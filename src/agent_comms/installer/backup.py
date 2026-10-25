@@ -54,10 +54,6 @@ class SavedFile:
         observed = path.stat()
         return cls(observed.st_size, observed.st_mtime_ns, observed.st_ino)
 
-    def matches_extraction(self, copied: SavedFile) -> bool:
-        """Extraction allocates a new inode and tar loses nanosecond mtime; compare size only."""
-        return self.size == copied.size
-
 
 def observed_files(root: Path) -> dict[Path, os.stat_result]:
     """Every regular file an installation carries, with its metadata."""
@@ -167,6 +163,11 @@ class ResourceBackup(ABC):
 
     @abstractmethod
     def restore(self) -> None: ...
+
+    def undo(self) -> None:
+        """Put back whatever changed since the snapshot; an untouched root stays as it is."""
+        if not self.original():
+            self.restore()
 
     @abstractmethod
     def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
@@ -380,7 +381,8 @@ class StoreBackup(ResourceBackup):
             name = source.relative_to(self.root)
             target = self.data_root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            owner.copy_file(source, target)
+            with owner.writers_drained(source):
+                owner.copy_file(source, target)
             Platform.current().sync_file(target)
             contents[name] = owner.digest(target)
             Platform.current().sync_directory(target.parent)

@@ -26,6 +26,7 @@ from .envelope_claim_transitions import NativeClaim
 from .field_codec import ClaimId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared
 from .reservation_rules import ReservationRule, ReservationViolationError
+from .tool_denial import SelectedToolDenied
 from .turn_input_source import (
     OriginalTurnInput,
     TurnInputSource,
@@ -122,8 +123,6 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
 
     def verify(self, store, turn, snapshot) -> None:
         """Recheck the running original without binding it or consuming its wait again."""
-        from .tool_denial import SelectedToolDenied
-
         if not turn.started_input or not turn.accepts_output:
             raise SelectedToolDenied("Native tool has no started original input")
         canonical = snapshot.canonical_name(self.thread.name)

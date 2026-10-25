@@ -21,6 +21,7 @@ from .thread_identity import (
     UserThreadRole,
 )
 from .turn_context import Provenance, WireProvenance
+from .working_memory_requests import AnnotationBudgetExhausted
 
 if TYPE_CHECKING:
     from typing import Self
@@ -626,10 +627,6 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
     def require_decision(self):
         return self
 
-    def contains_alternative(self, value: str | None) -> bool:
-        """Membership in this declaration, not permission from every constraint."""
-        return value == self.chosen or value in self.rejected
-
     def require_previous(self, original: Message) -> Decision:
         return original.require_decision()
 
@@ -703,7 +700,5 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
         return now - 3_600_000
 
     def require_budget(self, submitted: int) -> None:
-        from .working_memory_requests import AnnotationBudgetExhausted
-
         if submitted >= self.per_hour:
             raise AnnotationBudgetExhausted("Original disclosure grant's hourly request budget is exhausted")

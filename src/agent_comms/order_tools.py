@@ -12,6 +12,7 @@ from pydantic import JsonValue
 from agent_comms.todos import (
     ClaimOrder,
     CorrectCheckTodo,
+    CorrectRunTodo,
     DeliverTodo,
     DeliveryReport,
     InstallTodo,
@@ -40,6 +41,7 @@ from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
 from .head_review import PullRequestHead
 from .held_orders import HeldOrders
+from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .plan_phases import OrderPhase
@@ -410,7 +412,25 @@ class CommsOrderCheckTool(CommsTodoTool):
     why: Annotated[str, *tool_field("Why the recorded check was wrong")]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        return CorrectCheckTodo(todo.revision, actor, todo.order.check, self.check, self.why)
+        return CorrectCheckTodo(todo.revision, actor, self.why,
+                                previous=todo.order.check, check=self.check)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderRunTool(CommsTodoTool):
+    label = "Correct order run"
+    description = (
+        "Replace the run text that closes an open application order, recording the old run "
+        "and why; only its commander may invoke this tool, and the order keeps its review "
+        "timer and strikes."
+    )
+    run: Annotated[str, *tool_field("The corrected run: what the installed app must show")]
+    why: Annotated[str, *tool_field("Why the recorded run was wrong")]
+
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+        previous = todo.order.checked().run
+        return CorrectRunTodo(todo.revision, actor, self.why,
+                              previous=previous, run=previous.retexted(self.run))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -455,6 +475,16 @@ class CommsTurnsTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
         return comms.transcripts.turns(caller.subject(self.thread), self.window)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsInputDeliveryTool(ThreadReadTool):
+    label = "Input delivery"
+    description = ("Read a unit's inputs that failed or are UNKNOWN, and its earlier delivery "
+                   "notices, each with its bus sequence and input id; none is ever replayed.")
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> DeliveryOverview:
+        return comms.goals.input_delivery(caller.subject(self.thread), include_history=True)
 
 
 @dataclass(frozen=True, kw_only=True)

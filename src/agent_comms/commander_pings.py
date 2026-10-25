@@ -9,6 +9,9 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.channel_targets import ThreadTarget
+
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
@@ -83,7 +86,11 @@ class UnitPing(Ping):
 
 @dataclass(frozen=True)
 class HudPing(Ping, declared_name=None):
-    """A HUD row changes when its rendered line changes, even with the same identity."""
+    """A HUD row changes when its rendered line changes, even with the same identity.
+
+    The ping text is a change detector, not a carrier: it tells the commander a row moved.
+    Views read the row itself from CommanderFrame, written from the same CommanderHud.
+    """
 
     text: str = field(compare=True, kw_only=True)
 
@@ -180,8 +187,6 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         return None
 
     def send(self, comms: Comms, previous: CommanderUpdate | None) -> Message:
-        from agent_comms.bus_publication import AgentOrigin
-        from agent_comms.channel_targets import ThreadTarget
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
         message = Message(

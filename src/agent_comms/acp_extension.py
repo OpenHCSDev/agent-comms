@@ -29,7 +29,6 @@ from .field_codec import (
     AcceptsNull,
     ExternalJsonShape,
     FieldCodec,
-    Id128Text,
     InputId,
     MalformedRecord,
     MessageId,

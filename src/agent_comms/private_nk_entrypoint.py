@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
+from .bus import Bus
+from .locked_store import RegistryFile
+
 from .native_arguments import NativeArguments
 from .native_package import (
     NativePackageError,
@@ -69,7 +72,6 @@ class RootLaunch(ABC):
 
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
         """Explicit owner launch prepares registry authority, then native tables."""
-        from .locked_store import RegistryFile
         from .registration import Registration
 
         if agent_bin == NativeArguments.default_binary:
@@ -145,8 +147,6 @@ class PrivateNkLaunch(RootLaunch):
         directory, registry or database and make no provider request.
         """
         NativeSessionFiles.require_private_directory(self.validated_root)
-        from .bus import Bus
-        from .locked_store import RegistryFile
         from .registry_store import RegistryStore
 
         Bus(Bus.path_in(self.validated_root)).revision()

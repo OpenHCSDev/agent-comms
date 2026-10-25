@@ -247,7 +247,7 @@ def pinned_native() -> Path:
     try:
         fcntl.flock(held, fcntl.LOCK_EX)
         if not pinned_location().is_dir():
-            subprocess.run([str(stack / "bin/prepare-pi-native"), "--python", sys.executable], check=True)
+            subprocess.run([str(stack / "native/prepare-pi-native"), "--python", sys.executable], check=True)
     finally:
         os.close(held)
     return pinned_native_package()
@@ -436,6 +436,29 @@ def declare_test_bus(
     for thread in threads:
         comms.registry.declare(thread)
     return comms
+
+
+def ledger_one_failure_short(root: Path) -> Path:
+    """Install 13's ledger: its failure CHECK one TurnFailure member short, the schema an
+    install must carry before any opening accepts it."""
+    from contextlib import closing
+
+    from agent_comms.goal_attempts import GoalAttemptStore
+    from agent_comms.goal_failure_observation import FailedTurnEvidence
+    from agent_comms.turn_failure import TurnFailure
+    from agent_comms.typed_table import sql_literal
+
+    directory = root / GoalAttemptStore.root_directory
+    directory.mkdir(mode=0o700)
+    path = GoalAttemptStore.initialize(directory).path
+    newest = sql_literal(TurnFailure.names()[-1])
+    with closing(sqlite3.connect(path)) as db:
+        (table,) = db.execute("SELECT sql FROM sqlite_master WHERE name=?",
+                              (FailedTurnEvidence.declared_name,)).fetchone()
+        db.execute(f'DROP TABLE "{FailedTurnEvidence.declared_name}"')
+        db.execute(table.replace(f", {newest}", ""))
+        db.commit()
+    return path
 
 
 def installed_comms(root: Path) -> Comms:

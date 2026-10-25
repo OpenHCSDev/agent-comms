@@ -18,10 +18,13 @@ from agent_comms.coordination_errors import CoordinationError
 
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
+from .goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
 from .registration import Registration
+from .relationships import RelationshipStore
 from .thread_execution import NativeThreadExecution
 from .thread_status import StoppedThreadStatus
+from .view_unread import transcript_read_state
 
 if TYPE_CHECKING:
     from .cli_bridges.history import History
@@ -32,7 +35,14 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .config_options import RunningSelection
 from .errors import RelationViolationError
-from .field_codec import DeclaredWireType, FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .field_codec import (
+    DeclaredWireType,
+    FieldCodec,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
@@ -47,8 +57,8 @@ from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
-from .tool_result import ToolResult
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .tool_result import ToolResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,10 +239,10 @@ class ThreadManagement:
         worktree: ImportDirectory = SourceDirectory(),
         model: ModelChoice = KeptModel(),
         tags: frozenset[str] = frozenset(),
-        limits: ImportLimits | None = None,
+        limits: ImportLimits = ImportLimits(),
     ) -> ThreadImported:
         """Import a stopped, resumable snapshot of any harness session, without adopting its executor."""
-        snapshot = ImportSnapshot.read(history, limits or ImportLimits())
+        snapshot = ImportSnapshot.read(history, limits)
         directory = worktree.project(snapshot)
         if not directory:
             raise ValueError("The source has no project directory; supply --worktree.")
@@ -263,7 +273,7 @@ class ThreadManagement:
         return ThreadImported.of(name, session_path, snapshot)
 
     def rehome_thread(
-        self, history: History, *, name: str, limits: ImportLimits | None = None,
+        self, history: History, *, name: str, limits: ImportLimits = ImportLimits(),
     ) -> ThreadImported:
         """Move an external unit onto native Pi on its existing declaration.
 
@@ -271,12 +281,10 @@ class ThreadManagement:
         only the execution and the session change. The harness's own bridge is retired
         first, so one inbox never has two deliverers.
         """
-        snapshot = ImportSnapshot.read(history, limits or ImportLimits())
+        snapshot = ImportSnapshot.read(history, limits)
         session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
         with self.registry.store.locked():
-            current = self.registry.snapshot().threads.get(name)
-            if current is None:
-                raise ValueError(f"No thread named {name!r} to re-home.")
+            current = self.registry.snapshot().require(name)
             current.execution.require_external()
             self._write_imported_session(session_path, snapshot, Path(current.worktree))
             rehomed = replace(
@@ -484,10 +492,6 @@ class ThreadManagement:
     @property
     def thread_owned_states(self) -> tuple[ThreadOwnedState, ...]:
         """Every store whose rows end with a thread declaration."""
-        from .goal_waits import GoalWaits
-        from .relationships import RelationshipStore
-        from .view_unread import transcript_read_state
-
         states = (
             self.agents.activity,
             self.agents.runtime_info,

@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
+from .context_reading import ContextReading, ContextUsage, UnmeasuredContext, UnsizedContextUsage
 from .field_codec import (
     AcceptsNull,
     ExternalField,
     ExternalJsonShape,
     FieldCodec,
     NullMember,
+    PresentMember,
     WireValue,
     boundary_decoder,
 )
@@ -71,11 +73,12 @@ class PiCount(AcceptsNull, ExternalJsonShape, WireValue):
     def schema(cls) -> dict[str, object]:
         return PiCountWire.schema()
 
+    @abstractmethod
+    def present(self) -> tuple[ReportedCount, ...]:
+        """The reported count, or nothing: NullMember and PresentMember answer it."""
+
     def matches(self, count: int) -> bool:
         return False
-
-    def require_count(self) -> int:
-        raise ValueError("Pi has not reported this count")
 
     def observe_size(self, account: UsageAccount) -> None:
         account.size = self
@@ -84,6 +87,9 @@ class PiCount(AcceptsNull, ExternalJsonShape, WireValue):
         pass
 
     def reading(self, used: PiCount) -> ContextReading:
+        return used.unsized()
+
+    def unsized(self) -> ContextReading:
         return UnmeasuredContext()
 
     def with_size(self, size: int) -> ContextReading:
@@ -117,7 +123,7 @@ class UnreportedCount(NullMember, PiCount):
 
 
 @dataclass(frozen=True)
-class ReportedCount(PiCount):
+class ReportedCount(PresentMember, PiCount):
     count: int
 
     def to_wire(self) -> int:
@@ -125,9 +131,6 @@ class ReportedCount(PiCount):
 
     def matches(self, count: int) -> bool:
         return self.count == count
-
-    def require_count(self) -> int:
-        return self.count
 
     def update_size(self, account: UsageAccount) -> None:
         account.size = self
@@ -137,6 +140,9 @@ class ReportedCount(PiCount):
 
     def with_size(self, size: int) -> ContextReading:
         return ContextUsage(self.count, size)
+
+    def unsized(self) -> ContextReading:
+        return UnsizedContextUsage(self.count)
 
     def otherwise(self, other: PiCount) -> PiCount:
         return self

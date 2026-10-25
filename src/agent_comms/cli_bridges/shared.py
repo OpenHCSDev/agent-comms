@@ -59,6 +59,7 @@ from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import (
     BridgeBeginning,
@@ -68,6 +69,7 @@ from agent_comms.message_reference import (
     MessageReference,
 )
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -630,8 +632,6 @@ class Inbox(Operation[OperationBridge]):
 
     async def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
-        from agent_comms.registration import Registration
-
         registry = await asyncio.to_thread(
             Registration, RegistryFile.path_in(Path(bridge.binding.root)))
         await bridge.comms.bus.when_open(lambda: endpoint.enter_context(
@@ -879,9 +879,17 @@ class UnacknowledgedPause(UnresumedBridge):
 
     socket: Path
     timeout: float
+    paused: PausedSessionBridge = field(compare=False, repr=False)
 
     def require_paused(self) -> None:
-        raise self
+        raise UpgradeRefused(str(self))
+
+    def release(self) -> Self:
+        """The bridge may still be closing its bus resources; its runtime waits in the socket
+        for the ready it writes once they close, so it resumes instead of staying stopped.
+        The refusal stands."""
+        self.paused.release()
+        return self
 
     def lines(self) -> tuple[str, ...]:
         return (f"Session bridge {self.name} at {self.socket} did not acknowledge pause "
@@ -929,11 +937,13 @@ class SessionBridge:
         request = PauseSession(owner=self.observed.owner, process=self.observed.process)
         peer = resources.enter_context(request.connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
+        paused = PausedSessionBridge(self, peer)
         try:
             request.decode_reply(stream.readline(4096))
         except TimeoutError:
-            return UnacknowledgedPause(self.claim.thread, self.claim.socket_path, peer.gettimeout())
-        return PausedSessionBridge(self, peer)
+            return UnacknowledgedPause(self.claim.thread, self.claim.socket_path,
+                                       peer.gettimeout(), paused)
+        return paused
 
 
 @dataclass

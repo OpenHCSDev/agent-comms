@@ -7,6 +7,11 @@ or changes the registry PID. The socket is scoped to the wire and owner PID.
 from __future__ import annotations
 
 from functools import partial
+
+from .acp_extension import (
+    decode_updates,
+    encode_updates,
+)
 from .coordinator import Coordination
 
 import asyncio
@@ -49,7 +54,6 @@ from .owner_protocol import (
 )
 from .owner_connection import OwnerConnection, OwnerIdentityChangedError, socket_path
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
-from .child_process import Platform
 from .errors import RelationViolationError
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
@@ -258,7 +262,7 @@ class RuntimeServer(SessionUpdateSink):
             _LOG.error("Owner work %s failed", task.get_name(), exc_info=error)
 
     async def start(self) -> None:
-        if self.server is not None or not Platform.current().serves_local_socket:
+        if self.server is not None:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -377,8 +381,6 @@ class RuntimeServer(SessionUpdateSink):
 
 def present_session(metadata: dict[str, object], session_id: str) -> dict[str, object]:
     """Rebind presentation coordinates through their declared owners."""
-    from .acp_extension import decode_updates, encode_updates
-
     return {
         **metadata,
         **encode_updates(*(fact.for_session(session_id) for fact in decode_updates(metadata))),

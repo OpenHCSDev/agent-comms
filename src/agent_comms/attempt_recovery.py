@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from agent_comms.coordination_response import PublicationAppendDispatches
+
 
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.child_process import ProcessIdentity
+
+from .native_entries import NativeEntry
 from .native_failures import NativePiUnavailable
 
 import os
@@ -43,6 +47,16 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
 from .native_input_record import FullNativeExecution, TriageNativeExecution
+from .native_pi import NativeContextProof
+from .native_prompt_binding import (
+    expected_prompt_bindings,
+    expected_prompt_matches_journal,
+)
+from .pi_vocabulary import PendingStopReason
+from .private_path import (
+    FileRevision,
+    MissingFile,
+)
 from .private_send_stage import TriageNativeSend
 from .lifecycle_capability import Deferred
 from agent_comms.typed_table import RowNotFoundError
@@ -291,8 +305,6 @@ class DispatchedOwnerLoss(VerifiedAttemptOwnerLoss):
         return self.native_input
 
     def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None:
-        from agent_comms.coordination_response import PublicationAppendDispatches
-
         self.require_native_exit()
         PublicationAppendDispatches.resolve_retained(
             store, self.boundary.bus, self.boundary,
@@ -447,12 +459,6 @@ class RecoveryMonitorCapability:
         cls, store: Coordination, execution_id: str, acquired: VerifiedOwnerLoss,
     ):
         """Settle the old input without re-running it or fabricating delivery."""
-        from .native_entries import NativeEntry
-        from .native_pi import NativeContextProof
-        from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
-        from .pi_vocabulary import PendingStopReason
-        from .private_path import FileRevision, MissingFile
-
         snapshot = store.get(execution_id)
         attempt = snapshot.require_current_attempt()
         source = NativeRuntimeInput.one(
@@ -514,98 +520,6 @@ class RecoveryMonitorCapability:
                     observed_at_ms=int(time.time() * 1000),
                 ),
             )
-
-    @classmethod
-    def abandon_released_native_attempt(
-        cls, store: Coordination, execution_id: str
-    ) -> Applied[RecoverySnapshot]:
-        """Close a released, dead native attempt while retaining UNKNOWN effects.
-
-        This explicit operator action abandons the old local backend; it does
-        not reconstruct a provider terminal, acceptance, or an unsent outcome.
-        Owner exclusion and native-process absence prevent further local work.
-        The existing monitor atomically fails the attempt, records replay-unsafe
-        UNKNOWN effects and releases its slot. Input evidences/cursors are never
-        changed. A frozen publication still requires its acknowledgement resolver.
-
-        A live successor need not stop: loss belongs to the original process,
-        while its UNKNOWN input and all evidence remain untouched.
-        """
-        with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
-            return loss.abandon(cls, store, execution_id)
-
-
-    @classmethod
-    def recover_native_failure(
-        cls, store: Coordination, execution_id: str, session_file: Path
-    ) -> Applied[RecoverySnapshot]:
-        """Retire a released owner's failed native input without recovering acceptance.
-
-        A saved error is evidence of failure only: no live context acknowledgement is
-        reconstructed, no cursor advances, and UNKNOWN effects remain unsafe
-        to replay. An unfinished journal or unresolved publication is refused.
-        """
-        from agent_comms.native_entries import NativeEntry
-        from agent_comms.native_pi import NativeContextProof
-        from agent_comms.native_prompt_binding import (
-            expected_prompt_bindings,
-            expected_prompt_matches_journal,
-        )
-
-        with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
-            snapshot = store.get(execution_id)
-            attempt = snapshot.attempt
-            assert attempt is not None  # The release observer requires an attempt.
-            if bool(snapshot.publication_intents):
-                raise PublicationUncertain("native failure cannot resolve frozen publication")
-            reserved = loss.require_native_input()
-            original_session = reserved.require_session_identity()
-            session_file = Path(session_file).absolute()
-            original_session.require_session(str(session_file))
-            with expected_prompt_bindings(store, (reserved.input_id,)) as bindings:
-                binding = bindings.get(reserved.input_id)
-                if binding is None or binding.identity != reserved.identity:
-                    raise RecoveryBlocked("native failure lacks its bound original input")
-            with NativeEntry.open_evidence(session_file) as evidence:
-                if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
-                    raise RecoveryBlocked("native failure lacks its bound original input")
-                proof = NativeContextProof.read_evidence(
-                    NativeSessionFiles.for_identity(original_session, root=store.session.path.parent,
-                                       owner=reserved.owner_identity),
-                    reserved.input_id, evidence=evidence,
-                    session_entry_start=reserved.require_context_proof().session_entry_start,
-                )
-                original_session.require_context(proof)
-                _header, entries = evidence.observe()
-                user_index = next(
-                    index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id
-                )
-                following = entries[user_index + 1 :]
-                if len(following) != 1:
-                    raise RecoveryBlocked("native failure has unfinished or additional session work")
-                terminal = following[0]
-                try:
-                    terminal.require_failed_terminal(proof.session_entry_id)
-                except ValueError as error:
-                    raise RecoveryBlocked(str(error)) from error
-                loss.require_native_exit()
-                monitor = cls(store, _grant=_MONITOR_GRANT)
-                return monitor.terminalize_dead_attempt(
-                    execution_id,
-                    attempt.attempt_ordinal,
-                    attempt.owner_generation,
-                    expected_attempt_revision=attempt.revision,
-                    expected_execution_revision=snapshot.execution.revision,
-                    expected_pointer_revision=snapshot.pointer_revision,
-                    owner_loss=loss,
-                    evidence=MonitorEvidence(
-                        subprocess_dead=True,
-                        backend_done=True,
-                        outcome=UnknownOutcomeAttempt(),
-                        reason_code=GivenReasonCode("released_native_failure"),
-                        observed_at_ms=int(time.time() * 1000),
-                    ),
-                )
 
     def terminalize_dead_attempt(
         self,

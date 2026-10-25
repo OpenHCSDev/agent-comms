@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import signal
 from abc import abstractmethod
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .errors import StaleAttemptError
 from .native_arguments import SelectedModel
+from .native_failures import NativePiUnavailable
 
 if TYPE_CHECKING:
     from .backend import TurnSession
+    from .goal_attempts import GoalAttemptStore, LaunchPermit
+    from .goal_failure_observation import FailedTurnObservation
     from .turn_output import TurnOutput
 
 
@@ -40,12 +46,21 @@ class TurnFailure(DeclaredFamily):
 
     def raise_native(self, proof, model: SelectedModel) -> None:
         """A runtime failure does not prove a completed provider request."""
-        from .native_failures import NativePiUnavailable
-
         raise NativePiUnavailable(self.text)
 
     def retry_delay(self, attempt_ordinal: int) -> float:
         raise TypeError("Only a retryable provider failure has a retry delay")
+
+    @classmethod
+    def settle_attempt(
+        cls,
+        permit: LaunchPermit,
+        store: GoalAttemptStore,
+        observation: FailedTurnObservation,
+    ) -> None:
+        """A failed attempt blocks its goal until someone retries it."""
+        with suppress(StaleAttemptError):
+            permit.reservation.fail(store, cls.declared_name, observation=observation)
 
 
 class InputIdUnavailable(TurnFailure):
@@ -184,3 +199,22 @@ class BackendFailed(TurnFailure):
 
 class NativeLaunchInvalid(BackendFailed):
     """The configured native launch could not be acquired."""
+
+
+class NativeChildSignaled(TurnFailure):
+    """A signal ended the native child: the stop an operator gives, never a backend failure.
+
+    Declared last, so any failure the turn already recorded keeps precedence.
+    """
+
+    # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP (rpc-mode.js:296).
+    stop_exits: ClassVar[frozenset[int]] = frozenset({128 + signal.SIGTERM, 128 + signal.SIGHUP})
+
+    @classmethod
+    def settle_attempt(
+        cls,
+        permit: LaunchPermit,
+        store: GoalAttemptStore,
+        observation: FailedTurnObservation,
+    ) -> None:
+        permit.stop(store)

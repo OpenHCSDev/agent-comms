@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .thread_presentation import UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
@@ -100,9 +101,12 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
                      for candidate in thread.work_state.candidates(executor))
 
     @classmethod
-    def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
-        from .thread_presentation import UnavailableThreadOwnerBinding
+    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
+        """The thread when its commander's heartbeat reads it as a unit."""
+        return (thread,)
 
+    @classmethod
+    def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
         return UnavailableThreadOwnerBinding()
 
     @classmethod
@@ -196,4 +200,9 @@ class CommanderForkExecution(ExternalThreadExecution):
     @classmethod
     def order_candidates(cls, thread: Thread) -> tuple[Thread, ...]:
         """A fork works inside its commander's turn and never holds an order."""
+        return ()
+
+    @classmethod
+    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
+        """A fork acts inside its commander's turn, so the commander's own card covers it."""
         return ()

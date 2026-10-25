@@ -683,10 +683,6 @@ class TurnState:
     def native_phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
         yield from self.phase_effects(self.active.phase.observed(phase))
 
-    def settles(self, held: TurnDeclaration) -> bool:
-        """A busy publication always replaces the held turn; an idle one only settles its own."""
-        return self.active.phase.busy or held.settled_by(self)
-
 
 class TurnCompletion(ABC):
     """Whether terminal publication attested an exact finished turn."""

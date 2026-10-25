@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .errors import RelationViolationError
+
 from .input_key import InputKey
 
 from . import turn_origin
@@ -51,10 +53,6 @@ class MessageRoute:
     targets: tuple[str, ...]
 
     @property
-    def outgoing_label(self) -> str:
-        return "To " + ", ".join(self.targets)
-
-    @property
     def incoming_scope(self) -> str:
         return (
             ", ".join(
@@ -62,10 +60,6 @@ class MessageRoute:
             )
             or "direct message"
         )
-
-    @property
-    def incoming_label(self) -> str:
-        return f"Incoming from {self.sender}: via {self.incoming_scope}"
 
     @classmethod
     def from_wire(cls, data: Mapping) -> MessageRoute:
@@ -96,8 +90,6 @@ class TurnRouting:
 
     def require_publications(self, originals, owner_lookup: str) -> None:
         """Only committed originals addressed by this reply intent can be joined."""
-        from .errors import RelationViolationError
-
         if self.publications:
             raise RelationViolationError("Turn intent cannot preclaim a publication")
         if not originals:

@@ -12,6 +12,7 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_schema import CoordinatorRow
+from agent_comms.coordination_tables.attempts import AttemptRecord
 from agent_comms.coordination_tables.executions import ExecutionReference
 from agent_comms.reason_codes import GivenReasonCode, RecoveryDetail
 from agent_comms.recovery_states import RecoveryCondition
@@ -56,8 +57,6 @@ class RecoveryAudit(ImmutableRows, ExecutionReference, CoordinatorRow):
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
-        from agent_comms.coordination_tables.attempts import AttemptRecord
-
         return super().references() + (
             ForeignKey(
                 columns=("execution_id", "attempt"), target=AttemptRecord, target_columns=("execution_id", "attempt_ordinal")

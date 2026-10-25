@@ -29,6 +29,7 @@ from acp.exceptions import RequestError
 from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
+from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
@@ -85,6 +86,7 @@ from .config_options import (
 )
 from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .declared_verb import DeclaredCommand
 from .exporting import (
@@ -123,9 +125,11 @@ from agent_comms.installer.probes.harnesses import HarnessInstallation, InstallR
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .input_disposition import InputDispositions
 from .input_origin import InputProvenance
 from .input_key import InputKey, InputKeyText
 from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
+from .launch_runtime import LaunchRuntime
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import FirstUnreadStart, InboxStart, MessageReference, NewestUnreadStart
@@ -135,7 +139,7 @@ from .messages import (
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
-from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
+from .owner_lifecycle import OwnerRestartResult, OwnerRestartSelection, OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
@@ -154,11 +158,16 @@ from .storage_rules import (
     CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
     RepositoryCheckoutAllocation, StorageProjection, StorageRule,
 )
-from .restart_scope import AllOwners, OneOwner, RestartTarget
+from .restart_queue import RestartQueued, enqueue
+from .restart_scope import AllOwners, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .send_result import SendResult
 from .shared_ledger import LedgerDocument
+from .task_sources import (
+    CorrectionTaskChange,
+    UserTaskSupersession,
+)
 from .thread_execution import (
     ArchiveOwnerControl,
     ExternalThreadExecution,
@@ -194,7 +203,8 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import ReconciledFile
+from .typed_table import ReconciledFile, WriterOwnedStore
+from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 
@@ -1314,8 +1324,6 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
     ]
 
     def original_source(self, ctx: Comms):
-        from .input_disposition import InputDispositions
-
         return InputDispositions(ctx.root).lookup(self.source).context_provenance().require_human_input()
 
     def pin_original(self, ctx: Comms, source: MessageReference) -> Message:
@@ -1361,8 +1369,6 @@ class CorrectAnnotationCliCommand(WorktreeArgument, CliCommand, declared_name="c
     ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .coordinator import Coordination
-
         author = ctx.messaging.user_identity(self.worktree).incarnation
         snapshot = ctx.registry.snapshot()
         with Coordination(str(CoordinationStore.path_in(ctx.root))) as store:
@@ -1401,8 +1407,6 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
     ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .working_memory_annotations import WorkingMemoryAnnotations
-
         return WorkingMemoryAnnotations.calibration(
             CoordinationStore.path_in(ctx.root), self.question, self.classifier)
 
@@ -1421,8 +1425,6 @@ class SupersedeConstraintCliCommand(
     body: Annotated[str, Argument(flags=("--body",))]
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .task_sources import CorrectionTaskChange, UserTaskSupersession
-
         message = ctx.messaging.send_user_message(CommandTarget.named(self.thread), self.body, worktree=self.worktree,
             task=UserTaskSupersession(CorrectionTaskChange(self.source)))
         return ConstraintSupersededResult(message.reference)
@@ -1818,9 +1820,11 @@ class InstallCliCommand(HarnessInstallation, CliCommand):
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """The bus may be unreadable by this runtime, or absent, until the target's own
         source has carried or created it, so nothing opens it here."""
-        from agent_comms.installer.launch import InstallRun
+        from agent_comms.installer.launch import InstallLogs, InstallRun
 
-        return InstallRun.start(self, route.root).launch(output)
+        with InstallLogs(route.root).launching():
+            run = InstallRun.start(self, route.root, ProcessLauncherPhase())
+            return run.launch(output)
 
 
 
@@ -1944,6 +1948,11 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
             return schema.reconcile_writes(db)
+
+    def answer(self, root: Path) -> ReconciledStoresResult:
+        """A store outside the bus that the target's writer could not open refuses the plan."""
+        WriterOwnedStore.practice_openings()
+        return super().answer(root)
 
 @dataclass(frozen=True)
 class CheckoutResult(CliResult):
@@ -2188,15 +2197,24 @@ class RestartCliCommand(CliCommand):
         # Explicit CLI launch overrides are independent operator arguments.
         return ()
 
-    @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
-        if thread.executing:
-            return ()
-        return (cls(name=OneOwner(thread.name)),) if thread.restart_candidates(status) else ()
-
     def apply(self, ctx: Comms) -> CliResult:
         results = ctx.owners.restart_owners(self.name, agent_bin=self.agent_bin, agent_args=self.agent_args)
         return OwnersRestartedResult(results)
+
+
+@dataclass(frozen=True, kw_only=True)
+class QueueRestartCliCommand(ThreadLifecycleCliCommand, CliCommand[RestartQueued]):
+    """A selected owner restarts at its next idle point: at once when idle, never mid-turn."""
+
+    help = "Restart process"
+
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return bool(thread.restart_candidates(status))
+
+    def apply(self, ctx: Comms) -> RestartQueued:
+        selection = OwnerRestartSelection.capture(ctx.registry.snapshot(), self.name)
+        return RestartQueued(enqueue(ctx, selection, launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)

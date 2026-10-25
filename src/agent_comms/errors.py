@@ -104,10 +104,6 @@ class HumanClaimBlockedError(HumanSendError):
     """A prior private reservation cannot be safely retried."""
 
 
-class CheckpointNeedsRepairError(Exception):
-    """A shared source requires exclusive checkpoint repair before it can open."""
-
-
 class GoalAttemptError(RuntimeError):
     """A goal attempt cannot proceed as requested."""
 

@@ -14,10 +14,15 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .activity_clocks import ChannelActivity
+from .agent_activity import (
+    AgentActivity,
+    RecordedRecipientActivity,
+)
 from .audience_manifest import FrozenRecipient
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
+from .commander_frame_file import CommanderFrameFile
 from .coordination_database import CoordinationStore
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .declared_family import DeclaredFamily
@@ -63,6 +68,7 @@ from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
     BusSourceView,
+    CommanderFramesView,
     ExternalTranscriptsView,
     NotificationsView,
     RegistrationsView,
@@ -82,6 +88,7 @@ from .thread_presentation import (
 from .thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
+from .transcript_sources import AssignedTranscriptSource
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
 
 if TYPE_CHECKING:
@@ -241,8 +248,6 @@ class MessageNotification:
         assignment_read: NotificationAssignmentRead, *, viewer: OutcomeViewer,
     ):
         """Project the original frozen audience even before handling is recorded."""
-        from .agent_activity import AgentActivity
-
         if not sources:
             return {}
         snapshot = registry.snapshot()
@@ -259,7 +264,6 @@ class MessageNotification:
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
                                  sources: Sequence[Delivered]):
-        from .agent_activity import RecordedRecipientActivity
         from .notification_assignment import NotificationAssignment
 
         observations = {
@@ -349,7 +353,6 @@ class MessageNotification:
         if not 1 <= limit <= cls.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
-        from .transcript_sources import AssignedTranscriptSource
 
         captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
             limit=0, sent_limit=limit
@@ -799,6 +802,10 @@ def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
     return ExternalTranscript.source_paths(views.root)
 
 
+def commander_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return tuple(sorted(CommanderFrameFile.matching_in(views.root)))
+
+
 def expiry_period_changed(before: int, now: int) -> bool:
     return before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds
 
@@ -878,6 +885,10 @@ class WireRevision(ReadState):
     external_transcripts: Annotated[
         tuple[FileRevision, ...],
         *revision_source(external_transcript_paths, StoresView, ExternalTranscriptsView),
+    ]
+    commander_frames: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(commander_frame_paths, CommanderFramesView),
     ]
     # Notifications change once per expiry period, not per tick.
     expiry_tick: Annotated[

@@ -35,7 +35,7 @@ async def run_owner(comms: Comms) -> None:
     async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         name = ThreadLaunch.current().name
         thread = await Coordination.run_worker(partial(comms.registry.require, name))
-        stopped = OwnerStop()
+        stopped = OwnerStop(comms.owners.maintenance)
         agent = CommsAgent(
             comms,
             runtime_enabled=True,
@@ -69,7 +69,7 @@ async def run_startup_input(agent: CommsAgent, name: str, key: InputKey) -> None
                 raise ValueError("Startup input no longer belongs to this owner claim_scope")
             return row
         row = await Coordination.run_worker(capture)
-        await agent.inputs.emit_input_disposition(name, row)
+        await agent.inputs.emit_input_delivery_changed(name)
         await agent.turns.run_agent_turn(
             name,
             name,

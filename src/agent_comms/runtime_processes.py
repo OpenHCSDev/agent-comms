@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import os
-import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.child_process import IdentityMismatchError, Platform, ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_children import ApplicationChildInitiator
 
@@ -116,8 +114,3 @@ class RuntimeProcesses:
                 )
             )
         return cls(tuple(outcomes))
-
-
-if __name__ == "__main__":
-    print(FieldCodec.compact(FieldCodec.encode(RuntimeProcesses.observe(
-        LaunchRuntime.from_interpreter(sys.argv[1])))))

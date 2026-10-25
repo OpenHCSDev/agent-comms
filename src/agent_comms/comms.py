@@ -85,12 +85,11 @@ class Comms:
     @classmethod
     @contextmanager
     def client(cls, route: CommsRoute) -> Iterator[Comms]:
-        """Borrow this selected route for one complete client call."""
-        # Refuse before borrowing a route or opening stores held by maintenance.
-        # This grants nothing: writes still check under their determining locks.
+        """One complete client call on this selected route."""
+        # Refuse before opening stores held by maintenance. This grants nothing:
+        # each write checks again inside its own store's write transaction.
         MaintenanceBarrier(RegistryFile.path_in(route.root)).assert_open_unlocked()
-        with route.hold_client_route():
-            yield cls(route)
+        yield cls(route)
 
     async def watch(
         self, name: str, *, acknowledgment: type[WatchAcknowledgment],

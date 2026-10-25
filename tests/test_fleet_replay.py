@@ -52,7 +52,7 @@ from agent_comms.todos import (
 )
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeTurnId
-from agent_comms.work_branches import BranchDifference, UnpushedHead
+from agent_comms.work_branches import BranchDifference, SourceGrowth, UnpushedHead
 from conftest import declare_test_bus
 from fixture_git import IDENTITY
 from source_revision_fixture import SourceRepository
@@ -264,13 +264,13 @@ class BranchGrowthSeed(IncidentSeed):
         worktree = fleet.worktree("growing", base=fleet.main)
         fleet.commit(
             worktree, "src/agent_comms/grown.py",
-            "".join(f"v{i} = {i}\n" for i in range(BranchGrowth.limit + 1)),
+            "".join(f"v{i} = {i}\n" for i in range(SourceGrowth.limit + 1)),
         )
         fleet.push(worktree)
         todo = fleet.unit("growing", worktree)
         return BranchGrowth(
             todo.id, todo.held().owner_identity, fleet.repository,
-            "growing", BranchGrowth.limit + 1,
+            "growing", SourceGrowth((("src/agent_comms/grown.py", SourceGrowth.limit + 1),)),
         )
 
 
@@ -449,12 +449,13 @@ def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
     built.git(built.source.checkout, 'worktree', 'add', '-q', '-b', 'current-order',
               str(checkout), built.main)
     assert not any(rule.line().startswith(behind_line) for rule in built.observe().rules)
-    growth = BranchGrowth.limit + 1
+    growth = SourceGrowth.limit + 1
     built.commit(checkout, 'src/agent_comms/order_growth.py',
                  ''.join(f'order_value_{index} = {index}\n' for index in range(growth)))
     assert built.git(home, 'rev-parse', 'HEAD') == built.old_main
     assert BranchGrowth(
-        todo.id, todo.held().owner_identity, built.repository, 'current-order', growth,
+        todo.id, todo.held().owner_identity, built.repository, 'current-order',
+        SourceGrowth((('src/agent_comms/order_growth.py', growth),)),
     ) in built.observe().rules
 
 
@@ -508,3 +509,11 @@ def test_replay_raises_each_incident_once(fleet):
     assert {rule.observation_key() for rule in first.rules} == {
         rule.observation_key() for rule in second.rules
     }
+
+
+def test_a_stopped_unit_is_not_spinning(fleet):
+    """2026-10-24: the heartbeat called a unit stopped with comms_stop SPINNING on its old calls."""
+    built, _ = fleet
+    assert any(type(rule) is SpinningUnit for rule in built.observe().rules)
+    built.comms.registry.unregister("spinning")
+    assert not any(type(rule) is SpinningUnit for rule in built.observe().rules)

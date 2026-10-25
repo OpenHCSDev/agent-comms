@@ -16,10 +16,14 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from .coordination_tables.participants import OwnerGenerations
+from .coordination_tables.responses import ResponseObligation
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec, InputId, MalformedRecord, NativeContext, RootId, SlotId, ThreadLookup,
 )
+from .native_pi import NativeContextRecord
+from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import ToolCallId
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .tool_denial import SelectedToolDenied
@@ -144,8 +148,6 @@ class NativeRuntimeInput(
 
     def require_session_identity(self) -> NativeSessionIdentity:
         """Recover the source originally attested before this row's raw writer."""
-        from .native_session_reopen import NativeSessionIdentity
-
         try:
             return FieldCodec.decode(
                 NativeSessionIdentity,
@@ -156,8 +158,6 @@ class NativeRuntimeInput(
 
     def require_context_proof(self) -> NativeContextProof:
         """Recover the original committed acknowledgement, never manufacture it from a path."""
-        from .native_pi import NativeContextRecord
-
         self.reference.require_recorded()
         values = {item.name: self.context_value(item.name)
                   for item, _wire in FieldCodec.record_fields(NativeContextRecord)}
@@ -220,7 +220,6 @@ class NativeRuntimeInput(
         projection is persisted, and the read closes before presentation work.
         """
         from .coordination_tables.executions import ExecutionRecord
-        from .coordination_tables.responses import ResponseObligation
         from .transcripts import TranscriptRead
 
         with TranscriptRead.publication_source(root) as db:
@@ -367,7 +366,7 @@ class AcknowledgedSlot(SelectedSlotState):
 class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
     """The consumed slot and its live terminal acknowledgement, in one transaction store."""
 
-    slot_id: Annotated[SlotId, FrozenColumn(primary_key=True, renamed_from=("input_id",))]
+    slot_id: Annotated[SlotId, FrozenColumn(primary_key=True)]
     call_id: Annotated[ToolCallId, FrozenColumn()]
     state: type[SelectedSlotState] = ConsumedSlot
 
@@ -434,8 +433,6 @@ class CurrentNativeCursor(
 
     @property
     def owner_identity(self):
-        from .coordination_tables.participants import OwnerGenerations
-
         return OwnerGenerations(owner_lookup=self.recipient_lookup,  generation=self.owner_generation)
 
     covered_seq: Annotated[int, Column(check="covered_seq>=0")]

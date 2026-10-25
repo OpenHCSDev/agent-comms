@@ -1,18 +1,23 @@
 """Committed notifications survive a new watcher and use the real publisher/readers."""
 
 import os
+import pickle
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
+from agent_comms.todos import ProgressRead
+from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
 from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.wake_policy import PassiveWake
@@ -37,8 +42,13 @@ def notifications(comms):
     return tuple(message for message in page.messages if isinstance(message.task, CommanderUpdate))
 
 
+def lead_hud(comms, states=()):
+    return CommanderHud.of(comms, "lead", HeartbeatFrame.read(comms, "lead", ProgressRead()), states)
+
+
 def beat(comms, rules=(), *, states=()):
-    frame = CommanderObservation(comms.registry.require("lead"), (), rules, states, hud=())
+    frame = CommanderObservation(
+        comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states))
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     CommanderHeartbeat().pass_body(comms, (frame,))
 
@@ -47,7 +57,8 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     comms = notification_bus
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
-    frames = tuple(CommanderObservation(thread, (), (), (), hud=()) for thread in (lead, missing))
+    frames = tuple(CommanderObservation(thread, (), (), (), hud=lead_hud(comms))
+                   for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
         CommanderHeartbeat().pass_body(comms, frames)
     completed = ServicePassStore.at(comms.root).read().commander_completed
@@ -56,8 +67,9 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     # A quiet pass still completes after its original notice was committed.
     beat(comms)
     assert len(notifications(comms)) == 1
-    # A pass that misses a still-registered commander retires nothing.
+    # A pass that misses a still-registered commander retires nothing but its frame.
     CommanderHeartbeat().pass_body(comms, ())
+    assert CommanderFrame.read_all(comms.root) == ()
     assert set(ServicePassStore.at(comms.root).read().commander_completed) == {lead.incarnation}
     # Only the registry retiring the incarnation drops its completion.
     comms.registry.unregister("lead")
@@ -110,7 +122,8 @@ def test_rule_packets_lead_with_five_and_publish_all_current_occurrences(notific
     first, = notifications(comms)
     assert isinstance(first.task, CommanderDecisions)
     assert len(first.task.decisions) == 5
-    assert {RulePing.capture(rule) for rule in rules} == set(first.task.handled)
+    assert set(first.task.handled) == (
+        {RulePing.capture(rule) for rule in rules} | set(lead_hud(comms).pings()))
     beat(comms, rules)
     assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
@@ -160,3 +173,16 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
     beat(comms, (moved,))
     announced, = notifications(comms)
     assert "NO LONGER CURRENT" not in announced.body
+
+
+def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_bus):
+    comms = notification_bus
+    states = state_cards(comms, UnitState)
+    reading = ObserveCommanderHud().observation()
+    beat(comms, states=states)
+    observed, = reading.read(comms, comms.views.revision())
+    # The result crosses the observation process boundary by pickle.
+    assert pickle.loads(pickle.dumps(observed)).huds == (lead_hud(comms, states),)
+    assert not list(reading.read(comms, comms.views.revision()))
+    beat(comms, states=states)
+    assert isinstance(next(reading.read(comms, comms.views.revision())), CommanderHudObserved)

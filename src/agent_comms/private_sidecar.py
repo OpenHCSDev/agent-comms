@@ -19,6 +19,7 @@ import os
 import secrets
 import sqlite3
 import stat
+import fcntl
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -30,7 +31,6 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
 
 from .field_codec import FieldCodec
-from .child_process import Platform
 
 if TYPE_CHECKING:
     from .agent_backend import StreamingInputPolicy
@@ -116,10 +116,6 @@ class _PinnedDirectory:
 
 @contextmanager
 def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
-    Platform.current().require_pinned_paths(IdentityConflict(
-        "Private sidecar snapshots require POSIX no-follow descriptors."))
-    import fcntl
-
     path = path.absolute()
     if ".." in path.parts or not path.name:
         raise IdentityConflict("Private sidecar path must be lexical.")

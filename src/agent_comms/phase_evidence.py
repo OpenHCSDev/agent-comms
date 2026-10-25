@@ -35,6 +35,7 @@ class MainTree:
     repo: Repo
     commit: str
     branch: ClassVar[str] = "main"
+    source: ClassVar[str] = ".py"
 
     @classmethod
     def of(cls, repo: Repo) -> MainTree:
@@ -50,12 +51,13 @@ class MainTree:
             self.repo.checkout, "cat-file", "--batch-check", input=requests).splitlines())
 
     def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
-        """``git grep -E`` rows in this tree, like ``module`` and ``modules``.
+        """``git grep -E`` rows of this tree's Python modules, like ``module`` and ``modules``;
+        the Markdown beside them quotes code it does not hold.
 
         A submodule is another repository's tree, regardless of local recurse settings.
         Git pathspecs such as ``:!file`` exclude.
         """
-        return list(Repo.grep(
+        return [row for row in Repo.grep(
             self.repo.checkout,
             "--no-recurse-submodules",
             *options,
@@ -65,7 +67,7 @@ class MainTree:
             self.commit,
             "--",
             *paths,
-        ))
+        ) if row.split(":", 2)[1].endswith(self.source)]
 
     def count(self, pattern: str, paths: tuple[str, ...]) -> int:
         """Matching lines under ``paths``."""
@@ -98,7 +100,7 @@ class MainTree:
         """Every Python module under ``paths``, read in one ``git cat-file --batch``."""
         listed = Repo.git(self.repo.checkout, "ls-tree", "-r", "--name-only", self.commit, "--",
                           *paths)
-        names = [name for name in listed.splitlines() if name.endswith(".py")]
+        names = [name for name in listed.splitlines() if name.endswith(self.source)]
         batch = Repo.git_bytes(self.repo.checkout, "cat-file", "--batch",
                                input="".join(f"{self.commit}:{name}\n" for name in names))
         for name in names:

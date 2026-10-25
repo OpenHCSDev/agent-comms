@@ -1,21 +1,10 @@
 """Shared durable coordination errors, independent of record store_files."""
 
-import copyreg
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from copyreg import __newobj__
 from typing import Never
-
-from acp.exceptions import RequestError
-
-
-def reduce_request_error(error: RequestError) -> tuple[type[RequestError], tuple[object, ...]]:
-    """The SDK error hands Exception only its message; the observation pipe carries it whole."""
-    return RequestError, (error.code, str(error), error.data)
-
-
-copyreg.pickle(RequestError, reduce_request_error)
 
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import errno
-import json
+import fcntl
 import math
 import os
 import stat
@@ -19,7 +19,6 @@ from contextlib import (
     ExitStack,
     asynccontextmanager,
     contextmanager,
-    suppress,
 )
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
@@ -32,8 +31,6 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
 
-with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode for its flock.
-    import fcntl
 
 class LockMode(ABC):
     """Whether a store lock lets other holders in, and what its holder may do."""
@@ -468,7 +465,6 @@ class StoreLockAcquisition:
         *, mode: LockMode, lock_type: type[StoreLock],
     ) -> Iterator[StoreLock]:
         with ExitStack() as resources:
-            resources.callback(platform.release_store_lock, file.fileno())
             acquisition = cls(file, mode, FileIdentity.from_stat(os.fstat(file.fileno())))
             yield resources.enter_context(acquisition.source(store_path, read_budget, lock_type))
 
@@ -566,85 +562,3 @@ class ExclusiveAtomicFile(AtomicFile):
 
     def _install(self, staged: Path) -> None:
         os.link(staged, self.path)
-
-
-def _repair_trailing_jsonl(path: Path) -> None:
-    """Complete a valid unterminated record or quarantine a truncated one."""
-    try:
-        with path.open("rb") as stream:
-            if not stream.seek(0, os.SEEK_END):
-                return
-            stream.seek(-1, os.SEEK_END)
-            if stream.read(1) == b"\n":
-                return
-            stream.seek(0)
-            data = stream.read()
-    except FileNotFoundError:
-        return
-    boundary = data.rfind(b"\n") + 1
-    tail = data[boundary:]
-    try:
-        json.loads(tail)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        corrupt_path = path.with_name(f"{path.name}.corrupt")
-        with open(corrupt_path, "ab") as corrupt:
-            corrupt.write(tail + b"\n")
-            corrupt.flush()
-            os.fsync(corrupt.fileno())
-        with open(path, "r+b") as output:
-            output.truncate(boundary)
-            output.flush()
-            os.fsync(output.fileno())
-    else:
-        with open(path, "ab") as output:
-            output.write(b"\n")
-            output.flush()
-            os.fsync(output.fileno())
-
-
-def _iter_jsonl_stream(
-    records: BinaryIO, *, boundary: int | None = None, label: str = "wire"
-) -> Iterator[tuple[Mapping, int]]:
-    """One raw-record parser for locked logs and fixed opened-inode snapshots."""
-    while boundary is None or records.tell() < boundary:
-        raw_line = (
-            records.readline() if boundary is None else records.readline(boundary - records.tell())
-        )
-        if not raw_line:
-            break
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            if not raw_line.endswith((b"\n", b"\r")):
-                break
-            raise
-        if not isinstance(record, Mapping):
-            if label == "wire snapshot":
-                raise ValueError("Wire snapshot JSONL record must be an object.")
-            raise ValueError(f"JSONL record in {label} must be an object.")
-        yield record, len(raw_line)
-
-
-def _iter_jsonl_records(path: Path) -> Iterator[tuple[Mapping, int]]:
-    """Yield JSONL records and encoded sizes without materializing the log."""
-    if not path.exists():
-        return
-    with open(path, "rb") as records:
-        yield from _iter_jsonl_stream(records, label=str(path))
-
-
-def _jsonl_records(path: Path) -> list[Mapping]:
-    """Read complete JSONL records, tolerating only a truncated final record."""
-    return [record for record, _ in _iter_jsonl_records(path)]
-
-
-def _append_jsonl(path: Path, record: Mapping) -> None:
-    """Append one durable record. Caller must hold the store lock."""
-    _repair_trailing_jsonl(path)
-    with open(path, "ab") as output:
-        output.write(json.dumps(record).encode() + b"\n")
-        output.flush()
-        os.fsync(output.fileno())
