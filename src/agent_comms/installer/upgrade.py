@@ -145,6 +145,8 @@ from agent_comms.installer.reporting import (
     UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
+from agent_comms.installer.runtime_wire import CrossesRuntimes
+from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
@@ -560,6 +562,25 @@ class Stack:
                 raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
             os.replace(fetched, self.uv)
 
+    def require_runtime_wire(self) -> None:
+        """Compare the target's wire with the source stamped into this installed wheel.
+
+        Isolated Python ignores the target installer's PYTHONPATH: the old wheel, not
+        the current checkout or its build metadata, owns the outgoing Core identity.
+        """
+        commit = self.commands.run(
+            self.python, "-I", "-c",
+            "from agent_comms.package_stamp import STAMP; print(STAMP.commit())",
+        ).strip()
+        paths = tuple(dict.fromkeys(member.path for member in CrossesRuntimes.declarations()))
+        present = self.commands.git(self.checkout, "ls-tree", "--name-only", "-r", commit,
+                                    "--", *paths).splitlines()
+        sources = {path: self.commands.git(self.checkout, "show", f"{commit}:{path}")
+                   for path in present}
+        drift = CrossesRuntimes.drift_sources(sources)
+        if drift:
+            raise RuntimeWireChanged(commit, drift)
+
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
         with self.lock.with_name("pyproject.toml").open("rb") as definition:
@@ -881,9 +902,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
                 raise UpgradeRefused(str(error)) from None
             member = Install.member(root, retire)
             installed = Stack(tree.path, commands)
-            installed.require_uv()
             if not installed.python.exists():
                 raise UpgradeRefused(f"No installed stack at {installed.python}")
+            installed.require_runtime_wire()
+            installed.require_uv()
         staged = Stack.build(ScratchCheckout(tree.path), commands)
         with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)
