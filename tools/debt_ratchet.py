@@ -365,7 +365,38 @@ class CountedSource(GitMeasure):
                 {key: value for key, value in after.items() if cls.owns(key)})
 
 
-class OccurrenceMeasure(CountedSource):
+@dataclass(frozen=True)
+class Site:
+    """One counted occurrence: the file and line a grown measure points at."""
+
+    path: str
+    line: int
+
+
+class LocatedSource(CountedSource):
+    """A pass that knows the line of every occurrence it counts; its count is how many."""
+
+    @classmethod
+    @abstractmethod
+    def lines(cls, source: bytes, filename: str) -> list[int]:
+        """The line of each occurrence, once per unit counted."""
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        return len(cls.lines(source, filename))
+
+    @classmethod
+    def located(cls, sources: list[tuple[str, bytes]]) -> dict[str, list[Site]]:
+        """Each report key's sites. A site belongs to the key one occurrence in its file
+        tallies to, so the key layout stays tally's alone."""
+        found: dict[str, list[Site]] = {}
+        for path, source in sources:
+            (key,) = cls.tally([(path, 1)])
+            found.setdefault(key, []).extend(Site(path, line) for line in cls.lines(source, path))
+        return found
+
+
+class OccurrenceMeasure(LocatedSource):
     """Shared additive counting for syntactic occurrence measures."""
 
     @staticmethod
@@ -379,9 +410,20 @@ class OccurrenceMeasure(CountedSource):
         return ast.walk(tree)
 
     @classmethod
-    def count(cls, source: bytes, filename: str) -> int:
+    def site_lines(cls, node: ast.AST) -> range:
+        """The lines a counted node spans. The parser positions every node a pass counts
+        except a comprehension clause, which the pass counting one places itself."""
+        match node:
+            case (ast.stmt() | ast.expr() | ast.arg() | ast.keyword() | ast.excepthandler()
+                  | ast.alias() | ast.pattern()):
+                return range(node.lineno, typing.cast(int, node.end_lineno) + 1)
+        raise TypeError(f"{cls.__name__} counted a {type(node).__name__}, which has no position")
+
+    @classmethod
+    def lines(cls, source: bytes, filename: str) -> list[int]:
         tree = cls.tree(source, filename)
-        return sum(cls.occurrences(node) for node in cls.sites(tree, filename))
+        return [cls.site_lines(node).start for node in cls.sites(tree, filename)
+                for _ in range(cls.occurrences(node))]
 
     @classmethod
     def tally(cls, counts: list[tuple[str, int]]) -> dict[str, int]:
@@ -782,10 +824,6 @@ class CleanChangedLines(OccurrenceMeasure):
     """
 
     @staticmethod
-    def site_lines(node: ast.AST) -> range:
-        return range(node.lineno, node.end_lineno + 1)
-
-    @staticmethod
     def introduced(
         repo: Path, base: str, head: str, paths: tuple[str, ...], departed_from: tuple[str, ...],
     ) -> dict[str, list[int]]:
@@ -913,9 +951,13 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
                 return int(any(word in name.casefold() for word in cls.words))
         return 0
 
-    @staticmethod
-    def site_lines(node: ast.AST) -> range:
-        line = node.end_lineno if isinstance(node, ast.Attribute) else node.lineno
+    @classmethod
+    def site_lines(cls, node: ast.AST) -> range:
+        """The line holding the banned name: an attribute's is where the attribute ends."""
+        match node:
+            case ast.Attribute(end_lineno=int(line)):
+                return range(line, line + 1)
+        line = super().site_lines(node).start
         return range(line, line + 1)
 
     @classmethod
@@ -937,9 +979,9 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return frozenset(found)
 
     @classmethod
-    def count(cls, source: bytes, filename: str) -> int:
+    def lines(cls, source: bytes, filename: str) -> list[int]:
         module = ChangedSource(filename, source, frozenset(), b"")
-        return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
+        return sorted([*super().lines(source, filename), *cls.prose_lines(module)])
 
     @classmethod
     def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]]) -> list[int]:
@@ -1064,24 +1106,24 @@ class RawRecordShapes(PerFileMeasure):
                    for _finding in RawShape.from_facts(facts, package))
 
 
-class FunctionLocalImport(PerFileMeasure):
+class FunctionLocalImport(PerFileMeasure, LocatedSource):
     """Imports executed inside a function, including nested local classes."""
 
     class Collector(ast.NodeVisitor):
         def __init__(self) -> None:
             self.depth = 0
-            self.found = 0
+            self.found: list[int] = []
 
         def generic_visit(self, node: ast.AST) -> None:
             nested = isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             self.depth += nested
             if self.depth and isinstance(node, (ast.Import, ast.ImportFrom)):
-                self.found += 1
+                self.found.append(node.lineno)
             super().generic_visit(node)
             self.depth -= nested
 
     @classmethod
-    def count(cls, source: bytes, filename: str) -> int:
+    def lines(cls, source: bytes, filename: str) -> list[int]:
         collector = cls.Collector()
         collector.visit(cls.tree(source, filename))
         return collector.found
@@ -1451,6 +1493,14 @@ class ForeignFieldSpellings(PerFileOccurrenceMeasure):
                     and item.value.isidentifier() for item in items
                 ))
         return 0
+
+    @classmethod
+    def site_lines(cls, node: ast.AST) -> range:
+        """A roster is the literal the loop runs over."""
+        match node:
+            case ast.For(iter=roster) | ast.AsyncFor(iter=roster) | ast.comprehension(iter=roster):
+                return super().site_lines(roster)
+        return super().site_lines(node)
 
 
 class BroadExceptDefault(PerFileOccurrenceMeasure):
@@ -2113,16 +2163,16 @@ class TypingReference(MroDispatch):
 
 class StringSubscript(OccurrenceMeasure):
     @classmethod
-    def count(cls, source: bytes, filename: str) -> int:
+    def lines(cls, source: bytes, filename: str) -> list[int]:
         tree = cls.tree(source, filename)
         imports = TypingImports.of(tree)
-        count = 0
+        found = []
         for node in ast.walk(tree):
             if cls.occurrences(node):
                 reference = TypingReference(imports)
                 reference.dispatch_sync(node.value)
-                count += reference.raw_access_count()
-        return count
+                found.extend([cls.site_lines(node).start] * reference.raw_access_count())
+        return found
 
     @staticmethod
     def occurrences(node: ast.AST) -> int:
@@ -2285,7 +2335,7 @@ class DeclaredTypeSites(MroDispatch):
             self.declare("alias", node.value, scope)
 
 
-class AnyName(PerFileMeasure):
+class AnyName(PerFileMeasure, LocatedSource):
     """Every written Any, including quoted declarations and loaded runtime references."""
 
     @classmethod
@@ -2296,8 +2346,8 @@ class AnyName(PerFileMeasure):
         return tuple(sorted(sites.uses, key=lambda use: (use.line, use.site, use.owner)))
 
     @classmethod
-    def count(cls, source: bytes, filename: str) -> int:
-        return len(cls.uses(source, filename))
+    def lines(cls, source: bytes, filename: str) -> list[int]:
+        return [use.line for use in cls.uses(source, filename)]
 
 
 class UnannotatedParameter(PerFileOccurrenceMeasure):
@@ -2463,8 +2513,8 @@ class Comparison:
     paths: tuple[str, ...]
     base: dict[str, int]
     head: dict[str, int]
-    introduced: dict[str, int]
-    introduced_lines: dict[str, list[int]]
+    introduced: dict[str, list[int]]
+    found: dict[str, list[Site]]
 
     @projected(view="report")
     def delta(self) -> dict[str, int]:
@@ -2488,12 +2538,11 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
     paths = set(touched & (python_paths(repo, base, root) | python_paths(repo, head, root)))
     before: dict[str, int] = {}
     after: dict[str, int] = {}
-    introduced: dict[str, int] = {}
-    introduced_lines: dict[str, list[int]] = {}
+    introduced: dict[str, list[int]] = {}
     # Every measure reads production Python paths only, so with none touched each would
     # report no change.
     if not touched & (production_paths(repo, base) | production_paths(repo, head)):
-        return Comparison(root, base, head, (), before, after, introduced, introduced_lines)
+        return Comparison(root, base, head, (), before, after, introduced, {})
 
     # A pass of a shared runner is measured once, by that runner.
     measures = tuple(dict.fromkeys(measure.run_by() for measure in measured))
@@ -2518,17 +2567,25 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
             if measure not in combined and all(part.done() for part in parts[measure]):
                 combined[measure] = measure.combine([part.result() for part in parts[measure]],
                                                     repo, base, head, paths, root)
+        # A shared runner measures all its passes; the comparison holds only the asked ones.
         for measure in measures:
-            measured_base, measured_head = combined[measure]
-            before.update(measured_base)
-            after.update(measured_head)
+            for side, taken in zip((before, after), combined[measure], strict=True):
+                side.update({key: value for key, value in taken.items()
+                             if any(asked.owns(key) for asked in measured)})
         for path_sites in sites:
-            for identity, found in path_sites.result().items():
-                introduced[identity] = len(found)
-                if found:
-                    introduced_lines[identity] = sorted(found)
-    return Comparison(root, base, head, tuple(sorted(paths)), changed.paired(before),
-                      changed.paired(after), introduced, introduced_lines)
+            introduced.update({identity: sorted(found)
+                               for identity, found in path_sites.result().items()})
+    comparison = Comparison(root, base, head, tuple(sorted(paths)), changed.paired(before),
+                            changed.paired(after), introduced, {})
+    # Only a grown measure is read for its sites, so a clean change pays for none.
+    grown = [measure for measure in LocatedSource.members_with(LocatedSource)
+             if measure in measured and measure.blocks(comparison.delta)]
+    if not grown:
+        return comparison
+    sources = GitMeasure.sources(repo, head, paths & python_paths(repo, head, root))
+    return dataclasses.replace(comparison, found={
+        key: sites for measure in grown for key, sites in measure.located(sources).items()
+        if comparison.delta[key] > 0})
 
 
 def main() -> int:
@@ -2548,8 +2605,12 @@ def main() -> int:
     for name, grown in sorted(result.delta.items()):
         if grown > 0:
             print(f"grew {name} +{grown}", file=sys.stderr)
-    for identity, lines in sorted(result.introduced_lines.items()):
-        print(f"introduced {identity} at lines {lines}", file=sys.stderr)
+    for name, sites in sorted(result.found.items()):
+        print(f"found {name} at {' '.join(f'{site.path}:{site.line}' for site in sites)}",
+              file=sys.stderr)
+    for identity, lines in sorted(result.introduced.items()):
+        if lines:
+            print(f"introduced {identity} at lines {lines}", file=sys.stderr)
     return int(result.failed)
 
 
