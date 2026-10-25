@@ -190,8 +190,16 @@ class ToadAskPhase(OwnerAsksPhase, declared_name=None):
     """An ask whose code lands in Toad. Evidence reads only the plan repository's main, so the
     plan document records the merged Toad commit under the phase's own name."""
 
-    def __init_subclass__(cls, **options: object) -> None:
-        super().__init_subclass__(**options)
+    def __init_subclass__(
+        cls,
+        *,
+        affix: str | None = None,
+        declared_name: str | None = None,
+        discovery_package: str | None = None,
+    ) -> None:
+        super().__init_subclass__(
+            affix=affix, declared_name=declared_name, discovery_package=discovery_package
+        )
         cls.evidence = PatternPresent(
             rf"^- {cls.declared_name} landed: OpenHCSDev/toad@[0-9a-f]{{40}}$",
             (OwnerAsksPlan.document,),
