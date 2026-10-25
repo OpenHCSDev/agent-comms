@@ -365,9 +365,17 @@ class Checkout:
         return cls.prepared(Path(path))
 
     @classmethod
+    def checked(cls, path: Path) -> Self:
+        """Resolve a supplied project and require a Git checkout, never the shell's cwd."""
+        path = path.expanduser().resolve(strict=True)
+        if not cls.present(path):
+            raise ValueError(f"Project {path} is not a Git checkout")
+        return cls(path)
+
+    @classmethod
     def prepared(cls, path: Path) -> Self:
         """Prepare this checkout's pinned submodules before handing it to a consumer."""
-        checkout = cls(path)
+        checkout = cls.checked(path)
         checkout.prepare()
         return checkout
 

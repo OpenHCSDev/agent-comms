@@ -99,7 +99,8 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     assert code == 1 and destination.read_bytes() == artifact
     assert not list(comms.root.glob(".AGENTS-export.md.*.tmp"))
     before_refusal = read_history(comms)
-    code, refused = command("pin-constraint", other.name, "--source", source)
+    code, refused = command("pin-constraint", other.name, "--source", source,
+                            "--worktree", other.worktree)
     assert code == 1 and "did not receive" in refused["error"]
     assert read_history(comms) == before_refusal
     code, empty = command("export-retained", other.name, "--output", str(comms.root / "other.md"))

@@ -213,7 +213,7 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--server', required=True, help='HTTP address of the running OpenCode TUI/server')
-        parser.add_argument('--directory', type=Path, default=Path.cwd(), help='OpenCode session working directory')
+        parser.add_argument('--directory', type=Path, required=True, help='OpenCode session working directory')
 
     def session_process(self) -> ProcessIdentity:
         return ProcessIdentity.capture(self.options.pid)

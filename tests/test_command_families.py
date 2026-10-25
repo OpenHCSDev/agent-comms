@@ -43,12 +43,8 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     assert register.name == "a" and register.tags == frozenset({"x", "y"})
     assert parse(["inbox", "--thread", "a"]).thread == "a"
     send_arguments = ["user-send", "--to", "a", "--body", "hello"]
-    monkeypatch.chdir(tmp_path)
-    assert parse(send_arguments).worktree == str(tmp_path)
-    changed = tmp_path / "changed"
-    changed.mkdir()
-    monkeypatch.chdir(changed)
-    assert parse(send_arguments).worktree == str(changed)
+    with pytest.raises(SystemExit):
+        parse(send_arguments)
     assert parse([*send_arguments, "--worktree", str(tmp_path)]).worktree == str(tmp_path)
     invoke = parse(["tool", "--tool", "comms_threads"])
     assert invoke.arguments == {}

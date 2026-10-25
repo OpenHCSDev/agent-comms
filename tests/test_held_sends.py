@@ -74,7 +74,7 @@ def assert_published_once(comms):
 
 @pytest.mark.parametrize('arguments', (
     ('send', '--from', 'sender'),
-    ('user-send',),
+    ('user-send', '--worktree', '{project}'),
 ))
 async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
     comms = held_bus
@@ -82,7 +82,8 @@ async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / 'src'))
     child = await asyncio.create_subprocess_exec(
         sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root),
-        *arguments, '--to', 'recipient', '--body', 'held publication',
+        *(argument.format(project=comms.root) for argument in arguments),
+        '--to', 'recipient', '--body', 'held publication',
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env)
     completed = asyncio.create_task(child.communicate())
     try:

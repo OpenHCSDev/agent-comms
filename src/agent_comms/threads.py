@@ -32,6 +32,7 @@ from .goals import (
     GoalDeclaration,
     NoGoal,
 )
+from .config_options import CatalogSelection
 from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
 from .lifecycle import LifecycleState
@@ -257,8 +258,16 @@ class ThreadCatalog(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance):
+class Thread(ThreadProvenance, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
+
+    def project_directory(self) -> Path:
+        from .repo import Checkout
+
+        try:
+            return Checkout.checked(Path(self.worktree)).path
+        except (OSError, ValueError) as error:
+            raise ValueError(f"Thread {self.name!r} has invalid project {self.worktree!r}: {error}") from error
 
     parent: ThreadParent = field(default_factory=NoParent)
     work_state: Annotated[

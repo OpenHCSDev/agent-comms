@@ -352,7 +352,7 @@ def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
     assert "reserved" not in comms.channels.catalog.read().tags
 
 
-def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
+def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, source_repository):
     import json
 
     from agent_comms.cli_bridges.history import AnySession, OfflineHistory
@@ -389,7 +389,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     )
     with pytest.raises(ValueError):
         comms.threads.create(
-            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="task", tags=GivenTags(frozenset({"reserved"}))),
+            ForkSpec.from_task(name="child", parent="parent", project=str(source_repository.checkout), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="task", tags=GivenTags(frozenset({"reserved"}))),
         )
 
     after = comms.registry.snapshot()

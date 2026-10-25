@@ -332,7 +332,7 @@ class TestSelectedTargetActions:
             assert CliCommand.target_catalog(comms, selected, project=str(tmp_path)) == ()
         refused = TargetEdit(ArchiveCliCommand,
                              ArchiveCliCommand.selected_targets((CommandTarget.named('project'),)),
-                             {}).apply(comms)
+                             {}, project=str(tmp_path)).apply(comms)
         failed, = refused.outcomes
         assert failed.error_type == UnregisteredThreadError.__name__
         comms.registry.declare(Thread('project', frozenset(), str(tmp_path)), StoppedThreadStatus())
@@ -370,7 +370,7 @@ class TestSelectedTargetActions:
             with pytest.raises(ValueError):
                 RestartCliCommand.execute_target(
                     comms, RestartCliCommand.selected_targets((CommandTarget.named('alpha'),)),
-                    arguments)
+                    arguments, project=str(tmp_path))
         explicit = RestartCliCommand(name=OneOwner('alpha'), agent_bin=GivenBinary('/operator/native'),
                                       agent_args=GivenArguments(('--no-extensions',)))
         from agent_comms.cli import build_parser
@@ -412,9 +412,9 @@ class TestSelectedTargetActions:
         assert action.confirmation.count('Threads, saved views and history remain.') == 1
         before = comms.registry.snapshot()
         with pytest.raises(ValueError):
-            TargetEdit(DeleteTagCliCommand, DeleteTagCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in selected)), {}).apply(comms)
+            TargetEdit(DeleteTagCliCommand, DeleteTagCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in selected)), {}, project=str(tmp_path)).apply(comms)
         assert comms.registry.snapshot() == before
-        result = TargetEdit(DeleteTagCliCommand, DeleteTagCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in selected)), {}, confirmed=True).apply(comms)
+        result = TargetEdit(DeleteTagCliCommand, DeleteTagCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in selected)), {}, project=str(tmp_path), confirmed=True).apply(comms)
         assert result.successful
         assert tuple(outcome.result.tag for outcome in result.outcomes) == ('team', 'other')
         assert all(outcome.result.removed_tag for outcome in result.outcomes)
@@ -436,7 +436,7 @@ class TestSelectedTargetActions:
         assert tuple(command.name for command in action.bound) == ('team', 'other')
         result = TargetEdit(DeleteTagCliCommand, DeleteTagCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in selected)),
             {'disposition': compile_decoder(TagDisposition).encode_editor(ArchiveThreadsTagDisposition())},
-            confirmed=True).apply(comms)
+            project=str(tmp_path), confirmed=True).apply(comms)
         assert not result.successful
         assert tuple(outcome.target for outcome in result.outcomes) == tuple(
             CommandTarget.named(name) for name in selected)
@@ -513,7 +513,7 @@ class TestSelectedTargetActions:
         comms.channels.update_tags("beta", add=frozenset({"team"}))
         for name in ("alpha", "beta"):
             comms.registry.register(comms.registry.require(name), RunningThreadStatus())
-        result = TargetEdit(StopCliCommand, StopCliCommand.selected_targets((CommandTarget.named('#team'), CommandTarget.named('alpha'))), {}).apply(comms)
+        result = TargetEdit(StopCliCommand, StopCliCommand.selected_targets((CommandTarget.named('#team'), CommandTarget.named('alpha'))), {}, project=str(tmp_path)).apply(comms)
         assert isinstance(result, TargetBatchResult) and result.successful
         assert len(result.outcomes) == 2
         assert {outcome.result.stopped for outcome in result.outcomes} == {"alpha", "beta"}
@@ -539,7 +539,7 @@ class TestSelectedTargetActions:
         catalog = comms.channels.catalog.read()
         target = ChannelTarget("#team")
         commands = StartCliCommand.bindings(
-            comms, target, snapshot=snapshot, catalog=catalog,
+            comms, target, project=str(tmp_path), snapshot=snapshot, catalog=catalog,
             resolved=target.resolve(snapshot, comms.bus.require_channel))
         assert tuple(command.name for command in commands) == ("alpha",)
         assert all(comms.registry.require(name).process_identity == NoProcess()
@@ -551,7 +551,7 @@ class TestSelectedTargetActions:
         comms = self.declared(tmp_path)
         before = {name: comms.registry.require(name).tags for name in ("alpha", "beta")}
         result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets((CommandTarget.named('alpha'), CommandTarget.named('beta'), CommandTarget.named('#team'))), {},
-                            channel=PerTargetChannels({"alpha": ("#team",), "beta": ("#other",)})).apply(comms)
+                            project=str(tmp_path), channel=PerTargetChannels({"alpha": ("#team",), "beta": ("#other",)})).apply(comms)
         assert result.successful and len(result.outcomes) == 3
         catalog = comms.channels.catalog.read()
         assert comms.bus.require_channel("#team").pinned
@@ -569,7 +569,7 @@ class TestSelectedTargetActions:
             comms, CliCommand.selected_targets((CommandTarget.named('alpha'),)), PerTargetChannels(channels), project=str(tmp_path))
             if action.declaration is PinThreadCliCommand)
         assert tuple(command.channel for command in action.bound) == ("#team", "#other")
-        result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in action.targets)), {}, channel=action.channels).apply(comms)
+        result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in action.targets)), {}, project=str(tmp_path), channel=action.channels).apply(comms)
         assert result.successful and len(result.outcomes) == 2
         document = comms.channels.catalog.read()
         assert document.pinned_threads("#team") == {"alpha"}
@@ -577,11 +577,11 @@ class TestSelectedTargetActions:
         assert comms.registry.require("alpha").tags == frozenset({"team", "other"})
         with pytest.raises(ValueError):
             TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets((CommandTarget.named('alpha'),)), {},
-                       channel=PerTargetChannels(channels)).apply(comms)
+                       project=str(tmp_path), channel=PerTargetChannels(channels)).apply(comms)
         archive = next(action for action in CliCommand.target_catalog(
             comms, CliCommand.selected_targets((CommandTarget.named('alpha'),)), PerTargetChannels(channels), project=str(tmp_path))
             if action.declaration is ArchiveCliCommand)
-        result = TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets((CommandTarget.named('alpha'),)), {}, channel=archive.channels).apply(comms)
+        result = TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets((CommandTarget.named('alpha'),)), {}, project=str(tmp_path), channel=archive.channels).apply(comms)
         assert result.successful and len(result.outcomes) == 1
         assert result.outcomes[0].result.archived == "alpha"
 
@@ -595,7 +595,7 @@ class TestSelectedTargetActions:
             comms, CliCommand.selected_targets((CommandTarget.named('alpha'),)), PerTargetChannels(channels), project=str(tmp_path))
             if action.declaration is PinThreadCliCommand)
         comms.channels.update_tags("alpha", remove=frozenset({"team"}))
-        result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in action.targets)), {}, channel=action.channels).apply(comms)
+        result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in action.targets)), {}, project=str(tmp_path), channel=action.channels).apply(comms)
         assert not result.successful and len(result.outcomes) == 2
         assert not result.outcomes[0].items_with(Successful, result.outcomes[0])
         assert "#team" in result.outcomes[0].error
@@ -642,12 +642,12 @@ class TestSelectedTargetActions:
         comms = self.declared(tmp_path)
         actions = CliCommand.target_catalog(comms, CliCommand.selected_targets((CommandTarget.named('missing'), CommandTarget.named('alpha'))), project=str(tmp_path))
         assert {action.declaration.declared_name for action in actions} >= {"archive", "read-target"}
-        result = TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets((CommandTarget.named('missing'), CommandTarget.named('alpha'))), {}).apply(comms)
+        result = TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets((CommandTarget.named('missing'), CommandTarget.named('alpha'))), {}, project=str(tmp_path)).apply(comms)
         assert not result.successful
         assert result.outcomes[0].target == CommandTarget.named("missing") and not result.outcomes[0].items_with(Successful, result.outcomes[0])
         assert result.outcomes[1].result.archived == "alpha"
         with pytest.raises(ValueError):
-            TargetEdit(ForkCliCommand, ForkCliCommand.selected_targets((CommandTarget.named('alpha'), CommandTarget.named('beta'))), {}).apply(comms)
+            TargetEdit(ForkCliCommand, ForkCliCommand.selected_targets((CommandTarget.named('alpha'), CommandTarget.named('beta'))), {}, project=str(tmp_path)).apply(comms)
 
 
 def test_result_kind_decides_exit_code_and_navigation_targets():

@@ -40,9 +40,10 @@ from agent_comms.threads import Thread
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment() -> None:
-    assert ThreadLaunch.current({"AGENT_COMMS_THREAD": "owner"}).name == "owner"
-    with pytest.raises(CallingThreadUnavailable):
-        ThreadLaunch.current({})
+    assert ThreadLaunch.current({"AGENT_COMMS_THREAD": "owner", "PI_WORKTREE": "/declared"}).worktree == "/declared"
+    for environment in ({}, {"AGENT_COMMS_THREAD": "owner"}):
+        with pytest.raises(CallingThreadUnavailable):
+            ThreadLaunch.current(environment)
     assert not ThreadLaunch.called_by("owner", lambda caller: caller, environment={})
 
 
@@ -485,13 +486,13 @@ class TestThreadOps:
 
 
 class TestFork:
-    def test_fork_requires_parent_session(self, wired: Comms) -> None:
+    def test_fork_requires_parent_session(self, wired: Comms, source_repository) -> None:
         with pytest.raises(ValueError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project=str(source_repository.checkout), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
 
-    def test_fork_fail_closed_unknown_parent(self, wired: Comms) -> None:
+    def test_fork_fail_closed_unknown_parent(self, wired: Comms, source_repository) -> None:
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project=str(source_repository.checkout), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
 
 
 class TestLedgerOps:

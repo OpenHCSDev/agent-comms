@@ -146,7 +146,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
     @abstractmethod
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: str | None, resolved,
-        *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
     ) -> tuple[C, ...]: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
@@ -336,7 +336,7 @@ class ThreadTarget(NamedTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: str | None, resolved: ResolvedThread,
-        *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
     ) -> tuple[C, ...]:
         return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
@@ -487,9 +487,9 @@ class ChannelTarget(NamedTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: str | None, resolved: ResolvedChannel,
-        *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
     ) -> tuple[C, ...]:
-        return declaration.channel_bindings(comms, resolved, snapshot=snapshot, catalog=catalog)
+        return declaration.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender: Message | None = None):
         from .channels import BuiltinChannelView
@@ -581,7 +581,7 @@ class ProjectTarget(CommandTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: str | None, resolved,
-        *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
     ) -> tuple[C, ...]:
         return declaration.project_bindings(comms, resolved)
 

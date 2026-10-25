@@ -67,9 +67,9 @@ def test_each_selection_returns_its_own_result(comms, tmp_path, selection, targe
     comms.registry.declare(Thread("first", frozenset(), str(tmp_path)), RunningThreadStatus())
     if selection is OneTarget and not resolvable:
         with pytest.raises(ValueError):
-            StopCliCommand.execute_target(comms, selection(target), {})
+            StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
         return
-    result = StopCliCommand.execute_target(comms, selection(target), {})
+    result = StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
     if selection is OneTarget:
         assert result.stopped == "first"
     else:
@@ -94,10 +94,10 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     assert any(action.declaration is ArchiveCliCommand for action in catalog)
     assert all(action.declaration is not QueueRestartCliCommand for action in catalog)
     with pytest.raises(ValueError, match="single target"):
-        RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {})
+        RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, project=str(tmp_path))
     assert all(comms.registry.status(name) == StoppedThreadStatus() for name in names)
     result = ArchiveCliCommand.execute_target(
-        comms, ArchiveCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, confirmed=True)
+        comms, ArchiveCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, project=str(tmp_path), confirmed=True)
     assert len(result.outcomes) == 2 and result.exit_code() == 0
     assert tuple(outcome.target for outcome in result.outcomes) == tuple(
         CommandTarget.named(name) for name in names)

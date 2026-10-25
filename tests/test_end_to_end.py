@@ -26,18 +26,51 @@ async def native(tmp_path, native_runtime_package):
         yield owner
 
 
-async def cli(programs, root, *arguments):
-    # The test's own interpreter runs the console target, so the CLI and the in-process
-    # wire are one runtime: a root refuses a second one (root_runtime.py:56).
-    result = await BoundedRun.run(
+async def cli_result(programs, root, *arguments):
+    # CLI and in-process wire share an interpreter: a root refuses two runtimes.
+    return await BoundedRun.run(
         (sys.executable, str(programs.script(main)), '--root', str(root), *arguments),
         timeout=60, env=dict(os.environ),
     )
+
+
+async def cli(programs, root, *arguments):
+    result = await cli_result(programs, root, *arguments)
     assert result.outcome.successful, (result.stdout + result.stderr).decode()
     return json.loads(result.stdout)
 
 
 class TestEndToEndLifecycle:
+    @pytest.mark.parametrize('operation,parent_arguments', [
+        ('new', ()), ('fork', ('--parent', 'parent')),
+    ])
+    async def test_new_and_fork_require_a_declared_checkout(
+        self, native, source_programs, operation, parent_arguments,
+    ):
+        await native.author_history()
+        comms = wire(native.root)
+        await cli(source_programs, native.root, 'register', '--name', 'parent',
+                  '--worktree', str(native.project), '--execution', 'native')
+        parent = comms.registry.require('parent')
+        comms.threads.attach_session(parent, str(native.session), process=parent.process_identity)
+        command = (operation, '--name', 'probe', *parent_arguments)
+        plain = native.project.parent / 'plain'
+        plain.mkdir()
+        for project_arguments in ((), ('--project', str(plain))):
+            refused = await cli_result(source_programs, native.root, *command, *project_arguments)
+            assert not refused.outcome.successful
+            assert 'probe' not in comms.registry.snapshot().threads
+        try:
+            created = await cli(source_programs, native.root, *command,
+                                '--project', str(native.project),
+                                '--model', 'response-local/fixture', '--thinking-level', 'off')
+            assert created['created'] == 'probe'
+            assert comms.registry.require('probe').worktree == str(native.project.resolve())
+        finally:
+            for thread in comms.registry.snapshot().threads.values():
+                if thread.process_alive:
+                    await cli(source_programs, native.root, 'stop', '--name', thread.name)
+
     async def test_fork_send_receive_respond(self, native, source_programs):
         await native.author_history()
         root = native.root

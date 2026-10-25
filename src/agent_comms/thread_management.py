@@ -152,6 +152,11 @@ class NewThreadSpec:
     task: LaunchInput = field(default_factory=LaunchInput)
     tags: TagChoice = InheritedTags()
 
+    def __post_init__(self) -> None:
+        from .repo import Checkout
+
+        object.__setattr__(self, "project", str(Checkout.checked(Path(self.project)).path))
+
     @classmethod
     def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
@@ -162,8 +167,8 @@ class NewThreadSpec:
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
-        project = Path(self.project).expanduser().resolve(strict=True)
-        thread = self.declaration(str(project), threads.registry)
+        project = Path(self.project)
+        thread = self.declaration(self.project, threads.registry)
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
         with threads.registry.store.guarded_write():
@@ -440,8 +445,8 @@ class ThreadManagement:
     def running_selection(self, name: str) -> RunningSelection:
         thread = self.registry.require(name)
         return RunningSelection(
+            thread,
             thread.model.applied(self.agents.agent_info_of(thread.name).model),
-            thread.thinking_level,
         )
 
     def resolve_thread_model(

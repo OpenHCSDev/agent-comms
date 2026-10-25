@@ -1155,7 +1155,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         return ProcessIdentity.capture(os.getpid())
 
     async def session_worktree(self) -> Path:
-        return Path.cwd()
+        return self.comms.registry.require(self.binding.bus).project_directory()
 
     async def registered_watch(self, operation: Inbox) -> None:
         with ExitStack() as endpoint:

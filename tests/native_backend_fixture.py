@@ -224,6 +224,8 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     root.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
+    from agent_comms.repo import Repo
+    Repo.git(project, 'init', '--quiet')
     config.mkdir(mode=0o700)
     session = create_fresh_private_session(tmp_path / "sessions", worktree=project).path
     provider = provider_type(status=200, text="Native response lifecycle.")
