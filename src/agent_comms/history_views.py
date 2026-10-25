@@ -57,7 +57,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
 from .page_traversal import LiveCursor
-from .notification_read import NotificationWindow
+from .notification_evidence import NotificationWindow
 from .presentation import (
     BusPresentation,
     ChannelView,

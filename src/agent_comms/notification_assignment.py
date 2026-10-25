@@ -25,7 +25,7 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .notification_read import NotificationAssignmentRead, NotificationWindow
+from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .private_registry_guard import RegistryPrivacy
 from .typed_table import BooleanStorage, TypedRow
 
@@ -234,10 +234,8 @@ class NotificationAssignment(NotificationSource):
         sources = tuple({source.message.reference: source
                          for read in reads for source in read.sources}.values())
         fresh = {}
-        for start in range(0, len(sources), NotificationWindow.window_limit):
-            fresh.update(cls.read(
-                root, sources[start:start + NotificationWindow.window_limit],
-            ).rows_by_source())
+        for sources_chunk in NotificationWindow.chunks(sources):
+            fresh.update(cls.read(root, sources_chunk).rows_by_source())
         return tuple(read for read in reads if read.differs_from(fresh))
 
     @classmethod

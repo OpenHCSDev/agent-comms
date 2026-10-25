@@ -66,7 +66,8 @@ from .read_basis import (
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .notification_assignment import NotificationAssignment
-from .notification_read import NotificationAssignmentRead, NotificationReadMark, NotificationWindow
+from .notification_evidence import NotificationAssignmentRead, NotificationReadMark, NotificationWindow
+from .notification_read import CapturedNotificationWindow
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
@@ -233,15 +234,13 @@ class MessageNotification:
         result = {}
         reads = []
         read_marks = []
-        for start in range(0, len(references), NotificationWindow.window_limit):
-            sources = log.deliveries_for_references(
-                references[start : start + NotificationWindow.window_limit]
-            )
+        for references_chunk in NotificationWindow.chunks(references):
+            sources = log.deliveries_for_references(references_chunk)
             window = project(sources)
             result.update(window.outcomes)
             reads.extend(window.reads)
             read_marks.extend(window.read_marks)
-        return NotificationWindow(result, tuple(reads), tuple(read_marks))
+        return CapturedNotificationWindow(result, tuple(reads), tuple(read_marks))
 
     @classmethod
     def delivery_window(
@@ -250,7 +249,7 @@ class MessageNotification:
     ) -> NotificationWindow:
         """Project the original frozen audience even before handling is recorded."""
         if not sources:
-            return NotificationWindow({}, (assignment_read,))
+            return CapturedNotificationWindow({}, (assignment_read,))
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
             ((source, recipient) for source in sources for recipient in source.recipients
@@ -287,7 +286,7 @@ class MessageNotification:
         keys = {(source.message.seq, source.message.message_id) for source in sources}
         result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
         if not keys:
-            return NotificationWindow({}, (assignment_read,))
+            return CapturedNotificationWindow({}, (assignment_read,))
         rows = NotificationAssignment.resolve(root, assignment_read)
         read_marks = []
         reads = ReadLedger.at(root)
@@ -318,7 +317,7 @@ class MessageNotification:
             )
             read_marks.extend(direct_read.read_marks)
             result[key].extend(direct_read.outcomes.get(key, ()))
-        return NotificationWindow({key: tuple(rows) for key, rows in result.items()},
+        return CapturedNotificationWindow({key: tuple(rows) for key, rows in result.items()},
                                   (assignment_read,), tuple(read_marks))
 
     @classmethod
@@ -328,7 +327,7 @@ class MessageNotification:
         """Retain even an absent human receipt so its first display is observable."""
         message = source.message
         if source.recipients or not viewer.sees_direct_read(source):
-            return NotificationWindow({}, ())
+            return CapturedNotificationWindow({}, ())
         peer = CommandTarget.named(message.target).direct_peer(snapshot)
         for target in () if peer is None else peer.role.human(peer):
             recipient = FrozenRecipient(target.incarnation.lookup, target.name)
@@ -338,8 +337,8 @@ class MessageNotification:
             mark = NotificationReadMark(source, recipient, displayed_to)
             notification = (cls(recipient, source.sender_lookup, HumanReadProgress(),
                                 displayed_to=displayed_to, changed=True),) if displayed_to else ()
-            return NotificationWindow({(message.seq, message.message_id): notification}, (), (mark,))
-        return NotificationWindow({}, ())
+            return CapturedNotificationWindow({(message.seq, message.message_id): notification}, (), (mark,))
+        return CapturedNotificationWindow({}, ())
 
     @classmethod
     def sent_sources(
@@ -964,21 +963,8 @@ class WireRevision(ReadState):
                            if not previous.results[name].same_status(status_batch.view(name)))
         remaining = {name: view for name, view in readable.items() if name not in changed}
         changed.update(name for name, view in remaining.items()
-                       if view.notification_activity_names() & activity_changed)
-        if self.reads != earlier.reads:
-            marks = ReadLedger.at(comms.root).changed_notifications(
-                (mark for view in remaining.values() for mark in view.notification_marks),
-                comms.registry.snapshot(),
-            )
-            changed.update(name for name, view in remaining.items()
-                           if any(mark in marks for mark in view.notification_marks))
-        if self.notifications != earlier.notifications:
-            changed_reads = NotificationAssignment.changed(
-                (view.notification_read for name, view in remaining.items() if name not in changed),
-                comms.root,
-            )
-            changed.update(name for name, view in remaining.items()
-                           if view.notification_read in changed_reads)
+                       if view.notification_window.activity_names() & activity_changed
+                       or view.notification_window.changed(comms, self, earlier))
         return frozenset(changed & names)
 
     @property

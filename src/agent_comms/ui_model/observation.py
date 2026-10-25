@@ -50,9 +50,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import HistorySource
-from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.notification_read import NotificationAssignmentRead, NotificationReadMark, NotificationWindow
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
@@ -611,31 +609,24 @@ class NotificationsRead:
 
     revision: WireRevision
     activity: Mapping[str, ObservedActivity | DeletedThread | None] = field(default_factory=dict)
-    reads: tuple[NotificationAssignmentRead, ...] = ()
-    read_marks: tuple[NotificationReadMark, ...] = ()
+    notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
 
     @classmethod
     def of(cls, revision: WireRevision, comms: Comms,
            known: Mapping[str, ObservedActivity | DeletedThread],
            window: NotificationWindow,
            ) -> NotificationsRead:
-        names = {name for items in window.outcomes.values()
-                 for item in items for name in item.activity_names()}
+        names = window.activity_names()
         known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
-        return cls(revision, {name: known.get(name) for name in names}, window.reads, window.read_marks)
+        return cls(revision, {name: known.get(name) for name in names}, window)
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
         """Read marks, participant activity or retained assignment evidence changed."""
         if revision.registry != self.revision.registry:
             return True
-        if revision.reads != self.revision.reads and self.read_marks:
-            if ReadLedger.at(comms.root).changed_notifications(self.read_marks, comms.registry.snapshot()):
-                return True
         current = comms.views.observed_activity(revision, self.activity) if self.activity else {}
-        if any(current.get(name) != seen for name, seen in self.activity.items()):
-            return True
-        return (revision.notifications != self.revision.notifications
-                and bool(NotificationAssignment.changed(self.reads, comms.root)))
+        return (any(current.get(name) != seen for name, seen in self.activity.items())
+                or self.notification_window.changed(comms, revision, self.revision))
 
 
 class UnreadableNotificationsRead(NotificationsRead):
@@ -908,7 +899,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         readable, _ = previous.revision_inputs()
         names = self.located_threads.names
         watched = names | frozenset(actor for view in readable.values()
-                                    for actor in view.notification_activity_names())
+                                    for actor in view.notification_window.activity_names())
         activity = comms.views.observed_activity(revision, watched)
         self.located_threads = replace(self.located_threads, activity=activity)
         names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names

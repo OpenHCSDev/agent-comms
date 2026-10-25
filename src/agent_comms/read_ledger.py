@@ -21,7 +21,7 @@ from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .private_path import ObservedPath
-from .notification_read import NotificationReadMark
+from .notification_evidence import NotificationReadMark
 from .read_basis import (
     AllConversation,
     ChannelConversation,

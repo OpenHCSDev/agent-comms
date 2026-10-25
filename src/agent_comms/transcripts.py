@@ -26,7 +26,7 @@ from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut
-from .notification_read import NotificationWindow
+from .notification_evidence import NotificationWindow
 from .private_path import FileObservation, FileRevision
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity

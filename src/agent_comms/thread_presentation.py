@@ -12,7 +12,7 @@ from agent_comms.errors import RelationViolationError, RouteChangedError, Unregi
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
-from .notification_read import NotificationAssignmentRead, NotificationReadMark
+from .notification_evidence import NoNotificationWindow, NotificationWindow
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
@@ -216,12 +216,7 @@ class ThreadPresentation(ThreadStatusDisplay):
     read_identity: TranscriptReadIdentity | None = None
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
-    notification_read: NotificationAssignmentRead = field(default_factory=NotificationAssignmentRead.empty)
-    notification_marks: tuple[NotificationReadMark, ...] = ()
-
-    def notification_activity_names(self) -> frozenset[str]:
-        return frozenset(name for item in (*self.notifications, *self.sent_notifications)
-                         for name in item.activity_names())
+    notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
 
     def require(self, name: str) -> ThreadPresentation:
         """Require a presentation for a caller already bound to this thread."""
@@ -283,7 +278,7 @@ class ThreadPresentation(ThreadStatusDisplay):
         )
         return replace(
             self, notifications=incoming, sent_notifications=sent,
-            notification_read=notification_read, notification_marks=projected.read_marks,
+            notification_window=projected,
             read_identity=window.read.identity,
             incoming_references=tuple(source.message.reference for source in window.sources),
             sent_references=tuple(source.message.reference for source in window.sent_sources),

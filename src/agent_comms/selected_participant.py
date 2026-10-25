@@ -32,7 +32,7 @@ from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment
-from .notification_read import NotificationAssignmentRead, NotificationWindow
+from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome

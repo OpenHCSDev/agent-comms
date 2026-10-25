@@ -24,7 +24,7 @@ sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
 from agent_comms.comms import wire
 from agent_comms.presentation import MessageNotification
-from agent_comms.notification_read import NotificationWindow
+from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.threads import Thread
 from toad.widgets.comms_sidebar import ChannelGroup
