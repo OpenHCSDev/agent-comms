@@ -14,6 +14,7 @@ import json
 import math
 import multiprocessing
 import os
+import pwd
 import re
 import select
 import signal
@@ -43,7 +44,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128, NullMember, RecordMember, SubclassUnion
-from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime
+from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -818,8 +819,100 @@ class DarwinPlatform(Platform):
                 return
 
 
+class UnitActivity(DeclaredFamily, affix="Unit"):
+    """systemd's ActiveState of a unit, an external contract decoded once by its spelling."""
+
+    @classmethod
+    def ended(cls) -> bool:
+        """Whether the unit has stopped running, cleanly or not."""
+        return False
+
+    @classmethod
+    def serving(cls) -> bool:
+        """Whether ``systemctl is-active`` counts the unit as running."""
+        return False
+
+
+class EndedUnit(UnitActivity, declared_name=None):
+    @classmethod
+    def ended(cls) -> bool:
+        return True
+
+
+class ServingUnit(UnitActivity, declared_name=None):
+    @classmethod
+    def serving(cls) -> bool:
+        return True
+
+
+class ActiveUnit(ServingUnit): ...
+
+
+class ReloadingUnit(ServingUnit): ...
+
+
+class RefreshingUnit(ServingUnit): ...
+
+
+class ActivatingUnit(UnitActivity): ...
+
+
+class DeactivatingUnit(UnitActivity): ...
+
+
+class MaintenanceUnit(UnitActivity): ...
+
+
+class InactiveUnit(EndedUnit): ...
+
+
+class FailedUnit(EndedUnit): ...
+
+
+class UnmanagedHomeError(RelationViolationError):
+    """A home no user manager belongs to asked to change the manager's units."""
+
+
+class SystemdUnit(ABC):
+    """A user unit declares the definition the resident manager installs."""
+
+    unit: ClassVar[str]
+
+    @classmethod
+    def unit_file(cls, home: Path) -> Path:
+        return home / ".config/systemd/user" / cls.unit
+
+    @classmethod
+    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
+        return ()
+
+    @classmethod
+    @abstractmethod
+    def unit_text(cls, arguments: tuple[str, ...]) -> str: ...
+
+
+class AgentsSlice(SystemdUnit):
+    """Agent residents and their descendants leave two CPUs for the owner."""
+
+    unit = "agents.slice"
+    allowed_cpus: ClassVar[str] = "2-11"
+    cpu_weight: ClassVar[int] = 50
+
+    @classmethod
+    def launch_option(cls) -> str:
+        return f"--slice={cls.unit}"
+
+    @classmethod
+    def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
+        return (
+            "[Unit]\nDescription=Agent processes\n\n"
+            f"[Slice]\nAllowedCPUs={cls.allowed_cpus}\nCPUWeight={cls.cpu_weight}\n"
+        )
+
+
 class ResidentManager(DeclaredFamily, affix="Manager"):
-    """What owns a handed-off resident once its launcher is gone: a host fact, decoded once.
+    """What owns this home's units, and a handed-off resident once its launcher is gone: a
+    host fact, decoded once, and the only caller of ``systemctl`` and ``systemd-run``.
 
     Leaving the launcher's process tree is not enough when the launcher is itself a systemd
     unit: ending that unit signals its whole cgroup, setsid and the reparent to init included.
@@ -827,8 +920,12 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
 
     @staticmethod
     def current() -> type[ResidentManager]:
+        """The user manager belongs to the UID and serves the UID's own home. A home that
+        swapped HOME (a test, a private install) still inherits the XDG_RUNTIME_DIR that
+        reaches the real manager, so the socket alone never decides it."""
         runtime = os.environ.get("XDG_RUNTIME_DIR")
-        if runtime and Path(runtime, "systemd", "private").is_socket():
+        if (runtime and Path(runtime, "systemd", "private").is_socket()
+                and Path.home().resolve() == Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()):
             return SystemdUserManager
         return NoResidentManager
 
@@ -836,6 +933,73 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
     def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
         """A host with no manager owns the resident only through its process tree."""
         return command
+
+    @classmethod
+    def activity(cls, unit: str) -> type[UnitActivity]:
+        """No manager runs a unit for this home."""
+        return InactiveUnit
+
+    @classmethod
+    def loads(cls, unit: str, definition: Path) -> bool:
+        """Whether the manager runs ``unit`` from this home's own ``definition``."""
+        return False
+
+    @classmethod
+    def main_pid(cls, unit: str, definition: Path) -> int:
+        """The process of the unit loaded from ``definition``; zero for any other."""
+        return 0
+
+    @classmethod
+    def listed(cls, pattern: str) -> tuple[str, ...]:
+        """The names of the active units matching ``pattern``."""
+        return ()
+
+    @classmethod
+    def reload(cls) -> None:
+        """Load this home's unit definitions; no manager reads a home it does not serve."""
+
+    @classmethod
+    def install(cls, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
+                home: Path) -> None:
+        """Publish a unit and its declared prerequisites, then load them together."""
+        cls.write_unit(unit, arguments, home=home)
+        cls.reload()
+
+    @classmethod
+    def write_unit(cls, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
+                   home: Path) -> None:
+        for required in unit.required_units():
+            cls.write_unit(required, home=home)
+        destination = unit.unit_file(home)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(unit.unit_text(arguments), encoding="utf-8")
+
+    @classmethod
+    def control(cls, *arguments: str) -> None:
+        """Start, stop, enable or disable the manager's units."""
+        raise UnmanagedHomeError(
+            f"{Path.home()} is not the user's own home, so no user manager belongs to it; "
+            f"refused systemctl {' '.join(arguments)}")
+
+    @classmethod
+    def transient(cls, unit: str, command: tuple[str, ...], *, cwd: Path, stdin: Path,
+                  stdout: Path, stderr: Path, inherited: tuple[str, ...],
+                  assigned: Mapping[str, str], wait: bool) -> None:
+        """Run ``command`` as ``unit``, so stopping its caller cannot cut it short; ``wait``
+        follows it to its end and raises on its failure. Without a manager only a caller
+        that waits can own it."""
+        if not wait:
+            raise UnmanagedHomeError(
+                f"{Path.home()} has no user manager to keep {unit} past its caller")
+        environment = {name: os.environ[name] for name in inherited if name in os.environ}
+        # As under systemd-run, the unit gets exactly these variables, its import path included.
+        with (stdin.open("rb") as given, stdout.open("wb") as answer, stderr.open("wb") as errors,
+              SpawnedProcess.launch(command, cwd=cwd, env={**environment, **assigned},
+                                    stdin=given, output=answer, stderr=errors,
+                                    runtime=RestoredRuntime(Path(command[0]))) as child):
+            returncode = child.process.wait()
+        if returncode:
+            raise subprocess.CalledProcessError(returncode, command)
 
 
 class NoResidentManager(ResidentManager): ...
@@ -848,7 +1012,61 @@ class SystemdUserManager(ResidentManager):
     @classmethod
     def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
         return ("systemd-run", "--user", "--scope", "--quiet", "--collect",
+                AgentsSlice.launch_option(),
                 f"--unit=agent-comms-resident-{Id128.mint()}", "--", *command)
+
+    @staticmethod
+    def shown(unit: str, name: str) -> str:
+        return subprocess.check_output(
+            ("systemctl", "--user", "show", "-p", name, "--value", unit), text=True,
+        ).strip()
+
+    @classmethod
+    def activity(cls, unit: str) -> type[UnitActivity]:
+        return UnitActivity.member_named(cls.shown(unit, "ActiveState"))
+
+    @classmethod
+    def loads(cls, unit: str, definition: Path) -> bool:
+        """The manager belongs to the UID, not HOME; the same name loaded from another
+        directory is not this home's unit."""
+        return (definition.is_file()
+                and Path(cls.shown(unit, "FragmentPath")).resolve() == definition.resolve())
+
+    @classmethod
+    def main_pid(cls, unit: str, definition: Path) -> int:
+        return int(cls.shown(unit, "MainPID")) if cls.loads(unit, definition) else 0
+
+    @classmethod
+    def listed(cls, pattern: str) -> tuple[str, ...]:
+        listed = subprocess.check_output(
+            ("systemctl", "--user", "list-units", pattern, "--state=active", "--plain",
+             "--no-legend"), text=True)
+        return tuple(line.split()[0] for line in listed.splitlines() if line.strip())
+
+    @classmethod
+    def reload(cls) -> None:
+        cls.control("daemon-reload")
+
+    @classmethod
+    def control(cls, *arguments: str) -> None:
+        subprocess.run(("systemctl", "--user", *arguments), check=True)
+
+    @classmethod
+    def transient(cls, unit: str, command: tuple[str, ...], *, cwd: Path, stdin: Path,
+                  stdout: Path, stderr: Path, inherited: tuple[str, ...],
+                  assigned: Mapping[str, str], wait: bool) -> None:
+        """systemd-run copies each inherited value itself, so none is spelled on a command
+        line."""
+        subprocess.run(
+            ("systemd-run", "--user", "--quiet", "--collect", *(("--wait",) if wait else ()),
+             AgentsSlice.launch_option(), f"--unit={unit}", f"--working-directory={cwd}",
+             f"--property=StandardInput=file:{stdin}",
+             f"--property=StandardOutput=file:{stdout}",
+             f"--property=StandardError=file:{stderr}",
+             *(f"--setenv={name}" for name in inherited),
+             *(f"--setenv={name}={value}" for name, value in assigned.items()), *command),
+            check=True,
+        )
 
 
 class ChildLifetime(DeclaredFamily, affix="Lifetime"):
