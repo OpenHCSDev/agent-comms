@@ -61,6 +61,10 @@ class Ping(DeclaredFamily, affix="Ping"):
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
 
     @property
+    def urgent(self) -> bool:
+        return False
+
+    @property
     @abstractmethod
     def key(self) -> object: ...
 
@@ -89,7 +93,7 @@ class Ping(DeclaredFamily, affix="Ping"):
     def board_line[Line: BoardLine](self, kind: type[Line]) -> Line:
         """This line as the commander's board holds it: locked once the answer window passes."""
         since = self.since.recorded_at("A heartbeat line")
-        return kind(self.text, since, since + AwaitingCommander.seconds)
+        return kind(self.text, since, since + AwaitingCommander.seconds, urgent=self.urgent)
 
     def board[Line: BoardLine](self, kind: type[Line]) -> tuple[Line, ...]:
         """The board line the commander's tool calls print; a line no verb disposes of has none."""
@@ -103,6 +107,10 @@ class Ping(DeclaredFamily, affix="Ping"):
 class RulePing(Ping):
     rule: type[StandingRule]
     observation: TextDigest
+
+    @property
+    def urgent(self) -> bool:
+        return self.rule.urgent
 
     @property
     def key(self) -> TextDigest:
@@ -218,10 +226,12 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         known = {ping.key: ping for ping in previous.handled} if previous else {}
         # Equality ignores the start, so an unchanged observation keeps the start it had.
         began = {ping: ping.since for ping in known.values()}
-        handled = tuple(replace(ping, since=began.get(ping, ping.since).continued_from(now))
-                        for ping in (
-            *(UnitPing.capture(state) for state in states if state.attention()),
-            *(RulePing.capture(rule) for rule in rules),
+        handled = tuple(sorted(
+            (replace(ping, since=began.get(ping, ping.since).continued_from(now))
+             for ping in (
+                 *(UnitPing.capture(state) for state in states if state.attention()),
+                 *(RulePing.capture(rule) for rule in rules),
+             )), key=lambda ping: not ping.urgent,
         ))
         new = tuple(ping for ping in handled if known.get(ping.key) != ping)
         if new:
