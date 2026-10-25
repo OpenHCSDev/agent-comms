@@ -9,6 +9,7 @@ import struct
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import AsyncIterator, Self
 
@@ -170,8 +171,8 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
         async with CodexConnection.open(self.socket) as codex:
             page = ItemsPage.model_validate(await codex.call(ItemsList(
                 threadId=self.thread, cursor=request.request.cursor))).publication()
-        await asyncio.to_thread(EarlierPublishedPage(page.items, page.earlier, request).publish,
-                                ThreadOutput(transcript, self.comms.agents))
+        await self.comms.bus.when_open(partial(EarlierPublishedPage(page.items, page.earlier, request).publish,
+                                               ThreadOutput(transcript, self.comms.agents)))
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with CodexConnection.open(self.socket) as codex:

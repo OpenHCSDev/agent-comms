@@ -324,6 +324,10 @@ class LockHolder(DeclaredFamily, affix="LockHolder"):
     @abstractmethod
     def describe(self) -> str: ...
 
+    @staticmethod
+    def described(holders: tuple[LockHolder, ...]) -> str:
+        return "held by " + "; ".join(holder.describe() for holder in holders)
+
 
 @dataclass(frozen=True, slots=True)
 class IdentifiedLockHolder(LockHolder):

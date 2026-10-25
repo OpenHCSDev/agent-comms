@@ -198,7 +198,7 @@ class RegistryEdit:
             self.store.save_unlocked(self.document)
             self.original = self.store.read_revision_unlocked()
         for record in self.superseded:
-            record.path.unlink()
+            record.retire()
         self.superseded.clear()
 
 
@@ -312,6 +312,8 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
         with self.locked():
+            # Refuse before an editor can prepare participants or journal a registration.
+            self.require_maintenance_open()
             original = self.read_revision_unlocked()
             original.document.purpose.require_write()
             yield RegistryEdit(self, original.document.copy(), original)
