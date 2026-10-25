@@ -1,6 +1,6 @@
 ---
 name: send-backs-and-strikes
-description: "a unit defect (send-back, false claim, off-order edit, undisclosed assumption, turn ended stalled on nothing) is a strike at once, in public and plain words, and two take the task away; a correction of the commander's own order is never a strike; read every open order first, review semantics not test passes, and spend idle ticks hunting hot paths"
+description: "a unit defect (send-back, false claim, off-order edit, undisclosed assumption, turn ended stalled on nothing) is a strike at once, in public and plain words, and measures the unit without ever taking its task away; a correction of the commander's own order is never a strike; read every open order first, review semantics not test passes, and spend idle ticks hunting hot paths"
 drift: "Correcting your own order is not a send-back: no strike, and the unit keeps its turn."
 audience: commander
 type: hard-rule
@@ -8,7 +8,7 @@ type: hard-rule
 
 **Why:** a strike that waits or hides teaches nothing, a strike against a mechanism that does not exist is the commander's own slop, and a passing test is not a review. Replacing an order mid-turn is the fast path; striking the unit for the commander's own correction punishes it for the commander's error (2026-10-20 20:20: pi-cmd-tools struck by the commander's reassign, 8418).
 
-- Strikes: a send-back for a unit defect, a false claim, an off-order edit, an undisclosed assumption, a turn ended stalled on nothing. Two on one task take the task away.
+- Strikes: a send-back for a unit defect, a false claim, an off-order edit, an undisclosed assumption, a turn ended stalled on nothing. A strike never takes the task away or reassigns it: it is the signal to read that unit's trail and diff, find why it keeps missing, and order the fix to that cause. Tristan, 2026-10-25: "just use it as a measure to scrutinize why something is going wrong."
 - An order replacement is one of two things. A **send-back** names the unit's defect and strikes. A **correction** says the commander's order was wrong, records no strike and keeps the unit's turn permission; send it with `--clean` until Core declares the two as members of one replacement family.
 - Before striking, read every open order on the problem and check that the mechanism the strike claims exists. A wrong order is slop too: say so, unstrike what it caused, send the corrected order.
 - Judge a change by visible parity with its siblings and trace the call chain yourself.
