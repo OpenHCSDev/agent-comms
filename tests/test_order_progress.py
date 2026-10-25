@@ -160,3 +160,19 @@ def test_a_timer_up_tells_the_commander_to_judge_and_strikes_no_one():
     clock = time.strftime('%H:%M:%S', time.localtime(1000.0))
     assert up.line() == f'TIMER UP: worker P1 at {clock}, order order-P1 -> read its diff and judge it'
     assert up.began() == 1000.0
+
+
+def test_push_times_come_from_origin_reflogs_only(tmp_path):
+    """The connector walked every reflog (`--all`, 3.2 s on the live checkout) to keep the origin ones."""
+    origin = tmp_path / 'origin.git'
+    subprocess.run(['git', 'init', '-q', '--bare', str(origin)], check=True)
+    worktree = unit_checkout(tmp_path / 'worker--P1')
+    assert PresentCheckout(worktree).origin_pushes == ()
+    git(worktree, 'remote', 'add', 'origin', str(origin))
+    git(worktree, 'push', '-q', 'origin', 'HEAD:refs/heads/work')
+    pushed = git(worktree, 'rev-parse', 'HEAD')
+    git(worktree, 'commit', '-q', '--allow-empty', '-m', 'local only')
+    git(worktree, 'push', '-q', 'origin', 'HEAD:refs/heads/side')
+    git(worktree, 'commit', '-q', '--allow-empty', '-m', 'never pushed')
+    side = git(worktree, 'rev-parse', 'HEAD~1')
+    assert sorted(sha for sha, _ in PresentCheckout(worktree).origin_pushes) == sorted([pushed, side])

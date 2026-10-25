@@ -748,11 +748,13 @@ class Commander(CommanderContext):
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
             todo.revision, self.incarnation, voided, why)))
         unit = voided.previous.owner
-        n = struck(self.comms.goals.todos.get(task), unit)
+        after = self.comms.goals.todos.get(task)
+        n = struck(after, unit)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
-                f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
+                f'recorded {voided.at.clock()}; {n} strike(s) remain; held by '
+                f'{after.holder or "nobody"}): {why}')
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo))
-        print(f'{unit}: {n} strike(s) on {task}')
+        print(f'{unit}: {n} strike(s) on {task}; held by {after.holder or "nobody"}')
 
     def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
         """Core retires an undelivered order sent in error.
@@ -855,7 +857,7 @@ class DirectiveVerb(CommanderVerb):
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         blocked = []
         for rule in owed:
-            if rule.blocks(reached, self):
+            if rule.blocks(reached, self, named):
                 blocked.append(rule)
             else:
                 print(f'WARNING: {rule.line()}')
