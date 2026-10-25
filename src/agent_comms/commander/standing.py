@@ -39,6 +39,7 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
+    CoreActsStandingRule,
     DatedStandingRule,
     IndependentStandingRule,
     OwedAnswer,
@@ -492,9 +493,12 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
                          if assignment.running_holders(snapshot))
         protected = {rule.todo.id for rule in retained}
         owners = {rule.previous.owner_identity for rule in retained}
-        idle = [unit for unit in cls.idle(comms, commander, scan) if unit.incarnation not in owners]
+        unowned = tuple(todo for todo in rows if todo.id not in protected)
+        # Reading every candidate's recent turns is the expensive part; no unowned row, no read.
+        idle = [unit for unit in cls.idle(comms, commander, scan)
+                if unit.incarnation not in owners] if unowned else []
         found = []
-        for todo in (todo for todo in rows if todo.id not in protected):
+        for todo in unowned:
             for unit in idle:
                 if not todo.strikes_against(unit.incarnation):
                     idle.remove(unit)
@@ -633,7 +637,7 @@ class HeartbeatNotStarted(HeartbeatSilent):
 
 @dataclass(frozen=True)
 class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name=None):
-    """A thread nothing can reach: every message sent to it waits unread.
+    """A thread nothing can reach: every message sent to it waits undelivered.
 
     Each member owns how its inbox reports the pause; the window and the date are shared.
     """
@@ -693,7 +697,7 @@ class UnitDeaf(InboxUnavailable):
     def line(self) -> str:
         return (f"UNDEAFEN {self.unit}: it has read none of its inbox since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
-                " waits unread -> read its drain diagnostic and fix that owner")
+                " waits undelivered -> read its drain diagnostic and fix that owner")
 
 
 @dataclass(frozen=True)

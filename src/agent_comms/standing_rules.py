@@ -724,7 +724,8 @@ class StuckMerge(HeadLine, DatedStandingRule):
 class IdlePullRequest(HeadLine, DatedStandingRule):
     """An open head, draft or ready, going nowhere outside the merge queue: unmoved for the
     idle window, or blocked by a conflict or a red required check. Armed heads are
-    StuckMerge's; every other open request on the configured repositories is a board item."""
+    StuckMerge's; every other open request linked to one of this commander's orders is a
+    board item. Another commander's requests share the repositories, never this board."""
     request: PullRequestHead
     holders: tuple[ThreadIncarnation, ...] = field(compare=False)
     blocks: tuple[MergeBlock, ...] = field(compare=False)
@@ -734,13 +735,16 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_pulls(comms.goals, frame.pulls, frame.todos)
+        ordered = comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
+        return cls.scan_pulls(comms.goals, frame.pulls, frame.todos, ordered)
 
     @classmethod
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead,
-                   held: Sequence[Todo]) -> tuple[Self, ...]:
-        """Holders are the live holds whose orders link the request, as the HUD cards read."""
+                   held: Sequence[Todo], ordered: Sequence[Todo]) -> tuple[Self, ...]:
+        """Holders are the live holds whose orders link the request, as the HUD cards read;
+        the commander's orders' links own which requests are its fleet's."""
         now = time.time()
+        pulls.register(ordered)
         holders: dict[tuple[RepositoryName, int], tuple[ThreadIncarnation, ...]] = {}
         for todo in held:
             for request in pulls.open_for(todo):
@@ -750,7 +754,8 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
             cls(PullRequestHead(repo, row.number, row.head), holders.get((repo, row.number), ()),
                 row.merge_blocks, row.reviewable_at)
             for repo in goals.registry.snapshot().commander_project.repository_names()
-            for row in pulls.open(repo) if not row.armed_times
+            for linked in (pulls.linked(repo),)
+            for row in pulls.open(repo) if row.number in linked and not row.armed_times
         )
         return tuple(rule for rule in found if rule.began() <= now)
 

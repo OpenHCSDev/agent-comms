@@ -366,23 +366,20 @@ class Blocked(NeedsCommanderAttention, UnitState):
 
 @dataclass(frozen=True)
 class Detached(NeedsCommanderAttention, UnitState):
-    unread: int = field(compare=False)
+    """A pending order whose holder's presence takes no delivery: an order sent now is not
+    read now. The registered status owns that fact; the inbox's read marker is the owner's,
+    marks what he opened, and says nothing about the unit."""
+
     verb = "WAKE"
     action = "wake it or reassign the order"
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
         if source.pending and not source.presence.receiving:
-            yield cls(
-                source.thread.incarnation,
-                source.orders,
-                source.presence,
-                source,
-                source.comms.bus.pending_count(source.thread.name),
-            )
+            yield cls(source.thread.incarnation, source.orders, source.presence, source)
 
     def detail(self) -> str:
-        return f"{self.unread} unread; {super().detail()}"
+        return f"{self.presence.declared_name}, takes no delivery; {super().detail()}"
 
 
 @dataclass(frozen=True)
