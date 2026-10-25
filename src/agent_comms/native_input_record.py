@@ -271,8 +271,8 @@ class TriageNativeExecution(NativeInputExecution):
     ) -> None:
         from .triage_native_sources import TriageNativeSource
 
-        if not assignments or len({row.assignment_id for row in assignments}) != len(assignments):
-            raise IdentityConflict("Native input membership must name distinct original sources")
+        if not assignments:
+            raise IdentityConflict("Native input membership names at least one original source")
         for ordinal, row in enumerate(assignments):
             TriageNativeSource(input_id, ordinal, row.assignment_id).insert(db)
 
