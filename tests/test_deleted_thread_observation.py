@@ -3,7 +3,9 @@
 import asyncio
 import pickle
 from dataclasses import replace
+from types import SimpleNamespace
 
+from agent_comms import activity
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.registry_provenance import DeletedThread
@@ -14,6 +16,7 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from test_observer_death import readable
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
 
@@ -58,12 +61,12 @@ def test_snapshot_keeps_alias_activity_and_reports_names_absent_after_deletion(c
     comms.registry.rename('original', 'renamed')
     names = ('original', 'renamed', 'surviving')
     before = comms.registry.snapshot()
-    acquired = before.observed_activity(comms.agents, names)
+    acquired = before.observed_activity(comms.agents, names).activity
     assert acquired['original'] == acquired['renamed']
     assert acquired['original'].thread == 'renamed'
     comms.registry.remove('renamed')
     after = comms.registry.snapshot()
-    acquired = after.observed_activity(comms.agents, names)
+    acquired = after.observed_activity(comms.agents, names).activity
     assert acquired['original'] == DeletedThread('original')
     assert acquired['renamed'] == DeletedThread('renamed')
     assert isinstance(acquired['surviving'], ObservedActivity)
@@ -131,3 +134,18 @@ def test_one_revision_captures_each_thread_activity_once(comms):
     assert comms.views.observed_activity(revision, ('surviving',)) == {'surviving': first['surviving']}
     later = comms.views.observed_activity(comms.views.revision(), ('surviving',))
     assert later['surviving'].timestamp > first['surviving'].timestamp
+
+
+def test_a_busy_capture_ends_when_its_row_turns_stale_on_an_unchanged_revision(comms, monkeypatch):
+    """A busy row turning idle with age moves no revision field, so a quiet bus showed an
+    external thread working forever. The capture now expires with its earliest busy row."""
+    clock = [1_000_000.0]
+    monkeypatch.setattr(activity, 'time', SimpleNamespace(time=lambda: clock[0]))
+    comms.registry.declare(Thread('cli', frozenset(), str(comms.root.parent),
+                                  execution=ExternalThreadExecution))
+    comms.agents.set_activity('cli', ActivityState.WORKING)
+    revision = comms.views.revision()
+    assert comms.views.observed_activity(revision, ('cli',))['cli'].state.busy
+    clock[0] = comms.agents.activity.stale_at(comms.agents.activity.current('cli'), active=False) + 1
+    assert comms.views.revision() == revision
+    assert not comms.views.observed_activity(revision, ('cli',))['cli'].state.busy
