@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.heartbeat_subjects import HeadSubject
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeadSubject, UnitSubject
 from agent_comms.recorded_time import RecordedEventTime
@@ -23,7 +24,7 @@ from agent_comms.todos import (
     ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
-    StrikeReason, UnmergedListedPullRequest, VerdictReason,
+    StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
 
@@ -147,6 +148,26 @@ def test_only_a_head_linked_to_the_callers_held_order_refuses_its_orders(head_bu
     assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
 
 
+def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
+    """A reviewing mark on an open head is not a verdict: the JUDGE line stays owed and its
+    heartbeat line undisposed until ok or back, and reviewing after an ok owes it again."""
+    comms, _, request = head_bus
+    subject, since = HeadSubject(request), time.time() - 1
+
+    def owed() -> list[PullRequestHead]:
+        return [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(
+            comms.goals, "lead", ProgressRead(()))]
+
+    invoke(comms, request, UnderReviewHeadVerdict())
+    assert owed() == [request]
+    assert not subject.disposed(comms, frozenset(), since)
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    assert owed() == []
+    assert subject.disposed(comms, frozenset(), since)
+    invoke(comms, request, UnderReviewHeadVerdict())
+    assert owed() == [request]
+
+
 def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus):
     comms, _, request = head_bus
     todo = comms.goals.todos.get("P2")
@@ -261,7 +282,8 @@ def test_a_pr_verdict_acts_on_the_unit_holding_that_head(head_bus):
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     verb = judge.JudgeVerb.parse(["ok", "--pr", str(request.pr), "--head", request.head,
                                   "--why", ACCEPTED.text])
-    acted = frozenset(verb.acts_on(order.Commander.read_root(comms.root)))
+    ctx = order.Commander.read_root(comms.root)
+    acted = frozenset(verb.subject(ctx).acts_on(ctx))
     assert acted == {HeadSubject(request), UnitSubject(held.owner_identity)}
 
 

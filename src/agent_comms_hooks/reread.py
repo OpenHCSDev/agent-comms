@@ -8,12 +8,14 @@ waits on a read the commander may skip, and the cadence counts tool calls, so no
 parse can stall it.
 
 The same call carries the RE-ARM line while this session's bridge runs with no Monitor
-reading it, since every other route to the commander goes through that dead reader.
+reading it, since every other route to the commander goes through that dead reader, and the
+heartbeat's board, which the bridge records instead of sending it to the Monitor.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -64,6 +66,17 @@ class DeafReminder(SliceReminder):
         return super().take() + tuple(deaf.line() for deaf in WatchClaim(self.session_id).deaf())
 
 
+@dataclass(frozen=True)
+class BoardReminder(DeafReminder):
+    """Beside those, every line of the newest heartbeat packet the commander disposes of, on
+    every tool call until the next packet clears it."""
+
+    def take(self) -> tuple[str, ...]:
+        now = time.time()
+        board = WatchClaim(self.session_id).state().board()
+        return super().take() + tuple(line.line(now) for line in board)
+
+
 class ReminderProgram(ClaudeHookProgram):
     events = ("PostToolUse",)
 
@@ -73,7 +86,7 @@ class ReminderProgram(ClaudeHookProgram):
 
 
 def main() -> None:
-    hook = DeafReminder.read()
+    hook = BoardReminder.read()
     if texts := hook.take():
         hook.warn("\n\n".join(texts))
 

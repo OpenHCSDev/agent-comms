@@ -413,8 +413,11 @@ class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
         """Reading or rejecting a head carries out no clause of the order it is linked to."""
         return UnquotedHeadReview.of(todo, self.head_evidence())
 
-    def acts_on(self, ctx: order.Commander) -> tuple[HeartbeatSubject, ...]:
-        return self.subject(ctx).acts_on(ctx)
+    def act(self, ctx: order.Commander) -> None:
+        """The gate and the verdict read one subject: selecting a PR reads GitHub."""
+        subject = self.subject(ctx)
+        self.gate_on(ctx, subject.acts_on(ctx))
+        subject.run(self, ctx)
 
     def head_evidence(self) -> tuple[FileLine, ...]:
         return ()

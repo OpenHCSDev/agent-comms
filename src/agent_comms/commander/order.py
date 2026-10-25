@@ -33,7 +33,7 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
+from agent_comms.change_report import FileLine, MainRevision, NoSourceReference, RegisteredRoots
 from agent_comms.channel_targets import CommsTag
 from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.commander.standing import (
@@ -727,15 +727,13 @@ class Commander(CommanderContext):
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}{taken}')
 
-    def hunt(self, where, why, sent, repository=""):
+    def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order.
-        FILE:LINE is read in the registered repository's checkout, never the shell's cwd."""
+        FILE:LINE is read in the registered repository it names, never the shell's cwd."""
         ref = FileLine.from_wire(where)
-        try:
-            directory = Repo.selected(self.repos, repository).checkout
-        except ValueError as error:
-            sys.exit(f'Refused: {error}')
-        ref.require_exists(directory, MainRevision())
+        roots = RegisteredRoots(self.project)
+        ref.require_exists(roots, MainRevision())
+        directory, _ = ref.repository.source(roots, MainRevision())
         if len(why.split()) < 10:
             sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
         ref = FileLine(str((directory / ref.file).resolve()), ref.line)
@@ -817,6 +815,10 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
         ctx.comms.registry.require(ctx.commander).require_commander()
         self.fork.commanding(ctx.comms, ctx.commander)
         ctx = ctx.model_copy(update={'actor': self.fork})
+        self.act(ctx)
+
+    def act(self, ctx: Commander) -> None:
+        """Gate, then run."""
         self.gate(ctx)
         self.run(ctx)
 
@@ -845,20 +847,21 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
     fresh line asks for. Core records that action, and the record is what disposes of the line.
     Nothing the commander says about a line counts."""
 
-    def gate(self, ctx: Commander) -> None:
-        super().gate(ctx)
+    @abstractmethod
+    def act(self, ctx: Commander) -> None:
+        """Gate on the heartbeat subjects this verb's recorded action touches, then run;
+        each verb decodes those subjects once, beside the action that records them."""
+
+    def gate_on(self, ctx: Commander, subjects: tuple[HeartbeatSubject, ...]) -> None:
+        self.gate(ctx)
         now = time.time()
         board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
-        acted = frozenset(self.acts_on(ctx))
-        if (any(ping.locks(now - AwaitingCommander.seconds) for ping in board)
+        acted = frozenset(subjects)
+        if (any(ping.waits_on_commander(now - AwaitingCommander.seconds) for ping in board)
                 and not any(ping.acted_on(acted) for ping in board)):
             sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
                      f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'
                      + '\n'.join(ping.render(now) for ping in board))
-
-    @abstractmethod
-    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
-        """The heartbeat subjects this verb's recorded action touches."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -932,6 +935,10 @@ class DirectiveVerb(HeartbeatGated):
     @abstractmethod
     def addressed(self) -> tuple[str, ...]:
         """The threads this action's message is for; only their asks can it answer."""
+
+    def act(self, ctx: Commander) -> None:
+        self.gate_on(ctx, self.acts_on(ctx))
+        self.run(ctx)
 
     def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
         snapshot = ctx.comms.registry.snapshot()
@@ -1408,14 +1415,9 @@ class HuntVerb(Reasoned, OrderVerb):
             },
         ),
     ] = ""
-    repository: Annotated[
-        str,
-        Argument(flags=("--repo",), options={
-            "help": "registered repository FILE:LINE is in; required when several are registered"}),
-    ] = ""
 
     def run(self, ctx: Commander) -> None:
-        ctx.hunt(self.where, self.why, self.sent, self.repository)
+        ctx.hunt(self.where, self.why, self.sent)
 
 
 class NextHuntVerb(OrderVerb, declared_name="next-hunt"):

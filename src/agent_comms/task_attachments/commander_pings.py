@@ -15,6 +15,7 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import ThreadTarget
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.cli_protocol import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import OrderId
@@ -28,10 +29,13 @@ from agent_comms.standing_rules import StandingRule
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.ui_model.unit_state import UnitState
+from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
+from agent_comms_hooks.board import BoardLine
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
+    from agent_comms.cli_bridges.claude import ClaudeBridge
+    from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
     from agent_comms.commander_hud import CommanderHud
     from agent_comms.registry_document import RegistrySnapshot
@@ -61,10 +65,18 @@ class Ping(DeclaredFamily, affix="Ping"):
     def key(self) -> object: ...
 
     def undisposed(self, comms: Comms, actors: frozenset[str], cut: float) -> bool:
-        """Began before ``cut`` and no subject has a recorded action since it began."""
-        return (self.since.before(cut) and bool(self.subjects)
-                and not any(subject.disposed(comms, actors, self.since.recorded_at("A line"))
-                            for subject in self.subjects))
+        """The commander's to dispose of, began before ``cut``, and not disposed of since. Only
+        such a line is restated as waiting and locks the verbs."""
+        return self.waits_on_commander(cut) and not self.disposed(comms, actors)
+
+    def waits_on_commander(self, cut: float) -> bool:
+        return self.commander_disposes and self.since.before(cut)
+
+    def disposed(self, comms: Comms, actors: frozenset[str]) -> bool:
+        """A subject has a recorded action since the line began; a line without one never waits."""
+        began = self.since.recorded_at("A line")
+        return not self.subjects or any(subject.disposed(comms, actors, began)
+                                        for subject in self.subjects)
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         return any(subject.acted_on(acted) for subject in self.subjects)
@@ -74,13 +86,17 @@ class Ping(DeclaredFamily, affix="Ping"):
         """Whether a commander verb disposes of this line; only such a line locks the verbs."""
         return True
 
-    def locks(self, cut: float) -> bool:
-        """Undisposed past ``cut`` and the commander's to dispose of."""
-        return self.commander_disposes and self.since.before(cut)
+    def board_line[Line: BoardLine](self, kind: type[Line]) -> Line:
+        """This line as the commander's board holds it: locked once the answer window passes."""
+        since = self.since.recorded_at("A heartbeat line")
+        return kind(self.text, since, since + AwaitingCommander.seconds)
+
+    def board[Line: BoardLine](self, kind: type[Line]) -> tuple[Line, ...]:
+        """The board line the commander's tool calls print; a line no verb disposes of has none."""
+        return (self.board_line(kind),) if self.commander_disposes else ()
 
     def render(self, now: float) -> str:
-        minutes = int((now - self.since.recorded_at("A heartbeat line")) // 60)
-        return f"{self.text} ({minutes} min)"
+        return self.board_line(BoardLine).aged(now)
 
 
 @dataclass(frozen=True)
@@ -130,12 +146,29 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
     role: ClassVar[MessageRole]
+    header: ClassVar[str] = "Fuck your assumptions, here's what's up:"
 
     def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
         return self if self.commander == commander else None
 
     @abstractmethod
-    def body(self, now: float, frame: tuple[str, ...]) -> str: ...
+    def lines(self, now: float) -> tuple[str, ...]:
+        """What this packet asks of the commander."""
+
+    def body(self, now: float, frame: tuple[str, ...]) -> str:
+        """The header, then the action lines, then the HUD telemetry: telemetry first read as
+        a status feed and the action lines scrolled under it."""
+        return "\n".join((self.header, *self.lines(now), *frame))
+
+    def board[Line: BoardLine](self, kind: type[Line]) -> tuple[Line, ...]:
+        return tuple(line for ping in self.handled for line in ping.board(kind))
+
+    async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
+        return await bridge.deliver_board(self, message)
+
+    @abstractmethod
+    async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
+        """What reaches the session itself once its bridge has put this packet on its board."""
 
     def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
         """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
@@ -212,9 +245,12 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 class CommanderNotice(CommanderUpdate):
     role = NoticeRole()
 
-    def body(self, now: float, frame: tuple[str, ...]) -> str:
-        return "\n".join((*frame, f"Lines cleared; {len(self.handled)} still current.",
-                          *self.not_applied))
+    async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
+        """Cleared lines leave the board; nothing new needs the session."""
+        return DeliveredOutcome
+
+    def lines(self, now: float) -> tuple[str, ...]:
+        return (f"Lines cleared; {len(self.handled)} still current.", *self.not_applied)
 
 
 @dataclass(frozen=True)
@@ -225,9 +261,12 @@ class CommanderDecisions(CommanderUpdate):
     waiting: tuple[Ping, ...]
     role = ConversationRole()
 
-    def body(self, now: float, frame: tuple[str, ...]) -> str:
+    async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
+        return await bridge.wake(message)
+
+    def lines(self, now: float) -> tuple[str, ...]:
         waiting = sorted(self.waiting, key=lambda ping: ping.since.chronology())
-        return "\n".join((
-            *frame, *(ping.render(now) for ping in self.decisions), *self.not_applied,
+        return (
+            *(ping.render(now) for ping in self.decisions), *self.not_applied,
             *(("UNDISPOSED:", *(ping.render(now) for ping in waiting)) if waiting else ()),
-        ))
+        )
