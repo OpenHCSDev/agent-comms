@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
@@ -47,6 +47,37 @@ class StoryEvent(StorySource):
 
     def story(self) -> tuple[StoryLine, ...]:
         return (StoryLine(self.at, self.story_text()),)
+
+
+class OrderStories(ABC):
+    """Find the problems an order declared, including declarations archived in its story."""
+
+    @abstractmethod
+    def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]: ...
+
+    def for_order(self, order_id: str) -> tuple[Todo, ...]:
+        from .todos import TodoError
+
+        rows = self._for_orders((order_id,))
+        if not rows:
+            raise TodoError(f"Unknown saved order: {order_id!r}")
+        return rows
+
+    def related_problems(self, problem: Todo) -> tuple[Todo, ...]:
+        return self._for_orders(problem.held_order_ids)
+
+    def _for_orders(self, identities: tuple[str, ...]) -> tuple[Todo, ...]:
+        from .todos import CheckedProblemOrder, StoredOrderStory, Todo
+
+        slots = ','.join('?' for _ in identities)
+        return self._select(
+            f'EXISTS (SELECT 1 FROM json_tree("order") AS declaration '
+            f"WHERE declaration.key='id' AND declaration.value IN ({slots})) "
+            f'OR EXISTS (SELECT 1 FROM {StoredOrderStory.declared_name} AS declaration '
+            f'WHERE declaration.problem={Todo.declared_name}.id '
+            f'AND declaration.kind IN {CheckedProblemOrder.sql_choices()} '
+            f"AND json_extract(declaration.event,'$.id') IN ({slots}))",
+            (*identities, *identities))
 
 
 @dataclass(frozen=True)

@@ -50,14 +50,13 @@ class TodoStories(Carry):
                 decoded = []
                 for name, history in zip(INLINE_FIELDS, histories, strict=True):
                     raw = FieldCodec.parse(history)
-                    if name in ("corrections", "messages"):
-                        if not isinstance(raw, list):
-                            raise ValueError(f"{problem}.{name}: expected the retired event array")
-                        for entry in raw:
-                            if not isinstance(entry, dict):
-                                raise ValueError(f"{problem}.{name}: expected a retired event record")
-                            entry.setdefault(FieldCodec.record_key(OrderMessage, "at"),
-                                             FieldCodec.encode(UnrecordedEventTime()))
+                    if not isinstance(raw, list):
+                        raise ValueError(f"{problem}.{name}: expected the retired event array")
+                    for entry in raw:
+                        if not isinstance(entry, dict):
+                            raise ValueError(f"{problem}.{name}: expected a retired event record")
+                        entry.setdefault(FieldCodec.record_key(OrderMessage, "at"),
+                                         FieldCodec.encode(UnrecordedEventTime()))
                     decoded.extend(FieldCodec.decode(tuple[TodoCommand | CheckedProblemOrder, ...], raw))
                 # The old strike tuple precedes its voids, including undated ones.
                 # Story rendering retains each event's recorded time, not carry time.

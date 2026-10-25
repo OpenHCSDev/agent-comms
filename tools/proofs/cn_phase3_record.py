@@ -170,7 +170,7 @@ def record(session: Path) -> None:
             ),
         )
     todo = comms.goals.todos.get("P1")
-    assert todo.struck_out(worker.name)
+    assert todo.struck_out(worker.incarnation)
     cli(
         "record-lead",
         CommsFireTool(
