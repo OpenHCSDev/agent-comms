@@ -200,6 +200,10 @@ class InstallUnit(SystemdUnit):
     def running(self) -> bool:
         return not self.activity(self.unit).ended()
 
+    def stop(self) -> None:
+        """Systemd signals the install, which runs its abort, and returns once the unit ends."""
+        subprocess.run(("systemctl", "--user", "stop", self.unit), check=True)
+
     def due(self) -> type[standing.InstallDue]:
         """A run whose unit is gone without printing a result died; any other was launched."""
         gone = self.activity(self.unit).ended()
@@ -256,6 +260,12 @@ class InstallLogs:
 
     def running(self) -> tuple[InstallUnit, ...]:
         return tuple(unit for unit in self.units() if unit.running())
+
+    def stop_running(self) -> None:
+        """Systemd, not their caller, owns the root's installs, so whoever removes the root
+        stops them first; a caller killed mid-install leaves its unit writing otherwise."""
+        for unit in self.running():
+            unit.stop()
 
     def launched(self, repo: RepositoryName, main: str) -> tuple[InstallUnit, ...]:
         """The runs launched for this merge, decoded once from their launch records."""
