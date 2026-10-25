@@ -53,6 +53,7 @@ from tools.debt_ratchet import (
     OwnTypeTest,
     StringDispatch,
     StringDispatchArms,
+    StoreLockCalls,
     StringSubscript,
     TypeErrors,
     TypeIdentity,
@@ -114,6 +115,43 @@ def test_plain_str_id_annotations_block_growth_per_file(source, expected):
     comparison = Comparison("src", "base", "head", (path,), before, after, {}, {})
     assert comparison.delta[identity] == expected
     assert comparison.failed == bool(expected)
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("with store.locked(mode=SharedLock()):\n    pass", 1),
+        ("async with store.locked_async():\n    pass", 1),
+        ("with _store_lock(path), StoreLock.ordered(owners):\n    pass", 2),
+        ("fcntl.flock(descriptor, fcntl.LOCK_EX)", 1),
+        ("def try_store_lock(descriptor):\n    is_store_lock(path)", 0),
+        ('"""with store.locked():"""\nnote = "fcntl.flock("', 0),
+        ("ordered(owners)\nlocked = True", 0),
+    ],
+)
+def test_store_lock_calls_count_calls_not_spellings(source, expected):
+    assert StoreLockCalls.count(source.encode(), "src/agent_comms/example.py") == expected
+
+
+def test_store_lock_calls_skip_the_store_owners():
+    """Locking is store_files' and locked_store's own mechanism, never a hand-placed copy."""
+    source = b"with _store_lock(path):\n    pass"
+    assert StoreLockCalls.owners == ("agent_comms/store_files.py", "agent_comms/locked_store.py")
+    assert [StoreLockCalls.count(source, f"src/{owner}") for owner in StoreLockCalls.owners] == [0, 0]
+
+
+def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):
+    base = repo.commit({"turns.py": "def save(store):\n    with store.locked():\n        pass\n",
+                        "other.py": "def read(store):\n    with store.locked():\n        pass\n"})
+    head = repo.commit({"turns.py": "def save(store):\n    pass\n",
+                        "other.py": "def read(store):\n    with store.locked():\n        pass\n"
+                                    "    with store.locked():\n        pass\n"})
+    status, report = repo.compare(base, head, StoreLockCalls)
+    assert status == 1
+    grown = StoreLockCalls.key(f"{repo.root}/other.py")
+    assert report["delta"] == {StoreLockCalls.key(f"{repo.root}/turns.py"): -1, grown: 1}
+    assert report["found"] == {grown: [{"path": f"{repo.root}/other.py", "line": line}
+                                       for line in (2, 4)]}
 
 
 SOURCE = Path(__file__).resolve().parents[2]
