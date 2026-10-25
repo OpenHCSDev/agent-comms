@@ -1,7 +1,10 @@
 """Real turn acquisition and terminal handling share the execution owner."""
 
 import os
+import signal
 import sqlite3
+import subprocess
+import sys
 from contextlib import AsyncExitStack, asynccontextmanager, closing
 from dataclasses import fields
 
@@ -9,7 +12,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
@@ -29,6 +32,7 @@ from agent_comms.goal_states import ActiveGoal
 from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
+from agent_comms.turn_failure import NativeChildSignaled
 from agent_comms.turn_input_source import NoTurnAcceptance
 from agent_comms.turn_terminal import OwnerStop
 
@@ -144,6 +148,35 @@ async def test_turn_failing_under_install_hold_is_stopped_not_blocked(execution_
         held = comms.owners.maintenance.begin(MaintenanceOperator.current())
         turn.finish_goals()
         comms.owners.maintenance.clear(held)
+    assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
+    assert failure_count(comms) == 0
+
+
+def stopped_after(script: str) -> bool:
+    """Whether the outcome a real child process leaves behind reports a stop."""
+    code = subprocess.run([sys.executable, "-c", script], timeout=30).returncode
+    reports: list[None] = []
+    ChildOutcome.from_returncode(code).report_stopped(
+        lambda: reports.append(None), NativeChildSignaled.stop_exits)
+    return bool(reports)
+
+
+def test_only_a_signal_ends_the_native_child_as_stopped():
+    """A kill, and Pi's own SIGTERM/SIGHUP shutdown exits, are stops; a crash is not."""
+    assert stopped_after("import os, signal; os.kill(os.getpid(), signal.SIGKILL)")
+    assert stopped_after(f"raise SystemExit({128 + signal.SIGTERM})")
+    assert stopped_after(f"raise SystemExit({128 + signal.SIGHUP})")
+    assert not stopped_after("raise SystemExit(1)")
+    assert not stopped_after("raise SystemExit(0)")
+
+
+@pytest.mark.asyncio
+async def test_turn_whose_child_was_signaled_is_stopped_not_blocked(execution_bus):
+    """A group kill reaches the child before the owner's stop callback; the goal stays runnable."""
+    comms = execution_bus
+    async with turn_on(comms) as turn:
+        await turn.progress.done(events.Done(
+            "killed with its owner", False, failure=NativeChildSignaled("Pi exited 143")))
     assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
     assert failure_count(comms) == 0
 

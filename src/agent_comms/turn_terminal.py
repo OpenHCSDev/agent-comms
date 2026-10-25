@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from .errors import StaleAttemptError
 import asyncio
 from abc import ABC, abstractmethod
-from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from .turn_failure import BackendFailed, TurnFailure
 from .goal_failure_observation import FailedTurnObservation
+from .turn_failure import BackendFailed, TurnFailure
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -79,12 +77,8 @@ class FailedGoalTurn(TurnTerminal):
     def settle_launched(self, account, permit, store, captured, current) -> None:
         if permit.has_verified_progress(store):
             return
-        observation = self.failure_observation(account, permit, captured)
-        with suppress(StaleAttemptError):
-            permit.reservation.fail(
-                store, self.failure_kind.declared_name,
-                observation=observation,
-            )
+        self.failure_kind.settle_attempt(
+            permit, store, self.failure_observation(account, permit, captured))
 
 
 class EndedWithoutResult(FailedGoalTurn):
