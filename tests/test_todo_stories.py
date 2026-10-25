@@ -7,7 +7,9 @@ import time
 import pytest
 
 from agent_comms.commander.order import Commander
-from agent_comms.field_codec import FieldCodec, GoalId, MessageId
+from agent_comms.field_codec import FieldCodec, GoalId, MessageId, OrderId
+from agent_comms.native_tool_call import ToolCallId
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.order_story import StoryEvent
 from agent_comms.order_tools import CommsTodoListTool
@@ -16,9 +18,10 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AcceptedVerdict, Assignment, CheckedProblemOrder, DroppedVerdict, FailedCheckStrike, OrderMessage,
-    PeerAcceptedVerdict, ReleaseTodo, SendBackVerdict, StoredOrderStory,
-    StrikeReason, StrikeTodo, SupersededVerdict, Todo, TodoCommand, VoidStrikeTodo, WordingCorrection,
+    AcceptedVerdict, Assignment, CheckedProblemOrder, DroppedVerdict, EditSendBackVerdict, FailedCheckStrike,
+    LimitReleaseTodo, OrderMessage, PeerAcceptedVerdict, ReleaseTodo, RewrittenVerdict, SendBackStrike,
+    SendBackVerdict, StoredOrderStory, StrikeReason, StrikeTodo, SupersededVerdict, Todo, TodoCommand,
+    VoidStrikeTodo, WordingCorrection,
 )
 from agent_comms.tool_caller import NoThreadCaller
 from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
@@ -52,13 +55,13 @@ def story_members(comms):
                        "The original source trace shows this strike was issued in error."),
         ReleaseTodo(todo.revision, actor, todo.held(), StrikeReason(
             "The commander transfers this order so its original events remain visible.")),
-        AcceptedVerdict(todo.revision, actor, todo.held(), "accepted-call",
+        AcceptedVerdict(todo.revision, actor, todo.held(), ToolCallId("accepted-call"),
                         quote="Repair the existing record owner"),
         WordingCorrection(todo.revision, MessageId.mint("wording correction"), ("custody",),
                           at=RecordedEventTime(2000)),
         OrderMessage(todo.revision, actor, MessageId.mint("order message"),
                      at=RecordedEventTime(3000)),
-        replace(todo.order.checked(), id="previous-order"),
+        replace(todo.order.checked(), id=OrderId.mint()),
     )
 
 
@@ -69,13 +72,24 @@ def test_story_members_round_trip_in_one_append_only_table(recorded_problem):
     actor = recorded_problem.registry.require("lead").incarnation
     events += (
         FailedCheckStrike.make(todo, 4000, "The declared acceptance command failed at its source owner."),
-        PeerAcceptedVerdict(todo.revision, actor, todo.held(), "peer-call",
+        PeerAcceptedVerdict(todo.revision, actor, todo.held(), ToolCallId("peer-call"),
             quote="Repair the existing record owner", peer=MessageId.mint("peer review")),
-        SupersededVerdict(todo.revision, actor, todo.held(), "superseded-call", "P2",
+        SupersededVerdict(todo.revision, actor, todo.held(), ToolCallId("superseded-call"), "P2",
                           "The replacement order removes this original implementation entirely."),
-        DroppedVerdict(todo.revision, actor, todo.held(), "dropped-call", "owner.py", ("discarded text",)),
-        SendBackVerdict(todo.revision, actor, todo.held(), "sent-back-call",
+        DroppedVerdict(todo.revision, actor, todo.held(), ToolCallId("dropped-call"),
+                       path="owner.py", added=("discarded text",)),
+        SendBackVerdict(todo.revision, actor, todo.held(), ToolCallId("sent-back-call"),
                         StrikeReason("The repair still copies the record shape outside its declaration.")),
+        EditSendBackVerdict(todo.revision, actor, todo.held(), ToolCallId("edit-sent-back-call"),
+                            StrikeReason("The edit restates the record shape the owner already declares."),
+                            path="owner.py"),
+        RewrittenVerdict(todo.revision, actor, todo.held(), ToolCallId("rewritten-call"),
+                         path="owner.py", added=("rewritten text",), commit="0" * 40,
+                         reason="A later commit rewrote this edit and carries its reviewed lines."),
+        SendBackStrike(todo.revision, actor, todo.held(),
+                       "The send-back records the miss the repair repeated in its owner."),
+        LimitReleaseTodo(todo.revision, actor, todo.held(), StrikeReason(
+            "The worker took the strike limit on this order, so the task goes to another unit.")),
     )
     assert {type(event) for event in events} >= set(TodoCommand.members_with(StoryEvent))
     with store.writing() as db:
@@ -159,11 +173,11 @@ def test_board_of_forty_orders_and_two_thousand_verdicts_decodes_no_story_rows(r
     with store.writing() as db:
         for number in range(1, 41):
             todo = replace(original, id=f"P{number}", revision=51,
-                           order=replace(original.order.checked(), id=f"order-{number}"))
+                           order=replace(original.order.checked(), id=OrderId(f"{number:012x}")))
             todo.upsert(db)
             for verdict in range(50):
                 StoredOrderStory.append(db, todo.id, AcceptedVerdict(
-                    verdict + 1, actor, todo.held(), f"call-{number}-{verdict}",
+                    verdict + 1, actor, todo.held(), ToolCallId(f"call-{number}-{verdict}"),
                     quote="Repair the existing record owner"))
     measured = {"rows": 0, "aggregates": 0}
     read_code = StoredOrderStory.read.__func__.__code__
@@ -203,7 +217,7 @@ def test_inline_history_is_carried_once_without_losing_void_links(recorded_probl
         columns = ", ".join(f'"{column}"=?' for column in INLINE_FIELDS)
         db.execute(f'UPDATE "{Todo.declared_name}" SET {columns} WHERE id=?',
                    (*map(lambda column: FieldCodec.compact(retired[column]), INLINE_FIELDS), "P1"))
-    step = TodoStories(comms.root, comms.root, tmp_path / "spill")
+    step = TodoStories(LiveFilesRequest(comms.root), tmp_path / "spill")
     assert step.carry(apply=False).changed == 1
     maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
     hold = maintenance.begin(MaintenanceOperator.current())
