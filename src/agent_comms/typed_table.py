@@ -21,8 +21,10 @@ from dataclasses import dataclass, field, is_dataclass
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
 from importlib import import_module
+from importlib.metadata import entry_points
 from inspect import getsource
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -2207,6 +2209,55 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         schema = cls.schema_at(path)
         with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
             return schema.reconcile_schema(db, cls.schema_change(path))
+
+
+class WriterOwnedStore(DeclaredFamily, affix="Store"):
+    """A durable file outside the bus that its own writer reconciles when it opens it
+    (``WriterOwnedFile``). An installed package declares each one through the
+    ``agent_comms.writer_owned_stores`` entry point. Before cutover the installer opens a
+    copy of each with the target's declaration, so a stored schema the declaration cannot
+    carry refuses the install and names the file, instead of failing the writer's next
+    launch."""
+
+    entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
+
+    @classmethod
+    @abstractmethod
+    def path(cls) -> Path: ...
+
+    @classmethod
+    @abstractmethod
+    def table_schema(cls) -> type[TableSchema]: ...
+
+    @staticmethod
+    @cache
+    def load_declarations() -> None:
+        """Import each module the installed distributions declare, once per process."""
+        for entry in entry_points(group=WriterOwnedStore.entry_point_group):
+            entry.load()
+
+    @classmethod
+    def practice_opening(cls, directory: Path) -> None:
+        """The writer's own opening, run on a copy, so the stored file is never written."""
+        path = cls.path()
+        if not path.is_file():
+            return
+        copy = directory / path.name
+        with closing(sqlite3.connect(path)) as stored, closing(sqlite3.connect(copy)) as practice:
+            stored.backup(practice)
+        try:
+            with closing(SQLiteFile.writer(copy)) as db, db:
+                cls.table_schema().install_schema(db, WriterOwnedFile())
+        except RelationViolationError as error:
+            raise RelationViolationError(
+                f"{path} cannot open on this runtime: {error}") from error
+
+    @staticmethod
+    def practice_openings() -> None:
+        WriterOwnedStore.load_declarations()
+        with TemporaryDirectory() as directory:
+            for store in WriterOwnedStore.members_with(WriterOwnedStore):
+                store.practice_opening(Path(directory))
 
 
 class CarriedWriter(StoreWriter, DurableFile):

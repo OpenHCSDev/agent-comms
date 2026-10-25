@@ -1209,6 +1209,9 @@ class ChildOutcome(DeclaredFamily, affix="Outcome"):
     def report_forced(self, report: Callable[[str], None]) -> None:
         pass
 
+    def report_stopped(self, report: Callable[[], None], stop_exits: frozenset[int]) -> None:
+        """Only a signal, or a program's declared stop exit, ends a child as stopped."""
+
     def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
         return ""
 
@@ -1235,6 +1238,10 @@ class ExitedOutcome(ChildOutcome):
     def printed_count(self, stdout: bytes) -> CheckPrinted:
         return CheckPrinted.decoded(stdout)
 
+    def report_stopped(self, report: Callable[[], None], stop_exits: frozenset[int]) -> None:
+        if self.code in stop_exits:
+            report()
+
     @property
     def summary(self) -> str:
         return f"exited with code {self.code}"
@@ -1255,6 +1262,9 @@ class InterruptedForkOutcome(ChildOutcome):
 class SignaledOutcome(InterruptedForkOutcome):
     interrupted: ClassVar[bool] = True
     signal_number: int
+
+    def report_stopped(self, report: Callable[[], None], stop_exits: frozenset[int]) -> None:
+        report()
 
     @property
     def summary(self) -> str:
