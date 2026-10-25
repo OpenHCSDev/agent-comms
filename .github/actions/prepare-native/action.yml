@@ -5,6 +5,10 @@ inputs:
     description: Installed Core interpreter command or executable path
     required: false
     default: python
+  core:
+    description: Where Core is checked out; Toad's suite checks it out beside its own tree
+    required: false
+    default: .
 runs:
   using: composite
   steps:
@@ -13,8 +17,8 @@ runs:
         node-version: "22.19.0"
     - name: Warm locked MCP dependencies
       shell: bash
-      working-directory: extensions/pi-mcp-client
+      working-directory: ${{ inputs.core }}/extensions/pi-mcp-client
       run: npm ci --ignore-scripts --no-audit --no-fund
     - name: Prepare pinned native Pi
       shell: bash
-      run: stack/native/prepare-pi-native --python "$(command -v '${{ inputs.python }}')"
+      run: ${{ inputs.core }}/stack/native/prepare-pi-native --python "$(command -v '${{ inputs.python }}')"
