@@ -63,42 +63,30 @@ class Ping(DeclaredFamily, affix="Ping"):
     @abstractmethod
     def key(self) -> object: ...
 
-    def disposed(self, comms: Comms, actors: frozenset[str]) -> bool:
-        """Whether a subject has a recorded action since this line began; a line about nothing
-        a verb can act on is disposed only by a packet that no longer carries it."""
-        since = self.since.recorded_at("A line")
-        return any(subject.disposed(comms, actors, since) for subject in self.subjects)
+    def acted(self, comms: Comms, actors: frozenset[str]) -> bool:
+        """Whether a subject has a recorded action since this line began."""
+        began = self.since.recorded_at("A line")
+        return any(subject.disposed(comms, actors, began) for subject in self.subjects)
 
     def undisposed(self, comms: Comms, actors: frozenset[str], cut: float) -> bool:
-        """Began before ``cut`` and no subject has a recorded action since it began."""
-        return self.since.before(cut) and self.disposable and not self.disposed(comms, actors)
+        """Waiting on the commander, and not acted on since it began. Only such a line is
+        restated as waiting and locks the verbs."""
+        return self.waits_on_commander(cut) and not self.acted(comms, actors)
 
-    @property
-    def disposable(self) -> bool:
-        """Whether a recorded action can dispose of this line: only such a line is owed."""
-        return bool(self.subjects)
-
-    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
-        return any(subject.acted_on(acted) for subject in self.subjects)
-
-    @property
-    def commander_disposes(self) -> bool:
-        """Whether a commander verb disposes of this line; only such a line locks the verbs."""
-        return True
-
-    def locks(self, cut: float) -> bool:
-        """Past ``cut``, the commander's to dispose of, and disposable by a recorded action."""
-        return self.commander_disposes and self.disposable and self.since.before(cut)
+    def waits_on_commander(self, cut: float) -> bool:
+        """The commander's to dispose of, began before ``cut``, and about a subject a verb can
+        act on: a line about nothing a verb touches never waits."""
+        return self.commander_disposes and bool(self.subjects) and self.since.before(cut)
 
     def on_board(self, comms: Comms, actors: frozenset[str]) -> bool:
         """The commander's to dispose of, and no recorded action has yet."""
-        return self.commander_disposes and not self.disposed(comms, actors)
+        return self.commander_disposes and not self.acted(comms, actors)
 
     def board_line(self, now: float, cut: float) -> str:
         """This line as the commander's tool calls print it: locked as the gate refuses on it,
         once a line a verb can dispose of is past the answer window."""
         locked = " -> LOCKS your writing verbs until a recorded action disposes of it"
-        return f"BOARD: {self.render(now)}{locked if self.locks(cut) else ''}"
+        return f"BOARD: {self.render(now)}{locked if self.waits_on_commander(cut) else ''}"
 
     def render(self, now: float) -> str:
         since = self.since.recorded_at("A heartbeat line")
