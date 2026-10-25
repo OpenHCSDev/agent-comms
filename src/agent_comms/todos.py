@@ -3040,6 +3040,21 @@ class Assignment(TodoHolder):
         """A retained assignment follows its live incarnation, never a reused name."""
         return tuple(owner for owner in self.holder_in(snapshot) if owner.process_alive)
 
+    def require_available_in(self, db: sqlite3.Connection, problem: str,
+                             assigner: ThreadIncarnation, snapshot: RegistrySnapshot) -> None:
+        """Validate this holder against open work using the transaction's registry snapshot."""
+        TodoStore.require_unit_in(db, self.owner_identity, assigner)
+        worktrees = {owner.project_path for owner in self.holder_in(snapshot)}
+        for held in TodoStore._open(db, "assignment IS NOT NULL", ()):
+            previous = held.held()
+            if held.id == problem or previous.owner_identity == self.owner_identity:
+                continue
+            for other in previous.holder_in(snapshot):
+                if other.project_path in worktrees:
+                    raise SharedWorktreeRefusal(
+                        problem, held.id, self.owner_identity, other.incarnation, other.project_path
+                    )
+
     @property
     def parent_identity(self) -> ThreadIncarnation:
         """The acting assigner: commander, registered fork, or watcher; not Todo.creator."""
@@ -3267,8 +3282,8 @@ class AssignTodo(TodoOperation):
                        parent=actor.name, parent_created=actor.wire_birth))
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
-        store.require_assignment_in(
-            db, current.id, self.proposed.owner_identity, self.actor,
+        self.proposed.require_available_in(
+            db, current.id, self.actor,
             RegistryStore.at(store.root).read_snapshot_unlocked())
         OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
@@ -4073,7 +4088,7 @@ class RestoreHolderTodo(TodoCommand):
         snapshot = RegistryStore.at(store.root).read_snapshot_unlocked()
         if not self.previous.running_holders(snapshot):
             raise TodoConflict(current)
-        store.require_assignment_in(db, current.id, self.previous.owner_identity, self.actor, snapshot)
+        self.previous.require_available_in(db, current.id, self.actor, snapshot)
 
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
@@ -4804,22 +4819,6 @@ class TodoStore(OwnerRequestStore):
                 f"{todo.order.checked().id} ({todo.id}); "
                 "finish or release that order before assigning it again.")
 
-    def require_assignment_in(self, db: sqlite3.Connection, problem: str,
-                              unit: ThreadIncarnation, assigner: ThreadIncarnation,
-                              snapshot: RegistrySnapshot) -> None:
-        """Creation and reassignment consume their transaction's one registry snapshot."""
-        self.require_unit_in(db, unit, assigner)
-        worktrees = {owner.project_path for owner in snapshot.threads_for(unit.require_recorded())}
-        for held in self._open(db, "assignment IS NOT NULL", ()):
-            previous = held.held().owner_identity
-            if held.id == problem or previous == unit:
-                continue
-            for other in snapshot.threads_for(previous.require_recorded()):
-                if other.project_path in worktrees:
-                    raise SharedWorktreeRefusal(
-                        problem, held.id, unit, other.incarnation, other.project_path
-                    )
-
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
         recorded = HuntRecord(uuid4().hex, commander, hunt)
@@ -5050,8 +5049,8 @@ class TodoStore(OwnerRequestStore):
             todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
             review_at, order, request)
         with self.writing() as db:
-            self.require_assignment_in(
-                db, todo_id, assignee, assigner,
+            proposed.held().require_available_in(
+                db, todo_id, assigner,
                 RegistryStore.at(self.root).read_snapshot_unlocked())
             OwnerRequest.require(db, id=request).require_open(identity)
             proposed.insert_if_absent(db)
