@@ -32,12 +32,12 @@ class HuntRecordIds(Carry):
                 return Carried(0)
             refused = tuple(stored for (stored,) in db.execute(
                 HuntRecord._sql(f'SELECT {{id}} FROM "{HuntRecord.declared_name}"'))
-                if Id128Text.spelling.fullmatch(stored) is None)
+                if not Id128Text.spells(stored))
         if apply and refused:
             MaintenanceBarrier(RegistryStore.path_in(self.root)).read().require_held_by(
                 MaintenanceHolder.current(), "Carry saved hunt ids"
             )
-            (column,) = (field for field in HuntRecord._fields if field.name == "id")
+            (column,) = (field for field in HuntRecord._fields if field.column.primary_key)
             with closing(TodoStore.writer(path)) as db, db:
                 db.execute("BEGIN IMMEDIATE")
                 self.rewrite_stored(db, HuntRecord, column,
