@@ -1,6 +1,5 @@
 """Independent owner-local scheduling barriers, using the shared rule family."""
 
-import asyncio
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -110,7 +109,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
         while inputs.state(session_id).pending_turns:
             if ClosingScheduleRule().violated(self):
                 return WakeDue()
-            async with inputs.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
+            async with inputs.state(session_id).turn_lock:
                 # The bus may accept a channel post while an operator drains the
                 # fleet. Keep its existing queued origin; do not start a native
                 # turn or consume it until this root's typed phase is READY.
@@ -133,8 +132,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
                 pending, remaining = ScheduledTurn.take_batch(pending)
                 if remaining:
                     state.pending_turns = remaining
-                inputs.effects.turns.turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
-                try:
+                async with inputs.state(session_id).own_turn_task():
                     await inputs.effects.turns.run_agent_turn(
                         session_id,
                         inputs.sessions.require(session_id),
@@ -143,8 +141,6 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
                         origins=tuple(origin for turn in pending for origin in turn.origin.messages()),
                         autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
                     )
-                finally:
-                    inputs.effects.turns.turn_tasks.pop(session_id, None)
         return WakeDue()
 
     @staticmethod
@@ -218,7 +214,7 @@ class OccupiedOwnerTurnRule(ReservationRule):
     explanation = "The session still owns a running turn."
 
     def violated(self, check):
-        return check.session_id in check.turns.turn_tasks
+        return check.turns.inputs.state(check.session_id).turn_task.busy
 
 
 class NativeInboxOwnerTurnRule(ReservationRule):
