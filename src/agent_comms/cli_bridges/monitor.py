@@ -270,7 +270,7 @@ class PeerGone(SessionReply, declared_name='gone'):
 
 
 @dataclass(frozen=True)
-class SessionRequest[Reply: SessionReply](SessionWire, CrossesRuntimes, DeclaredFamily, affix=""):
+class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix=""):
     reply_class: ClassVar[type[SessionReply]]
     reply_timeout: ClassVar[float] = 30
 
@@ -309,7 +309,7 @@ class SessionRequest[Reply: SessionReply](SessionWire, CrossesRuntimes, Declared
 
 
 @dataclass(frozen=True)
-class AttachMonitor(SessionRequest[SessionReady], declared_name='attach'):
+class AttachMonitor(CrossesRuntimes, SessionRequest[SessionReady], declared_name='attach'):
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return await service.bridge.reader.attach(service, peer)
@@ -324,7 +324,7 @@ class ReadBoard(SessionRequest[BoardReply], declared_name=SessionBoard.request):
 
 
 @dataclass(frozen=True)
-class VerifySession(SessionRequest[SessionReady], declared_name='verify'):
+class VerifySession(CrossesRuntimes, SessionRequest[SessionReady], declared_name='verify'):
     owner: ProcessIdentity
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
@@ -334,7 +334,7 @@ class VerifySession(SessionRequest[SessionReady], declared_name='verify'):
 
 
 @dataclass(frozen=True)
-class InspectSession(SessionRequest[SessionInformation], declared_name='inspect'):
+class InspectSession(CrossesRuntimes, SessionRequest[SessionInformation], declared_name='inspect'):
 
     def information(self, endpoint: Path) -> SessionInformation:
         return self.exchange(endpoint)
