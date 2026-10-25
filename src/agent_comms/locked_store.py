@@ -831,16 +831,6 @@ class SQLiteFile(SQLiteStorage):
             return content.hexdigest()
 
 
-class WriterOwnedSQLiteFile(SQLiteStorage):
-    """External SQLite files retain exact bytes; observation never checkpoints their source.
-    Their writer must be quiesced before copying or replacing the physical file group."""
-
-    @classmethod
-    def content_members(cls, path: Path) -> frozenset[Path]:
-        observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
-        return cls.snapshot_members(path, observed)
-
-
 class StoreCommittedError(OSError):
     """COMMIT succeeded; change signalling or connection retirement failed."""
 

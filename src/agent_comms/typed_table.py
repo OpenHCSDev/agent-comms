@@ -66,9 +66,9 @@ from .locked_store import (
     RootFile,
     RuntimeFile,
     SQLiteFile,
+    SQLiteStorage,
     StoreCommittedError,
     WrittenFile,
-    WriterOwnedSQLiteFile,
 )
 from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
@@ -2278,7 +2278,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
             return schema.reconcile_schema(db, cls.schema_change(path))
 
 
-class WriterOwnedStore(WriterOwnedSQLiteFile, DurableFile, DeclaredFamily, affix="Store"):
+class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"):
     """A durable file outside the bus that its own writer reconciles when it opens it
     (``WriterOwnedFile``). An installed package declares each one through the
     ``agent_comms.writer_owned_stores`` entry point. Before cutover the installer opens a
@@ -2288,6 +2288,12 @@ class WriterOwnedStore(WriterOwnedSQLiteFile, DurableFile, DeclaredFamily, affix
 
     entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
     retained_directory: ClassVar[Path] = Path("writer-owned")
+
+    @classmethod
+    def content_members(cls, path: Path) -> frozenset[Path]:
+        """Retain the original primary and committed WAL bytes without checkpointing."""
+        observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
+        return cls.snapshot_members(path, observed)
 
     @classmethod
     def retained_name(cls, root: Path, path: Path) -> Path:
