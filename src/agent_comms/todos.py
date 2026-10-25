@@ -1460,6 +1460,11 @@ class GrowthReason(PlainText):
     refusal = "Say why the source grows in {}+ words; jargon {} hides what happened."
     least_words = 12
 
+    @classmethod
+    def every(cls, texts: tuple[str, ...]) -> GrowthReason:
+        """One reason per repeated --growth, each held to the word minimum, on one record."""
+        return cls("; ".join(cls(text).text for text in texts))
+
     def names(self, path: str) -> bool:
         """One whole word of the reason is the file's path or its file name."""
         words = {word.strip(".,;:()`'\"") for word in self.text.split()}

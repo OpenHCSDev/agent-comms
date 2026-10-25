@@ -7,7 +7,7 @@ from typing import ClassVar, Literal
 
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
-from agent_comms.cli_protocol import TaggedWire, TextWire, WireHeader
+from agent_comms.cli_protocol import Declared, TaggedWire, TextWire, WireHeader
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.recorded_time import RecordedEventTime
@@ -253,7 +253,7 @@ class FailedTool(EndedTool, declared_name='error'):
 class ToolPart(Part, declared_name='tool'):
     call_id: ToolCallId = Field(alias='callID')
     tool: str
-    state: ToolState.declared_union()
+    state: Declared[ToolState]
 
     def finished(self, message: MessageInfo) -> bool:
         return self.state.finished
@@ -311,8 +311,8 @@ class PatchPart(StructuralPart, declared_name='patch'):
 
 
 class SavedMessage(WireModel):
-    info: MessageInfo.declared_union()
-    parts: list[Part.declared_union()]
+    info: Declared[MessageInfo]
+    parts: list[Declared[Part]]
 
     def publications(self) -> tuple[RuntimeUpdate, ...]:
         """Its finished parts. An unfinished part is published from its own deltas, from its

@@ -8,6 +8,9 @@ grants no response, recovery, model replay, edit, or current-owner authority.
 
 from __future__ import annotations
 
+import sqlite3
+import sys
+
 from agent_comms.native_session_files import NativeSessionFiles
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -97,6 +100,41 @@ class _HistoricalSource(TypedRow):
     message_id: MessageId
 
 
+def _selected_sources(columns: str, condition: str) -> str:
+    """One recipient's sealed selected sources joined to the native inputs that took them."""
+    return (
+        f"SELECT {columns} FROM native_runtime_input n "
+        f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+        "JOIN wake_claims c ON c.assignment_id=member.assignment_id "
+        "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
+        "AND m.recipient_lookup=c.recipient_lookup "
+        "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
+        "AND r.wire_seq=m.wire_seq AND r.message_id=c.message_id AND r.sealed=1 "
+        "JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
+        "AND d.wire_seq=r.wire_seq AND d.claim_id=c.assignment_id "
+        "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
+        f"WHERE r.wire_root_id=? AND c.recipient_lookup=? AND {condition} "
+        "AND n.owner_lookup=c.recipient_lookup AND n.session_entry_id IS NOT NULL"
+    )
+
+
+def first_foreign_claim_source(
+    db: sqlite3.Connection, *, wire_root_id: RootId, recipient_lookup: ThreadLookup,
+    after_seq: int, claimed_generation: int,
+) -> int:
+    """The first source after ``after_seq`` taken by an input another claim sent.
+
+    A cursor owner proves only inputs its own claim sent (CursorOwner.matches_prefix),
+    so no coverage scan publishes past this source. With none, the scan may reach the bus end.
+    """
+    (seq,) = db.execute(
+        _selected_sources("COALESCE(MIN(c.wire_seq), ?)",
+                          "c.wire_seq>? AND n.sent_owner_claimed_generation IS NOT ?"),
+        (sys.maxsize, wire_root_id, recipient_lookup, after_seq, claimed_generation),
+    ).fetchone()
+    return int(seq)
+
+
 def read_historical_native_inputs(
     store: Coordination,
     *,
@@ -126,18 +164,7 @@ def read_historical_native_inputs(
             NativeRuntimeTable.require_installed(db)
             sources = _HistoricalSource.read(
                 db.execute(
-                    "SELECT n.input_id,c.assignment_id,c.wire_seq,c.message_id FROM native_runtime_input n "
-                    f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
-                    "JOIN wake_claims c ON c.assignment_id=member.assignment_id "
-                    "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
-                    "AND m.recipient_lookup=c.recipient_lookup "
-                    "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
-                    "AND r.wire_seq=m.wire_seq AND r.message_id=c.message_id AND r.sealed=1 "
-                    "JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
-                    "AND d.wire_seq=r.wire_seq AND d.claim_id=c.assignment_id "
-                    "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
-                    "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
-                    "AND n.owner_lookup=c.recipient_lookup AND n.session_entry_id IS NOT NULL",
+                    _selected_sources("n.input_id,c.assignment_id,c.wire_seq,c.message_id", "c.wire_seq=?"),
                     (wire_root_id, recipient_lookup, source_seq),
                 )
             )

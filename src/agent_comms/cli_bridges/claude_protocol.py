@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
-from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
+from agent_comms.cli_protocol import Declared, TaggedWire, TextWire, TimestampedWire, WireHeader
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.pi_counts import PiCount, PiCountWire
@@ -431,7 +431,7 @@ class ClaudeUsage(WireModel):
 
 
 class AssistantMessage(WireModel):
-    content: list[AssistantBlock.declared_union()]
+    content: list[Declared[AssistantBlock]]
     model: str = ''
     usage: ClaudeUsage = Field(default_factory=ClaudeUsage)
 
@@ -623,7 +623,7 @@ class TaskMessage(ContentBlocks):
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
     tool_use_id: ToolCallId
-    content: list[ResultPart.declared_union()]
+    content: list[Declared[ResultPart]]
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -633,13 +633,13 @@ class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
 
 
 class UserMessage(ContentBlocks):
-    content: list[UserBlock.declared_union()]
+    content: list[Declared[UserBlock]]
 
 
 class UserRecord(ClaudeRecord, TimedRecord, declared_name='user'):
     promptId: str
     message: UserMessage
-    origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
+    origin: Declared[PromptOrigin] = Field(default_factory=ToolSupplied)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
@@ -730,7 +730,7 @@ class ModelRefusalNoFallback(SystemEvent, declared_name='model_refusal_no_fallba
 
 
 class SystemRecord(ClaudeRecord, declared_name='system'):
-    subtype: SystemEvent.declared_union()
+    subtype: Declared[SystemEvent]
 
     @model_validator(mode='before')
     @classmethod
@@ -779,7 +779,7 @@ class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
 
 
 class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
-    attachment: AttachmentPayload.declared_union()
+    attachment: Declared[AttachmentPayload]
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.attachment.updates(self)

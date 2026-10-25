@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, Union
 
 from pydantic import (
     Discriminator,
+    GetCoreSchemaHandler,
     InstanceOf,
     PlainSerializer,
     PlainValidator,
@@ -22,16 +23,16 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
-from .coordination_errors import CoordinationError, CoordinationReadUnavailable
+from .coordination_errors import CommandFailure, CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .field_codec import TimestampText
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .recorded_time import UnrecordedTimeError
-from .repo import GitCommandError
 from .turn_item import NativeTurnId, TurnItem
 from .wire_models import DeclaredWireFamily, WireModel
 
@@ -40,7 +41,7 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import BindingThread, CliBridge, DeliveryRow
 
 
-CLI_FAILURES = (ValueError, OSError, CoordinationError, GitCommandError)
+CLI_FAILURES = (ValueError, OSError, CommandFailure)
 
 
 async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
@@ -116,6 +117,18 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
             alternatives = Union[*reversed(tuple(hierarchy.static_order()))]
             variants.append(Annotated[alternatives, Tag(wire_tag)])
         return Annotated[Union[*variants], Discriminator(cls.tag_of)]
+
+
+class DeclaredMembers:
+    """Decodes the annotated family as the union of its declared members."""
+
+    def __get_pydantic_core_schema__(
+        self, family: type[TaggedWire], handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        return handler(family.declared_union())
+
+
+type Declared[Family: TaggedWire] = Annotated[Family, DeclaredMembers()]
 
 
 class OpenWire(TaggedWire, ABC, declared_name=None):
