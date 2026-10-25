@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 from contextlib import closing
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -237,7 +238,7 @@ def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
             migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
         assert saved.read_text() == "migrated"
-        backup.undo()
+        hold = backup.restore(partial(staged.restore_stores, hold))
         assert saved.read_text() == "original"
         assert staged.verify(comms.root) == migration.read
     maintenance.clear(hold)

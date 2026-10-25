@@ -704,6 +704,17 @@ class Stack:
             return ()
         return self.probe(CarryProbe(operation, steps))
 
+    def restore_stores(self, hold: MaintenanceState) -> MaintenanceState:
+        """Retarget the caller's hold while the outgoing runtime rebuilds projections."""
+        root = Path(hold.root)
+        runtime = LaunchRuntime(RootRuntimeStore.at(root).read().prefix / "bin/python")
+        outgoing = replace(self, runtime=runtime)
+        maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
+        hold = maintenance.retarget(hold, runtime)
+        with hold.holding():
+            outgoing.cli(root, ReconcileStoresCliCommand)
+        return hold
+
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
@@ -852,7 +863,8 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         report.running(tree, commands.clock),
     ):
         with PreparePhase().running(commands.clock):
-            StoreBackup.complete_interrupted(root, spill_dir)
+            StoreBackup.complete_interrupted(
+                root, spill_dir, Stack(checkout, commands).restore_stores)
             current = commands.git(checkout, "rev-parse", "HEAD").strip()
             with commands.timing(GitPhase(
                 checkout, ("merge-base", "--is-ancestor", current, target),
@@ -1185,6 +1197,13 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     if unrehearsed:
                         raise UpgradeRefused(
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
+                    carry_files = frozenset(
+                        path.relative_to(self.root)
+                        for step in self.pending for path in step.input_files())
+                    omitted = (frozenset(planned.rewritten)
+                               - frozenset(planned.backup_files) - carry_files)
+                    selected = tuple(path for path in selected
+                                     if path.relative_to(self.root) not in omitted)
                     migration = PreparedMigration.capture(
                         maintenance.held_by(MaintenanceOperator.current()), self.installed)
                     backup, selected_route = self.backed_up(selected)
@@ -1211,15 +1230,15 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     # Only the services this run stopped may write the root on its behalf.
                     HostService.stop_all(stopped.services)
 
-                    def rehold() -> None:
-                        """Hold the root again in whatever phase it is now in."""
+                    def rehold(hold: MaintenanceState) -> None:
+                        """Keep the caller's current hold active through the restore."""
                         holder.close()
-                        holder.enter_context(
-                            maintenance.held_by(MaintenanceOperator.current()).holding())
+                        holder.enter_context(hold.holding())
 
-                    rehold()
-                    backup.undo()
-                    rehold()
+                    hold = maintenance.held_by(MaintenanceOperator.current())
+                    rehold(hold)
+                    hold = backup.restore(partial(self.installed.restore_stores, hold))
+                    rehold(hold)
                     head = self.installed.commands.git(
                         self.checkout, "rev-parse", "HEAD").strip()
                     if head != self.current:

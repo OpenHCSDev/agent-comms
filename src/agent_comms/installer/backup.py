@@ -9,11 +9,10 @@ import stat
 import sys
 import tempfile
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from string import Formatter
 from typing import Annotated, ClassVar, Iterator, Self
@@ -37,9 +36,10 @@ from agent_comms.locked_store import (
     RuntimeFile,
     UndeclaredFile,
 )
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.registry_store import RegistryStore
+from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.store_files import AtomicFile
 
 
@@ -148,37 +148,8 @@ class BackupName:
                 yield cls(name)
 
 
-class ResourceBackup(ABC):
-    """The installation's rollback and retention behavior, with or without a snapshot."""
-
-    @property
-    @abstractmethod
-    def description(self) -> str: ...
-
-    @abstractmethod
-    def report(self) -> BackupReport: ...
-
-    @abstractmethod
-    def original(self) -> bool: ...
-
-    @abstractmethod
-    def restore(self) -> None: ...
-
-    def undo(self) -> None:
-        """Put back whatever changed since the snapshot; an untouched root stays as it is."""
-        if not self.original():
-            self.restore()
-
-    @abstractmethod
-    def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
-
-    @abstractmethod
-    def spill_directory(self, configured: Path) -> Path:
-        """Carry originals share the snapshot's retention; no snapshot creates nothing."""
-
-
 @dataclass
-class StoreBackup(ResourceBackup):
+class StoreBackup:
     """Snapshot selected stores and the route, including its original absence."""
     root: Path
     route: Path
@@ -212,7 +183,10 @@ class StoreBackup(ResourceBackup):
         return tuple(backup for backup in backups if backup.restoring.exists())
 
     @classmethod
-    def complete_interrupted(cls, root: Path, spill_dir: Path) -> tuple[Path, ...]:
+    def complete_interrupted(
+        cls, root: Path, spill_dir: Path,
+        rebuild: Callable[[MaintenanceState], MaintenanceState],
+    ) -> tuple[Path, ...]:
         """Finish every restore a killed install left unfinished, before anything reads
         the bus: take its abandoned maintenance hold, restore, release, then retire the
         backup so the next install never meets it again."""
@@ -221,7 +195,7 @@ class StoreBackup(ResourceBackup):
             maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
             hold = maintenance.begin(MaintenanceOperator.current())
             with hold.holding():
-                backup.restore()
+                hold = backup.restore(partial(rebuild, hold))
             maintenance.clear(hold)
             retired.append(backup.retire())
         return tuple(retired)
@@ -294,6 +268,8 @@ class StoreBackup(ResourceBackup):
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
+        # Rollback selects its outgoing interpreter from this restored declaration.
+        files = tuple(dict.fromkeys((*files, *RootRuntimeStore.matching_in(root))))
         registry = RegistryStore.at(root).written
         if any(path in files for path in registry):
             files = tuple(dict.fromkeys((*files, *registry)))
@@ -424,7 +400,8 @@ class StoreBackup(ResourceBackup):
             (self.root / parent).mkdir(mode=0o700)
             Platform.current().sync_directory((self.root / parent).parent)
 
-    def restore(self) -> None:
+    def restore[Restored](self, rebuild: Callable[[], Restored]) -> Restored:
+        """Restore selected bytes, then rebuild omitted projections before marking complete."""
         saved = self.files()
         selected = self.selected_files()
         owners = self.resource_owners(selected, saved)
@@ -459,5 +436,7 @@ class StoreBackup(ResourceBackup):
         self.restore_route()
         if not self.stores_original():
             raise UpgradeRefused('Selected stores differ after backup restoration')
+        restored = rebuild()
         self.restoring.unlink()
         Platform.current().sync_directory(self.path)
+        return restored
