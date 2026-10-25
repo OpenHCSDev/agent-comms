@@ -374,6 +374,13 @@ class OwnerLifecycle:
         self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> OwnerStartResult:
+        return self.relaunch(name, agent_bin=agent_bin, agent_args=agent_args)
+
+    def relaunch(
+        self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
+        agent_args: LaunchArguments = InheritedArguments(),
+    ) -> OwnerStartResult:
+        """Restore the process without retrying or otherwise changing its goal."""
         with self.registry.storage_rule.room_for_start(self.registry.require(name), self.root):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
