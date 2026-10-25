@@ -23,7 +23,8 @@ def without_here_documents(command: str) -> str:
         text = io.StringIO(command)
         lex = shlex.shlex(text, posix=False, punctuation_chars="<>")
         lex.whitespace_split = True
-        delimiters, previous, line_end = [], None, len(command)
+        delimiters: list[str] = []
+        previous, line_end = "", len(command)
         for word in lex:
             if delimiters and text.tell() > line_end + 1:
                 break
