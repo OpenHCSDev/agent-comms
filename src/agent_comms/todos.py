@@ -3287,6 +3287,8 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
     def require_current(self, current: Todo) -> None:
         current.require_commander(self.actor)
         _text(self.tool_call_id, "Judged tool call ID", 200)
+        if self.tool_call_id in current.judged_calls:
+            raise TodoError(f"Tool call {self.tool_call_id} already has a verdict on {current.id}.")
         super().require_current(current)
 
 
@@ -3351,6 +3353,10 @@ class HeadVerdict(HeadReview, declared_name=None):
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
         return current
 
+    def settles_edits(self, record: HeadReviewRecord, began: float) -> float:
+        """Edits before this cut are judged by the head; only a decision judges them."""
+        return began
+
 
 @dataclass(frozen=True)
 class DecidedHeadVerdict(HeadVerdict, declared_name=None):
@@ -3358,6 +3364,9 @@ class DecidedHeadVerdict(HeadVerdict, declared_name=None):
 
     reason: VerdictReason
     verb: ClassVar[str]
+
+    def settles_edits(self, record: HeadReviewRecord, began: float) -> float:
+        return record.at.latest_with(began)
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"{self.verb} by {reviewer} on {subject}: {self.reason.text}"
@@ -4741,14 +4750,13 @@ class TodoStore(OwnerRequestStore):
             ))
 
     def unjudged_since(self, todo: Todo) -> float:
-        order = todo.order.checked()
+        """The problem's work starts at its first order; a send-back reissues the order but
+        judges none of the edits before it, so only a decided head review moves the cut."""
         with self.snapshot() as db:
-            reviews = StoredHeadReview.select(
-                db, problem=todo.id, order_id=order.id,
-                order_by=("seq",), descending=True, limit=1,
-            )
-        began = order.at.recorded_at("An order")
-        return max((began, *(row.record.at.latest_with(began) for row in reviews)))
+            reviews = StoredHeadReview.select(db, problem=todo.id)
+        began = min(order.at.recorded_at("An order") for order in todo.order_history)
+        return max((began, *(row.record.verdict.settles_edits(row.record, began)
+                             for row in reviews)))
 
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:

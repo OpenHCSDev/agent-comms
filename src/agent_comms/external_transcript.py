@@ -434,11 +434,6 @@ class StoreRead(TranscriptSource):
                 yield from tool.edit_calls(identity, GeneratedTimestamp.decode(timestamp),
                                            todo.held().owner, todo.id)
 
-    def unjudged_count(self, todo, since) -> int:
-        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo, since)
-        return self.connection.execute(
-            f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
-            parameters).fetchone()[0]
 
 
 @dataclass(frozen=True, slots=True)
