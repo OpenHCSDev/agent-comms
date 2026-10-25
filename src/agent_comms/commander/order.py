@@ -472,6 +472,11 @@ class OrderedProblems(ABC):
                   listed: Mapping[str, Todo]) -> bool:
         """Whether this order replaces the unit's own earlier order on the same problems."""
 
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """The order with the pull requests its problems already hold; a new problem holds none."""
+        return order
+
     @abstractmethod
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
@@ -523,6 +528,12 @@ class ListedProblems(OrderedProblems):
             pid in listed and any(assignment.owner_identity == unit for assignment
                                   in listed[pid].holder_state.current_assignments())
             for pid in group)
+
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """A replacement order keeps the problem's pull requests: a restore cites their heads."""
+        return order.carrying(link for pid in group if pid in listed
+                              for link in listed[pid].order.linked_requests)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
@@ -888,6 +899,19 @@ class RequestedOrderVerb(OrderVerb, DirectiveVerb, declared_name=None):
         RequestSelection, Argument(flags=("--request",),
                                    options={"help": "owner request ID; defaults to newest open"}),
     ] = NewestOpenRequest()
+    clean: Annotated[
+        bool,
+        Argument(
+            flags=("--clean",), options={"help": "the unit showed no incompetence"}
+        ),
+    ] = False
+    disk: Annotated[
+        bool,
+        Argument(
+            flags=("--disk",),
+            options={"help": "a cleanup order; never overrides a tool's storage rule"},
+        ),
+    ] = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -897,25 +921,12 @@ class SendVerb(RequestedOrderVerb):
     body_file: Annotated[
         str, Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
     ]
-    clean: Annotated[
-        bool,
-        Argument(
-            flags=("--clean",), options={"help": "the unit showed no incompetence"}
-        ),
-    ] = False
     reassign: Annotated[
         Reassignment,
         Argument(
             flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
         ),
     ] = NoReassignment()
-    disk: Annotated[
-        bool,
-        Argument(
-            flags=("--disk",),
-            options={"help": "a cleanup order; never overrides a tool's storage rule"},
-        ),
-    ] = False
     traced: Annotated[
         FileLine | NoSourceReference,
         Argument(
@@ -1228,8 +1239,6 @@ class ProblemVerb(RequestedOrderVerb):
             flags=("--where",), options={"help": "the actual file:line where this problem occurs"}
         ),
     ]
-    disk: Annotated[bool, Argument(flags=("--disk",))] = False
-
     @property
     def addressed(self) -> tuple[str, ...]:
         return (self.to,)
@@ -1242,7 +1251,8 @@ class ProblemVerb(RequestedOrderVerb):
             ctx.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
         pid = ctx.comms.goals.todos.allocate_problem()
-        ctx.send(self.to, document, target=NewProblem(pid, document.defect), disk=self.disk,
+        ctx.send(self.to, document, clean=self.clean,
+                 target=NewProblem(pid, document.defect), disk=self.disk,
                  finding=LocatedProblemFinding(location), answers=references,
                  request=self.request)
         print(pid)

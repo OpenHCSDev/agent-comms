@@ -273,29 +273,24 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
     assert all(saved.status(name).stopped for name in names[1:])
 
 
-def test_the_install_start_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_open(
-        comms, stack):
-    """Install 14: f23ca8968 refused this ledger at every opening, so its stop answered
-    nothing. The install's start holds the root, and the target stops the owners under
-    that hold, carrying the ledger, which stays held until the install releases it."""
-    from agent_comms.child_process import ProcessIdentity
+def test_the_install_start_stops_owners_under_its_hold(comms, stack):
+    """The install's start holds the root and the outgoing runtime stops the owners under
+    that hold; the hold stays draining until the install releases it."""
+    from agent_comms.child_process import SpawnedProcess
 
     path = ledger_one_failure_short(comms.root)
     maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
-    with subprocess.Popen(("sleep", "600")) as owner:
-        try:
-            comms.registry.declare(replace(Thread("unit", frozenset(), str(comms.root)),
-                                           process_identity=ProcessIdentity.capture(owner.pid)),
-                                   RunningThreadStatus())
-            with ExistingBusInstall.owners_stopped(comms.root, stack, stack) as owners:
-                assert owners.stopped == ["unit"]
-                assert stack.running_owners(comms.root) == []
-                assert maintenance.read().phase is DrainingPhase
-                owners.retired()
-                owners.release()
-                assert maintenance.read().phase is ReadyPhase
-        finally:
-            owner.kill()
+    with SpawnedProcess.launch(("sleep", "600")) as owner:
+        comms.registry.declare(replace(Thread("unit", frozenset(), str(comms.root)),
+                                       process_identity=owner.identity),
+                               RunningThreadStatus())
+        with ExistingBusInstall.owners_stopped(comms.root, stack, stack) as owners:
+            assert owners.stopped == ["unit"]
+            assert stack.running_owners(comms.root) == []
+            assert maintenance.read().phase is DrainingPhase
+            owners.retired()
+            owners.release()
+            assert maintenance.read().phase is ReadyPhase
     GoalAttemptStore.at(path.parent)
 
 

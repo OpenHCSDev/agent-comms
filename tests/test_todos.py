@@ -48,6 +48,7 @@ from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeTurnId
 from agent_comms.threads import Thread
+from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment,
     ChangeTodoState,
@@ -57,6 +58,7 @@ from agent_comms.todos import (
     OrderMessage,
     DeliverTodo,
     DoneTodoState,
+    DraftListedPullRequest,
     MergedListedPullRequest,
     MergedProgress,
     NotOrderCommander,
@@ -72,8 +74,6 @@ from agent_comms.todos import (
     StrikeReason,
     Todo,
     TodoCommand,
-    TodoConflict,
-    TodoError,
     TodoState,
     TodoStore,
     UnmergedListedPullRequest,
@@ -422,15 +422,18 @@ def released_published_orders(pr_commander, github_cli):
         assert source.git(checkout, 'status', '--porcelain') == ''
         assert source.git(checkout, 'rev-parse', 'HEAD') == source.git(checkout, 'rev-parse', '@{upstream}')
     originals = {}
-    for problem, name, draft in (('P615', 'pi-mi', False), ('P637', 'unit-installer', False),
-                                  ('P667', 'unit-backend', True)):
+    for problem, name, request_type in (
+        ('P615', 'pi-mi', UnmergedListedPullRequest),
+        ('P637', 'unit-installer', UnmergedListedPullRequest),
+        ('P667', 'unit-backend', DraftListedPullRequest),
+    ):
         owner = declared[name]
         row = pr_order(ctx, problem, owner=owner)
         number = int(problem[1:])
         now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-        github_cli.put(source.github, UnmergedListedPullRequest(
+        github_cli.put(source.github, request_type(
             number=number, branch=name, head=source.git(Path(owner.worktree), 'rev-parse', 'HEAD').strip(),
-            updated=now, base='main', reviewable_times=(now,), draft=draft))
+            updated=now, base='main', reviewable_times=(now,)))
         row = c.goals.todos.apply(row.id, RecordPullRequest(
             row.revision, owner.incarnation, PullRequestLink(source.github, number), row.held().generation))
         originals[problem] = row

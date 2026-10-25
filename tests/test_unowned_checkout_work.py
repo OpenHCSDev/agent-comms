@@ -7,7 +7,7 @@ import json
 import os
 import subprocess
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -15,10 +15,14 @@ import pytest
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.commander_heartbeat import (
     CommanderHeartbeat,
     CommanderObservation,
 )
+from agent_comms.commander_pings import CommanderUpdate, RulePing
+from agent_comms.commander_hud import CommanderHud
+from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
@@ -29,11 +33,17 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
+from agent_comms.service_passes import ServicePassStore
+from agent_comms.standing_rules import (
+    RepeatedTodoChange, ServicePassFailing, StaleTodoDecision, StandingRule,
+)
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
-    PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason, TodoError,
+    PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason, StrikeTodo, Todo,
+    VoidStrikeTodo,
 )
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeTurnId
@@ -152,6 +162,110 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     CommanderHeartbeat.register(c.registry)
     configured_repository(c)
     return c
+
+
+@pytest.fixture
+def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
+    c = checkout_bus
+    row = c.goals.todos.get('P1')
+    strike = StrikeTodo(
+        row.revision, c.registry.require('lead').incarnation, row.held(),
+        'The worker claimed completion without delivering any of its checked implementation.',
+        evidence=(row.order.checked().owner,))
+    struck = c.goals.todos.apply(row.id, strike)
+    c.goals.todos.apply(row.id, ReleaseTodo(
+        struck.revision, CoreWatcherIncarnation.watcher(), struck.held(),
+        StrikeReason('The worker stopped answering before the checked work was finished.')))
+    return c, strike
+
+
+def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
+    lead = c.registry.require('lead')
+    hud = CommanderHud(lead.incarnation, (), (), OverloadDegradation.from_orders((), 0, 0))
+    CommanderHeartbeat().pass_body(c, (CommanderObservation(lead, (), rules, (), hud),))
+
+
+def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bus):
+    c, strike = struck_unowned_bus
+    with LaunchRoot.from_path(c.root).selected():
+        stale, = (rule for rule in UnownedWheelSpin.violations(c, 'lead')
+                  if rule.todo.id == 'P1')
+        current = c.goals.todos.get('P1')
+        fresh = c.goals.todos.apply(current.id, VoidStrikeTodo(
+            current.revision, c.registry.require('lead').incarnation, strike,
+            'The cited failure was incorrect and the commander takes back this strike.'))
+        following = ServicePassFailing('following-rule', time.time(), 'independent source')
+        run_heartbeat_rules(c, (stale, following))
+
+        assigned = c.goals.todos.get('P1')
+        assert assigned.holder == 'idle'
+        assert assigned.revision == fresh.revision + 1
+        assert not assigned.live_strikes('worker')
+        assert stale.redecided(c, 'lead', assigned) == ()
+        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
+        assert update is not None and not update.not_applied
+        assert RulePing.capture(following) in update.handled
+        assert c.registry.require('lead').incarnation in (
+            ServicePassStore.at(c.root).read().commander_completed)
+
+
+def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkout_bus):
+    c = checkout_bus
+
+    @dataclass(frozen=True)
+    class ConflictingServicePass(ServicePassFailing, declared_name=None):
+        current: Todo
+
+        def enforce(self, comms: Comms, commander: str) -> None:
+            raise TodoConflict(self.current)
+
+    current = c.goals.todos.get('P1')
+    stale = ConflictingServicePass('stale-rule', time.time(), 'changed row', current)
+    following = ServicePassFailing('following-rule', time.time(), 'independent source')
+    with LaunchRoot.from_path(c.root).selected():
+        run_heartbeat_rules(c, (stale, following))
+        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
+        assert update is not None
+        assert update.not_applied == (stale.rejected_line(StaleTodoDecision(current)),)
+        assert RulePing.capture(stale) not in update.handled
+        assert RulePing.capture(following) in update.handled
+        assert c.registry.require('lead').incarnation in (
+            ServicePassStore.at(c.root).read().commander_completed)
+
+
+def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unowned_bus):
+    c, strike = struck_unowned_bus
+
+    @dataclass(frozen=True, eq=False)
+    class ChangingRow(UnownedWheelSpin, declared_name=None):
+        next_row: Todo
+
+        def enforce(self, comms: Comms, commander: str) -> None:
+            raise TodoConflict(self.todo)
+
+        def redecided(self, comms: Comms, commander: str,
+                      current: Todo) -> tuple[StandingRule, ...]:
+            return (type(self)(self.next_row, self.next_row),)
+
+    previous = c.goals.todos.get('P1')
+    current = c.goals.todos.apply(previous.id, VoidStrikeTodo(
+        previous.revision, c.registry.require('lead').incarnation, strike,
+        'The cited failure was incorrect and the commander takes back this strike.'))
+    stale = ChangingRow(previous, current)
+    following = ServicePassFailing('following-rule', time.time(), 'independent source')
+    with LaunchRoot.from_path(c.root).selected():
+        rejected = StandingRule.enforce_all(c, 'lead', (stale, following))
+        error, = rejected.values()
+        with pytest.raises(RepeatedTodoChange) as caught:
+            raise error
+        assert caught.value.previous == previous
+        assert caught.value.current == current
+        run_heartbeat_rules(c, (stale, following))
+        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
+        assert update is not None
+        assert update.not_applied == (stale.rejected_line(caught.value),)
+        assert RulePing.capture(stale) not in update.handled
+        assert RulePing.capture(following) in update.handled
 
 
 def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(

@@ -24,7 +24,7 @@ def main():
         data = repositories[f"{owner}/{name}"]
         if parts == ["pulls"]:
             for entry in data["requests"].values():
-                if entry["listed"]["kind"] == data["open_kind"]:
+                if entry["listed"]["kind"] in data["open_kinds"]:
                     print(entry["listed"]["number"])
         elif parts[:1] == ["pulls"] and len(parts) == 2:
             print(data["requests"][parts[1]]["listed"]["head"])
@@ -52,7 +52,7 @@ def main():
                 "nodes": [{"number": entry["listed"]["number"],
                            "headRefName": entry["listed"]["branch"], "isCrossRepository": False}
                           for entry in data["requests"].values()
-                          if entry["listed"]["kind"] == data["open_kind"]],
+                          if entry["listed"]["kind"] in data["open_kinds"]],
                 "pageInfo": {"hasNextPage": False, "endCursor": None},
             }}}}))
         elif "issues(" in query:

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
-import stat
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -20,6 +18,7 @@ from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
+from .native_session_files import NativeSessionFiles
 from .registration import Registration
 from .relationships import RelationshipStore
 from .thread_execution import NativeThreadExecution
@@ -195,7 +194,7 @@ class ForkSpec(NewThreadSpec):
         # Copy saved history before locking the registry for its declaration.
         parent = self._parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads))
-        location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
+        location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime, threads.root))
         with threads.registry.store.locked():
             current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.runtime != parent.runtime:
@@ -304,15 +303,7 @@ class ThreadManagement:
     def _write_imported_session(
         self, session_path: Path, snapshot: ImportedConversation, project: Path,
     ) -> None:
-        session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        # Session output must remain in an owner-controlled directory.
-        info = session_path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-        ):
-            raise ValueError("Imported session directory is not owner-controlled.")
+        NativeSessionFiles.prepare_private_directory(session_path.parent)
         AtomicFile(session_path).write_bytes(snapshot.session_bytes(project))
 
     def claim_thread(
