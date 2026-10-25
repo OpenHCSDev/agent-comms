@@ -209,7 +209,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
                 return True
 
         if notification_fails:
-            marker = comms.bus.bus.path.with_suffix(".changed")
+            marker, = comms.bus.bus.source_paths(comms.bus.bus.path.parent)
             marker.unlink()
             marker.mkdir()
         with ThreadPoolExecutor(max_workers=1) as pool:
@@ -317,6 +317,16 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert tuple(OrderEditCountRead.for_commander(comms, "lead")) == ()
     with pytest.raises(ValueError, match="pass --artifact FILE"):
         comms.goals.todos.get("P2").order.closing_artifact()
+
+
+def order_file(comms, tmp_path):
+    """A well-formed order for the worker, so a send reaches the answer gate."""
+    order = replace(comms.goals.todos.get("P1").order.checked(), id=OrderId.mint())
+    document = OrderFile(order, "The worker's next step waits on the commander's answer.",
+                         "This is stupid because an owed answer stalls the worker.")
+    path = tmp_path / "order.json"
+    path.write_text(json.dumps(FieldCodec.encode(document)))
+    return str(path)
 
 
 def publish(comms, sender, target, timestamp, *, answers=()):
@@ -550,7 +560,7 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=question.message_id):
-        SendVerb(unit="worker", body_file="unused").apply(ctx)
+        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
     # A reply to the asker answers its open asks without naming them.
     SayVerb(units="worker", body_file=str(reply)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (question.reference,)
@@ -569,12 +579,12 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     capsys.readouterr()
     SayVerb(units="worker", body_file=str(reply), answers=(first.message_id,)).apply(ctx)
-    assert f"WARNING: UNANSWERED worker: message {second.seq}:{second.message_id}" in (
+    assert f"WARNING: ANSWER worker message {second.seq}:{second.message_id}" in (
         capsys.readouterr().out)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (first.reference,)
     assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
     with pytest.raises(RecordProblems, match=second.message_id):
-        SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
 
 
 def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
@@ -600,7 +610,7 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=check.message_id):
-        SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+        SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
     SayVerb(units="worker", body_file=str(reply), answers=(ask.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (ask.reference,)
 
@@ -630,7 +640,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
-    with pytest.raises(RecordProblems, match=f"DIRECTIVE UNACTED: owner directive {directive.seq}:{directive.message_id}"):
+    with pytest.raises(RecordProblems, match=f"ACT ON owner directive {directive.seq}:{directive.message_id}"):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
