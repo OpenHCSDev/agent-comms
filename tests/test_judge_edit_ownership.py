@@ -9,9 +9,13 @@ from test_judge_dropped import recorded_edit, unjudged
 from test_todos import order
 
 from agent_comms.field_codec import GoalId
+from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goals import ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.storage_rules import StorageRule
-from agent_comms.todos import AcceptedVerdict, StrikeReason, TodoError
+from agent_comms.order_tools import CommsVerdictTool
+from agent_comms.todos import AcceptedVerdict, SendBackVerdict, StrikeReason, TodoError
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.owner_requests import NewestOpenRequest
 
 pytest_plugins = ("test_held_problem_orders",)
@@ -45,17 +49,20 @@ def test_an_edit_belongs_to_the_order_whose_checkout_it_is_in(two_orders):
     assert sorted(filed) == [("p1-call", "P1"), ("p2-call", "P2"), ("scratch-call", "P2")]
 
 
-def test_a_reissued_order_leaves_earlier_edits_unjudged(two_orders):
+def test_a_send_back_leaves_the_edits_it_does_not_name_unjudged(two_orders):
     ctx, checkout = two_orders
-    recorded_edit(ctx, "early-call", str(checkout["P1"] / "early.py"), "EARLY = 'before the back'")
-    store = ctx.comms.goals.todos
-    current = store.get("P1")
-    reissued = current.order.checked().sent_back(StrikeReason(
-        "Stupid slop: the test reissues this order the way a send-back does"))
-    with store.writing() as connection:
-        replace(current, order=reissued, prior_orders=current.orders_before(reissued),
-                revision=current.revision + 1).upsert(connection)
-    assert "early-call" in unjudged(ctx)
+    recorded_edit(ctx, "early-call", str(checkout["P1"] / "early.py"), "EARLY = 'not cited'")
+    recorded_edit(ctx, "sent-call", str(checkout["P1"] / "sent.py"), "SENT = 'cited'")
+    current = ctx.comms.goals.todos.get("P1")
+    ctx.comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(), goal_id=current.held().generation))
+    lead = ctx.comms.registry.require(ctx.commander).incarnation
+    reissued = ThreadCaller(ctx.commander).invoke(CommsVerdictTool(problem="P1", operation=SendBackVerdict(
+        current.revision, lead, current.held(), "sent-call",
+        reason=StrikeReason("The worker restated the owner's decision in a second copied branch."),
+        evidence=(current.order.checked().owner,))), ctx.comms).todo
+    assert reissued.order.id != current.order.id
+    assert set(unjudged(ctx)) == {"early-call"}
 
 
 def test_a_second_verdict_on_one_edit_is_refused(two_orders):

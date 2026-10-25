@@ -191,11 +191,15 @@ class OrderRead[Result](TranscriptRead[Result]):
     bound: TurnsSince
     todo: Todo
 
+
+@dataclass(frozen=True)
+class OrderEditRead[Result](OrderRead[Result]):
+    """A held order's edits: the ones its workplaces own that no verdict names."""
+    workplaces: EditWorkplaces
+
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
         yield from cls.for_orders(comms.root, HeldOrders.read(comms, commander).live)
-
-    workplaces: EditWorkplaces = field(default_factory=lambda: EditWorkplaces({}))
 
     @classmethod
     def for_orders(cls, root: Path, holds: Iterable[LiveHold]) -> Iterator[Self]:
@@ -231,7 +235,7 @@ class EditWorkplaces:
     the order the unit was given last. Each edit is read under exactly one order."""
 
     checkouts: dict[str, tuple[Path, ...]]
-    latest: str = ""
+    latest: str
 
     @classmethod
     def of(cls, rule: StorageRule, holder: Thread, todos: tuple[Todo, ...]) -> Self:
@@ -246,7 +250,7 @@ class EditWorkplaces:
                     self.latest)
 
 
-class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
+class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
     """Original unjudged calls; external events are selected before decoding."""
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
@@ -256,7 +260,7 @@ class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
         return self.owned(source.unjudged(self.todo, self.bound.at))
 
 
-class OrderEditCountRead(OrderRead[int]):
+class OrderEditCountRead(OrderEditRead[int]):
     """Load counts the edits each order owns; ownership reads each edit's path."""
 
     @classmethod
