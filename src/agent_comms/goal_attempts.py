@@ -673,7 +673,7 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
         self._ready_grants: dict[tuple[str, int], str] = {}
         with closing(self._connect()) as conn:
             try:
-                self.table_schema().reconcile_schema(conn, self.schema_change(self.path))
+                self.schema_change(self.path).opened(self.table_schema(), conn)
             except (sqlite3.Error, MalformedRecord) as error:
                 raise StorageUncertainError("Incomplete goal attempt schema.") from error
 

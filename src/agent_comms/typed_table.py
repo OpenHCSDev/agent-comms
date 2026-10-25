@@ -796,20 +796,34 @@ class SQLiteCatalogObject(TypedRow):
 
 
 class SchemaChange(ABC):
-    """Who may change a stored schema: the reconcile asks before it writes."""
+    """Who may change a stored schema: the reconcile asks before it writes, and an opening
+    asks what to do with a stored schema that differs."""
 
     @abstractmethod
     def require(self) -> None: ...
 
+    @abstractmethod
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        """An opening of a file that has a stored schema."""
+
 
 @dataclass(frozen=True)
 class HeldBusFile(SchemaChange):
-    """A bus file every runtime on the root opens: its schema changes only in the process
-    holding the root's maintenance, so a newer runtime opening the live bus outside an
-    install refuses instead of moving it under the running owners (install 53, 2026-10-22)."""
+    """A bus file every runtime on the root opens: only the installer's carry changes its
+    schema, in the process holding the root's maintenance, so a newer runtime opening the
+    live bus refuses instead of moving it under the running owners (install 53, 2026-10-22),
+    and no opening rewrites a file outside the carry's backup."""
+
+    carry_verb: ClassVar[str] = "reconcile-stores"
 
     owner: type[RootFile]
     path: Path
+
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        if schema.schema_differs(db):
+            raise schema.schema_error(
+                f"{self.path} differs from {schema.__name__}; "
+                f"agent-comms {self.carry_verb} carries it")
 
     def require(self) -> None:
         barrier = MaintenanceBarrier(RegistryFile.path_in(self.owner.bus_root(self.path)))
@@ -828,6 +842,10 @@ class WriterOwnedFile(SchemaChange):
 
     def require(self) -> None:
         """The owning writer may rebuild this schema."""
+
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        """The writer is this file's carry."""
+        schema.reconcile_schema(db, self)
 
 
 class TableSchema(ABC):
@@ -935,9 +953,9 @@ class TableSchema(ABC):
 
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
-        """The writer's answer to a stored schema that differs from the declaration, in a
-        write transaction of its own and only where ``change`` allows; whether it changed
-        the file."""
+        """The carry of a stored schema that differs from the declaration, in a write
+        transaction of its own and only where ``change`` allows; whether it changed the
+        file."""
         if not cls.schema_differs(db):
             return False
         change.require()
@@ -948,13 +966,13 @@ class TableSchema(ABC):
     @classmethod
     def install_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> None:
         """Every writer's opening: a file with no stored schema gets its declaration, and
-        one that has a schema is reconciled onto it. The first read also attaches an existing
+        ``change`` answers one that has a schema. The first read also attaches an existing
         WAL, and an opening that finds its schema takes no write lock."""
         if not cls.stored_schema(db):
             with SQLiteFile.write_transaction(db):
                 if not cls.stored_schema(db):
                     cls.create_schema(db)
-        cls.reconcile_schema(db, change)
+        change.opened(cls, db)
 
     @classmethod
     @abstractmethod
