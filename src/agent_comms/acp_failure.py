@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .turn_failure import TurnFailure
     from .turn_input_source import OriginalTurnInput
 
+from .coordination_errors import Refused
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
 from .field_codec import (
@@ -262,7 +263,7 @@ class NativeTurnOutcome(ABC):
 
     def raise_fault(self, cause: Exception) -> NoReturn:
         """Report a transport fault without rewriting the completed native outcome."""
-        failure = ACPFailure.from_detail(-32603, f"{type(cause).__name__}: {cause}")
+        failure = ACPFailure.from_detail(Refused.INTERNAL_ERROR, f"{type(cause).__name__}: {cause}")
         raise NativeTurnError(RequestFailure(failure, False)) from cause
 
 
@@ -296,7 +297,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         document: InputDocument, original: OriginalTurnInput,
     ) -> FailedNativeTurnOutcome:
         failure = replace(
-            ACPFailure.from_detail(-32603, terminal.text or "Backend failed",
+            ACPFailure.from_detail(Refused.INTERNAL_ERROR, terminal.text or "Backend failed",
                                   diagnostics=error.diagnostics if error is not None else ()),
             input_state=original.failure_state(document),
             retry_result=ProviderRetryResult.from_optional(terminal.retry_result),
