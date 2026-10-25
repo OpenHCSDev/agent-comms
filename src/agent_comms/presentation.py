@@ -991,6 +991,11 @@ class WireRevision(ReadState):
     def changed_since(self, view: RevisionView, earlier: ReadState) -> bool:
         return earlier.changed_before(view, self)
 
+    def changed_since_any(self, earlier: ReadState) -> bool:
+        """All declared views, using their source comparisons, including timed expiry."""
+        return any(self.changed_since(view(), earlier)
+                   for view in RevisionView.members_with(RevisionView))
+
     def changed_before(self, view: RevisionView, later: WireRevision) -> bool:
         """Whether any source feeding `view` differs, by the view's comparison."""
         return any(
