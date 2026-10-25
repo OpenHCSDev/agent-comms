@@ -123,9 +123,6 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
             return (CrashedStandingRule(cls, type(error),
                                        FileLine.raised(error, frame.plan.main.repo)),)
 
-    def belongs_to(self, family: type[StandingRule]) -> bool:
-        return isinstance(self, family)
-
     @abstractmethod
     def line(self) -> str: ...
 
@@ -193,12 +190,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
                observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
-        """Read each owner once against the supplied frame and its one progress reader,
-        preserving the requested family."""
+        """Read each owner once against the supplied frame and its one progress reader."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         return tuple(rule for owner in owners
                      for rule in owner.scanned(comms, commander, observed, frame)
-                     if rule.belongs_to(cls) and rule.attention() and rule.broke_after(after))
+                     if rule.attention() and rule.broke_after(after))
 
 
 class OrderRefusingStandingRule(StandingRule, declared_name=None):
@@ -255,9 +251,6 @@ class CrashedStandingRule(UndatedStandingRule, declared_name=None):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return ()
-
-    def belongs_to(self, family: type[StandingRule]) -> bool:
-        return True
 
     def line(self) -> str:
         return f"{self.rule.__name__}: crashed {self.error.__name__} {self.place.to_wire()}"
