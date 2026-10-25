@@ -129,3 +129,12 @@ def test_a_message_answers_only_what_its_sender_received(source):
         reply = source.messaging.send(sender, "unselected", "Answered",
                                       answers=(original.reference,)).message
         assert source.bus.bus.lookup(reply.seq).answers == (original.reference,)
+
+
+def test_a_check_root_answers_a_dm_received_before_the_copy(source, scratch_root):
+    # A copy written as public records had no receipts, so send refused every old answer.
+    original = source.bus.bus.lookup(1)
+    with CheckRoot(source, ("A", "B"), scratch_root / "received").open() as copied:
+        reply = copied.messaging.send("B", "A", "Answered inside the copy",
+                                      answers=(original.reference,)).message
+        assert copied.bus.bus.lookup(reply.seq).answers == (original.reference,)
