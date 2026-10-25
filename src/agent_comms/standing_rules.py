@@ -11,8 +11,8 @@ from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
-from pathlib import Path
 from itertools import combinations
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
@@ -179,13 +179,12 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
-               observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        """Read each owner once against the supplied frame and its one progress reader,
-        preserving the requested family."""
+               observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
+        """Read each owner once against the supplied frame and its one progress reader."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         return tuple(rule for owner in owners
                      for rule in owner.scan_observed(comms, commander, observed, frame)
-                     if isinstance(rule, cls) and rule.attention() and rule.broke_after(after))
+                     if rule.attention() and rule.broke_after(after))
 
 
 class OrderRefusingStandingRule(StandingRule, declared_name=None):
