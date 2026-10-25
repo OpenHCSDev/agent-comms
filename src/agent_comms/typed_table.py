@@ -552,7 +552,7 @@ class TypedRow(SqlProjection):
     def _fields(cls: type[TypedRow]) -> tuple[_Field, ...]:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
-        return tuple(_Field.for_field(plan) for plan in FieldCodec.field_plans(cls))
+        return tuple(_Field.for_field(plan) for plan in FieldCodec.field_plans(cls) if plan.records)
 
     @classmethod
     def column_projection(cls) -> dict[str, str]:

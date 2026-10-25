@@ -525,8 +525,7 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
     order_id: Annotated[OrderId, *tool_field("Immutable order ID")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
-        (story,) = OrderStory.collect(comms.goals.todos.for_order(self.order_id))
-        return story
+        return OrderStory.collect(self.order_id, comms.goals.todos.for_order(self.order_id))
 
 
 @dataclass(frozen=True, kw_only=True)
