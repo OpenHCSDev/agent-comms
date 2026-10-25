@@ -1673,7 +1673,7 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return f"^(?:{cls.spelling.pattern})$"
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "string", "pattern": cls.anchored()}
 
 
@@ -1936,14 +1936,6 @@ class Id128Text(NominalSpelling[Id128], HexDigits):
     digits = 32
 
 
-class AssignmentId(NominalText):
-    """One recipient's wake claim on one bus message."""
-
-
-class AssignmentIdText(NominalSpelling[AssignmentId]):
-    spelling = re.compile(".{1,256}")
-
-
 class MessageId(NominalText):
     @classmethod
     def mint(cls, text: str) -> Self:
@@ -1978,6 +1970,34 @@ class Hex256Text(HexDigits):
 
 class Sha256Text(Hex256Text):
     """A SHA-256 digest."""
+
+
+class AssignmentId(NominalText):
+    """One recipient's wake claim on one bus message."""
+
+    cohort_codec: ClassVar[str] = "cohort-v1:"
+
+    @classmethod
+    def cohort(cls, identity: bytes) -> Self:
+        """The claim a sealed cohort mints for one member's identity."""
+        return cls(cls.cohort_codec + hashlib.sha256(identity).hexdigest())
+
+    def require_cohort(self) -> Self:
+        """Only a cohort-minted claim binds a wake."""
+        if not self.startswith(self.cohort_codec):
+            raise MalformedRecord("AssignmentId is not cohort-minted")
+        Sha256Text.from_text(self.removeprefix(self.cohort_codec))
+        return self
+
+
+class AssignmentIdText(NominalSpelling[AssignmentId]):
+    """Spelled and stored as BoundedText, so the wake claim's stored form is unchanged."""
+
+    spelling = re.compile(rf"[\s\S]{{1,{BoundedText.max_length}}}")
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return BoundedText.schema()
 
 
 class Token256Text(Hex256Text):
