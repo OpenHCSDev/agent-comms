@@ -36,6 +36,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import OverdueHeadRefusalError, RelationViolationError
 from .goal_mentions import bind_goal_mentions
+from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -80,7 +81,7 @@ class OwnerControlInvocable:
 
 @dataclass(frozen=True)
 class GoalPrecondition:
-    goal_id: GoalId | None = None
+    goal_id: OneGoal | AllGoals = AllGoals()
     expected_state: GoalState | None = None
     expected_goal: GoalDeclaration = NoGoal()
     expected_owner: ProcessIdentity | None = None
@@ -98,8 +99,7 @@ class GoalPrecondition:
         ):
             raise ValueError("The goal owner changed; refresh its state.")
         self.expected_goal.check_expected(goal)
-        if self.goal_id is not None:
-            goal.require().require_id(self.goal_id)
+        self.goal_id.require(goal)
         if self.expected_state is not None:
             goal.require().require_state(self.expected_state)
 
@@ -134,7 +134,7 @@ class GoalAction[Result: GoalDeclaration](
     @classmethod
     def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:
         """What the unit's own goal tool expects before this action: its active goal."""
-        return GoalPrecondition(goal_id=goal_id, expected_state=ActiveGoal())
+        return GoalPrecondition(goal_id=OneGoal(goal_id), expected_state=ActiveGoal())
 
     @classmethod
     async def submit_control(
@@ -693,7 +693,7 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
     @classmethod
     def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:
-        return GoalPrecondition(goal_id=goal_id)
+        return GoalPrecondition(goal_id=OneGoal(goal_id))
 
     @classmethod
     async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:

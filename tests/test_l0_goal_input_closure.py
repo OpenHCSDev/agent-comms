@@ -27,6 +27,7 @@ from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.goal_scope import OneGoal
 
 
 def register(comms, name):
@@ -83,7 +84,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
     store = comms.goals.open_goal_store()
     retry = RetryGoalAction(
-        expect=GoalPrecondition(goal_id=goal.id, expected_owner=ProcessIdentity.capture(os.getpid()))
+        expect=GoalPrecondition(goal_id=OneGoal(goal.id), expected_owner=ProcessIdentity.capture(os.getpid()))
     )
     with pytest.raises(ValueError):
         comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
@@ -125,7 +126,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     )
     messages = comms.bus.inbox("owner").page.messages
     comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
-    action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
+    action = StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("peer",))
     with pytest.raises(ValueError):
         comms.goals.update_goal("owner", action)
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])

@@ -158,7 +158,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
         active_ids = frozenset(current.id for current in goal)
         pending[:] = [
             turn for turn in pending
-            if not turn.autonomous_goal or turn.goal_id in active_ids
+            if not turn.autonomous_goal or turn.goal_id.retained_by(active_ids)
         ]
 
 
