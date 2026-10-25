@@ -1129,9 +1129,7 @@ class BridgeLog(io.TextIOBase):
 
 
 @dataclass(eq=False, repr=False)
-class CliBridge(
-    ExternalRuntime, DeliversInput, History, Generic[BridgeOptions], declared_name=None,
-):
+class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     state_directory: ClassVar[Path]
@@ -1149,7 +1147,7 @@ class CliBridge(
     @classmethod
     def state_directories(cls) -> tuple[Path, ...]:
         """Relative state directories declared by the loaded bridge members."""
-        return tuple(bridge.state_directory for bridge in cls.members_with(cls))
+        return tuple(bridge.state_directory for bridge in History.members_with(CliBridge))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
