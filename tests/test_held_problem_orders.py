@@ -52,7 +52,8 @@ def held_commander(pr_commander, cited_source):
         review_at=RecordedEventTime(time.time() + 1000), order=order(cited_source),
     )
     published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
-    source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
+    source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id,
+                                                      at=RecordedEventTime(time.time())))
     original = source.comms.goals.todos.get(todo.id)
     practice = PracticeCopy(source.root, source.root.parent / f"{source.root.name}-copied")
     practice.include(tuple(RootFile.existing_in(practice.root)))

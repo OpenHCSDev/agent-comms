@@ -154,7 +154,7 @@ def claim_order(held_bus):
         worker = held_bus.registry.require("worker").incarnation
         original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
         todo = held_bus.goals.todos.apply(
-            todo.id, OrderMessage(todo.revision, lead, original.message_id))
+            todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
         claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
                                       "Review the published repair", original.reference,
                                       store=held_bus.goals.todos)
@@ -185,7 +185,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     worker = comms.registry.require("worker").incarnation
     original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
     todo = comms.goals.todos.apply(
-        todo.id, OrderMessage(todo.revision, lead, original.message_id))
+        todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
     claim = OrderClaim.for_order(
         todo, worker, 1, "a" * 40, "Review this published repair with @outsider", original.reference,
         store=comms.goals.todos)

@@ -49,8 +49,10 @@ def story_members(comms):
             "The commander transfers this order so its original events remain visible.")),
         AcceptedVerdict(todo.revision, actor, todo.held(), "accepted-call",
                         quote="Repair the existing record owner"),
-        WordingCorrection(todo.revision, MessageId.mint(), ("custody",)),
-        OrderMessage(todo.revision, actor, MessageId.mint()),
+        WordingCorrection(todo.revision, MessageId.mint("wording correction"), ("custody",),
+                          at=RecordedEventTime(2000)),
+        OrderMessage(todo.revision, actor, MessageId.mint("order message"),
+                     at=RecordedEventTime(3000)),
         replace(todo.order.checked(), id="previous-order"),
     )
 

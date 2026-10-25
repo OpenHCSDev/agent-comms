@@ -4,6 +4,7 @@
 from agent_comms.repository_name import RepositoryName
 
 from dataclasses import replace
+import time
 
 import pytest
 
@@ -75,7 +76,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         current.latest_message
     for message_id in map(MessageId.mint, ("initial order", "current order")):
         caller.invoke(CommsChangeProblemTool(problem=current.id, operation=OrderMessage(
-            current.revision, actor, message_id)), comms)
+            current.revision, actor, message_id, at=RecordedEventTime(time.time()))), comms)
         current = comms.goals.todos.get(current.id)
         assert current.latest_message.message_id == message_id
     copied_root = tmp_path / "copy"

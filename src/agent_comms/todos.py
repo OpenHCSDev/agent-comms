@@ -2427,6 +2427,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         for pid in group:
             context.comms.goals.change_problem(pid, OrderMessage(
                 context.comms.goals.todos.get(pid).revision, context.actor_identity, sent,
+                at=EventTime.capture(time.time()),
             ), context.commander)
 
     def notify_replaced(
@@ -3874,7 +3875,7 @@ class WordingCorrection(TodoOperation, StoryEvent):
     """Core's answer to a published unit message whose words hide what happened; no strike."""
     message_id: MessageId
     words: tuple[str, ...]
-    at: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
+    at: EventTime = field(kw_only=True)
 
     def story_text(self) -> str:
         return f"Wording corrected on {self.message_id}: {', '.join(self.words)}"
@@ -3891,7 +3892,7 @@ class OrderMessage(TodoOperation, StoryEvent):
     """The bus message the commander sent this order in; a verdict citing it lands here."""
     actor: ThreadIncarnation
     message_id: MessageId
-    at: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
+    at: EventTime = field(kw_only=True)
 
     def story_text(self) -> str:
         return f"{self.actor.name} sent order message {self.message_id}"
@@ -5042,7 +5043,8 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             return ()
         with self.writing() as db:
             held = self.held_in(db, '1', (), unit=unit)
-            corrected = tuple(WordingCorrection(todo.revision, message_id, words).write(db, todo, self)
+            at = EventTime.capture(time.time())
+            corrected = tuple(WordingCorrection(todo.revision, message_id, words, at=at).write(db, todo, self)
                               for todo in held)
             return tuple(replace(todo, history=self) for todo in corrected)
 

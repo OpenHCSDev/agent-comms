@@ -13,7 +13,8 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.registry_store import RegistryStore
-from agent_comms.todos import CheckedProblemOrder, StoredOrderStory, Todo, TodoCommand, TodoStore
+from agent_comms.recorded_time import UnrecordedEventTime
+from agent_comms.todos import CheckedProblemOrder, OrderMessage, StoredOrderStory, Todo, TodoCommand, TodoStore
 
 # This is the retired external schema, consumed only by this one-shot boundary.
 INLINE_FIELDS = ("strikes", "voided", "released", "verdicts", "corrections", "messages", "prior_orders")
@@ -46,9 +47,18 @@ class TodoStories(Carry):
             for problem, *histories in db.execute(
                 f'SELECT id,{columns} FROM "{Todo.declared_name}" ORDER BY rowid'
             ).fetchall():
-                decoded = tuple(event for history in histories for event in FieldCodec.decode(
-                    tuple[TodoCommand | CheckedProblemOrder, ...], FieldCodec.parse(history),
-                ))
+                decoded = []
+                for name, history in zip(INLINE_FIELDS, histories, strict=True):
+                    raw = FieldCodec.parse(history)
+                    if name in ("corrections", "messages"):
+                        if not isinstance(raw, list):
+                            raise ValueError(f"{problem}.{name}: expected the retired event array")
+                        for entry in raw:
+                            if not isinstance(entry, dict):
+                                raise ValueError(f"{problem}.{name}: expected a retired event record")
+                            entry.setdefault(FieldCodec.record_key(OrderMessage, "at"),
+                                             FieldCodec.encode(UnrecordedEventTime()))
+                    decoded.extend(FieldCodec.decode(tuple[TodoCommand | CheckedProblemOrder, ...], raw))
                 # The old strike tuple precedes its voids, including undated ones.
                 # Story rendering retains each event's recorded time, not carry time.
                 for event in decoded:
