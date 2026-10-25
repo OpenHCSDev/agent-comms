@@ -165,6 +165,12 @@ class UnitObservation:
     def orders(self) -> tuple[str, ...]:
         return tuple(todo.id for todo in self.todos)
 
+    @property
+    def merges(self) -> dict[str, OrderProgress]:
+        """Each held order's merge as its progress reads it; unmerged orders read no commit."""
+        return {origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
+                for origin in self.sources}
+
 
 class NeedsCommanderAttention:
     """Urgent siblings share their ping behavior without claiming each other's state."""
@@ -459,10 +465,7 @@ class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
 
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
-        progress: dict[str, OrderProgress] = {
-            origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
-            for origin in source.sources
-        }
+        progress = source.merges
         return any(
             todo.order.accepted or todo.order.waiting_on_install(todo, progress)
             for todo in source.todos

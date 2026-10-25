@@ -119,6 +119,13 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
 
+    clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
+
+    @classmethod
+    def cleared_by(cls, verb: type[CommanderVerb]) -> None:
+        """A verb declaring that it clears this rule joins the action its line prints."""
+        cls.clearing_verbs = (*cls.clearing_verbs, verb)
+
     def attention(self) -> bool:
         return True
 
@@ -252,9 +259,10 @@ class LostTools(UndatedStandingRule):
 
 @dataclass(frozen=True)
 class HeldBranch:
-    """One open order joined to its own allocated checkout. Only the branch difference reads
-    that worktree; its unit may retire it mid-frame, so every later Git read goes through the
-    order's repository, which owns the branch refs and remote heads and outlives the worktree."""
+    """One order still writing source, joined to its own allocated checkout. Only the branch
+    difference reads that worktree; its unit may retire it mid-frame, so every later Git read
+    goes through the order's repository, which owns the branch refs and remote heads and
+    outlives the worktree."""
 
     todo: Todo
     holder: ThreadIncarnation
@@ -300,9 +308,12 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, declared_name=None):
         snapshot = comms.registry.snapshot()
         branches = []
         for state in observed:
+            merges = state.source.merges
+            writing = tuple(todo for todo in state.source.todos
+                            if todo.order.writes_source(todo, merges))
             for unit in state.readable_units():
                 for thread in snapshot.threads_for(unit.require_recorded()):
-                    for todo in state.source.todos:
+                    for todo in writing:
                         path = storage.order_checkout(storage.roots_of(thread), todo.id)
                         if path.is_dir():
                             branches.append(HeldBranch(
@@ -417,12 +428,6 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     and which actions it prevents while it waits."""
 
     message: Message
-    clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
-
-    @classmethod
-    def cleared_by(cls, verb: type[CommanderVerb]) -> None:
-        """A verb declaring that it clears this debt joins the hint the refusal prints."""
-        cls.clearing_verbs = (*cls.clearing_verbs, verb)
 
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
         """Only a unit's question belongs on that unit's observation."""
@@ -686,6 +691,58 @@ class StuckMerge(HeadLine, DatedStandingRule):
         return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}:"
                 f" auto-merge armed but {self.block.what()}"
                 " -> fix the check at its owner or give it an owner now")
+
+
+@dataclass(frozen=True)
+class IdlePullRequest(HeadLine, DatedStandingRule):
+    """An open head, draft or ready, going nowhere outside the merge queue: unmoved for the
+    idle window, or blocked by a conflict or a red required check. Armed heads are
+    StuckMerge's; every other open request on the configured repositories is a board item."""
+    request: PullRequestHead
+    holders: tuple[ThreadIncarnation, ...] = field(compare=False)
+    blocks: tuple[MergeBlock, ...] = field(compare=False)
+    moved: float = field(compare=False)
+    seconds: ClassVar[int] = 30 * 60
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_pulls(comms.goals, frame.pulls, frame.todos)
+
+    @classmethod
+    def scan_pulls(cls, goals: Goals, pulls: ProgressRead,
+                   held: Sequence[Todo]) -> tuple[Self, ...]:
+        """Holders are the live holds whose orders link the request, as the HUD cards read."""
+        now = time.time()
+        holders: dict[tuple[RepositoryName, int], tuple[ThreadIncarnation, ...]] = {}
+        for todo in held:
+            for request in pulls.open_for(todo):
+                key = (todo.repo, request.number)
+                holders[key] = (*holders.get(key, ()), todo.held().owner_identity)
+        found = (
+            cls(PullRequestHead(repo, row.number, row.head), holders.get((repo, row.number), ()),
+                row.merge_blocks, row.reviewable_at)
+            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for row in pulls.open(repo) if not row.armed_times
+        )
+        return tuple(rule for rule in found if rule.began() <= now)
+
+    def began(self) -> float:
+        return min((*(block.since for block in self.blocks), self.moved + self.seconds))
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        """A verdict on the head or an order to its holder disposes of the line."""
+        return (*super().subjects(), *(UnitSubject(holder) for holder in self.holders))
+
+    def line(self) -> str:
+        held = ", ".join(holder.name for holder in self.holders) or "no live holder"
+        why = "; ".join(block.what() for block in self.blocks) or "head unmoved"
+        actions = ((*(block.remedy() for block in self.blocks),
+                    *(f"order {holder.name}" for holder in self.holders))
+                   or ("land or supersede it",))
+        return (f"IDLE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
+                f" ({held}): {why}, idle {int((time.time() - self.moved) // 60)} min"
+                f" -> {'; '.join(actions)}")
 
 
 @dataclass(frozen=True)

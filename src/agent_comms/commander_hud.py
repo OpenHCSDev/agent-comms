@@ -22,7 +22,7 @@ from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, UnmergedListedPullRequest
+from agent_comms.todos import OrderProgress, ProgressRead, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import UnitClock, UnitState
@@ -209,7 +209,7 @@ class CommanderHud(ToolResult):
             requests = {
                 (todo.repo, request.number): request
                 for todo in orders
-                for request in pulls.listed(todo.repo, UnmergedListedPullRequest, todo)
+                for request in pulls.open_for(todo)
             }
             units.append(CommanderUnit(
                 unit, type(state), state.clock(),

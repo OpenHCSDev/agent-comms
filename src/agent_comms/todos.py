@@ -676,6 +676,9 @@ class MergeBlock(DeclaredFamily, affix="MergeBlock"):
     @abstractmethod
     def what(self) -> str: ...
 
+    @abstractmethod
+    def remedy(self) -> str: ...
+
 
 @dataclass(frozen=True)
 class FailedCheckMergeBlock(MergeBlock):
@@ -685,6 +688,9 @@ class FailedCheckMergeBlock(MergeBlock):
     def what(self) -> str:
         return f"required check {self.name} failed"
 
+    def remedy(self) -> str:
+        return f"fix {self.name} at its owner"
+
 
 @dataclass(frozen=True)
 class ConflictMergeBlock(MergeBlock):
@@ -692,6 +698,9 @@ class ConflictMergeBlock(MergeBlock):
 
     def what(self) -> str:
         return "conflicts with its base"
+
+    def remedy(self) -> str:
+        return "merge main into it"
 
 
 @dataclass(frozen=True)
@@ -717,6 +726,12 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     def stuck(self) -> tuple[MergeBlock, ...]:
         """Blocks on a head whose auto-merge is armed: queued, and going nowhere."""
         return tuple(block for _ in self.armed_times for block in self.merge_blocks)
+
+    def landing(self) -> bool:
+        """Armed, or carrying the commander's verdict, with nothing blocking the merge: the
+        next install can carry it."""
+        return ((bool(self.armed_times) or HeadReview.context in self.status_contexts)
+                and not self.merge_blocks)
 
     def as_merged(self) -> tuple[MergedListedPullRequest, ...]:
         return ()
@@ -760,6 +775,9 @@ class DraftListedPullRequest(UnmergedListedPullRequest):
 
     def review_due(self, now: float, seconds: float) -> tuple[float, ...]:
         return ()
+
+    def landing(self) -> bool:
+        return False
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[OrderId, ...]) -> DraftPullRequest:
         return DraftPullRequest.from_listed(self, problems, orders)
@@ -831,10 +849,14 @@ class PullRequests:
         raise TodoError(
             f"{todo.id} has no merged pull request; link it with `order pr` and merge it.")
 
+    def open_for(self, todo: Todo) -> tuple[PullRequest, ...]:
+        """The open requests linked to this order, newest first."""
+        return self.listed(todo.repo, UnmergedListedPullRequest, todo)
+
     def claimed_heads(self, todo: Todo) -> Iterator[tuple[OrderClaim, PullRequest]]:
         """Join the current claim to its open PR in this same GitHub read."""
         for claim in todo.order.owed_claims():
-            for request in self.listed(claim.pull_request.repo, UnmergedListedPullRequest, todo):
+            for request in self.open_for(todo):
                 if request.number == claim.pull_request.number:
                     yield claim, request
 
@@ -1917,6 +1939,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return ()
 
+    def writes_source(self, todo: Todo, read: dict[str, OrderProgress]) -> bool:
+        """Whether its holder's branch still owes source: no order outside delivery does."""
+        return False
+
     def commander_claims(self) -> tuple[OrderClaim, ...]:
         return ()
 
@@ -2399,7 +2425,8 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
     @property
     def line(self) -> str:
-        return self.run.merged_line
+        """The installed build, not the merge, says whether the install is still owed."""
+        return self.run.merged_line(self.installation())
 
     def closed_in(self, todo: Todo) -> Todo:
         return DoneTodoState.closed(todo, self)
@@ -2436,6 +2463,10 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=None):
     """Pending work and a holder's claim both await the commander's delivery verdict."""
+
+    def writes_source(self, todo: Todo, read: dict[str, OrderProgress]) -> bool:
+        """Until its PR merges; a merged order's proof run writes no source."""
+        return read[todo.id].judgeable
 
     def sent_back(self, reason: StrikeReason) -> PendingProblemOrder:
         return self.fresh_order(time.time(), (*self.edits, reason.text))
@@ -3665,8 +3696,9 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
 
     def subject(self, goals: Goals, request: PullRequestHead) -> str:
         project = goals.registry.snapshot().commander_project.require()
+        row, = PullRequests().rows(request.repo, (request.pr,))
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
-                              ).reviewed_growth(request.pr, request.head)
+                              ).reviewed_growth(request.pr, request.head, row.base)
         self.require_growth(growth)
         return f"#{request.pr} (src {growth.total:+d})"
 
@@ -3740,9 +3772,8 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     def for_request(cls, todos: Sequence[Todo], request: PullRequestHead,
                     link: Callable[[Todo], OrderLink], problem: str = "") -> HeadReviewOrder:
         """``link`` is the reviewing verb's own link to the order that holds the head."""
-        linked = tuple(todo for todo in todos if todo.repo == request.repo
-                       and (not problem or todo.id == problem)
-                       and todo.order.checked().holds_head(request))
+        linked = tuple(todo for todo in cls.holding(todos, request)
+                       if not problem or todo.id == problem)
         if not linked:
             if problem:
                 raise TodoError(f"{problem} does not hold this pull request.")
@@ -3751,6 +3782,12 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
             raise TodoError("More than one order holds this pull request; select --problem.")
         todo, = linked
         return OrderHeadReview(todo.revision, link(todo))
+
+    @staticmethod
+    def holding(todos: Sequence[Todo], request: PullRequestHead) -> tuple[Todo, ...]:
+        """The held orders whose checked order holds this head."""
+        return tuple(todo for todo in todos if todo.repo == request.repo
+                     and todo.order.checked().holds_head(request))
 
     @abstractmethod
     def require_reviewer(self, goals: Goals, request: PullRequestHead,

@@ -24,6 +24,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, GitRecord, PackageRecord
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
+from agent_comms.installer.launch import InstallLogs
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
@@ -38,7 +39,9 @@ from agent_comms.todos import (
     OpenTodoState,
     OperationDelivery,
     PendingProblemOrder,
+    ProgressRead,
     Todo,
+    UnmergedListedPullRequest,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.order_tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
@@ -46,6 +49,8 @@ from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
+
+pytest_plugins = ("github_fixture",)
 
 
 @dataclass(frozen=True)
@@ -143,6 +148,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     )
     with pytest.raises(DeliveredCommitNotInstalledError):
         merged.require_installation()
+    assert merged.line.startswith("Merged, waiting on install")
     observed = run.after_merge(todo, merged)
     assert observed == todo  # Waiting again does not manufacture a revision.
     assert observed.state is OpenTodoState
@@ -161,6 +167,8 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     RuntimeResolution(core_commit=graph.newer, packages=resolution.packages).save(runtime.prefix)
     accepted = run.after_merge(todo, merged)
     assert accepted.state is after_install
+    # P553: bf328ceb5 sat in the installed build under "Merged, waiting on install".
+    assert merged.line.startswith("Merged, installed")
     assert merged.waiting_on_install(todo, {}) == (todo,)
     ThreadCaller("lead").invoke(CommsProblemCloseTool(
         problem=todo.id, works=works, artifact=str(artifact),
@@ -323,7 +331,7 @@ def test_build_containment_does_not_turn_git_failure_into_absence_or_success(pro
 
 @pytest.mark.parametrize("advance_main", (False, True), ids=("installed-main", "newer-main"))
 def test_install_due_compares_fetched_main_to_installed_build(
-    tmp_path, proof_build_checkouts, advance_main, monkeypatch,
+    tmp_path, proof_build_checkouts, advance_main, github_cli,
 ):
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -343,9 +351,8 @@ def test_install_due_compares_fetched_main_to_installed_build(
     bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
 
-    after_settle = time.time() + InstallDue.settle + 1
-    monkeypatch.setattr(time, "time", lambda: after_settle)
-    due = InstallDue.violations(bus, "lead")
+    github_cli.configure(graph.repository.github)
+    due = InstallDue.due(bus, ProgressRead())
 
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
     assert Repo.git(checkout, "rev-parse", "origin/main").strip() == (
@@ -360,15 +367,16 @@ def test_install_due_compares_fetched_main_to_installed_build(
     runtime = LaunchRuntime.installed().prefix
     resolution = RuntimeResolution.at(runtime)
     RuntimeResolution(core_commit=graph.newer, packages=resolution.packages).save(runtime)
-    after_install = InstallDue.violations(bus, "lead")
+    after_install = InstallDue.due(bus, ProgressRead())
     assert after_install == ()
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
 
 
-def test_install_waits_for_merges_to_settle_into_one_batch(
-    tmp_path, proof_build_checkouts, monkeypatch,
+def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
+    tmp_path, proof_build_checkouts, github_cli, monkeypatch,
 ):
-    """A merge younger than the settle window is not due yet; once it has stood, it is."""
+    """Due is a disposition: the line names what an install would carry the pass main leaves
+    the installed build, and the heartbeat's enforce launches nothing."""
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
     checkout = graph.repository.checkout
@@ -376,17 +384,28 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     origin.parent.mkdir()
     subprocess.run(("git", "init", "--bare", str(origin)), check=True, capture_output=True)
     Repo.git(checkout, "remote", "set-url", "origin", str(origin))
-    Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
+    Repo.git(checkout, "checkout", "-q", "--detach", graph.installed)
+    subprocess.run(("git", *IDENTITY, "commit", "--allow-empty", "-q", "-m",
+                    "Merge pull request #41 from OpenHCSDev/fix/due", "-m", "Install what merged"),
+                   cwd=checkout, check=True, capture_output=True)
+    merge = Repo.git(checkout, "rev-parse", "HEAD").strip()
+    Repo.git(checkout, "push", "origin", f"{merge}:refs/heads/main")
+    github_cli.configure(graph.repository.github)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    github_cli.put(graph.repository.github, UnmergedListedPullRequest(
+        42, "fix/next", "b" * 40, stamp, "main", reviewable_times=(stamp,), armed_times=(stamp,)))
     bus = wire(tmp_path / "bus")
     bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
-    merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))
+    merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", merge))
+    monkeypatch.setattr(time, "time", lambda: merged + 60)
 
-    monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle - 1)
-    assert InstallDue.violations(bus, "lead") == ()
+    (due,) = InstallDue.due(bus, ProgressRead())
+    assert due.main == merge
+    assert "INSTALL DUE" in due.line() and "1 merges, oldest 1 min" in due.line()
+    assert "#41 Install what merged" in due.line() and "landing: #42 fix/next" in due.line()
+    assert "order install" in due.line()
+    due.enforce(bus, "lead")
+    assert InstallLogs(bus.root).units() == ()
 
-    monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle)
-    (due,) = InstallDue.violations(bus, "lead")
-    assert due.main == graph.newer
-    assert due.oldest_minutes == 30
 

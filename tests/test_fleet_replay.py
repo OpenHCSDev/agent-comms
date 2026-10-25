@@ -24,8 +24,9 @@ from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.native_tool_call import ToolCallId
-from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
@@ -55,6 +56,7 @@ from agent_comms.todos import (
 )
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.work_branches import BranchDifference, SourceGrowth, UnpushedHead
 from conftest import declare_test_bus
 from fixture_git import IDENTITY
@@ -534,6 +536,24 @@ def test_an_empty_commit_does_not_reset_spinning_and_a_src_change_ends_it(fleet)
     assert any(type(rule) is SpinningUnit for rule in built.observe().rules)
     built.commit(worktree, "src/stack/owner.mjs", "export const owner = 1;\n")
     assert not any(type(rule) is SpinningUnit for rule in built.observe().rules)
+
+
+def test_a_merged_order_running_its_proof_is_not_spinning(fleet):
+    """2026-10-25: RESHAPE pi-mi P734 while P734 sat merged as 2bfa16ca8 and its unit ran the
+    application proof; a merged order owes no source."""
+    built, _ = fleet
+    store = built.comms.goals.todos
+    todo = store.get(built.problems["spinning"])
+    assert any(type(rule) is SpinningUnit for rule in built.observe().rules)
+    proof = ApplicationOrderRun("Open the installed application and run the merged order's proof")
+    with store.writing() as db:
+        replace(todo, order=replace(todo.order, run=proof).merged("0" * 40),
+                revision=todo.revision + 1).upsert(db)
+    # The board read, not the HUD: this fixture's repository is no installed package.
+    frame = HeartbeatFrame.read(built.comms, built.commander, ProgressRead())
+    rules = StandingRule.broken(built.comms, built.commander, frame=frame,
+                                observed=UnitState.current(built.comms, built.commander, frame))
+    assert not any(type(rule) is SpinningUnit for rule in rules)
 
 
 def test_a_stopped_unit_is_not_spinning(fleet):

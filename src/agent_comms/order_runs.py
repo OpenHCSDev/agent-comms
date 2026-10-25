@@ -11,6 +11,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import ToolRefusedError
 
 if TYPE_CHECKING:
+    from agent_comms.build_identity import CommitInstallation
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import MergedProblemOrder, Todo
 
@@ -29,9 +30,8 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     def retexted(self, text: str) -> OrderRun:
         raise ToolRefusedError("A mechanical run has no text; its check alone closes the order.")
 
-    @property
-    def merged_line(self) -> str:
-        return "Merged, waiting on install"
+    def merged_line(self, installation: CommitInstallation) -> str:
+        return f"Merged, {installation.merged_state}"
 
     @abstractmethod
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
@@ -74,9 +74,8 @@ class ApplicationOrderRun(OrderRun):
                 f"Reassign them; only a mechanical run reaches {unit.name}."
             )
 
-    @property
-    def merged_line(self) -> str:
-        return f"{super().merged_line}, waiting on the run"
+    def merged_line(self, installation: CommitInstallation) -> str:
+        return f"{super().merged_line(installation)}, waiting on the run"
 
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
         return merged.waiting_in(todo)

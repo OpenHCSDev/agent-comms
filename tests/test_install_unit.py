@@ -182,10 +182,10 @@ def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, syst
     logs.record(run.unit.logs, core.github, "a" * 40)
     running_only(monkeypatch, run.unit)
 
-    standing.PendingInstallDue(toad, "c" * 40, "0" * 40, 1, 31, logs, core, "a" * 40).enforce(
-        None, "commander")  # type: ignore[arg-type]
-    standing.PendingInstallDue(toad, "d" * 40, "0" * 40, 1, 31, logs, core, "e" * 40).enforce(
-        None, "commander")  # type: ignore[arg-type]
+    standing.PendingInstallDue(toad, "c" * 40, "0" * 40, (), (), logs, core, "a" * 40).launch(
+        None)  # type: ignore[arg-type]
+    standing.PendingInstallDue(toad, "d" * 40, "0" * 40, (), (), logs, core, "e" * 40).launch(
+        None)  # type: ignore[arg-type]
 
     assert logs.launched(toad, "c" * 40) == (run.unit,)
     assert logs.member(toad, "c" * 40).func is standing.LaunchedInstallDue

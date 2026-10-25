@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import GitCommitText
@@ -33,6 +33,8 @@ class UninstalledRepositoryError(ValueError):
 class CommitInstallation(DeclaredFamily, affix="CommitInstallation"):
     """Whether the installed build contains a set of delivered commits."""
 
+    merged_state: ClassVar[str]
+
     @abstractmethod
     def require(self) -> None: ...
 
@@ -42,6 +44,8 @@ class CommitInstallation(DeclaredFamily, affix="CommitInstallation"):
 
 @dataclass(frozen=True)
 class InstalledCommitInstallation(CommitInstallation):
+    merged_state = "installed"
+
     def require(self) -> None:
         pass
 
@@ -53,6 +57,7 @@ class InstalledCommitInstallation(CommitInstallation):
 class MissingCommitInstallation(CommitInstallation):
     commit: str
     installed: RecordedBuildIdentity
+    merged_state = "waiting on install"
 
     def require(self) -> None:
         raise DeliveredCommitNotInstalledError(

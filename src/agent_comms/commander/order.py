@@ -36,7 +36,11 @@ from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
 from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.commander.standing import DeliveryAwaitingJudgement, UnownedWheelSpin
+from agent_comms.commander.standing import (
+    DeliveryAwaitingJudgement,
+    InstallDue,
+    UnownedWheelSpin,
+)
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -67,7 +71,7 @@ from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
-from agent_comms.standing_rules import HuntDue, OwedAnswer
+from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingRule
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.typed_table import RowNotFoundError
@@ -88,6 +92,7 @@ from agent_comms.todos import (
     OrderText,
     OrderWords,
     PendingProblemOrder,
+    ProgressRead,
     ProblemFinding,
     PullRequestLink,
     PullRequests,
@@ -797,7 +802,7 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
-    clears: ClassVar[tuple[type[OwedAnswer], ...]] = ()
+    clears: ClassVar[tuple[type[StandingRule], ...]] = ()
 
     def __init_subclass__(cls, **options: object) -> None:
         """A verb names the owed answers it clears; each rule's hint is rendered from them."""
@@ -1420,6 +1425,15 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
         for path in HuntDue.next_hunt(ctx.comms, ctx.commander,
                                       HeldOrders.read(ctx.comms, ctx.commander).todos):
             print(path)
+
+
+class InstallVerb(OrderVerb):
+    help = "launch Core's installer for every configured main the installed build lacks"
+    clears = (InstallDue,)
+
+    def run(self, ctx: Commander) -> None:
+        for due in InstallDue.due(ctx.comms, ProgressRead()):
+            print(f"{due.repo.to_wire()} main {due.main[:12]}: {due.launch(ctx.comms)}")
 
 
 class IdleVerb(OrderVerb):
