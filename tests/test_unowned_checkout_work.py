@@ -128,7 +128,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
-        id='shared-work', owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
+        owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(home, 'false'),
         edits=('Keep the changes with their author until they have been pushed.',),
         banned=('No second store of checkout holders.',), report='Report the actual checkout.',

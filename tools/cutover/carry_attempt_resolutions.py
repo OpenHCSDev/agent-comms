@@ -20,7 +20,7 @@ from agent_comms.attempt_resolution import (
 )
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.field_codec import GoalId, MessageId, RetryDecisionId, TurnId
+from agent_comms.field_codec import GoalId, MessageId, OrderId, RetryDecisionId, TurnId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
@@ -76,7 +76,7 @@ class StoredDecision(TypedRow):
         if answer:
             return ComplianceDecision(MessageId(self.legacy))
         if order:
-            return OrderDecision(self.legacy)
+            return OrderDecision(OrderId(self.legacy))
         if self == KNOWN_ORPHAN:
             raise OrphanedDecisionError(self)
         raise ValueError(f"No message or order owns legacy decision: {self}")

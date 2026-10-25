@@ -90,7 +90,7 @@ if TYPE_CHECKING:
     from .pi_commands import PiCommand
     from .pi_events import AutoRetryEnd, Response
     from .routing import Routing
-    from .transcript_routes import InputDisplay
+    from .transcript_routes import SentTextDigest
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
@@ -980,8 +980,8 @@ class UserMessage(PiMessage):
         # Preserve exact separators, including empty text blocks, for provenance.
         return "\n".join(text for part in self.parts for text in part.text_parts())
 
-    def matches_display(self, display: InputDisplay) -> bool:
-        return self.content.reported and display.matches(self.original_text)
+    def matches_display(self, digest: SentTextDigest) -> bool:
+        return self.content.reported and digest.matches(self.original_text)
 
     def display_parts(self, text: str) -> tuple[PiContent, ...]:
         return (

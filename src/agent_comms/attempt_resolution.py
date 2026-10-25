@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
-from .field_codec import MessageId, NullMember, RetryDecisionId, SubclassUnion, TaggedRecordMember, TurnId
+from .field_codec import MessageId, NullMember, OrderId, RetryDecisionId, SubclassUnion, TaggedRecordMember, TurnId
 
 
 class WorkDecision(DeclaredFamily, affix="Decision"):
@@ -29,7 +29,7 @@ class VerifiedTurnDecision(WorkDecision):
 
 @dataclass(frozen=True)
 class OrderDecision(WorkDecision):
-    order: str
+    order: OrderId
 
 
 class AttemptResolution(SubclassUnion, affix="Resolution"):

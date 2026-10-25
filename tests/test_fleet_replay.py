@@ -153,7 +153,6 @@ class Fleet:
                 text=f"Repair {name}",
                 review_at=RecordedEventTime(time.time() + 3600),
                 order=PendingProblemOrder(
-                    id=f"order-{name}",
                     owner=scope.shape.parents[0],
                     scope=scope,
                     run=MechanicalOrderRun(),

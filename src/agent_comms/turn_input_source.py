@@ -15,7 +15,7 @@ from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputSt
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .field_codec import GoalWaitId, InputId, TurnId
-from .input_attempt import InputAlreadyCleared
+from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message
 from .ordinary_turn_rules import (
@@ -398,8 +398,8 @@ class FollowingTurnInput(TurnInputSource):
         return response.later_input(parts)
 
     def display(self, dispositions: InputDispositions, text: str) -> DisplayText:
-        row = dispositions.lookup(self.keys[0]) if self.keys else None
-        return DisplayText(row.source_text if row is not None and row.exists else text)
+        row = next((dispositions.lookup(key) for key in self.keys), MissingInput())
+        return DisplayText(row.source_text_or(text))
 
     def defers_for_goal(self, original: GoalPermission, current: GoalDeclaration) -> bool:
         return not original.allows(current)

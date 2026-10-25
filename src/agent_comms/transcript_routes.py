@@ -13,7 +13,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
 from .errors import RelationViolationError
-from .field_codec import InputId, MalformedRecord, NominalSpelling, NominalText, NullMember, Sha256Text
+from .field_codec import InputId, MalformedRecord, NominalSpelling, NominalText, NullMember, SingleFieldValue
 from .input_disposition import InputDispositions
 from .private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting
@@ -65,21 +65,14 @@ class NoDisplayText(NullMember):
         return fallback
 
 
-class SentTextDigest(NominalText):
+class SentTextDigest(TextDigest, SingleFieldValue):
     """The exact sent text owns matching and an immutable route binding."""
-
-    @classmethod
-    def of(cls, text: str) -> SentTextDigest:
-        return cls(TextDigest.of(text).value)
-
-    def matches(self, text: str) -> bool:
-        return self == self.of(text)
 
     def project_message(
         self, message: UserMessage, display: InputDisplay,
         context: TranscriptProjection, timestamp: float,
     ) -> list[TranscriptEvent]:
-        if not message.matches_display(display):
+        if not message.matches_display(self):
             return message.project_parts(message.parts, context, timestamp, NoTurnRouting())
         return display.project_display(message, context, timestamp, display.routing)
 
@@ -92,10 +85,6 @@ class SentTextDigest(NominalText):
     ) -> None:
         if (self, previous.routing) != (incoming, routing):
             raise RelationViolationError("Native input routing cannot be rebound.")
-
-
-class SentTextDigestSpelling(NominalSpelling[SentTextDigest]):
-    spelling = Sha256Text.spelling
 
 
 @dataclass(frozen=True)
@@ -160,9 +149,6 @@ class InputDisplay(TranscriptRoutesRows, WithoutRowid, InputPresentation):
     routing: Routing = NoTurnRouting()
     sent_text_digest: SentTextDigest | NoSentTextDigest = NoSentTextDigest()
     checks = ("routing IS NULL OR sent_text_digest IS NOT NULL",)
-
-    def matches(self, text: str) -> bool:
-        return self.sent_text_digest.matches(text)
 
     def project_message(
         self, message: UserMessage, context: TranscriptProjection, timestamp: float,

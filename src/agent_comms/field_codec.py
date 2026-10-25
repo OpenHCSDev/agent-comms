@@ -1928,6 +1928,19 @@ class MessageIdText(NominalSpelling[MessageId]):
     spelling = re.compile(f"[0-9a-f]{{{digits}}}")
 
 
+class OrderId(NominalText):
+    """One immutable problem order identity."""
+
+    @classmethod
+    def mint(cls) -> Self:
+        return cls(uuid4().hex[:OrderIdText.digits])
+
+
+class OrderIdText(NominalSpelling[OrderId]):
+    digits: ClassVar[int] = 12
+    spelling = re.compile(f"[0-9a-f]{{{digits}}}")
+
+
 class Hex256Text(SpelledText):
     """256 bits written as 64 lowercase hex digits."""
 

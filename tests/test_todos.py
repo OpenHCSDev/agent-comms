@@ -27,7 +27,7 @@ from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
@@ -88,7 +88,7 @@ def thread(name: str, root: Path, created: float) -> Thread:
 
 def order(source: SourceRepository):
     scope = source.scope()
-    return PendingProblemOrder(id="checked-order", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
+    return PendingProblemOrder(id=OrderId("a" * 12), owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
         check=OrderCheck(source.checkout, "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
@@ -376,7 +376,7 @@ def pr_order(
         generation=pr_work_goal_id, request=NewestOpenRequest().for_order(ctx.comms.goals.todos,
             lead.incarnation),
         review_at=RecordedEventTime(1000),
-        order=replace(order(source), id=f"order-{pid}", run=run))
+        order=replace(order(source), id=OrderId.mint(), run=run))
 
 
 def adopt_pr(ctx, pid, number):

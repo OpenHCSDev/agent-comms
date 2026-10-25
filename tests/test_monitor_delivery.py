@@ -418,8 +418,9 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
         output.delivered_targets((sender.name,))
         turn = NativeTurnId(f"{speaker.name}-turn")
-        output.publish_item(FinishedItem(turn, NativeItemId("a"), (AssistantTranscript(
-            f"{speaker.name} answers", timestamp=1.0, position="a"),)))
+        item_id = NativeItemId("a")
+        output.publish_item(FinishedItem(turn, item_id, (AssistantTranscript(
+            f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
     assert comms.bus.pending_count("unit") == 0
     assert comms.bus.pending_count("lead") == 1

@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.field_codec import FieldCodec, MessageId, OrderId
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.native_tool_call import ToolCallId
@@ -82,10 +82,11 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         caller.invoke(CommsVerdictTool(problem="P1", operation=sent_back), comms)
     assert comms.bus.bus.revision() == before_send_back + 1
     todo = comms.goals.todos.get("P1")
+    resent_id = OrderId.mint()
     caller.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
         problem="P1", expected_revision=todo.revision, assigner=actor, commander="lead",
         request=request, review_at=RecordedEventTime(2000),
-        order=replace(order(source), id="resent-order"))), comms)
+        order=replace(order(source), id=resent_id))), comms)
     current = comms.goals.todos.get("P1")
     with pytest.raises(ValueError):
         current.latest_message
@@ -99,14 +100,14 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     copied = wire(copied_root)
     saved = copied.goals.todos.get("P1")
     stored_at = copied.goals.todos.path.stat().st_mtime_ns
-    result = CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=NoThreadCaller())
+    result = CommsOrderStoryTool.invoke(copied, {"order_id": str(resent_id)}, caller=NoThreadCaller())
     story = FieldCodec.decode(OrderStory, result)
     assert story.line.count(reason) == story.line.count(standalone) == 1
-    assert story.line.count("Ordered resent-order:") == story.line.count("Accepted") == 1
+    assert story.line.count(f"Ordered {resent_id}:") == story.line.count("Accepted") == 1
     assert story.line.count("bad-call") == story.line.count("accepted-call") == 1
     assert "strike recorded" in story.line
     assert len(saved.strikes) == len(saved.verdicts) == 2
-    assert CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=caller) == result
+    assert CommsOrderStoryTool.invoke(copied, {"order_id": str(resent_id)}, caller=caller) == result
     fleet = FieldCodec.decode(FleetStory, board_read(CommsFleetStoryTool, copied, NoThreadCaller()))
     assert fleet.lines == (f"P1 worker: {saved.order.line}",)
     assert copied.goals.todos.get("P1") == saved == comms.goals.todos.get("P1")
@@ -117,7 +118,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
                     strikes=(), verdicts=(), messages=()).insert(db)
     copied.goals.todos.link(actor, "P2", "worker", saved.id)
     linked = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
-        copied, {"order_id": "resent-order"}, caller=caller))
+        copied, {"order_id": str(resent_id)}, caller=caller))
     assert tuple(problem.problem for problem in linked.problems) == ("P1", "P2")
     assert linked.problems[0] == story.problems[0]
     assert linked.line.count(reason) == linked.line.count(standalone) == 1
@@ -138,4 +139,4 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert FieldCodec.decode(
         FleetStory, board_read(CommsFleetStoryTool, copied, caller)).lines == linked_fleet.lines[1:]
     with pytest.raises(TodoError):
-        CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)
+        CommsOrderStoryTool.invoke(copied, {"order_id": str(OrderId.mint())}, caller=caller)

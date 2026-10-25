@@ -16,7 +16,7 @@ from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
 from agent_comms.comms import wire
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.backup import StoreBackup
@@ -86,7 +86,6 @@ def fork_bus(tmp_path, configured_repository):
     configured_repository(comms, source)
     now = time.time()
     order = PendingProblemOrder(
-        id="first-order",
         owner=source.scope().shape.parents[0],
         scope=source.scope(),
         run=MechanicalOrderRun(),
@@ -107,7 +106,7 @@ def fork_bus(tmp_path, configured_repository):
         assigner=lead.incarnation,
         generation=retained_goal_id,
         review_at=RecordedEventTime(now + 600),
-        order=replace(order, id="retained-order"),
+        order=replace(order, id=OrderId.mint()),
         request=request.id,
     )
     copied = tmp_path / "copied-bus"
@@ -452,7 +451,7 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
         generation=direct_goal_id,
         request=retained.request.require(),
         review_at=retained.review_at,
-        order=replace(order, id="direct-order"),
+        order=replace(order, id=OrderId.mint()),
     )
     assert store.allocate_problem() == "P121"
     with store.snapshot() as db:
@@ -493,7 +492,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
         assigner=lead.incarnation,
         generation=worker_goal_id,
         review_at=RecordedEventTime(time.time() + 600),
-        order=replace(order, id="replacing-order"),
+        order=replace(order, id=OrderId.mint()),
         request=store.get("P40").request.require(),
     )
     comms.registry.register_commander_child("fork-one", "lead", comms.goals)

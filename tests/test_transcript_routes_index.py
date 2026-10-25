@@ -56,8 +56,8 @@ def test_binding_preserves_first_display_and_rejects_different_input(tmp_path):
     with TranscriptRoutes(tmp_path).for_session("session") as routes:
         row = routes.input_display(INPUT_ID)
         assert row.text == "human display"
-        assert row.matches("exact sent text")
-        assert not row.matches("different text")
+        assert row.sent_text_digest.matches("exact sent text")
+        assert not row.sent_text_digest.matches("different text")
     with owner.snapshot() as connection:
         assert tuple(connection.execute(
             f'SELECT text, routing, sent_text_digest FROM "{InputDisplay.declared_name}"'
@@ -69,7 +69,7 @@ def test_empty_display_is_present_and_internal_display_remains_absent(tmp_path):
     owner.record_input_display(INPUT_ID, DisplayText(""), sent_text=SentInputText(""))
     with owner.for_session("session") as routes:
         assert routes.input_display(INPUT_ID).text.present() == (DisplayText(""),)
-        assert routes.input_display(INPUT_ID).matches("")
+        assert routes.input_display(INPUT_ID).sent_text_digest.matches("")
     internal = TranscriptRoutes(tmp_path / "internal")
     internal.record_input_display(INPUT_ID, NoDisplayText())
     with internal.for_session("session") as routes:
@@ -96,7 +96,7 @@ def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
     reader = TranscriptRoutes(tmp_path)
     with reader.for_session("session") as routes:
         assert routes.get("a") == routing
-        assert routes.input_display(INPUT_ID).matches("sent")
+        assert routes.input_display(INPUT_ID).sent_text_digest.matches("sent")
     written = [sql for sql in statements
                if sql.lstrip().split(None, 1)[0].upper()
                in {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE", "REPLACE"}]

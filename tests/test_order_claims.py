@@ -10,7 +10,7 @@ import pytest
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.native_tool_call import ToolCallId
@@ -210,7 +210,7 @@ def corrected_order_file(ctx, source) -> str:
     marker.touch()
     now = time.time()
     document = OrderFile(
-        replace(order(source), id="corrected-order",
+        replace(order(source), id=OrderId.mint(),
                 check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
                 at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120)),
         "The claimed change keeps the duplicated decision the order told the unit to delete",
@@ -254,7 +254,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
         "P2", original.repo, "Repair the other held workflow", creator=lead,
         assigner=ctx.incarnation, owner=other, generation=other_order_goal_id,
         request=original.request.require(), review_at=RecordedEventTime(time.time() + 1000),
-        order=replace(original.order.checked(), id="other-order"),
+        order=replace(original.order.checked(), id=OrderId.mint()),
     )
     head = source.git(source.checkout, "rev-parse", "HEAD").strip()
     claims = []

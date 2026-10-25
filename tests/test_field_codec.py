@@ -1064,6 +1064,25 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
         assert FieldCodec.encode(message, MessageId) == expected
 
 
+def test_order_identity_owns_minting_and_wire_spelling() -> None:
+    from agent_comms.field_codec import OrderId, OrderIdText
+
+    order = OrderId.mint()
+    assert type(order) is OrderId
+    assert len(order) == OrderIdText.digits
+    assert FieldCodec.encode(order, OrderId) == str(order)
+    assert type(FieldCodec.decode(OrderId, str(order))) is OrderId
+    assert FieldCodec.decode(OrderId, str(order)) == order
+    assert FieldCodec.value_schema(OrderId) == {
+        "type": "string", "pattern": OrderIdText.anchored(),
+    }
+    for malformed in ("not-an-order", "a" * 32, 12):
+        with pytest.raises(MalformedRecord):
+            FieldCodec.decode(OrderId, malformed)
+    with pytest.raises(MalformedRecord):
+        FieldCodec.encode(MessageId.mint("not an order"), OrderId)
+
+
 @dataclass(frozen=True)
 class SecretMember(RecordMember):
     name: str

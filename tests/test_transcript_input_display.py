@@ -142,7 +142,7 @@ def test_empty_reported_content_is_not_omitted(content, expected):
     display = InputDisplay(
         FIRST_INPUT_ID, NoDisplayText(), sent_text_digest=SentInputText("").digest,
     )
-    assert message.matches_display(display) is expected
+    assert message.matches_display(display.sent_text_digest) is expected
     assert message.to_wire()["content"] == content.get("content")
 
 
