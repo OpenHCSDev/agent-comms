@@ -109,7 +109,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
         while inputs.state(session_id).pending_turns:
             if ClosingScheduleRule().violated(self):
                 return WakeDue()
-            async with inputs.ensure_live_drain(session_id).turn_lock:
+            async with inputs.state(session_id).turn_lock:
                 # The bus may accept a channel post while an operator drains the
                 # fleet. Keep its existing queued origin; do not start a native
                 # turn or consume it until this root's typed phase is READY.

@@ -368,7 +368,7 @@ class TurnRunner:
         selection uses this same resource and refuses a busy owner. Neither
         consumer can close a child after a new turn acquired it.
         """
-        lock = self.inputs.ensure_live_drain(session_id).turn_lock
+        lock = self.inputs.state(session_id).turn_lock
         if lock.locked():
             yield None
             return
@@ -387,7 +387,7 @@ class TurnRunner:
         rows never create input, and selected failure/cancellation retires the
         inbox without pretending that its pending prompts reached the model.
         """
-        async with self.inputs.ensure_live_drain(session_id).turn_lock:
+        async with self.inputs.state(session_id).turn_lock:
             async with self.inputs.state(session_id).own_turn_task():
                 owner = await Coordination.run_worker(partial(
                     self.comms.registry.require, execution.owner_name,

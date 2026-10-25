@@ -138,7 +138,8 @@ class InputObservation(ABC):
             state.observation_watcher = None
 
     def wake_observer(self, session_id: str) -> None:
-        self.ensure_live_drain(session_id).wake_observer()
+        self.ensure_live_drain(session_id)
+        self.state(session_id).wake_observer()
 
     def register_wake(self, session_id: str, task: asyncio.Task[WakeOutcome]) -> None:
         state = self.state(session_id)
@@ -157,20 +158,19 @@ class InputObservation(ABC):
 
         task.add_done_callback(finished)
 
-    def ensure_live_drain(self, session_id: str) -> DrainedSession:
-        """Return the session owner with its one live inbox observer."""
-        state = self.state(session_id)
+    def ensure_live_drain(self, session_id: str) -> None:
+        """Keep one background task per session pushing inbox messages live."""
         if self.closing:
-            return state
+            return
+        state = self.state(session_id)
         if state.observing():
-            return state
+            return
 
         task = self.runtime.background(self.observe(session_id))
         state.drain_task = task
         task.add_done_callback(
             lambda completed: self._retire_observer(session_id, completed)
         )
-        return state
 
     async def _own_entry(self, session_id: str) -> RegistryEntryRevision:
         return await Coordination.run_worker(partial(

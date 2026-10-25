@@ -70,7 +70,7 @@ async def compact_context(
     if instructions is not None and not isinstance(instructions, str):
         return FailedCompaction("Compaction instructions are invalid.")
     thread_name = await runner.sessions.sync_identity(session_id)
-    lock = runner.inputs.ensure_live_drain(session_id).turn_lock
+    lock = runner.inputs.state(session_id).turn_lock
     if lock.locked() or await Coordination.run_worker(partial(runner.session_busy, session_id)):
         return FailedCompaction("Wait for the current response before compacting.")
     async with lock:
