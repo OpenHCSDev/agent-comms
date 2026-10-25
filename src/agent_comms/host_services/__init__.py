@@ -150,7 +150,7 @@ class SystemdUserService(SystemdUnit, HostService, declared_name=None):
         )
 
     @classmethod
-    def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
+    def unit_text(cls, arguments: tuple[str, ...]) -> str:
         return cls.render_unit(cls.command_line(arguments))
 
     @classmethod

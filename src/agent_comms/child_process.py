@@ -888,7 +888,7 @@ class SystemdUnit(ABC):
 
     @classmethod
     @abstractmethod
-    def unit_text(cls, arguments: tuple[str, ...] = ()) -> str: ...
+    def unit_text(cls, arguments: tuple[str, ...]) -> str: ...
 
 
 class AgentsSlice(SystemdUnit):
