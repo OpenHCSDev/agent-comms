@@ -33,7 +33,9 @@ from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, Rel
 from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
+    GoalPrecondition,
     ReissuedOrderGoalAction,
+    RetryGoalAction,
 )
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
@@ -402,6 +404,8 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
 
 def test_a_running_turn_is_not_a_stalled_holder(held_bus):
     blocked_holder(held_bus)
+    goal = held_bus.registry.require("worker").goal.require()
+    held_bus.goals.update_goal("worker", RetryGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
     thread = held_bus.registry.require("worker")
     held_bus.registry.register(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
     owner = held_bus.agents.begin_turn("worker", TurnId('3e748b426825aaaad5def94520fa5858'))
