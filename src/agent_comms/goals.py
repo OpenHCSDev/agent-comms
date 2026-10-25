@@ -45,6 +45,7 @@ from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
 from .reported_turn import NoReportedTurn, ReportedTurnState
 from .shell_commands import ShellCommand
+from .shell_effects import shell_storage_effects
 from .text_digest import TextDigest
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
@@ -327,8 +328,6 @@ class CheckCommand:
                              "delivered commit and at each branch commit. Drop the checkout.")
 
     def require_order_effects(self, cwd: Path) -> None:
-        from .storage_rules import shell_storage_effects
-
         for effect in shell_storage_effects(self.command, cwd):
             effect.require_order_check()
 

@@ -13,7 +13,8 @@ from agent_comms.storage_room import (
     BuildRoomWork, RoomClaim, TestGateRoomWork, UnitStartRoomWork,
     WaitingRoomPhase,
 )
-from agent_comms.storage_rules import StorageRule, shell_storage_effects
+from agent_comms.storage_rules import StorageRule
+from agent_comms.shell_effects import shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.field_codec import RoomTicket

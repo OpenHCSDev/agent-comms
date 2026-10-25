@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from .envelope_claim_transitions import FileClaimPath
     from .storage_room import RoomReservation
     from .threads import Thread
-    from .storage_rules import StorageEffect
+    from .shell_effects import StorageEffect
     from .pi_payloads import PiToolResult
     from .turn_goal_permission import TurnGoalPermission
 

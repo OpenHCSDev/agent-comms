@@ -13,8 +13,11 @@ from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import (
-    CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
-    StorageDenied, StorageProjection, UnassignedThreadStorage, UnitStorage, shell_storage_effects,
+    StorageRoots, StorageRule, StorageProjection, UnassignedThreadStorage, UnitStorage,
+)
+from agent_comms.shell_effects import (
+    CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageDenied, ShellProgram,
+    StorageEffect, shell_storage_effects,
 )
 from agent_comms.threads import Thread
 
@@ -145,7 +148,6 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
 
 
 def test_programs_do_not_claim_to_be_effect_values():
-    from agent_comms.storage_rules import ShellProgram, StorageEffect
     assert all(not issubclass(program, StorageEffect)
                for program in set(ShellProgram.programs.values()))
 
