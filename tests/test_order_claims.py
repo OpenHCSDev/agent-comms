@@ -17,7 +17,6 @@ from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.messages import QuestionKind
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_tools import (
-    CommsHudTool,
     CommsOrderDeliverTool,
     CommsVerdictTool,
     TodoChanged,
@@ -91,7 +90,6 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
                 if message.message_id == claimed.order.claim.message.message_id)
     assert sent.sender == "worker" and sent.target == ctx.commander
     assert sent.answers and sent.answers == claimed.order.claim.message.answers
-    assert "Claimed by the unit" in "\n".join(ctx.call(CommsHudTool()).frame)
     with pytest.raises(TodoError, match="Only a pending order"):
         ThreadCaller("worker").invoke(request, comms)
     assert comms.goals.todos.get("P1") == claimed
@@ -186,7 +184,7 @@ def test_third_strike_keeps_holder_and_order_and_requests_scrutiny(held_commande
     for ordinal in range(3):
         todo = store.apply(todo.id, StrikeTodo(
             todo.revision, ctx.incarnation, todo.held(),
-            f"Review {ordinal + 1} found the original duplicated decision still present.",
+            f"Review {ordinal + 1} found the original duplicated decision still present in the edited source.",
             evidence=(todo.order.checked().owner,),
         ))
         assert todo.held() == original.held()

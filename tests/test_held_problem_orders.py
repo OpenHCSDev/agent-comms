@@ -18,7 +18,7 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     DeliveredProblemOrder, MergedListedPullRequest, OrderMessage, PullRequestCommit,
-    PullRequestLink,
+    PullRequestLink, StrikeTodo,
 )
 from agent_comms.work_branches import WorkBranches
 from agent_comms.owner_requests import NewestOpenRequest
@@ -105,9 +105,15 @@ def merge_two_commit_fix(source, binaries, number):
     return base, commits[0], merge
 
 
-def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_commander, cited_source):
+def test_clean_resend_keeps_three_strikes_and_the_existing_holder(held_commander, cited_source):
     ctx = held_commander
     original = ctx.comms.goals.todos.get("P1")
+    for ordinal in range(3):
+        original = ctx.comms.goals.todos.apply(original.id, StrikeTodo(
+            original.revision, ctx.incarnation, original.held(),
+            f"Review {ordinal + 1} found the original duplicated decision still present in the edited source.",
+            evidence=(original.order.checked().owner,),
+        ))
     marker = ctx.root / "unfinished"
     marker.touch()
     now = time.time()
@@ -129,7 +135,8 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     saved = ctx.comms.goals.todos.get("P1")
     assert saved.order.id != original.order.id
     assert saved.latest_message.message_id != original.latest_message.message_id
-    assert saved.strike_count == original.strike_count == 0
+    assert saved.strike_count == original.strike_count == 3
+    assert saved.held().owner_identity == original.held().owner_identity
     assert ctx.comms.registry.require("worker").goal.require().id == saved.held().generation
     ThreadCaller("worker").invoke(CommsChannelsTool(), ctx.comms)
 
