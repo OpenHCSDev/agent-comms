@@ -398,12 +398,7 @@ class NoTurnLease(NullMember, TurnLease):
                 owner.incarnation.require_recorded(), conversation.scope(snapshot),
                 cursor, snapshot,
             )
-            destination = route.canonical_name(snapshot.canonical_name)
-            return tuple(
-                original.message.reference
-                for original in source.messages_for_references(references)
-                if original.message.exact_reply_target == destination
-            )
+            return source.answering(references, route, snapshot)
 
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return False

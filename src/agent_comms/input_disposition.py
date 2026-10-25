@@ -153,12 +153,7 @@ class InputDocument:
             for row in sorted(self.rows.values(), key=lambda item: item.order)
             for reference in row.delivered_in(lease, privacy.namespace, snapshot).references()
         )
-        route = CommandTarget.named(target).canonical_name(snapshot.canonical_name)
-        return tuple(
-            original.message.reference
-            for original in source.messages_for_references(delivered)
-            if original.message.exact_reply_target == route
-        )
+        return source.answering(delivered, CommandTarget.named(target), snapshot)
 
     def unbound_wire_inputs(self, root_id: RootId) -> dict[MessageReference, StoredInput]:
         """Original bus deliveries with positive evidence that Pi never received them."""
