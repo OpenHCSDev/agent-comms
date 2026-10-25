@@ -100,6 +100,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     order_tools = {
         "comms_todo",
         "comms_verdict",
+        "comms_verdicts",
         "comms_fire",
         "comms_correct_wording",
         "comms_todo_list",
@@ -188,6 +189,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             },
         },
         "comms_verdict": {"id": "P1", "operation": verdict},
+        "comms_verdicts": {"verdicts": [{"problem": "P1", "operation": verdict}]},
         "comms_unjudged": {},
         "comms_fire": {
             "unit": "worker",

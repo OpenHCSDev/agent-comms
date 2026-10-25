@@ -49,6 +49,7 @@ from agent_comms.thread_text import GivenThreadText, NoThreadText
 from agent_comms.threads import Thread
 from agent_comms.child_process import NO_PROCESS
 from agent_comms.errors import RelationViolationError
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 
 
@@ -384,12 +385,12 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, c
 
 
 def test_rehome_moves_a_codex_unit_to_pi_on_its_own_birth(
-    tmp_path: Path, comms: Comms, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, comms: Comms, monkeypatch: pytest.MonkeyPatch, user_manager: type,
 ) -> None:
-    import agent_comms.host_services as host_services
+    import subprocess
 
     systemctl: list[tuple[str, ...]] = []
-    monkeypatch.setattr(host_services.subprocess, "run", lambda argv, **_: systemctl.append(argv))
+    monkeypatch.setattr(subprocess, "run", lambda argv, **_: systemctl.append(argv))
     worktree = tmp_path / "unit-worktree"
     worktree.mkdir()
     before = comms.registry.declare(Thread(
@@ -725,7 +726,7 @@ def test_import_refuses_redirected_session_directory(tmp_path: Path, comms: Comm
     outside = tmp_path / "outside"
     outside.mkdir(mode=0o755)
     (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
-    with pytest.raises(ValueError):
+    with pytest.raises(NativePiUnavailable):
         comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, AnySession()), name="imported")
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())

@@ -6,7 +6,7 @@ import pytest
 
 from source_revision_fixture import SourceRepository
 from test_todos import order
-from agent_comms.change_report import FileLine, MainRevision, PullRequestHeadRevision
+from agent_comms.change_report import CitedRevisions, FileLine, MainRevision, PullRequestHeadRevision
 from agent_comms.errors import MissingSourceLine
 from agent_comms.field_codec import OwnerRequestKey
 from agent_comms.goal_actions import OrderGoalAction
@@ -73,3 +73,22 @@ def test_order_derives_its_only_source_revision_from_its_pull_request(tmp_path):
     action.require_sendable()
     with pytest.raises(MissingSourceLine):
         replace(action, order=replace(declaration, pull_requests=())).require_sendable()
+
+
+def test_cited_revisions_accept_a_line_from_the_held_head_or_main(tmp_path):
+    source = SourceRepository.create(tmp_path)
+    revision = CitedRevisions((PullRequestHeadRevision(source.link), MainRevision()))
+    for location in (FileLine('branch.py', 2), FileLine('owner.py', 2)):
+        location.require_exists(source.checkout, revision)
+        location.require_class(source.checkout, revision)
+    with pytest.raises(MissingSourceLine, match='does not exist'):
+        FileLine('owner.py', 400).require_exists(source.checkout, revision)
+
+
+def test_a_replacement_order_carries_the_problem_pull_requests_once(tmp_path):
+    source = SourceRepository.create(tmp_path / 'cited-source')
+    declaration = order(source)
+    carried = declaration.carrying((source.link, source.link))
+    assert carried.pull_requests == (source.link,)
+    assert carried.carrying((source.link,)) is carried
+    assert isinstance(carried.cited_revision, CitedRevisions)

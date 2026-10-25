@@ -42,6 +42,7 @@ from agent_comms.thread_text import ForkedParent
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
+    DraftListedPullRequest,
     OrderClaim,
     OrderMessage,
     PendingProblemOrder,
@@ -192,10 +193,11 @@ class Fleet:
         )
         return claimed
 
-    def pull_request(self, number: int, branch: str, head: str, *, draft: bool = False) -> None:
+    def pull_request(self, number: int, branch: str, head: str, *,
+                     kind: type[UnmergedListedPullRequest] = UnmergedListedPullRequest) -> None:
         stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        self.github.put(self.repository, UnmergedListedPullRequest(
-            number, branch, head, stamp, "main", reviewable_times=(stamp,), draft=draft,
+        self.github.put(self.repository, kind(
+            number, branch, head, stamp, "main", reviewable_times=(stamp,),
         ))
 
 
@@ -516,7 +518,7 @@ def test_an_empty_draft_is_the_first_commit_not_an_empty_pr(fleet):
     worktree = built.worktree("draft", base=built.main)
     built.push(worktree)
     todo = built.unit("draft", worktree)
-    built.pull_request(21, "draft", built.main, draft=True)
+    built.pull_request(21, "draft", built.main, kind=DraftListedPullRequest)
     built.claim(todo, 21, built.main, at=time.time())
     assert not any(isinstance(rule, EmptyPullRequest) and rule.problem == todo.id
                    for rule in built.observe().rules)

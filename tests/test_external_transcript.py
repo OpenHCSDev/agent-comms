@@ -255,11 +255,12 @@ def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_pa
     comms.registry.declare(Thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     for index, text in enumerate(f"item {number}" for number in range(21)):
+        item_id = NativeItemId.fresh()
         transcript.finish(
             turn_id=t1_turn_id,
-            item_id=NativeItemId(text),
+            item_id=item_id,
             events=(
-                AssistantTranscript(text, timestamp=float(index), position=NativeItemId(text)),
+                AssistantTranscript(text, timestamp=float(index), position=item_id),
             ),
         )
 

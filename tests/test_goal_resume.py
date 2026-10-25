@@ -268,7 +268,7 @@ def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_
     commander_retry.require_active()
     assert comms.registry.require('owner').goal == commander_retry
 
-    failed_turn("Provider failed a third time.")
+    failed_turn()
     comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal_id))))
     store.reserve(goal_id, store.require_generation(goal_id).number)
     with pytest.raises(ValueError):

@@ -307,7 +307,9 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
         frame = CommanderObservation.read(c, c.registry.require('lead'))
         CommanderHeartbeat().pass_body(c, (frame,))
 
-    with LaunchRoot.from_path(root).selected():
+    # The copy retires the source root's processes; the idle unit is live here only while bound here.
+    with (LaunchRoot.from_path(root).selected(),
+          c.registry.external_process('idle', ProcessIdentity.capture(os.getpid()))):
         (checkout / 'work.py').write_text('# not yet published\n')
         assert_retained(c)
         beat()

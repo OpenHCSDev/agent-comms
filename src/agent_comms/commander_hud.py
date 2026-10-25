@@ -142,8 +142,8 @@ class CommanderHud(ToolResult):
                     todo.strike_count, edits[todo.id],
                 ) for todo in orders),
                 sum(len(todo.live_strikes(unit.name)) for todo in history),
-                tuple(request for request in requests.values() if not request.draft),
-                tuple(request for request in requests.values() if request.draft),
+                tuple(ready for request in requests.values() for ready in request.as_ready()),
+                tuple(draft for request in requests.values() for draft in request.as_draft()),
             ))
         phases = tuple(CommanderPhase(
             phase, phase.done(reading), phase.ready(reading),

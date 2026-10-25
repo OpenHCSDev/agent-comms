@@ -64,6 +64,10 @@ class OwnerGenerations(
     owner_lookup: Annotated[ThreadLookup, FrozenColumn(primary_key=True)]
     generation: Annotated[int, Column(check="generation > 0")]
 
+    def within(self, current: OwnerGenerations) -> bool:
+        """The same participant at this generation or an earlier, retried one."""
+        return self.owner_lookup == current.owner_lookup and self.generation <= current.generation
+
     def require_recorded_owner(self, thread):
         """Join the recorded incarnation; a rename does not change ownership."""
         expected = type(self)(owner_lookup=thread.incarnation.lookup,

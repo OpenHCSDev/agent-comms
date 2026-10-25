@@ -11,7 +11,7 @@ import pytest
 from agent_comms.acp_extension import EmptyCursorObservation, VerifiedCursorObservation
 from agent_comms.assignment_states import TriagePendingAssignment
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.cursor_owner import (
     CommittedCursorOwner,
     CursorOwner,
@@ -236,7 +236,9 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
         assert restarted.state(db) == published == RecordedCursor(replace(
             earlier_row, owner_claimed_generation=5, covered_seq=3,
         ))
-        assert earlier.state(db) == RecordedCursor(earlier_row)
+        assert CurrentNativeCursor.select(db) == [published.row]
+        with pytest.raises(StaleFence):
+            earlier.state(db)
         newer = replace(sent, input_id=FieldCodec.decode(InputId, "9" * 32), sent_owner_claimed_generation=RecordedNativeClaim(6))
         newer.insert(db)
         newer_proof = newer.execution.historical_proof(newer, lifecycle=TriagePendingAssignment(), **{
@@ -246,3 +248,27 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
         })
         assert restarted.matches_prefix(db, (proof,))
         assert not restarted.matches_prefix(db, (newer_proof,))
+
+
+def test_a_retried_participant_generation_advances_past_the_inputs_its_earlier_attempt_sent(
+    tmp_path, recorded, historical_source,
+):
+    """A retry advances the participant generation (selected_participant.py prepare_attempt); same participant."""
+    thread = Thread("owner", frozenset(), str(tmp_path))
+    lookup = thread.incarnation.require_recorded().lookup
+    root = FieldCodec.decode(RootId, "a" * 32)
+    sent = replace(recorded, owner_lookup=lookup, verdict=DecidedTriageRecord(IgnoreSelectedTriage))
+    attempt = CursorOwner(thread=thread, claimed_generation=2, generation=1, wire_root_id=root)
+    retried = CursorOwner(thread=thread, claimed_generation=2, generation=2, wire_root_id=root)
+    with sqlite3.connect(":memory:") as db:
+        NativeRuntimeInput.create(db)
+        CurrentNativeCursor.create(db)
+        sent.insert(db)
+        proof = sent.execution.historical_proof(
+            sent, lifecycle=TriagePendingAssignment(), **{**historical_source, "owner_lookup": lookup},
+        )
+        assert retried.matches_prefix(db, (proof,))
+        assert InjectedInput(proof).allows(retried, db, UnstartedCursor())
+        InjectedInput(proof).build(attempt, 1).insert(db)
+        inherited = retried.state(db)
+        assert type(inherited) is InheritedCursor and inherited.covered_seq == 1

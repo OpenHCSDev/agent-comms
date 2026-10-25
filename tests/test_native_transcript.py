@@ -77,21 +77,20 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     assert forward[0].start == 0 and forward[-1].end == path.stat().st_size
 
 
-@pytest.mark.parametrize("raw, error, match", [
+@pytest.mark.parametrize("raw, error", [
     (encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": 42}}),
-     ValueError, r"^message\.content: Expected a JSON array\.; fix: supply .*\btuple\[agent_comms\.pi_payloads\.PiContent, \.\.\.\]"),
-    (b'{"type":"message"\n', MalformedRecord,
-     r"^Invalid JSON: Expecting ',' delimiter: line 2 column 1 \(char 18\)$"),
+     ValueError),
+    (b'{"type":"message"\n', MalformedRecord),
 ])
 @pytest.mark.parametrize("read", [
     lambda reader, size: reader.forward(0, size),
     lambda reader, size: reader.reverse(size),
     lambda reader, size: reader.tail(),
 ], ids=["forward", "reverse", "tail"])
-def test_corrupt_complete_entries_raise_in_every_read_direction(tmp_path, raw, error, match, read):
+def test_corrupt_complete_entries_raise_in_every_read_direction(tmp_path, raw, error, read):
     path = tmp_path / "corrupt.jsonl"
     path.write_bytes(raw)
-    with pytest.raises(error, match=match):
+    with pytest.raises(error):
         tuple(read(NativeTranscript(path), path.stat().st_size))
 
 

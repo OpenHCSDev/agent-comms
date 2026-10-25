@@ -600,6 +600,50 @@ class LockedTurnFile(TurnFile, LockedFile, DependentStateTier):
     path: Path
 
 
+class LockedTurn(ABC):
+    """What a turn file's writer finds once it holds the file's lock: the generation its
+    registry still names, or one a registry edit superseded, whose file retire() deletes."""
+
+    @abstractmethod
+    def without_claim(self) -> None: ...
+
+    @abstractmethod
+    def effects(
+        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
+    ) -> tuple[TurnState, ...]: ...
+
+
+@dataclass(frozen=True)
+class NamedTurn(LockedTurn):
+    record: StoredTurnRecord
+
+    def without_claim(self) -> None:
+        self.record._publish_unlocked(self.record._read_unlocked().without_claim())
+
+    def effects(
+        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
+    ) -> tuple[TurnState, ...]:
+        active = self.record._read_unlocked()
+        if not active.held_by(lease):
+            return ()
+        effects = tuple(observe(TurnState(active)))
+        for state in effects:
+            self.record._publish_unlocked(state.active.require_active())
+        return effects
+
+
+class RetiredTurn(LockedTurn):
+    """A superseded generation: its claim went with it and no phase change reaches it."""
+
+    def without_claim(self) -> None:
+        pass
+
+    def effects(
+        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
+    ) -> tuple[TurnState, ...]:
+        return ()
+
+
 @dataclass(frozen=True)
 class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurnReference,
                        declared_name=None):
@@ -671,9 +715,18 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
         active.validate_owner(process, generation)
         return active.lease(incarnation, self)
 
+    def _named_unlocked(self) -> LockedTurn:
+        """This generation as its registry names it now, read under the writer lock. A
+        registry edit saves before it retires a superseded file, so a writer that waited out
+        the retirement finds the registry naming another generation."""
+        from .registry_store import RegistryStore
+
+        registry = RegistryStore(self.registry_path).read_snapshot_unlocked()
+        return NamedTurn(self) if registry.holds_turn(self.identity) else RetiredTurn()
+
     def without_claim(self) -> None:
         with self.writers.locked():
-            self._publish_unlocked(self._read_unlocked().without_claim())
+            self._named_unlocked().without_claim()
 
     def retire(self) -> None:
         """Delete a superseded turn under its own lock; a phase change waiting on that lock
@@ -686,18 +739,8 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
-        from .registry_store import RegistryStore
-
         with self.writers.locked():
-            if not RegistryStore(self.registry_path).read_snapshot_unlocked().holds_turn(self.identity):
-                return ()
-            active = self._read_unlocked()
-            if not active.held_by(lease):
-                return ()
-            effects = tuple(observe(TurnState(active)))
-            for state in effects:
-                self._publish_unlocked(state.active.require_active())
-            return effects
+            return self._named_unlocked().effects(lease, observe)
 
     def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))

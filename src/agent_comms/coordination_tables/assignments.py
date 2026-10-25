@@ -143,7 +143,7 @@ class WakeAssignment(
     ]
     recipient: Annotated[str, FrozenColumn(check="length(recipient) BETWEEN 1 AND 256")]
     recipient_lookup: Annotated[ThreadLookup, FrozenColumn()]
-    wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0")]
+    wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0", index=True)]
     message_id: Annotated[MessageId, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
     audience: Annotated[MessageAudience, FrozenColumn()]
     lifecycle: Annotated[AssignmentState, SnapshotExclude()]
