@@ -557,10 +557,11 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
     @classmethod
     def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
         registry = comms.registry
+        snapshot = registry.snapshot()
         members = cls.members_with(cls)
         found = []
         for unit in sorted(set(units), key=lambda unit: unit.name):
-            thread = registry.require(unit.name)
+            thread = snapshot.require(unit.name)
             if thread.incarnation != unit:
                 raise ValueError("Observed unit incarnation changed")
             storage = UnitStorage.read(registry.storage_rule, thread)
