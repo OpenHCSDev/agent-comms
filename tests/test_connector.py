@@ -197,7 +197,7 @@ async def approved_token(client: TestClient, comms: Comms) -> str:
     assert (await client.head("/authorize", params=parameters, allow_redirects=False)).status == 405
     waiting = await client.get("/authorize", params=parameters, allow_redirects=False)
     assert waiting.status == 200
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     notice = comms.bus.inbox(owner.name).page.messages[-1]
     link = urlsplit(notice.body.splitlines()[-1])
     assert (await client.head(link.path, allow_redirects=False)).status == 405
@@ -275,7 +275,7 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
     assert (await client.get(
         "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
     )).status == 200
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
     secret = link.path.rsplit("/", 1)[-1]
     runner = web.AppRunner(Connector(store, "http://127.0.0.1:18766", root).application(),
@@ -617,7 +617,7 @@ async def test_approval_previews_do_not_grant_browser_trust(client, store, comms
     assert (await client.get(
         "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
     )).status == 200
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
     before = store.path.read_bytes()
     for _ in range(2):
@@ -645,7 +645,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
         assert (await client.get(
             "/authorize", params=FieldCodec.encode(query), allow_redirects=False
         )).status == 200
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     before = len(comms.bus.inbox(owner.name).page.messages)
     assert before == ConnectorGrants.waiting_limit
     blocked = replace(login.query, state="overflow")
@@ -676,7 +676,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
 async def test_owner_browser_approval_lifecycle(client, store, comms):
     """One real HTTP/store/bus journey: owner consent, remembered browser, expiry and revoke."""
     token = await approved_token(client, comms)
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     notices = comms.bus.inbox(owner.name).page.messages
     assert len(notices) == 1 and notices[0].target == owner.name
     first_link = urlsplit(notices[0].body.splitlines()[-1])

@@ -58,7 +58,7 @@ def setup(root, count=5):
     comms = wire(root)
     comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(root), created_at=10.0))
     comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(root), created_at=11.0))
-    viewer = comms.messaging.user_identity(str(root)).name
+    viewer = comms.messaging.user_identity(Checkout(root)).name
     for i in range(count):
         comms.messaging.send("alice", "#team", f"{root.name} channel {i}").message.message_id
         comms.messaging.send("alice", viewer, f"{root.name} direct {i}").message.message_id
@@ -91,9 +91,9 @@ def migrated(tmp_path):
 @pytest.mark.parametrize(
     "method,args,reader",
     [
-        ("channel_display_page", ("#team",), lambda live: dict(viewer=live.views.display_viewer(str(live.root)))),
+        ("channel_display_page", ("#team",), lambda live: dict(viewer=live.views.display_viewer(Checkout(live.root)))),
         ("dm_display_page", (ThreadTarget("alice"),), lambda live: dict(worktree=str(live.root))),
-        ("channel_display_page", ("#any",), lambda live: dict(viewer=live.views.display_viewer(str(live.root)))),
+        ("channel_display_page", ("#any",), lambda live: dict(viewer=live.views.display_viewer(Checkout(live.root)))),
     ],
 )
 def test_all_history_backward_and_forward(migrated, method, args, reader):
@@ -118,7 +118,7 @@ def test_all_history_backward_and_forward(migrated, method, args, reader):
 
 def test_original_identity_and_no_delivery_authority(migrated):
     old, prior, live, source = migrated
-    rows = collect(live, "channel_display_page", "#team", viewer=live.views.display_viewer(str(live.root)))
+    rows = collect(live, "channel_display_page", "#team", viewer=live.views.display_viewer(Checkout(live.root)))
     historical = [m for m in rows if isinstance(m, HistoricalMessage) and m.source == source]
     original = list(old.views.history_page(CommandTarget.named("#team")).messages)
     assert [m.to_wire() for m in historical] == [Message.from_message(m).to_wire() for m in original]
@@ -131,12 +131,12 @@ def test_original_identity_and_no_delivery_authority(migrated):
 
 def test_sparse_historical_ack_does_not_ack_live(migrated):
     _, _, live, source = migrated
-    viewer = live.messaging.user_identity(str(live.root))
+    viewer = live.messaging.user_identity(Checkout(live.root))
     page = live.views.channel_display_page(
-        "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
+        "#team", viewer=NamedViewer(live.messaging.user_identity(Checkout(live.root)).name),
         bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older(), 3),
     )
-    live.views.mark_page_read(page.select([page.messages[1].seq]), worktree=str(live.root))
+    live.views.mark_page_read(page.select([page.messages[1].seq]), worktree=Checkout(live.root))
     snapshot = live.registry.snapshot()
     assert ReadLedger.at(source.root).read().messages == {
         viewer.incarnation: ReadCursor({
@@ -150,7 +150,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
             replace(page, selection=replace(page.selection, displayed=replace(
                 page.selection.displayed,
                 displayed=replace(page.selection.displayed.displayed, viewer_created_at=-9.0),
-            ))), worktree=str(live.root),
+            ))), worktree=Checkout(live.root),
         )
 
 
@@ -161,10 +161,10 @@ def test_select_painted_page_keeps_its_source_with_attached_history(migrated, co
     bounds = PageBounds(HistoryCursor(source=source.key, sequence=100).older(), 2) if archived else PageBounds(limit=2)
     if conversation == "channel":
         page = live.views.channel_display_page(
-            "#team", viewer=live.views.display_viewer(str(live.root)), bounds=bounds,
+            "#team", viewer=live.views.display_viewer(Checkout(live.root)), bounds=bounds,
         )
     else:
-        page = live.views.dm_display_page(ThreadTarget("alice"), worktree=str(live.root), bounds=bounds)
+        page = live.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(live.root), bounds=bounds)
     message = page.messages[-1]
     selected = page.select((message.seq,))
     assert selected.messages == (message,)
@@ -298,7 +298,7 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
 
 def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
     _, _, live, _ = migrated
-    viewer = NamedViewer(live.messaging.user_identity(str(live.root)).name)
+    viewer = NamedViewer(live.messaging.user_identity(Checkout(live.root)).name)
     assert len(collect(live, "history_page", CommandTarget.named("#team"))) == 9
     assert len(collect(live, "history_page", CommandTarget.named("alice"), viewer=viewer)) == 9
     assert len(collect(live, "history_page", CommandTarget.named("#any"))) == 18
@@ -326,7 +326,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     assert root_bytes(old.root) == original
     assert not (Path(source.root) / "unknown-input.json").exists()
     page = live.views.channel_display_page(
-        "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
+        "#team", viewer=NamedViewer(live.messaging.user_identity(Checkout(live.root)).name),
         bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older()),
     )
     archived = Bus(Bus.path_in(Path(source.root)))
@@ -334,7 +334,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     archived.append(lambda seq, db: PublicRecord.from_message(Message(
         original.sender, original.target, "external archive mutation", original.type, seq=seq)))
     with pytest.raises(ValueError):
-        live.views.mark_page_read(page, worktree=str(live.root))
+        live.views.mark_page_read(page, worktree=Checkout(live.root))
     with pytest.raises(ValueError):
         live.views.channel_display_page(
             "#team", bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older())
@@ -356,7 +356,7 @@ def test_missing_historical_peer_is_browsable_without_live_registration(migrated
     _, _, live, source = migrated
     live.registry.unregister("alice")
     live.registry.remove("alice")
-    page = live.views.dm_display_page(ThreadTarget("alice"), worktree=str(live.root))
+    page = live.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(live.root))
     assert page.messages
     assert all(isinstance(message, HistoricalMessage) for message in page.messages)
     assert "alice" not in live.registry

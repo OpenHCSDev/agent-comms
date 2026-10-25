@@ -37,7 +37,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     missing = old.agents.begin_turn("missing", TurnId('310c74d7ac243239a928d4021c709acb')).thread
     old.messaging.send("live", "missing", "Old pending work must not be replayed").message.message_id
     current.registry.declare(replace(live, title=GivenThreadText("Current live title")))
-    current.messaging.send_user_message(CommandTarget.named('#comms'), "Current message", worktree=str(tmp_path))
+    current.messaging.send_user_message(CommandTarget.named('#comms'), "Current message", worktree=Checkout(tmp_path))
     before = current.registry.snapshot()
     bus = current.bus.bus.revision()
     old_bus = old.bus.bus.revision()
@@ -149,7 +149,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             current.registry.restore_stopped(source, (missing.name,))
         message = (
             current.messaging.send_user_message(
-                CommandTarget.named('#comms'), "@live Reply once", worktree=str(tmp_path)
+                CommandTarget.named('#comms'), "@live Reply once", worktree=Checkout(tmp_path)
             )
             if repair_existing
             else None
@@ -168,7 +168,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             assert current.bus.bus.revision() == bus_before
         else:
             message = current.messaging.send_user_message(
-                CommandTarget.named('#comms'), "@live Reply once", worktree=str(tmp_path)
+                CommandTarget.named('#comms'), "@live Reply once", worktree=Checkout(tmp_path)
             )
         accept_initial(current.bus, root_id, message.seq, store)
         assert tuple(

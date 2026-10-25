@@ -41,11 +41,11 @@ def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
     comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
     comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(tmp_path)))
     comms.messaging.send("alice", "bob", "hidden until any-mode").message.message_id
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == 0
-    comms.views.mark_user_view_read("#team", worktree=str(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 0
+    comms.views.mark_user_view_read("#team", worktree=Checkout(tmp_path))
     comms.channels.set_channel_any_mode("#team", True)
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == 1
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == 1
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 1
+    assert wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 1
 
 
 def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
@@ -57,14 +57,14 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send("carol", "dave", "unpainted older DM").message
     comms.messaging.send("alice", "bob", "painted DM").message
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == 1
-    comms.views.mark_user_view_read("#team", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == 0
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 1
+    comms.views.mark_user_view_read("#team", worktree=Checkout(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 0
 
     # Carol's old DM becomes visible only after joining the channel. The
     # previous painted basis cannot acknowledge this newly included history.
     comms.channels.update_tags("carol", add=frozenset({"team"}))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count >= 1
+    assert wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count >= 1
 
 
 def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
@@ -76,15 +76,15 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send("carol", "dave", "hidden old DM").message
     comms.messaging.send("alice", "bob", "painted DM").message
-    painted = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
+    painted = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
     assert [message.seq for message in painted.messages] == [2]
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))
-    unread_after_join = wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count
+    unread_after_join = wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count
     with pytest.raises(DMPaintedBoundChanged):
-        comms.views.mark_page_read(painted, worktree=str(tmp_path))
+        comms.views.mark_page_read(painted, worktree=Checkout(tmp_path))
     assert (
-        wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == unread_after_join
+        wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == unread_after_join
     )
 
 
@@ -96,7 +96,7 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(root)))
         comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(root)))
         comms.messaging.send("alice", "bob", "hidden before crash").message
-        comms.views.mark_user_view_read("#team", worktree=str(root))
+        comms.views.mark_user_view_read("#team", worktree=Checkout(root))
         child = subprocess.run(
             [
                 sys.executable,
@@ -110,4 +110,4 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         reopened = wire(root)
         reopened.channels.set_channel_any_mode("#team", True)
         assert [message.seq for message in list(reopened.views.channel_display_page("#team").messages)] == [1, 2]
-        assert reopened.views.viewer_snapshot(str(root)).channel_unread["#team"].count == 2
+        assert reopened.views.viewer_snapshot(Checkout(root)).channel_unread["#team"].count == 2

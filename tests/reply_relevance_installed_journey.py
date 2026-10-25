@@ -1,5 +1,6 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
 
+from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 
@@ -125,7 +126,7 @@ async def run(stage, package):
             original = service.messaging.send_user_message(CommandTarget.named('#openhcs'),
                 'Please reply tersely if you receive this. This is a distinct current '
                 'connectivity request, not continuation of your assigned task or a retry. '
-                'Reply with Received 505-20261002-a1.', worktree=str(source.worktree))
+                'Reply with Received 505-20261002-a1.', worktree=source.worktree)
             acknowledgement['originals'].append(FieldCodec.encode(original.reference))
             persist('one-distinct-user-channel-request-published')
             async with asyncio.timeout(300):

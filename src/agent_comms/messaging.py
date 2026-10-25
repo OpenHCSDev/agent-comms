@@ -114,13 +114,13 @@ class Messaging:
         """What this owner's message to target answers among its running turn's inputs."""
         return owner.turn_lease.answered_inputs(self, owner, target)
 
-    def _register_user(self, worktree: str) -> Thread:
+    def _register_user(self, worktree: Checkout) -> Thread:
         name = self.registry.snapshot().claim_name("user")
-        thread = Thread(name, frozenset(), Checkout(Path(worktree)), role=UserThreadRole)
+        thread = Thread(name, frozenset(), worktree, role=UserThreadRole)
         self.registry.register(thread)
         return thread
 
-    def user_identity(self, worktree: str) -> Thread:
+    def user_identity(self, worktree: Checkout) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
         for thread in self.registry.user_thread().existing():
             return thread
@@ -129,32 +129,32 @@ class Messaging:
         with self.registry.store.guarded_write():
             return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
-    def send_user_message(self, target: NamedTarget, body: str, *, worktree: str,
+    def send_user_message(self, target: NamedTarget, body: str, *, worktree: Checkout,
                           task: TaskAttachment = NoTaskAttachment()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         user = self.user_identity(worktree)
         return self._publish_user(user, target, body, task)
 
-    def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
+    def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: Checkout,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
                             change: TaskChange = OriginalTaskChange()) -> Message:
         """Pin a checked message as sent by the user, without replaying it or starting a turn."""
         return self._pin_constraint(recipient, subject, HumanConstraintPin,
                                     worktree=worktree, scope=scope, change=change)
 
-    def pin_input_constraint(self, recipient: str, subject, *, worktree: str,
+    def pin_input_constraint(self, recipient: str, subject, *, worktree: Checkout,
                              scope: TaskScopeSelection = CurrentTaskScopeSelection(),
                              change: TaskChange = OriginalTaskChange()) -> Message:
         """Pin the recorded input and its author, rather than a copy of its text."""
         return self._pin_constraint(recipient, subject, NativeInputConstraintPin,
                                     worktree=worktree, scope=scope, change=change)
 
-    def approve_annotations(self, recipient, subject, *, worktree, per_hour, segments):
+    def approve_annotations(self, recipient, subject, *, worktree: Checkout, per_hour, segments):
         return self._pin_constraint(recipient, subject, AnnotationDisclosureGrant,
             worktree=worktree, scope=CurrentTaskScopeSelection(), change=OriginalTaskChange(),
             per_hour=per_hour, segments=segments)
 
-    def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change,
+    def _pin_constraint(self, recipient, subject, declaration, *, worktree: Checkout, scope, change,
                         **declaration_options) -> Message:
         user = self.user_identity(worktree)
         owner = self.registry.require(recipient)

@@ -217,7 +217,7 @@ class NamedTarget(CommandTarget):
     ) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def mark_view_read(self, views: HistoryViews, worktree: str) -> None: ...
+    def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None: ...
 
     def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return self.name
@@ -395,7 +395,7 @@ class ThreadTarget(NamedTarget):
     ) -> tuple[str, ...]:
         return (self.selected_name(snapshot),)
 
-    def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
+    def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None:
         views.mark_thread_user_read(self.name, worktree=worktree)
 
 
@@ -554,7 +554,7 @@ class ChannelTarget(NamedTarget):
         return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
-    def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
+    def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None:
         from .presentation import ReadAll
 
         views.presentation.mark_channel_read(

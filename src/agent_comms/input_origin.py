@@ -132,7 +132,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
             if snapshot.claimed_identity(owner.name) != claim_scope:
                 raise RelationViolationError("User input attachment changed before capture")
             root_id = comms.registry.store.private_guard_unlocked().namespace
-            user = comms.messaging.user_identity(str(owner.worktree))
+            user = comms.messaging.user_identity(owner.worktree)
             return cls(
                 root_id=root_id, author=HumanOrigin.of(user),
                 claimed_identity=claim_scope, project=str(owner.worktree), goal=owner.goal.captured,

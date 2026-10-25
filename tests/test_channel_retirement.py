@@ -84,7 +84,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     for send in (
         lambda: comms.messaging.send("other", "#engineering", "blocked").message.message_id,
         lambda: comms.messaging.send_user_message(
-            CommandTarget.named('#engineering'), "blocked", worktree=str(tmp_path)
+            CommandTarget.named('#engineering'), "blocked", worktree=Checkout(tmp_path)
         ),
     ):
         with pytest.raises(ValueError):
@@ -113,9 +113,9 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
     )
     before = comms.bus.bus.revision()
     with pytest.raises(ValueError):
-        comms.messaging.send_user_message(CommandTarget.named('#team-view'), "blocked", worktree=str(comms.root))
+        comms.messaging.send_user_message(CommandTarget.named('#team-view'), "blocked", worktree=Checkout(comms.root))
     assert comms.bus.bus.revision() == before
-    comms.messaging.send_user_message(CommandTarget.named('#team'), "exact", worktree=str(comms.root))
+    comms.messaging.send_user_message(CommandTarget.named('#team'), "exact", worktree=Checkout(comms.root))
     comms.channels.update_tags("bob", remove=frozenset({"team"}))
     rows = read_history(comms, "#team")
     assert [row.body for row in rows if not isinstance(row.role, Membership)] == ["exact"]

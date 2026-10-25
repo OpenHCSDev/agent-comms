@@ -35,7 +35,7 @@ def overdue(comms, directive: RequestDirective):
 
 def test_the_owners_message_is_a_directive_the_overdue_rule_reads(tmp_path):
     comms = requesting_lead(tmp_path)
-    message = comms.messaging.send_user_message(CommandTarget.named('lead'), "Send the order now.", worktree=str(tmp_path))
+    message = comms.messaging.send_user_message(CommandTarget.named('lead'), "Send the order now.", worktree=Checkout(tmp_path))
     request, = comms.goals.todos.open_requests(comms.registry.require("lead").incarnation)
     directives = request.directives
     assert [directive.seq for directive in directives] == [message.seq]
@@ -45,7 +45,7 @@ def test_the_owners_message_is_a_directive_the_overdue_rule_reads(tmp_path):
 def test_an_owner_message_to_a_channel_records_no_directive(tmp_path):
     comms = requesting_lead(tmp_path)
     comms.channels.create_tag("base")
-    comms.messaging.send_user_message(CommandTarget.named('#base'), "Everyone, stop now.", worktree=str(tmp_path))
+    comms.messaging.send_user_message(CommandTarget.named('#base'), "Everyone, stop now.", worktree=Checkout(tmp_path))
     request, = comms.goals.todos.open_requests(comms.registry.require("lead").incarnation)
     assert request.directives == ()
 
@@ -82,7 +82,7 @@ def test_connector_keeps_the_selected_request_when_notification_fails(tmp_path):
 def test_recorded_directives_keep_repeated_sequences_and_refuse_an_older_bus_cut(tmp_path):
     comms = requesting_lead(tmp_path)
     with comms.bus.bus.reading() as older:
-        message = comms.messaging.send_user_message(CommandTarget.named('lead'), "Record the requested work", worktree=str(tmp_path))
+        message = comms.messaging.send_user_message(CommandTarget.named('lead'), "Record the requested work", worktree=Checkout(tmp_path))
         request, = comms.goals.todos.open_requests(comms.registry.require("lead").incarnation)
         comms.goals.todos.record_directive(request.id, RequestDirective(
             message.seq, message.timestamp + RequestDirective.window + 1))

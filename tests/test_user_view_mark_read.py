@@ -31,7 +31,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     answer(source, "Saved reply")
     comms.registry.declare(Thread('sender', frozenset({'ci'}), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     comms.registry.declare(Thread('receiver', frozenset({'ci'}), Checkout(tmp_path)))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     comms.messaging.send("sender", "receiver", "Agent inbox remains unread").message.message_id
     comms.messaging.send("sender", viewer, "Human DM").message.message_id
     comms.messaging.send("sender", "#ci", "Channel message").message.message_id
@@ -43,33 +43,33 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     assert comms.bus.pending_count("receiver", CommandTarget.named("sender")) == 1
     assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 1
 
-    comms.views.mark_user_view_read("sender", worktree=str(tmp_path))
-    after_dm = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    comms.views.mark_user_view_read("sender", worktree=Checkout(tmp_path))
+    after_dm = wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path))
     assert after_dm.thread_unread["sender"] == ReplyUnread(0)
     assert after_dm.unread["sender"].count == 0
     assert after_dm.channel_unread["#ci"].count == 1
     assert comms.bus.pending_count("receiver", CommandTarget.named("sender")) == 1
 
-    comms.views.mark_user_view_read("#ci", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"].count == 0
+    comms.views.mark_user_view_read("#ci", worktree=Checkout(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#ci"].count == 0
     assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 1
 
     comms.messaging.send("sender", "#ci", "One more channel message").message.message_id
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"].count > 0
-    comms.views.mark_user_view_read("#any", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"].count == 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"].count == 0
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#any"].count > 0
+    comms.views.mark_user_view_read("#any", worktree=Checkout(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#any"].count == 0
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#ci"].count == 0
     assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 2
 
     comms.messaging.send("receiver", viewer, "Human DM from a peer with no transcript").message.message_id
-    assert comms.views.viewer_snapshot(str(tmp_path)).unread["receiver"].count == 1
-    comms.views.mark_user_view_read("receiver", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).unread["receiver"].count == 0
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).unread["receiver"].count == 1
+    comms.views.mark_user_view_read("receiver", worktree=Checkout(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).unread["receiver"].count == 0
 
     answer(source, "New reply after manual read")
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["sender"] == ReplyUnread(1)
     with pytest.raises(ValueError):
-        comms.views.mark_user_view_read("missing", worktree=str(tmp_path))
+        comms.views.mark_user_view_read("missing", worktree=Checkout(tmp_path))
 
 
 def test_sessionless_cli_painted_tail_and_explicit_inbox_read_share_bus_marks(tmp_path):
@@ -77,15 +77,15 @@ def test_sessionless_cli_painted_tail_and_explicit_inbox_read_share_bus_marks(tm
     comms.registry.declare(Thread(
         'cli', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution,
     ))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     comms.messaging.send('cli', viewer, 'Painted CLI reply').message.message_id
     assert comms.bus.pending_count(viewer, CommandTarget.named('cli')) == 1
-    comms.views.mark_thread_view_read('cli', worktree=str(tmp_path),
+    comms.views.mark_thread_view_read('cli', worktree=Checkout(tmp_path),
         through=comms.transcripts.transcript_checkpoint('cli'))
     assert comms.bus.pending_count(viewer, CommandTarget.named('cli')) == 0
     comms.messaging.send('cli', viewer, 'Explicitly marked CLI reply').message.message_id
     assert comms.bus.pending_count(viewer, CommandTarget.named('cli')) == 1
-    comms.views.mark_user_view_read('cli', worktree=str(tmp_path))
+    comms.views.mark_user_view_read('cli', worktree=Checkout(tmp_path))
     assert comms.bus.pending_count(viewer, CommandTarget.named('cli')) == 0
 
 
@@ -99,13 +99,13 @@ def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(Thread('sender', frozenset({'ci'}), Checkout(tmp_path)))
     comms.registry.declare(Thread('archivist', frozenset({'bulk'}), Checkout(tmp_path)))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     for _ in range(20):
         comms.messaging.send("archivist", "#bulk", "x" * 200_000).message.message_id
     comms.messaging.send("sender", viewer, "Human DM").message.message_id
     comms.messaging.send("sender", "#ci", "Channel message").message.message_id
     # An open UI has already counted unread messages and shown a page.
-    comms.views.viewer_snapshot(str(tmp_path))
+    comms.views.viewer_snapshot(Checkout(tmp_path))
     comms.views.presentation.channel_page("#ci", viewer=NamedViewer(viewer))
     comms.messaging.send("sender", viewer, "Later human DM").message.message_id
     comms.messaging.send("sender", "#ci", "Later channel message").message.message_id
@@ -114,10 +114,10 @@ def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
 
     for target in ("sender", "#ci"):
         before = bytes_read()
-        comms.views.mark_user_view_read(target, worktree=str(tmp_path))
+        comms.views.mark_user_view_read(target, worktree=Checkout(tmp_path))
         assert bytes_read() - before < log_size // 4, target
 
-    after = comms.views.viewer_snapshot(str(tmp_path))
+    after = comms.views.viewer_snapshot(Checkout(tmp_path))
     assert after.unread["sender"].count == 0
     assert after.channel_unread["#ci"].count == 0
     assert after.channel_unread["#bulk"].count == 20

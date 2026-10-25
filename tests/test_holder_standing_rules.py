@@ -140,7 +140,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
 
 
 def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
-    reader = comms.messaging.user_identity(str(tmp_path))
+    reader = comms.messaging.user_identity(Checkout(tmp_path))
     before = comms.registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError, match="Only agent threads can be stopped"):
         comms.owners.stop(reader.name)
@@ -196,11 +196,11 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     elif change == "rename_holder":
         comms.registry.rename("worker", "renamed-worker")
     else:
-        worktree = str(comms.registry.require("lead").worktree)
+        worktree = comms.registry.require("lead").worktree
         comms.registry.unregister("lead")
         comms.registry.remove("lead")
         if change == "recreate":
-            comms.registry.declare(Thread("lead", frozenset({"comms"}), Checkout(Path(worktree))))
+            comms.registry.declare(Thread("lead", frozenset({"comms"}), worktree))
     before = comms.bus.bus.revision()
     operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
     if change in ("rename", "rename_holder"):
@@ -501,7 +501,7 @@ def test_latest_answer_retains_the_original_response_eligibility(
     held_bus, target, body, role, human, eligible,
 ):
     now = time.time()
-    user = held_bus.messaging.user_identity(str(held_bus.root)) if human else None
+    user = held_bus.messaging.user_identity(Checkout(held_bus.root)) if human else None
     sender = user.name if user else "worker"
     origin = HumanOrigin.of(user) if user else AgentOrigin()
     original = held_bus.bus.publisher.publish_ordinary(

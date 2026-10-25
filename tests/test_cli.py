@@ -616,7 +616,7 @@ class TestSelectedTargetActions:
         }}) + '\n')
         comms.registry.declare(Thread('alpha', frozenset({'team'}), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
         comms.channels.update_tags('beta', add=frozenset({'team'}))
-        viewer = comms.messaging.user_identity(str(tmp_path)).name
+        viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
         comms.messaging.send('alpha', 'beta', 'Executor message').message.message_id
         comms.messaging.send('alpha', viewer, 'Human DM').message.message_id
         comms.messaging.send('alpha', '#team', 'Channel message').message.message_id

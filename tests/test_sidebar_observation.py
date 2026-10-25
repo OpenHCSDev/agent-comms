@@ -27,7 +27,7 @@ def test_sidebar_apply_and_failure_publish_their_original_answers(comms):
     scheduled = []
     model = SidebarModel(scheduled.append)
     assert model.observation.channel_unread("#any") == UnobservedUnread()
-    snapshot = comms.views.viewer_snapshot(str(comms.root.parent))
+    snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
     model.apply(snapshot, SidebarModel.derive(snapshot))
     assert model.observation.require_snapshot() is snapshot
     assert model.observation.channel_order() is snapshot.channel_order
@@ -94,7 +94,7 @@ def test_snapshot_constructor_retains_namespace_validation_and_derives_birth_ind
 def test_current_reference_resolves_original_birth_after_registry_rename(comms, declare_reference):
     original = declare_reference(status=RunningThreadStatus())
     comms.registry.rename(original.name, "renamed")
-    snapshot = comms.views.viewer_snapshot(str(comms.root.parent))
+    snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
     references = pickle.loads(pickle.dumps(snapshot, protocol=5)).references
     current = references.thread(original.incarnation)
     assert current.name == "renamed"
@@ -105,10 +105,10 @@ def test_current_reference_resolves_original_birth_after_registry_rename(comms, 
 
 def test_recreated_thread_reference_resolves_new_birth_not_same_name(comms, declare_reference):
     original = declare_reference()
-    before = comms.views.viewer_snapshot(str(comms.root.parent)).references
+    before = comms.views.viewer_snapshot(Checkout(comms.root.parent)).references
     comms.threads.delete(original.name)
     recreated = declare_reference(original.name)
-    snapshot = comms.views.viewer_snapshot(str(comms.root.parent))
+    snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
     references = pickle.loads(pickle.dumps(snapshot, protocol=5)).references
     assert recreated.incarnation != original.incarnation
     assert references.thread(recreated.incarnation).incarnation == recreated.incarnation
@@ -130,7 +130,7 @@ def test_current_reference_membership_and_lookup_share_the_retained_registry(com
 
 def test_current_reference_source_projection_keeps_historical_identity(comms, declare_reference):
     original = declare_reference()
-    references = comms.views.viewer_snapshot(str(comms.root.parent)).references
+    references = comms.views.viewer_snapshot(Checkout(comms.root.parent)).references
     source = HistorySource.capture_original(comms.root, RegistryProvenance.capture(references.registry))
     restored = pickle.loads(pickle.dumps(references, protocol=5))
     recorded = restored.for_source(source)

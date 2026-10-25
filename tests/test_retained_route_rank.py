@@ -7,7 +7,7 @@ from agent_comms.threads import Thread
 
 def test_original_empty_cut_cannot_clear_later_deliveries(comms, tmp_path):
     comms.registry.declare(Thread("sender", frozenset(), Checkout(tmp_path)))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         assert source.revision() == 0
         message = comms.messaging.send("sender", viewer, "after empty capture").message

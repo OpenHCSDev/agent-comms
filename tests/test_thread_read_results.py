@@ -89,7 +89,7 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
             accept_initial(comms.bus, root_id, message.seq, store)
     notification_source = initial.message
     if changed_name in ('read', 'unrelated_read'):
-        human = comms.messaging.user_identity(str(private_directory))
+        human = comms.messaging.user_identity(Checkout(private_directory))
         read_source = publish_initial(comms, 'beta' if changed_name == 'read' else 'outside',
                                       human.name, 'Human read receipt')
         if changed_name == 'read':

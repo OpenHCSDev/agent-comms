@@ -13,7 +13,7 @@ from agent_comms.threads import Thread
 def test_discovery_ignores_retired_source_history(tmp_path, rebound, comms):
     c = comms
     c.registry.declare(Thread('sender', frozenset(), Checkout(tmp_path)))
-    viewer = c.messaging.user_identity(str(tmp_path)).name
+    viewer = c.messaging.user_identity(Checkout(tmp_path)).name
     original = c.messaging.send('sender', viewer, 'current source').message
 
     def measured():

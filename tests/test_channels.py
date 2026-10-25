@@ -269,7 +269,7 @@ def test_any_is_non_routable(tmp_path):
     with pytest.raises(ValueError):
         comms.messaging.send("other", "#any", "agent send rejected").message.message_id
     with pytest.raises(ValueError):
-        comms.messaging.send_user_message(CommandTarget.named('#any'), "user send rejected", worktree=str(tmp_path))
+        comms.messaging.send_user_message(CommandTarget.named('#any'), "user send rejected", worktree=Checkout(tmp_path))
 
 
 def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path):
@@ -506,13 +506,13 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     history = list(wire(tmp_path).views.history_page(CommandTarget.named("#api")).messages)
     assert [message.role.change.declared_name for message in history] == ["joined", "left"]
     assert all(not message.role.response_policy(message).starts_turn for message in history)
-    assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
+    assert not comms.views.viewer_snapshot(Checkout(tmp_path)).participants("#api")
     comms.agents.begin_turn("peer", TurnId('e99af36cdfcffbc191cce98c5d771afb'))
     assert [
-        person.thread.name for person in comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
+        person.thread.name for person in comms.views.viewer_snapshot(Checkout(tmp_path)).participants("#api")
     ] == ["peer"]
     comms.owners.stop("peer")
-    assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
+    assert not comms.views.viewer_snapshot(Checkout(tmp_path)).participants("#api")
 
 
 @pytest.mark.parametrize("order", ChannelSort.members_with(ChannelSort))
@@ -525,7 +525,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     for channel in ("#ui", "#none"):
         result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True}, caller=NoThreadCaller())
         assert result["pinned"]
-    views = observer.views.viewer_snapshot(str(tmp_path)).channels
+    views = observer.views.viewer_snapshot(Checkout(tmp_path)).channels
     assert list(views) == (
         [name for name in original if name in {"#ui", "#none"}]
         + [name for name in original if name not in {"#ui", "#none"}]

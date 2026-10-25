@@ -195,7 +195,7 @@ class PreparingStage(SidebarReadStage):
     StaleRevision("source moved"),
 ])
 def test_sidebar_prepares_once_then_publishes_and_keeps_real_rows(comms, cause):
-    request = ObserveSidebar(str(comms.root.parent), True, True)
+    request = ObserveSidebar(Checkout(comms.root.parent), True, True)
     revision = comms.views.revision()
     reading = SidebarReading(request)
     reading.stage = stage = PreparingStage(cause)
@@ -226,7 +226,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
     try:
         await readable(process)
         process.results()
-        process.request(ObserveSidebar(str(comms.root.parent), True, True))
+        process.request(ObserveSidebar(Checkout(comms.root.parent), True, True))
         async with asyncio.timeout(30):
             while True:
                 await readable(process)

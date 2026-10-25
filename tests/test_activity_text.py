@@ -104,10 +104,10 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
     cli = comms.registry.declare(Thread('cli-clock', frozenset({'clock'}), Checkout(comms.root), execution=ExternalThreadExecution))
     comms.channels.set_channel_sort("#clock", LastActivityThreadSort)
     output = ThreadOutput(ExternalTranscript(comms.root, cli.incarnation), comms.agents)
-    request = ObserveSidebar(str(comms.root), True, False)
+    request = ObserveSidebar(Checkout(comms.root), True, False)
 
     def observed():
-        snapshot = comms.views.viewer_snapshot(str(comms.root))
+        snapshot = comms.views.viewer_snapshot(Checkout(comms.root))
         return SidebarObserved(comms.views.revision(), request, snapshot, SidebarModel.derive(snapshot))
 
     def members(result):

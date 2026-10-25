@@ -136,7 +136,7 @@ def test_user_identity_is_created_once_under_the_registry_owner(tmp_path):
     root = messages.bus.path.parent
     clients = tuple(wire(root).messaging for _ in range(2))
     with ThreadPoolExecutor(max_workers=2) as executor:
-        users = tuple(executor.map(lambda client: client.user_identity(str(root)), clients))
+        users = tuple(executor.map(lambda client: client.user_identity(Checkout(root)), clients))
     assert users[0].incarnation == users[1].incarnation
     registered = tuple(clients[0].registry.user_thread().existing())
     assert len(registered) == 1 and registered[0].incarnation == users[0].incarnation

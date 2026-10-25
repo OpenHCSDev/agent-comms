@@ -73,7 +73,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     await until(pilot, lambda: not comms.registry.require('beta').executing)
     assert len(requests) == 1
     (evidence/'first-reply.svg').write_text(app.export_screenshot())
-    user = comms.messaging.user_identity(str(agent.project_root_path)).name
+    user = comms.messaging.user_identity(Checkout(agent.project_root_path)).name
     await channel_target('#team').open(NavigationContext(app, mode, agent.project_root_path, user))
     await app.selected_session.wait_content_ready()
     channel = app.selected_session.query_one(CommsChatView)

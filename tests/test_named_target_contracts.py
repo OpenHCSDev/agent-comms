@@ -18,9 +18,9 @@ from agent_comms.threads import Thread
 @pytest.fixture
 def named_target_journey(tmp_path):
     comms = context_comms(tmp_path)
-    worktree = str(tmp_path)
+    worktree = Checkout(tmp_path)
     comms.registry.declare(Thread(
-        "cli", frozenset({"team"}), Checkout(Path(worktree)), execution=ExternalThreadExecution,
+        "cli", frozenset({"team"}), worktree, execution=ExternalThreadExecution,
     ))
     viewer = comms.messaging.user_identity(worktree).name
     comms.messaging.send("cli", "Alice", "Agent direct message")
@@ -31,7 +31,7 @@ def named_target_journey(tmp_path):
 
 def test_named_targets_share_count_changes_and_human_read_contracts(named_target_journey):
     comms = named_target_journey
-    worktree = str(comms.registry.require("cli").worktree)
+    worktree = comms.registry.require("cli").worktree
     direct: NamedTarget = CommandTarget.named("cli")
     channel: NamedTarget = CommandTarget.named("#team")
     for target in (direct, channel):
@@ -62,7 +62,7 @@ def test_named_targets_share_count_changes_and_human_read_contracts(named_target
 
 def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_path):
     comms = context_comms(tmp_path)
-    worktree = str(tmp_path)
+    worktree = Checkout(tmp_path)
     target = IncarnationThreadTarget(comms.registry.require("Alice").incarnation)
     original = comms.messaging.send_user_message(target, "before rename", worktree=worktree)
     comms.registry.rename("Alice", "renamed")
@@ -85,13 +85,13 @@ def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_pa
 @pytest.mark.parametrize("recreate", [False, True])
 def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_path, recreate):
     comms = context_comms(tmp_path)
-    worktree = str(tmp_path)
+    worktree = Checkout(tmp_path)
     target = IncarnationThreadTarget(comms.registry.require("Alice").incarnation)
     viewer = comms.messaging.user_identity(worktree)
     comms.registry.unregister("Alice")
     comms.registry.remove("Alice")
     if recreate:
-        comms.registry.declare(Thread("Alice", frozenset({"team"}), Checkout(Path(worktree))))
+        comms.registry.declare(Thread("Alice", frozenset({"team"}), worktree))
     before = comms.bus.bus.revision()
     with pytest.raises(HumanSendRefusedError):
         comms.messaging.send_user_message(target, "must not reach successor", worktree=worktree)
@@ -106,7 +106,7 @@ def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_pat
 
 def test_dm_page_refuses_replacement_between_registry_capture_and_bus_read(tmp_path, monkeypatch):
     comms = context_comms(tmp_path)
-    worktree = str(tmp_path)
+    worktree = Checkout(tmp_path)
     target = IncarnationThreadTarget(comms.registry.require("Alice").incarnation)
     viewer = comms.messaging.user_identity(worktree)
     read_opened = ConversationMessagePageRequest.read_opened
@@ -115,7 +115,7 @@ def test_dm_page_refuses_replacement_between_registry_capture_and_bus_read(tmp_p
     def replace_before_read(request, source):
         comms.registry.unregister("Alice")
         comms.registry.remove("Alice")
-        comms.registry.declare(Thread("Alice", frozenset({"team"}), Checkout(Path(worktree))))
+        comms.registry.declare(Thread("Alice", frozenset({"team"}), worktree))
         successor_messages.append(comms.messaging.send("Alice", viewer.name, "successor reply").message)
         return read_opened(request, source)
 

@@ -1,6 +1,7 @@
 """History, display snapshots and viewer read-state ownership."""
 
 from __future__ import annotations
+from agent_comms.repo import Checkout
 
 from .activity import ActivityCapture, ObservedActivity
 from .activity_clocks import ChannelActivity
@@ -130,11 +131,11 @@ class ThreadViewRead(ConversationPreparation):
         self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))
         page = DMDisplayBasis.fetch_page(
             self.views.bus, self.views.registry, self.views.root, self.viewer.name,
-            ThreadTarget(self.thread.name), worktree=str(self.viewer.worktree),
+            ThreadTarget(self.thread.name), worktree=self.viewer.worktree,
             bounds=PageBounds(LiveCursor(self.through.wire.sequence + 1).older()),
         )
         if page.messages:
-            self.views.mark_page_read(page, worktree=str(self.viewer.worktree))
+            self.views.mark_page_read(page, worktree=self.viewer.worktree)
 
 
 @dataclass(frozen=True)
@@ -244,12 +245,12 @@ class HistoryViews:
         return self.bus.history.threads(name)
 
     def dm_display_page(
-        self, peer: ThreadTarget, *, worktree: str, bounds: PageBounds = NEWEST_PAGE
+        self, peer: ThreadTarget, *, worktree: Checkout, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name
         return DMDisplayHistory(viewer, peer, worktree).page(self.presentation, bounds)
 
-    def display_viewer(self, worktree: str) -> NamedViewer:
+    def display_viewer(self, worktree: Checkout) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""
         return NamedViewer(self.messaging.user_identity(worktree).name)
 
@@ -263,7 +264,7 @@ class HistoryViews:
         channel = self.bus.require_channel(target)
         return ChannelDisplayHistory(channel, viewer).page(self.presentation, bounds)
 
-    def mark_page_read(self, page: MessagePage, *, worktree: str) -> None:
+    def mark_page_read(self, page: MessagePage, *, worktree: Checkout) -> None:
         """Acknowledge the original read evidence of exactly the painted page."""
         page.selection.acknowledge(self, page, worktree=worktree)
 
@@ -395,7 +396,7 @@ class HistoryViews:
         )
 
     def viewer_snapshot(
-        self, worktree: str, visibility: RosterVisibility = DEFAULT_ROSTER,
+        self, worktree: Checkout, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> CoordinationSnapshot:
         """Local presentation scope, independent of agent delivery cursors."""
         with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
@@ -417,14 +418,14 @@ class HistoryViews:
         )
         return replace(snapshot, thread_unread={**snapshot.thread_unread, **unread.counts})
 
-    def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
+    def mark_thread_view_read(self, name: str, *, worktree: Checkout, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""
         thread = self.registry.require(name)
         thread.execution.prepare_conversation(ThreadViewRead(
             self, thread, self.messaging.user_identity(worktree), through,
         ))
 
-    def mark_user_view_read(self, target: str, *, worktree: str) -> None:
+    def mark_user_view_read(self, target: str, *, worktree: Checkout) -> None:
         """Explicit human 'Mark inbox read' for a channel, DM, or native thread.
 
         Unlike the agent-facing acknowledgement tool, this never advances an
@@ -433,7 +434,7 @@ class HistoryViews:
         """
         CommandTarget.named(target).mark_view_read(self, worktree)
 
-    def mark_thread_user_read(self, target: str, *, worktree: str) -> None:
+    def mark_thread_user_read(self, target: str, *, worktree: Checkout) -> None:
         viewer = self.messaging.user_identity(worktree).name
         thread = self.registry.require(target)
         checkpoint = self.transcripts.transcript_checkpoint(thread.name)

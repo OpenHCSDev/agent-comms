@@ -43,8 +43,8 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
         published_seq=0, revision=7)
     owner = comms.registry.declare(Thread('reader', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), comms.root), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
-    original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=str(owner.worktree))
-    comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=str(owner.worktree))
+    original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
+    comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
     inputs = InputDispositions(comms.root)
     inputs.record(ORIGINAL_UNKNOWN_KEY, seq=None, owner=owner.name, claim_scope=1,
                   target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
@@ -70,7 +70,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     owner = comms.registry.declare(Thread('recipient', frozenset(), Checkout(comms.root)))
     other = comms.registry.declare(Thread('unaddressed', frozenset(), Checkout(comms.root)))
     wording = "Never replay UNKNOWN.\nPreserve exact λ /source/owned bytes."
-    original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=str(owner.worktree))
+    original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     original_prefix = read_history(comms)
 
     def command(*args):

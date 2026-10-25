@@ -91,7 +91,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     message = comms.messaging.send_user_message(CommandTarget.named('#team'), 'Independent saved original',
-                                               worktree=str(tmp_path))
+                                               worktree=Checkout(tmp_path))
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)
     wire_before = comms.bus.bus.revision()

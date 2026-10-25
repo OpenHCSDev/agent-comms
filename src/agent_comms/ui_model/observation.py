@@ -14,6 +14,7 @@ rows, and no longer competes with that work for its interpreter lock.
 """
 
 from __future__ import annotations
+from agent_comms.repo import Checkout
 
 import asyncio
 import itertools
@@ -672,15 +673,15 @@ class ReadDeliveryOverview(OwnerRead):
 
 @dataclass(frozen=True)
 class ObserveSidebar(InterestRequest):
-    worktree: str
+    worktree: Checkout
     show_stopped: bool
     show_archived: bool
 
     def observation(self) -> SidebarReading:
         return SidebarReading(self)
 
-    def _answer(
-        self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str
+    def _answer[T](
+        self, revision: WireRevision, read: Callable[[T, RosterVisibility], CoordinationSnapshot], subject: T
     ) -> SidebarResult:
 
         visibility = RosterVisibility(self.show_stopped, self.show_archived)

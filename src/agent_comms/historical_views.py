@@ -1,6 +1,7 @@
 """Source-bound historical display values. These carry no delivery authority."""
 
 from __future__ import annotations
+from agent_comms.repo import Checkout
 
 import json
 import shutil
@@ -136,14 +137,14 @@ class ConversationHistoryView:
     @classmethod
     def revision(cls, views: HistoryViews, target: NamedTarget,
                  earlier: ConversationObservation,
-                 *, worktree: str) -> ConversationRevision:
+                 *, worktree: Checkout) -> ConversationRevision:
         return earlier.capture(
             views.revision(), partial(cls._read_revision, views, target, worktree))
 
     @classmethod
     def _read_revision(cls, views: HistoryViews, target: NamedTarget,
-                       worktree: str) -> ConversationRevision:
-        worktree = str(Path(worktree).resolve())
+                       worktree: Checkout) -> ConversationRevision:
+        worktree = Checkout(worktree.path.resolve())
         viewer = views.messaging.user_identity(worktree).name
         with views.registry.store.reading(views.channels.catalog):
             snapshot = views.registry.store.read_snapshot_unlocked()
@@ -158,7 +159,7 @@ class ConversationHistoryView:
     @classmethod
     @abstractmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: NamedTarget, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> DisplayIdentity: ...
 
     def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
@@ -180,7 +181,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: NamedTarget, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> ChannelDisplayIdentity:
         with views.bus.opened_activity() as activity:
             channel = catalog.require_channel(target.selected_name(snapshot), activity)
@@ -209,11 +210,11 @@ class DMHistory(HistoryView):
 
 @dataclass(frozen=True, slots=True)
 class DMDisplayHistory(ConversationHistoryView, DMHistory):
-    worktree: str
+    worktree: Checkout
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: NamedTarget, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> DMDisplayIdentity:
         name = target.selected_name(snapshot)
         try:

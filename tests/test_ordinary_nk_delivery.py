@@ -27,10 +27,10 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
     initial = comms.bus.bus.delivery(message.seq)
     assert initial.message == message
     assert initial.canonical_members == frozenset({"beta"})
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     reply = comms.messaging.send("sender", viewer, "human notification").message
     human = comms.bus.bus.delivery(reply.seq)
     assert isinstance(human.message.role, NoticeRole)
     assert human.recipients == ()
     assert human.decisions == ()
-    assert comms.views.dm_display_page(ThreadTarget("sender"), worktree=str(tmp_path)).messages[-1] == reply
+    assert comms.views.dm_display_page(ThreadTarget("sender"), worktree=Checkout(tmp_path)).messages[-1] == reply

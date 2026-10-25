@@ -80,7 +80,7 @@ def main() -> None:
             event.update(type=kind, uuid=kind, message=dict(role=kind, content=content))
             print(json.dumps(event), file=stream)
     comms.registry.register(declaration(root, "sentinel"), StoppedThreadStatus())
-    reading = ObserveSidebar(str(root), True, False).observation()
+    reading = ObserveSidebar(Checkout(root), True, False).observation()
     stop = mp.Event()
     counts: Queue[int] = mp.Queue()
     process = mp.Process(target=writer, args=(root, stop, counts, args.imports))

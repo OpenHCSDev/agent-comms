@@ -53,12 +53,12 @@ def test_viewer_snapshot_exposes_actual_active_channel_participant(tmp_path):
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     lease = comms.agents.begin_turn("beta", TurnId('2863939642c6213365179d5204d162ce')).turn_lease
     try:
-        snapshot = comms.views.viewer_snapshot(str(comms.root))
+        snapshot = comms.views.viewer_snapshot(Checkout(comms.root))
         assert [person.thread.name for person in snapshot.participants("#team")] == ["beta"]
         assert snapshot.participants("#team")[0].presentation.status.working
     finally:
         comms.agents.finish_turn(lease)
-    assert comms.views.viewer_snapshot(str(comms.root)).participants("#team") == ()
+    assert comms.views.viewer_snapshot(Checkout(comms.root)).participants("#team") == ()
 
 
 def test_joined_declarations_decode_one_sql_snapshot_and_reject_foreign_columns():

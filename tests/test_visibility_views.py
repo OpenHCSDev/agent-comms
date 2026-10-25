@@ -28,7 +28,7 @@ def test_roster_visibility_selects_threads_and_channel_members(tmp_path, visibil
     assert comms.registry.status("stopped") == StoppedThreadStatus()
     assert comms.registry.status("archived") == ArchivedThreadStatus()
 
-    snapshot = comms.views.viewer_snapshot(str(tmp_path), visibility)
+    snapshot = comms.views.viewer_snapshot(Checkout(tmp_path), visibility)
     assert set(snapshot.threads) == set(snapshot.channels["#team"].members) == shown
     assert {view.thread.name for view in comms.views.thread_views(visibility)} == shown
     channel, = (view for view in comms.views.channel_views(visibility) if view.channel.name == "#team")
