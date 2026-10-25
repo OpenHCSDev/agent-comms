@@ -30,7 +30,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.locked_store import DurableFile
 from agent_comms.problem_number import ProblemNumber
-from agent_comms.repo import GitCommandError, Repo
+from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.storage_room import (
@@ -171,7 +171,7 @@ class HomeCheckoutAllocation(CheckoutAllocation):
             yield cls()
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
-        return True
+        return path in owner.home_checkouts
 
 
 class ProblemCheckoutAllocation(CheckoutAllocation):
@@ -370,8 +370,8 @@ class StorageRule(RoomAllocation, DurableFile):
         candidates = (home, *self.checkout_paths(thread))
         checkouts = {home}
         listed: set[Path] = set()
-        for repository in candidates:
-            if repository in listed or not (repository / '.git').exists():
+        for repository in Checkout.present(*candidates):
+            if repository in listed:
                 continue
             entries = WorkBranches(repository).read_checkout().worktrees()
             listed.update(entries)
