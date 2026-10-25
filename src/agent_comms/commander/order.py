@@ -347,15 +347,18 @@ class CommanderContext(BaseModel):
         return context
 
     @property
+    def project(self) -> RegisteredCommanderProject:
+        return self.comms.registry.snapshot().commander_project.require()
+
+    @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        project = snapshot.commander_project.require()
-        (thread,) = project.commanders(snapshot)
+        (thread,) = self.project.commanders(snapshot)
         return thread.name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
-        return self.comms.registry.snapshot().commander_project.require().repos
+        return self.project.repos
 
     def order_file(self, path: str) -> OrderFile:
         """The order file with its check bound to a registered checkout, once, where it enters."""

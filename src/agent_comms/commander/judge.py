@@ -267,7 +267,7 @@ class PullRequestReview(ReviewSubject):
     @classmethod
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> PullRequestReview:
         return cls(PullRequestHead.among(
-            ctx.comms.registry.snapshot().commander_project.require().repository_names(options.repo),
+            ctx.project.repository_names(options.repo),
             options.pr, options.head))
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
@@ -609,7 +609,8 @@ class BatchVerb(JudgeVerb):
                 refusals |= refused.located(f'entry {number} ({entry.declared_name})', '')
         judged = [call.operation.tool_call_id for call in verdicts]
         if twice := sorted({i for i in judged if judged.count(i) > 1}):
-            refusals['ids'] = f'edits judged twice in this batch: {twice}'
+            refusals |= MalformedRecord(f'edits judged twice in this batch: {twice}').located(
+                'ids', 'judge each edit once')
         if refusals:
             raise RecordProblems(refusals)
         record(ctx, self, tuple(verdicts), len(unjudged))
