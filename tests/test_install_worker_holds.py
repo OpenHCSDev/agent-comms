@@ -26,10 +26,10 @@ from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 
 
 @pytest.mark.parametrize("command", [StartCliCommand, StopCliCommand])
-def test_owner_actions_decode_in_the_selected_worker(comms, command):
+def test_owner_actions_decode_in_the_selected_worker(comms, command, source_repository):
     runtime = LaunchRuntime.running()
     with InstallCommands() as commands:
-        stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)
+        stack = Stack(source_repository.checkout, commands, runtime=runtime)
         outcomes = stack.owners(comms.root, command, ["missing-owner"])
     assert len(outcomes) == 1
     assert outcomes[0].name == "missing-owner"

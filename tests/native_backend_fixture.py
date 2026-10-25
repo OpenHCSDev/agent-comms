@@ -301,10 +301,7 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
                 await asyncio.gather(*connections, return_exceptions=True)
 
             async def retire_all():
-                from agent_comms.installer.launch import InstallLogs
-
                 async with AsyncExitStack() as retirement:
-                    retirement.callback(InstallLogs(root).stop_running)
                     retirement.push_async_callback(close_server)
                     for child in owner.children:
                         retirement.push_async_callback(child.shutdown)
