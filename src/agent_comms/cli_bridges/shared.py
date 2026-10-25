@@ -1137,14 +1137,9 @@ class CliBridge(
     state_directory: ClassVar[Path]
 
     @classmethod
-    def state_root(cls) -> Path:
-        """The common root of the declared bridge state directories."""
-        return Path.home()
-
-    @classmethod
     def state_path(cls) -> Path:
         """This bridge's default state directory in the live filesystem."""
-        return cls.state_root() / cls.state_directory
+        return Path.home() / cls.state_directory
 
     @classmethod
     def reading_declarations(cls) -> tuple[type[Self], ...]:
@@ -1290,7 +1285,7 @@ class BridgeDeliveryStore(WriterOwnedStore):
 
     @classmethod
     def path(cls) -> Path:
-        return CliBridge.state_root()
+        return Path.home()
 
     @classmethod
     def resources(cls, files: FilesRequest) -> tuple[WriterOwnedResource, ...]:
