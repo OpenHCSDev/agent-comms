@@ -33,13 +33,13 @@ from agent_comms.locked_store import (
     DeclaredFile,
     LockedStore,
     RootFile,
+    RollbackRetained,
     RuntimeFile,
     UndeclaredFile,
 )
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.registry_store import RegistryStore
-from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.store_files import AtomicFile
 
 
@@ -268,11 +268,7 @@ class StoreBackup:
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
-        # Rollback selects its outgoing interpreter from this restored declaration.
-        files = tuple(dict.fromkeys((*files, *RootRuntimeStore.matching_in(root))))
-        registry = RegistryStore.at(root).written
-        if any(path in files for path in registry):
-            files = tuple(dict.fromkeys((*files, *registry)))
+        files = tuple(dict.fromkeys((*files, *RollbackRetained.retained_in(root))))
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
         owners = {root / resource.path: owner

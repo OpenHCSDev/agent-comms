@@ -14,7 +14,7 @@ from agent_comms.coordination_database import (
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.locked_store import RollbackRetained, SQLiteFile
 from agent_comms.store_files import StoreBusy
 
 
@@ -160,6 +160,27 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     archived = backup.retire()
     assert not backup.path.exists()
     assert archived.exists()
+
+
+@pytest.mark.parametrize("existed", (False, True))
+def test_rollback_retained_family_is_saved_without_rewrite_selection(tmp_path, existed):
+    root = tmp_path / "wire"
+    root.mkdir()
+    retained = RollbackRetained.retained_in(root)
+    assert retained
+    for path in retained:
+        if existed:
+            path.write_bytes(b"original")
+    backup = StoreBackup.take(root, tmp_path / "route.json", (), tmp_path / "spill")
+    assert set(backup.selected_files()) == {path.relative_to(root) for path in retained}
+    for path in retained:
+        path.write_bytes(b"changed")
+    backup.restore(lambda: None)
+    for path in retained:
+        if existed:
+            assert path.read_bytes() == b"original"
+        else:
+            assert not path.exists()
 
 
 def test_store_backup_restores_a_file_whose_directory_a_carry_deleted(tmp_path):

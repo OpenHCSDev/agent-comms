@@ -422,6 +422,29 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
+class RollbackRetained(DurableFile):
+    """Files every rollback retains, even when no rewrite selected them."""
+
+    __slots__ = ()
+    _owners: ClassVar[set[type[RollbackRetained]]] = set()
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if "filename" in vars(cls):
+            RollbackRetained._owners.add(cls)
+
+    @classmethod
+    def rollback_files(cls, root: Path) -> tuple[Path, ...]:
+        """Include absent files too: rollback must remove a newly created one."""
+        return (cls.path_in(root),)
+
+    @classmethod
+    def retained_in(cls, root: Path) -> frozenset[Path]:
+        RootFile.load_declarations()
+        return frozenset(path for owner in cls._owners
+                         for path in owner.rollback_files(owner.directory_in(root)))
+
+
 class WrittenFile(RootFile, ABC):
     """A file whose kind declares when maintenance permits its writers."""
 
@@ -479,11 +502,18 @@ class WireWakeFile(RootFile):
         )
 
 
-class RegistryFile(DurableFile, WireWakeFile):
+class RegistryFile(RollbackRetained, WireWakeFile):
     """Registry location usable by record types without importing their decoder."""
 
     __slots__ = ()
     filename = "registry.json"
+
+    @classmethod
+    def rollback_files(cls, root: Path) -> tuple[Path, ...]:
+        """Registry writes replace its document and privacy guard together."""
+        from .registry_store import RegistryStore
+
+        return RegistryStore.at(root).written
 
     @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
