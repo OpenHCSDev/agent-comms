@@ -260,7 +260,7 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
 def test_only_foreign_comparison_refusal_exempts_an_owned_type_check(source, allowed):
     checks = ClassChecks()
     checks.visit(ast.parse(source))
-    assert (not checks.declared & checks.checked) is allowed
+    assert (not checks.owned()) is allowed
 
 
 @pytest.mark.parametrize(("required", "unskipped", "expected"), (
