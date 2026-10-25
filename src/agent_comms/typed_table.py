@@ -1109,11 +1109,12 @@ class TableSchema(ABC):
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> None:
         """Inside the caller's write transaction, the stored schema onto the declaration
-        wherever the declaration says how: declared earlier table names, missing
-        nullable or defaulted fields, an index, trigger or view rebuilt from its SQL, or a missing object.
+        wherever the declaration says how: declared earlier table names, dropped
+        fields, missing nullable or defaulted fields, an index, trigger or view rebuilt from its SQL, or a missing object.
         Other table differences are refused with the rows untouched."""
         for row in cls.schema_rows():
             row.take_previous_name(db)
+            row.drop_declared_fields(db)
             row.derive_missing_fields(db)
             row.derive_relaxed_fields(db)
             if SQLiteColumnShape.only_constraints_differ(db, row):
@@ -1887,6 +1888,10 @@ class TypedTable(
     renamed_from: ClassVar[tuple[str, ...]] = ()
     """Table names this row's rows were stored under before; the writer renames the one it
     finds, so a renamed declaration needs no hand-written step."""
+    dropped_fields: ClassVar[tuple[str, ...]] = ()
+    """Columns an earlier declaration stored that this row no longer has; the writer drops
+    the ones it finds and keeps every row. A stored column nothing declares is still refused,
+    since only the declaration can say its values are disposable."""
 
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
@@ -2091,6 +2096,13 @@ class TypedTable(
         actual = {item.name: item.sql for item in cls.stored_objects(db)}
         if actual.get(cls.declared_name) == cls._table_sql(required=required):
             cls.rebuild(db)
+
+    @classmethod
+    def drop_declared_fields(cls, db: sqlite3.Connection) -> None:
+        stored = cls.stored_columns(db)
+        for name in cls.dropped_fields:
+            if name in stored:
+                db.execute(f"ALTER TABLE {_identifier(cls.declared_name)} DROP COLUMN {_identifier(name)}")
 
     @classmethod
     def take_previous_name(cls, db: sqlite3.Connection) -> None:
