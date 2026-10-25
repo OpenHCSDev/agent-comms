@@ -706,7 +706,8 @@ def test_per_file_increase_cannot_be_offset_or_moved(
     assert status == 1
     assert report["delta"][measure.at(f"{repo.root}/new.py").text] > 0
     assert (
-        sum(delta for key, delta in report["delta"].items() if measure.owns(key)) == 0
+        sum(report["delta"].get(measure.at(f"{repo.root}/{name}").text, 0)
+            for name in ("old.py", "new.py")) == 0
     )
 
 
@@ -719,10 +720,10 @@ def test_advisory_growth_is_measured_and_warned_never_failed(
     base = repo.commit({"new.py": ""})
     head = repo.commit({"new.py": source})
     status, report = repo.compare(base, head, measure)
-    key = measure.at(f"{repo.root}/new.py").text
+    count = measure.at(f"{repo.root}/new.py")
     assert status == 0
-    assert report["delta"][key] > 0
-    assert measure.grew(key, 1).startswith(f"::warning file={repo.root}/new.py::")
+    assert report["delta"][count.text] > 0
+    assert measure.grew(count, 1).startswith(f"::warning file={repo.root}/new.py::")
 
 
 def test_a_renamed_file_compares_with_its_old_path(repo: Repository) -> None:
