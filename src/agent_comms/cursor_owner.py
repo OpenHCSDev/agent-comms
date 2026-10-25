@@ -362,6 +362,10 @@ class RecordedCursor(CursorState):
 class InheritedCursor(RecordedCursor):
     """An earlier claim's row; this claim's first publish writes its own row from it."""
 
+    def observation(self) -> CursorObservation:
+        # ACP scopes a cursor to the live claim (acp_extension.py validate_scope): none until it publishes.
+        return EmptyCursorObservation()
+
     def write(self, db: Connection, owner: CursorOwner, cursor: CurrentNativeCursor) -> CursorState:
         cursor.insert(db)
         return RecordedCursor(cursor)

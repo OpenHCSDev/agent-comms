@@ -227,6 +227,7 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
         earlier_row.insert(db)
         inherited = restarted.state(db)
         assert type(inherited) is InheritedCursor and inherited.covered_seq == 1
+        assert inherited.observation() == EmptyCursorObservation()
         coverage = ProvenSourceCoverage(
             root, lookup, 3, (), (), None, source_prefix=SourcePrefix(FileIdentity.from_stat(tmp_path.stat()), 3),
         )
