@@ -1272,8 +1272,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         files = LiveFilesRequest(self.root)
         pending = tuple(replace(step, files=files) for step in self.pending)
         expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
-        selected = tuple(files.location(resource)
-                         for resource in RootFile.named_files(files, expected))
+        resources = RootFile.named_files(files, expected)
+        selected = tuple(files.location(resource) for resource in resources)
         with RestoreSpaceBackupPhase().running(self.staged.commands.clock):
             restore = RestoreSpace.measure(max(
                 rehearsal.files.restore_bytes,
@@ -1298,12 +1298,12 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                         raise UpgradeRefused(
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
                     carry_files = frozenset(
-                        path.relative_to(self.root)
-                        for step in self.pending for path in step.input_files())
+                        resource.path for step in pending
+                        for resource in RootFile.owned_files(files, step.input_files()))
                     omitted = (frozenset(planned.rewritten)
                                - frozenset(planned.backup_files) - carry_files)
-                    selected = tuple(path for path in selected
-                                     if path.relative_to(self.root) not in omitted)
+                    selected = tuple(files.location(resource) for resource in resources
+                                     if resource.path not in omitted)
                     migration = PreparedMigration.capture(
                         maintenance.held_by(MaintenanceOperator.current()), self.installed,
                         files, pending)
