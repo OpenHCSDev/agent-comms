@@ -4923,13 +4923,20 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
             parameters=(before,), order_by=("seq",), descending=descending, limit=limit))
 
     @classmethod
+    def live_strike_predicate(cls, source: str, before: str) -> str:
+        """A strike exists at the snapshot bound and has no void at that same bound."""
+        return (
+            f"{source}.{{kind}} IN {StrikeTodo.sql_choices()} AND {source}.{{seq}}<={before} "
+            f"AND NOT EXISTS (SELECT 1 FROM {cls.declared_name} v "
+            f"WHERE v.{{voids}}={source}.{{seq}} AND v.{{seq}}<={before})"
+        )
+
+    @classmethod
     def live_strikes(cls, db: sqlite3.Connection, problem: str, *,
                      before: int) -> tuple[StrikeTodo, ...]:
         return tuple(cast(StrikeTodo, row.event) for row in cls.select(
-            db, problem=problem, where=f"{{kind}} IN {StrikeTodo.sql_choices()} "
-            f"AND NOT EXISTS (SELECT 1 FROM {cls.declared_name} v WHERE v.voids={cls.declared_name}.seq AND v.seq<=?) "
-            "AND {seq}<=?", parameters=(before, before),
-            order_by=("seq",), descending=True))
+            db, problem=problem, where=cls.live_strike_predicate(cls.declared_name, "?"),
+            parameters=(before, before), order_by=("seq",), descending=True))
 
     @classmethod
     def bound_for(cls, db: sqlite3.Connection, problem: str) -> int:
@@ -4955,8 +4962,8 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
             ), live AS (
                 SELECT s.problem, s.strike_assignment, count(*) total,
                     json_extract(json_group_array(json(s.event_time) ORDER BY s.event_at DESC, s.seq DESC), '$[0]') latest
-                FROM selected s LEFT JOIN {cls.declared_name} v ON v.voids=s.seq
-                WHERE s.kind IN {StrikeTodo.sql_choices()} AND v.seq IS NULL
+                FROM selected s
+                WHERE {cls.live_strike_predicate('s', '(SELECT max(seq) FROM selected)')}
                 GROUP BY s.problem, s.strike_owner, s.strike_created
             ), counts AS (
                 SELECT problem, json_group_array(json_patch(json(strike_assignment), json_object(
