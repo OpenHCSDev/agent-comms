@@ -13,7 +13,8 @@ from agent_comms.mro_dispatch import MroDispatch, handles
 
 
 class Untyped:
-    """What a name stands for when it is bound to no typing declaration."""
+    """What a name stands for when it is bound to no typing declaration; TypingImports.declares
+    answers no for it, as for every other value the typing modules do not declare."""
 
 
 class TypingImports(MroDispatch):
@@ -87,6 +88,14 @@ class TypingImports(MroDispatch):
         self.shadowed.add(node.name)
 
     @classmethod
+    def declares(cls, value: object) -> bool:
+        """Whether a bound value is one of the typing modules or a member they declare."""
+        return any(
+            value is module or any(value is member for member in vars(module).values())
+            for module in cls.typing_modules.values()
+        )
+
+    @classmethod
     def of(cls, tree: ast.Module) -> dict[str, object]:
         imports = cls(set(tree.body))
         for node in ast.walk(tree):
@@ -107,7 +116,7 @@ class TypingImports(MroDispatch):
         imports = cls(set(ast.walk(tree)))
         for node in ast.walk(tree):
             imports.dispatch_sync(node)
-        return {name: value for name, value in imports.values.items() if value is not Untyped}
+        return {name: value for name, value in imports.values.items() if cls.declares(value)}
 
 
 class TypingReference(MroDispatch):
@@ -136,4 +145,4 @@ class TypingReference(MroDispatch):
 
     def raw_access_count(self) -> int:
         """Typing declarations contribute no raw-record operation; unknowns do."""
-        return int(self.value is Untyped)
+        return int(not TypingImports.declares(self.value))
