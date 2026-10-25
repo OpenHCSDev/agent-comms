@@ -1,11 +1,9 @@
-"""The install unit: reads its ``InstallRun`` from the file named on its command line and
-prints the report."""
+"""The install unit: reads its ``InstallRun`` on standard input and prints the report."""
 from __future__ import annotations
 
 import json
 import signal
 import sys
-from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
@@ -23,7 +21,7 @@ def stopped(signum: int, frame: object) -> None:
 def main() -> None:
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, stopped)
-    request = FieldCodec.decode(InstallRun, FieldCodec.parse(Path(sys.argv[1]).read_text()))
+    request = FieldCodec.decode(InstallRun, FieldCodec.parse(sys.stdin.read()))
     try:
         with LaunchRoot.from_path(request.root).selected():
             print(json.dumps(FieldCodec.encode(request.run()), indent=2))

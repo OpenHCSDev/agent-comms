@@ -7,10 +7,10 @@ import { dirname, extname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isBuiltin } from 'node:module';
 
-const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const packageRoot = resolve(process.argv[2]);
 const { build } = await import(pathToFileURL(resolve(packageRoot, 'node_modules/esbuild/lib/main.js')));
-const manifest = JSON.parse(readFileSync(resolve(repo, 'stack/native-import-manifest.json')));
+const manifest = JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'native-import-manifest.json')));
 if (manifest.version !== 2) throw new Error('Current extension declaration format required');
 for (const declaration of manifest.extensionEntries) {
     if (!declaration.sources) continue;

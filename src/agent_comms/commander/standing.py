@@ -123,10 +123,18 @@ class PendingInstallDue(InstallDue):
         return f"launched an install of Core main {self.target}"
 
     def enforce(self, comms: Comms, commander: str) -> None:
+        """Every repository's merge installs the same Core target, so a run of that target
+        already going is this merge's launch too; any other run is waited out."""
         command = InstallCliCommand(checkout=self.core.checkout, to=self.target,
                                     project=self.core.checkout)
-        run = installer_launch.InstallRun.start(command, comms.root)
-        run.spawn()
+        try:
+            with self.logs.launching():
+                run = installer_launch.InstallRun.start(command, comms.root)
+                run.spawn()
+        except installer_launch.InstallRunning as running:
+            for unit in running.installing(self.target):
+                self.logs.record(unit.logs, self.repo, self.main)
+            return
         self.logs.record(run.unit.logs, self.repo, self.main)
 
 

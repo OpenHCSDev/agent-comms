@@ -341,11 +341,13 @@ class TestSelectedTargetActions:
             project=str(tmp_path))
         assert any(action.declaration is ArchiveCliCommand for action in actions)
 
-    def test_restart_catalog_uses_original_owner_and_idle_requirements(self, tmp_path):
+    def test_restart_catalog_queues_for_the_original_owner_even_while_busy(self, tmp_path):
         import os
         from dataclasses import replace
         from agent_comms.child_process import ProcessIdentity
-        from agent_comms.cli_commands import CliCommand, RestartCliCommand, StopCliCommand
+        from agent_comms.cli_commands import (
+            CliCommand, QueueRestartCliCommand, RestartCliCommand, StopCliCommand,
+        )
         from agent_comms.restart_scope import OneOwner
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -361,14 +363,10 @@ class TestSelectedTargetActions:
         action = next(action for action in CliCommand.target_catalog(
             comms, CliCommand.selected_targets((CommandTarget.named('alpha'),)),
             project=str(tmp_path))
-            if action.declaration is RestartCliCommand)
-        assert action.bound == (RestartCliCommand(name=OneOwner('alpha')),)
+            if action.declaration is QueueRestartCliCommand)
+        assert action.bound == (QueueRestartCliCommand(name='alpha'),)
         assert action.editable_fields == ()
-        assert action.encode()['parameters']['properties'] == {}
-        assert action.edited({}).bound == action.bound
         for arguments in ({'agent_bin': json.dumps('/other/native')}, {'agent_args': '--other'}):
-            with pytest.raises(ValueError):
-                action.edited(arguments)
             with pytest.raises(ValueError):
                 RestartCliCommand.execute_target(
                     comms, RestartCliCommand.selected_targets((CommandTarget.named('alpha'),)),
@@ -381,10 +379,8 @@ class TestSelectedTargetActions:
             '--agent-args=--no-extensions'])
         parsed = CliCommand.member_named(options.command).from_arguments(options)
         assert parsed == explicit
-        with pytest.raises(ValueError):
-            action.bound[0].edited({'all': True})
         assert StopCliCommand.help == 'Stop process'
-        assert not RestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
+        assert not QueueRestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
             comms.registry.store.path,
@@ -395,11 +391,11 @@ class TestSelectedTargetActions:
                 turn_generation=RecordedGeneration(busy.generation),
             ),
         )
-        assert not RestartCliCommand.thread_bindings(comms,
+        assert QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status)
-        assert not RestartCliCommand.thread_bindings(comms,
+        assert not QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status)
-        assert not RestartCliCommand.thread_bindings(comms,
+        assert not QueueRestartCliCommand.thread_bindings(comms,
             replace(owner, execution=ExternalThreadExecution), status)
 
     def test_tag_batch_requires_each_confirmation_before_removing_any_tag(self, tmp_path):

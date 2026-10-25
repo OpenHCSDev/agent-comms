@@ -46,7 +46,9 @@ def test_each_selection_returns_its_own_result(comms, tmp_path, selection, targe
 
 
 def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
-    from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, RestartCliCommand
+    from agent_comms.cli_commands import (
+        ArchiveCliCommand, CliCommand, QueueRestartCliCommand, RestartCliCommand,
+    )
     from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
     names = ("first", "second")
@@ -56,7 +58,7 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     selected = CliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names))
     catalog = CliCommand.target_catalog(comms, selected, project=str(tmp_path))
     assert any(action.declaration is ArchiveCliCommand for action in catalog)
-    assert all(action.declaration is not RestartCliCommand for action in catalog)
+    assert all(action.declaration is not QueueRestartCliCommand for action in catalog)
     with pytest.raises(ValueError, match="single target"):
         RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {})
     assert all(comms.registry.status(name) == StoppedThreadStatus() for name in names)

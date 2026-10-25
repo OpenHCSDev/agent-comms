@@ -83,7 +83,11 @@ class UnitPing(Ping):
 
 @dataclass(frozen=True)
 class HudPing(Ping, declared_name=None):
-    """A HUD row changes when its rendered line changes, even with the same identity."""
+    """A HUD row changes when its rendered line changes, even with the same identity.
+
+    The ping text is a change detector, not a carrier: it tells the commander a row moved.
+    Views read the row itself from CommanderFrame, written from the same CommanderHud.
+    """
 
     text: str = field(compare=True, kw_only=True)
 

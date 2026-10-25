@@ -3,7 +3,6 @@
 import ast
 import json
 import os
-import socket
 import subprocess
 import sys
 import time
@@ -39,13 +38,34 @@ from tools.debt_ratchet import (
     StringFieldMetadata,
     StringIdentity,
     python_paths,
+    AnyName,
+    BooleanChainTerms,
+    BuiltinHandlerTypeSwitch,
+    CodecSubclass,
+    FamilyFlattened,
+    ForeignAbsenceProbe,
+    GodClassExcess,
+    LintFindings,
+    LongBooleanChain,
+    Measure,
+    OwnTypeTest,
+    StringDispatch,
+    StringDispatchArms,
+    StringSubscript,
+    TypeErrors,
+    TypeIdentity,
+    TypeSwitch,
+    TypeSwitchArms,
+    UnannotatedParameter,
+    Unformatted,
+    compare,
 )
 
 pytestmark = pytest.mark.refactor_guard
 
 
 def test_measure_owner_rejects_a_new_absence() -> None:
-    name = f"{NoneAbsence.__name__}:tools/example.py"
+    name = NoneAbsence.key("tools/example.py")
     result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {}, {})
     assert result.delta[name] == 1
     assert result.failed
@@ -88,7 +108,7 @@ def test_plain_str_id_annotations_block_growth_per_file(source, expected):
     path = "src/example.py"
     before = PlainStrIdAnnotation.snapshot([(path, b"description: str")])
     after = PlainStrIdAnnotation.snapshot([(path, source.encode())])
-    identity = f"{PlainStrIdAnnotation.__name__}:{path}"
+    identity = PlainStrIdAnnotation.key(path)
     comparison = Comparison("src", "base", "head", (path,), before, after, {}, {})
     assert comparison.delta[identity] == expected
     assert comparison.failed == bool(expected)
@@ -108,62 +128,10 @@ def ratchet_environment() -> dict[str, str]:
     return {**os.environ, "PYTHONPATH": search_path(SOURCE / "src")}
 
 
-class RatchetServer:
-    """The ratchet's command line served by one interpreter per test worker (ratchet_server.py).
-
-    Each comparison still forks its own measuring pool; it no longer pays the interpreter's
-    start. The command's own process tree and log are proven by the tests that launch it.
-    """
-
-    script = Path(__file__).with_name("ratchet_server.py")
-
-    def __init__(self, directory: Path):
-        self.directory = directory
-        self.socket = directory / "ratchet.sock"
-        self.child = self.launch()
-
-    def launch(self) -> SpawnedProcess:
-        self.socket.unlink(missing_ok=True)
-        child = SpawnedProcess.launch((sys.executable, str(self.script), str(self.socket)),
-                                      env=ratchet_environment(), output=subprocess.PIPE)
-        assert child.process.stdout.readline() == b"ready\n", child.process.communicate()
-        return child
-
-    def run(self, cwd: Path, argv: tuple[str, ...], *,
-            timeout: float) -> subprocess.CompletedProcess[str]:
-        stdout, stderr = self.directory / "stdout", self.directory / "stderr"
-        request = dict(cwd=str(cwd), argv=list(argv), env=ratchet_environment(),
-                       stdout=str(stdout), stderr=str(stderr))
-        try:
-            with socket.socket(socket.AF_UNIX) as connection:
-                connection.settimeout(timeout)
-                connection.connect(str(self.socket))
-                connection.sendall(json.dumps(request).encode() + b"\n")
-                reply = json.loads(connection.makefile("rb").readline())
-        except Exception:
-            # A comparison still running would answer the next test's request late.
-            self.close()
-            self.child = self.launch()
-            raise
-        return subprocess.CompletedProcess(argv, reply["returncode"],
-                                           stdout.read_text(), stderr.read_text())
-
-    def close(self) -> None:
-        self.child.close()
-
-
-@pytest.fixture(scope="module")
-def ratchet(tmp_path_factory) -> Iterator[RatchetServer]:
-    server = RatchetServer(tmp_path_factory.mktemp("ratchet-server"))
-    yield server
-    server.close()
-
-
 class Repository:
-    def __init__(self, path: Path, root: str, ratchet: RatchetServer):
+    def __init__(self, path: Path, root: str):
         self.path = path
         self.root = root
-        self.ratchet = ratchet
         self.git("init", "-q")
 
     def git(self, *args: str) -> str:
@@ -196,14 +164,17 @@ class Repository:
                                    output=subprocess.PIPE) as child:
             yield child
 
-    def compare(self, base: str, head: str, *, timeout: float = 120) -> tuple[int, dict]:
-        result = self.ratchet.run(self.path, self.arguments(base, head), timeout=timeout)
-        assert result.returncode in (0, 1), result.stderr[-2000:]
-        return result.returncode, json.loads(result.stdout)
+    def compare(self, base: str, head: str, *measured: type[Measure]) -> tuple[int, dict]:
+        """The command's exit status and report, taking only the named measures' measurements.
+
+        The command line itself is proven by the tests that launch it.
+        """
+        result = compare(self.path, base, head, self.root, 2, measured)
+        return int(result.failed), json.loads(json.dumps(FieldCodec.project(result, "report")))
 
 
-def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path, ratchet) -> None:
-    repo = Repository(tmp_path, "src/sample", ratchet)
+def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path) -> None:
+    repo = Repository(tmp_path, "src/sample")
     announcement = tmp_path / "probe-tree.json"
     declaration = (
         "from dataclasses import dataclass\nfrom typing import ClassVar\n"
@@ -249,8 +220,8 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
 
 
 @pytest.fixture(params=["src/agent_comms", "src/toad"])
-def repo(tmp_path: Path, request, ratchet) -> Repository:
-    return Repository(tmp_path, request.param, ratchet)
+def repo(tmp_path: Path, request) -> Repository:
+    return Repository(tmp_path, request.param)
 
 
 def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, monkeypatch) -> None:
@@ -285,8 +256,8 @@ def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, mon
         GitMeasure.sources(repo.path, revision, selected | {f'{repo.root}/missing.py'})
 
 
-def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch, ratchet):
-    repo = Repository(tmp_path, "src/agent_comms", ratchet)
+def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch):
+    repo = Repository(tmp_path, "src/agent_comms")
     source = subprocess.check_output(
         ["git", "archive", "HEAD", "--", "src/agent_comms"], timeout=20
     )
@@ -320,9 +291,9 @@ def test_clean_growth_passes_but_type_and_string_dispatch_fail(repo: Repository)
     base = repo.commit({"new.py": "value = 1\n"})
     source = "value = 1\nother = 2\n"
     grown = repo.commit({"new.py": source})
-    assert repo.compare(base, grown)[0] == 0
+    assert repo.compare(base, grown, StringDispatch, TypeIdentity)[0] == 0
     filtered = repo.commit({"new.py": source + "filtered = type(value) is int\n"})
-    status, report = repo.compare(grown, filtered)
+    status, report = repo.compare(grown, filtered, StringDispatch, TypeIdentity)
     assert status == 1
     assert report["delta"]["TypeIdentity"] == 1
     dispatch = repo.commit(
@@ -337,15 +308,15 @@ def test_clean_growth_passes_but_type_and_string_dispatch_fail(repo: Repository)
             )
         }
     )
-    status, report = repo.compare(grown, dispatch)
+    status, report = repo.compare(grown, dispatch, StringDispatch, TypeIdentity)
     assert status == 1
-    assert report["delta"][f"StringDispatch:{repo.root}/new.py"] == 1
+    assert report["delta"][StringDispatch.key(f"{repo.root}/new.py")] == 1
 
 
 def test_added_type_check_fails(repo: Repository) -> None:
     base = repo.commit({"check.py": 'value = row["a"]\n'})
     head = repo.commit({"check.py": "value = type(x) is int\n"})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, LongBooleanChain, StringSubscript, TypeIdentity)
     assert status == 1  # A different measure's reduction cannot cancel this increase.
     assert {
         key: report["delta"][key] for key in ("TypeIdentity", "LongBooleanChain", "StringSubscript")
@@ -362,7 +333,7 @@ def test_moves_between_files_pass(repo: Repository) -> None:
     moved = repo.commit({"from.py": None, "nested/to.py": source})
     combined = repo.commit({"nested/to.py": None, "other.py": "a = 1\n" + source})
     for head in (moved, combined):
-        status, report = repo.compare(base, head)
+        status, report = repo.compare(base, head, StringSubscript, TypeIdentity)
         assert status == 0
         assert not any(report["delta"].values())
         assert report["head"]["TypeIdentity"] == 1
@@ -372,7 +343,7 @@ def test_moves_between_files_pass(repo: Repository) -> None:
 def test_reduction_passes(repo: Repository) -> None:
     base = repo.commit({"removed.py": 'value = type(x) is int and a and b and row["key"]\n'})
     head = repo.commit({"removed.py": None})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, LongBooleanChain, StringSubscript, TypeIdentity)
     assert status == 0
     assert {
         key: report["delta"][key] for key in ("TypeIdentity", "LongBooleanChain", "StringSubscript")
@@ -400,7 +371,7 @@ text = 'type(x) is int and a and b and row["not code"]'
 """
         }
     )
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, LongBooleanChain, StringSubscript, TypeIdentity)
     assert status == 1
     assert report["base"] == {name: 0 for name in report["head"]}
     assert {
@@ -417,13 +388,12 @@ def test_other_source_root_does_not_enter_report(repo: Repository) -> None:
     outside = repo.path / "unrelated.py"
     outside.write_text('value = type(x) is int and a and b and row["key"]\n')
     head = repo.commit({"kept.py": "value = 2\n"})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, TypeIdentity, LongBooleanChain, StringSubscript)
     assert status == 0
     assert report["paths"] == [f"{repo.root}/kept.py"]
 
 
 def test_builtin_handler_measure_uses_shared_collector_and_rejects_growth(repo: Repository) -> None:
-    from tools.debt_ratchet import BuiltinHandlerTypeSwitch
     from audit.handler_declarations import BuiltinHandlerDeclarations
 
     assert issubclass(BuiltinHandlerTypeSwitch, BuiltinHandlerDeclarations)
@@ -440,18 +410,18 @@ class Consumer(MroDispatch):
     assert BuiltinHandlerTypeSwitch.count(growing.encode(), "policy.py") == 3
     assert BuiltinHandlerTypeSwitch.count(b"not valid Python", "field_codec.py") == 0
     head = repo.commit({"policy.py": growing})
-    status, report = repo.compare(base, head)
-    identity = f"BuiltinHandlerTypeSwitch:{repo.root}/policy.py"
+    status, report = repo.compare(base, head, BuiltinHandlerTypeSwitch)
+    identity = BuiltinHandlerTypeSwitch.key(f"{repo.root}/policy.py")
     assert status == 1
     assert report["base"][identity] == 1 and report["head"][identity] == 3
     assert report["delta"][identity] == 2
     moved = repo.commit(
         {"policy.py": source, "another_codec.py": growing, "field_codec.py": growing}
     )
-    status, report = repo.compare(head, moved)
+    status, report = repo.compare(head, moved, BuiltinHandlerTypeSwitch)
     assert status == 1  # A filename suffix cannot admit another primitive dispatcher.
-    assert report["head"][f"BuiltinHandlerTypeSwitch:{repo.root}/field_codec.py"] == 0
-    assert report["delta"][f"BuiltinHandlerTypeSwitch:{repo.root}/another_codec.py"] == 3
+    assert report["head"][BuiltinHandlerTypeSwitch.key(f"{repo.root}/field_codec.py")] == 0
+    assert report["delta"][BuiltinHandlerTypeSwitch.key(f"{repo.root}/another_codec.py")] == 3
 
 
 def owner(name: str, lines: int, indent: str = "") -> str:
@@ -472,10 +442,9 @@ def module(*owners: str) -> str:
 
 @pytest.mark.parametrize("root", ["src/agent_comms", "src/toad", "src/textual"])
 def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
-    tmp_path: Path, root: str, ratchet
+    tmp_path: Path, root: str
 ):
-    repo = Repository(tmp_path, root, ratchet)
-    from tools.debt_ratchet import FamilyFlattened
+    repo = Repository(tmp_path, root)
     from audit.measures import FamilyFlattened as AuditFamilyFlattened
 
     original = "def carry(value):\n    return (value.declared_name, value.family_name)\n"
@@ -486,10 +455,10 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
             "second.py": "def carry(value):\n    return value.declared_name\n",
         }
     )
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, FamilyFlattened)
     assert status == 1
-    assert report["delta"][f"FamilyFlattened:{repo.root}/first.py"] == -2
-    assert report["delta"][f"FamilyFlattened:{repo.root}/second.py"] == 1
+    assert report["delta"][FamilyFlattened.key(f"{repo.root}/first.py")] == -2
+    assert report["delta"][FamilyFlattened.key(f"{repo.root}/second.py")] == 1
     assert FamilyFlattened.count(original.encode(), "consumer.py") == (
         AuditFamilyFlattened.count(ast.parse(original))
     )
@@ -510,13 +479,13 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
             **{path: original for path in facades},
         }
     )
-    status, report = repo.compare(head, moved)
+    status, report = repo.compare(head, moved, FamilyFlattened)
     assert status == 1
-    assert report["delta"][f"FamilyFlattened:{repo.root}/another_codec.py"] == 2
+    assert report["delta"][FamilyFlattened.key(f"{repo.root}/another_codec.py")] == 2
     for module in original_modules:
-        assert report["head"][f"FamilyFlattened:{module.as_posix()}"] == 0
+        assert report["head"][FamilyFlattened.key(module.as_posix())] == 0
     for path in facades:
-        assert report["head"][f"FamilyFlattened:{repo.root}/{path}"] == 2
+        assert report["head"][FamilyFlattened.key(f"{repo.root}/{path}")] == 2
 
 
 @pytest.mark.parametrize(
@@ -546,7 +515,6 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
     ],
 )
 def test_family_name_owner_reads_and_codec_detours(source: str, expected: int):
-    from tools.debt_ratchet import FamilyFlattened
 
     assert FamilyFlattened.count(source.encode(), "consumer.py") == expected
 
@@ -554,49 +522,49 @@ def test_family_name_owner_reads_and_codec_detours(source: str, expected: int):
 def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:
     base = repo.commit({"owners.py": owner("Small", 2)})
     head = repo.commit({"owners.py": module(owner("Small", 500), owner("New", 500))})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, GodClassExcess)
     assert status == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::Small"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::New"] == 0
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/owners.py::Small")] == 0
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/owners.py::New")] == 0
 
 
 def test_class_growth_cannot_be_cancelled_by_another_class(repo: Repository) -> None:
     base = repo.commit({"classes.py": module(owner("Growing", 501), owner("Shrinking", 600))})
     head = repo.commit({"classes.py": module(owner("Growing", 502), owner("Shrinking", 500))})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, GodClassExcess)
     assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/classes.py::Growing"] == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/classes.py::Shrinking"] == -100
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/classes.py::Growing")] == 1
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/classes.py::Shrinking")] == -100
 
 
 @pytest.mark.parametrize("before", [0, 500])
 def test_new_or_crossing_god_class_is_refused(repo: Repository, before: int) -> None:
     base = repo.commit({"owners.py": owner("New", before)} if before else {})
     head = repo.commit({"owners.py": owner("New", 501)})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, GodClassExcess)
     assert status == 1
-    assert report["base"][f"GodClassExcess:{repo.root}/owners.py::New"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::New"] == 1
+    assert report["base"][GodClassExcess.key(f"{repo.root}/owners.py::New")] == 0
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/owners.py::New")] == 1
 
 
 def test_class_move_keeps_baseline_and_new_small_owner_has_no_class_debt(repo: Repository) -> None:
     base = repo.commit({"old.py": owner("Existing", 501)})
     moved = repo.commit({"old.py": None, "new.py": module(owner("Existing", 501), owner("NewOwner", 25))})
-    status, report = repo.compare(base, moved)
+    status, report = repo.compare(base, moved, GodClassExcess)
     assert status == 0
-    assert report["base"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::NewOwner"] == 0
+    assert report["base"][GodClassExcess.key(f"{repo.root}/new.py::Existing")] == 1
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/new.py::Existing")] == 0
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/new.py::NewOwner")] == 0
     grown = repo.commit({"new.py": module(owner("Existing", 502), owner("NewOwner", 26))})
-    assert repo.compare(moved, grown)[0] == 1
+    assert repo.compare(moved, grown, GodClassExcess)[0] == 1
 
 
 def test_moved_class_growth_is_rejected(repo: Repository) -> None:
     base = repo.commit({"old.py": owner("Existing", 500)})
     head = repo.commit({"old.py": None, "new.py": owner("Existing", 501)})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, GodClassExcess)
     assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/new.py::Existing")] == 1
 
 
 def test_formatting_a_god_class_is_not_growth(repo: Repository) -> None:
@@ -608,8 +576,8 @@ def test_formatting_a_god_class_is_not_growth(repo: Repository) -> None:
     assert formatted.count("\n") > unformatted.count("\n")
     base = repo.commit({"wide.py": unformatted})
     head = repo.commit({"wide.py": formatted})
-    status, report = repo.compare(base, head)
-    assert report["delta"][f"GodClassExcess:{repo.root}/wide.py::Wide"] == 0
+    status, report = repo.compare(base, head, GodClassExcess)
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/wide.py::Wide")] == 0
     assert status == 0
 
 
@@ -617,34 +585,36 @@ def test_nested_and_duplicate_named_classes_keep_separate_baselines(repo: Reposi
     nested = "class Outer:\n" + owner("Inner", 501, "    ")
     base = repo.commit({"one.py": nested, "two.py": owner("Inner", 500)})
     head = repo.commit({"one.py": nested, "two.py": owner("Inner", 501)})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, GodClassExcess)
     assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/one.py::Outer.Inner"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/two.py::Inner"] == 1
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/one.py::Outer.Inner")] == 0
+    assert report["delta"][GodClassExcess.key(f"{repo.root}/two.py::Inner")] == 1
 
 
 def test_chain_terms_catch_growth_hidden_by_unchanged_chain_count(repo: Repository) -> None:
     base = repo.commit({"rules.py": "valid = a and b and c and d\n"})
     head = repo.commit({"rules.py": "valid = a and b and c and d and e\n"})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, BooleanChainTerms, LongBooleanChain)
     assert status == 1
     assert report["delta"]["LongBooleanChain"] == 0
-    assert report["delta"][f"BooleanChainTerms:{repo.root}/rules.py"] == 1
+    assert report["delta"][BooleanChainTerms.key(f"{repo.root}/rules.py")] == 1
 
 
 @pytest.mark.parametrize(
-    ("measure", "decision"),
+    ("measure", "arms", "decision"),
     [
-        ("StringDispatch", "if value == {case!r}: return 1"),
-        ("StringDispatch", "if value in ({case!r},): return 1"),
-        ("StringDispatch", "match value:\n        case {case!r}: return 1"),
-        ("TypeSwitch", "if isinstance(value, Case{case}): return 1"),
-        ("TypeSwitch", "if type(value) is Case{case}: return 1"),
-        ("TypeSwitch", "match value:\n        case Case{case}(): return 1"),
+        (StringDispatch, StringDispatchArms, "if value == {case!r}: return 1"),
+        (StringDispatch, StringDispatchArms, "if value in ({case!r},): return 1"),
+        (StringDispatch, StringDispatchArms, "match value:\n        case {case!r}: return 1"),
+        (TypeSwitch, TypeSwitchArms, "if isinstance(value, Case{case}): return 1"),
+        (TypeSwitch, TypeSwitchArms, "if type(value) is Case{case}: return 1"),
+        (TypeSwitch, TypeSwitchArms, "match value:\n        case Case{case}(): return 1"),
+        (TypeSwitch, TypeSwitchArms, "if issubclass(value, Case{case}): return 1"),
+        (TypeSwitch, TypeSwitchArms, "if value is Case{case}: return 1"),
     ],
 )
 def test_dispatch_growth_and_reduction_use_the_installed_command(
-    repo: Repository, measure: str, decision: str
+    repo: Repository, measure: type[Measure], arms: type[Measure], decision: str
 ) -> None:
     def source(cases):
         return (
@@ -655,15 +625,27 @@ def test_dispatch_growth_and_reduction_use_the_installed_command(
 
     before = repo.commit({"policy.py": source(range(3))})
     grown = repo.commit({"policy.py": source(range(4))})
-    status, report = repo.compare(before, grown)
+    status, report = repo.compare(before, grown, measure, arms)
     assert status == 1
-    assert report["delta"][f"{measure}:{repo.root}/policy.py"] == 0
-    assert report["delta"][f"{measure}Arms:{repo.root}/policy.py"] == 1
+    assert report["delta"][measure.key(f"{repo.root}/policy.py")] == 0
+    assert report["delta"][arms.key(f"{repo.root}/policy.py")] == 1
     reduced = repo.commit({"policy.py": source(range(2))})
-    status, report = repo.compare(grown, reduced)
+    status, report = repo.compare(grown, reduced, measure, arms)
     assert status == 0
-    assert report["delta"][f"{measure}:{repo.root}/policy.py"] == -1
-    assert report["delta"][f"{measure}Arms:{repo.root}/policy.py"] == -4
+    assert report["delta"][measure.key(f"{repo.root}/policy.py")] == -1
+    assert report["delta"][arms.key(f"{repo.root}/policy.py")] == -4
+
+
+def test_own_class_type_test_counts_one_arm_and_never_a_foreign_class(repo: Repository) -> None:
+    owned = "class Case:\n    pass\n\n\nclass Import:\n    pass\n"
+    base = repo.commit({"owned.py": owned, "check.py": "import ast\n\n\ndef read(node):\n"
+                        "    return isinstance(node, ast.Import)\n"})
+    head = repo.commit({"check.py": "import ast\n\nfrom .owned import Case\n\n\ndef read(node):\n"
+                        "    return isinstance(node, ast.Import) or issubclass(node, Case)\n"})
+    status, report = repo.compare(base, head, OwnTypeTest)
+    assert status == 1
+    assert report["base"][OwnTypeTest.key(f"{repo.root}/check.py")] == 0
+    assert report["delta"][OwnTypeTest.key(f"{repo.root}/check.py")] == 1
 
 
 def test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine(repo: Repository) -> None:
@@ -684,45 +666,61 @@ async def second(value):
 """
         }
     )
-    status, report = repo.compare(before, head)
+    status, report = repo.compare(before, head, FamilyFlattened, StringDispatch, StringDispatchArms)
     # This checks the three-arm dispatch measure's scope. The separate
     # family measure also reports these literal comparisons.
     assert status == 1
-    assert report["head"][f"FamilyFlattened:{repo.root}/scope.py"] > 0
-    assert report["head"][f"StringDispatch:{repo.root}/scope.py"] == 0
-    assert report["head"][f"StringDispatchArms:{repo.root}/scope.py"] == 0
+    assert report["head"][FamilyFlattened.key(f"{repo.root}/scope.py")] > 0
+    assert report["head"][StringDispatch.key(f"{repo.root}/scope.py")] == 0
+    assert report["head"][StringDispatchArms.key(f"{repo.root}/scope.py")] == 0
 
 
 @pytest.mark.parametrize(
     ("measure", "source"),
     [
-        ("BooleanChainTerms", "valid = a and b and c and d\n"),
-        ("ForeignAbsenceProbe", "absent = other.value is None\n"),
-        ("CodecSubclass", "class Local(FieldCodec):\n    pass\n"),
-        ("StringDispatch", 'def decide(x):\n    return x in ("a", "b", "c")\n'),
+        (BooleanChainTerms, "valid = a and b and c and d\n"),
+        (ForeignAbsenceProbe, "absent = other.value is None\n"),
+        (CodecSubclass, "class Local(FieldCodec):\n    pass\n"),
+        (StringDispatch, 'def decide(x):\n    return x in ("a", "b", "c")\n'),
         (
-            "TypeSwitch",
+            TypeSwitch,
             "def decide(x):\n    return isinstance(x, A) or isinstance(x, B) or isinstance(x, C)\n",
         ),
-        ("AnyName", "from typing import Any\ndef read(value: Any) -> None: ...\n"),
-        ("AnyName", "from typing import Any\nvalue = Any\n"),
-        ("UnannotatedParameter", "def read(value): ...\n"),
-        ("Unformatted", "value=1\n"),
-        ("LintFindings", "import os\n"),
-        ("TypeErrors", 'value: int = "text"\n'),
+        (OwnTypeTest, "class Case:\n    pass\ndef read(x):\n    return isinstance(x, Case)\n"),
+        (AnyName, "from typing import Any\ndef read(value: Any) -> None: ...\n"),
+        (AnyName, "from typing import Any\nvalue = Any\n"),
+        (UnannotatedParameter, "def read(value): ...\n"),
+        (Unformatted, "value=1\n"),
+        (LintFindings, "import os\n"),
+        (TypeErrors, 'value: int = "text"\n'),
     ],
 )
 def test_per_file_increase_cannot_be_offset_or_moved(
-    repo: Repository, measure: str, source: str
+    repo: Repository, measure: type[Measure], source: str
 ) -> None:
     base = repo.commit({"old.py": source, "new.py": ""})
     head = repo.commit({"old.py": None, "new.py": source})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, measure)
     assert status == 1
-    assert report["delta"][f"{measure}:{repo.root}/new.py"] > 0
+    assert report["delta"][measure.key(f"{repo.root}/new.py")] > 0
     assert (
-        sum(delta for key, delta in report["delta"].items() if key.startswith(measure + ":")) == 0
+        sum(delta for key, delta in report["delta"].items() if measure.owns(key)) == 0
     )
+
+
+def test_a_renamed_file_compares_with_its_old_path(repo: Repository) -> None:
+    kept = "".join(f"def keep{i}(value: int) -> int:\n    return value\n" for i in range(8))
+    source = kept + "def read(value): ...\n"
+    base = repo.commit({"old.py": source})
+    moved = repo.commit({"old.py": None, "nested/new.py": source})
+    status, report = repo.compare(base, moved, UnannotatedParameter)
+    assert status == 0
+    assert report["delta"][UnannotatedParameter.key(f"{repo.root}/nested/new.py")] == 0
+    assert UnannotatedParameter.key(f"{repo.root}/old.py") not in report["delta"]
+    grown = repo.commit({"nested/new.py": source + "def write(value): ...\n"})
+    status, report = repo.compare(base, grown, UnannotatedParameter)
+    assert status == 1
+    assert report["delta"][UnannotatedParameter.key(f"{repo.root}/nested/new.py")] == 1
 
 
 def test_both_revisions_are_checked_under_the_head_configuration(repo: Repository) -> None:
@@ -733,13 +731,13 @@ def test_both_revisions_are_checked_under_the_head_configuration(repo: Repositor
     base = repo.commit({"kept.py": source + "type Pair = tuple[int, int]\n"})
     (repo.path / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["E", "F", "I"]\n')
     head = repo.commit({"kept.py": source + "type Pair = tuple[int, int]\nother = 1\n"})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, LintFindings, TypeErrors, Unformatted)
     # The base alone cannot parse PEP 695 under its own 3.11 target, and the head adds the
     # import-order rule; under one configuration neither changes the file's counts.
-    assert report["base"][f"TypeErrors:{repo.root}/kept.py"] == 1
-    assert report["base"][f"LintFindings:{repo.root}/kept.py"] == 1
-    for measure in ("TypeErrors", "LintFindings", "Unformatted"):
-        assert report["delta"][f"{measure}:{repo.root}/kept.py"] == 0
+    assert report["base"][TypeErrors.key(f"{repo.root}/kept.py")] == 1
+    assert report["base"][LintFindings.key(f"{repo.root}/kept.py")] == 1
+    for measure in (TypeErrors, LintFindings, Unformatted):
+        assert report["delta"][measure.key(f"{repo.root}/kept.py")] == 0
 
 
 def test_foreign_probes_and_codec_bases_use_ast_not_text(repo: Repository) -> None:
@@ -762,10 +760,10 @@ class OwnedCodec:
 """
         }
     )
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, CodecSubclass, ForeignAbsenceProbe)
     assert status == 1
-    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 2
-    assert report["head"][f"CodecSubclass:{repo.root}/boundary.py"] == 1
+    assert report["head"][ForeignAbsenceProbe.key(f"{repo.root}/boundary.py")] == 2
+    assert report["head"][CodecSubclass.key(f"{repo.root}/boundary.py")] == 1
 
 
 def test_connection_boolean_is_not_an_absence_probe(repo: Repository) -> None:
@@ -783,9 +781,9 @@ class Reader:
 """
         }
     )
-    status, report = repo.compare(base, boolean)
-    assert status == 1
-    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/connection.py"] == 0
+    status, report = repo.compare(base, boolean, ForeignAbsenceProbe)
+    assert status == 0
+    assert report["head"][ForeignAbsenceProbe.key(f"{repo.root}/connection.py")] == 0
 
     missing = repo.commit(
         {
@@ -801,9 +799,9 @@ def present(state: State):
 """
         }
     )
-    status, report = repo.compare(boolean, missing)
+    status, report = repo.compare(boolean, missing, ForeignAbsenceProbe)
     assert status == 1
-    assert report["delta"][f"ForeignAbsenceProbe:{repo.root}/missing.py"] == 2
+    assert report["delta"][ForeignAbsenceProbe.key(f"{repo.root}/missing.py")] == 2
 
 
 def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Repository) -> None:
@@ -829,8 +827,8 @@ def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Reposito
         source += 'def generic[T: t.Literal["stdio"]](value: T) -> T:\n    return value\n'
     base = repo.commit({"boundary.py": ""})
     declarations = repo.commit({"boundary.py": source})
-    status, report = repo.compare(base, declarations)
-    assert status == 1
+    status, report = repo.compare(base, declarations, StringSubscript)
+    assert status == 0
     assert report["head"]["StringSubscript"] == 0
     # Annotation spelling cannot conceal actual initializer/default/decorator/body reads.
     runtime = (
@@ -847,7 +845,7 @@ def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Reposito
         + "\n"
     )
     changed = repo.commit({"boundary.py": runtime})
-    status, report = repo.compare(declarations, changed)
+    status, report = repo.compare(declarations, changed, StringSubscript)
     assert status == 1
     assert report["delta"]["StringSubscript"] == 5
 
@@ -867,7 +865,7 @@ def test_typing_spelling_does_not_hide_shadowed_or_unresolved_read(repo: Reposit
             + "\n"
         }
     )
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, StringSubscript)
     assert status == 1
     assert report["delta"]["StringSubscript"] == 2
 
@@ -916,7 +914,6 @@ ANY_NON_DECLARATIONS = (
 
 
 def test_any_is_counted_once_in_declarations_and_values(repo: Repository) -> None:
-    from tools.debt_ratchet import AnyName
 
     uses = AnyName.uses(ANY_DECLARATIONS.encode(), "declarations.py")
     assert sorted((use.site, use.owner) for use in uses) == [
@@ -935,10 +932,10 @@ def test_any_is_counted_once_in_declarations_and_values(repo: Repository) -> Non
 
     base = repo.commit({"declarations.py": "", "values.py": ""})
     head = repo.commit({"declarations.py": ANY_DECLARATIONS, "values.py": ANY_NON_DECLARATIONS})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, AnyName)
     assert status == 1
-    assert report["delta"][f"AnyName:{repo.root}/declarations.py"] == len(uses)
-    assert report["delta"][f"AnyName:{repo.root}/values.py"] == 3
+    assert report["delta"][AnyName.key(f"{repo.root}/declarations.py")] == len(uses)
+    assert report["delta"][AnyName.key(f"{repo.root}/values.py")] == 3
 
 
 def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> None:
@@ -946,9 +943,9 @@ def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> Non
     head = repo.commit(
         {"declarations.py": ANY_DECLARATIONS.replace("fill: Any = 0", "fill: int = 0")}
     )
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, AnyName)
     assert status == 0
-    assert report["delta"][f"AnyName:{repo.root}/declarations.py"] == -1
+    assert report["delta"][AnyName.key(f"{repo.root}/declarations.py")] == -1
 
 
 @pytest.mark.parametrize(
@@ -965,8 +962,8 @@ def test_clean_changed_lines_cannot_be_offset_with_a_deletion(repo, measure, del
     (test_an_absence_moved_with_its_class_to_another_module_is_not_written)."""
     base = repo.commit({"old.py": deleted, "new.py": ""})
     head = repo.commit({"old.py": None, "new.py": source})
-    status, report = repo.compare(base, head)
-    identity = f"{measure.__name__}:{repo.root}/new.py"
+    status, report = repo.compare(base, head, measure)
+    identity = measure.key(f"{repo.root}/new.py")
     assert status == 1
     assert report["delta"][identity] == 1
     assert report["introduced"][identity] == 1
@@ -982,8 +979,8 @@ def test_clean_changed_lines_cannot_be_offset_with_a_deletion(repo, measure, del
 def test_unchanged_old_sites_are_not_forced_to_zero(repo, measure, source):
     base = repo.commit({"old.py": source + "clean = 1\n"})
     head = repo.commit({"old.py": source + "clean = 2\n"})
-    status, report = repo.compare(base, head)
-    identity = f"{measure.__name__}:{repo.root}/old.py"
+    status, report = repo.compare(base, head, measure)
+    identity = measure.key(f"{repo.root}/old.py")
     assert status == 0
     assert report["head"][identity] == 1
     assert report["introduced"][identity] == 0
@@ -1003,28 +1000,26 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
     head = repo.commit(
         {name: source.replace("value: str", "value: str | None") for name, source in files.items()}
     )
-    status, report = repo.compare(base, head)
-    identity = f"{NoneAbsence.__name__}:{repo.root}"
+    status, report = repo.compare(base, head, NoneAbsence)
     assert status == 1
     assert report["introduced_lines"] == {
-        f"{identity}/owner.py": [1],
-        f"{identity}/foreign.py": [5],
+        NoneAbsence.key(f"{repo.root}/owner.py"): [1],
+        NoneAbsence.key(f"{repo.root}/foreign.py"): [5],
     }
-    assert (
-        report["introduced"][f"{identity}/plan.py"] == report["delta"][f"{identity}/plan.py"] == 0
-    )
+    plan = NoneAbsence.key(f"{repo.root}/plan.py")
+    assert report["introduced"][plan] == report["delta"][plan] == 0
 
 
 def test_an_unchanged_absence_on_a_rewritten_line_is_not_written_but_a_new_one_is(repo):
     base = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.done\n"})
     kept = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.settled()\n"})
-    status, report = repo.compare(base, kept)
-    identity = f"{NoneAbsence.__name__}:{repo.root}/owner.py"
+    status, report = repo.compare(base, kept, NoneAbsence)
+    identity = NoneAbsence.key(f"{repo.root}/owner.py")
     assert report["introduced"][identity] == 0
     added = repo.commit(
         {"owner.py": "def ready(stored):\n    return stored is not None and stored.owner is not None\n"}
     )
-    status, report = repo.compare(kept, added)
+    status, report = repo.compare(kept, added, NoneAbsence)
     assert status == 1
     assert report["introduced_lines"][identity] == [2]
 
@@ -1034,22 +1029,21 @@ def test_an_absence_moved_with_its_class_to_another_module_is_not_written(repo):
     other = "class Other:\n    def check(self, v):\n        return v is None\n"
     base = repo.commit({"attempts.py": holder, "executions.py": "VALUE = 1\n"})
     moved = repo.commit({"attempts.py": "VALUE = 2\n", "executions.py": holder})
-    status, report = repo.compare(base, moved)
-    identity = f"{NoneAbsence.__name__}:{repo.root}"
-    assert report["introduced"][f"{identity}/executions.py"] == 0
+    status, report = repo.compare(base, moved, NoneAbsence)
+    assert report["introduced"][NoneAbsence.key(f"{repo.root}/executions.py")] == 0
     deleted = repo.commit({"attempts.py": holder, "executions.py": None})
     moved_out = repo.commit({"attempts.py": None, "owners.py": holder + "\n\n" + other})
-    status, report = repo.compare(deleted, moved_out)
+    status, report = repo.compare(deleted, moved_out, NoneAbsence)
     assert status == 1
-    assert report["introduced_lines"][f"{identity}/owners.py"] == [8]
+    assert report["introduced_lines"][NoneAbsence.key(f"{repo.root}/owners.py")] == [8]
 
 
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
     repo.git("config", "diff.interHunkContext", "3")
     base = repo.commit({"names.py": "first = 1\nold_receipt = 1\nlast = 1\n"})
     head = repo.commit({"names.py": "first = 2\nold_receipt = 1\nlast = 2\n"})
-    status, report = repo.compare(base, head)
-    identity = f"BannedVocabulary:{repo.root}/names.py"
+    status, report = repo.compare(base, head, BannedVocabulary)
+    identity = BannedVocabulary.key(f"{repo.root}/names.py")
     assert status == 0
     assert report["head"][identity] == 1
     assert report["introduced"][identity] == 0
@@ -1059,8 +1053,8 @@ def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
 def test_net_reduction_does_not_pay_for_a_new_identifier(repo, word):
     base = repo.commit({"names.py": "old_admit = 1\nold_receipt = 2\n"})
     head = repo.commit({"names.py": f"new_{word} = 3\n"})
-    status, report = repo.compare(base, head)
-    identity = f"BannedVocabulary:{repo.root}/names.py"
+    status, report = repo.compare(base, head, BannedVocabulary)
+    identity = BannedVocabulary.key(f"{repo.root}/names.py")
     assert status == 1
     assert report["base"][identity] == 2
     assert report["head"][identity] == 1
@@ -1075,8 +1069,8 @@ def test_old_function_name_and_multiline_attribute_have_their_own_lines(repo, wo
     head = repo.commit(
         {"names.py": f"def old_admit():\n    return (\n        other\n        .{word}\n    )\n"}
     )
-    status, report = repo.compare(base, head)
-    identity = f"BannedVocabulary:{repo.root}/names.py"
+    status, report = repo.compare(base, head, BannedVocabulary)
+    identity = BannedVocabulary.key(f"{repo.root}/names.py")
     assert status == 0
     assert report["head"][identity] == 2
     assert report["introduced"][identity] == 0
@@ -1085,8 +1079,8 @@ def test_old_function_name_and_multiline_attribute_have_their_own_lines(repo, wo
 def test_changed_argument_still_changes_a_multiline_frozen_write(repo):
     base = repo.commit({"owner.py": 'object.__setattr__(\n    self, "value",\n    1,\n)\n'})
     head = repo.commit({"owner.py": 'object.__setattr__(\n    self, "value",\n    2,\n)\n'})
-    status, report = repo.compare(base, head)
-    identity = f"FrozenFieldWrite:{repo.root}/owner.py"
+    status, report = repo.compare(base, head, FrozenFieldWrite)
+    identity = FrozenFieldWrite.key(f"{repo.root}/owner.py")
     assert status == 1
     assert report["delta"][identity] == 0
     assert report["introduced"][identity] == 1
@@ -1121,8 +1115,8 @@ def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):
     original = 'key = "admission_generation"\n# clean wording\n'
     base = repo.commit({"words.py": original})
     head = repo.commit({"words.py": original.replace("clean wording", "admission wording")})
-    status, report = repo.compare(base, head)
-    identity = f"BannedVocabulary:{repo.root}/words.py"
+    status, report = repo.compare(base, head, BannedVocabulary)
+    identity = BannedVocabulary.key(f"{repo.root}/words.py")
     assert status == 1
     assert report["head"][identity] == 1
     assert report["introduced"][identity] == 1
@@ -1247,12 +1241,12 @@ def test_string_identity_measures_spellings_outside_root_and_skips_declared_test
     for name in ("tools/step.py", "tests/test_step.py"):
         (repo.path / name).write_text('after = sys.modules["carry_other"]\n')
     head = repo.commit({})
-    status, report = repo.compare(base, head)
+    status, report = repo.compare(base, head, StringIdentity)
     assert status == 1
     assert {key: value for key, value in report["delta"].items() if value} == {
-        "StringIdentity:tools/step.py": 1
+        StringIdentity.key("tools/step.py"): 1
     }
-    assert "StringIdentity:tests/test_step.py" not in report["head"]
+    assert StringIdentity.key("tests/test_step.py") not in report["head"]
 
 
 def test_broad_suppress_is_counted_and_cannot_be_added(repo):
@@ -1264,8 +1258,8 @@ with suppress(Exception): raise RuntimeError()
     assert BroadSwallow.count(source, "read.py") == 3
     before = repo.commit({"reader.py": "work()\n"})
     after = repo.commit({"reader.py": "with suppress(OSError): work()\n"})
-    status, report = repo.compare(before, after)
-    identity = f"BroadSwallow:{repo.root}/reader.py"
+    status, report = repo.compare(before, after, BroadSwallow)
+    identity = BroadSwallow.key(f"{repo.root}/reader.py")
     assert status == 1 and report["introduced"][identity] == 1
     assert report["delta"][identity] == 1
 
@@ -1311,8 +1305,8 @@ except FileNotFoundError: absent()
     )
     before = repo.commit({"reader.py": "work()\n"})
     after = repo.commit({"reader.py": "try: work()\nexcept OSError: pass\n"})
-    status, report = repo.compare(before, after)
-    identity = f"BroadSwallow:{repo.root}/reader.py"
+    status, report = repo.compare(before, after, BroadSwallow)
+    identity = BroadSwallow.key(f"{repo.root}/reader.py")
     assert status == 1 and report["introduced"][identity] == 1
     assert report["delta"][identity] == 1
 

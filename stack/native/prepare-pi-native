@@ -14,7 +14,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --python)
             [[ $# -ge 2 ]] || {
-                printf 'Usage: prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
+                printf 'Usage: stack/native/prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
                 exit 1
             }
             python=$2
@@ -26,14 +26,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --publish)
             [[ $# -ge 2 && -z "$publish_root" ]] || {
-                printf 'Usage: prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
+                printf 'Usage: stack/native/prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
                 exit 1
             }
             publish_root=$2
             shift 2
             ;;
         *)
-            printf 'Usage: prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
+            printf 'Usage: stack/native/prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT] [--python PATH]\n' >&2
             exit 1
             ;;
     esac
@@ -121,7 +121,7 @@ cp -- "$stock_root/package.json" "$stock/package.json"
 # zero fuzz, and checks JS syntax. Its Bedrock transport edit is intentionally
 # restored below: the running stack must not fork Pi's network layer.
 prepared=$(
-    PI_STOCK_DIR="$stock" "$repo_root/experiments/pi-context-proof/prepare-copied-pi.sh" "$stock_spec" \
+    PI_STOCK_DIR="$stock" "$native_root/prepare-copied-pi.sh" "$stock_spec" \
         | sed -n 's/^PI_PACKAGE_DIR=//p'
 )
 scratch_root=${prepared%/node_modules/@earendil-works/pi-coding-agent}
@@ -137,37 +137,34 @@ mv -- "$scratch_root/node_modules" "$stage/node_modules"
 cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 compaction=dist/core/compaction/compaction.js
 session=dist/core/agent-session.js
-"$python" "$stack_root/patch-native-steering.py" \
+"$python" "$native_root/patch-native-steering.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 manager=dist/core/session-manager.js
 services=dist/core/agent-session-services.js
-"$python" "$stack_root/patch-native-model-config.py" \
+"$python" "$native_root/patch-native-model-config.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
 rpc=dist/modes/rpc/rpc-mode.js
 # One SessionManager storage owner; replace eager loaders and their consumers together.
 native_package="$stage/node_modules/@earendil-works/pi-coding-agent"
-patch --batch --fuzz=0 --no-backup-if-mismatch -p1 -d "$native_package" < "$stack_root/native-session-storage.patch"
-cp -- "$stack_root/native-session-entry-store.mjs" "$native_package/dist/core/session-entry-store.js"
-cp -- "$stack_root/native-session-entry-store.d.ts" "$native_package/dist/core/session-entry-store.d.ts"
-cp -- "$stack_root/native-proof-journal.mjs" "$native_package/dist/core/native-proof-journal.js"
-cp -- "$stack_root/native-proof-journal.d.ts" "$native_package/dist/core/native-proof-journal.d.ts"
-cp -- "$stack_root/native-private-file.mjs" "$native_package/dist/core/native-private-file.js"
-PYTHONPATH="$repo_root/src" "$python" "$stack_root/render-native-proof-schema.py" \
-    "$native_package/dist/core/native-proof-schema.js"
-cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
-"$python" "$stack_root/patch-native-compaction-brief.py" "$native_package/$session"
-"$python" "$stack_root/patch-native-compaction-wip.py" "$native_package/$session"
-"$python" "$stack_root/patch-native-compaction-cap.py" "$native_package"
-"$python" "$stack_root/patch-native-turn-context.py" \
+patch --batch --fuzz=0 --no-backup-if-mismatch -p1 -d "$native_package" < "$native_root/native-session-storage.patch"
+cp -- "$native_root/native-session-entry-store.mjs" "$native_package/dist/core/session-entry-store.js"
+cp -- "$native_root/native-session-entry-store.d.ts" "$native_package/dist/core/session-entry-store.d.ts"
+cp -- "$native_root/native-proof-journal.mjs" "$native_package/dist/core/native-proof-journal.js"
+cp -- "$native_root/native-proof-journal.d.ts" "$native_package/dist/core/native-proof-journal.d.ts"
+cp -- "$native_root/native-private-file.mjs" "$native_package/dist/core/native-private-file.js"
+cp -- "$native_root/native-proof-schema.mjs" "$native_package/dist/core/native-proof-schema.js"
+"$python" "$native_root/patch-native-compaction-brief.py" "$native_package/$session"
+"$python" "$native_root/patch-native-compaction-wip.py" "$native_package/$session"
+"$python" "$native_root/patch-native-compaction-cap.py" "$native_package"
+"$python" "$native_root/patch-native-turn-context.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
-"$python" "$stack_root/patch-native-file-artifact.py" \
+"$python" "$native_root/patch-native-file-artifact.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
-    -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-request-progress-adapters.patch"
-"$python" "$stack_root/patch-native-request-observation.py" \
+    -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$native_root/native-request-progress-adapters.patch"
+"$python" "$native_root/patch-native-request-observation.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
-"$python" "$stack_root/prepare-native-import-boundary.py" \
+"$python" "$native_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent" \
     ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}
 native share_resources \

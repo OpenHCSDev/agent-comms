@@ -26,7 +26,7 @@ def test_materialized_directories_do_not_copy_checkout_permissions(tmp_path):
     nested.mkdir(parents=True)
     (nested / "entry.mjs").write_text("export const value = 1;\n")
     prepare = load_resource_module(
-        Path(__file__).resolve().parents[1] / "stack/prepare-native-import-boundary.py")
+        Path(__file__).resolve().parents[1] / "stack/native/prepare-native-import-boundary.py")
     digests = set()
     for mode in (0o700, 0o755):
         source.chmod(mode)

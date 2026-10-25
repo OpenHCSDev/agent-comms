@@ -60,7 +60,8 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .lifecycle_capability import Failed
-from .locked_store import DurableFile, PublishedSQLiteFile, WireWakeFile
+from .locked_store import DurableFile, PublishedSQLiteFile, RegistryFile, WireWakeFile
+from .maintenance_barrier import MaintenanceBarrier
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
 from .store_files import AtomicFile
@@ -680,6 +681,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         if path.exists():
             # Existing state never recreates a process-local launch capability.
             return cls(directory)
+        cls.require_maintenance_open(path)
         try:
             fd, name = tempfile.mkstemp(prefix=".goal-attempts-init-", dir=directory)
         except OSError as error:
@@ -719,6 +721,13 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         return self.database(self.path)
 
     @classmethod
+    def require_maintenance_open(cls, path: Path) -> None:
+        """Every installation carries this ledger, and stopping owners settle their turns in
+        it: past the drain only the install's holder commits, so its carry check charges no
+        other writer's change."""
+        MaintenanceBarrier(RegistryFile.path_in(cls.bus_root(path))).assert_drained_writes_open_unlocked()
+
+    @classmethod
     def database(cls, path: Path) -> sqlite3.Connection:
         """Open this ledger's database, including a retained format at its carry boundary."""
         try:
@@ -740,6 +749,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]
     ) -> _T:
         """A failed commit, sync, or readback is never a launch authorization."""
+        self.require_maintenance_open(self.path)
         with closing(self._connect()) as conn:
             try:
                 with self.publishing_changes(conn, self.path):

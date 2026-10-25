@@ -6,6 +6,7 @@ rehearsal and harness setup are the target's, never the outgoing runtime's.
 """
 from __future__ import annotations
 
+import fcntl
 import glob
 import json
 import os
@@ -93,13 +94,15 @@ class InstallReport(MroDispatch):
 
     @handles(BaseException)
     def crashed(self, error: BaseException) -> tuple[str, ...]:
-        package = Path(agent_comms.__file__).resolve().parent
+        # The target tree is already removed here, so paths are compared as imported, never
+        # resolved: a removed working directory makes even a non-strict resolve raise.
+        package = Path(agent_comms.__file__).parent
         frame = next(
             frame for frame in reversed(extract_tb(error.__traceback__))
-            if Path(frame.filename).resolve().is_relative_to(package)
+            if Path(frame.filename).is_relative_to(package)
         )
         module = ".".join(
-            Path(frame.filename).resolve().relative_to(package.parent).with_suffix("").parts
+            Path(frame.filename).relative_to(package.parent).with_suffix("").parts
         )
         location = self.source.module_file(module)
         return (f"Install failed: {type(error).__name__}: {error}",
@@ -168,17 +171,31 @@ class InstallUnit(SystemdUnit):
     def errors(self) -> Path:
         return self.logs / "stderr.log"
 
+    @property
+    def request(self) -> Path:
+        """The ``InstallRun`` the unit reads on its standard input, as every runtime's launcher
+        has sent it: the launcher is the installed runtime, older than the tree it starts."""
+        return self.logs / "request.json"
+
     def start(self, tree: Path, command: tuple[str, ...], pythonpath: str,
               *options: str) -> None:
         """Start the unit; ``--wait`` follows it to its end and raises on its failure."""
         subprocess.run(
             ("systemd-run", "--user", "--quiet", "--collect", *options, f"--unit={self.unit}",
-             f"--working-directory={tree}", f"--property=StandardOutput=file:{self.result}",
+             f"--working-directory={tree}", f"--property=StandardInput=file:{self.request}",
+             f"--property=StandardOutput=file:{self.result}",
              f"--property=StandardError=file:{self.errors}",
              *(f"--setenv={name}" for name in self.inherited),
              f"--setenv=PYTHONPATH={pythonpath}", *command),
             check=True,
         )
+
+    def target(self) -> str:
+        """The commit this unit installs, read from the request it was started with."""
+        return FieldCodec.decode(InstallRun, FieldCodec.parse(self.request.read_text())).target
+
+    def running(self) -> bool:
+        return not self.activity(self.unit).ended()
 
     def due(self) -> type[standing.InstallDue]:
         """A run whose unit is gone without printing a result died; any other was launched."""
@@ -191,6 +208,19 @@ class InstallUnit(SystemdUnit):
                      if line.strip()), "no output")
 
 
+class InstallRunning(UpgradeRefused):
+    """One install per bus root: a launch that finds another one launching or running
+    refuses and names the running units, so a heartbeat can count the merge as launched."""
+
+    def __init__(self, lock: Path, units: tuple[InstallUnit, ...]) -> None:
+        self.units = units
+        super().__init__(f"another install holds {lock}; running units: "
+                         f"{', '.join(unit.unit for unit in units)}")
+
+    def installing(self, target: str) -> tuple[InstallUnit, ...]:
+        return tuple(unit for unit in self.units if unit.target() == target)
+
+
 @dataclass(frozen=True)
 class InstallLogs:
     """Each install's diagnostics beside the bus, kept as long as its data backups are."""
@@ -198,16 +228,39 @@ class InstallLogs:
     root: Path
     cause_file: ClassVar[str] = "cause.json"
 
+    @property
+    def lock(self) -> Path:
+        return self.root.parent / f".{self.root.name}.install.lock"
+
+    @contextmanager
+    def launching(self) -> Iterator[None]:
+        """Held from the target checkout to the unit's start, and for a waiting launch to the
+        unit's end; under it no other unit runs, so minting and retiring never race one."""
+        with self.lock.open("a") as held:
+            try:
+                fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise InstallRunning(self.lock, self.running()) from None
+            if running := self.running():
+                raise InstallRunning(self.lock, running)
+            yield
+
+    def units(self) -> tuple[InstallUnit, ...]:
+        return tuple(
+            InstallUnit(Id128(path.name.removeprefix(self.prefix)), path)
+            for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*") if path.is_dir()
+        )
+
+    def running(self) -> tuple[InstallUnit, ...]:
+        return tuple(unit for unit in self.units() if unit.running())
+
     def launched(self, repo: RepositoryName, main: str) -> tuple[InstallUnit, ...]:
         """The runs launched for this merge, decoded once from their launch records."""
         cause = InstallCause(repo, main)
         return tuple(
-            InstallUnit(Id128(path.name.removeprefix(self.prefix)), path)
-            for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
-            if path.is_dir()
-            for marker in (path / self.cause_file,)
-            if marker.is_file()
-            and FieldCodec.decode(InstallCause, FieldCodec.parse(marker.read_text())) == cause
+            unit for unit in self.units()
+            if cause in (FieldCodec.decode(InstallCause, FieldCodec.parse(marker.read_text()))
+                         for marker in unit.logs.glob("cause*.json"))
         )
 
     def member(self, repo: RepositoryName, main: str) -> type[standing.InstallDue]:
@@ -216,7 +269,12 @@ class InstallLogs:
                     standing.PendingInstallDue)
 
     def record(self, logs: Path, repo: RepositoryName, main: str) -> None:
-        (logs / self.cause_file).write_text(json.dumps(FieldCodec.encode(InstallCause(repo, main))))
+        """A run installs every repository's merge at once. Its first cause keeps the name
+        every runtime reads, and each further repository's merge gets its own file."""
+        marker = logs / self.cause_file
+        if marker.exists():
+            marker = logs / f"cause-{Id128.mint()}.json"
+        marker.write_text(json.dumps(FieldCodec.encode(InstallCause(repo, main))))
 
     @property
     def prefix(self) -> str:
@@ -231,9 +289,10 @@ class InstallLogs:
         return unit
 
     def retire(self) -> tuple[Path, ...]:
-        """The names carry no time, so age is each directory's own modification time."""
-        logs = sorted((path for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
-                       if path.is_dir()), key=lambda path: path.stat().st_mtime)
+        """The names carry no time, so age is each directory's own modification time; a
+        running unit's directory is its live output and is never retired."""
+        logs = sorted((unit.logs for unit in self.units() if not unit.running()),
+                      key=lambda path: path.stat().st_mtime)
         retired = tuple(logs[:-StoreBackup.kept])
         for path in retired:
             shutil.rmtree(path)
@@ -271,12 +330,11 @@ class InstallRun:
         """The install runs in its own unit and reads its request from a file beside the bus,
         so stopping the caller's unit, the connector's included, cannot cut it short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        request = self.unit.logs / "request.json"
-        request.write_text(json.dumps(FieldCodec.encode(self)))
+        self.unit.request.write_text(json.dumps(FieldCodec.encode(self)))
         print(f"install: {self.unit.unit} runs {self.target[:12]}; "
               f"diagnostics {self.unit.errors}", file=sys.stderr, flush=True)
         self.unit.start(
-            tree.path, (sys.executable, "-m", agent_comms.installer.__name__, str(request)),
+            tree.path, (sys.executable, "-m", agent_comms.installer.__name__),
             os.pathsep.join(map(str, tree.source_paths())), *options,
         )
 

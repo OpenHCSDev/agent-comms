@@ -1,1 +1,1 @@
-"""Commander tools: orders, verdicts, strikes, forced rule review and fleet watchers over agent-comms."""
+"""Commander tools: orders, verdicts, strikes and fleet watchers over agent-comms."""

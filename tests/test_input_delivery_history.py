@@ -1,7 +1,11 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
+import io
+import json
+from contextlib import redirect_stdout
 from dataclasses import replace
 
+from agent_comms.cli import main
 from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.comms import wire
 from agent_comms.field_codec import GoalId, InputId, TurnId
@@ -96,6 +100,20 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
         for r in reopened.goals.input_delivery("renamed", scope=scope).inputs
     ]
     assert stored_inputs(ledger.root).rows[BusInputKey(7)].native_id == "b" * 32
+
+
+def test_commander_reads_a_units_failed_inputs_through_the_tool(tmp_path):
+    """2026-10-24: the commander hand-wrote SQL against the bus to list pi-mi's lost inputs."""
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path)))
+    seed(comms, 'owner')
+    output = io.StringIO()
+    with redirect_stdout(output):
+        code = main(['--root', str(comms.root), 'tool', '--tool', 'comms_input_delivery',
+                     '--arguments', json.dumps({'thread': 'owner'})])
+    assert code == 0, output.getvalue()
+    overview = json.loads(output.getvalue())
+    assert {row['sequence'] for row in overview['inputs']} >= {2, 8}
 
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
