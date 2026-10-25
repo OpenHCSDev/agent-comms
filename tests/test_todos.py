@@ -44,6 +44,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.threads import Thread
+from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment,
     ChangeTodoState,
@@ -68,8 +69,6 @@ from agent_comms.todos import (
     StrikeReason,
     Todo,
     TodoCommand,
-    TodoConflict,
-    TodoError,
     TodoState,
     TodoStore,
     UnmergedListedPullRequest,

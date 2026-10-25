@@ -1856,13 +1856,14 @@ class SpawnedProcess(SynchronousProcess):
         stdin: int | BinaryIO | TextIO = subprocess.DEVNULL,
         output: int | BinaryIO | TextIO = subprocess.DEVNULL,
         stderr: int | BinaryIO | TextIO = subprocess.STDOUT,
+        pass_fds: tuple[int, ...] = (),
         runtime: LaunchRuntime = LaunchRuntime.running(),
         lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
     ) -> Generator[SpawnedProcess]:
         """Yield the child before it executes; leaving the body releases it, raising reaps it."""
         if not command:
             raise ValueError("A child command is required")
-        with Platform.current().launch(command, (), runtime, lifetime) as launch:
+        with Platform.current().launch(command, pass_fds, runtime, lifetime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdin=stdin, stdout=output,
                                  stderr=stderr)
             try:
