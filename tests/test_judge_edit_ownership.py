@@ -77,3 +77,21 @@ def test_a_second_verdict_on_one_edit_is_refused(two_orders):
     judged = store.apply("P1", verdict)
     with pytest.raises(TodoError, match="already has a verdict"):
         store.apply("P1", replace(verdict, expected_revision=judged.revision))
+
+
+def test_an_edit_in_a_released_problems_checkout_joins_no_held_order(two_orders):
+    ctx, checkout = two_orders
+    released = checkout["P1"].with_name(checkout["P1"].name.replace("--P1", "--P9"))
+    recorded_edit(ctx, "p9-call", str(released / "nine.py"), "NINE = 'released problem'")
+    recorded_edit(ctx, "p2-call", str(checkout["P2"] / "two.py"), "TWO = 'second problem'")
+    assert [(edit.id, edit.problem) for edit in unjudged(ctx).values()] == [("p2-call", "P2")]
+
+
+def test_reading_a_stored_reason_never_flags_its_words(capsys):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.todos import VerdictReason
+
+    FieldCodec.decode(VerdictReason, "the store cutover happened before this verdict was written")
+    assert capsys.readouterr().err == ""
+    VerdictReason.refused("the store cutover happened before this verdict was written")
+    assert "Flag: jargon cutover" in capsys.readouterr().err
