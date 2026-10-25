@@ -2029,8 +2029,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     @cached_property
     def cited_revision(self) -> SourceRevision:
-        heads = tuple(map(PullRequestHeadRevision, self.linked_requests))
-        return CitedRevisions((*heads, MainRevision())) if heads else MainRevision()
+        return CitedRevisions((*map(PullRequestHeadRevision, self.linked_requests), MainRevision()))
 
     def require_references(self) -> None:
         root, revision = self.check.directory, self.cited_revision
