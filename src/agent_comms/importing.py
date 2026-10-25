@@ -1,9 +1,11 @@
-"""A bounded, portable conversation snapshot of any harness session, written as a Pi session."""
+"""What an import writes as a thread's Pi session: a bounded, portable snapshot of any harness
+session, or a native Pi session kept byte for byte."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -68,8 +70,51 @@ class ImportedSessionMetadata:
         return ContextSourceText(source.public_description(), source.public_text(comms))
 
 
+class ImportedConversation(ABC):
+    """A session an import registers as a stopped thread: where it ran and the Pi session it becomes."""
+
+    harness: type[Harness]
+    source_id: str
+    project: str
+    title: ThreadText
+    messages_seen: int
+    truncated_messages: int
+    notices: tuple[str, ...]
+    historical_instructions: tuple[CodexRolloutProvenance, ...]
+
+    @property
+    @abstractmethod
+    def imported_messages(self) -> int: ...
+
+    @abstractmethod
+    def session_bytes(self, project: Path) -> bytes:
+        """The thread's Pi session file, for a thread working in ``project``."""
+
+
 @dataclass(frozen=True, slots=True)
-class ImportSnapshot:
+class KeptPiSession(ImportedConversation):
+    """A native Pi session is already what a thread runs: its file is the session, unchanged."""
+
+    harness: type[Harness]
+    source: Path
+    source_id: str
+    project: str
+    messages_seen: int
+    title: ThreadText = NoThreadText()
+    truncated_messages: int = 0
+    notices: tuple[str, ...] = ()
+    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
+
+    @property
+    def imported_messages(self) -> int:
+        return self.messages_seen
+
+    def session_bytes(self, project: Path) -> bytes:
+        return self.source.read_bytes()
+
+
+@dataclass(frozen=True, slots=True)
+class ImportSnapshot(ImportedConversation):
     harness: type[Harness]
     source_id: str
     project: str
@@ -91,6 +136,13 @@ class ImportSnapshot:
             return buffer
 
         return asyncio.run(collect()).snapshot(history.harness)
+
+    @property
+    def imported_messages(self) -> int:
+        return len(self.messages)
+
+    def session_bytes(self, project: Path) -> bytes:
+        return self.pi_session(project).encode()
 
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
@@ -204,10 +256,10 @@ class ThreadImported(CliResult):
     historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     @classmethod
-    def of(cls, thread: str, session_file: Path, snapshot: ImportSnapshot) -> ThreadImported:
+    def of(cls, thread: str, session_file: Path, snapshot: ImportedConversation) -> ThreadImported:
         return cls(
             thread, str(session_file), snapshot.harness, snapshot.source_id,
-            len(snapshot.messages), snapshot.messages_seen - len(snapshot.messages),
+            snapshot.imported_messages, snapshot.messages_seen - snapshot.imported_messages,
             snapshot.truncated_messages, snapshot.notices, snapshot.historical_instructions,
         )
 

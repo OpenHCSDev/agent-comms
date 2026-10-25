@@ -3,7 +3,8 @@
 Every harness has two ways to reach a session's past: an offline reader of the files the harness
 stores, and an online reader that asks the running harness. Both decode into the transcript
 updates the live bridges publish, so an import and a bridge read a session through one decoder.
-Each harness declares itself once, on its parent (ClaudeHistory, CodexHistory, OpenCodeHistory);
+Each harness declares itself once, on its parent (ClaudeHistory, CodexHistory, OpenCodeHistory,
+PiHistory);
 a reader inherits its harness parent and its path (OfflineHistory, OnlineHistory), and is found by
 that crossing. A bridge is its harness's online reader plus delivery and following; it declares
 itself outside the family, because it follows a session rather than reading one more way.
@@ -22,7 +23,8 @@ from pydantic import TypeAdapter
 from agent_comms.agent_runtime import ReadsHistory
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import SubclassUnion
-from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness
+from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness, PiHarness
+from agent_comms.importing import ImportLimits, ImportSnapshot, ImportedConversation
 
 from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice, ThreadText
@@ -43,6 +45,10 @@ class History(ReadsHistory, DeclaredFamily, affix="History", discovery_package="
         parent, = (parent for parent in HarnessHistory.__subclasses__() if parent.harness is harness)
         return cls.members_with(parent)
 
+    def imported(self, limits: ImportLimits) -> ImportedConversation:
+        """What importing this session writes: a bounded conversation rebuilt as a Pi session."""
+        return ImportSnapshot.read(self, limits)
+
 
 class HarnessHistory(History):
     """Its direct subclasses each declare one harness; every reader inherits one of them."""
@@ -54,6 +60,10 @@ class ClaudeHistory(HarnessHistory):
 
 class CodexHistory(HarnessHistory):
     harness = CodexHarness
+
+
+class PiHistory(HarnessHistory):
+    harness = PiHarness
 
 
 class OpenCodeHistory(HarnessHistory):

@@ -1132,7 +1132,7 @@ class ImportingCliCommand(ConversationLimitsCliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread"):
-    help = "Import a stored Claude Code, Codex or OpenCode session as a stopped thread"
+    help = "Import a stored session of the --harness as a stopped thread"
     harness: Annotated[
         type[Harness],
         Editor(ChoiceTargetField),
@@ -1144,7 +1144,7 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
         Argument(
             flags=("--source",),
             options={
-                "help": "Claude Code or Codex session JSONL, OpenCode export JSON or opencode.db"
+                "help": "The harness's stored session: a session JSONL, OpenCode export JSON or opencode.db"
             },
         ),
     ]
