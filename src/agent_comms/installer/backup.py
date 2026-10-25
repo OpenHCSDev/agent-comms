@@ -40,6 +40,7 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOpera
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
+from agent_comms.typed_table import WriterOwnedStore
 
 
 @dataclass(frozen=True)
@@ -54,32 +55,32 @@ class SavedFile:
         return cls(observed.st_size, observed.st_mtime_ns, observed.st_ino)
 
 
-def observed_files(root: Path) -> dict[Path, os.stat_result]:
-    """Every regular file an installation carries, with its metadata."""
+def bus_paths(root: Path, original_root: Path,
+              external: tuple[type[WriterOwnedStore], ...]) -> tuple[Path, ...]:
+    """One inventory of bus content and the selected writer-owned stores."""
     excluded = RuntimeFile.paths_in(root)
-    observed: dict[Path, os.stat_result] = {}
+    observed: list[Path] = []
     for path in root.rglob("*"):
         if path in excluded:
             continue
         info = path.lstat()
         if stat.S_ISREG(info.st_mode):
-            observed[path] = info
-    return observed
+            observed.append(path)
+    return (*observed, *(store.located(root, original_root) for store in external))
 
 
-def settle_bus_files(root: Path, original_root: Path, external: tuple[type[RootFile], ...] = ()) -> None:
+def settle_bus_files(root: Path, original_root: Path,
+                     external: tuple[type[WriterOwnedStore], ...] = ()) -> None:
     """Each selected declaration owns whether settling is valid for its file."""
-    paths = (*observed_files(root), *(owner.source_path(
-        root, original_root, owner.retained_name(root, root)) for owner in external))
+    paths = bus_paths(root, original_root, external)
     for resource, owner in RootFile.owned_files(root, paths, original_root).items():
         owner.settle(owner.source_path(root, original_root, resource.path))
 
 
-def bus_files(root: Path, original_root: Path, external: tuple[type[RootFile], ...] = ()
+def bus_files(root: Path, original_root: Path, external: tuple[type[WriterOwnedStore], ...] = ()
               ) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
     """One declaration-derived inventory for bus and writer-owned resources."""
-    paths = (*observed_files(root), *(owner.source_path(
-        root, original_root, owner.retained_name(root, root)) for owner in external))
+    paths = bus_paths(root, original_root, external)
     saved = {}
     for resource, owner in RootFile.owned_files(root, paths, original_root).items():
         source = owner.source_path(root, original_root, resource.path)

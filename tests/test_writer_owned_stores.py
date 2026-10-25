@@ -135,7 +135,7 @@ def writer_owned_step(writer_owned_store):
                     self.rewrite_stored(db, row, column, [
                         (column.encode(ChannelTarget("#comms")), BARE_TARGET),
                     ])
-            return Carried(count, rewritten=(store.retained_name(self.root, path),)
+            return Carried(count, rewritten=(store.retained_filename,)
                            if apply and count else ())
 
     return SavedViewCarry
@@ -154,7 +154,7 @@ def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
     step = writer_owned_step(root, root, tmp_path / "spill")
     assert step.input_files() == (store.path(),)
     assert step.carry(apply=False).changed == 1
-    name = store.retained_name(root, store.path())
+    name = store.retained_filename
     backup = StoreBackup.take(root, tmp_path / "route", step.input_files(), tmp_path / "backup")
     assert backup.selected_files() == (name,)
     assert name == Path("writer-owned") / store.declared_name

@@ -72,8 +72,7 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
             raise RelationViolationError(
                 f"{type(self).__name__} does not declare writer-owned input {store.declared_name}"
             )
-        name = store.retained_name(self.root, store.path())
-        return store.source_path(self.root, self.original_root, name)
+        return store.located(self.root, self.original_root)
 
     @staticmethod
     def writer_declarations(steps: Iterable[Carry | type[Carry]]) -> tuple[type[WriterOwnedStore], ...]:
@@ -222,8 +221,7 @@ class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, Pa
         with TemporaryDirectory() as directory:
             for store in self.stores:
                 store.practice_opening(self.root, self.original_root, Path(directory))
-                name = store.retained_name(self.root, store.path())
-                paths.append(store.source_path(self.root, self.original_root, name))
+                paths.append(store.located(self.root, self.original_root))
         return tuple(paths)
 
 

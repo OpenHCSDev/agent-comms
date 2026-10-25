@@ -222,7 +222,7 @@ def carried(
     root: Path,
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
     steps: tuple[StepRun, ...], expected: frozenset[Path],
-    original_root: Path, external: tuple[type[RootFile], ...] = (),
+    original_root: Path, external: tuple[type[WriterOwnedStore], ...] = (),
 ) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root, original_root, external)
@@ -794,9 +794,8 @@ class TargetStack(Stack):
             yield self
             return
         with ExitStack() as lifetime:
-            locks = tuple(lifetime.enter_context(store.retaining(store.source_path(
-                root, original_root, store.retained_name(root, store.path()),
-            ))) for store in stores)
+            locks = tuple(lifetime.enter_context(store.retaining(store.located(root, original_root)))
+                          for store in stores)
             program = self.program.borrowing(locks)
             lifetime.callback(self.commands.close_program, self.python, program)
             yield replace(self, program=program)

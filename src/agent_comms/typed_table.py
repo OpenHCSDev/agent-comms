@@ -2304,6 +2304,11 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
     retained_directory: ClassVar[Path] = Path("writer-owned")
+    retained_filename: ClassVar[Path]
+
+    def __init_subclass__(cls, **options: str | None) -> None:
+        super().__init_subclass__(**options)
+        cls.retained_filename = cls.retained_directory / cls.declared_name
 
     @classmethod
     def content_members(cls, path: Path) -> frozenset[Path]:
@@ -2313,7 +2318,11 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     @classmethod
     def retained_name(cls, root: Path, path: Path) -> Path:
-        return cls.retained_directory / cls.declared_name
+        return cls.retained_filename
+
+    @classmethod
+    def located(cls, root: Path, original_root: Path) -> Path:
+        return cls.source_path(root, original_root, cls.retained_filename)
 
     @classmethod
     def source_path(cls, root: Path, original_root: Path, name: Path) -> Path:
@@ -2322,19 +2331,17 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
     @classmethod
     def external_members(cls, root: Path, original_root: Path) -> Mapping[Path, type[RootFile]]:
         cls.load_declarations()
-        return {store.source_path(root, original_root, store.retained_name(root, store.path())): store
-                for store in cls.members_with(cls)}
+        return {store.located(root, original_root): store for store in cls.members_with(cls)}
 
     @classmethod
     def require_retained_name(cls, name: Path) -> None:
-        names = {store.retained_name(Path(), store.path())
-                 for store in WriterOwnedStore.members_with(WriterOwnedStore)}
+        names = {store.retained_filename for store in WriterOwnedStore.members_with(WriterOwnedStore)}
         if name.is_relative_to(cls.retained_directory) and name not in names:
             raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
 
     @classmethod
     def practice_opening(cls, root: Path, original_root: Path, directory: Path) -> None:
-        path = cls.source_path(root, original_root, cls.retained_name(root, cls.path()))
+        path = cls.located(root, original_root)
         if not path.is_file():
             return
         copied = directory / cls.declared_name
