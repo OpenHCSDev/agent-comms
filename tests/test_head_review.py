@@ -19,10 +19,10 @@ from agent_comms.standing_rules import (
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.work_branches import SourceGrowth
+from agent_comms.work_branches import SourceGrowth, WorkBranches
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
+    CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
@@ -141,6 +141,58 @@ def test_moved_head_posts_and_records_nothing(head_bus):
         invoke(comms, moved, ReviewedHeadVerdict(ACCEPTED))
     assert not comms.goals.todos.head_reviews(moved)
     assert not any("statuses/" in call[1] for call in github.calls())
+
+
+def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
+    comms, github, request = head_bus
+    source = reviewed_source
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+
+    (source.checkout / "base_only.py").write_text("advanced = True\n")
+    source.git(source.checkout, "add", "base_only.py")
+    source.git(source.checkout, "commit", "-m", "Advance the base independently")
+    source.git(source.checkout, "push", "origin", "main")
+    source.git(source.checkout, "checkout", "feature")
+    source.git(source.checkout, "merge", "--no-edit", "main")
+    merged = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
+    moved = opened(github, source, request.pr, merged)
+
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    assert pulls.open(request.repo)[0].has_head_review
+    assert comms.goals.todos.head_reviews(moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
+    assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls)
+    carried_posts = tuple(call for call in github.calls() if f"statuses/{merged}" in call[1])
+    assert len(carried_posts) == 1
+    assert f"description=carried from {request.head[:9]}: same change" in carried_posts[0]
+
+    owner = source.checkout / "owner.py"
+    owner.write_text(owner.read_text() + 'spacing = "a b"\n')
+    changed = source.publish_change("Add an unreviewed line", "owner.py")
+    added = opened(github, source, request.pr, changed)
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    assert not pulls.open(request.repo)[0].has_head_review
+    assert not comms.goals.todos.head_reviews(added)
+    assert not any(f"statuses/{changed}" in call[1] for call in github.calls())
+
+    owner.write_text(owner.read_text() + (
+        "\ndef evaluate(flag):\n    if flag:\n        print(flag)\n"
+        "        return 2\n    return 1\n"))
+    eight = opened(github, source, request.pr,
+                   source.publish_change("Review an eight-space return", "owner.py"))
+    invoke(comms, eight, ReviewedHeadVerdict(ACCEPTED))
+    owner.write_text(owner.read_text().replace("        return 2\n", "    return 2\n"))
+    four = opened(github, source, request.pr,
+                  source.publish_change("Move the return outside the branch", "owner.py"))
+    reader = WorkBranches(source.checkout)
+    assert eight.change_identity(reader, "main") != four.change_identity(reader, "main")
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    assert not pulls.open(request.repo)[0].has_head_review
+    assert not comms.goals.todos.head_reviews(four)
+    assert not any(f"statuses/{four.head}" in call[1] for call in github.calls())
 
 
 def test_only_a_head_linked_to_the_callers_held_order_refuses_its_orders(head_bus):

@@ -4017,7 +4017,7 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
     )
     repo: ClassVar[Generated] = Generated(
         RepositoryName,
-        Column(generated=f"json_extract({{request}}, '$.{FieldCodec.record_key(PullRequestHead, 'repo')}')"),
+        Column(generated=f"{{request}} -> '$.{FieldCodec.record_key(PullRequestHead, 'repo')}'"),
     )
     pr: ClassVar[Generated] = Generated(
         int, Column(generated=f"json_extract({{request}}, '$.{FieldCodec.record_key(PullRequestHead, 'pr')}')"),
