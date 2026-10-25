@@ -505,7 +505,7 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     async def register(self, bridge: CliBridge) -> None:
         """Most operations require an already registered reader."""
 
-    async def prepare(self, bridge: CliBridge) -> Binding:
+    async def prepare(self, bridge: CliBridge) -> SessionBinding:
         await self.register(bridge)
         return bridge.binding.registered(bridge.comms).bind(bridge.db)
 
