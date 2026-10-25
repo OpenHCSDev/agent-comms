@@ -135,6 +135,7 @@ class Repository:
         self.path = path
         self.root = root
         self.git("init", "-q")
+        self.git("remote", "add", "origin", str(SOURCE))
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(
@@ -339,7 +340,6 @@ def test_a_done_phase_fails_the_change_that_breaks_it(tmp_path: Path) -> None:
     objects = subprocess.check_output(["git", "-C", str(SOURCE), "rev-parse", "--path-format=absolute",
                                        "--git-common-dir"], text=True).strip()
     (tmp_path / ".git/objects/info/alternates").write_text(f"{objects}/objects\n")
-    repo.git("remote", "add", "origin", str(SOURCE))
     owned = "class Owned:\n    pass\n"
     base = repo.commit({"agent_comms/owned.py": owned})
     head = repo.commit({"agent_comms/owned.py": owned + "\n\ndef owns(value):\n"
