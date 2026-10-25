@@ -2590,7 +2590,7 @@ class DonePhaseBroken(Measure):
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
-        declared = Path(sys.modules[PlanPhase.__module__].__file__ or "").resolve()
+        declared = Path(inspect.getfile(PlanPhase)).resolve()
         if root != f"{declared.relative_to(REPOSITORY).parts[0]}/":
             return ()
         return tuple(partial(cls.failing, repo, revision(repo, ref)) for ref in (base, head))
