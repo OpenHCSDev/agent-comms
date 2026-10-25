@@ -166,6 +166,45 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     print(str(refused.value))
 
 
+def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
+    held_commander, cited_source, tmp_path,
+):
+    """Delivered work waits only on its run; its holder takes the next order."""
+    ctx = held_commander
+    merge_two_commit_fix(cited_source, tmp_path / 'bin', 4)
+    current = ctx.comms.goals.todos.get('P1')
+    check = OrderCheck(cited_source.checkout, 'cat count.txt', CountCheckResult(0))
+    with ctx.comms.goals.todos.writing() as connection:
+        replace(current, order=replace(current.order, check=check),
+                revision=current.revision + 1).upsert(connection)
+    link_pull_request(ctx, 'P1', 4)
+    with chdir(cited_source.checkout):
+        main(["done", "worker", "P1"], ctx)
+    assert not ctx.comms.goals.todos.get("P1").order.occupies_holder()
+    marker = ctx.root / "unfinished"
+    marker.touch()
+    second = replace(order(cited_source), id="second-order",
+                     check=OrderCheck(ctx.repos[0].checkout,
+                                      f"test ! -e {shlex.quote(str(marker))}"))
+    document = OrderFile(
+        second,
+        "The copied workflow still contains an unfinished decision that prevents completion",
+        "This is stupid because finished work waiting on its run must not idle its holder",
+        unplanned_reason=(
+            "This isolated workflow verifies holder release"
+            " rather than advancing the production plan."
+        ),
+    )
+    path = ctx.root / "second-order.json"
+    path.write_text(json.dumps(FieldCodec.encode(document)))
+    before = {todo.id for todo in ctx.comms.goals.todos.for_commander(ctx.incarnation)}
+    where = f"{second.owner.file}:{second.owner.line}"
+    main(["problem", str(path), "--to", "worker", "--where", where], ctx)
+    created = [todo for todo in ctx.comms.goals.todos.for_commander(ctx.incarnation)
+               if todo.id not in before]
+    assert [todo.holder for todo in created] == ["worker"]
+
+
 def test_done_checks_the_merged_tree_and_records_the_first_commit(
     held_commander, cited_source, tmp_path,
 ):
