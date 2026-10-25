@@ -1610,8 +1610,9 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
 class TextRepresentation[V](FieldRepresentation[V]):
     """External text scalars share strict decoding at the canonical boundary.
 
-    Its schema names the representation, so text with no declared spelling never shares a stored
-    form with plain ``str`` or with another representation; SpelledText declares one.
+    A text field's stored format is its wire spelling: the JSON type and the pattern it
+    accepts. The schema's description names the representation for readers and is
+    documentation, never part of the format.
     """
 
     @classmethod
