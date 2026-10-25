@@ -1,15 +1,13 @@
 import os
-import tomllib
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.packages import InstalledPackagesProbe
-from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution, StackProject
+from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 
 
@@ -103,12 +101,16 @@ def test_missing_and_ambiguous_lock_evidence_refuses():
         ambiguous.pins({"agent-comms": "1"}, "core")
 
 
-def test_the_stack_tracks_the_main_install_due_measures_and_refuses_a_unit_branch():
-    """Toad pinned to work/unit-toad--P694 after its merge: every install relocked the same
-    branch head while InstallDue saw main ahead, and launched the same install again."""
-    path = Path(__file__).resolve().parents[1] / "stack" / "pyproject.toml"
-    project = tomllib.loads(path.read_text())
-    StackProject.model_validate(project)
-    project["tool"]["uv"]["sources"]["batrachian-toad"]["branch"] = "work/unit-toad--P694"
-    with pytest.raises(ValidationError, match="batrachian-toad"):
-        StackProject.model_validate(project)
+def test_the_stack_relocks_every_branch_tracking_package_and_refuses_a_unit_branch():
+    """resolve() upgraded only stack/pyproject.toml's sources, so transitive metaclass-registry
+    stayed at fb7c871 before MroDispatch; Toad pinned to work/unit-toad--P694 after its merge
+    relocked the same branch head while InstallDue saw main ahead."""
+    path = Path(__file__).resolve().parents[1] / "stack" / "uv.lock"
+    lock = ResolvedLock.read(path)
+    tracked = lock.tracked()
+    assert {"batrachian-toad", "metaclass-registry", "textual"} <= set(tracked)
+    assert "objectstate" not in tracked
+    toad = next(entry for entry in lock.package if entry.name == "batrachian-toad")
+    toad.source.git = toad.source.git.replace("branch=main", "branch=work/unit-toad--P694")
+    with pytest.raises(ValueError, match="batrachian-toad"):
+        lock.tracked()
