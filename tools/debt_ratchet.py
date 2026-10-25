@@ -172,6 +172,14 @@ class Measure(DeclaredFamily, affix="Measure"):
         """The environment of a tool run in a revision extracted to the tree."""
         return dict(os.environ)
 
+    @classmethod
+    def checker_output(cls, result: subprocess.CompletedProcess[bytes], subject: str) -> str:
+        """A checker's report, once it exits as a finding run: zero or one."""
+        output = (result.stdout + result.stderr).decode()
+        if result.returncode not in (0, 1):
+            raise ValueError(f"{cls.__name__} could not check {subject}: {output}")
+        return output
+
     @staticmethod
     def source_paths(root: str, tree: Path) -> tuple[str, ...]:
         """Where a revision extracted to the tree imports from: the measured root's directory,
@@ -668,11 +676,9 @@ class CheckedRevision(Measure):
                 (sys.executable, "-m", *cls.command(tree, selected, side)),
                 cwd=tree, env=cls.environment(root, tree), timeout=600,
             )
-        if result.returncode not in (0, 1):
-            raise ValueError(f"{cls.__name__} could not check {ref}: {result.stderr}")
         # A checker reports each file under the path it was given, inside the tree or relative to
         # it; mypy also reports the modules it follows outside the tree, which are not measured.
-        output = (result.stdout + result.stderr).decode()
+        output = cls.checker_output(result, ref)
         reported = (Path(tree, match[1]) for match in cls.finding.finditer(output))
         return Counter(path.relative_to(tree).as_posix()
                        for path in reported if path.is_relative_to(tree))
@@ -834,9 +840,7 @@ class ClientTypeErrors(Measure):
                 env={**os.environ, "MYPYPATH": os.pathsep.join(
                     (str(Path(scratch, "src")), str(client.checkout / "src")))},
             )
-        if result.returncode not in (0, 1):
-            raise ValueError(f"{cls.__name__} could not check {client.name} at {ref}: {result.stderr}")
-        output = (result.stdout + result.stderr).decode()
+        output = cls.checker_output(result, f"{client.name} at {ref}")
         return Counter(f"{client.name}/{match[1]}" for match in cls.finding.finditer(output)
                        if match[1] in selected)
 
