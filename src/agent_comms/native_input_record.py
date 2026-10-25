@@ -278,7 +278,7 @@ class TriageNativeExecution(NativeInputExecution):
                 TriageNativeSource(input_id, ordinal, row.assignment_id).insert(db)
         except sqlite3.IntegrityError as error:
             # Only assignment_id is UNIQUE here; a key, CHECK or guard refusal is a bug.
-            if error.sqlite_errorname != "SQLITE_CONSTRAINT_UNIQUE":
+            if error.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
                 raise
             raise IdentityConflict("Native input membership must name distinct original sources") from error
 
