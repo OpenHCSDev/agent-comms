@@ -30,7 +30,7 @@ from agent_comms.locked_store import DurableFile
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.storage_room import (
     AllocationRoomWork,
     BuildRoomWork,
@@ -508,14 +508,10 @@ class UnitStorage:
 
 
 @dataclass(frozen=True)
-class StorageViolation(UndatedStandingRule, declared_name=None):
+class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
     """One family scan shares each held unit's storage snapshot between its violations."""
 
     storage: UnitStorage
-
-    @classmethod
-    def scan_owner(cls) -> type[StorageViolation]:
-        return __class__
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,

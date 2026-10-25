@@ -39,11 +39,13 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
+    CoreActsStandingRule,
     DatedStandingRule,
     IndependentStandingRule,
     OwedAnswer,
     ReasonedStandingRule,
     StandingRule,
+    FamilyScan,
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
@@ -90,7 +92,7 @@ class UninstalledMerge:
 
 
 @dataclass(frozen=True)
-class InstallDue(UndatedStandingRule):
+class InstallDue(UndatedStandingRule, FamilyScan):
     """A configured main not contained in the installed build can use an install, from the
     pass it leaves the build: due is a disposition, never a launch.
 
@@ -113,10 +115,6 @@ class InstallDue(UndatedStandingRule):
     @property
     @abstractmethod
     def action(self) -> str: ...
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return InstallDue
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -240,12 +238,8 @@ class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
         )
 
 
-class PlanRule(UndatedStandingRule, declared_name=None):
+class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
     """Rules read from the heartbeat's one look at the plans and the commander's orders."""
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return PlanRule
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -431,7 +425,7 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
+class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan):
     """A unit holds no next order while the board has unowned rows; Core hands the row to it
     without a commander turn, restarting the row's review window at the handoff."""
 
@@ -492,9 +486,12 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
                          if assignment.running_holders(snapshot))
         protected = {rule.todo.id for rule in retained}
         owners = {rule.previous.owner_identity for rule in retained}
-        idle = [unit for unit in cls.idle(comms, commander, scan) if unit.incarnation not in owners]
+        unowned = tuple(todo for todo in rows if todo.id not in protected)
+        # Reading every candidate's recent turns is the expensive part; no unowned row, no read.
+        idle = [unit for unit in cls.idle(comms, commander, scan)
+                if unit.incarnation not in owners] if unowned else []
         found = []
-        for todo in (todo for todo in rows if todo.id not in protected):
+        for todo in unowned:
             for unit in idle:
                 if not todo.strikes_against(unit.incarnation):
                     idle.remove(unit)
@@ -513,7 +510,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True, eq=False)
-class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
+class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     dispatch: WorkDispatch
 
     @property
@@ -531,7 +528,7 @@ class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
 
 
 @dataclass(frozen=True, eq=False)
-class RetainedHolderWheelSpin(UnownedWheelSpin, declared_name=None):
+class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     previous: Assignment
 
     def comparison_values(self) -> tuple[object, ...]:
@@ -578,20 +575,16 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
                 logging.info("%s", rule.rejected_line(error))
 
 
-class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
+class WaitingUnownedWheelSpin(UnownedWheelSpin):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
 
 
 @dataclass(frozen=True)
-class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=None):
+class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, declared_name=None):
     """A missing or stale successful pass, independent of whether a DM needed sending."""
 
     seconds: ClassVar[int] = 180
     since: float
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return HeartbeatSilent
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[HeartbeatSilent, ...]:
@@ -633,7 +626,7 @@ class HeartbeatNotStarted(HeartbeatSilent):
 
 @dataclass(frozen=True)
 class InboxUnavailable(IndependentStandingRule, DatedStandingRule, declared_name=None):
-    """A thread nothing can reach: every message sent to it waits unread.
+    """A thread nothing can reach: every message sent to it waits undelivered.
 
     Each member owns how its inbox reports the pause; the window and the date are shared.
     """
@@ -693,7 +686,7 @@ class UnitDeaf(InboxUnavailable):
     def line(self) -> str:
         return (f"UNDEAFEN {self.unit}: it has read none of its inbox since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
-                " waits unread -> read its drain diagnostic and fix that owner")
+                " waits undelivered -> read its drain diagnostic and fix that owner")
 
 
 @dataclass(frozen=True)

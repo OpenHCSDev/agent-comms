@@ -82,9 +82,9 @@ class Ping(DeclaredFamily, affix="Ping"):
         return any(subject.acted_on(acted) for subject in self.subjects)
 
     @property
+    @abstractmethod
     def commander_disposes(self) -> bool:
         """Whether a commander verb disposes of this line; only such a line locks the verbs."""
-        return True
 
     def board_line[Line: BoardLine](self, kind: type[Line]) -> Line:
         """This line as the commander's board holds it: locked once the answer window passes."""
@@ -101,15 +101,20 @@ class Ping(DeclaredFamily, affix="Ping"):
 
 @dataclass(frozen=True)
 class RulePing(Ping):
+    rule: type[StandingRule]
     observation: TextDigest
 
     @property
     def key(self) -> TextDigest:
         return self.observation
 
+    @property
+    def commander_disposes(self) -> bool:
+        return self.rule.commander_disposes
+
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
-        return cls(rule.observation_key(), text=rule.line(), subjects=rule.subjects())
+        return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
 
 
 @dataclass(frozen=True)

@@ -29,7 +29,7 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
-from agent_comms.ui_model.unit_state import AwaitingApplicationRun, AwaitingCommander
+from agent_comms.ui_model.unit_state import AwaitingApplicationRun, AwaitingCommander, DeliveredUnclosed
 from agent_comms_hooks.board import BoardLine
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.skill import CommanderStart
@@ -123,7 +123,7 @@ def test_the_board_rides_every_tool_call_until_a_packet_clears_it(tmp_path, monk
     lead = RecordedThreadIncarnation("lead", 1.0)
     # Past the answer window, and 30 s clear of the next minute so both calls render alike.
     began = RecordedEventTime(time.time() - AwaitingCommander.seconds - 30)
-    stale = RulePing(TextDigest.of("CLOSE"), text="CLOSE unit-a P1 -> close it", since=began)
+    stale = RulePing(DeliveredUnclosed, TextDigest.of("CLOSE"), text="CLOSE unit-a P1 -> close it", since=began)
     waiting = UnitPing(RecordedThreadIncarnation("worker", 1.0), AwaitingApplicationRun, (), (),
                        TextDigest.of("AWAIT"), text="AWAIT RUN worker", since=began)
     with claim.held(record), claim.reader_held(), Binding.open(record.store.parent) as db:

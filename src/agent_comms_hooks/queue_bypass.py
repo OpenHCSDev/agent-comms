@@ -1,9 +1,10 @@
-"""Only claude-ai lands work around the merge queue.
+"""Only claude-ai and the commander land work around the merge queue.
 
 Every agent acts as the same GitHub account, and that account may bypass the merge-queue
-ruleset so claude-ai can land an already diagnosed fix without waiting in the queue. A session
-on the fleet's machine never does: a merge that skips the queue is refused here, and work lands
-through the queue with its checks and the commander's verdict on the head.
+ruleset so claude-ai or the commander can land an already diagnosed fix without waiting in the
+queue, such as when the commander's own verdict tool is what the fix repairs. Every other
+session on the fleet's machine is refused here, and its work lands through the queue with its
+checks and the commander's verdict on the head.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
-from agent_comms_hooks import BashRefusal
+from agent_comms_hooks import BashRefusal, ClaudeToolHook
 from agent_comms_hooks.shell import Program, ShellCommand
 
 GH = Program("gh")
@@ -61,10 +62,15 @@ class ApiMerge(QueueBypass):
 class QueueBypassGuard(BashRefusal):
     headline = "Merge around the queue refused"
     advice = (
-        ". Only claude-ai lands work past the queue. Enqueue it with"
+        ". Only claude-ai and the commander land work past the queue. Enqueue it with"
         " `gh pr merge N --auto --merge`; the queue runs its checks and the"
         " commander's head verdict."
     )
+
+    @classmethod
+    def binds(cls, hook: ClaudeToolHook) -> bool:
+        """The commander's session, the one that holds its sources, may merge past the queue."""
+        return not hook.parts.exists()
 
     @classmethod
     def reasons(cls, command: str) -> tuple[str, ...]:
