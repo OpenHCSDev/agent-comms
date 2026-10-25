@@ -12,10 +12,10 @@ neither reaches are listed as deletion candidates, and a client import naming a 
 Core no longer has fails --check, the step the merge queue runs. That step writes this
 report to its job summary, so the report always describes the tree it was run on.
 
-The outgoing wire is a client too, of the Core an install upgrades from: the installed
-runtime answers every RuntimeProbe but a TargetProbe with its own installer, so --base REV
-reads Core at REV and --check fails when it lacks one of those probes or declares its
-fields differently.
+The outgoing wire is a client too, of the Core an install upgrades from. The
+CrossesRuntimes capability owns every declaration the outgoing runtime decodes.
+--base REV checks those contracts in CI; installation also checks the actual installed
+Core stamp before maintenance begins.
 
     python tools/module_layers.py
     python tools/module_layers.py --check [--base REV] [--report FILE]
@@ -38,7 +38,8 @@ from functools import cached_property
 from pathlib import Path
 
 from agent_comms.installer import probes
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.cli_bridges import monitor
+from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
 from typing_names import TypingImports, TypingReference
 
@@ -229,53 +230,6 @@ class ImportNames(ModuleReferences):
         self.record(node, *(f"{stem}.{alias.name}" for alias in node.names))
 
 
-@dataclass(frozen=True)
-class ClientImport:
-    """One absolute import statement in a stack client."""
-
-    client: str
-    path: str
-    line: int
-    module: str
-    names: tuple[str, ...] = ()
-
-    def __str__(self) -> str:
-        return f"{self.client}:{self.path}:{self.line} imports {self.module}"
-
-    def drift(self, package: Package) -> tuple[str, ...]:
-        """How the tree declares an imported name differently from what this client needs;
-        an import needs only the names."""
-        return ()
-
-
-@dataclass(frozen=True)
-class WireClass(ClientImport):
-    """A class one runtime encodes and another decodes: the tree must declare the same
-    annotated class attributes, its fields, in the same order."""
-
-    fields: tuple[str, ...] = ()
-
-    @staticmethod
-    def declared(node: ast.ClassDef) -> tuple[str, ...]:
-        fields: list[str] = []
-        for statement in node.body:
-            match statement:
-                case ast.AnnAssign(target=target, annotation=annotation):
-                    fields.append(f"{ast.unparse(target)}: {ast.unparse(annotation)}")
-        return tuple(fields)
-
-    def drift(self, package: Package) -> tuple[str, ...]:
-        path = package.modules[self.module]
-        drifted: list[str] = []
-        for node in ast.parse(path.read_text(), str(path)).body:
-            match node:
-                case ast.ClassDef(name=name) if name in self.names:
-                    if (fields := self.declared(node)) != self.fields:
-                        drifted.append(f"{name} declares ({', '.join(fields)}), "
-                                       f"sent as ({', '.join(self.fields)})")
-        return tuple(drifted)
-
-
 class ClientImportNames(ModuleReferences):
     """Records each absolute module one client file imports; the package keeps its own."""
 
@@ -390,30 +344,15 @@ class StackClient:
 
 
 class OutgoingWire(StackClient):
-    """The probes an installed runtime answers with its own installer: every RuntimeProbe
-    but a TargetProbe (installer/interpreter_operation.py), read from the family as this
-    tree declares it."""
+    """Every declaration carrying the cross-runtime capability, from its owning registry."""
 
     @classmethod
     def at(cls) -> OutgoingWire:
-        return cls("outgoing wire", Path(inspect.getfile(probes)).parents[3])
+        return cls("outgoing wire", Path(inspect.getfile(probes)).parents[4])
 
     @cached_property
     def imports(self) -> tuple[ClientImport, ...]:
-        found: list[ClientImport] = []
-        members: tuple[type[RuntimeProbe], ...] = RuntimeProbe.discover_members(probes, RuntimeProbe)
-        for member in members:
-            for probe in member.outgoing_wire():
-                lines, line = inspect.getsourcelines(probe)
-                match ast.parse("".join(lines)).body:
-                    case [ast.ClassDef() as node]:
-                        found.append(WireClass(
-                            self.name, str(Path(inspect.getfile(probe)).relative_to(self.checkout)),
-                            line, probe.__module__, (probe.__name__,), WireClass.declared(node),
-                        ))
-                    case body:
-                        raise ValueError(f"{probe.__qualname__}'s source is not one class: {body}")
-        return tuple(found)
+        return CrossesRuntimes.declarations()
 
 
 class ImportGraph:
@@ -611,7 +550,7 @@ class Package:
             (entry, drift)
             for entry in self.client_imports
             if self.provides(entry.module)
-            for drift in entry.drift(self)
+            for drift in entry.drift(self.src.parent)
         )
 
     @cached_property

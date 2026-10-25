@@ -24,6 +24,7 @@ import hashlib
 import os
 import shutil
 import sys
+import tarfile
 import tempfile
 import time
 import tomllib
@@ -145,6 +146,8 @@ from agent_comms.installer.reporting import (
     UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
+from agent_comms.installer.runtime_wire import CrossesRuntimes
+from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
@@ -553,6 +556,27 @@ class Stack:
                 raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
             os.replace(fetched, self.uv)
 
+    def require_runtime_wire(self, scratch: Path) -> None:
+        """Compare the target's wire with the source stamped into this installed wheel.
+
+        Isolated Python ignores the target installer's PYTHONPATH: the old wheel, not
+        the current checkout or its build metadata, owns the outgoing Core identity.
+        """
+        commit = self.commands.run(
+            self.python, "-I", "-c",
+            "from agent_comms.package_stamp import STAMP; print(STAMP.commit())",
+        ).strip()
+        with tempfile.TemporaryDirectory(dir=scratch, prefix="runtime-wire-") as directory:
+            tree = Path(directory)
+            archive = tree / "source.tar"
+            self.commands.git(self.checkout, "archive", "--format=tar",
+                              f"--output={archive}", commit, "src")
+            with tarfile.open(archive) as source:
+                source.extractall(tree, filter="data")
+            drift = CrossesRuntimes.drift(tree)
+            if drift:
+                raise RuntimeWireChanged(commit, drift)
+
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
         with self.lock.with_name("pyproject.toml").open("rb") as definition:
@@ -860,6 +884,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             installed.require_uv()
             if not installed.python.exists():
                 raise UpgradeRefused(f"No installed stack at {installed.python}")
+        installed.require_runtime_wire(spill_dir)
         staged = Stack.build(ScratchCheckout(tree.path), commands)
         with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)
