@@ -694,6 +694,13 @@ class SQLiteColumnShape(TypedRow):
             (row.declared_name,)))
 
     @classmethod
+    def key_differs(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
+        """Whether the stored table keys its rows by other columns than the row declares."""
+        stored = tuple(item.name for item in sorted(cls.of(db, row), key=lambda item: item.pk)
+                       if item.pk)
+        return stored != tuple(item.wire_name for item in row._columns if item.column.primary_key)
+
+    @classmethod
     def only_constraints_differ(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
         """Whether the stored table holds the declared columns under other constraints, such
         as a family CHECK that gained a member: rebuilding it carries every row, and SQLite

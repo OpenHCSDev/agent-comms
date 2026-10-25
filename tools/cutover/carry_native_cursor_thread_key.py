@@ -1,6 +1,5 @@
 """Fold each thread's per-claim native cursor rows into its newest, keyed by the thread alone."""
 
-import sqlite3
 from contextlib import closing
 from pathlib import Path
 from typing import ClassVar
@@ -15,13 +14,12 @@ from agent_comms.typed_table import SQLiteCatalogObject, SQLiteColumnShape
 
 class NativeCursorThreadKey(Carry):
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (CoordinationStore,)
-    retired_key: ClassVar[str] = "owner_claimed_generation"
 
     def carry(self, *, apply: bool) -> Carried:
         folded: dict[Path, list[CurrentNativeCursor]] = {}
         for path in self.input_files():
             with closing(CoordinationStore.read_snapshot(path)) as db:
-                if not CurrentNativeCursor.present(db) or not self.keyed_by_claim(db):
+                if not CurrentNativeCursor.present(db) or not SQLiteColumnShape.key_differs(db, CurrentNativeCursor):
                     continue
                 folded[path] = self.retired(CurrentNativeCursor.select(db))
         if apply:
@@ -39,11 +37,6 @@ class NativeCursorThreadKey(Carry):
             detail={"retired": sum(len(rows) for rows in folded.values())},
             rewritten=tuple(path.relative_to(self.root) for path in folded) if apply else (),
         )
-
-    @classmethod
-    def keyed_by_claim(cls, db: sqlite3.Connection) -> bool:
-        return any(column.name == cls.retired_key and column.pk
-                   for column in SQLiteColumnShape.of(db, CurrentNativeCursor))
 
     @staticmethod
     def retired(rows: list[CurrentNativeCursor]) -> list[CurrentNativeCursor]:
