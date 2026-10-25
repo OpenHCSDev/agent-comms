@@ -13,7 +13,7 @@ import pytest
 pytestmark = pytest.mark.refactor_guard
 
 ROOT = Path(__file__).resolve().parents[2]
-RAW_LAUNCHES = 33
+RAW_LAUNCHES = 32
 
 
 class RawLaunch(ast.NodeVisitor):
