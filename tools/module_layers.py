@@ -23,7 +23,9 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+import typing
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -61,12 +63,43 @@ LAYERS = (
 
 
 @dataclass(frozen=True)
-class Import:
-    """One import statement inside agent_comms naming another agent_comms module."""
+class Import(ABC):
+    """One import statement inside agent_comms naming another agent_comms module. Its
+    class says when the statement runs."""
 
     source: str
     target: str
     line: int
+
+    loads: typing.ClassVar[bool]
+    """Whether loading ``source`` runs it, so loading ``source`` loads ``target``."""
+
+    @classmethod
+    def in_function(cls) -> type[Import]:
+        """The class of an import written one function deeper."""
+        return CallTimeImport
+
+
+class LoadTimeImport(Import):
+    """At module level: it runs when its module loads."""
+
+    loads = True
+
+
+class CallTimeImport(Import):
+    """Inside a function body: it runs when the function is called."""
+
+    loads = False
+
+
+class CheckerImport(Import):
+    """Under ``if TYPE_CHECKING:``: only a type checker reads it."""
+
+    loads = False
+
+    @classmethod
+    def in_function(cls) -> type[Import]:
+        return cls
 
 
 class ModuleReferences(ast.NodeVisitor, ABC):
@@ -92,11 +125,41 @@ class ImportNames(ModuleReferences):
         self.package, self.module, self.found = package, module, found
         # relative imports start at the file's own directory, a package's __init__ included
         self.parent = ".".join(path.parent.relative_to(package.src).parts)
+        self.runs: type[Import] = LoadTimeImport
 
     def record(self, node: ast.stmt | ast.expr, *names: str) -> None:
         for name in names:
             if (target := self.package.resolve(name)) is not None:
-                self.found.append(Import(self.module, target, node.lineno))
+                self.found.append(self.runs(self.module, target, node.lineno))
+
+    def visit_within(self, runs: type[Import], nodes: list[ast.stmt] | list[ast.AST]) -> None:
+        outer, self.runs = self.runs, runs
+        for node in nodes:
+            self.visit(node)
+        self.runs = outer
+
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> None:
+        """Decorators, defaults and annotations run where the ``def`` runs; only the body
+        runs when the function is called. Wrapping the body in an Expression lets
+        iter_child_nodes yield a lambda's one expression and a def's statements alike."""
+        called = list(ast.iter_child_nodes(ast.Expression(body=node.body)))
+        self.visit_within(
+            self.runs,
+            [child for child in ast.iter_child_nodes(node) if all(child is not c for c in called)],
+        )
+        self.visit_within(self.runs.in_function(), called)
+
+    # NodeVisitor dispatches on these names; one method serves all three scopes.
+    visit_AsyncFunctionDef = visit_Lambda = visit_FunctionDef  # noqa: N815
+
+    def visit_If(self, node: ast.If) -> None:
+        match node.test:
+            case ast.Name(id="TYPE_CHECKING") | ast.Attribute(attr="TYPE_CHECKING"):
+                self.visit(node.test)
+                self.visit_within(CheckerImport, node.body)
+                self.visit_within(self.runs, node.orelse)
+            case _:
+                self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
         self.record(node, *(alias.name for alias in node.names))
@@ -233,6 +296,32 @@ class StackClient:
                 ast.parse(path.read_text(), relative)
             )
         return tuple(found)
+
+
+class ImportGraph:
+    """The modules reached from some modules through a set of import edges. Importing a
+    module imports every package above it first, so those are reached too."""
+
+    def __init__(self, edges: Iterable[Import]) -> None:
+        self.targets: dict[str, set[str]] = {}
+        for edge in edges:
+            self.add(edge.source, (edge.target,))
+
+    def add(self, source: str, targets: Iterable[str]) -> None:
+        self.targets.setdefault(source, set()).update(targets)
+
+    def reached(self, starts: Iterable[str]) -> set[str]:
+        seen: set[str] = set()
+        todo = list(starts)
+        while todo:
+            module = todo.pop()
+            if module in seen:
+                continue
+            seen.add(module)
+            parts = module.split(".")
+            todo.extend(".".join(parts[:end]) for end in range(1, len(parts)))
+            todo.extend(self.targets.get(module, ()))
+        return seen
 
 
 class Package:
@@ -393,20 +482,13 @@ class Package:
     def unreached(self) -> tuple[str, ...]:
         """Units no console script or stack client reaches through static imports,
         package __init__s included."""
-        edges: dict[str, set[str]] = {}
-        for edge in self.imports:
-            edges.setdefault(edge.source, set()).add(edge.target)
         clients = (target for entry in self.client_imports for target in self.client_targets(entry))
-        seen, todo = set(), [PACKAGE, *self.entry_points, *clients]
-        while todo:
-            module = todo.pop()
-            if module in seen:
-                continue
-            seen.add(module)
-            parts = module.split(".")
-            todo.extend(".".join(parts[:end]) for end in range(1, len(parts)))
-            todo.extend(edges.get(module, ()))
+        seen = ImportGraph(self.imports).reached([PACKAGE, *self.entry_points, *clients])
         return tuple(unit for unit in self.top_level if not any(self.unit(m) == unit for m in seen))
+
+    def load_graph(self) -> ImportGraph:
+        """The imports that run while modules load: a cycle through them deadlocks an import."""
+        return ImportGraph(edge for edge in self.imports if edge.loads)
 
     def markdown(self) -> str:
         lines = [
