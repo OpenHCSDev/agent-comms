@@ -1,7 +1,7 @@
 """Only a heartbeat line the commander can dispose of locks its writing verbs."""
 
 from agent_comms.build_identity import InstalledCommitInstallation, MissingCommitInstallation, RecordedBuildIdentity
-from agent_comms.commander_pings import RulePing, UnitPing
+from agent_comms.task_attachments.commander_pings import RulePing, UnitPing
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.text_digest import TextDigest
