@@ -60,6 +60,7 @@ from agent_comms.todos import (
     HeadVerdict,
     HeadReviewOrder,
     JudgedCall,
+    OrderQuote,
     SendBackVerdict,
     StrikeReason,
     SupersededVerdict,
@@ -75,6 +76,7 @@ from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
 
+EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
 
 
@@ -223,12 +225,16 @@ class EditReview(ReviewSubject):
         """The verdicts these IDs carry; a refusal exits before anything is written."""
         if not self.ids:
             sys.exit('Refused: select at least one edit ID:CODE')
-        orders = {todo.id: todo for todo in ctx.held_orders()
-                  if not options.problem or todo.id == options.problem}
+        orders = {todo.id: todo for todo in ctx.held_orders()}
         edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
+        if elsewhere := [f'{i} is {edits[i].problem}\'s' for i in ids
+                         if options.problem and edits[i].problem != options.problem]:
+            sys.exit(f'Refused: its checkout files each edit under one order: {elsewhere}')
+        if not options.lines:
+            sys.exit(f'Refused: --line is {EDIT_LINE}')
         if unread := [token for token in self.ids
                       if token != f'{token.split(":")[0]}:{edits[token.split(":")[0]].code()}']:
             sys.exit(f'Refused: wrong or missing read codes {unread}; read each edit to its "=== end" line')
@@ -279,8 +285,8 @@ class ReasonedVerb(JudgeVerb, declared_name=None):
     why: str
 
     def require_why(self) -> None:
-        if len(self.why.split()) < 6:
-            sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
+        if refused := VerdictReason.refused(self.why):
+            sys.exit(f'Refused: {refused}')
 
     def refused(self, number: int, code: object) -> str:
         """One batch entry's refusal, named by its own verb."""
@@ -307,7 +313,7 @@ class VerdictVerb(ReasonedVerb):
             options={
                 "action": "append",
                 "metavar": "LINE",
-                "help": "an exact diff line; repeat for each",
+                "help": EDIT_LINE,
             },
         ),
     ] = ()
@@ -331,7 +337,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
     pr: Annotated[int, Argument(options={"help": "review this PR instead of individual edits"})] = 0
     head: Annotated[str, Argument(options={"help": "the exact reviewed SHA; required with --pr"})] = ""
     repo: Annotated[str, Argument(options={"help": "registered repository name; optional for one repo"})] = ""
-    serves: Annotated[str, Argument(options={"help": "exact words of the linked order"})] = ""
+    serves: Annotated[str, Argument(options={"help": OrderQuote.rule})] = ""
 
     def subject(self, ctx: order.Commander) -> ReviewSubject:
         return ReviewSubject.from_options(self, ctx)
@@ -359,7 +365,7 @@ class OkVerb(HeadVerdictVerb):
     no_owner: Annotated[
         str,
         Argument(
-            flags=("--no-owner",), options={"help": "12+ words with because and absolute file:line"}
+            flags=("--no-owner",), options={"help": AcceptedVerdict.branch_rule}
         ),
     ] = ""
     peer: Annotated[

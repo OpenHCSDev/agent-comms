@@ -16,7 +16,7 @@ from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
-from .storage_rules import StorageRule
+from .storage_rules import StorageRoots, StorageRule
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .tool_declaration import EditCall
@@ -231,23 +231,21 @@ class OrderEditRead[Result](OrderRead[Result]):
 @dataclass(frozen=True)
 class EditWorkplaces:
     """Which of one unit's held orders an edit belongs to. An edit inside a problem checkout
-    belongs to that problem's order; any other path (scratch, a shared checkout) belongs to
-    the order the unit was given last. Each edit is read under exactly one order."""
+    belongs to that problem, held or not, so a released problem's edits join no other order;
+    any other path (scratch, a shared checkout) belongs to the order the unit was given last.
+    Each edit is read under at most one order."""
 
-    checkouts: dict[str, tuple[Path, ...]]
+    rule: StorageRule
+    roots: StorageRoots
     latest: str
 
     @classmethod
     def of(cls, rule: StorageRule, holder: Thread, todos: tuple[Todo, ...]) -> Self:
-        roots = rule.roots_of(holder)
-        return cls({todo.id: rule.problem_checkouts(roots, todo.id) for todo in todos},
+        return cls(rule, rule.roots_of(holder),
                    max(todos, key=lambda todo: todo.order.checked().at.recorded_at("An order")).id)
 
     def order_of(self, path: str) -> str:
-        edited = Path(path)
-        return next((problem for problem, checkouts in self.checkouts.items()
-                     if any(edited.is_relative_to(checkout) for checkout in checkouts)),
-                    self.latest)
+        return self.rule.checkout_problem(self.roots, Path(path), self.latest)
 
 
 class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
