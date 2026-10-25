@@ -82,7 +82,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from agent_comms.repo import GitCommandError
-from agent_comms.head_review import PullRequestHead, ReadPullRequestHead
+from agent_comms.head_review import HeadReviewOrder, HeadReviewRelation, PullRequestHead, ReadPullRequestHead
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
@@ -3838,51 +3838,11 @@ class UnderReviewHeadVerdict(HeadVerdict):
             ReviewingProblemOrder, review=record))
 
 
-class HeadReviewRelation(DeclaredFamily):
-    """Order relationships share one declaration family and compose their capabilities."""
-
-
 class HeadOrderLink(HeadReviewRelation, declared_name=None):
     """The historical order relationship of a recorded head decision."""
 
     @abstractmethod
     def rejected(self, goals: Goals, record: HeadReviewRecord) -> None: ...
-
-
-class HeadReviewOrder(HeadReviewRelation, declared_name=None):
-    """The input that authorizes a head review's optional order change."""
-
-    @classmethod
-    def for_request(cls, todos: Sequence[Todo], request: PullRequestHead,
-                    link: Callable[[Todo], OrderLink], problem: str = "") -> HeadReviewOrder:
-        """``link`` is the reviewing verb's own link to the order that holds the head."""
-        linked = tuple(todo for todo in cls.holding(todos, request)
-                       if not problem or todo.id == problem)
-        if not linked:
-            if problem:
-                raise TodoError(f"{problem} does not hold this pull request.")
-            return NoHeadOrder()
-        if len(linked) != 1:
-            raise TodoError("More than one order holds this pull request; select --problem.")
-        todo, = linked
-        return OrderHeadReview(todo.revision, link(todo))
-
-    @staticmethod
-    def holding(todos: Sequence[Todo], request: PullRequestHead) -> tuple[Todo, ...]:
-        """The open orders whose current declaration holds this head, held or released."""
-        return tuple(todo for todo in todos if todo.repo == request.repo
-                     and todo.order.holds_head(request))
-
-    @abstractmethod
-    def require_reviewer(self, goals: Goals, request: PullRequestHead,
-                         actor: ThreadIncarnation) -> None: ...
-
-    def director_identity(self, goals: Goals, actor: ThreadIncarnation) -> ThreadIncarnation:
-        return actor
-
-    @abstractmethod
-    def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
-                      actor: ThreadIncarnation) -> HeadReviewRecord: ...
 
 
 @dataclass(frozen=True)
@@ -3965,12 +3925,27 @@ class OrderHeadReview(HeadReviewOrder):
     expected_revision: int
     link: OrderLink
 
+    @classmethod
+    def for_request(cls, todos: Sequence[Todo], request: PullRequestHead,
+                    link: Callable[[Todo], OrderLink], problem: str = "") -> HeadReviewOrder:
+        """The verb constructs its relationship from the same open orders the board reads."""
+        linked = tuple(todo for todo in cls.holding(todos, request)
+                       if not problem or todo.id == problem)
+        if not linked:
+            if problem:
+                raise TodoError(f"{problem} does not hold this pull request.")
+            return NoHeadOrder()
+        if len(linked) != 1:
+            raise TodoError("More than one order holds this pull request; select --problem.")
+        todo, = linked
+        return cls(todo.revision, link(todo))
+
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
         self.link.require_current(goals.todos.get(self.link.problem), actor)
 
     def director_identity(self, goals: Goals, actor: ThreadIncarnation) -> ThreadIncarnation:
-        return actor.require_recorded().acting_for(goals.todos.get(self.link.problem).creator)
+        return actor.require_recorded().acting_for(goals.todos.get(self.link.problem).creator_identity)
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> OrderHeadReviewRecord:

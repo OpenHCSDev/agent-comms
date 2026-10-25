@@ -44,7 +44,7 @@ from agent_comms.field_codec import (
     SelectingArgumentDefault,
 )
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, UnitSubject
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
@@ -61,7 +61,7 @@ from agent_comms.todos import (
     ReviewedHeadVerdict,
     RejectedHeadVerdict,
     HeadVerdict,
-    HeadReviewOrder,
+    OrderHeadReview,
     JudgedCall,
     LinkedHeadReview,
     OrderLink,
@@ -320,7 +320,7 @@ class PullRequestReview(ReviewSubject):
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
         options.check_edits([])
-        linked = HeadReviewOrder.for_request(ctx.todos(), self.request, options.order_link,
+        linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
         ctx.call(CommsHeadVerdictTool(request=self.request,
                                     operation=options.head_operation(), order=linked))

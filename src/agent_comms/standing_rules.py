@@ -21,7 +21,7 @@ from agent_comms.errors import RejectedEnforcementError, TodoConflict
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
 )
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
-        HeadVerdict, MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
+        MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
         UnmergedListedPullRequest,
     )
     from agent_comms.goal_management import Goals
@@ -607,9 +607,7 @@ class ReviewTimerUp(HeldOrderDue):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        from agent_comms.todos import HeadReviewOrder
-
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[ReviewTimerUp, ...]:
         todos = comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
         return tuple(
             rule
@@ -630,12 +628,15 @@ class ReviewTimerUp(HeldOrderDue):
 
     def line(self) -> str:
         return (f"READ {self.holder.name} {self.problem}: review timer up at {self.since.clock()},"
-                f" order {self.order} -> {self.clearing_commands()}")
+                f" order {self.order}")
 
 
 @dataclass(frozen=True)
 class HeadReviewTimerUp(HeadReviewCommands, ReviewTimerUp, declared_name=None):
     """A timer with a current PR head offers only that order's accepted verdicts."""
+
+    def line(self) -> str:
+        return f"{super().line()} -> {self.clearing_commands()}"
 
 
 @dataclass(frozen=True)
@@ -700,8 +701,6 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
 
     @classmethod
     def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
-        from agent_comms.todos import HeadReviewOrder
-
         now = time.time()
         snapshot = goals.registry.snapshot()
         todos = goals.todos.for_commander(snapshot.require(commander).incarnation)
@@ -736,8 +735,6 @@ class LinkedUnreviewedHead(UnreviewedHead, OrderRefusingStandingRule):
     @classmethod
     def reviewed(cls, pulls: ProgressRead, repo: RepositoryName,
                  todos: Sequence[Todo]) -> tuple[UnmergedListedPullRequest, ...]:
-        from agent_comms.todos import HeadReviewOrder
-
         return tuple(row for row in pulls.open(repo)
                      if HeadReviewOrder.holding(todos, PullRequestHead(repo, row.number, row.head)))
 
@@ -749,8 +746,6 @@ class OrderlessUnreviewedHead(UnreviewedHead):
     @classmethod
     def reviewed(cls, pulls: ProgressRead, repo: RepositoryName,
                  todos: Sequence[Todo]) -> tuple[UnmergedListedPullRequest, ...]:
-        from agent_comms.todos import HeadReviewOrder
-
         return tuple(row for row in pulls.open(repo)
                      if not HeadReviewOrder.holding(todos, PullRequestHead(repo, row.number, row.head)))
 

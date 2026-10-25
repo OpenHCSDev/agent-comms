@@ -12,12 +12,13 @@ from agent_comms.commander.standing import DeliveryAwaitingJudgement
 from agent_comms.field_codec import GoalId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.head_review import HeadReviewOrder
 from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp
 from agent_comms.todos import (
-    Assignment, ClaimOrder, HeadReviewOrder, LinkedHeadReview, NoHeadOrder, OrderClaim,
-    OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest,
+    Assignment, ClaimOrder, OrderHeadReview, OrderClaim,
+    OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
     PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StrikeReason, UnderReviewHeadVerdict, VerdictReason,
 )
 
@@ -78,7 +79,7 @@ def assert_review_preconditions(rule, comms, request):
             continue
         verb = judge.JudgeVerb.parse(author_arguments(command, todo))
         assert not verb.argument_problems()
-        scope = HeadReviewOrder.for_request(ctx.todos(), request, verb.order_link, verb.problem)
+        scope = OrderHeadReview.for_request(ctx.todos(), request, verb.order_link, verb.problem)
         scope.require_reviewer(comms.goals, request, ctx.actor_identity)
         for linked in HeadReviewOrder.holding(ctx.todos(), request):
             operation = RecordOrderHeadVerdict(linked.revision, OrderHeadReviewRecord(
@@ -102,8 +103,10 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     # The timer's own condition remains real: age the observed review timer in this read.
     timed = replace(todo, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
-    timer, = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
-    assert_review_preconditions(timer, comms, request)
+    timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
+    assert bool(timers) == (not claim_it)
+    for timer in timers:
+        assert_review_preconditions(timer, comms, request)
     for delivery in DeliveryAwaitingJudgement.read_open(
             comms.bus.bus, comms.registry.snapshot(), {todo.held().owner_identity: (todo,)},
             "lead", ()):
@@ -135,6 +138,9 @@ def test_claim_link_survives_two_sendbacks_and_released_review_changes_no_goal(b
     rule, = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
     assert UnderReviewHeadVerdict not in assert_review_preconditions(rule, comms, request)
     # A former holder can already be doing different work. A head review must not edit that goal.
+    other = comms.goals.todos.get("P1")
+    ReleaseTodo(other.revision, other.creator_identity, other.held(), StrikeReason(
+        "The worker stopped this independent fixture order before starting different assigned work")).record(comms.goals, other.id)
     comms.goals.update_goal("worker", SetGoalAction(text="Different work"))
     goal = comms.registry.require("worker").goal.require()
     command = next(command for command in re.findall(r"`([^`]+)`", rule.line())

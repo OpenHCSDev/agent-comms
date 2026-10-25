@@ -18,8 +18,7 @@ from .tool_result import ToolResult
 if TYPE_CHECKING:
     from .comms import Comms
     from .registration import Registration
-    from .head_review import PullRequestHead
-    from .todos import HeadReviewOrder
+    from .head_review import HeadReviewOrder, PullRequestHead
     from .threads import Thread
     from .tool_request import ToolRequest
 
