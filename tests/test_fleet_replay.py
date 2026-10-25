@@ -514,6 +514,25 @@ def test_replay_raises_each_incident_once(fleet):
     }
 
 
+def test_holders_in_one_plain_directory_share_no_worktree(fleet, tmp_path):
+    built, _ = fleet
+    home = tmp_path / "plain-project"
+    home.mkdir()
+    declare_test_bus(
+        built.comms,
+        threads=tuple(
+            Thread(name=name, tags=frozenset({"comms"}), worktree=str(home))
+            for name in ("first-home", "second-home")
+        ),
+    )
+    # Before `checkout add` both units run in the plain directory; the order checks in a real one.
+    checked_in = built.thread("behind").project_path
+    ordered = (built.order("first-home", checked_in, at=time.time()),
+               built.order("second-home", checked_in, at=time.time()))
+    assert [todo.id for todo in ordered] == [
+        built.problems["first-home"], built.problems["second-home"]]
+
+
 def test_an_empty_draft_is_the_first_commit_not_an_empty_pr(fleet):
     built, _ = fleet
     worktree = built.worktree("draft", base=built.main)

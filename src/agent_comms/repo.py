@@ -345,6 +345,11 @@ class Checkout:
     path: Path
 
     @classmethod
+    def present(cls, *paths: Path) -> tuple[Path, ...]:
+        """The given paths that are Git working trees; a plain directory holds no checkout."""
+        return tuple(path for path in paths if (path / ".git").exists())
+
+    @classmethod
     def add(cls, repository: Path | str, path: Path | str, start: CheckoutStart) -> Self:
         Repo.git(repository, "worktree", "add", *start.worktree_arguments(Path(path)))
         return cls.prepared(Path(path))

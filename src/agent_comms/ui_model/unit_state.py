@@ -155,7 +155,8 @@ class UnitObservation:
 
     def require_read(self) -> None:
         if self.todos:
-            self.pulls.branch_difference(self.thread.project_path)
+            for path in self.thread.home_checkouts:
+                self.pulls.branch_difference(path)
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
                 self.pulls.checkout(path).require_read()
         for source in self.sources:

@@ -121,6 +121,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
     commander_disposes: ClassVar[bool] = True
+    urgent: ClassVar[bool] = False
 
     @classmethod
     def cleared_by(cls, verb: type[CommanderVerb]) -> None:
