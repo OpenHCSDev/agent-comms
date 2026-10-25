@@ -524,7 +524,7 @@ class FilesRequest(DeclaredFamily, affix="Request"):
     def location(self, resource: FileResource) -> Path: ...
 
     def writer_path(self, store: type[WriterOwnedStore]) -> Path:
-        return self.location(store.resource(store.retained_filename))
+        return self.location(store.resource(store.retained_filename()))
 
 
 class LiveFilesRequest(FilesRequest):

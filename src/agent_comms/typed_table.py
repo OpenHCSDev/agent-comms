@@ -2327,11 +2327,10 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
     retained_directory: ClassVar[Path] = Path("writer-owned")
-    retained_filename: ClassVar[Path]
 
-    def __init_subclass__(cls, **options: str | None) -> None:
-        super().__init_subclass__(**options)
-        cls.retained_filename = cls.retained_directory / cls.declared_name
+    @classmethod
+    def retained_filename(cls) -> Path:
+        return cls.retained_directory / cls.declared_name
 
     @classmethod
     def content_members(cls, path: Path) -> frozenset[Path]:
@@ -2341,7 +2340,7 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     @classmethod
     def retained_name(cls, root: Path, path: Path) -> Path:
-        return cls.retained_filename
+        return cls.retained_filename()
 
     @classmethod
     def live(cls, root: Path) -> Path:
@@ -2358,7 +2357,7 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     @classmethod
     def require_retained_name(cls, name: Path) -> None:
-        names = {store.retained_filename for store in WriterOwnedStore.members_with(WriterOwnedStore)}
+        names = {store.retained_filename() for store in WriterOwnedStore.members_with(WriterOwnedStore)}
         if name.is_relative_to(cls.retained_directory) and name not in names:
             raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
 
