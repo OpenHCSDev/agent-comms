@@ -312,9 +312,16 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
         with self.locked():
+            # Refuse before an editor can prepare participants or journal a registration.
+            self.require_maintenance_open()
             original = self.read_revision_unlocked()
             original.document.purpose.require_write()
             yield RegistryEdit(self, original.document.copy(), original)
+
+    def retire_processes(self) -> None:
+        with self.editing() as edit:
+            edit.document.retire_processes()
+            edit.commit()
 
     def mark_historical(self) -> None:
         """Explicit archive creation/carry seals this declaration, idempotently."""

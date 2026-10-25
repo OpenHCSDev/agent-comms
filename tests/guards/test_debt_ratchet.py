@@ -148,8 +148,8 @@ def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):
                                     "    with store.locked():\n        pass\n"})
     status, report = repo.compare(base, head, StoreLockCalls)
     assert status == 1
-    grown = StoreLockCalls.key(f"{repo.root}/other.py")
-    assert report["delta"] == {StoreLockCalls.key(f"{repo.root}/turns.py"): -1, grown: 1}
+    grown = StoreLockCalls.at(f"{repo.root}/other.py").text
+    assert report["delta"] == {StoreLockCalls.at(f"{repo.root}/turns.py").text: -1, grown: 1}
     assert report["found"] == {grown: [{"path": f"{repo.root}/other.py", "line": line}
                                        for line in (2, 4)]}
 
@@ -173,6 +173,7 @@ class Repository:
         self.path = path
         self.root = root
         self.git("init", "-q")
+        self.git("remote", "add", "origin", str(SOURCE))
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(
@@ -377,7 +378,6 @@ def test_a_done_phase_fails_the_change_that_breaks_it(tmp_path: Path) -> None:
     objects = subprocess.check_output(["git", "-C", str(SOURCE), "rev-parse", "--path-format=absolute",
                                        "--git-common-dir"], text=True).strip()
     (tmp_path / ".git/objects/info/alternates").write_text(f"{objects}/objects\n")
-    repo.git("remote", "add", "origin", str(SOURCE))
     owned = "class Owned:\n    pass\n"
     base = repo.commit({"agent_comms/owned.py": owned})
     head = repo.commit({"agent_comms/owned.py": owned + "\n\ndef owns(value):\n"

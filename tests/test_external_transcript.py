@@ -104,6 +104,35 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
             publication.retire_message()
 
 
+def test_turn_owned_draft_refuses_maintenance_without_changing_the_saved_draft(tmp_path):
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.external_transcript import TurnDraftPublication
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+
+    comms = wire(tmp_path / 'wire')
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external('cli')
+    with transcript.writer_connection() as connection:
+        publication = TurnDraftPublication(transcript, connection, NativeTurnId('turn'))
+        publication.begin_message(1.0)
+        publication.publish(('before',))
+        barrier = MaintenanceBarrier(comms.registry.store.path)
+        hold = barrier.begin(MaintenanceOperator.current())
+        try:
+            with pytest.raises(RelationViolationError):
+                publication.publish(('held',))
+            with pytest.raises(RelationViolationError):
+                publication.retire_message()
+            with transcript.reading() as reader:
+                draft = reader.current_draft(transcript.root, transcript.incarnation)
+                assert draft.events[0].text == 'before'
+        finally:
+            barrier.clear(hold)
+        publication.publish(('after',))
+        with transcript.reading() as reader:
+            assert reader.current_draft(transcript.root, transcript.incarnation).events[0].text == 'after'
+
+
 @pytest.mark.asyncio
 async def test_earlier_page_requests_reach_initial_and_committed_watch_observations(tmp_path):
     turn_turn_id = NativeTurnId('turn')

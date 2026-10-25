@@ -11,8 +11,12 @@ branch head, so its imports root the reachability like a console script does. Mo
 neither reaches are listed as deletion candidates, and a client import naming a module
 Core no longer has fails --check, the step the merge queue runs.
 
+The installer package is a client too, of the Core it upgrades from: install ships it in
+installer.zip and runs it on the runtime already installed. --previous REV reads Core at REV,
+and --check fails when the installer imports a module or name that tree lacks.
+
     python tools/module_layers.py > docs/layout/MODULE_LAYERS.md
-    python tools/module_layers.py --check
+    python tools/module_layers.py --check [--previous REV]
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
+from typing import ClassVar
 
 from typing_names import TypingImports, TypingReference
 
@@ -298,15 +303,45 @@ class StackClient:
             clients.append(cls(name, checkout))
         return tuple(clients)
 
+    @property
+    def root(self) -> Path:
+        """The directory whose Python files are this client's."""
+        return self.checkout
+
+    def reader(self, relative: Path, found: list[ClientImport]) -> ClientImportNames:
+        return ClientImportNames(self.name, str(relative), found)
+
+    def keeps(self, entry: ClientImport) -> bool:
+        return True
+
     @cached_property
     def imports(self) -> tuple[ClientImport, ...]:
         found: list[ClientImport] = []
-        for path in sorted(self.checkout.rglob("*.py")):
-            relative = str(path.relative_to(self.checkout))
-            ClientImportNames(self.name, relative, found).visit(
-                ast.parse(path.read_text(), relative)
-            )
-        return tuple(found)
+        for path in sorted(self.root.rglob("*.py")):
+            relative = path.relative_to(self.checkout)
+            self.reader(relative, found).visit(ast.parse(path.read_text(), str(relative)))
+        return tuple(entry for entry in found if self.keeps(entry))
+
+
+@dataclass(frozen=True)
+class InstallerZip(StackClient):
+    """The installer package as installer.zip carries it to the runtime already installed
+    (RetainedProgram in installer/interpreter_operation.py). Its own modules come from the zip;
+    every other agent_comms import resolves in that older runtime."""
+
+    PACKAGE: ClassVar[str] = f"{PACKAGE}.installer"
+
+    @classmethod
+    def at(cls, root: Path) -> InstallerZip:
+        return cls("installer.zip", root / "src")
+
+    @property
+    def root(self) -> Path:
+        return self.checkout.joinpath(*self.PACKAGE.split("."))
+
+    def keeps(self, entry: ClientImport) -> bool:
+        """The zip carries the installer's own modules; only the rest resolve in the runtime."""
+        return entry.module != self.PACKAGE and not entry.module.startswith(self.PACKAGE + ".")
 
 
 class ImportGraph:
@@ -566,6 +601,31 @@ class Package:
         return "\n".join(lines) + "\n"
 
 
+def report(package: Package) -> bool:
+    """Print what a checked tree lacks for its clients; whether it lacks anything."""
+    for entry in package.missing:
+        print(f"missing module: {entry}", file=sys.stderr)
+    for entry, name in package.missing_names:
+        print(f"missing name: {entry} {name}", file=sys.stderr)
+    print(
+        f"{len(package.client_imports)} client imports of {len(package.client_surface)} units; "
+        f"{len(package.missing)} name a module this tree lacks, "
+        f"{len(package.missing_names)} a name its module does not define"
+    )
+    return bool(package.missing or package.missing_names)
+
+
+def previous_tree(revision: str, into: Path) -> Path:
+    """Core's source and project file at ``revision``, the runtime an install upgrades from."""
+    into.mkdir()
+    archive = subprocess.run(
+        ["git", "-C", str(ROOT), "archive", revision, "src", "pyproject.toml"],
+        check=True, capture_output=True,
+    ).stdout
+    subprocess.run(["tar", "-x", "-C", str(into)], input=archive, check=True)
+    return into
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.partition("\n")[0])
     parser.add_argument(
@@ -573,22 +633,23 @@ def main() -> int:
         action="store_true",
         help="fail when a stack client imports an agent_comms module this tree lacks",
     )
+    parser.add_argument(
+        "--previous",
+        metavar="REV",
+        help="with --check, also fail when the installer imports what Core at REV lacks",
+    )
     arguments = parser.parse_args()
     with tempfile.TemporaryDirectory() as clones:
         package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones)))
         if not arguments.check:
             sys.stdout.write(package.markdown())
             return 0
-        for entry in package.missing:
-            print(f"missing module: {entry}", file=sys.stderr)
-        for entry, name in package.missing_names:
-            print(f"missing name: {entry} {name}", file=sys.stderr)
-        print(
-            f"{len(package.client_imports)} client imports of {len(package.client_surface)} units; "
-            f"{len(package.missing)} name a module this tree lacks, "
-            f"{len(package.missing_names)} a name its module does not define"
-        )
-        return 1 if package.missing or package.missing_names else 0
+        lacking = report(package)
+        if arguments.previous:
+            previous = previous_tree(arguments.previous, Path(clones) / "previous")
+            print(f"installer.zip against Core at {arguments.previous}:")
+            lacking = report(Package(previous, (InstallerZip.at(ROOT),))) or lacking
+        return 1 if lacking else 0
 
 
 if __name__ == "__main__":
