@@ -127,6 +127,15 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         """A verb declaring that it clears this rule joins the action its line prints."""
         cls.clearing_verbs = (*cls.clearing_verbs, verb)
 
+    def command_values(self) -> Mapping[str, str]:
+        """The verb arguments this line knows, by argument name."""
+        return {}
+
+    def clearing_commands(self) -> str:
+        """The verbs that clear this line, each with the arguments this line fills."""
+        values = self.command_values()
+        return " or ".join(f"`{verb.command(values)}`" for verb in self.clearing_verbs)
+
     def attention(self) -> bool:
         return True
 
@@ -691,9 +700,10 @@ class OrderlessUnreviewedHead(UnreviewedHead):
 
 @dataclass(frozen=True)
 class StuckMerge(HeadLine, DatedStandingRule):
-    """An armed head GitHub will not merge: approved, queued and going nowhere."""
+    """An armed head GitHub will not merge: approved, queued and going nowhere. One line per
+    head, naming every block on it."""
     request: PullRequestHead
-    block: MergeBlock
+    blocks: tuple[MergeBlock, ...] = field(compare=False)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -703,19 +713,19 @@ class StuckMerge(HeadLine, DatedStandingRule):
     @classmethod
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
         return tuple(
-            cls(PullRequestHead(repo, row.number, row.head), block)
+            cls(PullRequestHead(repo, row.number, row.head), blocks)
             for repo in goals.registry.snapshot().commander_project.repository_names()
             for row in pulls.open(repo)
-            for block in row.stuck()
+            for blocks in (row.stuck(),) if blocks
         )
 
     def began(self) -> float:
-        return self.block.since
+        return min(block.since for block in self.blocks)
 
     def line(self) -> str:
         return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}:"
-                f" auto-merge armed but {self.block.what()}"
-                " -> fix the check at its owner or give it an owner now")
+                f" auto-merge armed but {'; '.join(block.what() for block in self.blocks)}"
+                f" -> {'; '.join(block.remedy() for block in self.blocks)}")
 
 
 @dataclass(frozen=True)

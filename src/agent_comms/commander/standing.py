@@ -164,8 +164,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
 class PendingInstallDue(InstallDue):
     @property
     def action(self) -> str:
-        verbs = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
-        return f"{verbs} installs Core main {self.target[:12]}; batch the landing requests first"
+        return f"{self.clearing_commands()} installs Core main {self.target[:12]}; batch the landing requests first"
 
     def launch(self, comms: Comms) -> str:
         """Every repository's merge installs the same Core target, so a run of that target
@@ -376,12 +375,10 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
         """A verdict on the delivered head acts on the delivery; a chat reply does not."""
         return (HeadSubject(self.request),)
 
-    def clearing_action(self) -> str:
-        """The verbs that declare they clear this debt render their own command lines."""
-        DeclaredFamily.discover_package(commander)
-        lines = " or ".join(f"`{verb.usage()}`" for verb in self.clearing_verbs)
-        return (f"{lines} (UNIT {self.unit}, PROBLEM {self.problem})."
-                f" --repo: {Repo.selection_refusal()}")
+    def command_values(self) -> Mapping[str, str]:
+        return {"unit": self.unit, "problem": self.problem,
+                "repo": self.request.repo.to_wire(), "pr": str(self.request.pr),
+                "head": self.request.head}
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
@@ -393,9 +390,12 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
         return (self.unit in reached and not action.resolves_claim(self.unit, self.problem)
                 and not any(rule.asked_by(frozenset((self.unit,))) for rule in answered))
 
+    def clearing_action(self) -> str:
+        DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
+        return self.clearing_commands()
+
     def line(self) -> str:
-        return (f"JUDGE {self.unit} {self.problem} delivery {self.cited}"
-                f" -> {self.clearing_action()}")
+        return f"JUDGE {self.unit} {self.problem} delivery {self.cited} -> {self.clearing_action()}"
 
 
 @dataclass(frozen=True)

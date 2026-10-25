@@ -18,21 +18,18 @@ from urllib.parse import quote
 
 @dataclass(frozen=True)
 class BoardLine:
-    """One heartbeat line the commander disposes of: its text, when its condition began, and
-    when it starts refusing the commander's writing verbs."""
+    """One heartbeat line the commander disposes of: its text and when its condition began."""
 
     table: ClassVar[str] = "board_line"
 
     text: str
     since: float
-    locks_at: float
 
     def aged(self, now: float) -> str:
         return f"{self.text} ({int((now - self.since) // 60)} min)"
 
     def line(self, now: float) -> str:
-        locked = " -> LOCKS your writing verbs until a recorded action disposes of it"
-        return f"BOARD: {self.aged(now)}{locked if now >= self.locks_at else ''}"
+        return f"BOARD: {self.aged(now)}"
 
     @classmethod
     def recorded(cls, store: Path) -> tuple[BoardLine, ...]:

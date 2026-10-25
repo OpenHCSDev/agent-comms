@@ -29,7 +29,7 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
-from agent_comms.ui_model.unit_state import AwaitingApplicationRun, AwaitingCommander, DeliveredUnclosed
+from agent_comms.ui_model.unit_state import AwaitingApplicationRun, DeliveredUnclosed
 from agent_comms_hooks.board import BoardLine
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.skill import CommanderStart
@@ -121,8 +121,8 @@ def test_the_board_rides_every_tool_call_until_a_packet_clears_it(tmp_path, monk
     claim = WatchClaim(hook.session_id)
     record = WatchRecord("lead", str(tmp_path / "bus"), ("watch",), tmp_path / "inbox")
     lead = RecordedThreadIncarnation("lead", 1.0)
-    # Past the answer window, and 30 s clear of the next minute so both calls render alike.
-    began = RecordedEventTime(time.time() - AwaitingCommander.seconds - 30)
+    # 30 s clear of the next minute so both calls render alike.
+    began = RecordedEventTime(time.time() - 90)
     stale = RulePing(DeliveredUnclosed, TextDigest.of("CLOSE"), text="CLOSE unit-a P1 -> close it", since=began)
     waiting = UnitPing(RecordedThreadIncarnation("worker", 1.0), AwaitingApplicationRun, (), (),
                        TextDigest.of("AWAIT"), text="AWAIT RUN worker", since=began)
@@ -130,8 +130,7 @@ def test_the_board_rides_every_tool_call_until_a_packet_clears_it(tmp_path, monk
         assert hook.take() == ()  # the bridge has recorded no packet
         BoardLineRow.record(db, CommanderDecisions(lead, (stale, waiting), (stale, waiting), ()))
         line, = stale.board(BoardLine)
-        assert line.locks_at <= time.time()
-        assert hook.take() == hook.take() == (line.line(time.time()),)
+        assert hook.take() == hook.take() == ("BOARD: CLOSE unit-a P1 -> close it (1 min)",)
         BoardLineRow.record(db, CommanderNotice(lead, (waiting,)))
         assert hook.take() == ()
 

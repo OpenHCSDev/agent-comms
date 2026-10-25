@@ -731,7 +731,7 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 
     def stuck(self) -> tuple[MergeBlock, ...]:
         """Blocks on a head whose auto-merge is armed: queued, and going nowhere."""
-        return tuple(block for _ in self.armed_times for block in self.merge_blocks)
+        return self.merge_blocks if self.armed_times else ()
 
     def landing(self) -> bool:
         """Armed, or carrying the commander's verdict, with nothing blocking the merge: the
