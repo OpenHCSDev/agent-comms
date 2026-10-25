@@ -13,7 +13,8 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
-from .field_codec import ThreadLookup, FieldCodec, NullMember, WireOmitDefault, GoalId
+from .field_codec import ThreadLookup, FieldCodec, NullMember, WireOmitDefault
+from .goal_scope import AllGoals, GoalScope
 from .message_reference import MessageReference
 from .messages import PublicSender
 from .read_basis import DMDisplayScope, MessageDisplayScope
@@ -107,12 +108,12 @@ class TurnRouting:
 class ScheduledTurn:
     prompt: str
     origin: turn_origin.TurnOrigin = NO_TURN_ORIGIN
-    goal_id: GoalId | None = None
+    goal_id: GoalScope = AllGoals()
     goal_wait_id: str | None = None
 
     @property
     def autonomous_goal(self) -> bool:
-        return self.goal_id is not None and self.origin.autonomous
+        return self.goal_id.schedules_goal() and self.origin.autonomous
 
     @classmethod
     def resuming_in_project(cls, project: str) -> ScheduledTurn:

@@ -2,6 +2,7 @@
 
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
+from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.routing import ScheduledTurn
 from delivery_owner_fixture import canonical_agent
@@ -18,7 +19,7 @@ async def test_reserved_goal_is_unchanged_and_schedules_after_operator_stop(comm
         generation = store.require_generation(goal.id)
         initial = owner.turns.goals.prepare_goal(session)
         assert isinstance(initial, ScheduledTurn)
-        assert initial.goal_id == goal.id
+        assert initial.goal_id == OneGoal(goal.id)
         permit = store.claim_launch(store.reserve(
             goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number),
         ))
@@ -35,7 +36,7 @@ async def test_reserved_goal_is_unchanged_and_schedules_after_operator_stop(comm
         assert isinstance(store.require_generation(goal.id).lifecycle, ReadyGeneration)
         scheduled = owner.turns.goals.prepare_goal(session)
         assert isinstance(scheduled, ScheduledTurn)
-        assert scheduled.goal_id == goal.id
+        assert scheduled.goal_id == OneGoal(goal.id)
         assert comms.registry.require(thread.name).goal == goal
         assert comms.registry.goal_history(thread.name) == history
         assert permit.reservation.generation + 1 == store.require_generation(goal.id).number

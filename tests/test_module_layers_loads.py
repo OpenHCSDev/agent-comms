@@ -33,6 +33,7 @@ def test_only_imports_that_run_while_the_module_loads_load_their_target(tmp_path
         path = tmp_path / "src" / "agent_comms" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(source)
+    (tmp_path / "pyproject.toml").write_text('[project.scripts]\nac = "agent_comms.user:main"\n')
     package = Package(tmp_path)
     loads = {
         edge.target: edge.loads for edge in package.imports if edge.source == "agent_comms.user"
