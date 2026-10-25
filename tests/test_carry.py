@@ -11,16 +11,16 @@ from pathlib import Path
 import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
-from agent_comms.cli_commands import StopCliCommand
+from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
 from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
+from agent_comms.installer.probes.commands import CliOutput, CliUndecodable
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstallClock, TargetProgram
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
-    BackedUpMigration,
     PracticeBus,
     PreparedMigration,
     RehearsalFiles,
@@ -213,7 +213,7 @@ def test_a_bus_dry_runs_only_the_steps_it_has_not_finished(staged, tmp_path, noi
     assert FinishedCarryStore.at(root).read().steps == (step.declared_name,)
 
 
-def test_backed_up_migration_restores_a_real_worker_failure(comms, staged, noisy_step):
+def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
     _, step = noisy_step
     saved = comms.root / "saved"
     saved.write_text("original")
@@ -221,13 +221,13 @@ def test_backed_up_migration_restores_a_real_worker_failure(comms, staged, noisy
     maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
     hold = maintenance.begin(MaintenanceOperator.current())
     with hold.holding():
-        migration = PreparedMigration.capture(hold, staged).extended(
-            BackedUpMigration, backup=StoreBackup.take(
-                comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill"))
+        backup = StoreBackup.take(
+            comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill")
+        migration = PreparedMigration.capture(hold, staged)
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
             migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
         assert saved.read_text() == "migrated"
-        migration.restore()
+        backup.undo()
         assert saved.read_text() == "original"
         assert staged.verify(comms.root) == migration.read
     maintenance.clear(hold)
@@ -260,6 +260,14 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
         stack.owners(comms.root, StopCliCommand, names).require_success(UpgradeRefused)
     saved = comms.registry.snapshot()
     assert all(saved.status(name).stopped for name in names[1:])
+
+
+def test_a_command_line_that_dies_before_answering_refuses_with_its_own_error():
+    """Install 14: the outgoing runtime's stop crashed opening its ledger and printed nothing;
+    the refusal names the crash instead of an empty document."""
+    died = CliOutput(1, "", "StorageUncertainError: Unsupported goal attempt schema")
+    with pytest.raises(CliUndecodable, match="StorageUncertainError"):
+        died.answer(TargetBatchResult)
 
 
 def test_upgrade_refuses_at_start_without_its_own_uv(stack):

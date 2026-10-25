@@ -34,7 +34,6 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from pydantic import TypeAdapter
 
 from agent_comms.active_route import (
     ActiveRoute,
@@ -56,12 +55,11 @@ from agent_comms.cli_commands import (
     TargetActionCliCommand,
     TargetBatchResult,
 )
-from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
+from agent_comms.field_codec import PathText
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer.backup import (
@@ -129,7 +127,7 @@ from agent_comms.installer.probes.carry import (
     MigrateOperation,
     RetireInputsOperation,
 )
-from agent_comms.installer.probes.commands import CliCommandProbe
+from agent_comms.installer.probes.commands import CliCommandProbe, CliRefused, CliUndecodable
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
@@ -166,7 +164,6 @@ if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
 
 HOME = Path.home()
-CORE_ERROR = TypeAdapter(CoreError.declared_union())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -614,24 +611,27 @@ class Stack:
     def cli[Answer: CliResult](self, root: Path, command: type[CliCommand[Answer]],
                                *arguments: str) -> Answer:
         """This bus's answer to ``command``, never the route's, decoded as the result the
-        command declares. A declared read-unavailable failure (the route index still
-        rebuilding, its writer busy) is waited out; every other failure refuses."""
-        invocation = command.invocation(*arguments)
+        command declares."""
+        return self.answer(root, command.invocation(*arguments), command.result_type())
+
+    def answer[Answer: CliResult](self, root: Path, invocation: tuple[str, ...],
+                                  result: type[Answer]) -> Answer:
+        """One command line's ``result`` on this bus. A declared read-unavailable failure
+        (the route index still rebuilding, its writer busy) is waited out; every other
+        failure refuses."""
         verb = f"agent-comms {' '.join(invocation)}"
         for _ in range(240):
-            completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
             try:
-                if not completed.returncode:
-                    return FieldCodec.decode(command.result_type(),
-                                             FieldCodec.parse(completed.stdout))
-                failure = CORE_ERROR.validate_json(completed.stdout)
-            except (MalformedRecord, ValueError) as malformed:
-                raise UpgradeRefused(f"{verb}: undecodable answer: {malformed}; "
-                                     f"stdout: {completed.stdout.strip()}") from malformed
-            if not issubclass(failure.exception_type, CoordinationReadUnavailable):
-                raise UpgradeRefused(f"{verb}: {failure.error}")
+                return self.probe(CliCommandProbe(("--root", str(root), *invocation))).answer(
+                    result)
+            except CliUndecodable as undecodable:
+                raise UpgradeRefused(f"{verb}: undecodable answer: {undecodable}") from undecodable
+            except CliRefused as refused:
+                if not issubclass(refused.failure.exception_type, CoordinationReadUnavailable):
+                    raise UpgradeRefused(f"{verb}: {refused}") from refused
+                waited = refused
             time.sleep(5)
-        raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {failure.error}")
+        raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {waited}")
 
     def call_steps[Answer](self, steps: tuple[Carry, ...],
                            operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
@@ -652,10 +652,9 @@ class Stack:
         if not names:
             return TargetBatchResult(())
         with OwnersPhase(command=command).running(self.commands.clock):
-            invocation = TargetActionCliCommand.invocation(
-                "--operation", command.declared_name, "--targets", *names)
-            completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
-            return FieldCodec.decode(TargetBatchResult, FieldCodec.parse(completed.stdout))
+            # A batch command answers every selection with its batch (MultipleTargets).
+            return self.answer(root, TargetActionCliCommand.invocation(
+                "--operation", command.declared_name, "--targets", *names), TargetBatchResult)
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """One start batch; keep each refusal in the installed or rollback report."""
@@ -1014,17 +1013,6 @@ class PreparedMigration(Extendable):
         return passed
 
 
-@dataclass(frozen=True)
-class BackedUpMigration(PreparedMigration):
-    """A live migration carries the recovery data its failure path needs."""
-
-    backup: StoreBackup
-
-    def restore(self) -> None:
-        if not self.backup.original():
-            self.backup.restore()
-
-
 class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> CarriedRehearsal:
         copied = practice.copy.path
@@ -1068,8 +1056,6 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 holder.enter_context(held.holding())  # this run's CLI calls read under its hold
             try:
                 try:
-                    self.installed.owners(self.root, StopCliCommand, running).require_success(
-                        UpgradeRefused)
                     with RetargetMaintenancePhase().running(self.staged.commands.clock):
                         held = maintenance.retarget(held, self.staged.runtime)
                         holder.close()
@@ -1080,9 +1066,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     if unrehearsed:
                         raise UpgradeRefused(
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
-                    original = PreparedMigration.capture(held, self.installed)
+                    settle_bus_files(self.root)
                     backup, selected_route = self.backed_up(selected)
-                    migration = original.extended(BackedUpMigration, backup=backup)
                 except BaseException as error:
                     with AbortMaintenancePhase().running(self.staged.commands.clock):
                         holder.close()
@@ -1093,10 +1078,17 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                         f"maintenance cleared; owners: {started}", file=sys.stderr)
                     raise
                 try:
+                    # The target stops the owners, after the backup: stopping settles their
+                    # turns in stores this install carries, which the outgoing runtime may be
+                    # unable to open (install 14, 2026-10-24: a ledger install 13 left
+                    # uncarried refused f23ca8968's every opening, so its stop answered nothing).
+                    self.staged.owners(self.root, StopCliCommand, running).require_success(
+                        UpgradeRefused)
+                    migration = PreparedMigration.capture(held, self.installed)
                     self.checkout_target()
                     passed = migration.carry(self.pending, self.staged)
                     passed.files.require_rehearsal(rehearsal.files)
-                    self.publish(migration.backup, selected_route)
+                    self.publish(backup, selected_route)
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
                         holder.close()
                         maintenance.clear(held)
@@ -1117,7 +1109,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                         return hold
 
                     rehold()
-                    migration.restore()
+                    backup.undo()
                     restored_hold = rehold()
                     head = self.installed.commands.git(
                         self.checkout, "rev-parse", "HEAD").strip()
@@ -1132,25 +1124,25 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     started = self.installed.start(self.root, running)
                     print(f"install: restored after failure ({type(error).__name__}: {error}); "
                           f"original runtime selected; owners: {started}; "
-                          f"backup: {migration.backup.description}",
+                          f"backup: {backup.description}",
                           file=sys.stderr)
                     raise InstallRolledBack(
-                        error, started, migration.backup.description,
+                        error, started, backup.description,
                         runtime=self.installed.runtime) from error
                 # Owner startup is reported per owner and never rolls the install back.
                 report.writer = RuntimeWriter(self.root, self.staged)
                 try:
                     retirement = tuple(replace(
-                        step, spill_dir=migration.backup.spill_directory(self.spill_dir),
+                        step, spill_dir=backup.spill_directory(self.spill_dir),
                     ) for step in self.pending)
                     passed = passed.after_acceptance(retirement, self.staged)
                 finally:
                     started = self.staged.start(self.root, running)
                 with BackupRetirePhase().running(self.staged.commands.clock):
-                    retired_backups = migration.backup.retain(self.spill_dir)
+                    retired_backups = backup.retain(self.spill_dir)
                 return passed.extended(
                     CarriedRun, stopped=tuple(running), services=restarted_services,
-                    started=started, restore_space=restore, backup=migration.backup.report(),
+                    started=started, restore_space=restore, backup=backup.report(),
                     retired_backups=retired_backups)
             finally:
                 holder.close()

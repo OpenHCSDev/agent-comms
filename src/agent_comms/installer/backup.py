@@ -164,6 +164,11 @@ class ResourceBackup(ABC):
     @abstractmethod
     def restore(self) -> None: ...
 
+    def undo(self) -> None:
+        """Put back whatever changed since the snapshot; an untouched root stays as it is."""
+        if not self.original():
+            self.restore()
+
     @abstractmethod
     def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
 
