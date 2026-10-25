@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast, get_args, get
 from agent_comms.build_identity import (
     BuildIdentity,
     CommitInstallation,
+    InstalledBuild,
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
@@ -1876,7 +1877,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def line(self) -> str:
         return "No order"
 
-    def installed_line(self, installed: RecordedBuildIdentity) -> str:
+    def installed_line(self, installed: InstalledBuild) -> str:
         """The board's line, read against the build its one read resolved."""
         return self.line
 
@@ -2443,7 +2444,7 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
     def line(self) -> str:
         return self.run.merged_line(f"at {self.sha[:9]}")
 
-    def installed_line(self, installed: RecordedBuildIdentity) -> str:
+    def installed_line(self, installed: InstalledBuild) -> str:
         """The installed build, not the merge, says whether the install is still owed."""
         return self.run.merged_line(
             installed.containing(self.installation_commits, self.check.directory).merged_state)
@@ -3346,7 +3347,8 @@ class TodoBatch:
         with goals.todos.writing() as db:
             for call in self.together:
                 call.write(db, goals.todos)
-            written = tuple(goals.todos._current(db, call.problem) for call in self.together)
+            written = goals.todos._snapshot_rows(
+                db, tuple(goals.todos._current(db, call.problem) for call in self.together))
         for call, changed in zip(self.together, written):
             call.operation.after_record(goals, changed)
         return (*written, *(call.operation.record(goals, call.problem) for call in self.alone))
@@ -5180,10 +5182,15 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
+        """Rows read in the transaction read history through its connection; a conflict
+        leaving it carries its row detached while that connection is still open."""
         try:
             with (RegistryStore.at(self.root).guarded_read(),
                   super(TodoStore, self).writing() as connection):
-                yield connection
+                try:
+                    yield connection
+                except TodoConflict as conflict:
+                    raise TodoConflict(self._snapshot_rows(connection, (conflict.current,))[0]) from conflict
         except sqlite3.Error as error:
             raise TodoStoreUnwritable(
                 f"{self.path}: {type(error).__name__}: {error}"
