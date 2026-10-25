@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus,
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 NOTIFICATION_EXCERPT = 110
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ThreadStatusModel:
     """What an open thread's status line shows, and its one-line overview."""
 
@@ -39,6 +39,12 @@ class ThreadStatusModel:
     presentation: ThreadPresentation
     summary: tuple[str, ...] = ()
     """Overview parts for a collapsed status: first summary line, latest inbound, recent count."""
+
+    def __eq__(self, other: object) -> bool:
+        row = cast(ThreadStatusModel, other)
+        return ((self.name, self.shown, self.lines, self.summary)
+                == (row.name, row.shown, row.lines, row.summary)
+                and self.presentation.same_status(row.presentation))
 
     @property
     def status(self) -> ThreadPresentationStatus:

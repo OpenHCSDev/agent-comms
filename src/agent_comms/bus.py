@@ -6,9 +6,9 @@ from agent_comms.activity_clocks import ActivityClocks, ChannelActivity
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from heapq import nlargest
 from itertools import islice, product
 from pathlib import Path
@@ -109,6 +109,37 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
         ))
         headers = (BusRow.require(db, seq=seq) for seq in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+
+@dataclass(frozen=True)
+class DisplayUnread:
+    """Unread totals at one bus boundary, with the read basis that owns them."""
+
+    through: int = -1
+    seen: ReadCursor = field(default_factory=ReadCursor)
+    scopes: tuple[ChannelDisplayScope, ...] = ()
+    viewer_names: tuple[str, ...] = ()
+    counts: Mapping[str, int] = field(default_factory=dict)
+
+    def advanced(
+        self, source: BusReader, scopes: tuple[ChannelDisplayScope, ...],
+        viewer_names: tuple[str, ...], seen: ReadCursor, snapshot: RegistryProvenance,
+    ) -> DisplayUnread:
+        through = source.revision()
+        unchanged = (self.through >= 0 and self.seen == seen
+                     and self.scopes == scopes and self.viewer_names == viewer_names)
+        if unchanged and through == self.through:
+            return self
+        counted = source.display_unread(
+            scopes, viewer_names, seen, snapshot, through=through,
+            after=self.through if unchanged else -1,
+        )
+        if unchanged:
+            return replace(counted, counts={
+                channel: self.counts[channel] + count
+                for channel, count in counted.counts.items()
+            })
+        return counted
 
 
 class BusReader(RouteCounts, ABC):
@@ -401,8 +432,10 @@ class BusReader(RouteCounts, ABC):
 
     def display_unread(
         self, scopes: Iterable[ChannelDisplayScope], viewer_names: Iterable[str],
-        seen: ReadCursor, snapshot: RegistryProvenance,
-    ) -> dict[str, int]:
+        seen: ReadCursor, snapshot: RegistryProvenance, *, through: int, after: int = -1,
+    ) -> DisplayUnread:
+        """Count one explicit sequence interval with the captured cursor predicate."""
+        scopes, viewer_names = tuple(scopes), tuple(viewer_names)
         counts = {}
         with self.observing() as db:
             for scope in scopes:
@@ -411,13 +444,13 @@ class BusReader(RouteCounts, ABC):
                 counts[scope.channel] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? '
+                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
                     f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
-                    (*bindings.values(), seen.lower_bound(scope, snapshot), *parameters,
-                     json.dumps(tuple(viewer_names))),
+                    (*bindings.values(), max(after, seen.lower_bound(scope, snapshot)), through,
+                     *parameters, json.dumps(viewer_names)),
                 ).fetchone()[0])
-        return counts
+        return DisplayUnread(through, seen, scopes, viewer_names, counts)
 
     def delivered_unanswered(
         self, recipient: RecordedThreadIncarnation, scope: MessageDisplayScope,

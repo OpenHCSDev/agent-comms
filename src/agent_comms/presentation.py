@@ -19,6 +19,7 @@ from .agent_activity import (
     RecordedRecipientActivity,
 )
 from .audience_manifest import FrozenRecipient
+from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
@@ -436,6 +437,7 @@ class BusPresentation:
         self.agents = agents
         self.goals = goals
         self._path = bus.bus.path
+        self._display_unread = DisplayUnread()
 
     @contextmanager
     def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
@@ -495,8 +497,10 @@ class BusPresentation:
         """
         seen = basis.seen(source)
         activity = {scope.channel: scope.activity(source) for scope in basis.scopes}
-        unread = source.display_unread(basis.scopes, basis.viewer_names, seen, basis.registry)
-        return activity, unread
+        self._display_unread = self._display_unread.advanced(
+            source, basis.scopes, tuple(sorted(basis.viewer_names)), seen, basis.registry,
+        )
+        return activity, self._display_unread.counts
 
 
 @dataclass(frozen=True, slots=True)
