@@ -159,7 +159,7 @@ class AttemptResolutions(Carry):
                             continue
                         counts.update(("decisions",))
                         mapped[row.legacy] = str(decision_column.encode(decision))
-            counts["decision_schema"] += schema_changes
+            counts += Counter(decision_schema=schema_changes)
             changed += len(updates) + len(decisions) + schema_changes
             if apply and (updates or schema_changes):
                 with (
