@@ -1469,11 +1469,11 @@ class TaggedRecordMember(RecordMember):
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
-        return _FamilyRecordDecoder(cls)
+        return structural
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        return _FamilyRecordDecoder(cls).decode_bound(data, {})
+        return cast(Self, _structural_decoder(cls).decode(data))
 
 
 class RepresentedProjection(MroDispatch):
