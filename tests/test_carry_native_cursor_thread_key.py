@@ -9,6 +9,7 @@ import pytest
 from cutover.carry_native_cursor_thread_key import NativeCursorThreadKey
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RootId, ThreadLookup
 from agent_comms.native_input_record import UnrecordedNativeColumn
@@ -45,7 +46,7 @@ def test_carry_keeps_each_threads_newest_cursor_and_rekeys_by_thread(tmp_path):
     newest_b = cursor("b", 9, 30)
     newest_c = cursor("c", 4, 12)
     path = claim_keyed_store(root, [cursor("b", 2, 10), cursor("b", 5, 20), newest_b, newest_c])
-    step = NativeCursorThreadKey(root, root, tmp_path / "spill")
+    step = NativeCursorThreadKey(LiveFilesRequest(root), tmp_path / "spill")
 
     dry = step.carry(apply=False)
     assert (dry.changed, dry.detail, dry.rewritten) == (1, {"retired": 2}, ())
@@ -68,4 +69,4 @@ def test_carry_refuses_to_regress_a_thread_whose_older_claim_covered_more(tmp_pa
     claim_keyed_store(root, [cursor("b", 2, 40), cursor("b", 5, 20)])
 
     with pytest.raises(RelationViolationError):
-        NativeCursorThreadKey(root, root, tmp_path / "spill").carry(apply=False)
+        NativeCursorThreadKey(LiveFilesRequest(root), tmp_path / "spill").carry(apply=False)

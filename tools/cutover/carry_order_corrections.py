@@ -51,7 +51,7 @@ class OrderCorrections(Carry):
 
     def carry(self, *, apply: bool) -> Carried:
         path = TodoStore.path_in(self.root)
-        self.require_confined(self.root, path)
+        self.require_confined(path)
         if not path.exists():
             return Carried(0)
         if apply:

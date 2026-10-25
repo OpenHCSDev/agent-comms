@@ -8,6 +8,7 @@ import pytest
 from cutover.carry_selected_slot_column import SelectedSlotColumn
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import SlotId
 from agent_comms.native_runtime_input import SelectedToolSlot
@@ -28,7 +29,7 @@ def old_slot_store(root: Path) -> Path:
 def test_carry_renames_the_stored_column_once(tmp_path):
     root = tmp_path / "root"
     path = old_slot_store(root)
-    step = SelectedSlotColumn(root, root, tmp_path / "spill")
+    step = SelectedSlotColumn(LiveFilesRequest(root), tmp_path / "spill")
 
     assert step.carry(apply=False).changed == 1
     with closing(sqlite3.connect(path)) as db:
@@ -48,4 +49,4 @@ def test_carry_refuses_a_table_holding_both_columns(tmp_path):
         db.execute(f'ALTER TABLE "{SelectedToolSlot.declared_name}" ADD COLUMN slot_id TEXT')
 
     with pytest.raises(RelationViolationError):
-        SelectedSlotColumn(root, root, tmp_path / "spill").carry(apply=False)
+        SelectedSlotColumn(LiveFilesRequest(root), tmp_path / "spill").carry(apply=False)
