@@ -182,6 +182,8 @@ class UnitState(UndatedStandingRule, declared_name=None):
     source: UnitObservation = field(compare=False, repr=False)
     verb: ClassVar[str]
     action: ClassVar[str]
+    holds_unit: ClassVar[bool] = True
+    """Whether the unit waits on the commander while this state's line stays owed."""
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:
@@ -455,6 +457,7 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
     verb = "CLOSE"
+    holds_unit = False
     action = "install the merge or close with the working application evidence"
 
     @classmethod

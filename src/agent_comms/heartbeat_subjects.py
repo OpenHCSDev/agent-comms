@@ -27,10 +27,17 @@ class HeartbeatSubject(DeclaredFamily, affix="Subject"):
         """Whether Core recorded an action on this subject at or after ``since``; ``actors`` are
         the names the commander and its forks publish under."""
 
+    @abstractmethod
+    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
+        """Who waits while this subject's line stays owed, given the units Core has paused."""
+
 
 @dataclass(frozen=True)
 class UnitSubject(HeartbeatSubject):
     unit: ThreadIncarnation
+
+    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
+        return (self.unit.name,) if self.unit.name in paused else ()
 
     def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
         return any(message.timestamp >= since for message in comms.bus.bus.latest_addressed(
@@ -41,6 +48,10 @@ class UnitSubject(HeartbeatSubject):
 @dataclass(frozen=True)
 class HeadSubject(HeartbeatSubject):
     request: PullRequestHead
+
+    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
+        """A pull request head waits on its verdict whatever its unit is doing."""
+        return (f"{self.request.repo.name}#{self.request.pr}",)
 
     def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
         return any(review.at.since(since) for review in comms.goals.todos.head_reviews(self.request))

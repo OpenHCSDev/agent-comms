@@ -480,6 +480,10 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     def clearing_action(self) -> str:
         """The action that clears this member's debt, printed by the refusing verb."""
 
+    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
+        """Who waits on this answer: whoever sent the owed message."""
+        return (self.message.sender,)
+
     def due(self, now: float) -> bool:
         return True
 

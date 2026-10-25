@@ -284,6 +284,9 @@ class UnitOwedAnswer(OwedAnswer, declared_name=None):
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
         return (self.message,) if unit.name == self.unit else ()
 
+    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
+        return (self.unit,)
+
 
 @dataclass(frozen=True)
 class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
