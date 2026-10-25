@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from aiohttp import ClientError
 
+from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.cli_bridges.codex import CodexAppServer
 from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
@@ -22,7 +23,7 @@ from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, UnmergedListedPullRequest
+from agent_comms.todos import OrderProgress, ProgressRead, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import UnitClock, UnitState
@@ -199,6 +200,7 @@ class CommanderHud(ToolResult):
         held = frame.todos
         progress = pulls.progress(held, comms.registry)
         timers = store.timers_up_in(held, now, progress)
+        installed = RecordedBuildIdentity.installed()
         edits = dict.fromkeys((todo.id for todo in held), 0) | {
             read.todo.id: read.read()
             for read in OrderEditCountRead.judgeable(comms.root, frame.live, progress)
@@ -209,12 +211,13 @@ class CommanderHud(ToolResult):
             requests = {
                 (todo.repo, request.number): request
                 for todo in orders
-                for request in pulls.listed(todo.repo, UnmergedListedPullRequest, todo)
+                for request in pulls.open_for(todo)
             }
             units.append(CommanderUnit(
                 unit, type(state), state.clock(),
                 tuple(CommanderOrder(
-                    todo.id, todo.text, todo.order.checked().id, todo.order.line, progress[todo.id],
+                    todo.id, todo.text, todo.order.checked().id, todo.order.installed_line(installed),
+                    progress[todo.id],
                     tuple(at for due, at in timers if due.id == todo.id),
                     todo.strike_count, edits[todo.id],
                 ) for todo in orders),
