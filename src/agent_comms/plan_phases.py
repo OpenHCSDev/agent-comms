@@ -79,6 +79,10 @@ class StoreGuardsPlan(Plan):
     document = "plans/STORE-GUARDS-PLAN.md"
 
 
+class OwnerAsksPlan(Plan):
+    document = "plans/OWNER-ASKS-PLAN.md"
+
+
 class OrderPhase(DeclaredFamily, affix="Phase"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
@@ -113,12 +117,16 @@ class PlanPhase(OrderPhase, declared_name=None):
     task: ClassVar[PhaseTask] = UnspecifiedPhaseTask()
 
     @classmethod
+    def phase_evidence(cls) -> PhaseEvidence:
+        return cls.evidence
+
+    @classmethod
     def serving(cls, todos: tuple[Todo, ...]) -> tuple[Todo, ...]:
         return tuple(todo for todo in todos if todo.order.phase is cls)
 
     @classmethod
     def done(cls, reading: PlanReading) -> bool:
-        return reading.holds(cls.evidence)
+        return reading.holds(cls.phase_evidence())
 
     @classmethod
     def holding(cls, reading: PlanReading) -> tuple[Todo, ...]:
@@ -176,6 +184,22 @@ class StoreGuardsPhase(PlanPhase, declared_name=None):
         ":!src/agent_comms/store_files.py", ":!src/agent_comms/locked_store.py",
         ":!src/agent_comms/skills/",
     )
+
+
+class OwnerAsksPhase(PlanPhase, declared_name=None):
+    plan = OwnerAsksPlan
+
+
+class ToadAskPhase(OwnerAsksPhase, declared_name=None):
+    """An ask whose code lands in Toad. Evidence reads only the plan repository's main, so the
+    plan document records the merged Toad commit under the phase's own name."""
+
+    @classmethod
+    def phase_evidence(cls) -> PhaseEvidence:
+        return PatternPresent(
+            rf"^- {cls.declared_name} landed: OpenHCSDev/toad@[0-9a-f]{{40}}$",
+            (OwnerAsksPlan.document,),
+        )
 
 
 class RetainedStorePhase(CommanderNativePhase):
@@ -263,14 +287,14 @@ class ParityPhase(CommanderNativePhase):
     """The native capability owners, not a second matrix of demonstrations, decide completion."""
 
     after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, CommanderPagePhase)
-    evidence = ParityEvidence(tuple(phase.evidence for phase in after))
+    evidence = ParityEvidence(tuple(phase.phase_evidence() for phase in after))
 
 
 class CutoverPhase(CommanderNativePhase):
     """The native evidence passes and the machine-wide commander configuration is gone."""
 
     after = (ParityPhase,)
-    evidence = AllEvidence((ParityPhase.evidence, PatternAbsent(r"\bCommanderConfig\b")))
+    evidence = AllEvidence((ParityPhase.phase_evidence(), PatternAbsent(r"\bCommanderConfig\b")))
 
 
 class SkillPhase(CommanderNativePhase):
@@ -988,3 +1012,59 @@ class LockCensusPhase(StoreGuardsPhase):
     """5: the debt ratchet counts lock calls outside the store owners and refuses growth."""
 
     evidence = PatternPresent(r"^class StoreLockCalls\(", ("tools/debt_ratchet.py",))
+
+
+class KeymapK2K7Phase(ToadAskPhase):
+    """Toad keymap K2 to K7: remappable F1/F2, focus-modal bindings, a binding menu (toad#1212)."""
+
+
+class PageQuarterScrollPhase(ToadAskPhase):
+    """Plain PageUp/PageDown scroll a quarter page; toad#1233 did only the shifted keys."""
+
+
+class LoadingSpinnerPhase(ToadAskPhase):
+    """The top loading spinner is back; both were removed instead of keeping it."""
+
+
+class CommanderLatencyPhase(OwnerAsksPhase):
+    """Each commander verb answers in under 5 s; they take about 30 s."""
+
+    evidence = FunctionDeclared("test_commander_verb_answers_under_five_seconds", ("tests",))
+
+
+class DeliveryLatencyPhase(OwnerAsksPhase):
+    """A bus message reaches its recipient on its next tool call; delivery slowed at 01:57 UTC
+    on 2026-10-25."""
+
+    evidence = FunctionDeclared("test_message_injects_into_next_tool_call", ("tests",))
+
+
+class RamBudgetPhase(OwnerAsksPhase):
+    """The fleet's memory owner is found and capped; desktop free RAM fell to 2.2 GB."""
+
+    evidence = FunctionDeclared("test_fleet_memory_stays_under_its_cap", ("tests",))
+
+
+class UnflattenModulesPhase(OwnerAsksPhase):
+    """The package structure for the flat modules of ``src/agent_comms`` is a declared plan."""
+
+    evidence = ClassDeclared("PackageStructurePlan", ("src/agent_comms/plan_phases.py",))
+
+
+class BoardLineLockTextPhase(OwnerAsksPhase):
+    """A board line says what the heartbeat gate does, which since #3345 is print, not refuse;
+    a JUDGE line names its verbs without their argparse usage."""
+
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"LOCKS your writing verbs", ("src",)),
+            PatternAbsent(r"verb\.usage\(\)", ("src/agent_comms/commander/standing.py",)),
+        )
+    )
+
+
+class ClosedUnmergedPrsPhase(OwnerAsksPhase):
+    """A standing rule flags a PR closed unmerged that holds commits main lacks (lost: toad
+    #1080, #1095)."""
+
+    evidence = ClassDeclared("ClosedUnmergedPullRequest", ("src/agent_comms",))

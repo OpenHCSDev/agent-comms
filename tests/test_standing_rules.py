@@ -2,6 +2,18 @@ import json
 import time
 from dataclasses import replace
 
+import pytest
+
+from agent_comms.cli_bridges.claude import BoardLineRow
+from agent_comms.cli_bridges.shared import Binding
+from agent_comms.commander.standing import GoalBlocked, RequestStalled
+from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_states import ActiveGoal, BlockedGoal, UnrecordedBlockGoal
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.text_digest import TextDigest
+from agent_comms_hooks.board import BoardLine
+
 
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.todos import (DirectiveText)
@@ -33,5 +45,51 @@ def working(comms, name, created):
 
 def test_plain_messages_need_no_order_labels():
     assert DirectiveText.refused("Yes, go ahead.") == ()
+
+
+@pytest.mark.parametrize("state, reason", (
+    (BlockedGoal("Provider needs authorization: " + "x" * 220),
+     "Provider needs authorization: " + "x" * 220),
+    (UnrecordedBlockGoal(), "no reason recorded"),
+))
+def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, state, reason):
+    """No order is needed; the current state owns appearance and disappearance."""
+    comms.registry.declare(Thread("paper", frozenset(), str(tmp_path)))
+    comms.goals.update_goal("paper", SetGoalAction(text="Finish the paper"))
+    thread = comms.registry.require("paper")
+    comms.registry.register(replace(thread, goal=replace(thread.goal.require(), state=state)),
+                            comms.registry.status("paper"))
+    rule, = GoalBlocked.violations(comms, "paper")
+    assert rule.thread == thread.incarnation
+    assert rule.reason == reason
+    assert reason[:200] in rule.line()
+    assert "x" * 201 not in rule.line()
+    assert "unblock it or tell Tristan, this wake" in rule.line()
+
+    now = time.time()
+    old = RulePing(RequestStalled, TextDigest.of("old housekeeping"),
+                   text="IDLE housekeeping", since=RecordedEventTime(now - 600))
+    previous = CommanderDecisions(thread.incarnation, (old,), (old,), ())
+    update = CommanderUpdate.derive(thread.incarnation, (), (rule,), previous, now=now)
+    assert update is not None
+    assert update.handled[0].urgent
+    assert "seen for 0 min" in update.handled[0].render(now)
+    urgent, = update.handled
+    with Binding.open(tmp_path / "bridge") as db:
+        BoardLineRow.record(db, CommanderDecisions(thread.incarnation, (old, urgent), (), ()))
+        first, second = BoardLine.recorded(tmp_path / "bridge" / "delivery.sqlite3")
+        assert first.urgent and first.text == rule.line()
+        assert not second.urgent and second.text == old.text
+
+        current = comms.registry.require("paper")
+        comms.registry.register(
+            replace(current, goal=replace(current.goal.require(), state=ActiveGoal())),
+            comms.registry.status("paper"),
+        )
+        assert GoalBlocked.violations(comms, "paper") == ()
+        cleared = CommanderUpdate.derive(thread.incarnation, (), (), update, now=now + 60)
+        assert cleared is not None
+        BoardLineRow.record(db, cleared)
+        assert BoardLine.recorded(tmp_path / "bridge" / "delivery.sqlite3") == ()
 
 
