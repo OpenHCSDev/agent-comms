@@ -36,12 +36,15 @@ class Refused(CommandFailure, DrainUnavailable):
     INTERNAL_ERROR: ClassVar[int] = -32603
 
     code: int
-    message: str
     data: object
 
     def __init__(self, code: int, message: str, data: object = None) -> None:
         super().__init__(message)
-        self.code, self.message, self.data = code, message, data
+        self.code, self.data = code, data
+
+    @property
+    def message(self) -> str:
+        return str(self)
 
     @classmethod
     def invalid_params(cls, data: object = None) -> Self:

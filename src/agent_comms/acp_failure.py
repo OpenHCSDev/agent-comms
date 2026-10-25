@@ -216,10 +216,6 @@ class ACPFailure(DeliveryFailure):
         """Display classification only; input state comes from structured facts."""
 
     @classmethod
-    def from_error(cls, error: RequestError) -> ACPFailure:
-        return RequestFailure.from_error(error).failure
-
-    @classmethod
     def from_detail(cls, code, detail, *, diagnostics=()):
         detail = detail or "ACP request failed"
         owner = next(
