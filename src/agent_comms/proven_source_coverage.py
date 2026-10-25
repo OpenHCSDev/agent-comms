@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import IdentityConflict
@@ -56,6 +56,10 @@ class SourcePrefix(PresentPath):
     def require_start(self, covered_seq: int) -> None:
         if covered_seq > self.through_seq:
             raise IdentityConflict("current source coverage exceeds the bus")
+
+    def before(self, stop_seq: int) -> SourcePrefix:
+        """This prefix ending just before ``stop_seq``, when that source is inside it."""
+        return replace(self, through_seq=min(self.through_seq, stop_seq - 1))
 
     def require_current(self, bus: Bus) -> None:
         if not ObservedPath.at(bus.path).same_file(self.identity):
@@ -325,11 +329,16 @@ class SourceCoverage:
             source_seq=source_seq, source_reads=source_reads,
         )
 
-    def since(self, state: CursorState, *,
+    def since(self, state: CursorState, *, stop_seq: int,
               source_reads: NativeEvidenceScope) -> ProvenSourceCoverage:
-        """Prove sources beyond the cursor, bounded to one captured SQLite prefix."""
+        """Prove sources beyond the cursor, up to the first one the owner cannot prove.
+
+        ``stop_seq`` is the owner's first source taken by another claim's input. Every
+        scan past it rereads the whole history only to be refused at publication, so the
+        captured prefix ends before it and an unchanged source reads nothing.
+        """
         with source_reads.borrow():
-            prefix = SourcePrefix.capture(self.bus.bus, state.covered_seq)
+            prefix = SourcePrefix.capture(self.bus.bus, state.covered_seq).before(stop_seq)
             covered = state.covered_seq
             inputs, no_wake = [], []
             for _ in range(self.page_budget):
