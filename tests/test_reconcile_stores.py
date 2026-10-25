@@ -28,6 +28,7 @@ from agent_comms.cli_commands import (
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
 from agent_comms.installer.backup import bus_files
@@ -36,8 +37,9 @@ from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHold
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_runtime_schema import PrivateCoordinatorSchema
 from agent_comms.triage_native_sources import TriageNativeSources
+from agent_comms.turn_failure import TurnFailure
 from agent_comms.typed_table import (
-    Column, DurableTables, ReconciledFile, SharedFileTables, TableSchema, TypedTable,
+    Column, DurableTables, HeldBusFile, ReconciledFile, SharedFileTables, TableSchema, TypedTable,
     WriterOwnedStore,
 )
 from bus_record_fixture import OWNER_LOOKUP
@@ -253,13 +255,29 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
     assert PlannedReconcileCliCommand().answer(root).rewritten == ()
 
 
-def test_the_goal_ledger_carries_a_family_that_gained_a_member(private_comms):
-    """Install 13: the ledger kept a failure CHECK one member short, nothing carried it, and
-    every opening refused. Its owner is a reconciled file, so the install carries it."""
+def test_an_opening_refuses_a_drifted_store_and_reconcile_stores_carries_it(private_comms):
+    """Install 13: the ledger kept a failure CHECK one member short. Opening it refuses,
+    naming the carry, even under the hold, and rewrites nothing; reconcile-stores is the
+    one carry, keeping every row, and the next opening reads it."""
     root = private_comms.root
     path = ledger_one_failure_short(root)
+    directory = path.parent
+    table = FailedTurnEvidence.declared_name
+    row = ("a" * 32, "goal", 1, "kid", 1.0, "/wt", 1, 1, 0, "t" * 32, TurnFailure.names()[0])
+    with closing(sqlite3.connect(path)) as db:
+        db.execute(f'INSERT INTO "{table}" VALUES ({",".join("?" * len(row))})', row)
+        db.commit()
+        drifted = db.execute("SELECT sql FROM sqlite_master WHERE name=?", (table,)).fetchone()
+    with maintenance_held(root), pytest.raises(RelationViolationError,
+                                               match=HeldBusFile.carry_verb):
+        GoalAttemptStore.at(directory)
+    with closing(sqlite3.connect(path)) as db:
+        assert db.execute("SELECT sql FROM sqlite_master WHERE name=?",
+                          (table,)).fetchone() == drifted
     with maintenance_held(root) as holder:
         completed = reconcile(root, holder)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert str(path.relative_to(root)) in json.loads(completed.stdout)["rewritten"]
-    GoalAttemptStore.at(path.parent)
+    GoalAttemptStore.at(directory)
+    with closing(sqlite3.connect(path)) as db:
+        assert db.execute(f'SELECT * FROM "{table}"').fetchall() == [row]

@@ -11,7 +11,6 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from agent_comms.child_process import SpawnedProcess
-from agent_comms.maintenance_barrier import MaintenanceNotHeldError
 from bus_record_fixture import (
     OWNER_LOOKUP, RECIPIENT_LOOKUP, RENAMED_OWNER_LOOKUP, UNRELATED_LOOKUP,
 )
@@ -70,7 +69,7 @@ from agent_comms.execution_states import (
 )
 from agent_comms.attempt_states import AttemptState, LiveAttempt
 from agent_comms.field_codec import FieldCodec, MessageId
-from agent_comms.typed_table import JsonStorage
+from agent_comms.typed_table import HeldBusFile, JsonStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (
     PendingResponse,
@@ -1423,10 +1422,10 @@ def test_unexplained_columns_and_symlinks_rejected(tmp_path):
         pass
     with sqlite3.connect(path) as c:
         c.execute("ALTER TABLE participants ADD COLUMN unexplained TEXT")
-    with pytest.raises(MaintenanceNotHeldError):
+    with pytest.raises(SchemaVersionError, match=HeldBusFile.carry_verb):
         CoordinationStore(path)
     with maintenance_held(tmp_path), pytest.raises(SchemaVersionError):
-        CoordinationStore(path)
+        CoordinationStore.reconcile_at(path)
     link = tmp_path / "link"
     link.symlink_to(path)
     with pytest.raises(IntegrityViolationError):
