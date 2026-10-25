@@ -48,9 +48,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Sign:
-    """One occurrence of a degraded signal. Its key is what makes it new: a message, a stalled
-    phase at its age doubling, a load round. The same occurrence never stops the commander twice;
-    its line is how it reads now."""
+    """One occurrence of a degraded signal. Its key is what makes it new: a load round. The
+    same occurrence never stops the commander twice; its line is how it reads now."""
 
     signal: type[Degradation]
     key: tuple[object, ...]
@@ -427,9 +426,6 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         """Only a unit's question belongs on that unit's observation."""
         return ()
 
-    def degradation_signs(self) -> tuple[Sign, ...]:
-        return (Sign(AnswersOwedDegradation, (self.cited,), self.line()),)
-
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         return (AnswerSubject(self.message.message_id),)
 
@@ -504,15 +500,6 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         """Why naming this debt in an action that reaches only these threads would record an
         answer its asker never receives; empty when it would not."""
         return ""
-
-
-class AnswersOwedDegradation(Degradation, BlocksRelease):
-    """Messages to the commander are waiting past their window; each message is one sign."""
-
-    @classmethod
-    def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
-        return tuple(sign for rule in OwedAnswer.scan_observed(comms, commander, (), frame)
-                     for sign in rule.degradation_signs())
 
 
 @dataclass(frozen=True)
