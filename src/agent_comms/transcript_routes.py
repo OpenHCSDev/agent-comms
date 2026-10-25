@@ -112,13 +112,6 @@ class TranscriptRoutes(DurableStore):
     def for_session(self, session_file: str) -> _SessionRoutes:
         return _SessionRoutes(self, session_file)
 
-    def input_bindings(self) -> dict[str, InputDisplay]:
-        with self.snapshot() as connection:
-            return {
-                row.native_id: row
-                for row in InputDisplay.select(connection, where="sent_text_digest IS NOT NULL")
-            }
-
     def record(self, session_file: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
         if not entry_ids:
             return

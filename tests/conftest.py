@@ -160,6 +160,33 @@ def publish_initial(
         destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
 
+
+def accept_initial(bus: MessageBus, root_id: str, seq: int, store) -> tuple:
+    """Accept one initial the way its recipient's owner does, then read its sealed claims.
+
+    The live path is the owner's visible-delivery scan (cohort_foreground); it seals
+    the whole cohort of every original it finds, so one recipient's scan is enough.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from agent_comms.cohort_foreground import _accept_visible_deliveries
+    from agent_comms.coordination_cohort import sealed_cohort_assignments
+
+    recipients = bus.bus.delivery(seq).recipients
+    if recipients:
+        owner = recipients[0]
+        with ThreadPoolExecutor(1) as pool:
+            pool.submit(asyncio.run, _accept_visible_deliveries(
+                bus, root_id, Path(store.session.path), owner.recipient_lookup,
+                owner_name=owner.canonical_thread,
+            )).result()
+    return tuple(
+        assignment for recipient in recipients
+        for assignment in sealed_cohort_assignments(
+            store, recipient.recipient_lookup, after_seq=seq - 1, limit=1)
+        if assignment.wire_seq == seq
+    )
+
 def pytest_sessionstart(session: pytest.Session) -> None:
     """The controller populates this checkout's pinned submodules before any worker runs,
     as every tree of ours is (Checkout). Collection loads declarations only."""

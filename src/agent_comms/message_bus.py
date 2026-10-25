@@ -28,15 +28,13 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
-from agent_comms.message_page import InboxPage, MessagePage, MessagePageRequest, PageBounds
+from agent_comms.message_page import InboxPage, MessagePageRequest, PageBounds
 from agent_comms.message_reference import (
     FirstUnreadStart,
     NewestUnreadStart,
     InboxStart,
     MessageReference,
 )
-from agent_comms.messages import Message
-from agent_comms.page_traversal import LiveCursor
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import (
@@ -268,11 +266,6 @@ class MessageBus[Writes: Publisher]:
         rows = tuple(sorted(
             rows, key=lambda row: (row.sender_lookup not in first, row.seq)))
         return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
-
-    def incoming_page(self, name: str, *, after: int) -> MessagePage:
-        snapshot = self._registry.snapshot()
-        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        return MessagePageRequest(delivery, PageBounds(LiveCursor(after).newer())).read_opened(self.bus)
 
     def channels(self) -> Sequence[str]:
         return list(self.channel_declarations())

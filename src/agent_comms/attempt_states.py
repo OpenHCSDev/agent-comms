@@ -7,7 +7,7 @@ that phase. Native turn ownership remains S2's; these are durable observations.
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import (
@@ -81,11 +81,6 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
 
     def require_silent_completion(self) -> None:
         raise IdentityConflict("silent completion requires settling phase")
-
-    def renewed(self, expiry: int):
-        if self.process_dead:
-            raise RecoveryBlocked("a dead Pi RPC subprocess cannot renew its live lease")
-        return replace(self, lease_expires_at_ms=max(self.lease_expires_at_ms or 0, expiry))
 
     @property
     def tool_claim_open(self) -> bool:

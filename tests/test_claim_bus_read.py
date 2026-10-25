@@ -22,7 +22,8 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.context_store import UNREAD_CONTEXT
-from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from conftest import accept_initial
+from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordination_tables.executions import WireOrigin
@@ -99,7 +100,7 @@ def selected_turn(private_comms, private_directory):
             store.participants.register(
                 recipient.recipient_lookup, committed=True,
             )
-        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+        accept_initial(comms.bus, root_id, message.seq, store)
         lookup = comms.registry.require("Alice").incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
         owner, generation = comms.registry.live_owner_with_claim("Alice")
