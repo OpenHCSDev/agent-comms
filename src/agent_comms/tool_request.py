@@ -25,7 +25,6 @@ from .field_codec import (
     WireChoices,
     WireName,
 )
-from .message_bus import HeldBusWrite
 from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaration
 from .thread_execution import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
@@ -171,11 +170,12 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return self.apply(comms, caller)
 
 
-class PublishingTool[Caller: ToolCaller = ToolCaller](HeldBusWrite):
-    """A publication waits at the bus owner before any caller or message mutation."""
+class PublishingTool[Caller: ToolCaller = ToolCaller]:
+    """A publication is refused while maintenance holds the bus, as the call's entry is
+    (Comms.client): a request waiting out the hold would hold its connector's stop."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
-        return self.write_when_open(comms, partial(self.publish, comms, caller))
+        return comms.bus.write_open(partial(self.publish, comms, caller))
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
