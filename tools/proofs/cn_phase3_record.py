@@ -197,7 +197,7 @@ def record(session: Path) -> None:
     todo = comms.goals.todos.get("P1")
     assert len(todo.history.events(todo.id, StrikeTodo)) == 2
     assert len(todo.history.events(todo.id, VoidStrikeTodo)) == 1
-    assert todo.history.facts_for(todo.id).strike_count(worker.incarnation) == 1
+    assert todo.strikes_against(worker.incarnation) == 1
     (release,) = todo.history.events(todo.id, ReleaseTodo)
     released = release.previous
     assert released.owner_identity == worker.incarnation

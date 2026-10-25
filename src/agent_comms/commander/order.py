@@ -695,7 +695,7 @@ class Commander(CommanderContext):
     def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
-        n = todo.history.facts_for(todo.id).strike_count(self.comms.registry.require(unit).incarnation)
+        n = todo.strikes_against(self.comms.registry.require(unit).incarnation)
         taken = f", {todo.id} taken away" if todo.holder != unit else ""
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
                 f'{taken}): {strike.reason}')
@@ -732,7 +732,7 @@ class Commander(CommanderContext):
             todo.revision, self.incarnation, voided, why)))
         unit = voided.previous.owner
         todo = self.comms.goals.todos.get(task)
-        n = todo.history.facts_for(todo.id).strike_count(self.comms.registry.require(unit).incarnation)
+        n = todo.strikes_against(self.comms.registry.require(unit).incarnation)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
                 f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo))

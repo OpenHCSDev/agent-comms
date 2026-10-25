@@ -3220,7 +3220,7 @@ class FailedCheckStrike(StrikeTodo):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         if changed.revision == self.expected_revision:
             return
-        count = changed.history.facts_for(changed.id).strike_count(self.previous.owner_identity)
+        count = changed.strikes_against(self.previous.owner_identity)
         line = (f"Core strike {count} on {changed.id} order {self.order_id}: "
                 f"{self.previous.owner} {self.reason}"
                 + (f"; {changed.id} taken away" if not changed.holder else ""))
@@ -3257,9 +3257,6 @@ class VerdictAudience:
 @dataclass(frozen=True)
 class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
-
-    def send_back_times(self) -> tuple[float, ...]:
-        return ()
 
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
@@ -3721,9 +3718,6 @@ class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
-    def send_back_times(self) -> tuple[float, ...]:
-        return (self.at.recorded_at("A send-back"),)
-
     @property
     def line(self) -> str:
         return f"Sent back: {self.reason.text}"
@@ -4160,13 +4154,6 @@ class Todo(TodoStoreRows, TypedTable):
     def order_history(self) -> tuple[CheckedProblemOrder, ...]:
         return (*self.history.events(self.id, CheckedProblemOrder), *self.order.declarations)
 
-    def orders_before(
-        self, following: ProblemOrder, additional: tuple[CheckedProblemOrder, ...] = (),
-    ) -> tuple[CheckedProblemOrder, ...]:
-        current = {order.id for order in following.declarations}
-        return tuple({order.id: order for order in (*self.order_history, *additional)
-                      if order.id not in current}.values())
-
     def recurrence(
         self, locations: tuple[FileLine, ...], root: Path, now: float,
     ) -> tuple[str, ...]:
@@ -4287,10 +4274,14 @@ class Todo(TodoStoreRows, TypedTable):
         return any(count.owner_identity == unit and count.latest.since(since)
                    for count in self.history.facts_for(self.id).strike_totals)
 
+    def strikes_against(self, unit: ThreadIncarnation) -> int:
+        """The live strikes recorded against ``unit`` on this Todo."""
+        return self.history.facts_for(self.id).strike_count(unit)
+
     def struck_out(self, unit: ThreadIncarnation) -> bool:
         """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
         orders reach it."""
-        return self.history.facts_for(self.id).strike_count(unit) >= ProblemGoalOrder.StrikeLimit
+        return self.strikes_against(unit) >= ProblemGoalOrder.StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:
