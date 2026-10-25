@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.14.*"
 
 [[package]]
@@ -510,7 +510,7 @@ wheels = [
 [[package]]
 name = "nominal-refactor-advisor"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#9194ceaaddb9e74a744fc49810d8ff018c5b911d" }
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#3fc2f0848bb91981bd8e2a015cf381cd2c51e1dc" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "tree-sitter" },

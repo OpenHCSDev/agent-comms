@@ -27,7 +27,6 @@ import tokenize
 import tomllib
 import types
 import typing
-import typing_extensions
 from typing import Annotated
 from abc import abstractmethod
 from collections import Counter
@@ -2112,6 +2111,14 @@ class StringSubscript(OccurrenceMeasure):
         )
 
 
+class AnyReference(TypingReference):
+    """A reference AnyName asks one question of: does it resolve to ``typing.Any``."""
+
+    @property
+    def is_any(self) -> bool:
+        return self.value is typing.Any
+
+
 class AnyInTypeExpression(MroDispatch):
     """Count ``typing.Any`` in one type expression without evaluating it.
 
@@ -2136,7 +2143,7 @@ class AnyInTypeExpression(MroDispatch):
 
     @handles(ast.Name, ast.Attribute)
     def reference(self, node: ast.expr) -> None:
-        reference = TypingReference(self.imports)
+        reference = AnyReference(self.imports)
         reference.dispatch_sync(node)
         if reference.is_any:
             self.references.append(node)
@@ -2213,7 +2220,7 @@ class DeclaredTypeSites(MroDispatch):
     def reference(self, node: ast.Name | ast.Attribute, scope: tuple[ast.AST, ...]) -> None:
         if not isinstance(node.ctx, ast.Load) or node in self.counted:
             return
-        reference = TypingReference(self.imports)
+        reference = AnyReference(self.imports)
         reference.dispatch_sync(node)
         if reference.is_any:
             self.counted.add(node)

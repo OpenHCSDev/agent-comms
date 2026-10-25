@@ -12,6 +12,10 @@ import typing_extensions
 from agent_comms.mro_dispatch import MroDispatch, handles
 
 
+class Untyped:
+    """What a name stands for when it is bound to no typing declaration."""
+
+
 class TypingImports(MroDispatch):
     """Resolve unshadowed module imports from the actual stdlib declarations.
 
@@ -37,7 +41,9 @@ class TypingImports(MroDispatch):
     def modules(self, node: ast.Import) -> None:
         for item in node.names:
             self.bind(
-                node, item.asname or item.name.split(".")[0], self.typing_modules.get(item.name)
+                node,
+                item.asname or item.name.split(".")[0],
+                self.typing_modules.get(item.name, Untyped),
             )
 
     @handles(ast.ImportFrom)
@@ -48,7 +54,7 @@ class TypingImports(MroDispatch):
             case _:
                 namespace = {}
         for item in node.names:
-            self.bind(node, item.asname or item.name, namespace.get(item.name))
+            self.bind(node, item.asname or item.name, namespace.get(item.name, Untyped))
 
     @handles(ast.Name)
     def assignment(self, node: ast.Name) -> None:
@@ -101,7 +107,7 @@ class TypingImports(MroDispatch):
         imports = cls(set(ast.walk(tree)))
         for node in ast.walk(tree):
             imports.dispatch_sync(node)
-        return {name: value for name, value in imports.values.items() if value is not None}
+        return {name: value for name, value in imports.values.items() if value is not Untyped}
 
 
 class TypingReference(MroDispatch):
@@ -109,11 +115,7 @@ class TypingReference(MroDispatch):
 
     def __init__(self, imports: dict[str, object]) -> None:
         self.imports = imports
-        self.value: object = None
-
-    @property
-    def is_any(self) -> bool:
-        return self.value is typing.Any
+        self.value: object = Untyped
 
     @property
     def is_type_checking(self) -> bool:
@@ -122,7 +124,7 @@ class TypingReference(MroDispatch):
 
     @handles(ast.Name)
     def name(self, node: ast.Name) -> None:
-        self.value = self.imports.get(node.id)
+        self.value = self.imports.get(node.id, Untyped)
 
     @handles(ast.Attribute)
     def member(self, node: ast.Attribute) -> None:
@@ -130,8 +132,8 @@ class TypingReference(MroDispatch):
         parent.dispatch_sync(node.value)
         for module in TypingImports.typing_modules.values():
             if parent.value is module:
-                self.value = vars(module).get(node.attr)
+                self.value = vars(module).get(node.attr, Untyped)
 
     def raw_access_count(self) -> int:
         """Typing declarations contribute no raw-record operation; unknowns do."""
-        return int(getattr(self.value, "__module__", None) != typing.__name__)
+        return int(self.value is Untyped)
