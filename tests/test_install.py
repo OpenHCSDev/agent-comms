@@ -13,7 +13,7 @@ from agent_comms.field_codec import TurnId
 from agent_comms.threads import ParkedThreadWorkState
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.bus import Bus
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
@@ -25,7 +25,7 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.locked_store import BusFile, RootFile, SQLiteFile
+from agent_comms.locked_store import BusFile, RegistryFile, RootFile, SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.threads import Thread
 
@@ -103,7 +103,10 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     copy = practice.path
     measurement = practice.measurement
     copied = {str(path.relative_to(copy)) for path in copy.rglob("*") if path.is_file()}
-    assert copied == declared - witnesses
+    # The copy's own registry writer takes its own lock.
+    own_lock = {str(path.relative_to(copy))
+                for path in RegistryFile.transient_paths(RegistryFile.path_in(copy))}
+    assert copied - own_lock == declared - witnesses
     assert measurement.bytes > 0
     for name in databases:
         query = "SELECT name FROM sqlite_schema ORDER BY name"
@@ -240,7 +243,7 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
         assert '"failed"' not in capsys.readouterr().out
 
 
-def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
+def test_practice_copy_takes_turn_files_but_no_live_process(private_directory):
     root = private_directory / "bus"
     Bus.install(Bus.path_in(root))
     comms = wire(root)
@@ -254,6 +257,9 @@ def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     practice = PracticeCopy(root, private_directory / 'practice/bus')
     practice.include(tuple(RootFile.existing_in(root)))
     copy = practice.path
+    # Install 20's copy still named unit-signal's live pid 2128765: a start, stop or wake
+    # on the copy aimed at the live unit. The copy keeps the turn file, never its owner.
+    assert (copy / turn.relative_to(root)).read_bytes() == turn.read_bytes()
     copied = wire(copy).registry.require("owner")
-    assert copied.turn_lease.identity == lease.identity
-    assert copied.executing
+    assert (copied.process_identity, copied.executing) == (NoProcess(), False)
+    assert comms.registry.require("owner").turn_lease.identity == lease.identity
