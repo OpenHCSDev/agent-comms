@@ -495,11 +495,9 @@ class BusPresentation:
         membership. None is supplied independently by the metrics caller.
         Derived maxima are committed by the append, never prepared by this reader.
         """
-        seen = basis.seen(source)
-        activity = {scope.channel: scope.activity(source) for scope in basis.scopes}
-        counted = self._display_unread.advanced(
-            source, basis.scopes, tuple(sorted(basis.viewer_names)), seen, basis.registry,
-        )
+        selection = basis.unread_selection(source)
+        activity = {scope.channel: scope.activity(source) for scope in selection.scopes}
+        counted = self._display_unread.advanced(source, selection)
         self._display_unread = counted
         return activity, counted.counts
 

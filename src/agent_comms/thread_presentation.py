@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.coordination_errors import StaleRevision
@@ -196,8 +196,10 @@ class ThreadStatusDisplay:
     binding: ThreadOwnerBinding = field(default=UnavailableThreadOwnerBinding(), kw_only=True)
 
     def status_display(self) -> ThreadStatusDisplay:
-        return ThreadStatusDisplay(self.title, self.marker, self.summary, self.status,
-                                   binding=self.binding)
+        return ThreadStatusDisplay(**{
+            declared.name: getattr(self, declared.name)
+            for declared in fields(ThreadStatusDisplay)
+        })
 
     def same_status(self, other: ThreadStatusDisplay) -> bool:
         """Status equality never traverses acquired source history."""

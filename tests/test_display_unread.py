@@ -10,6 +10,7 @@ from agent_comms.read_basis import (
     ChannelConversation,
     ChannelDisplayScope,
     DisplayedConversation,
+    DisplayUnreadSelection,
     ReadCursor,
 )
 from agent_comms.registry_provenance import RegistryProvenance
@@ -28,16 +29,15 @@ def test_unread_advances_over_new_rows_and_recounts_after_a_read_mark(bus):
     namespace = RegistryProvenance(threads={}, aliases={})
     scopes = (ChannelDisplayScope("#team", frozenset({"#team"})),
               ChannelDisplayScope("#other", frozenset({"#other"})))
-    viewer = ("viewer",)
-    seen = ReadCursor()
+    selection = DisplayUnreadSelection(ReadCursor(), scopes, ("viewer",), namespace)
     queries = []
     with bus.reading() as source, source.observing() as db:
         db.set_trace_callback(queries.append)
-        first = DisplayUnread().advanced(source, scopes, viewer, seen, namespace)
+        first = DisplayUnread().advanced(source, selection)
         assert first.counts == {"#team": 500, "#other": 0}
         assert sum(query.startswith("WITH read_cursors") for query in queries) == 2
         queries.clear()
-        assert first.advanced(source, scopes, viewer, seen, namespace) is first
+        assert first.advanced(source, selection) is first
         assert not any(query.startswith("WITH read_cursors") for query in queries)
 
     for index in range(3):
@@ -47,21 +47,23 @@ def test_unread_advances_over_new_rows_and_recounts_after_a_read_mark(bus):
     queries.clear()
     with bus.reading() as source, source.observing() as db:
         db.set_trace_callback(queries.append)
-        second = first.advanced(source, scopes, viewer, seen, namespace)
+        second = first.advanced(source, selection)
         assert sum(query.startswith("WITH read_cursors") for query in queries) == 2
         assert second.counts == {"#team": 503, "#other": 0}
-        full = source.display_unread(scopes, viewer, seen, namespace, through=source.revision())
+        full = source.display_unread(selection, through=source.revision())
         assert second == full
 
-    seen = seen.add((DisplayedConversation(ChannelConversation("#team"), (), prefix_through=250),))
+    selection = replace(selection, seen=selection.seen.add((
+        DisplayedConversation(ChannelConversation("#team"), (), prefix_through=250),
+    )))
     with bus.reading() as source:
-        after_mark = second.advanced(source, scopes, viewer, seen, namespace)
-        full = source.display_unread(scopes, viewer, seen, namespace, through=source.revision())
+        after_mark = second.advanced(source, selection)
+        full = source.display_unread(selection, through=source.revision())
         assert after_mark == full
         assert after_mark.counts == {"#team": 253, "#other": 0}
-        excluded = after_mark.advanced(source, scopes, ("author",), seen, namespace)
+        excluded = after_mark.advanced(source, replace(selection, viewer_names=("author",)))
         assert excluded.counts == {"#team": 0, "#other": 0}
-        expanded = excluded.advanced(source, scopes[:1], viewer, seen, namespace)
+        expanded = excluded.advanced(source, replace(selection, scopes=selection.scopes[:1]))
         assert expanded.counts == {"#team": 253}
 
 
