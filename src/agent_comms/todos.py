@@ -36,6 +36,7 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
     CitedRevisions,
     CommitRevision,
+    Declaration,
     FileLine,
     MainRevision,
     NoSourceReference,
@@ -1761,7 +1762,7 @@ class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         """An unlocated finding has no source reference to validate."""
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
         return False
 
     def instructions(self) -> tuple[str, ...]:
@@ -1783,8 +1784,8 @@ class LocatedProblemFinding(ProblemFinding):
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         self.where.require_exists(root, revision)
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
-        return any(self.where.same_file(location, root) for location in locations)
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
+        return any(declaration.holds(self.where, root) for declaration in declarations)
 
     def instructions(self) -> tuple[str, ...]:
         return (f"Where: {self.place()}",)
@@ -2111,9 +2112,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
-        return (any(self.owner.same_file(location, root) for location in locations)
-                or self.finding.on_files(locations, root))
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
+        return (any(declaration.holds(self.owner, root) for declaration in declarations)
+                or self.finding.in_declarations(declarations, root))
 
     def checked(self) -> CheckedProblemOrder:
         return self
@@ -4466,12 +4467,12 @@ class Todo(TodoStoreRows, TypedTable):
                       if order.id not in current}.values())
 
     def recurrence(
-        self, locations: tuple[FileLine, ...], root: Path, now: float,
+        self, declarations: tuple[Declaration, ...], root: Path, now: float,
     ) -> tuple[str, ...]:
         recent = tuple(order for order in self.order_history
                        if order.at.since(now - 7 * 86400)
                        and order.at.recorded_at("An earlier order") <= now
-                       and order.on_files(locations, root))
+                       and order.in_declarations(declarations, root))
         if not recent:
             return ()
         previous = max(recent, key=lambda order: order.at.chronology())
@@ -5009,13 +5010,14 @@ class TodoStore(OwnerRequestStore):
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
         slop: tuple[Slop, ...], now: float,
     ) -> None:
+        declarations = (order.owner.declaration(root), where.declaration(root))
         previous = tuple(line for todo in self.list(Repo.of(root).github)
-                         for line in todo.recurrence((order.owner, where), root, now))
+                         for line in todo.recurrence(declarations, root, now))
         if previous and not any(
             item.derive.declaration_elsewhere(item.by.line, where, root) for item in slop
         ):
             raise TodoError('\n'.join((*previous,
-                'the same file broke again, name the fact written in more than one place '
+                'the same declaration broke again, name the fact written in more than one place '
                 'and the declaration that replaces the copies.')))
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
