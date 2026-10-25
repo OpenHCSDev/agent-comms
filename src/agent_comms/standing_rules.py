@@ -182,8 +182,9 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
-        """Ordinary rules scan independently; a family can own one shared scan."""
-        return cls
+        """The nearest class declaring FamilyScan owns the scan its members share; any other
+        rule scans independently."""
+        return next((owner for owner in cls.__mro__ if FamilyScan in owner.__bases__), cls)
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
@@ -193,6 +194,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return tuple(rule for owner in owners
                      for rule in owner.scan_observed(comms, commander, observed, frame)
                      if rule.attention() and rule.broke_after(after))
+
+
+class FamilyScan(StandingRule, declared_name=None):
+    """The class naming this among its bases owns one scan its members share: a member its
+    scan selects is never scanned a second time."""
 
 
 class OrderRefusingStandingRule(StandingRule, declared_name=None):
@@ -300,12 +306,8 @@ class HeadLine(StandingRule, declared_name=None):
         return (HeadSubject(self.request),)
 
 
-class HeldBranchRule(HolderLine, UndatedStandingRule, declared_name=None):
+class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=None):
     """Branch rules share the heartbeat's existing progress frame and one scan."""
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return HeldBranchRule
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -429,7 +431,7 @@ class DatedStandingRule(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
-class OwedAnswer(IndependentStandingRule, declared_name=None):
+class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     """A question or delivery awaiting the commander; each member owns what clears it
     and which actions it prevents while it waits."""
 
@@ -465,10 +467,6 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         now = time.time()
         return tuple(rule for rule in cls.opened(comms, commander) if rule.due(now))
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return OwedAnswer
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -781,15 +779,11 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class HuntDue(ReasonedStandingRule, DatedStandingRule):
+class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
     """Its scan picks the located member when a hot file is known; the members share it."""
 
     since: float
     seconds: ClassVar[int] = 900
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return __class__
 
     @classmethod
     def hunted(cls, comms: Comms, commander: str) -> float:
@@ -889,16 +883,12 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ServicePassFailing(IndependentStandingRule, DatedStandingRule):
+class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan):
     """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
 
     watch: str
     since: float
     error: str = field(compare=False)
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return __class__
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
@@ -968,15 +958,11 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DiskLow(IndependentStandingRule, UndatedStandingRule):
+class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
     """Under the cleanup threshold a cleanup owner is due; under the floor nothing allocates."""
 
     rule: StorageRule
     free_gib: float = field(compare=False)
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return __class__
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[DiskLow, ...]:
