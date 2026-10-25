@@ -150,14 +150,14 @@ class ReadNativeCoordinationSession(NativeCoordinationSession):
         self, path: str, *, clock_ms: Callable[[], int] = system_clock,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
-        self.contention = contention
+        self.read_budget = contention
         super().__init__(path, clock_ms=clock_ms, contention=contention)
 
     def boundary_contention(self) -> StoreLockContention:
         """A read's boundary spends the read's own budget on every lock it takes, so
         contention the read cannot wait out raises BlockingIOError for its caller to
         defer, instead of a wait with no end."""
-        return self.contention.lock_budget()
+        return self.read_budget.lock_budget()
 
     def _prepare_private_file(self) -> None:
         self._private_file()
