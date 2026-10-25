@@ -17,7 +17,7 @@ from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
 from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
-from agent_comms.installer.probes.commands import CliOutput, CliUndecodable
+from agent_comms.installer.probes.commands import CliOutput, CliUndecodableError
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstallClock, TargetProgram
 from agent_comms.installer.practice import PracticeCopy
@@ -279,7 +279,7 @@ def test_a_command_line_that_dies_before_answering_refuses_with_its_own_error():
     """Install 14: the outgoing runtime's stop crashed opening its ledger and printed nothing;
     the refusal names the crash instead of an empty document."""
     died = CliOutput(1, "", "StorageUncertainError: Unsupported goal attempt schema")
-    with pytest.raises(CliUndecodable, match="StorageUncertainError"):
+    with pytest.raises(CliUndecodableError, match="StorageUncertainError"):
         died.answer(TargetBatchResult)
 
 

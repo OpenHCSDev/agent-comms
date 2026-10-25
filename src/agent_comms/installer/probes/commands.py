@@ -14,7 +14,7 @@ from agent_comms.installer.interpreter_operation import CliProbePhase, RuntimePr
 CORE_ERROR = TypeAdapter(CoreError.declared_union())
 
 
-class CliRefused(Exception):
+class CliRefusedError(Exception):
     """A command line that answered with Core's declared error instead of its result."""
 
     def __init__(self, failure: CoreError):
@@ -22,7 +22,7 @@ class CliRefused(Exception):
         self.failure = failure
 
 
-class CliUndecodable(Exception):
+class CliUndecodableError(Exception):
     """A command line whose output is neither its declared result nor Core's error: it
     died before answering, and only its own error output says why."""
 
@@ -46,16 +46,19 @@ class CliOutput:
             except ValidationError:
                 pass  # a batch's own result also answers a nonzero exit
             else:
-                raise CliRefused(failure)
+                raise CliRefusedError(failure)
         try:
             answer = FieldCodec.decode(result, FieldCodec.parse(self.stdout))
         except (MalformedRecord, ValueError) as malformed:
-            raise CliUndecodable(
+            raise CliUndecodableError(
                 f"exit {self.returncode}, {malformed}; stdout: {self.stdout.strip()}; "
-                f"stderr: {self.stderr.strip()}") from malformed
+                f"stderr: {self.stderr.strip()}"
+            ) from malformed
         if answer.exit_code() != self.returncode:
-            raise CliUndecodable(f"exit {self.returncode} but its {result.__name__} "
-                                 f"answers exit {answer.exit_code()}: {self.stdout.strip()}")
+            raise CliUndecodableError(
+                f"exit {self.returncode} but its {result.__name__} "
+                f"answers exit {answer.exit_code()}: {self.stdout.strip()}"
+            )
         return answer
 
 

@@ -34,7 +34,6 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-
 from agent_comms.active_route import (
     ActiveRoute,
     RouteFile,
@@ -127,7 +126,11 @@ from agent_comms.installer.probes.carry import (
     MigrateOperation,
     RetireInputsOperation,
 )
-from agent_comms.installer.probes.commands import CliCommandProbe, CliRefused, CliUndecodable
+from agent_comms.installer.probes.commands import (
+    CliCommandProbe,
+    CliRefusedError,
+    CliUndecodableError,
+)
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
@@ -624,9 +627,9 @@ class Stack:
             try:
                 return self.probe(CliCommandProbe(("--root", str(root), *invocation))).answer(
                     result)
-            except CliUndecodable as undecodable:
+            except CliUndecodableError as undecodable:
                 raise UpgradeRefused(f"{verb}: undecodable answer: {undecodable}") from undecodable
-            except CliRefused as refused:
+            except CliRefusedError as refused:
                 if not issubclass(refused.failure.exception_type, CoordinationReadUnavailable):
                     raise UpgradeRefused(f"{verb}: {refused}") from refused
                 waited = refused
