@@ -115,12 +115,17 @@ class RouteCounts:
         WHERE {DeliveryScope.delivers_sql("target.actor", "route.sender", "alias.canonical")}
     ), requests AS MATERIALIZED (
         SELECT route.actor,row.seq,row.target,row.sender
-        FROM route_since AS route
+        FROM arguments,json_each(arguments.recipients) AS recipient
         CROSS JOIN "{ReceivedSource.declared_name}" AS addressed
-            ON addressed.lookup=route.recipient_lookup
+            ON addressed.lookup=recipient.value
+                AND addressed.seq>(SELECT after FROM arguments)
+                AND addressed.seq<=(SELECT through FROM arguments)
+                AND {ReadCursor.above_floor("addressed.seq", "recipient.key", "''")}
         CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.seq=addressed.seq
-        WHERE row.target=route.target AND row.sender=route.sender
-            AND row.sender_lookup IS route.sender_lookup AND row.timestamp>=route.addressed
+        CROSS JOIN route_since AS route ON route.actor=recipient.key
+            AND route.target=row.target AND route.sender=row.sender
+            AND route.sender_lookup IS row.sender_lookup
+        WHERE row.timestamp>=route.addressed
             AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
             AND {ReadCursor.above_floor("row.seq", "route.actor", "row.target")}
         UNION ALL
