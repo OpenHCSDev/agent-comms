@@ -124,20 +124,24 @@ def writer_owned_step(writer_owned_store):
         writer_owned = (store,)
 
         def carry(self, *, apply: bool) -> Carried:
-            path = self.writer_path(store)
-            self.require_confined(path)
-            with closing(store.read_snapshot(path)) as db:
-                (count,) = db.execute(
-                    "SELECT count(*) FROM open_tabs WHERE target = ?", (BARE_TARGET,),
-                ).fetchone()
-            if apply and count:
-                (column,) = row._fields_named(("target",))
-                with closing(store.writer(path)) as db, db:
-                    self.rewrite_stored(db, row, column, [
-                        (column.encode(ChannelTarget("#comms")), BARE_TARGET),
-                    ])
-            return Carried(count, rewritten=(store.retained_filename(),)
-                           if apply and count else ())
+            changed = 0
+            rewritten = []
+            for resource in store.resources(self.files):
+                path = self.files.location(resource)
+                self.require_confined(path)
+                with closing(store.read_snapshot(path)) as db:
+                    (count,) = db.execute(
+                        "SELECT count(*) FROM open_tabs WHERE target = ?", (BARE_TARGET,),
+                    ).fetchone()
+                changed += count
+                if apply and count:
+                    (column,) = row._fields_named(("target",))
+                    with closing(store.writer(path)) as db, db:
+                        self.rewrite_stored(db, row, column, [
+                            (column.encode(ChannelTarget("#comms")), BARE_TARGET),
+                        ])
+                    rewritten.append(resource.path)
+            return Carried(changed, rewritten=tuple(rewritten))
 
     return SavedViewCarry
 
@@ -165,14 +169,16 @@ def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
     copy = PracticeCopy(root, tmp_path / "practice")
     copy.include(step.input_files())
     copied_step = replace(step, files=RetainedCopyRequest(copy.path))
-    copied_path = copied_step.writer_path(store)
-    assert Carried(1, rewritten=(copied_path,)).for_step(copied_step).rewritten == (name,)
+    copied_paths = tuple(copied_step.files.location(resource)
+                         for resource in store.resources(copied_step.files))
+    assert Carried(1, rewritten=copied_paths).for_step(copied_step).rewritten == (name,)
     with pytest.raises(RelationViolationError):
         copied_step.require_confined(store.path())
     assert copied_step.carry(apply=True).rewritten == (name,)
-    assert WriterOwnedOpeningProbe(RetainedCopyRequest(copy.path), (store,)).run() == (copied_path,)
-    with closing(store.read_snapshot(copied_path)) as db:
-        assert row.select(db)[0].target == ChannelTarget("#comms")
+    assert WriterOwnedOpeningProbe(RetainedCopyRequest(copy.path), (store,)).run() == copied_paths
+    for copied_path in copied_paths:
+        with closing(store.read_snapshot(copied_path)) as db:
+            assert row.select(db)[0].target == ChannelTarget("#comms")
     assert store.path().read_bytes() == original
 
     assert step.carry(apply=True).changed == 1

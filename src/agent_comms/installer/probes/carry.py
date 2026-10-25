@@ -69,14 +69,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     writer_owned: ClassVar[tuple[type[WriterOwnedStore], ...]] = ()
     """External durable declarations this step is allowed to read and carry."""
 
-    def writer_path(self, store: type[WriterOwnedStore]) -> Path:
-        """Only a named declaration can supply an external input, on this step's root."""
-        if store not in self.writer_owned:
-            raise RelationViolationError(
-                f"{type(self).__name__} does not declare writer-owned input {store.declared_name}"
-            )
-        return self.files.writer_path(store)
-
     @staticmethod
     def writer_declarations(steps: Iterable[Carry | type[Carry]]) -> tuple[type[WriterOwnedStore], ...]:
         return tuple(dict.fromkeys(store for step in steps for store in step.writer_owned))
@@ -225,7 +217,8 @@ class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, Pa
         with TemporaryDirectory() as directory:
             for store in self.stores:
                 store.practice_opening(self.files, Path(directory))
-                paths.extend(self.files.location(resource) for resource in store.resources(self.files))
+                paths.extend(self.files.location(resource)
+                             for resource in store.resources(self.files))
         return tuple(paths)
 
 

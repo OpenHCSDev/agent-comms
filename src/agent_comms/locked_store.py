@@ -46,7 +46,6 @@ from .store_files import (
 if TYPE_CHECKING:
     from sqlite3 import _IsolationLevel
 
-    from .typed_table import WriterOwnedStore
 
 T = TypeVar("T")
 
@@ -523,9 +522,6 @@ class FilesRequest(DeclaredFamily, affix="Request"):
 
     @abstractmethod
     def retained_name(self, owner: type[RootFile], path: Path) -> Path: ...
-
-    def writer_path(self, store: type[WriterOwnedStore]) -> Path:
-        return self.location(store.resource(store.retained_filename()))
 
 
 class LiveFilesRequest(FilesRequest):

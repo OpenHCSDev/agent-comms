@@ -404,12 +404,19 @@ def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_canno
     copied = RetainedCopyRequest(practice.path)
     probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,))
     copied_paths = tuple(copied.location(resource) for resource in resources)
+    planned = subprocess.run(
+        [sys.executable, "-m", "agent_comms.cli", "--root", str(root),
+         *PlannedReconcileCliCommand.invocation()],
+        capture_output=True, text=True, timeout=60,
+    )
     if readable:
-        assert PlannedReconcileCliCommand().answer(root).rewritten == ()
+        assert planned.returncode == 0, planned.stdout + planned.stderr
+        result = FieldCodec.decode(PlannedStoresResult, FieldCodec.parse(planned.stdout))
+        assert result.rewritten == ()
         assert probe.run() == copied_paths
     else:
-        with pytest.raises(RelationViolationError, match=str(stored)):
-            PlannedReconcileCliCommand().answer(root)
+        assert planned.returncode != 0
+        assert str(stored) in planned.stdout + planned.stderr
         with pytest.raises(RelationViolationError, match=str(copied_paths[0])):
             probe.run()
     assert {path: path.read_bytes() for path in originals} == originals
