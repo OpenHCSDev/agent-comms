@@ -93,11 +93,20 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
     assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
 
 
-def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(head_bus):
+def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
+        head_bus, reviewed_source, configured_repository, tmp_path):
     """GitHub keeps the newest status per context on a commit, so reviewing an approved head
     holds it out of the merge queue until a new ok."""
     comms, github, request = head_bus
     context = order.Commander.read_root(comms.root)
+    second_checkout = tmp_path / "second-review-checkout"
+    reviewed_source.git(reviewed_source.checkout, "worktree", "add", "-q", "--detach",
+                        str(second_checkout))
+    configured_repository(comms, reviewed_source,
+                          reviewed_source.model_copy(update={"checkout": second_checkout}))
+    project = comms.registry.snapshot().commander_project.require()
+    assert project.repository_names().count(request.repo) == 1
+    assert project.repository_names(str(second_checkout)) == (request.repo,)
     common = ["--pr", str(request.pr), "--head", request.head]
     judge.main(["ok", *common, "--why", ACCEPTED.text], context)
     judge.main(["reviewing", *common], context)

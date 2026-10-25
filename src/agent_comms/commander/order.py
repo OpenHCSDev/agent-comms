@@ -36,7 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
 from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.commander.standing import UnownedWheelSpin
+from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -848,6 +848,11 @@ class DirectiveVerb(CommanderVerb):
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
         snapshot = ctx.comms.registry.snapshot()
+        known = {rule.message.message_id for rule in opened}
+        with ctx.comms.bus.bus.reading() as source:
+            opened += UnitAskUnanswered.explicitly_named(
+                source, snapshot, self.who(ctx),
+                tuple(identity for identity in self.answers if identity not in known))
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)

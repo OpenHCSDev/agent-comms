@@ -530,7 +530,7 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
 
     @abstractmethod
-    def repository_names(self) -> tuple[RepositoryName, ...]: ...
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]: ...
 
     @abstractmethod
     def require(self) -> RegisteredCommanderProject: ...
@@ -553,7 +553,7 @@ class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
-    def repository_names(self) -> tuple[RepositoryName, ...]:
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         return ()
 
     def require(self) -> RegisteredCommanderProject:
@@ -579,9 +579,9 @@ class RegisteredCommanderProject(CommanderProject):
             raise RelationViolationError("The registered commander thread no longer exists.")
         return selected
 
-    def repository_names(self) -> tuple[RepositoryName, ...]:
-        """Each GitHub repository once, however many registered checkouts point at it."""
-        return tuple(dict.fromkeys(repo.github for repo in self.repos))
+    def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
+        """Each selected GitHub repository once, however many checkouts point at it."""
+        return tuple(dict.fromkeys(repo.github for repo in Repo.candidates(self.repos, name)))
 
     def require(self) -> RegisteredCommanderProject:
         return self

@@ -17,6 +17,7 @@ from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.field_codec import MessageId
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer import launch as installer_launch
@@ -46,6 +47,7 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import Assignment, OrderClaim, OwnerRequest, PullRequests, RestoreHolderTodo, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from agent_comms.typed_table import RowNotFoundError
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 
@@ -282,6 +284,27 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
                          source, snapshot, commander, held, time.time(),
                      ).items()
                      for message in questions)
+
+    @classmethod
+    def explicitly_named(cls, source: BusReader, snapshot: RegistrySnapshot,
+                         commander: str, ids: tuple[MessageId, ...]) -> tuple[Self, ...]:
+        """An exact incoming original can be answered without having been tagged as a question.
+
+        Missing and already answered originals stay closed. Existing debts are resolved by
+        their own member, so a delivery claim cannot turn into an ordinary ask here.
+        """
+        found = []
+        for identity in ids:
+            try:
+                message = source.lookup_message(identity)
+            except RowNotFoundError:
+                continue
+            sender = snapshot.canonical_name(message.sender)
+            scope = RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(sender))
+            if (message.sender not in scope.first_names and scope.includes(message)
+                    and source.unanswered_references((message.seq,), scope.first_names)):
+                found.append(cls(message, sender))
+        return tuple(found)
 
     def clearing_action(self) -> str:
         return (f"Reply to {self.cited} or use --answers {self.message.message_id}. "

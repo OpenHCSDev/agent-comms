@@ -48,7 +48,6 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
-from agent_comms.repo import Repo
 from agent_comms.todos import (
     AcceptedVerdict,
     BluntText,
@@ -269,7 +268,7 @@ class PullRequestReview(ReviewSubject):
     @classmethod
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> PullRequestReview:
         return cls(PullRequestHead.among(
-            tuple(repository.github for repository in Repo.candidates(ctx.repos, options.repo)),
+            ctx.comms.registry.snapshot().commander_project.require().repository_names(options.repo),
             options.pr, options.head))
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:

@@ -1656,11 +1656,10 @@ class BluntText(BluntWords, OrderWords):
         return not found
 
     @classmethod
-    def refused(cls, text: str) -> str | None:
+    def wording_refusal(cls, text: str) -> tuple[str, ...]:
         """The refusal names every word that passes, so the next try is the last."""
-        if refusal := super().refused(text):
-            return f"{refusal} Any one of these words passes: {', '.join(cls.WORDS)}."
-        return None
+        return tuple(f"{refusal} Any one of these words passes: {', '.join(cls.WORDS)}."
+                     for refusal in super().wording_refusal(text))
 
 
 class DeliveryReport(BluntText):
