@@ -1399,7 +1399,7 @@ class OrderWords(WireValue):
     text: str
 
     def __post_init__(self) -> None:
-        if refused := self.wording_refusal(self.text):
+        for refused in self.wording_refusal(self.text):
             raise ToolRefusedError(refused)
 
     def to_wire(self) -> str:
@@ -1420,14 +1420,15 @@ class OrderWords(WireValue):
     def refused(cls, text: str) -> str | None:
         """The writer's check: it may print a note, which a decoded record never does."""
         cls.flag(text)
-        return cls.wording_refusal(text)
+        return next(iter(cls.wording_refusal(text)), None)
 
     @classmethod
-    def wording_refusal(cls, text: str) -> str | None:
+    def wording_refusal(cls, text: str) -> tuple[str, ...]:
+        """The refusal this text earns, or none: what a decoded record checks, silently."""
         found = cls.found(text)
         if len(text.split()) < cls.least_words or cls.refuses(found):
-            return cls.refusal.format(cls.least_words, found)
-        return None
+            return (cls.refusal.format(cls.least_words, found),)
+        return ()
 
     @staticmethod
     def refuses(found: list[str]) -> bool:
@@ -1506,10 +1507,10 @@ class StrikeReason(VerdictReason):
     least_words = 10
 
     @classmethod
-    def wording_refusal(cls, text: str) -> str | None:
+    def wording_refusal(cls, text: str) -> tuple[str, ...]:
         cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
         if cited and all(PlainText.found(span) for span in cited):
-            return f"{cited} is the unit's wording; send it a correction, not a strike."
+            return (f"{cited} is the unit's wording; send it a correction, not a strike.",)
         return super().wording_refusal(text)
 
 
