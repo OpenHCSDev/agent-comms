@@ -38,6 +38,7 @@ from tools.debt_ratchet import (
     StringFieldMetadata,
     StringIdentity,
     python_paths,
+    RawRecordShapes,
     AnyName,
     BooleanChainTerms,
     BuiltinHandlerTypeSwitch,
@@ -966,7 +967,7 @@ def test_clean_changed_lines_cannot_be_offset_with_a_deletion(repo, measure, del
     identity = measure.key(f"{repo.root}/new.py")
     assert status == 1
     assert report["delta"][identity] == 1
-    assert report["introduced"][identity] == 1
+    assert len(report["introduced"][identity]) == 1
 
 
 @pytest.mark.parametrize(
@@ -983,7 +984,7 @@ def test_unchanged_old_sites_are_not_forced_to_zero(repo, measure, source):
     identity = measure.key(f"{repo.root}/old.py")
     assert status == 0
     assert report["head"][identity] == 1
-    assert report["introduced"][identity] == 0
+    assert report["introduced"][identity] == []
 
 
 def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decoder(repo):
@@ -1002,12 +1003,12 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
     )
     status, report = repo.compare(base, head, NoneAbsence)
     assert status == 1
-    assert report["introduced_lines"] == {
+    assert {identity: lines for identity, lines in report["introduced"].items() if lines} == {
         NoneAbsence.key(f"{repo.root}/owner.py"): [1],
         NoneAbsence.key(f"{repo.root}/foreign.py"): [5],
     }
     plan = NoneAbsence.key(f"{repo.root}/plan.py")
-    assert report["introduced"][plan] == report["delta"][plan] == 0
+    assert report["introduced"][plan] == [] and report["delta"][plan] == 0
 
 
 def test_an_unchanged_absence_on_a_rewritten_line_is_not_written_but_a_new_one_is(repo):
@@ -1015,13 +1016,13 @@ def test_an_unchanged_absence_on_a_rewritten_line_is_not_written_but_a_new_one_i
     kept = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.settled()\n"})
     status, report = repo.compare(base, kept, NoneAbsence)
     identity = NoneAbsence.key(f"{repo.root}/owner.py")
-    assert report["introduced"][identity] == 0
+    assert report["introduced"][identity] == []
     added = repo.commit(
         {"owner.py": "def ready(stored):\n    return stored is not None and stored.owner is not None\n"}
     )
     status, report = repo.compare(kept, added, NoneAbsence)
     assert status == 1
-    assert report["introduced_lines"][identity] == [2]
+    assert report["introduced"][identity] == [2]
 
 
 def test_an_absence_moved_with_its_class_to_another_module_is_not_written(repo):
@@ -1030,12 +1031,12 @@ def test_an_absence_moved_with_its_class_to_another_module_is_not_written(repo):
     base = repo.commit({"attempts.py": holder, "executions.py": "VALUE = 1\n"})
     moved = repo.commit({"attempts.py": "VALUE = 2\n", "executions.py": holder})
     status, report = repo.compare(base, moved, NoneAbsence)
-    assert report["introduced"][NoneAbsence.key(f"{repo.root}/executions.py")] == 0
+    assert report["introduced"][NoneAbsence.key(f"{repo.root}/executions.py")] == []
     deleted = repo.commit({"attempts.py": holder, "executions.py": None})
     moved_out = repo.commit({"attempts.py": None, "owners.py": holder + "\n\n" + other})
     status, report = repo.compare(deleted, moved_out, NoneAbsence)
     assert status == 1
-    assert report["introduced_lines"][NoneAbsence.key(f"{repo.root}/owners.py")] == [8]
+    assert report["introduced"][NoneAbsence.key(f"{repo.root}/owners.py")] == [8]
 
 
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
@@ -1046,7 +1047,7 @@ def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
     identity = BannedVocabulary.key(f"{repo.root}/names.py")
     assert status == 0
     assert report["head"][identity] == 1
-    assert report["introduced"][identity] == 0
+    assert report["introduced"][identity] == []
 
 
 @pytest.mark.parametrize("word", BannedVocabulary.words)
@@ -1058,7 +1059,7 @@ def test_net_reduction_does_not_pay_for_a_new_identifier(repo, word):
     assert status == 1
     assert report["base"][identity] == 2
     assert report["head"][identity] == 1
-    assert report["introduced"][identity] == 1
+    assert len(report["introduced"][identity]) == 1
 
 
 @pytest.mark.parametrize("word", BannedVocabulary.words)
@@ -1073,7 +1074,7 @@ def test_old_function_name_and_multiline_attribute_have_their_own_lines(repo, wo
     identity = BannedVocabulary.key(f"{repo.root}/names.py")
     assert status == 0
     assert report["head"][identity] == 2
-    assert report["introduced"][identity] == 0
+    assert report["introduced"][identity] == []
 
 
 def test_changed_argument_still_changes_a_multiline_frozen_write(repo):
@@ -1083,7 +1084,7 @@ def test_changed_argument_still_changes_a_multiline_frozen_write(repo):
     identity = FrozenFieldWrite.key(f"{repo.root}/owner.py")
     assert status == 1
     assert report["delta"][identity] == 0
-    assert report["introduced"][identity] == 1
+    assert len(report["introduced"][identity]) == 1
 
 
 @pytest.mark.parametrize("word", BannedVocabulary.words)
@@ -1119,7 +1120,7 @@ def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):
     identity = BannedVocabulary.key(f"{repo.root}/words.py")
     assert status == 1
     assert report["head"][identity] == 1
-    assert report["introduced"][identity] == 1
+    assert len(report["introduced"][identity]) == 1
 
 
 def test_local_import_scope_counts_nested_functions_and_classes_once():
@@ -1260,7 +1261,7 @@ with suppress(Exception): raise RuntimeError()
     after = repo.commit({"reader.py": "with suppress(OSError): work()\n"})
     status, report = repo.compare(before, after, BroadSwallow)
     identity = BroadSwallow.key(f"{repo.root}/reader.py")
-    assert status == 1 and report["introduced"][identity] == 1
+    assert status == 1 and len(report["introduced"][identity]) == 1
     assert report["delta"][identity] == 1
 
 
@@ -1284,6 +1285,7 @@ def test_broad_handler_carrying_its_error_into_a_typed_outcome_is_not_a_swallow(
 def test_field_spelling_rosters_count_loops_not_declarations():
     source = b"""fields = ("path", "file_path", "filePath")\nfor key in ("path", "file_path", "filePath"):\n    value = data[key]\nvalue = next(data[key] for key in ("path", "file_path", "filePath") if key in data)\n"""
     assert ForeignFieldSpellings.count(source, "read.py") == 2
+    assert ForeignFieldSpellings.lines(source, "read.py") == [2, 4]
 
 
 def test_broad_swallow_is_counted_and_cannot_be_added(repo):
@@ -1307,7 +1309,7 @@ except FileNotFoundError: absent()
     after = repo.commit({"reader.py": "try: work()\nexcept OSError: pass\n"})
     status, report = repo.compare(before, after, BroadSwallow)
     identity = BroadSwallow.key(f"{repo.root}/reader.py")
-    assert status == 1 and report["introduced"][identity] == 1
+    assert status == 1 and len(report["introduced"][identity]) == 1
     assert report["delta"][identity] == 1
 
 
@@ -1328,7 +1330,7 @@ def test_growth_lines_end_the_merged_log(repo: Repository) -> None:
         text=True, timeout=120,
     )
     assert merged.returncode == 1
-    assert merged.stdout.rstrip().splitlines()[-1].startswith(("grew ", "introduced "))
+    assert merged.stdout.rstrip().splitlines()[-1].startswith(("grew ", "found ", "introduced "))
 
 
 def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
@@ -1353,3 +1355,30 @@ def test_content_cache_prunes_entries_unused_for_the_retention_period(tmp_path, 
     ContentCache.prune()
     assert ContentCache.stored("read") == (1,)
     assert ContentCache.stored("unused") == ()
+
+
+def test_a_grown_measure_points_at_every_head_site_it_counts(repo):
+    """A summed measure's sites span its files; a per-file measure's stay in its own file."""
+    base = repo.commit({"check.py": "value = 1\n", "other.py": "VALUE = 1\n"})
+    head = repo.commit({"check.py": "value = 1\nkind = type(x) is int\n",
+                        "other.py": "from typing import Any\nVALUE: Any = 1\n"})
+    status, report = repo.compare(base, head, TypeIdentity, AnyName)
+    assert status == 1
+    assert report["found"] == {
+        "TypeIdentity": [{"path": f"{repo.root}/check.py", "line": 2}],
+        AnyName.key(f"{repo.root}/other.py"): [{"path": f"{repo.root}/other.py", "line": 2}],
+    }
+
+
+def test_only_the_asked_measures_are_compared_and_located(repo):
+    """The audit's raw-shape count has no lines, so it grows without sites, and passes the
+    shared runner also took never reach the report."""
+    base = repo.commit({"rows.py": "VALUE = 1\n"})
+    head = repo.commit({"rows.py": 'def read(row: dict):\n    return row["a"], row["b"], row["c"], row["d"]\n'})
+    status, report = repo.compare(base, head, RawRecordShapes)
+    assert status == 1
+    assert report["delta"] == {RawRecordShapes.key(f"{repo.root}/rows.py"): 1}
+    assert report["found"] == {}
+    status, report = repo.compare(base, head, StringSubscript)
+    assert report["delta"] == {"StringSubscript": 4}
+    assert report["found"] == {"StringSubscript": [{"path": f"{repo.root}/rows.py", "line": 2}] * 4}
