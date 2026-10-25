@@ -13,6 +13,7 @@ from contextlib import closing
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import ClassVar
+from urllib.parse import quote
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class BoardLine:
     def read(cls, store: Path) -> tuple[BoardLine, ...]:
         """The lines the bridge recorded from its newest packet, oldest first."""
         columns = ", ".join(f'"{column.name}"' for column in fields(cls))
-        with closing(sqlite3.connect(f"{store.as_uri()}?mode=ro", uri=True)) as db:
+        # Path.as_uri imports urllib.request: 25 ms on every tool call.
+        with closing(sqlite3.connect(f"file:{quote(str(store))}?mode=ro", uri=True)) as db:
             return tuple(cls(*row) for row in db.execute(
                 f'SELECT {columns} FROM "{cls.table}" ORDER BY "since"'))
