@@ -314,7 +314,7 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
 
     from agent_comms.turn_item import ProviderResponseId
 
-    first_response, second_response = ProviderResponseId.fresh(), ProviderResponseId.fresh()
+    first_response, second_response = ProviderResponseId("resp-a"), ProviderResponseId("resp-b")
     permit.record_provider_usage(store, first_response, first)
     permit.record_provider_usage(store, first_response, first)
     permit.record_provider_usage(store, second_response, second)

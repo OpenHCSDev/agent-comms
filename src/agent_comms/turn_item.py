@@ -39,15 +39,19 @@ class NativeItemId(FreshNativeId):
     """One item within a harness's turn."""
 
 
-class UsageChargeId(FreshNativeId):
+class UsageChargeId(NominalText):
     """A billing entry within a goal attempt."""
+
+
+class UsageChargeIdText(NominalSpelling[UsageChargeId]):
+    spelling = NativeTurnIdText.spelling
 
 
 class ProviderResponseId(UsageChargeId):
     """The provider's original response identity, decoded from Pi."""
 
 
-class CompactionChargeId(UsageChargeId):
+class CompactionChargeId(UsageChargeId, FreshNativeId):
     """A locally minted billing entry for a compaction without a response id."""
 
 

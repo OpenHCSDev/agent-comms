@@ -75,7 +75,7 @@ def test_provider_usage_follows_the_declared_goal(copied_goal_bus, original_goal
     comms = copied_goal_bus
     from agent_comms.turn_item import ProviderResponseId
 
-    response_id = ProviderResponseId.fresh()
+    response_id = ProviderResponseId("resp-a")
     usage = PiUsage.from_wire({"input": 3, "output": 2, "totalTokens": 5})
     with goal_turn(comms, original_goal) as account:
         goal = comms.registry.require("worker").goal.require()
