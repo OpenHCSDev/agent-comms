@@ -1,6 +1,6 @@
 """Declared owner commands at the ACP boundary; shared behavior is inherited."""
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 from acp.schema import PromptRequest, PromptResponse
 
 from . import acp_extension
@@ -48,7 +48,7 @@ class AcpRequestConsumer(MroDispatch):
         if self.agent._prompt_text(self.request).strip() and not self.agent._prompt_text(
             self.request
         ).strip().startswith("/compact"):
-            raise RequestError.invalid_params({"reason": "Compaction metadata requires blank text"})
+            raise Refused.invalid_params({"reason": "Compaction metadata requires blank text"})
         self.response = await self.agent._compact_request(
             self.request.session_id, request.instructions
         )
@@ -56,7 +56,7 @@ class AcpRequestConsumer(MroDispatch):
     @handles(SelectedWriteRequest)
     async def selected_write(self, request):
         if self.request.prompt:
-            raise RequestError.invalid_params({"reason": "Selected write requires no prompt"})
+            raise Refused.invalid_params({"reason": "Selected write requires no prompt"})
         if self.request.session_id in self.agent.sessions.proxies:
             self.response = await self.forward(request)
             return

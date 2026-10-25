@@ -14,7 +14,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 
 from .acp_extension import QueueItem
 
@@ -168,7 +168,7 @@ class QueuedInput:
     def require_capacity(cls, inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
         if cls.remaining_capacity(inputs, sources) <= 0:
-            raise RequestError.invalid_params(
+            raise Refused.invalid_params(
                 {"reason": "Too many follow-up inputs awaiting their own user start."}
             )
 
