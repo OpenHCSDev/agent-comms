@@ -419,7 +419,7 @@ class CommanderContext(BaseModel):
         A publish alone is only queued."""
         outcomes = MessageNotification.references(
             self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,))
-        return MessageNotification.summary(outcomes.get((reference.seq, reference.message_id), ()))
+        return MessageNotification.summary(outcomes.outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)

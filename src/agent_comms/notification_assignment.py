@@ -229,6 +229,34 @@ class NotificationAssignmentRead:
     sources: tuple[Delivered, ...]
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
 
+    @classmethod
+    def empty(cls) -> NotificationAssignmentRead:
+        return cls((), ())
+
+    def rows_by_source(self) -> dict[MessageReference, tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]]:
+        grouped: dict[MessageReference, list[tuple[WakeAssignment, AssignmentActivityEvidence]]] = {
+            source.message.reference: [] for source in self.sources
+        }
+        for row in self.rows:
+            grouped.setdefault(row[0].source, []).append(row)
+        return {source: tuple(rows) for source, rows in grouped.items()}
+
+    @classmethod
+    def changed(cls, reads: Iterable[NotificationAssignmentRead], root: Path) -> tuple[NotificationAssignmentRead, ...]:
+        """Compare retained typed evidence without projecting another delivery window."""
+        reads = tuple(reads)
+        sources = tuple({source.message.reference: source
+                         for read in reads for source in read.sources}.values())
+        fresh = {}
+        for start in range(0, len(sources), MessageNotification.window_limit):
+            fresh.update(NotificationAssignment.read(
+                root, sources[start:start + MessageNotification.window_limit],
+            ).rows_by_source())
+        return tuple(read for read in reads if any(
+            previous != fresh.get(source, ())
+            for source, previous in read.rows_by_source().items()
+        ))
+
     def resolve(self, root: Path) -> tuple[NotificationAssignment, ...]:
         resolved = tuple(
             NotificationAssignment(

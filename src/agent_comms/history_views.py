@@ -64,6 +64,7 @@ from .presentation import (
     CountedRead,
     InboxRead,
     MessageNotification,
+    NotificationWindow,
     NoRevision,
     ReadState,
     ThreadRecord,
@@ -219,7 +220,7 @@ class HistoryViews:
         self.captured_activity = (revision, capture)
         return {name: capture.activity[name] for name in wanted if name in capture.activity}
 
-    def message_notifications_for_references(self, references: Sequence[MessageReference]):
+    def message_notifications_for_references(self, references: Sequence[MessageReference]) -> NotificationWindow:
         return MessageNotification.references(self.root, self.registry, self.bus.bus, references)
 
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,

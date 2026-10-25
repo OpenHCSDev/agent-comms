@@ -152,6 +152,14 @@ class OwnerOutcomes(OutcomeViewer):
         return source.sender_lookup == self.lookup
 
 
+@dataclass(frozen=True)
+class NotificationWindow:
+    """Projected outcomes and the detached assignment reads that produced them."""
+
+    outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
+    reads: tuple[NotificationAssignmentRead, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
@@ -216,32 +224,34 @@ class MessageNotification:
     def references(
         cls, root: Path, registry: Registration, log: Bus,
         references: Sequence[MessageReference],
-    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+    ) -> NotificationWindow:
         """Borrow mounted references in the original bounded delivery windows."""
         from .notification_assignment import NotificationAssignment
 
-        return cls.read_references(
-            log,
-            references,
-            lambda sources: cls.delivery_window(
-                root, registry, sources, NotificationAssignment.read(root, sources),
-                viewer=AllOutcomes(),
-            ),
-        )
+        def project(sources: Sequence[Delivered]) -> NotificationWindow:
+            read = NotificationAssignment.read(root, sources)
+            return NotificationWindow(cls.delivery_window(
+                root, registry, sources, read, viewer=AllOutcomes(),
+            ), (read,))
+
+        return cls.read_references(log, references, project)
 
     @classmethod
     def read_references(
         cls, log: Bus, references: Sequence[MessageReference],
-        project: Callable[[Sequence[Delivered]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
-    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+        project: Callable[[Sequence[Delivered]], NotificationWindow],
+    ) -> NotificationWindow:
         """Share bounded original delivery acquisition across live/recorded cuts."""
         result = {}
+        reads = []
         for start in range(0, len(references), cls.window_limit):
             sources = log.deliveries_for_references(
                 references[start : start + cls.window_limit]
             )
-            result.update(project(sources))
-        return result
+            window = project(sources)
+            result.update(window.outcomes)
+            reads.extend(window.reads)
+        return NotificationWindow(result, tuple(reads))
 
     @classmethod
     def delivery_window(
@@ -271,10 +281,11 @@ class MessageNotification:
             recipient.recipient_lookup: RecordedRecipientActivity()
             for source in sources for recipient in source.recipients
         }
-        return cls.project_delivery_window(
+        read = NotificationAssignment.read(root, sources)
+        return NotificationWindow(cls.project_delivery_window(
             root, namespace, sources, observations,
-            assignment_read=NotificationAssignment.read(root, sources), viewer=AllOutcomes(),
-        )
+            assignment_read=read, viewer=AllOutcomes(),
+        ), (read,))
 
     @classmethod
     def project_delivery_window(
@@ -967,24 +978,19 @@ class WireRevision(ReadState):
             status_batch = comms.views.thread_presentations(status_names)
             changed.update(name for name in status_names
                            if not previous.results[name].same_status(status_batch.view(name)))
-        notifications_changed = self.changed_since(NotificationsView(), earlier)
-        remaining = {name: view for name, view in readable.items() if name not in changed
-                     and (notifications_changed
-                          or view.notification_activity_names() & activity_changed)}
-        references = tuple(dict.fromkeys(reference for view in remaining.values()
-                                        for reference in (*view.incoming_references, *view.sent_references)))
-        if references:
-            outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.bus, references)
-            for name, view in remaining.items():
-                viewer = OwnerOutcomes.of(view.read_identity.thread)
-                current = tuple(replace(item, message=None)
-                                for reference in (*view.incoming_references, *view.sent_references)
-                                for item in outcomes[reference.seq, reference.message_id]
-                                if viewer.includes(item.sender_lookup, item.recipient_identity))
-                before = tuple(replace(item, message=None)
-                               for item in (*view.notifications, *view.sent_notifications))
-                if current != before:
-                    changed.add(name)
+        from .notification_assignment import NotificationAssignmentRead
+
+        remaining = {name: view for name, view in readable.items() if name not in changed}
+        changed.update(name for name, view in remaining.items()
+                       if self.reads != earlier.reads
+                       or view.notification_activity_names() & activity_changed)
+        if self.notifications != earlier.notifications:
+            changed_reads = NotificationAssignmentRead.changed(
+                (view.notification_read for name, view in remaining.items() if name not in changed),
+                comms.root,
+            )
+            changed.update(name for name, view in remaining.items()
+                           if view.notification_read in changed_reads)
         return frozenset(changed & names)
 
     @property

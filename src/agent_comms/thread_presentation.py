@@ -15,6 +15,7 @@ from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
+    from .notification_assignment import NotificationAssignmentRead
     from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
     from agent_comms.registry_document import RegistrySnapshot
@@ -206,6 +207,12 @@ class ThreadStatusDisplay:
         return self.status_display() == other.status_display()
 
 
+def empty_notification_read() -> NotificationAssignmentRead:
+    from .notification_assignment import NotificationAssignmentRead
+
+    return NotificationAssignmentRead.empty()
+
+
 @dataclass(frozen=True, slots=True)
 class ThreadPresentation(ThreadStatusDisplay):
     """A thread's acquired presentation, or its declared absence."""
@@ -215,6 +222,7 @@ class ThreadPresentation(ThreadStatusDisplay):
     read_identity: TranscriptReadIdentity | None = None
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
+    notification_read: NotificationAssignmentRead = field(default_factory=empty_notification_read)
 
     def notification_activity_names(self) -> frozenset[str]:
         return frozenset(name for item in (*self.notifications, *self.sent_notifications)
@@ -267,9 +275,9 @@ class ThreadPresentation(ThreadStatusDisplay):
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
+        notification_read = NotificationAssignment.read(transcripts.root, sources)
         projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, sources,
-            NotificationAssignment.read(transcripts.root, sources),
+            transcripts.root, transcripts.registry, sources, notification_read,
             viewer=OwnerOutcomes.of(window.read.identity.thread),
         )
         incoming, sent = (
@@ -280,6 +288,7 @@ class ThreadPresentation(ThreadStatusDisplay):
         )
         return replace(
             self, notifications=incoming, sent_notifications=sent,
+            notification_read=notification_read,
             read_identity=window.read.identity,
             incoming_references=tuple(source.message.reference for source in window.sources),
             sent_references=tuple(source.message.reference for source in window.sent_sources),
