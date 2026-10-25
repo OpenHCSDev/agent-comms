@@ -18,10 +18,10 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import cached_property, partial
 from pathlib import Path
+from traceback import extract_tb
 from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
-from agent_comms.change_report import FileLine
 from agent_comms.child_process import ResidentManager
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand
@@ -96,8 +96,19 @@ class InstallReport(MroDispatch):
 
     @handles(BaseException)
     def crashed(self, error: BaseException) -> tuple[str, ...]:
+        # The target tree is already removed here, so paths are compared as imported, never
+        # resolved: a removed working directory makes even a non-strict resolve raise.
+        package = Path(agent_comms.__file__).parent
+        frame = next(
+            frame for frame in reversed(extract_tb(error.__traceback__))
+            if Path(frame.filename).is_relative_to(package)
+        )
+        module = ".".join(
+            Path(frame.filename).relative_to(package.parent).with_suffix("").parts
+        )
+        location = self.source.module_file(module)
         return (f"Install failed: {type(error).__name__}: {error}",
-                FileLine.raised(error, self.source).to_wire())
+                f"{location}:{frame.lineno}")
 
     @contextmanager
     def running(self, tree: TargetTree, clock: InstallClock) -> Iterator[None]:
