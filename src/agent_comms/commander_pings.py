@@ -19,7 +19,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import (
     ConversationRole, InfoKind, Message, MessageRole, NoticeRole,
 )
-from agent_comms.plan_phases import PlanPhase
+from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.standing_rules import StandingRule
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
@@ -111,6 +111,22 @@ class PhaseRowPing(HudPing):
     @property
     def key(self) -> tuple[type[Self], type[PlanPhase]]:
         return type(self), self.phase
+
+
+@dataclass(frozen=True)
+class FinishedPhasesRowPing(HudPing):
+    plan: type[Plan]
+
+    @property
+    def key(self) -> tuple[type[Self], type[Plan]]:
+        return type(self), self.plan
+
+
+@dataclass(frozen=True)
+class ForksRowPing(HudPing):
+    @property
+    def key(self) -> tuple[type[ForksRowPing]]:
+        return (ForksRowPing,)
 
 
 @dataclass(frozen=True)

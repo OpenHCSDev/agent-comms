@@ -314,7 +314,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
     listed = FieldCodec.decode(TodoList, board_read(CommsTodoListTool, comms, NoThreadCaller()))
     assert {"P1", "P2", "P3"} <= {todo.id for todo in listed.todos} and listed.progress == {}
-    assert OrderEditCountRead.count(comms, "lead") == 0
+    assert tuple(OrderEditCountRead.for_commander(comms, "lead")) == ()
     with pytest.raises(ValueError, match="pass --artifact FILE"):
         comms.goals.todos.get("P2").order.closing_artifact()
 

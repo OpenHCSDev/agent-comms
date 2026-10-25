@@ -106,6 +106,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return (thread,)
 
     @classmethod
+    def commander_forks(cls, thread: Thread) -> tuple[Thread, ...]:
+        """The thread when it is a fork working inside its commander's turn."""
+        return ()
+
+    @classmethod
     def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
         return UnavailableThreadOwnerBinding()
 
@@ -206,3 +211,7 @@ class CommanderForkExecution(ExternalThreadExecution):
     def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
         """A fork acts inside its commander's turn, so the commander's own card covers it."""
         return ()
+
+    @classmethod
+    def commander_forks(cls, thread: Thread) -> tuple[Thread, ...]:
+        return (thread,)

@@ -167,7 +167,8 @@ class UnitObservation:
 class NeedsCommanderAttention:
     """Urgent siblings share their ping behavior without claiming each other's state."""
 
-    def attention(self) -> bool:
+    @classmethod
+    def attention(cls) -> bool:
         return True
 
 
@@ -244,11 +245,6 @@ class UnitState(UndatedStandingRule, declared_name=None):
         eligible.update(
             reading.thread.incarnation
             for reading in candidates
-            if reading.thread.parent.named(commander)
-        )
-        eligible.update(
-            reading.thread.incarnation
-            for reading in candidates
             if reading.thread.role.executor(reading.thread) and reading.presence.receiving
         )
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
@@ -272,7 +268,8 @@ class UnitState(UndatedStandingRule, declared_name=None):
     def clock(self) -> UnitClock:
         return self.source.clock
 
-    def attention(self) -> bool:
+    @classmethod
+    def attention(cls) -> bool:
         return False
 
     @property
