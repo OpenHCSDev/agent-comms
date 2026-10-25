@@ -86,6 +86,7 @@ from agent_comms.installer.interpreter_operation import (
     GitPhase,
     InstallClock,
     InstallRunPhase,
+    InstalledProgram,
     LiveCheckoutPreparePhase,
     LivePhase,
     OutgoingRuntimeMaintenancePhase,
@@ -98,7 +99,6 @@ from agent_comms.installer.interpreter_operation import (
     ReleaseBridgePhase,
     RestoredCheckoutPreparePhase,
     RestoreSpaceBackupPhase,
-    RetainedProgram,
     RetargetMaintenancePhase,
     RouteAndRuntimePublicationPhase,
     RuntimeProbe,
@@ -518,10 +518,10 @@ class Stack:
     commands: InstallCommands
     home: Path = HOME
     runtime: LaunchRuntime = field(default_factory=LaunchRuntime.installed)
-    program: ProbeProgram = field(default_factory=RetainedProgram.current)
-    """How this runtime's worker reaches the operation family: the outgoing runtime runs
-    the target's source of it, read once so reports outlive the tree; a runtime built
-    from the target declares it itself."""
+    program: ProbeProgram = InstalledProgram()
+    """How this runtime's worker reaches the operation family: the outgoing runtime answers
+    from its own installed installer; a runtime built from the target declares it too,
+    with the tree's carry steps beside it."""
 
     @property
     def python(self) -> Path:
@@ -863,7 +863,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         staged = Stack.build(ScratchCheckout(tree.path), commands)
         with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)
-        with mode.owners_stopped(member, root, installed, staged) as report.owners:
+        with mode.owners_stopped(member, root, installed, staged, bridges) as report.owners:
             with PracticePhase().running(commands.clock):
                 install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                                       installed, staged, tree, installer,
@@ -930,6 +930,18 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     @classmethod
     @contextmanager
+    def bridges_paused(cls, installed: Stack, staged: Stack,
+                       bridges: SessionBridgeResumes) -> Iterator[None]:
+        """Session bridges close their bus resources before the install holds the bus. A
+        bridge paused under the hold dies on its exit-time registry write and never answers
+        (installs 21 and 22, 2026-10-25: MaintenanceHeldError, then an empty pause reply)."""
+        with ExitStack() as paused:
+            with DiscoverAndPauseBridgePhase().running(staged.commands.clock):
+                paused.enter_context(bridges.holding(Serve.running(installed.home)))
+            yield
+
+    @classmethod
+    @contextmanager
     def owners_kept(cls, root: Path, installed: Stack,
                     staged: Stack) -> Iterator[OwnersStopped]:
         """Every owner keeps running: none runs at the root, or the run touches only a copy."""
@@ -979,22 +991,14 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
                 report: InstallReport) -> LiveRun:
-        """Session bridges close their bus resources before the bus is held, then exec in place.
-
-        Each serve retains its recorded owner's PID and start time after the hook exits.
-        Its control connection survives until live() publishes or rolls back; the
-        installed pointer, not a copied target version, selects its successor.
-        """
-        with ExitStack() as resources:
-            try:
-                with DiscoverAndPauseBridgePhase().running(self.staged.commands.clock):
-                    for bridge in Serve.running(self.installed.home):
-                        bridges.pause(bridge, resources)
-                return report.record_live(self.live(rehearsal, report))
-            finally:
-                # A later pause may fail; release captured peers before closing their sockets.
-                with ReleaseBridgePhase().running(self.staged.commands.clock):
-                    bridges.release()
+        """Bridges paused before the hold (bridges_paused) exec in place once live() publishes
+        or rolls back; the installed pointer, not a copied target version, selects each
+        successor. Each serve retains its recorded owner's PID and start time."""
+        try:
+            return report.record_live(self.live(rehearsal, report))
+        finally:
+            with ReleaseBridgePhase().running(self.staged.commands.clock):
+                bridges.release()
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed, report: InstallReport) -> LiveRun: ...

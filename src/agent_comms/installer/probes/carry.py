@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import sqlite3
 from abc import abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -19,6 +19,7 @@ from agent_comms.installer.interpreter_operation import (
     InterpreterOperation,
     RuntimeProbe,
     SubjectPhase,
+    TargetProbe,
 )
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import is_store_lock
@@ -108,21 +109,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
 
-class ArchivedInputs:
-    """Apply one carry input declaration to its retained snapshot roots as well."""
-
-    @abstractmethod
-    def roots(self) -> tuple[Path, ...]: ...
-
-    def input_files(self) -> tuple[Path, ...]:
-        paths: set[Path] = set()
-        for root in self.roots():
-            paths.update(super(ArchivedInputs, replace(self, root=root)).input_files())
-        for path in paths:
-            Carry.require_confined(self.root, path)
-        return tuple(sorted(paths))
-
-
 class CarryOperation[Answer](
     InterpreterOperation[tuple[Answer, ...], tuple[Carry, ...]],
     DeclaredFamily,
@@ -192,7 +178,7 @@ class RetireInputsOperation(CarryOperation[Carried]):
 
 
 @dataclass(frozen=True)
-class CarryProbe[Answer](RuntimeProbe[tuple[Answer, ...]]):
+class CarryProbe[Answer](TargetProbe, RuntimeProbe[tuple[Answer, ...]]):
     """A typed carry pass; the common worker exchange owns its measurements."""
 
     operation: CarryOperation

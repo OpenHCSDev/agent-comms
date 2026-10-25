@@ -13,6 +13,7 @@ from .errors import (
     CommittedMessageError,
     MessageAcknowledgmentError,
     RelationViolationError,
+    UnreceivedAnswerError,
     UnregisteredThreadError,
 )
 from .message_bus import MessageBus
@@ -36,7 +37,8 @@ from .working_memory_policy import AnnotationDisclosureGrant
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-from .todos import TodoError, TodoStore
+from .errors import TodoError
+from .todos import TodoStore
 
 
 class Messaging:
@@ -82,6 +84,11 @@ class Messaging:
         with todos.snapshot():
             pass  # The store validates its schema before any envelope is committed.
         self.bus.bus.messages_for_references(answers)
+        unreceived = self.bus.bus.unreceived(owner.incarnation.require_recorded().lookup, answers)
+        if unreceived:
+            raise UnreceivedAnswerError(
+                f"{owner.name} never received {', '.join(r.message_id for r in unreceived)}"
+                " and cannot answer it")
         message = Message(
             sender=owner.name,
             target=target,

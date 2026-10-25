@@ -1,77 +1,154 @@
 """The layer each agent_comms module belongs to, derived from its name and its imports.
 
-The layer table in this module names each layer's module prefixes; a module no
-prefix claims takes the highest layer among the modules it
-imports, so it adds no violation of its own. Every import that still runs downward
-in the order, or into a top layer from outside it, is a violation.
+Each layer is a class built on the layers it may import, and names its module
+prefixes; a module no prefix claims takes the highest layer among the modules it
+imports, so it adds no violation of its own. Every import into a layer the
+importing layer is not built on is a violation.
 
 The stack (stack/pyproject.toml) declares the client packages installed with Core from
 git sources: Toad and Textual import agent_comms modules. Each client is read at its
 branch head, so its imports root the reachability like a console script does. Modules
 neither reaches are listed as deletion candidates, and a client import naming a module
-Core no longer has fails --check, the step the merge queue runs.
+Core no longer has fails --check, the step the merge queue runs. That step writes this
+report to its job summary, so the report always describes the tree it was run on.
 
-The installer package is a client too, of the Core it upgrades from: install ships it in
-installer.zip and runs it on the runtime already installed. --previous REV reads Core at REV,
-and --check fails when the installer imports a module or name that tree lacks.
+The outgoing wire is a client too, of the Core an install upgrades from: the installed
+runtime answers every RuntimeProbe but a TargetProbe with its own installer, so --base REV
+reads Core at REV and --check fails when it lacks one of those probes or declares its
+fields differently.
 
-    python tools/module_layers.py > docs/layout/MODULE_LAYERS.md
-    python tools/module_layers.py --check [--previous REV]
+    python tools/module_layers.py
+    python tools/module_layers.py --check [--base REV] [--report FILE]
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import inspect
 import subprocess
 import sys
 import tempfile
 import tomllib
+import typing
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import ClassVar
+
+from agent_comms.installer import probes
+from agent_comms.installer.interpreter_operation import RuntimeProbe
+
+from typing_names import TypingImports, TypingReference
+
+from agent_comms.declared_family import DeclaredFamily
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"
 
 
+class Layer(DeclaredFamily):
+    """A package of the target structure. Its bases are the layers it may import, and
+    its prefixes the module names it owns besides its own name."""
+
+    prefixes: typing.ClassVar[frozenset[str]] = frozenset()
+
+    @classmethod
+    def claim(cls, unit: str) -> int:
+        """How much of the unit's name this layer claims; the longest claim owns it."""
+        head = unit.split(".")[1]
+        claims = [len(prefix) for prefix in cls.prefixes if head.startswith(prefix)]
+        if head == cls.declared_name:
+            claims.append(len(head))
+        return max(claims, default=0)
+
+    @classmethod
+    def may_import(cls, target: type[Layer]) -> bool:
+        return issubclass(cls, target)
+
+    @classmethod
+    def on_top(cls) -> bool:
+        """Nothing is built on a top layer, so nothing outside it may import it."""
+        return not any(
+            member is not cls and member.may_import(cls) for member in Layer.members_with(Layer)
+        )
+
+
+class Wire(Layer):
+    prefixes = frozenset({"bus_", "wire_", "message_", "delivery_", "private_"})
+
+
+class Registry(Wire):
+    prefixes = frozenset({"registry_", "registration_", "owner_", "thread_", "channel_"})
+
+
+class Coordination(Registry):
+    prefixes = frozenset({"goal_", "attempt_", "coordination_", "wake_"})
+
+
+class Context(Coordination):
+    prefixes = frozenset({"working_", "context_segments", "instructions"})
+
+
+class Turns(Context):
+    prefixes = frozenset({"turn_", "input_", "session_", "selected_"})
+
+
+class Runtime(Turns):
+    prefixes = frozenset({"native_", "pi_", "acp_", "agent_", "runtime_", "_pi_helpers", "cli_bridges"})
+
+
+class UiModel(Runtime):
+    pass
+
+
+class Cli(Runtime):
+    prefixes = frozenset({"cli_", "tool_", "tools"})
+
+
+class Commander(Runtime):
+    pass
+
+
 @dataclass(frozen=True)
-class Layer:
-    """A package of the target structure and the module name prefixes it owns."""
-
-    name: str
-    prefixes: tuple[str, ...]
-    top: bool = False
-
-    def claims(self, module: str) -> bool:
-        head = module.split(".")[1]
-        return head == self.name or any(head.startswith(prefix) for prefix in self.prefixes)
-
-
-LAYERS = (
-    Layer("wire", ("bus_", "wire_", "message_", "delivery_", "private_")),
-    Layer("registry", ("registry_", "registration_", "owner_", "thread_", "channel_")),
-    Layer("coordination", ("goal_", "attempt_", "coordination_", "wake_")),
-    Layer("context", ("working_", "context_segments", "instructions")),
-    Layer("turns", ("turn_", "input_", "session_", "selected_")),
-    Layer(
-        "runtime", ("native_", "pi_", "acp_", "agent_", "runtime_", "_pi_helpers", "cli_bridges")
-    ),
-    Layer("ui_model", (), top=True),
-    Layer("cli", ("cli_", "tool_", "tools"), top=True),
-    Layer("commander", (), top=True),
-)
-
-
-@dataclass(frozen=True)
-class Import:
-    """One import statement inside agent_comms naming another agent_comms module."""
+class Import(ABC):
+    """One import statement inside agent_comms naming another agent_comms module. Its
+    class says when the statement runs."""
 
     source: str
     target: str
     line: int
+
+    loads: typing.ClassVar[bool]
+    """Whether loading ``source`` runs it, so loading ``source`` loads ``target``."""
+
+    @classmethod
+    def in_function(cls) -> type[Import]:
+        """The class of an import written one function deeper."""
+        return CallTimeImport
+
+
+class LoadTimeImport(Import):
+    """At module level: it runs when its module loads."""
+
+    loads = True
+
+
+class CallTimeImport(Import):
+    """Inside a function body: it runs when the function is called."""
+
+    loads = False
+
+
+class CheckerImport(Import):
+    """Under ``if TYPE_CHECKING:``: only a type checker reads it."""
+
+    loads = False
+
+    @classmethod
+    def in_function(cls) -> type[Import]:
+        return cls
 
 
 class ModuleReferences(ast.NodeVisitor, ABC):
@@ -97,11 +174,50 @@ class ImportNames(ModuleReferences):
         self.package, self.module, self.found = package, module, found
         # relative imports start at the file's own directory, a package's __init__ included
         self.parent = ".".join(path.parent.relative_to(package.src).parts)
+        self.runs: type[Import] = LoadTimeImport
 
     def record(self, node: ast.stmt | ast.expr, *names: str) -> None:
         for name in names:
             if (target := self.package.resolve(name)) is not None:
-                self.found.append(Import(self.module, target, node.lineno))
+                self.found.append(self.runs(self.module, target, node.lineno))
+
+    def visit_within(self, runs: type[Import], nodes: Sequence[ast.AST]) -> None:
+        outer, self.runs = self.runs, runs
+        for node in nodes:
+            self.visit(node)
+        self.runs = outer
+
+    def visit_scope(self, node: ast.AST, called: Sequence[ast.AST]) -> None:
+        """Decorators, defaults and annotations run where the definition runs; only the
+        body runs when the function is called."""
+        self.visit_within(
+            self.runs,
+            [child for child in ast.iter_child_nodes(node) if all(child is not c for c in called)],
+        )
+        self.visit_within(self.runs.in_function(), called)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self.visit_scope(node, node.body)
+
+    # NodeVisitor dispatches on the node's class name; a coroutine's scopes are a function's.
+    visit_AsyncFunctionDef = visit_FunctionDef  # noqa: N815
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        self.visit_scope(node, [node.body])
+
+    def visit_Module(self, node: ast.Module) -> None:
+        self.typing = TypingImports.of(node)
+        self.generic_visit(node)
+
+    def visit_If(self, node: ast.If) -> None:
+        test = TypingReference(self.typing)
+        test.dispatch_sync(node.test)
+        if test.is_type_checking:
+            self.visit(node.test)
+            self.visit_within(CheckerImport, node.body)
+            self.visit_within(self.runs, node.orelse)
+        else:
+            self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
         self.record(node, *(alias.name for alias in node.names))
@@ -125,6 +241,39 @@ class ClientImport:
 
     def __str__(self) -> str:
         return f"{self.client}:{self.path}:{self.line} imports {self.module}"
+
+    def drift(self, package: Package) -> tuple[str, ...]:
+        """How the tree declares an imported name differently from what this client needs;
+        an import needs only the names."""
+        return ()
+
+
+@dataclass(frozen=True)
+class WireClass(ClientImport):
+    """A class one runtime encodes and another decodes: the tree must declare the same
+    annotated class attributes, its fields, in the same order."""
+
+    fields: tuple[str, ...] = ()
+
+    @staticmethod
+    def declared(node: ast.ClassDef) -> tuple[str, ...]:
+        fields: list[str] = []
+        for statement in node.body:
+            match statement:
+                case ast.AnnAssign(target=target, annotation=annotation):
+                    fields.append(f"{ast.unparse(target)}: {ast.unparse(annotation)}")
+        return tuple(fields)
+
+    def drift(self, package: Package) -> tuple[str, ...]:
+        path = package.modules[self.module]
+        drifted: list[str] = []
+        for node in ast.parse(path.read_text(), str(path)).body:
+            match node:
+                case ast.ClassDef(name=name) if name in self.names:
+                    if (fields := self.declared(node)) != self.fields:
+                        drifted.append(f"{name} declares ({', '.join(fields)}), "
+                                       f"sent as ({', '.join(self.fields)})")
+        return tuple(drifted)
 
 
 class ClientImportNames(ModuleReferences):
@@ -229,45 +378,68 @@ class StackClient:
             clients.append(cls(name, checkout))
         return tuple(clients)
 
-    @property
-    def root(self) -> Path:
-        """The directory whose Python files are this client's."""
-        return self.checkout
+    @cached_property
+    def imports(self) -> tuple[ClientImport, ...]:
+        found: list[ClientImport] = []
+        for path in sorted(self.checkout.rglob("*.py")):
+            relative = str(path.relative_to(self.checkout))
+            ClientImportNames(self.name, relative, found).visit(
+                ast.parse(path.read_text(), relative)
+            )
+        return tuple(found)
 
-    def reader(self, relative: Path, found: list[ClientImport]) -> ClientImportNames:
-        return ClientImportNames(self.name, str(relative), found)
 
-    def keeps(self, entry: ClientImport) -> bool:
-        return True
+class OutgoingWire(StackClient):
+    """The probes an installed runtime answers with its own installer: every RuntimeProbe
+    but a TargetProbe (installer/interpreter_operation.py), read from the family as this
+    tree declares it."""
+
+    @classmethod
+    def at(cls) -> OutgoingWire:
+        return cls("outgoing wire", Path(inspect.getfile(probes)).parents[3])
 
     @cached_property
     def imports(self) -> tuple[ClientImport, ...]:
         found: list[ClientImport] = []
-        for path in sorted(self.root.rglob("*.py")):
-            relative = path.relative_to(self.checkout)
-            self.reader(relative, found).visit(ast.parse(path.read_text(), str(relative)))
-        return tuple(entry for entry in found if self.keeps(entry))
+        members: tuple[type[RuntimeProbe], ...] = RuntimeProbe.discover_members(probes, RuntimeProbe)
+        for member in members:
+            for probe in member.outgoing_wire():
+                lines, line = inspect.getsourcelines(probe)
+                match ast.parse("".join(lines)).body:
+                    case [ast.ClassDef() as node]:
+                        found.append(WireClass(
+                            self.name, str(Path(inspect.getfile(probe)).relative_to(self.checkout)),
+                            line, probe.__module__, (probe.__name__,), WireClass.declared(node),
+                        ))
+                    case body:
+                        raise ValueError(f"{probe.__qualname__}'s source is not one class: {body}")
+        return tuple(found)
 
 
-@dataclass(frozen=True)
-class InstallerZip(StackClient):
-    """The installer package as installer.zip carries it to the runtime already installed
-    (RetainedProgram in installer/interpreter_operation.py). Its own modules come from the zip;
-    every other agent_comms import resolves in that older runtime."""
+class ImportGraph:
+    """The modules reached from some modules through a set of import edges. Importing a
+    module imports every package above it first, so those are reached too."""
 
-    PACKAGE: ClassVar[str] = f"{PACKAGE}.installer"
+    def __init__(self, edges: Iterable[Import]) -> None:
+        self.targets: dict[str, set[str]] = {}
+        for edge in edges:
+            self.add(edge.source, (edge.target,))
 
-    @classmethod
-    def at(cls, root: Path) -> InstallerZip:
-        return cls("installer.zip", root / "src")
+    def add(self, source: str, targets: Iterable[str]) -> None:
+        self.targets.setdefault(source, set()).update(targets)
 
-    @property
-    def root(self) -> Path:
-        return self.checkout.joinpath(*self.PACKAGE.split("."))
-
-    def keeps(self, entry: ClientImport) -> bool:
-        """The zip carries the installer's own modules; only the rest resolve in the runtime."""
-        return entry.module != self.PACKAGE and not entry.module.startswith(self.PACKAGE + ".")
+    def reached(self, starts: Iterable[str]) -> set[str]:
+        seen: set[str] = set()
+        todo = list(starts)
+        while todo:
+            module = todo.pop()
+            if module in seen:
+                continue
+            seen.add(module)
+            parts = module.split(".")
+            todo.extend(".".join(parts[:end]) for end in range(1, len(parts)))
+            todo.extend(self.targets.get(module, ()))
+        return seen
 
 
 class Package:
@@ -279,13 +451,27 @@ class Package:
         self.root = self.src / PACKAGE / "__init__.py"  # read for reachability, never a unit
         self.clients = clients
 
+    def dotted(self, path: Path) -> str:
+        return ".".join(path.relative_to(self.src).with_suffix("").parts).removesuffix(
+            ".__init__"
+        )
+
     @cached_property
     def files(self) -> dict[str, Path]:
         return {
-            ".".join(path.relative_to(self.src).with_suffix("").parts).removesuffix(
-                ".__init__"
-            ): path
+            self.dotted(path): path
             for path in sorted(set((self.src / PACKAGE).rglob("*.py")) - {self.root})
+        }
+
+    @cached_property
+    def script_packages(self) -> dict[str, Path]:
+        """The modules of every other package a console script starts in, read for
+        reachability and never units: their imports of agent_comms run like a script's."""
+        roots = {script.partition(".")[0] for script in self.entry_points} - {PACKAGE}
+        return {
+            self.dotted(path): path
+            for root in sorted(roots)
+            for path in sorted((self.src / root).rglob("*.py"))
         }
 
     @cached_property
@@ -303,15 +489,15 @@ class Package:
         return ".".join(module.split(".")[:2])
 
     def resolve(self, name: str) -> str | None:
-        """The module an import names, or None when it is outside agent_comms."""
-        while name and name not in self.files:
+        """The module an import names, or None when this tree does not provide it."""
+        while name and name not in self.modules:
             name = name.rpartition(".")[0]
         return name or None
 
     @cached_property
     def modules(self) -> dict[str, Path]:
-        """Every importable module, the package root included."""
-        return {PACKAGE: self.root, **self.files}
+        """Every importable module: the units, the package root and the script packages."""
+        return {PACKAGE: self.root, **self.script_packages, **self.files}
 
     def contains(self, module: str) -> bool:
         """Whether an absolute module name lies inside this package, present or not."""
@@ -325,42 +511,46 @@ class Package:
         return tuple(sorted(set(found), key=lambda edge: (edge.source, edge.line, edge.target)))
 
     @cached_property
-    def layers(self) -> dict[str, Layer]:
-        """Each unit's layer: its claiming prefix, else the highest layer it imports."""
-        claimed = {
-            unit: next(layer for layer in LAYERS if layer.claims(unit))
-            for unit in self.top_level
-            if any(layer.claims(unit) for layer in LAYERS)
-        }
-        rank = {unit: LAYERS.index(layer) for unit, layer in claimed.items()}
-        rank |= {unit: 0 for unit in self.top_level if unit not in claimed}
+    def layers(self) -> dict[str, type[Layer]]:
+        """Each unit's layer: its longest claim, else the highest layer it imports.
+
+        Highest is by declaration: on the chain that is the inheritance order, and between
+        top layers, which import nothing of each other, the later declared one."""
+        members = Layer.members_with(Layer)
+        position = {layer: index for index, layer in enumerate(members)}
+        claimed: dict[str, type[Layer]] = {}
+        for unit in self.top_level:
+            layer = max(members, key=lambda layer: layer.claim(unit))
+            if layer.claim(unit):
+                claimed[unit] = layer
+        layers = {unit: claimed.get(unit, Wire) for unit in self.top_level}
         changed = True
         while changed:
             changed = False
             for edge in self.unit_imports:
                 source, target = self.unit(edge.source), self.unit(edge.target)
-                if source not in claimed and source != target and rank[target] > rank[source]:
-                    rank[source], changed = rank[target], True
-        return {unit: LAYERS[rank[unit]] for unit in self.top_level}
+                higher = position[layers[target]] > position[layers[source]]
+                if source not in claimed and higher:
+                    layers[source], changed = layers[target], True
+        return layers
 
     @cached_property
     def unit_imports(self) -> tuple[Import, ...]:
-        """Imports between units; the package root is read for reachability only."""
-        return tuple(edge for edge in self.imports if edge.source in self.files)
+        """Imports between units; the other modules are read for reachability only."""
+        return tuple(
+            edge for edge in self.imports if edge.source in self.files and edge.target in self.files
+        )
 
     @cached_property
     def violations(self) -> tuple[Import, ...]:
-        """Imports into a later layer, or into a top layer from outside it."""
-        order = {layer: index for index, layer in enumerate(LAYERS)}
-        found = []
-        for edge in self.unit_imports:
-            source, target = (
-                self.layers[self.unit(edge.source)],
-                self.layers[self.unit(edge.target)],
+        """Imports into a layer the importing layer is not built on."""
+        return tuple(
+            edge
+            for edge in self.unit_imports
+            if not self.layers[self.unit(edge.source)].may_import(
+                self.layers[self.unit(edge.target)]
             )
-            if source is not target and (target.top or order[target] > order[source]):
-                found.append(edge)
-        return tuple(found)
+        )
 
     @cached_property
     def entry_points(self) -> tuple[str, ...]:
@@ -415,6 +605,16 @@ class Package:
         return tuple(found)
 
     @cached_property
+    def drifted(self) -> tuple[tuple[ClientImport, str], ...]:
+        """Names a client needs that this tree declares differently."""
+        return tuple(
+            (entry, drift)
+            for entry in self.client_imports
+            if self.provides(entry.module)
+            for drift in entry.drift(self)
+        )
+
+    @cached_property
     def client_surface(self) -> dict[str, set[str]]:
         """Each unit a client imports directly, with the clients importing it."""
         surface: dict[str, set[str]] = {}
@@ -428,42 +628,43 @@ class Package:
     def unreached(self) -> tuple[str, ...]:
         """Units no console script or stack client reaches through static imports,
         package __init__s included."""
-        edges: dict[str, set[str]] = {}
-        for edge in self.imports:
-            edges.setdefault(edge.source, set()).add(edge.target)
         clients = (target for entry in self.client_imports for target in self.client_targets(entry))
-        seen, todo = set(), [PACKAGE, *self.entry_points, *clients]
-        while todo:
-            module = todo.pop()
-            if module in seen:
-                continue
-            seen.add(module)
-            parts = module.split(".")
-            todo.extend(".".join(parts[:end]) for end in range(1, len(parts)))
-            todo.extend(edges.get(module, ()))
+        seen = ImportGraph(self.imports).reached([PACKAGE, *self.entry_points, *clients])
         return tuple(unit for unit in self.top_level if not any(self.unit(m) == unit for m in seen))
+
+    def load_graph(self) -> ImportGraph:
+        """The imports that run while modules load: a cycle through them deadlocks an import."""
+        return ImportGraph(edge for edge in self.imports if edge.loads)
+
+    @staticmethod
+    def joined(words: Iterable[str]) -> str:
+        """Words as an English list: ``a``, ``a and b``, ``a, b and c``."""
+        *rest, last = words
+        return f"{', '.join(rest)} and {last}" if rest else last
 
     def markdown(self) -> str:
         lines = [
             "# Module layers",
             "",
-            "Generated by `python tools/module_layers.py > docs/layout/MODULE_LAYERS.md`;"
-            " do not edit by hand.",
+            "Generated by `python tools/module_layers.py` for the tree it ran on.",
             "",
-            "Layers in order: " + ", ".join(f"`{layer.name}`" for layer in LAYERS) + ". "
-            "Each layer imports only the layers before it; "
-            "`ui_model`, `cli` and `commander` sit on top, "
-            "and nothing outside a top layer imports it. The layer table in "
-            "`tools/module_layers.py` declares the claiming prefixes; a module no prefix "
+            "Layers in order: "
+            + ", ".join(f"`{layer.declared_name}`" for layer in Layer.members_with(Layer))
+            + ". Each layer imports only the layers before it; "
+            + self.joined(
+                f"`{layer.declared_name}`" for layer in Layer.members_with(Layer) if layer.on_top()
+            )
+            + " sit on top, and nothing outside a top layer imports it. The layer classes in "
+            "`tools/module_layers.py` declare the claiming prefixes; a module no prefix "
             "claims takes the highest layer it imports.",
             "",
             f"{len(self.top_level)} top-level units ({len(self.subpackages)} of them subpackages); "
             f"{len(self.violations)} violating imports; {len(self.unreached)} deletion candidates.",
             "",
         ]
-        for layer in LAYERS:
+        for layer in Layer.members_with(Layer):
             units = [unit for unit in self.top_level if self.layers[unit] is layer]
-            lines += [f"## {layer.name} ({len(units)})", ""]
+            lines += [f"## {layer.declared_name} ({len(units)})", ""]
             lines += [f"- `{unit.removeprefix(PACKAGE + '.')}`" for unit in units]
             lines.append("")
         lines += [
@@ -479,7 +680,8 @@ class Package:
                 self.layers[self.unit(edge.target)],
             )
             lines.append(
-                f"| `{path}:{edge.line}` | `{edge.target}` | {source.name} | {target.name} |"
+                f"| `{path}:{edge.line}` | `{edge.target}` "
+                f"| {source.declared_name} | {target.declared_name} |"
             )
         lines += [
             "",
@@ -514,15 +716,18 @@ def report(package: Package) -> bool:
         print(f"missing module: {entry}", file=sys.stderr)
     for entry, name in package.missing_names:
         print(f"missing name: {entry} {name}", file=sys.stderr)
+    for entry, drift in package.drifted:
+        print(f"changed fields: {entry} {drift}", file=sys.stderr)
     print(
         f"{len(package.client_imports)} client imports of {len(package.client_surface)} units; "
         f"{len(package.missing)} name a module this tree lacks, "
-        f"{len(package.missing_names)} a name its module does not define"
+        f"{len(package.missing_names)} a name its module does not define, "
+        f"{len(package.drifted)} a name it declares differently"
     )
-    return bool(package.missing or package.missing_names)
+    return bool(package.missing or package.missing_names or package.drifted)
 
 
-def previous_tree(revision: str, into: Path) -> Path:
+def base_tree(revision: str, into: Path) -> Path:
     """Core's source and project file at ``revision``, the runtime an install upgrades from."""
     into.mkdir()
     archive = subprocess.run(
@@ -541,9 +746,12 @@ def main() -> int:
         help="fail when a stack client imports an agent_comms module this tree lacks",
     )
     parser.add_argument(
-        "--previous",
+        "--base",
         metavar="REV",
-        help="with --check, also fail when the installer imports what Core at REV lacks",
+        help="with --check, also fail when Core at REV lacks an outgoing probe or its fields",
+    )
+    parser.add_argument(
+        "--report", type=Path, help="with --check, also write the layer report to this file"
     )
     arguments = parser.parse_args()
     with tempfile.TemporaryDirectory() as clones:
@@ -551,11 +759,13 @@ def main() -> int:
         if not arguments.check:
             sys.stdout.write(package.markdown())
             return 0
+        if arguments.report:
+            arguments.report.write_text(package.markdown())
         lacking = report(package)
-        if arguments.previous:
-            previous = previous_tree(arguments.previous, Path(clones) / "previous")
-            print(f"installer.zip against Core at {arguments.previous}:")
-            lacking = report(Package(previous, (InstallerZip.at(ROOT),))) or lacking
+        if arguments.base:
+            base = base_tree(arguments.base, Path(clones) / "base")
+            print(f"outgoing wire against Core at {arguments.base}:")
+            lacking = report(Package(base, (OutgoingWire.at(),))) or lacking
         return 1 if lacking else 0
 
 
