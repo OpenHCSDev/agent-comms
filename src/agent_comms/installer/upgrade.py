@@ -145,6 +145,8 @@ from agent_comms.installer.reporting import (
     UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
+from agent_comms.installer.runtime_wire import CrossesRuntimes
+from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
@@ -494,13 +496,26 @@ class OwnersStopped:
     def release(self) -> None:
         """No hold was taken with these owners, so none is cleared."""
 
+    def keep(self) -> None:
+        """Nothing starts on the root again."""
+        self.give_back.pop_all()
+
+    @contextmanager
+    def held_on_failure(self) -> Iterator[None]:
+        """A raise inside leaves a root its runtime may not open: no owner starts on it."""
+        try:
+            yield
+        except BaseException:
+            self.keep()
+            raise
+
     def lines(self) -> tuple[str, ...]:
         return tuple(line for owner in self.started for line in owner.lines())
 
 
 @dataclass
 class HeldOwnersStopped(OwnersStopped):
-    """Owners the target stopped under the install's one maintenance hold, which lasts
+    """Owners the outgoing runtime stopped under the install's one maintenance hold, which lasts
     to its release, before anything starts on the root again, or to the install's exit."""
 
     hold: ExitStack = field(default_factory=ExitStack)
@@ -508,6 +523,11 @@ class HeldOwnersStopped(OwnersStopped):
     def release(self) -> None:
         """Clears the hold once; a later call finds nothing left to clear."""
         self.hold.close()
+
+    def keep(self) -> None:
+        """The hold stays draining too."""
+        self.hold.pop_all()
+        super().keep()
 
 
 @dataclass(frozen=True)
@@ -552,6 +572,25 @@ class Stack:
             if not declared.accepts(reported):
                 raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
             os.replace(fetched, self.uv)
+
+    def require_runtime_wire(self) -> None:
+        """Compare the target's wire with the source stamped into this installed wheel.
+
+        Isolated Python ignores the target installer's PYTHONPATH: the old wheel, not
+        the current checkout or its build metadata, owns the outgoing Core identity.
+        """
+        commit = self.commands.run(
+            self.python, "-I", "-c",
+            "from agent_comms.package_stamp import STAMP; print(STAMP.commit())",
+        ).strip()
+        paths = tuple(dict.fromkeys(member.path for member in CrossesRuntimes.declarations()))
+        present = self.commands.git(self.checkout, "ls-tree", "--name-only", "-r", commit,
+                                    "--", *paths).splitlines()
+        sources = {path: self.commands.git(self.checkout, "show", f"{commit}:{path}")
+                   for path in present}
+        drift = CrossesRuntimes.drift_sources(sources)
+        if drift:
+            raise RuntimeWireChanged(commit, drift)
 
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
@@ -730,6 +769,17 @@ class Stack:
             self.probe(ServingProbe())
             return services
 
+    def require_opens(self, root: Path) -> None:
+        """A restored root opens under this runtime's declarations, the check every opening
+        makes (TableSchema.require_schema), answered by this runtime's own CLI: install 13
+        released a half-restored ledger that every later opening refused (install 14,
+        2026-10-24)."""
+        differing = self.cli(root, PlannedReconcileCliCommand).rewritten
+        if differing:
+            raise UpgradeRefused(
+                f"Rollback left stores that differ from {self.runtime.prefix.name}'s "
+                f"declarations: {', '.join(map(str, differing))}; maintenance stays held")
+
     def verify(self, root: Path) -> BusReadBack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
         with ReadBackVerifyPhase().running(self.commands.clock):
@@ -857,9 +907,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
                 raise UpgradeRefused(str(error)) from None
             member = Install.member(root, retire)
             installed = Stack(tree.path, commands)
-            installed.require_uv()
             if not installed.python.exists():
                 raise UpgradeRefused(f"No installed stack at {installed.python}")
+            installed.require_runtime_wire()
+            installed.require_uv()
         staged = Stack.build(ScratchCheckout(tree.path), commands)
         with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)
@@ -1029,12 +1080,13 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     @contextmanager
     def owners_stopped(cls, root: Path, installed: Stack,
                        staged: Stack) -> Iterator[OwnersStopped]:
-        """One hold, one retarget and one stop per install, all at its start. The target
-        stops the owners: stopping settles their turns in stores this install carries,
-        which the outgoing runtime may be unable to open (install 14, 2026-10-24: a ledger
-        install 13 left uncarried refused f23ca8968's every opening, so its stop answered
-        nothing). The hold refuses every other writer and every owner start from here to
-        its release, so nothing writes the root between this stop and the backup."""
+        """One hold, one stop and one retarget per install, all at its start. The outgoing
+        runtime stops the owners: their stores still hold its declarations until this
+        install carries them, and the target refuses every store whose shape it has not
+        carried yet (install of 7dbd43736, 2026-10-25: #3193 rekeyed CurrentNativeCursor,
+        so the target's stop refused the coordinator file before any carry ran). Only then
+        does the hold move to the target, and from there to its release it refuses every
+        other writer and every owner start, so nothing writes the root before the backup."""
         clock = staged.commands.clock
         with OutgoingRuntimeMaintenancePhase().running(clock):
             RootRuntimeStore.at(root).adopt(installed.runtime)
@@ -1047,10 +1099,11 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
                     held = maintenance.begin(MaintenanceOperator.current())
                 owners.hold.callback(
                     lambda: maintenance.clear(maintenance.held_by(MaintenanceOperator.current())))
+                with held.holding():
+                    owners.stop(installed, root)
                 with RetargetMaintenancePhase().running(clock):
                     held = maintenance.retarget(held, staged.runtime)
                 owners.hold.enter_context(held.holding())
-                owners.stop(staged, root)
                 yield owners
 
     @classmethod
@@ -1192,26 +1245,30 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 except BaseException as error:
                     print(f"install: install failed ({type(error).__name__}: {error}); "
                           "restoring original installation", file=sys.stderr)
-                    # Only the services this run stopped may write the root on its behalf.
-                    HostService.stop_all(stopped.services)
+                    # Until the outgoing runtime opens every restored store, any raise
+                    # keeps the hold draining and starts no owner.
+                    with report.owners.held_on_failure():
+                        # Only the services this run stopped may write the root on its behalf.
+                        HostService.stop_all(stopped.services)
 
-                    def rehold() -> None:
-                        """Hold the root again in whatever phase it is now in."""
-                        holder.close()
-                        holder.enter_context(
-                            maintenance.held_by(MaintenanceOperator.current()).holding())
+                        def rehold() -> None:
+                            """Hold the root again in whatever phase it is now in."""
+                            holder.close()
+                            holder.enter_context(
+                                maintenance.held_by(MaintenanceOperator.current()).holding())
 
-                    rehold()
-                    backup.undo()
-                    rehold()
-                    head = self.installed.commands.git(
-                        self.checkout, "rev-parse", "HEAD").strip()
-                    if head != self.current:
-                        with RestoredCheckoutPreparePhase().running(self.staged.commands.clock):
-                            self.installed.commands.git(
-                                self.checkout, "reset", "-q", "--keep", self.current)
-                            Checkout(self.checkout).prepare()
-                    self.installed.publish(self.root)
+                        rehold()
+                        backup.undo()
+                        rehold()
+                        head = self.installed.commands.git(
+                            self.checkout, "rev-parse", "HEAD").strip()
+                        if head != self.current:
+                            with RestoredCheckoutPreparePhase().running(self.staged.commands.clock):
+                                self.installed.commands.git(
+                                    self.checkout, "reset", "-q", "--keep", self.current)
+                                Checkout(self.checkout).prepare()
+                        self.installed.publish(self.root)
+                        self.installed.require_opens(self.root)
                     holder.close()
                     report.owners.release()
                     print(f"install: restored after failure ({type(error).__name__}: {error}); "

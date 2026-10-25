@@ -36,7 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
 from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.commander.standing import UnownedWheelSpin
+from agent_comms.commander.standing import DeliveryAwaitingJudgement, UnownedWheelSpin
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -425,7 +425,8 @@ class CommanderContext(BaseModel):
         return request.resolve(self.repos)
 
     def held_orders(self) -> tuple[Todo, ...]:
-        return tuple(todo for todo in self.todos() if todo.holder)
+        """The live holds Core lists unjudged edits under, so a verdict finds every edit shown."""
+        return HeldOrders.read(self.comms, self.commander).todos
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
         return self.comms.goals.todos.held_by(
@@ -471,6 +472,11 @@ class OrderedProblems(ABC):
     def replacing(self, unit: ThreadIncarnation, group: Sequence[str],
                   listed: Mapping[str, Todo]) -> bool:
         """Whether this order replaces the unit's own earlier order on the same problems."""
+
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """The order with the pull requests its problems already hold; a new problem holds none."""
+        return order
 
     @abstractmethod
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
@@ -523,6 +529,12 @@ class ListedProblems(OrderedProblems):
             pid in listed and any(assignment.owner_identity == unit for assignment
                                   in listed[pid].holder_state.current_assignments())
             for pid in group)
+
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """A replacement order keeps the problem's pull requests: a restore cites their heads."""
+        return order.carrying(link for pid in group if pid in listed
+                              for link in listed[pid].order.linked_requests)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
@@ -736,11 +748,13 @@ class Commander(CommanderContext):
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
             todo.revision, self.incarnation, voided, why)))
         unit = voided.previous.owner
-        n = struck(self.comms.goals.todos.get(task), unit)
+        after = self.comms.goals.todos.get(task)
+        n = struck(after, unit)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
-                f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
+                f'recorded {voided.at.clock()}; {n} strike(s) remain; held by '
+                f'{after.holder or "nobody"}): {why}')
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo))
-        print(f'{unit}: {n} strike(s) on {task}')
+        print(f'{unit}: {n} strike(s) on {task}; held by {after.holder or "nobody"}')
 
     def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
         """Core retires an undelivered order sent in error.
@@ -780,6 +794,13 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
+    clears: ClassVar[tuple[type[OwedAnswer], ...]] = ()
+
+    def __init_subclass__(cls, **options) -> None:
+        """A verb names the owed answers it clears; each rule's hint is rendered from them."""
+        super().__init_subclass__(**options)
+        for rule in vars(cls).get("clears", ()):
+            rule.cleared_by(cls)
 
     def who(self, ctx: Commander) -> str:
         return ctx.actor_name
@@ -843,7 +864,7 @@ class DirectiveVerb(CommanderVerb):
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         blocked = []
         for rule in owed:
-            if rule.blocks(reached, self):
+            if rule.blocks(reached, self, named):
                 blocked.append(rule)
             else:
                 print(f'WARNING: {rule.line()}')
@@ -886,27 +907,12 @@ class RequestedOrderVerb(OrderVerb, DirectiveVerb, declared_name=None):
         RequestSelection, Argument(flags=("--request",),
                                    options={"help": "owner request ID; defaults to newest open"}),
     ] = NewestOpenRequest()
-
-
-@dataclass(frozen=True, kw_only=True)
-class SendVerb(RequestedOrderVerb):
-    help = "record the order in Core and send it"
-    unit: Annotated[str, Argument(flags=("unit",))]
-    body_file: Annotated[
-        str, Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
-    ]
     clean: Annotated[
         bool,
         Argument(
             flags=("--clean",), options={"help": "the unit showed no incompetence"}
         ),
     ] = False
-    reassign: Annotated[
-        Reassignment,
-        Argument(
-            flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
-        ),
-    ] = NoReassignment()
     disk: Annotated[
         bool,
         Argument(
@@ -914,6 +920,22 @@ class SendVerb(RequestedOrderVerb):
             options={"help": "a cleanup order; never overrides a tool's storage rule"},
         ),
     ] = False
+
+
+@dataclass(frozen=True, kw_only=True)
+class SendVerb(RequestedOrderVerb):
+    help = "record the order in Core and send it"
+    clears = (DeliveryAwaitingJudgement,)
+    unit: Annotated[str, Argument(flags=("unit",))]
+    body_file: Annotated[
+        str, Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
+    ]
+    reassign: Annotated[
+        Reassignment,
+        Argument(
+            flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
+        ),
+    ] = NoReassignment()
     traced: Annotated[
         FileLine | NoSourceReference,
         Argument(
@@ -1011,6 +1033,7 @@ class WithdrawVerb(Reasoned, OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
     help = "Core checks the order's merged PR at its merge commit; late delivery is a strike"
+    clears = (DeliveryAwaitingJudgement,)
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
     problem: Annotated[
         str,
@@ -1226,8 +1249,6 @@ class ProblemVerb(RequestedOrderVerb):
             flags=("--where",), options={"help": "the actual file:line where this problem occurs"}
         ),
     ]
-    disk: Annotated[bool, Argument(flags=("--disk",))] = False
-
     @property
     def addressed(self) -> tuple[str, ...]:
         return (self.to,)
@@ -1240,7 +1261,8 @@ class ProblemVerb(RequestedOrderVerb):
             ctx.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
         pid = ctx.comms.goals.todos.allocate_problem()
-        ctx.send(self.to, document, target=NewProblem(pid, document.defect), disk=self.disk,
+        ctx.send(self.to, document, clean=self.clean,
+                 target=NewProblem(pid, document.defect), disk=self.disk,
                  finding=LocatedProblemFinding(location), answers=references,
                  request=self.request)
         print(pid)

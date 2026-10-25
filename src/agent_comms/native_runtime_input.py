@@ -404,7 +404,7 @@ class CurrentNativeCursor(
     NativeRuntimeTable,
     WithoutRowid,
 ):
-    column_orders = (NonDecreasing(("covered_seq", "injected_seq")),)
+    column_orders = (NonDecreasing(("covered_seq", "injected_seq", "owner_generation", "owner_claimed_generation")),)
     reference_column = 'injected_seq'
     stable_reference_columns = ('input_id',)
 
@@ -425,10 +425,11 @@ class CurrentNativeCursor(
             primary_key=True, references=TableReference(Participants, ("participant_lookup",))
         ),
     ]
-    owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
+    # One cursor per thread; the generations fence its last writer, they do not key it.
+    owner_generation: Annotated[int, Column(check="owner_generation>0")]
     owner_claimed_generation: Annotated[
         int,
-        FrozenColumn(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
+        Column(record_key=True, check="{owner_claimed_generation}>0"),
     ]
 
     @property
