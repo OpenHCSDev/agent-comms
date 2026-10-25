@@ -353,7 +353,7 @@ class CommanderContext(BaseModel):
     @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        (thread,) = self.project.commanders(snapshot)
+        (thread,) = snapshot.commander_project.require().commanders(snapshot)
         return thread.name
 
     @property

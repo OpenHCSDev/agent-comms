@@ -11,7 +11,7 @@ from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, GitCommitText, RecordProblems
+from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .repo import Repo
 from .repository_name import RepositoryName
 
@@ -38,15 +38,18 @@ class PullRequestHead:
         if len(candidates) == 1:
             return candidates[0]
         observed = []
-        problems = {}
+        problems: dict[str, str] = {}
         for candidate in candidates:
             try:
                 observed.append(cls.at(candidate.repo, pr))
             except ToolRefusedError as refused:
-                problems[f'--repo {candidate.repo.to_wire()}'] = str(refused)
+                problems |= MalformedRecord(str(refused)).located(
+                    f'--repo {candidate.repo.to_wire()}', 'check access to this repository and pull request')
         held = tuple(candidate for candidate in observed if candidate.holds(head))
         if len(held) != 1:
-            raise RecordProblems({'--repo': Repo.selection_refusal(), **problems})
+            problems |= MalformedRecord(Repo.selection_refusal()).located(
+                '--repo', 'select one registered repository with --repo')
+            raise RecordProblems(problems)
         return cls(held[0].repo, pr, head)
 
     @classmethod

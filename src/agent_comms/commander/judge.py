@@ -187,7 +187,8 @@ class ReviewSubject(DeclaredFamily):
     def from_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> ReviewSubject:
         matches = tuple(member for member in cls.members_with(cls) if member.selected(options))
         if len(matches) != 1:
-            raise RecordProblems({'subject': 'select either edit IDs or --pr'})
+            raise RecordProblems(MalformedRecord('select either edit IDs or --pr').located(
+                'subject', 'supply edit IDs or --pr, not both'))
         member, = matches
         return member.decode_options(options, ctx)
 
@@ -218,7 +219,8 @@ class EditReview(ReviewSubject):
     @classmethod
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> EditReview:
         if options.head or options.repo:
-            raise RecordProblems({'--pr': '--head and --repo belong to --pr, not edit IDs'})
+            raise RecordProblems(MalformedRecord('--head and --repo belong to --pr, not edit IDs').located(
+                '--pr', 'review a PR with --pr, or omit --head and --repo'))
         return cls(options.ids)
 
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None:
@@ -229,19 +231,29 @@ class EditReview(ReviewSubject):
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
         """The verdicts these IDs carry; a refusal exits before anything is written."""
         if not self.ids:
-            raise RecordProblems({'ids': 'select at least one edit ID:CODE'})
+            raise RecordProblems(MalformedRecord('select at least one edit ID:CODE').located(
+                'ids', 'read judge show and supply an edit ID:CODE'))
         orders = {todo.id: todo for todo in ctx.held_orders()}
         edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
-        problems = {token: 'unknown edit id' for token, i in zip(self.ids, ids) if i not in edits}
+        problems: dict[str, str] = {}
+        for token, i in zip(self.ids, ids):
+            if i not in edits:
+                problems |= MalformedRecord('unknown edit id').located(
+                    token, 'read judge show and select a current edit ID:CODE')
         known = [(token, edits[i]) for token, i in zip(self.ids, ids) if i in edits]
-        problems |= {f'{token} --problem': f'its checkout files this edit under {edit.problem}'
-                     for token, edit in known if options.problem and edit.problem != options.problem}
-        problems |= {f'{token} code': 'wrong or missing read code; read the edit to its "=== end" line'
-                     for token, edit in known if token != f'{edit.id}:{edit.code()}'}
-        problems |= {f'{token} --line': ('none of your --line quotes is in this edit; judge it by its own text'
-                                         if options.lines else EDIT_LINE)
-                     for token, edit in known if not any(line in edit.text() for line in options.lines)}
+        for token, edit in known:
+            if options.problem and edit.problem != options.problem:
+                problems |= MalformedRecord(f'its checkout files this edit under {edit.problem}').located(
+                    f'{token} --problem', f'select --problem {edit.problem} or omit --problem')
+            if token != f'{edit.id}:{edit.code()}':
+                problems |= MalformedRecord('wrong or missing read code; read the edit to its "=== end" line').located(
+                    f'{token} code', 'use the ID:CODE printed at the end of this edit')
+            if not any(line in edit.text() for line in options.lines):
+                problems |= MalformedRecord(
+                    'none of your --line quotes is in this edit; judge it by its own text'
+                    if options.lines else EDIT_LINE).located(
+                        f'{token} --line', 'quote an exact line from this edit with --line')
         if problems:
             raise RecordProblems(problems)
         options.check_edits([edits[i] for i in ids])
@@ -280,7 +292,9 @@ class PullRequestReview(ReviewSubject):
 
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
-        raise RecordProblems({'--pr': 'a batch judges edit IDs; review a PR head with its own call'})
+        raise RecordProblems(MalformedRecord(
+            'a batch judges edit IDs; review a PR head with its own call').located(
+                '--pr', 'review this PR outside the batch'))
 
 
 class WordedText(BoundedText):
@@ -444,8 +458,9 @@ class OkVerb(ReasonedVerb, QuotingVerb):
             path = edit.path
             after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
             if added := order.forwarders_added(edit.added(), after):
-                raise RecordProblems({edit.id: (
-                    f'edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')})
+                raise RecordProblems(MalformedRecord(
+                    f'edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok').located(
+                        edit.id, 'send this edit back with judge back'))
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
 @dataclass(frozen=True, kw_only=True)
@@ -456,7 +471,9 @@ class ReviewingVerb(HeadVerdictVerb):
         return UnderReviewHeadVerdict()
 
     def edit_refusal(self) -> RecordProblems:
-        return RecordProblems({'ids': 'judge reviewing takes --pr and --head, never edit ids.'})
+        return RecordProblems(MalformedRecord(
+            'judge reviewing takes --pr and --head, never edit ids.').located(
+                'ids', 'supply --pr and --head instead of edit IDs'))
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict:
         raise self.edit_refusal()
