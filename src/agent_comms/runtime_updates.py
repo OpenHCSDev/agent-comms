@@ -164,7 +164,7 @@ class ThreadOutput(activity.ThreadOutput):
     drafts: dict[TurnItem, DraftAccumulator] = field(default_factory=dict)
 
     @classmethod
-    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> Self:
+    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
         return cls(transcript, comms.agents)
 
     def delivered_targets(self, targets: tuple[str, ...]) -> None:
@@ -229,8 +229,12 @@ class ReplyingThreadOutput(ThreadOutput):
     pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
 
     @classmethod
-    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> Self:
-        return cls(transcript, comms.agents, messaging=comms.messaging)
+    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
+        return comms.registry.snapshot().commander_project.session_output(
+            transcript.incarnation,
+            commander=ThreadOutput(transcript, comms.agents),
+            commanded=cls(transcript, comms.agents, messaging=comms.messaging),
+        )
 
     def delivered_targets(self, targets: tuple[str, ...]) -> None:
         self.reply_targets.update(targets)
