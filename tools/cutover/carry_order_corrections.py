@@ -60,6 +60,8 @@ class OrderCorrections(Carry):
             )
         marker = json.dumps(RETIRED)
         with TodoStore.observing(path) as db:
+            if "prior_orders" not in Todo.stored_columns(db):
+                return Carried(0)
             rows = StoredOrders.read(
                 db.execute(
                     f'SELECT id,"order",prior_orders FROM "{Todo.declared_name}" '

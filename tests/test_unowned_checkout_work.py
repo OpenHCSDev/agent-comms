@@ -200,7 +200,7 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assigned = c.goals.todos.get('P1')
         assert assigned.holder == 'idle'
         assert assigned.revision == fresh.revision + 1
-        assert not assigned.live_strikes('worker')
+        assert not assigned.strikes_against(c.registry.require('worker').incarnation)
         assert stale.redecided(c, 'lead', assigned) == ()
         update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
         assert update is not None and not update.not_applied
