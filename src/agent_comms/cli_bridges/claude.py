@@ -5,21 +5,29 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import aclosing
+from dataclasses import dataclass, replace
 from functools import cached_property
 from pathlib import Path
-from typing import AsyncIterator, BinaryIO, Self
+from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, ClassVar, Self
 
 from agent_comms.bus import Bus
+from agent_comms.cli_protocol import Outcome
+from agent_comms.messages import Message
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
+from agent_comms.typed_table import TypedTable
 from agent_comms.watched import FileSource
+from agent_comms_hooks.board import BoardLine
 from agent_comms_hooks.session import SessionHook
 
 from ..wire_models import WireModel
 from .claude_protocol import CLAUDE_RECORD, ClaudeMonitorFrame, ClaudeRecord, ClaudeSession
 from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
+from .shared import Binding, BridgeStateTable, Enrol, LineMonitorBridge, Options, run_bridge
+
+if TYPE_CHECKING:
+    from agent_comms.task_attachments.commander_pings import CommanderUpdate
 
 
 class SubagentMeta(WireModel):
@@ -86,8 +94,28 @@ class RunningClaude(ClaudeJsonLines, ClaudeHistory, OnlineHistory):
         return cls(thread)
 
 
+@dataclass(frozen=True)
+class BoardLineRow(BoardLine, BridgeStateTable, TypedTable, declared_name=BoardLine.table):
+    """The newest heartbeat packet's lines, which the session's tool-call hook prints."""
+
+    @classmethod
+    def record(cls, db: sqlite3.Connection, update: CommanderUpdate) -> None:
+        """The packet replaces the board whole: a line it no longer carries is cleared."""
+        with db:
+            cls.delete(db)
+            for line in update.board(cls):
+                line.insert(db)
+
+
 class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
-    """Follow this Claude session's file without submitting an input."""
+    """Follow this Claude session's file without submitting an input.
+
+    Heartbeat packets go on the board its tool-call hook prints, not to the Monitor: the
+    harness frames Monitor events as routine background, so a line said once there scrolls
+    away. The Monitor only gets a wake line, since an idle session runs no tool calls."""
+
+    board_wake: ClassVar[str] = ("Heartbeat: your board changed. Its lines print as BOARD: on"
+                                 " every tool call until a packet clears them.")
 
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
@@ -101,6 +129,13 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         LineMonitorBridge.__init__(self, options, binding, db)
         RunningClaude.__init__(self, binding.thread)
+
+    async def deliver_board(self, update: CommanderUpdate, message: Message) -> type[Outcome]:
+        BoardLineRow.record(self.db, update)
+        return await update.wake(self, message)
+
+    async def wake(self, message: Message) -> type[Outcome]:
+        return await self.deliver(replace(message, body=self.board_wake))
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         """On restart only the last 4 MiB is published again; Core's finish is idempotent, so

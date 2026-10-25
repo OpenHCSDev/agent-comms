@@ -56,7 +56,7 @@ from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.standing_rules import StandingRule
+from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
@@ -575,6 +575,18 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
     assert [owed.message.message_id for owed in unanswered(held_bus)] == [second.message_id]
     with pytest.raises(RecordProblems, match=second.message_id):
         SendVerb(unit="worker", body_file=str(reply)).apply(ctx)
+
+
+def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
+    """The board already states an owed answer and locks the verbs on it; a vibe check saying it
+    again on a second channel restated one fact, so no degraded sign carries it."""
+    from agent_comms.commander.vibe_check import VibeCheck
+
+    ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
+    frame = HeartbeatFrame.read(held_bus, "lead", ProgressRead())
+    assert [rule.message.message_id for rule in OwedAnswer.scan_observed(
+        held_bus, "lead", (), frame)] == [ask.message_id]
+    assert VibeCheck.scan_observed(held_bus, "lead", (), frame) == ()
 
 
 def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp_path):
