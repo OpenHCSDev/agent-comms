@@ -62,6 +62,9 @@ class RouteCounts:
     _requests = f'''arguments AS MATERIALIZED (
         SELECT ? AS targets,? AS recipients,? AS senders,? AS unrecorded,? AS through,? AS after,
             ? AS births,? AS aliases,? AS unaddressed,? AS addressed
+    ), recipients AS MATERIALIZED (
+        SELECT member.key,member.value
+        FROM arguments,json_each(arguments.recipients) AS member
     ), births AS MATERIALIZED (
         SELECT member.key AS name,member.value AS since
         FROM arguments,json_each(arguments.births) AS member
@@ -108,14 +111,13 @@ class RouteCounts:
         FROM actor_targets AS target
         JOIN route_keys AS route ON route.target=target.target
         JOIN addressed_since AS viewer ON viewer.name=target.actor
-        CROSS JOIN arguments
-        JOIN json_each(arguments.recipients) AS recipient ON recipient.key=target.actor
+        JOIN recipients AS recipient ON recipient.key=target.actor
         LEFT JOIN aliases AS alias ON alias.name=route.sender
         LEFT JOIN unaddressed_since AS unaddressed ON unaddressed.name=target.actor
         WHERE {DeliveryScope.delivers_sql("target.actor", "route.sender", "alias.canonical")}
     ), requests AS MATERIALIZED (
         SELECT route.actor,row.seq,row.target,row.sender
-        FROM arguments,json_each(arguments.recipients) AS recipient
+        FROM recipients AS recipient
         CROSS JOIN "{ReceivedSource.declared_name}" AS addressed
             ON addressed.lookup=recipient.value
                 AND addressed.seq>(SELECT after FROM arguments)
