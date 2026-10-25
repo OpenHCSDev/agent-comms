@@ -371,6 +371,10 @@ def test_lifecycle_flags_count_class_bodies_not_locals(tmp_path):
     assert not flagged.holds(ClassFlagsAbsent(r"^\s+(complete|active)" + FLAG))
     assert flagged.holds(ClassFlagsAbsent(r"^\s+(complete)" + FLAG))
 
+    # A transcript quoting a flag is prose, not a module: never parsed, never counted.
+    quoted = main_of(tmp_path, {"src/log.md": "I’ll check it.\n    complete = True\n"})
+    assert quoted.holds(ClassFlagsAbsent(r"^\s+(complete)" + FLAG))
+
 
 def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
     reading = main_of(tmp_path, {"src/a.py": "x = 1\n"})
