@@ -5,6 +5,7 @@ import errno
 import json
 import os
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
@@ -251,3 +252,34 @@ def test_a_client_call_never_holds_publication_and_the_bus_refuses_writes_held_b
         gate.clear(hold)
         sent = comms.messaging.send("sender", "recipient", "after the hold").message
     assert sent.body == "after the hold"
+
+
+ROUTE_HOLDER = """import ctypes, fcntl, os, sys, time
+ctypes.CDLL(None).prctl(15, sys.argv[2].encode())  # PR_SET_NAME: the comm the kernel reports
+fcntl.flock(os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY), fcntl.LOCK_SH)
+print("held", flush=True)
+time.sleep(60)
+"""
+
+
+def route_holder(directory, program):
+    directory.mkdir(mode=0o700)
+    holder = subprocess.Popen(
+        (sys.executable, "-c", ROUTE_HOLDER, str(directory), program),
+        stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline() == "held\n"
+    return holder
+
+
+def test_route_publication_neither_waits_for_nor_ends_an_old_toad_holding_the_directory(
+    tmp_path,
+):
+    """An old runtime's Toad still flocks the route directory; publishers no longer do."""
+    holder = route_holder(tmp_path / "state", "toad")
+    try:
+        with route_directory(tmp_path / "state" / "active-route.json"):
+            pass
+        assert holder.poll() is None
+    finally:
+        holder.kill()
+        holder.wait()
