@@ -16,6 +16,7 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
+from agent_comms.goal_history import OneGoal
 from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goal_presentation import PausedExecution, UnrecordedBlockExecution
 from agent_comms.goals import Goal
@@ -38,7 +39,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
         "worker", ActiveGoalAction(progress="Verified 2 of 3 items")
     )
     assert progressed is not None
-    before_history = comms.goals.goal_history("worker", goal_id=original.id)
+    before_history = comms.goals.goal_history("worker", OneGoal(original.id))
     before_registry = (tmp_path / "registry.json").read_bytes()
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
@@ -57,7 +58,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
             )
         assert comms.registry.require("worker").goal == progressed
         assert (tmp_path / "registry.json").read_bytes() == before_registry
-        assert comms.goals.goal_history("worker", goal_id=original.id) == before_history
+        assert comms.goals.goal_history("worker", OneGoal(original.id)) == before_history
 
     with pytest.raises(ValueError):
         tool.invoke(
@@ -110,4 +111,4 @@ def test_owner_resume_refusal_preserves_pause_and_prior_progress(tmp_path):
     execution = comms.goals.goal_execution("worker")
     assert isinstance(execution, PausedExecution)
     assert execution.source == progressed.state.source
-    assert comms.goals.goal_history("worker", goal_id=original.id)[-1].after == reloaded
+    assert comms.goals.goal_history("worker", OneGoal(original.id))[-1].after == reloaded

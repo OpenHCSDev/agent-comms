@@ -30,7 +30,7 @@ from .goal_actions import (
 )
 from .goal_attempts import Generation, GoalAttemptStore
 from .errors import UnresolvedAttemptError
-from .goal_history import GoalHistoryEntry, RecordedGoalHistory
+from .goal_history import AllGoals, GoalHistoryEntry, GoalScope, RecordedGoalHistory
 from .goal_waits import (
     GoalInputReview,
     GoalWait,
@@ -268,19 +268,19 @@ class Goals:
         )
 
     def goal_history(
-        self, name: str, *, goal_id: GoalId | None = None
+        self, name: str, scope: GoalScope = AllGoals()
     ) -> tuple[GoalHistoryEntry, ...]:
-        """Read durable revisions for one thread incarnation and optional goal ID."""
-        return self.registry.goal_history(name, goal_id=goal_id)
+        """Read durable revisions for one thread incarnation within ``scope``."""
+        return self.registry.goal_history(name, scope)
 
     def recorded_history(
-        self, reply: type[HistoryReply], name: str, *, goal_id: GoalId | None = None
+        self, reply: type[HistoryReply], name: str, scope: GoalScope
     ) -> HistoryReply:
         """Revisions from goal history, execution failures from the attempt ledger."""
         owner = self.registry.require(name).incarnation.wire_birth
         return reply(
-            tuple(entry.recorded() for entry in self.goal_history(name, goal_id=goal_id)),
-            self.open_goal_store().failures(owner, goal_id),
+            tuple(entry.recorded() for entry in self.goal_history(name, scope)),
+            self.open_goal_store().failures(owner, scope),
         )
 
     def goal_wait(self, name: str) -> GoalWait:

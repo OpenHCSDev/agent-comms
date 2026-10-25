@@ -15,9 +15,9 @@ from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self
 
-from agent_comms.field_codec import WireOmitDefault, GoalId
+from agent_comms.field_codec import NullMember, WireOmitDefault, WireValue, GoalId
 from agent_comms.owner_requests import NoRequestRevision, RequestRevision
 
 from .child_process import Platform
@@ -168,12 +168,68 @@ class RegistryWriterObserver(JournalObserver):
         row.state.reconcile(transaction, row, current)
 
 
+class GoalScope:
+    """Which goals a history read covers; the default answers every goal of the thread."""
+
+    __slots__ = ()
+
+    def keeps(self, revision: RecordedGoalRevision) -> bool:
+        return True
+
+    def failures(
+        self, conn: sqlite3.Connection, owner_created_at: float
+    ) -> tuple[FailedTurnEvidence, ...]:
+        """One owner incarnation's failed attempts, oldest generation first."""
+        return tuple(FailedTurnEvidence.select(
+            conn, order_by=("generation",), owner_created_at=owner_created_at,
+        ))
+
+
+@dataclass(frozen=True, slots=True)
+class AllGoals(GoalScope, NullMember):
+    """No goal ID was given: the thread's full history."""
+
+
+@dataclass(frozen=True, slots=True)
+class OneGoal(GoalScope, WireValue):
+    """The revisions that name this goal before or after, and its failed attempts."""
+
+    goal_id: GoalId
+
+    def keeps(self, revision: RecordedGoalRevision) -> bool:
+        return self.goal_id in {revision.before.reported_id(), revision.after.reported_id()}
+
+    def failures(
+        self, conn: sqlite3.Connection, owner_created_at: float
+    ) -> tuple[FailedTurnEvidence, ...]:
+        return tuple(FailedTurnEvidence.select(
+            conn, order_by=("generation",), owner_created_at=owner_created_at,
+            goal_id=self.goal_id,
+        ))
+
+    def to_wire(self) -> str:
+        return self.goal_id
+
+    @classmethod
+    def from_wire(cls, data: object) -> OneGoal:
+        return cls(FieldCodec.decode(GoalId, data))
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(GoalId)
+
+
 @dataclass(frozen=True)
 class RecordedGoalHistory(DeclaredReply):
     """A thread's goal revisions beside the attempt ledger's failures, which only the ledger writes."""
 
     history: tuple[RecordedGoalRevision, ...]
     failures: tuple[FailedTurnEvidence, ...]
+
+    @classmethod
+    def empty(cls) -> Self:
+        """No owner answered: no revisions and no failed attempts."""
+        return cls((), ())
 
 
 @dataclass(frozen=True)
@@ -277,22 +333,12 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             transaction.set_state(sequence, CommittedEntry)
 
     def history(
-        self, owner_created_at: float, current: GoalDeclaration, goal_id: GoalId | None = None
+        self, owner_created_at: float, current: GoalDeclaration, scope: GoalScope
     ) -> tuple[GoalHistoryEntry, ...]:
         with self._transaction() as transaction:
             entries = transaction.observe(owner_created_at, current, LockFreeObserver)
         return tuple(
-            row
-            for entry in entries
-            for row in entry.state.recorded(entry)
-            if (
-                goal_id is None
-                or goal_id
-                in {
-                    row.before.reported_id(),
-                    row.after.reported_id(),
-                }
-            )
+            row for entry in entries for row in entry.state.recorded(entry) if scope.keeps(row)
         )
 
 

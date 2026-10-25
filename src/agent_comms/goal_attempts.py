@@ -76,6 +76,7 @@ from .typed_table import (
 )
 
 if TYPE_CHECKING:
+    from .goal_history import GoalScope
     from .goal_management import Goals
     from .threads import Thread
     from .turn_context import TurnContext
@@ -793,15 +794,11 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
             return AttemptRecord.read_in(conn, attempt_id)
 
     def failures(
-        self, owner_created_at: float, goal_id: GoalId | None
+        self, owner_created_at: float, scope: GoalScope
     ) -> tuple[FailedTurnEvidence, ...]:
-        """One owner incarnation's failed attempts, oldest generation first."""
-        key = {} if goal_id is None else {"goal_id": goal_id}
         with closing(self._connect()) as conn:
             try:
-                return tuple(FailedTurnEvidence.select(
-                    conn, order_by=("generation",), owner_created_at=owner_created_at, **key,
-                ))
+                return scope.failures(conn, owner_created_at)
             except (sqlite3.Error, MalformedRecord) as error:
                 raise StorageUncertainError("Cannot read goal attempt failures.") from error
 

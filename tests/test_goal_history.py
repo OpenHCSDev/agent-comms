@@ -24,6 +24,7 @@ from agent_comms.goal_history import (
     BaselineRevision,
     GoalHistoryError,
     GoalHistoryStore,
+    OneGoal,
     ObservedGapRevision,
     TransitionRevision,
 )
@@ -75,8 +76,8 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     assert entries[0].after.text == "Ask @reviewer about the release"
     assert entries[4].before == completed
     assert entries[5].before == second
-    assert reopened.goals.goal_history("reviewer", goal_id=first.id) == entries[:5]
-    assert reopened.goals.goal_history("reviewer", goal_id=second.id) == entries[4:]
+    assert reopened.goals.goal_history("reviewer", OneGoal(first.id)) == entries[:5]
+    assert reopened.goals.goal_history("reviewer", OneGoal(second.id)) == entries[4:]
 
     history_tool = next(
         tool
