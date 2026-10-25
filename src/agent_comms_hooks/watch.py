@@ -7,7 +7,6 @@ process dies, so a claim with a record and no holder is a watch that lapsed.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -17,6 +16,8 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
+
+from agent_comms.store_files import ProcessSingleton
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -99,61 +100,52 @@ class WatchClaim:
         return self.path.with_name(self.path.stem[:32] + ".sock")
 
     @property
-    def reader_path(self) -> Path:
-        return self.path.with_suffix(".reader.lock")
+    def claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path)
+
+    @property
+    def reader_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path.with_suffix(".reader.lock"))
+
+    @property
+    def launch_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path.with_suffix(".launch.lock"))
 
     @contextmanager
     def launching(self) -> Iterator[None]:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.path.with_suffix(".launch.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with self.launch_claim.waited():
             yield
 
     @contextmanager
     def held(self, record: WatchRecord) -> Iterator[HeldClaim]:
         """One watch per conversation, independent of --state and bus aliases."""
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.path.open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with self.claim.claimed() as lock:
             yield HeldClaim(lock).record(record)
 
     @contextmanager
     def adopted(self, descriptor: int, record: WatchRecord) -> Iterator[HeldClaim]:
         """A replaced bridge's successor takes over the description its predecessor kept
         locked through exec, so the claim never reads as lapsed, and records its own command."""
-        if not os.path.samestat(os.fstat(descriptor), os.stat(self.path)):
-            raise ValueError(f'Inherited descriptor {descriptor} is not the claim {self.path}')
-        os.set_inheritable(descriptor, False)
-        with os.fdopen(descriptor, "a") as lock:
-            # Same open description: the flock is already this process's, so this cannot block.
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with self.claim.adopted(descriptor) as lock:
             yield HeldClaim(lock).record(record)
 
     @contextmanager
     def reader_held(self) -> Iterator[None]:
-        with self.reader_path.open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with self.reader_claim.claimed():
             yield
 
     def has_reader(self) -> bool:
-        if not self.reader_path.exists():
-            return False
-        with self.reader_path.open() as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return True
-        return False
+        return self.reader_claim.held_elsewhere()
 
     def state(self) -> WatchState:
         if not self.path.exists():
             return UnclaimedWatch()
-        with self.path.open() as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return LiveWatch(self, WatchRecord.decode(**json.load(lock)))
-            text = lock.read()
+        with self.claim.observed() as claim:
+            if claim.held:
+                return LiveWatch(self, WatchRecord.decode(**json.load(claim.file)))
+            text = claim.file.read()
         if not text:
             return UnclaimedWatch()
         return LapsedWatch(self, WatchRecord.decode(**json.loads(text)))

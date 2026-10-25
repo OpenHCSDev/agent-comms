@@ -8,12 +8,11 @@ review. No credentials or owner environment are written to the queue.
 from __future__ import annotations
 
 import asyncio
-import fcntl
 import json
 import os
 import sys
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -38,7 +37,7 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .store_files import AtomicFile, StoreLockFile, _store_lock
+from .store_files import AtomicFile, ClaimHeldError, ProcessSingleton, StoreLockFile, _store_lock
 from .thread_identity import RecordedThreadIncarnation
 from .tool_result import ToolResult
 from .watched import ChangeSignal, DirectorySource, FileSource
@@ -231,6 +230,10 @@ class RestartQueue:
     def lock_path(self) -> Path:
         return RestartQueueLock.path_in(self.directory)
 
+    @property
+    def watcher_claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.directory / "watcher.lock")
+
     @contextmanager
     def locked(self):
         with _store_lock(self.lock_path):
@@ -403,11 +406,10 @@ async def run(comms: Comms) -> None:
         ValueError("Queued restarts require Linux inotify and /proc")
     )
     queue = RestartQueue(comms.root / DIRECTORY)
-    lock = os.open(queue.directory / "watcher.lock", os.O_CREAT | os.O_RDWR, 0o600)
-    try:
+    with ExitStack() as claim:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            held = claim.enter_context(queue.watcher_claim.claimed())
+        except ClaimHeldError:
             return
         def release_if_empty():
             # Enqueue and release share this lock, so no request is orphaned.
@@ -416,7 +418,7 @@ async def run(comms: Comms) -> None:
                                 for pending in record.state.items_with(Pending, record))
                 if any(record.target.is_current_watcher for record in pending):
                     return False
-                fcntl.flock(lock, fcntl.LOCK_UN)
+                queue.watcher_claim.release(held)
                 if pending:
                     _start_watcher(comms.root, pending[0].target)
                 return True
@@ -430,8 +432,6 @@ async def run(comms: Comms) -> None:
                 if await Coordination.run_worker(release_if_empty):
                     return
                 await changes.wait()
-    finally:
-        os.close(lock)
 
 
 def main() -> None:
