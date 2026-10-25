@@ -693,7 +693,12 @@ class ShellInvocation(ShellCommand):
 
     @classmethod
     def parse(cls, command: str, cwd: Path) -> Iterator[ShellInvocation]:
-        for decoded in ShellCommand.split(command):
+        try:
+            decoded_commands = tuple(ShellCommand.split(command))
+        except ValueError as error:
+            raise StorageDenied(f'StorageRule: the shell command cannot be decoded ({error}); '
+                                'no tool was started') from error
+        for decoded in decoded_commands:
             words = decoded.words
             if decoded.program == 'cd' and len(words) > 1:
                 target = words[2] if words[1] == '--' and len(words) > 2 else words[1]

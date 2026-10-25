@@ -6,7 +6,7 @@ from agent_comms.activity_clocks import ActivityClocks, ChannelActivity
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from heapq import nlargest
@@ -52,7 +52,7 @@ from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import (
-    ChannelDisplayScope, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
+    DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
 )
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 from agent_comms.typed_table import CarriedWriter, ReconciledFile, SQLiteDatabase, WalStore
@@ -109,6 +109,36 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
         ))
         headers = (BusRow.require(db, seq=seq) for seq in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+
+class DisplayUnread:
+    """Before the first count, acquire the complete unread selection."""
+
+    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> CountedDisplayUnread:
+        return source.display_unread(selection, through=source.revision())
+
+
+@dataclass(frozen=True)
+class CountedDisplayUnread(DisplayUnread):
+    """A counted selection advances only the newly appended interval."""
+
+    through: int
+    selection: DisplayUnreadSelection
+    counts: Mapping[str, int]
+
+    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> CountedDisplayUnread:
+        if self.selection != selection:
+            return super().advanced(source, selection)
+        through = source.revision()
+        if through == self.through:
+            return self
+        counted = source.display_unread(
+            selection, through=through, after=self.through,
+        )
+        return replace(counted, counts={
+            channel: self.counts[channel] + count
+            for channel, count in counted.counts.items()
+        })
 
 
 class BusReader(RouteCounts, ABC):
@@ -400,24 +430,26 @@ class BusReader(RouteCounts, ABC):
             ))
 
     def display_unread(
-        self, scopes: Iterable[ChannelDisplayScope], viewer_names: Iterable[str],
-        seen: ReadCursor, snapshot: RegistryProvenance,
-    ) -> dict[str, int]:
+        self, selection: DisplayUnreadSelection, *, through: int, after: int = -1,
+    ) -> CountedDisplayUnread:
+        """Count one explicit sequence interval with the captured cursor predicate."""
         counts = {}
         with self.observing() as db:
-            for scope in scopes:
-                bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
+            for scope in selection.scopes:
+                bindings = ReadCursor.sql_bindings(selection.registry, {
+                    "viewer": selection.seen.counted(scope, selection.registry),
+                })
                 predicate, parameters = scope.index_predicate
                 counts[scope.channel] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? '
+                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
                     f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
-                    (*bindings.values(), seen.lower_bound(scope, snapshot), *parameters,
-                     json.dumps(tuple(viewer_names))),
+                    (*bindings.values(), max(after, selection.seen.lower_bound(scope, selection.registry)),
+                     through, *parameters, json.dumps(selection.viewer_names)),
                 ).fetchone()[0])
-        return counts
+        return CountedDisplayUnread(through, selection, counts)
 
     def delivered_unanswered(
         self, recipient: RecordedThreadIncarnation, scope: MessageDisplayScope,
