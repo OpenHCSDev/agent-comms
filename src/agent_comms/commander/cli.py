@@ -7,7 +7,7 @@ from pathlib import Path
 
 import agent_comms.commander as package
 from agent_comms.active_route import ActiveRoute, resolve_comms_route
-from agent_comms.errors import ToolRefusedError
+from agent_comms.cli_protocol import CLI_FAILURES
 from agent_comms.launch_root import LaunchRoot
 
 from .order import Commander
@@ -37,5 +37,6 @@ def main() -> None:
                                           else ActiveRoute.published_launch()))
         context = Commander.read_root(resolve_comms_route(options.root).root)
         tools[argv[0]].main(argv[1:], context)
-    except ToolRefusedError as refused:
+    except CLI_FAILURES as refused:
+        # The comms CLI's one failure set: a refusal the command raises prints, never a traceback.
         sys.exit(f'Refused: {refused}')

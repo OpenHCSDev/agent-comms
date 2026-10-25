@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Literal, Annotated, Self
 from pydantic import JsonValue
 
 
-from .child_process import NoProcess, ProcessIdentity
+from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
@@ -295,9 +295,10 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def __eq__(self, other: object) -> bool:
         """Rows still stored on both sides compare as their JSON; only rows that differ there,
-        or that either side wrote, are decoded, so a one-row edit never decodes the registry."""
+        or that either side wrote, are decoded, so a one-row edit never decodes the registry.
+        Rows equal only rows: a plain mapping is a different value."""
         if not isinstance(other, ThreadRows):
-            return super().__eq__(other)
+            return NotImplemented
         return self.keys() == other.keys() and all(
             (name in self._raw and name in other._raw and self._raw[name] == other._raw[name])
             or self[name] == other[name]
@@ -541,6 +542,12 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
 
+    def session_output[Output](self, incarnation: ThreadIncarnation, *,
+                               commander: Output, commanded: Output) -> Output:
+        """A commanded session's last item replies to the senders delivered in its turn; the
+        commander answers its owner in its own transcript and messages units only by tool."""
+        return commanded
+
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
@@ -584,6 +591,10 @@ class RegisteredCommanderProject(CommanderProject):
 
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
         return replace(self, repos=repositories.applied(self.repos))
+
+    def session_output[Output](self, incarnation: ThreadIncarnation, *,
+                               commander: Output, commanded: Output) -> Output:
+        return commander if incarnation == self.commander else commanded
 
 
 @ThreadSlice.required
@@ -799,6 +810,11 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change
 
+    def retire_processes(self) -> None:
+        """A copied registry's processes belong to the root it was copied from, never to the copy."""
+        for name, thread in tuple(self.threads.items()):
+            self.threads[name] = thread.without_process()
+
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         """Restore selected missing identities without importing execution authority.
 
@@ -821,7 +837,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             if name in self.aliases or thread.created_at in identities:
                 raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
             identities[thread.created_at] = name
-            additions.append(replace(thread.without_turn(), process_identity=NoProcess()))
+            additions.append(thread.without_process())
         restored = {thread.name: thread for thread in additions}
         available = ChainMap(restored, self.threads)
         aliases = source.restorable_aliases(available, self.aliases)

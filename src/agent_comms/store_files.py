@@ -8,6 +8,7 @@ import fcntl
 import math
 import os
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -80,7 +81,7 @@ class StoreLockBusyError(BlockingIOError):
         self.holders = holders
 
     def __str__(self) -> str:
-        return "store lock busy, held by " + "; ".join(holder.describe() for holder in self.holders)
+        return "store lock busy, " + LockHolder.described(self.holders)
 
 
 @dataclass(slots=True)
@@ -99,6 +100,7 @@ class StoreLockContention:
                 self.remaining -= time.monotonic() - begun
                 if self.remaining <= 0:
                     raise StoreLockBusyError(platform.lock_holders(descriptor)) from error
+                self.contended(descriptor, platform)
                 begun = time.monotonic()
                 try:
                     yield min(self.remaining, platform.store_lock_interval)
@@ -106,6 +108,9 @@ class StoreLockContention:
                     self.remaining -= time.monotonic() - begun
             else:
                 return
+
+    def contended(self, descriptor: int, platform: Platform) -> None:
+        """Each refused attempt that keeps waiting; a budget that names its holders overrides it."""
 
     def acquire(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
         for delay in self.waits(descriptor, platform, mode=mode):
@@ -127,6 +132,26 @@ class UnboundedContention(StoreLockContention):
 
 
 UNBOUNDED_CONTENTION = UnboundedContention()
+
+
+class HolderNamingContention(UnboundedContention):
+    """Waits as long as the lock is held, and prints its holders once, when the wait passes
+    ``after`` seconds, so a slow acquisition names whoever held it up (install 18 waited
+    59 s for the registry with nobody named)."""
+
+    __slots__ = ("after", "deadline")
+
+    def __init__(self, after: float) -> None:
+        super().__init__()
+        self.after = after
+        self.deadline = time.monotonic() + after
+
+    def contended(self, descriptor: int, platform: Platform) -> None:
+        if time.monotonic() >= self.deadline:
+            self.deadline = math.inf
+            print(f"store lock still waiting after {self.after:g} s, "
+                  f"{LockHolder.described(platform.lock_holders(descriptor))}",
+                  file=sys.stderr, flush=True)
 
 
 @dataclass

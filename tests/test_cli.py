@@ -438,7 +438,8 @@ class TestSelectedTargetActions:
             {'disposition': compile_decoder(TagDisposition).encode_editor(ArchiveThreadsTagDisposition())},
             confirmed=True).apply(comms)
         assert not result.successful
-        assert tuple(outcome.target for outcome in result.outcomes) == selected
+        assert tuple(outcome.target for outcome in result.outcomes) == tuple(
+            CommandTarget.named(name) for name in selected)
         assert result.outcomes[0].items_with(Successful, result.outcomes[0])
         assert not any(outcome.items_with(Successful, outcome) for outcome in result.outcomes[1:])
         with pytest.raises(ValueError, match="Initial direct target must be visible"):
@@ -477,7 +478,9 @@ class TestSelectedTargetActions:
         code, result = cli(tmp_path, "target-action", "--targets", "alpha", "active", "#team",
                            "--operation", "archive", "--confirmed")
         assert code == 1
-        assert [outcome["target"] for outcome in result["outcomes"]] == ["alpha", "active", "#team"]
+        assert tuple(FieldCodec.decode(CommandTarget, outcome["target"])
+                     for outcome in result["outcomes"]) == tuple(
+                         CommandTarget.named(name) for name in ("alpha", "active", "#team"))
         assert result["outcomes"][0]["result"] == {"archived": "alpha"}
         assert result["outcomes"][1]["error_type"] == CommandSelectionChanged.__name__
         assert "no longer available" in result["outcomes"][1]["error"]
@@ -641,7 +644,7 @@ class TestSelectedTargetActions:
         assert {action.declaration.declared_name for action in actions} >= {"archive", "read-target"}
         result = TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets((CommandTarget.named('missing'), CommandTarget.named('alpha'))), {}).apply(comms)
         assert not result.successful
-        assert result.outcomes[0].target == "missing" and not result.outcomes[0].items_with(Successful, result.outcomes[0])
+        assert result.outcomes[0].target == CommandTarget.named("missing") and not result.outcomes[0].items_with(Successful, result.outcomes[0])
         assert result.outcomes[1].result.archived == "alpha"
         with pytest.raises(ValueError):
             TargetEdit(ForkCliCommand, ForkCliCommand.selected_targets((CommandTarget.named('alpha'), CommandTarget.named('beta'))), {}).apply(comms)
@@ -658,9 +661,9 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     launched = OwnerStartResult("alpha", 11, True)
     attached = OwnerStartResult("beta", 12, False)
     batch = TargetBatchResult((
-        TargetCompleted("alpha", StartCliCommand(name="alpha"), launched),
-        TargetCompleted("beta", StartCliCommand(name="beta"), attached),
-        TargetFailed("gamma", "ValueError", "gone"),
+        TargetCompleted(CommandTarget.named("alpha"), StartCliCommand(name="alpha"), launched),
+        TargetCompleted(CommandTarget.named("beta"), StartCliCommand(name="beta"), attached),
+        TargetFailed(CommandTarget.named("gamma"), "ValueError", "gone"),
     ))
     assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ()
     assert batch.reconnect_targets() == ("alpha",)
@@ -674,5 +677,7 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     created = ThreadCreatedResult("child", NoProcess())
     assert created.open_targets() == ("child",)
     command = NewThreadCliCommand(name="child", project="/project", model=UndeclaredModel())
-    completed = TargetCompleted("/project", command, created)
+    from agent_comms.channel_targets import ProjectTarget
+
+    completed = TargetCompleted(ProjectTarget("/project"), command, created)
     assert TargetBatchResult((completed, batch.outcomes[-1], completed)).open_targets() == ("child",)
