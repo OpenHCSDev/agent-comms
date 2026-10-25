@@ -496,6 +496,19 @@ class OwnersStopped:
     def release(self) -> None:
         """No hold was taken with these owners, so none is cleared."""
 
+    def keep(self) -> None:
+        """Nothing starts on the root again."""
+        self.give_back.pop_all()
+
+    @contextmanager
+    def held_on_failure(self) -> Iterator[None]:
+        """A raise inside leaves a root its runtime may not open: no owner starts on it."""
+        try:
+            yield
+        except BaseException:
+            self.keep()
+            raise
+
     def lines(self) -> tuple[str, ...]:
         return tuple(line for owner in self.started for line in owner.lines())
 
@@ -510,6 +523,11 @@ class HeldOwnersStopped(OwnersStopped):
     def release(self) -> None:
         """Clears the hold once; a later call finds nothing left to clear."""
         self.hold.close()
+
+    def keep(self) -> None:
+        """The hold stays draining too."""
+        self.hold.pop_all()
+        super().keep()
 
 
 @dataclass(frozen=True)
@@ -750,6 +768,17 @@ class Stack:
             HostService.start_enabled()
             self.probe(ServingProbe())
             return services
+
+    def require_opens(self, root: Path) -> None:
+        """A restored root opens under this runtime's declarations, the check every opening
+        makes (TableSchema.require_schema), answered by this runtime's own CLI: install 13
+        released a half-restored ledger that every later opening refused (install 14,
+        2026-10-24)."""
+        differing = self.cli(root, PlannedReconcileCliCommand).rewritten
+        if differing:
+            raise UpgradeRefused(
+                f"Rollback left stores that differ from {self.runtime.prefix.name}'s "
+                f"declarations: {', '.join(map(str, differing))}; maintenance stays held")
 
     def verify(self, root: Path) -> BusReadBack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
@@ -1216,26 +1245,30 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 except BaseException as error:
                     print(f"install: install failed ({type(error).__name__}: {error}); "
                           "restoring original installation", file=sys.stderr)
-                    # Only the services this run stopped may write the root on its behalf.
-                    HostService.stop_all(stopped.services)
+                    # Until the outgoing runtime opens every restored store, any raise
+                    # keeps the hold draining and starts no owner.
+                    with report.owners.held_on_failure():
+                        # Only the services this run stopped may write the root on its behalf.
+                        HostService.stop_all(stopped.services)
 
-                    def rehold() -> None:
-                        """Hold the root again in whatever phase it is now in."""
-                        holder.close()
-                        holder.enter_context(
-                            maintenance.held_by(MaintenanceOperator.current()).holding())
+                        def rehold() -> None:
+                            """Hold the root again in whatever phase it is now in."""
+                            holder.close()
+                            holder.enter_context(
+                                maintenance.held_by(MaintenanceOperator.current()).holding())
 
-                    rehold()
-                    backup.undo()
-                    rehold()
-                    head = self.installed.commands.git(
-                        self.checkout, "rev-parse", "HEAD").strip()
-                    if head != self.current:
-                        with RestoredCheckoutPreparePhase().running(self.staged.commands.clock):
-                            self.installed.commands.git(
-                                self.checkout, "reset", "-q", "--keep", self.current)
-                            Checkout(self.checkout).prepare()
-                    self.installed.publish(self.root)
+                        rehold()
+                        backup.undo()
+                        rehold()
+                        head = self.installed.commands.git(
+                            self.checkout, "rev-parse", "HEAD").strip()
+                        if head != self.current:
+                            with RestoredCheckoutPreparePhase().running(self.staged.commands.clock):
+                                self.installed.commands.git(
+                                    self.checkout, "reset", "-q", "--keep", self.current)
+                                Checkout(self.checkout).prepare()
+                        self.installed.publish(self.root)
+                        self.installed.require_opens(self.root)
                     holder.close()
                     report.owners.release()
                     print(f"install: restored after failure ({type(error).__name__}: {error}); "

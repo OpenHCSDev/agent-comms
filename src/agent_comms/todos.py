@@ -658,6 +658,36 @@ class PullRequestCommit:
 
 
 @dataclass(frozen=True)
+class MergeBlock(DeclaredFamily, affix="MergeBlock"):
+    """Why GitHub will not merge a head, decoded once from the forge row."""
+    at: str
+
+    @cached_property
+    def since(self) -> float:
+        return _github_time(self.at)
+
+    @abstractmethod
+    def what(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class FailedCheckMergeBlock(MergeBlock):
+    """A required check concluded red on the head."""
+    name: str
+
+    def what(self) -> str:
+        return f"required check {self.name} failed"
+
+
+@dataclass(frozen=True)
+class ConflictMergeBlock(MergeBlock):
+    """The head conflicts with its base; no check can turn it green."""
+
+    def what(self) -> str:
+        return "conflicts with its base"
+
+
+@dataclass(frozen=True)
 class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     """The external query row; conversion lives here, never in its consumers."""
     number: int
@@ -667,9 +697,19 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     base: str
     reviewable_times: tuple[str, ...] = field(kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
+    armed_times: tuple[str, ...] = field(default=(), kw_only=True)
+    merge_blocks: tuple[MergeBlock, ...] = field(default=(), kw_only=True)
+
+    def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
+        """Open work and merged work awaiting acceptance stay with their recorded holder."""
+        return (assignment,)
 
     def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
         return ()
+
+    def stuck(self) -> tuple[MergeBlock, ...]:
+        """Blocks on a head whose auto-merge is armed: queued, and going nowhere."""
+        return tuple(block for _ in self.armed_times for block in self.merge_blocks)
 
     def as_merged(self) -> tuple[MergedListedPullRequest, ...]:
         return ()
@@ -721,6 +761,9 @@ class DraftListedPullRequest(UnmergedListedPullRequest):
 class ClosedListedPullRequest(ListedPullRequest):
     """Closed without merging; never selected as an open request."""
 
+    def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
+        return ()
+
     def as_closed(self) -> tuple[ClosedListedPullRequest, ...]:
         return (self,)
 
@@ -762,6 +805,17 @@ class PullRequests:
         for todo in todos:
             self._todos.setdefault(todo.repo, {})[todo.id] = todo
         return self
+
+    def retained_assignments(self, todo: Todo, assignment: Assignment) -> tuple[Assignment, ...]:
+        """An explicit closure releases work; missing forge links do not retire its author."""
+        self.register((todo,))
+        linked = self.linked(todo.repo)
+        numbers = tuple(number for number, candidates in linked.items() if todo in candidates)
+        if not numbers:
+            return (assignment,)
+        return tuple(dict.fromkeys(
+            retained for row in self.rows(todo.repo, numbers)
+            for retained in row.retained_assignments(assignment)))
 
     def merged_delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
         """The newest merged request linked to the order is what `order done` checks."""
@@ -827,7 +881,12 @@ class PullRequests:
             'merged: mergedAt updated: updatedAt created: createdAt '
             'ready_events: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT], last: 1) '
             '{ nodes { ... on ReadyForReviewEvent { createdAt } } } '
-            'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context } } } } } }'
+            'auto: autoMergeRequest { enabledAt } merge_state: mergeStateStatus '
+            'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context } } '
+            'statusCheckRollup { contexts(first: 100) { nodes { '
+            f'... on CheckRun {{ name conclusion completedAt isRequired(pullRequestNumber: {number}) }} '
+            f'... on StatusContext {{ context state createdAt isRequired(pullRequestNumber: {number}) }} '
+            '} } } } } } }'
             for number in numbers]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
@@ -842,8 +901,17 @@ class PullRequests:
             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
             '| . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context], '
             'reviewable_times: [.created, .head_statuses.nodes[].commit.committedDate, '
-            '.ready_events.nodes[].createdAt]} '
-            '| del(.draft,.closed,.created,.head_statuses,.ready_events))')
+            '.ready_events.nodes[].createdAt], '
+            'armed_times: [.auto.enabledAt? // empty], '
+            'merge_blocks: ([.head_statuses.nodes[].commit.statusCheckRollup.contexts.nodes[]? '
+            '| select(.isRequired) | select((.conclusion // .state) as $c '
+            '| ["FAILURE","TIMED_OUT","CANCELLED","ACTION_REQUIRED","STARTUP_FAILURE","ERROR"] '
+            '| index($c)) '
+            f'| {{kind: "{FailedCheckMergeBlock.declared_name}", name: (.name // .context), '
+            'at: (.completedAt // .createdAt)}] '
+            f'+ [select(.merge_state == "DIRTY") | {{kind: "{ConflictMergeBlock.declared_name}", '
+            'at: .updated}])} '
+            '| del(.draft,.closed,.created,.head_statuses,.ready_events,.auto,.merge_state))')
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
@@ -1458,7 +1526,7 @@ class OrderWords(WireValue):
     text: str
 
     def __post_init__(self) -> None:
-        if refused := self.refused(self.text):
+        for refused in self.wording_refusal(self.text):
             raise ToolRefusedError(refused)
 
     def to_wire(self) -> str:
@@ -1477,14 +1545,25 @@ class OrderWords(WireValue):
 
     @classmethod
     def refused(cls, text: str) -> str | None:
+        """The writer's check: it may print a note, which a decoded record never does."""
+        cls.flag(text)
+        return next(iter(cls.wording_refusal(text)), None)
+
+    @classmethod
+    def wording_refusal(cls, text: str) -> tuple[str, ...]:
+        """The refusal this text earns, or none: what a decoded record checks, silently."""
         found = cls.found(text)
         if len(text.split()) < cls.least_words or cls.refuses(found):
-            return cls.refusal.format(cls.least_words, found)
-        return None
+            return (cls.refusal.format(cls.least_words, found),)
+        return ()
 
     @staticmethod
     def refuses(found: list[str]) -> bool:
         return bool(found)
+
+    @classmethod
+    def flag(cls, text: str) -> None:
+        """A family that refuses has no note to print; one that only flags overrides this."""
 
     @classmethod
     def found(cls, text: str) -> list[str]:
@@ -1504,9 +1583,13 @@ class PlainText(DirectiveWords):
     @staticmethod
     def refuses(found: list[str]) -> bool:
         """Flags, never blocks: a wording slip costs a note, not a resend."""
-        if found:
-            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
         return False
+
+    @classmethod
+    def flag(cls, text: str) -> None:
+        """The note goes to whoever writes the text, at the write; decoding a record never prints it."""
+        if found := cls.found(text):
+            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
 
 
 class VerdictReason(PlainText):
@@ -1551,11 +1634,11 @@ class StrikeReason(VerdictReason):
     least_words = 10
 
     @classmethod
-    def refused(cls, text: str) -> str | None:
+    def wording_refusal(cls, text: str) -> tuple[str, ...]:
         cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
         if cited and all(PlainText.found(span) for span in cited):
-            return f"{cited} is the unit's wording; send it a correction, not a strike."
-        return super().refused(text)
+            return (f"{cited} is the unit's wording; send it a correction, not a strike.",)
+        return super().wording_refusal(text)
 
 
 class OrderText(OrderWords):
@@ -2908,6 +2991,17 @@ class TodoHolder(ABC):
     def current_assignments(self) -> tuple[Assignment, ...]:
         return ()
 
+    def retained_assignments(self, current: Todo, pulls: PullRequests) -> tuple[Assignment, ...]:
+        return ()
+
+    def restored(self, current: Todo) -> Todo:
+        """A current or absent holder has no released assignment to restore."""
+        return current
+
+    def after_void(self, voided: Todo) -> Todo:
+        """A void changes no holder unless the holder state was made by the voided strikes."""
+        return voided
+
 
 class NoTodoHolder(TodoHolder):
     def previous_assignment(self) -> Assignment:
@@ -2955,6 +3049,25 @@ class Assignment(TodoHolder):
         """The registered thread born as this hold's recorded holder; empty once that thread
         was deleted or registered again under a new birth."""
         return snapshot.threads_for(self.owner_identity.require_recorded())
+
+    def running_holders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """A retained assignment follows its live incarnation, never a reused name."""
+        return tuple(owner for owner in self.holder_in(snapshot) if owner.process_alive)
+
+    def require_available_in(self, db: sqlite3.Connection, problem: str,
+                             assigner: ThreadIncarnation, snapshot: RegistrySnapshot) -> None:
+        """Validate this holder against open work using the transaction's registry snapshot."""
+        TodoStore.require_unit_in(db, self.owner_identity, assigner)
+        worktrees = {owner.project_path for owner in self.holder_in(snapshot)}
+        for held in TodoStore._open(db, "assignment IS NOT NULL", ()):
+            previous = held.held()
+            if held.id == problem or previous.owner_identity == self.owner_identity:
+                continue
+            for other in previous.holder_in(snapshot):
+                if other.project_path in worktrees:
+                    raise SharedWorktreeRefusal(
+                        problem, held.id, self.owner_identity, other.incarnation, other.project_path
+                    )
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
@@ -3183,7 +3296,9 @@ class AssignTodo(TodoOperation):
                        parent=actor.name, parent_created=actor.wire_birth))
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
-        store.require_assignment_in(db, current.id, self.proposed.owner_identity, self.actor)
+        self.proposed.require_available_in(
+            db, current.id, self.actor,
+            RegistryStore.at(store.root).read_snapshot_unlocked())
         OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
@@ -3263,7 +3378,7 @@ class StrikeTodo(CitedStrike, StoryEvent):
             return struck
         limit = StrikeReason(f"{self.previous.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
                              f"on {struck.id}, so the task goes to another unit.")
-        return ReleaseTodo(struck.revision, self.actor, self.previous, limit, self.at).apply(struck)
+        return LimitReleaseTodo(struck.revision, self.actor, self.previous, limit, self.at).apply(struck)
 
     def story_text(self) -> str:
         return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
@@ -3418,11 +3533,12 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 @dataclass(frozen=True)
 class OrderQuote:
     quote: str
+    rule: ClassVar[str] = "Quote 4+ words of the order this verdict carries out."
 
     def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise TodoError("Quote 4+ words of the order this verdict carries out.")
+            raise TodoError(self.rule)
 
 
 @dataclass(frozen=True)
@@ -3439,6 +3555,8 @@ class QuotedVerdict(OrderQuote, OrderVerdict, declared_name=None):
 class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
     """The tool call carries out the order clause it quotes."""
     line = "Accepted"
+    branch_rule: ClassVar[str] = (
+        "Added branches need --no-owner: 12+ words with because and an absolute file:line.")
 
     @classmethod
     def require_branches(cls, added: int, no_owner: str | None) -> None:
@@ -3446,8 +3564,7 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
             return
         if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
                 and re.search(r'/\S+:\d+', no_owner)):
-            raise TodoError(
-                'Added branches need --no-owner: 12+ words with because and an absolute file:line.')
+            raise TodoError(cls.branch_rule)
 
 
 @dataclass(frozen=True)
@@ -3926,7 +4043,8 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
             raise TodoConflict(current)
         _text(self.reason, "Void reason", 2000)
         StrikeReason(self.reason)
-        return replace(current, voided=(*current.voided, self), revision=current.revision + 1)
+        voided = replace(current, voided=(*current.voided, self), revision=current.revision + 1)
+        return voided.holder_state.after_void(voided)
 
 
 @dataclass(frozen=True)
@@ -3955,6 +4073,45 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
         current.require_assignment(self.previous)
         return replace(current, assignment=None, released=(*current.released, self),
                        revision=current.revision + 1)
+
+    def retained_assignments(self, current: Todo, pulls: PullRequests) -> tuple[Assignment, ...]:
+        return pulls.retained_assignments(current, self.previous)
+
+    def restored(self, current: Todo) -> Todo:
+        """Unstrike and the watcher restore this recorded assignment through the same write."""
+        if current.struck_out(self.previous.owner):
+            return current
+        return replace(current, assignment=self.previous)
+
+
+@dataclass(frozen=True)
+class LimitReleaseTodo(ReleaseTodo):
+    """The strike limit declares its release's meaning when it records it."""
+
+    def after_void(self, voided: Todo) -> Todo:
+        return self.restored(voided)
+
+
+@dataclass(frozen=True)
+class RestoreHolderTodo(TodoCommand):
+    """Restore released work without reissuing its order or replacing the unit's goal."""
+    actor: ThreadIncarnation
+    previous: Assignment
+
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        snapshot = RegistryStore.at(store.root).read_snapshot_unlocked()
+        if not self.previous.running_holders(snapshot):
+            raise TodoConflict(current)
+        self.previous.require_available_in(db, current.id, self.actor, snapshot)
+
+    def changed(self, current: Todo) -> Todo:
+        self.actor.require_may_change(current)
+        current.state.require_open(current)
+        if current.holder_state.previous_assignment() != self.previous:
+            raise TodoConflict(current)
+        restored = current.holder_state.restored(current)
+        return (replace(restored, revision=current.revision + 1)
+                if restored != current else current)
 
 
 @dataclass(frozen=True)
@@ -4676,22 +4833,6 @@ class TodoStore(OwnerRequestStore):
                 f"{todo.order.checked().id} ({todo.id}); "
                 "finish or release that order before assigning it again.")
 
-    def require_assignment_in(self, db: sqlite3.Connection, problem: str,
-                              unit: ThreadIncarnation, assigner: ThreadIncarnation) -> None:
-        """Creation and reassignment share this decision under registry then Todo locks."""
-        self.require_unit_in(db, unit, assigner)
-        snapshot = RegistryStore.at(self.root).read_snapshot_unlocked()
-        worktrees = {owner.project_path for owner in snapshot.threads_for(unit.require_recorded())}
-        for held in self._open(db, "assignment IS NOT NULL", ()):
-            previous = held.held().owner_identity
-            if held.id == problem or previous == unit:
-                continue
-            for other in snapshot.threads_for(previous.require_recorded()):
-                if other.project_path in worktrees:
-                    raise SharedWorktreeRefusal(
-                        problem, held.id, unit, other.incarnation, other.project_path
-                    )
-
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
         recorded = HuntRecord(uuid4().hex, commander, hunt)
@@ -4922,7 +5063,9 @@ class TodoStore(OwnerRequestStore):
             todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
             review_at, order, request)
         with self.writing() as db:
-            self.require_assignment_in(db, todo_id, assignee, assigner)
+            proposed.held().require_available_in(
+                db, todo_id, assigner,
+                RegistryStore.at(self.root).read_snapshot_unlocked())
             OwnerRequest.require(db, id=request).require_open(identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
