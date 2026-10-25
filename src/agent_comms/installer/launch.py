@@ -64,7 +64,7 @@ from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
-from agent_comms.store_files import ClaimHeldError, ProcessSingleton
+from agent_comms.process_claim import ClaimHeldError, ProcessSingleton
 
 
 @dataclass

@@ -22,7 +22,7 @@ from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
-from .store_files import ProcessSingleton
+from .process_claim import ProcessSingleton
 from agent_comms.typed_table import ReconciledFile, TableSchema
 
 

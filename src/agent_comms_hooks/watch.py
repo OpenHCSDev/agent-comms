@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
-from agent_comms.store_files import ProcessSingleton
+from agent_comms.process_claim import ProcessSingleton
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -35,6 +35,19 @@ class NoSessionBridge(RuntimeError):
         super().__init__(
             f'No session bridge is running for session {session}; its log names why it stopped. '
             'Start it with agent-comms-claude-bridge connect.')
+
+
+@dataclass(frozen=True)
+class DeafWatch:
+    """A session bridge with no Monitor reading it: every line to it waits unread. Core's
+    heartbeat and the session's own tool-call hook say it in this one sentence."""
+
+    since: str
+
+    def line(self) -> str:
+        return (f"RE-ARM the commander watch: its bridge has no confirmed Monitor {self.since},"
+                " so every Core line to it waits unread -> re-arm its watch:"
+                " agent-comms-claude-bridge watch (bare, no pipe)")
 
 
 @dataclass(frozen=True)
@@ -138,6 +151,13 @@ class WatchClaim:
 
     def has_reader(self) -> bool:
         return self.reader_claim.held_elsewhere()
+
+    def deaf(self) -> tuple[DeafWatch, ...]:
+        """A running bridge whose reader claim nobody holds; a session with no bridge is
+        not deaf, it never bound one."""
+        if self.claim.held_elsewhere() and not self.has_reader():
+            return (DeafWatch("now (no Monitor holds its reader claim)"),)
+        return ()
 
     def state(self) -> WatchState:
         if not self.path.exists():
