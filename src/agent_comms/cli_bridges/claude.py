@@ -189,4 +189,4 @@ class Connect(Enrol):
 
 def main() -> None:
     run_bridge(ClaudeBridge, Options.parse(
-        __doc__, Path.home() / ClaudeBridge.state_directory, ClaudeBridge))
+        __doc__, ClaudeBridge.state_path(), ClaudeBridge))

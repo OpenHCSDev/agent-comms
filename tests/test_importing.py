@@ -90,13 +90,16 @@ def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path: Pa
     assert FieldCodec.encode(NoThreadText()) is None
 
 
-def test_every_harness_has_one_offline_family_and_one_online_reader() -> None:
+def test_every_harness_has_one_offline_family_and_one_online_reader(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert CliBridge.state_root() == tmp_path
     # Following bridges share the registry without contributing another standalone reader.
     assert {ClaudeBridge, CodexBridge, OpenCodeBridge} <= set(History.members_with(CliBridge))
     assert CliBridge.state_directories() == tuple(
         bridge.state_directory for bridge in History.members_with(CliBridge))
     for bridge in History.members_with(CliBridge):
         assert bridge.reading_declarations() == ()
+        assert bridge.state_path() == tmp_path / bridge.state_directory
     assert OfflineHistory.readers(ClaudeCodeHarness) == (ClaudeTranscript,)
     assert OfflineHistory.readers(CodexHarness)[0].__name__ == "CodexRollout"
     assert set(OfflineHistory.readers(OpenCodeHarness)) == {OpenCodeExport, OpenCodeDatabase}

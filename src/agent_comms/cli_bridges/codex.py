@@ -199,5 +199,5 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
 
 def main() -> None:
     run_bridge(CodexBridge, CodexOptions.parse(
-        __doc__, Path.home() / CodexBridge.state_directory, CodexBridge))
+        __doc__, CodexBridge.state_path(), CodexBridge))
 

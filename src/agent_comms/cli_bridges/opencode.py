@@ -251,5 +251,5 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions]):
 
 def main() -> None:
     run_bridge(OpenCodeBridge, OpenCodeOptions.parse(
-        __doc__, Path.home() / OpenCodeBridge.state_directory, OpenCodeBridge))
+        __doc__, OpenCodeBridge.state_path(), OpenCodeBridge))
 
