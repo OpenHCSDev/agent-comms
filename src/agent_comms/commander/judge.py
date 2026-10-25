@@ -447,7 +447,7 @@ class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
 
     @classmethod
     def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
-        return cls.verdict.permitted_by(verdicts)
+        return issubclass(cls.verdict, verdicts)
 
     pr: Annotated[int, Argument(options={"help": "review this PR instead of individual edits"})] = 0
     head: Annotated[str, Argument(options={"help": "the exact reviewed SHA; required with --pr"})] = ""

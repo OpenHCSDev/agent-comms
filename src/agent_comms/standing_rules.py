@@ -41,7 +41,6 @@ if TYPE_CHECKING:
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
         MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
-        UnmergedListedPullRequest,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -608,7 +607,7 @@ class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
         return verb.review_allowed(self.todo.order.checked().review_verdicts())
 
     def command_values(self) -> Mapping[str, str]:
-        return super().command_values() | {"problem": self.todo.id}
+        return {**super().command_values(), "problem": self.todo.id}
 
 
 class ReviewTimerUp(HeldOrderDue):
@@ -624,19 +623,19 @@ class ReviewTimerUp(HeldOrderDue):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[ReviewTimerUp, ...]:
-        todos = comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
-        return tuple(
-            rule
-            for todo, due in cls.conditions(comms, frame)
-            for rules in (tuple(
-                HeadReviewTimerUp(todo.id, todo.held().owner_identity, todo.order.checked().id,
-                                  due, head, todo=linked)
-                for request in frame.pulls.open_for(todo)[:1]
-                for head in (PullRequestHead(todo.repo, request.number, request.head),)
-                for linked in HeadReviewOrder.holding(todos, head)),)
-            for rule in (rules or (cls(todo.id, todo.held().owner_identity,
-                                      todo.order.checked().id, due),))
-        )
+        rules: list[ReviewTimerUp] = []
+        for todo, due in cls.conditions(comms, frame):
+            for request in frame.pulls.open_for(todo)[:1]:
+                head = PullRequestHead(todo.repo, request.number, request.head)
+                if todo.order.holds_head(head):
+                    rules.append(HeadReviewTimerUp(
+                        todo.id, todo.held().owner_identity, todo.order.checked().id,
+                        due, head, todo=todo))
+                    break
+            else:
+                rules.append(cls(todo.id, todo.held().owner_identity,
+                                 todo.order.checked().id, due))
+        return tuple(rules)
 
     def line(self) -> str:
         return (f"READ {self.holder.name} {self.problem}: review timer up at {self.since.clock()},"
@@ -719,7 +718,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
         return tuple(
             rule
             for repo in snapshot.commander_project.repository_names()
-            for row in cls.reviewed(pulls, repo, todos)
+            for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
             if not any(review.verdict.decides() for review in goals.todos.head_reviews(request))
@@ -729,11 +728,6 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     @classmethod
     def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
         return (cls(request, due),)
-
-    @classmethod
-    @abstractmethod
-    def reviewed(cls, pulls: ProgressRead, repo: RepositoryName,
-                 todos: Sequence[Todo]) -> tuple[UnmergedListedPullRequest, ...]: ...
 
     def began(self) -> float:
         return self.due_at
@@ -752,22 +746,14 @@ class LinkedUnreviewedHead(OrderHeadReviewCommands, UnreviewedHead, OrderRefusin
     def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
         return tuple(cls(request, due, todo=todo) for todo in HeadReviewOrder.holding(todos, request))
 
-    @classmethod
-    def reviewed(cls, pulls: ProgressRead, repo: RepositoryName,
-                 todos: Sequence[Todo]) -> tuple[UnmergedListedPullRequest, ...]:
-        return tuple(row for row in pulls.open(repo)
-                     if HeadReviewOrder.holding(todos, PullRequestHead(repo, row.number, row.head)))
-
 
 @dataclass(frozen=True)
 class OrderlessUnreviewedHead(UnreviewedHead):
     """A head no held order links: a board line that refuses nobody's orders."""
 
     @classmethod
-    def reviewed(cls, pulls: ProgressRead, repo: RepositoryName,
-                 todos: Sequence[Todo]) -> tuple[UnmergedListedPullRequest, ...]:
-        return tuple(row for row in pulls.open(repo)
-                     if not HeadReviewOrder.holding(todos, PullRequestHead(repo, row.number, row.head)))
+    def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
+        return () if HeadReviewOrder.holding(todos, request) else super().for_head(request, due, todos)
 
 
 @dataclass(frozen=True)

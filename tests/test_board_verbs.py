@@ -39,8 +39,8 @@ def board_review(head_bus):
     lead = comms.registry.require("lead").incarnation
     worker = comms.registry.require("worker").incarnation
 
-    def claim():
-        todo = comms.goals.todos.get("P2")
+    def claim(problem="P2"):
+        todo = comms.goals.todos.get(problem)
         original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
         todo = comms.goals.todos.apply(todo.id, OrderMessage(
             todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
@@ -85,6 +85,8 @@ def assert_review_preconditions(rule, comms, request):
         scope = OrderHeadReview.for_request(ctx.todos(), request, verb.order_link, verb.problem)
         scope.require_reviewer(comms.goals, request, ctx.actor_identity)
         for linked in HeadReviewOrder.holding(ctx.todos(), request):
+            if linked.id != verb.problem:
+                continue
             operation = RecordOrderHeadVerdict(linked.revision, OrderHeadReviewRecord(
                 request, ctx.actor_identity, RecordedEventTime(time.time()),
                 verb.head_operation(), verb.order_link(linked)))
@@ -117,24 +119,22 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
 
 
 def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_review):
-    comms, request, _, link = board_review
+    comms, request, claim, link = board_review
     first = link()
-    second = comms.goals.todos.get("P1")
-    RecordPullRequest(second.revision, second.creator_identity,
-                      PullRequestLink(request.repo, request.pr), second.held().generation).record(
-                          comms.goals, second.id)
-    second = comms.goals.todos.get(second.id)
+    second = claim("P1")
     rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
     assert {rule.todo.id for rule in rules} == {first.id, second.id}
     for rule in rules:
-        assert_review_preconditions(rule, comms, request)
+        verdicts = assert_review_preconditions(rule, comms, request)
+        assert (UnderReviewHeadVerdict in verdicts) == (rule.todo.id == second.id)
     frame = HeartbeatFrame.read(comms, "lead", ProgressRead(()))
     timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
     timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
-    assert {timer.todo.id for timer in timers} == {first.id, second.id}
-    for timer in timers:
-        assert_review_preconditions(timer, comms, request)
+    timer, = timers
+    assert timer.todo == timed
+    assert timer.problem == first.id
+    assert UnderReviewHeadVerdict not in assert_review_preconditions(timer, comms, request)
 
 
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
