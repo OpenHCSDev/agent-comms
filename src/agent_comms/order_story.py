@@ -28,7 +28,7 @@ class StorySource:
     def strikes_voided(self) -> tuple[StrikeTodo, ...]:
         return ()
 
-    def history_events(self) -> tuple[StoryEvent, ...]:
+    def history_events(self) -> tuple[Self | StrikeTodo, ...]:
         return ()
 
     def story(self) -> tuple[StoryLine, ...]:
@@ -38,8 +38,8 @@ class StorySource:
 class StoryEvent(StorySource):
     at: EventTime
 
-    def history_events(self) -> tuple[StoryEvent, ...]:
-        return (self,)
+    def history_events(self) -> tuple[Self | StrikeTodo, ...]:
+        return (*self.implied_strikes(), self)
 
     @abstractmethod
     def story_text(self) -> str: ...

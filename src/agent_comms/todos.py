@@ -27,6 +27,8 @@ from types import MappingProxyType, get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast, get_args, get_origin
 from uuid import uuid4
 
+from typing_extensions import TypeForm
+
 from agent_comms.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -3303,9 +3305,6 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
         judged = self.judged(current)
         return replace(judged, revision=current.revision + 1)
 
-    def history_events(self) -> tuple[StoryEvent, ...]:
-        return (*self.implied_strikes(), self)
-
     def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
         for strike in self.implied_strikes():
             result = strike.taken_away(db, result, store)
@@ -4519,11 +4518,11 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
 
     @classmethod
     def events_as[Event: TodoCommand | CheckedProblemOrder](
-        cls, db: sqlite3.Connection, problem: str, member: type[Event], *,
+        cls, db: sqlite3.Connection, problem: str, member: TypeForm[Event], *,
         before: int, limit: int = -1, descending: bool = False,
     ) -> tuple[Event, ...]:
         return tuple(cast(Event, row.event) for row in cls.select(
-            db, problem=problem, where=f"{{kind}} IN {member.sql_choices()} AND {{seq}}<=?",
+            db, problem=problem, where=f"{{kind}} IN {cast(type[Event], member).sql_choices()} AND {{seq}}<=?",
             parameters=(before,), order_by=("seq",), descending=descending, limit=limit))
 
     @classmethod
@@ -4540,7 +4539,7 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         (bound,) = db.execute(cls._sql(
             f"SELECT COALESCE(max({{seq}}),0) FROM {cls.declared_name} WHERE {{problem}}=?"),
             (problem,)).fetchone()
-        return bound
+        return FieldCodec.decode(int, bound)
 
     @classmethod
     def facts_for(cls, db: sqlite3.Connection, problems: tuple[str, ...]) -> dict[str, StoryFacts]:
@@ -4606,7 +4605,7 @@ class TodoHistory:
             return StoredOrderStory.bound_for(db, problem)
 
     def events[Event: TodoCommand | CheckedProblemOrder](
-        self, problem: str, member: type[Event], *, limit: int = -1, descending: bool = False,
+        self, problem: str, member: TypeForm[Event], *, limit: int = -1, descending: bool = False,
     ) -> tuple[Event, ...]:
         with self.snapshot() as db:
             return StoredOrderStory.events_as(db, problem, member, before=self.bound_for(problem),
