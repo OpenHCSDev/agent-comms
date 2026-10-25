@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus_tables import ReceivedSource
 from .class_fact import ClassFact
-from .field_codec import FieldCodec, ThreadLookup
+from .field_codec import ThreadLookup
 from .messages import BusProjectionTables, BusRow, Message, PublicRecord, PublicSender
 from .projection_source import ProducedRow
 from .read_basis import ReadCursor
-from .typed_table import Column, Index, TypedRow, TypedTable
+from .routing import DeliveryScope
+from .typed_table import Column, Index, TypedRow
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
@@ -59,10 +60,29 @@ class RouteCounts:
     """Bus readers share delivery queries and their existing observing lifetime."""
 
     _requests = f'''arguments AS MATERIALIZED (
-        SELECT ? AS targets,? AS recipients,? AS senders,? AS unrecorded,? AS through,? AS after
-    ), request_targets AS MATERIALIZED (
-        SELECT DISTINCT target.value AS target
+        SELECT ? AS targets,? AS recipients,? AS senders,? AS unrecorded,? AS through,? AS after,
+            ? AS births,? AS aliases,? AS unaddressed,? AS addressed
+    ), births AS MATERIALIZED (
+        SELECT member.key AS name,member.value AS since
+        FROM arguments,json_each(arguments.births) AS member
+    ), aliases AS MATERIALIZED (
+        SELECT member.key AS name,member.value AS canonical
+        FROM arguments,json_each(arguments.aliases) AS member
+    ), unaddressed_since AS MATERIALIZED (
+        SELECT member.key AS name,member.value AS since
+        FROM arguments,json_each(arguments.unaddressed) AS member
+    ), addressed_since AS MATERIALIZED (
+        SELECT member.key AS name,member.value AS since
+        FROM arguments,json_each(arguments.addressed) AS member
+    ), actor_targets AS MATERIALIZED (
+        SELECT owner.key AS actor,target.value AS target
         FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
+    ), request_targets AS MATERIALIZED (
+        SELECT DISTINCT target FROM actor_targets
+    ), sender_keys AS MATERIALIZED (
+        SELECT sender.key AS sender,lookup.value AS sender_lookup,birth.since
+        FROM arguments,json_each(arguments.senders) AS sender,json_each(sender.value) AS lookup
+        JOIN births AS birth ON birth.name=sender.key
     ), unrecorded AS MATERIALIZED (
         SELECT target.target,source.value AS sender,
             (SELECT sender_lookup FROM "{BusRouteCounts.declared_name}" AS route
@@ -70,54 +90,54 @@ class RouteCounts:
                  AND route.seq<=(SELECT through FROM arguments) AND route.sender_lookup IS NOT NULL
              ORDER BY route.seq LIMIT 1) AS sender_lookup
         FROM request_targets AS target,arguments,json_each(arguments.unrecorded) AS source
-    ), route_keys AS (
-        SELECT target.target,sender.key AS sender,lookup.value AS sender_lookup
-        FROM request_targets AS target,arguments,json_each(arguments.senders) AS sender,
-            json_each(sender.value) AS lookup
+    ), route_keys AS MATERIALIZED (
+        SELECT DISTINCT row.target,row.sender,row.sender_lookup,sender.since
+        FROM request_targets AS target
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=target.target
+        JOIN sender_keys AS sender ON sender.sender=row.sender
+            AND sender.sender_lookup IS row.sender_lookup
+        WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
         UNION ALL
-        SELECT * FROM unrecorded WHERE sender_lookup IS NOT NULL
+        SELECT route.*,birth.since FROM unrecorded AS route
+        JOIN births AS birth ON birth.name=route.sender WHERE route.sender_lookup IS NOT NULL
     ), route_since AS MATERIALIZED (
-        SELECT owner.key AS actor,recipient.value AS recipient_lookup,
+        SELECT target.actor,recipient.value AS recipient_lookup,
             route.target,route.sender,route.sender_lookup,
-            delivery_since(owner.key,route.sender,route.target,route.sender_lookup,0) AS unaddressed,
-            delivery_since(owner.key,route.sender,route.target,route.sender_lookup,1) AS addressed
-        FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
-        JOIN json_each(arguments.recipients) AS recipient ON recipient.key=owner.key
-        JOIN route_keys AS route ON route.target=target.value
-        WHERE EXISTS (
-            SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
-            WHERE row.target=route.target AND row.sender=route.sender
-                AND row.sender_lookup IS route.sender_lookup
-                AND row.seq>(SELECT after FROM arguments)
-                AND row.seq<=(SELECT through FROM arguments)
-                AND {ReadCursor.above_floor("row.seq", "owner.key", "row.target")}
-        )
-    ), candidates AS MATERIALIZED (
-        SELECT route.actor,row.*,
-            CASE WHEN addressed.seq IS NULL THEN route.unaddressed ELSE route.addressed END AS since
+            max(route.since,unaddressed.since) AS unaddressed,
+            max(route.since,viewer.since) AS addressed
+        FROM actor_targets AS target
+        JOIN route_keys AS route ON route.target=target.target
+        JOIN addressed_since AS viewer ON viewer.name=target.actor
+        CROSS JOIN arguments
+        JOIN json_each(arguments.recipients) AS recipient ON recipient.key=target.actor
+        LEFT JOIN aliases AS alias ON alias.name=route.sender
+        LEFT JOIN unaddressed_since AS unaddressed ON unaddressed.name=target.actor
+        WHERE {DeliveryScope.delivers_sql("target.actor", "route.sender", "alias.canonical")}
+    ), requests AS MATERIALIZED (
+        SELECT route.actor,row.seq,row.target,row.sender
+        FROM route_since AS route
+        CROSS JOIN "{ReceivedSource.declared_name}" AS addressed
+            ON addressed.lookup=route.recipient_lookup
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.seq=addressed.seq
+        WHERE row.target=route.target AND row.sender=route.sender
+            AND row.sender_lookup IS route.sender_lookup AND row.timestamp>=route.addressed
+            AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
+            AND {ReadCursor.above_floor("row.seq", "route.actor", "row.target")}
+        UNION ALL
+        SELECT route.actor,row.seq,row.target,row.sender
         FROM route_since AS route
         CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
             AND row.sender=route.sender AND row.sender_lookup IS route.sender_lookup
-        LEFT JOIN "{ReceivedSource.declared_name}" AS addressed
-            ON addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq
-        WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
+        WHERE route.unaddressed IS NOT NULL AND row.timestamp>=route.unaddressed
+            AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
             AND {ReadCursor.above_floor("row.seq", "route.actor", "row.target")}
-    ), requests AS MATERIALIZED (
-        SELECT * FROM candidates WHERE since IS NOT NULL AND timestamp>=since
+            AND NOT EXISTS (SELECT 1 FROM "{ReceivedSource.declared_name}" AS addressed
+                WHERE addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq)
     )'''
 
     def _route_rows(self, row_type, registry, deliveries, seen, after: int, query: str, parameters=()):
         with self.observing() as db:
-            db.create_function(
-                "delivery_since", 5,
-                lambda actor, sender, target, lookup, received: registry.unread_since(
-                    actor, deliveries[actor].minimum_timestamp(
-                        sender, target, FieldCodec.decode(ThreadLookup | PublicSender, lookup),
-                        registry
-                    ),
-                    bool(received)), deterministic=True,
-            )
-            senders = registry.sender_bindings
+            namespace = registry.sender_bindings
             bindings = (
                 *ReadCursor.sql_bindings(registry,
                     {actor: seen[actor].counted(delivery, registry)
@@ -126,7 +146,14 @@ class RouteCounts:
                             for actor, delivery in deliveries.items()}),
                 json.dumps({actor: registry.require(actor).incarnation.require_recorded().lookup
                             for actor in deliveries}),
-                senders["senders"], senders["unrecorded"], BusRow.last_seq(db), after,
+                namespace.senders, namespace.unrecorded, BusRow.last_seq(db), after,
+                namespace.births, json.dumps(dict(registry.aliases)),
+                json.dumps({actor: registry.unread_since(
+                    actor, registry.require(actor).incarnation.wire_birth, False,
+                ) for actor in deliveries}),
+                json.dumps({actor: registry.unread_since(
+                    actor, registry.require(actor).incarnation.wire_birth, True,
+                ) for actor in deliveries}),
                 *parameters,
             )
             return row_type.read(db.execute(
