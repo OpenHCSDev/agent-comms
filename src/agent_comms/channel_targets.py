@@ -15,6 +15,7 @@ from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .thread_identity import ThreadIncarnation
+from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
@@ -232,6 +233,13 @@ class NamedTarget(CommandTarget):
     def reply_target(self, sender: str) -> str: ...
 
     @abstractmethod
+    def answered_sql(
+        self, target: str, sender: str, snapshot: RegistryProvenance,
+    ) -> tuple[str, tuple]:
+        """Select originals answered by this destination, using the same registry cut."""
+        ...
+
+    @abstractmethod
     def wake_policy(self, recipient: FrozenRecipient, mentions: frozenset[str]) -> WakePolicy: ...
 
     @abstractmethod
@@ -350,6 +358,16 @@ class ThreadTarget(NamedTarget):
     def reply_target(self, sender: str) -> str:
         return sender
 
+    def answered_sql(
+        self, target: str, sender: str, snapshot: RegistryProvenance,
+    ) -> tuple[str, tuple]:
+        names = tuple(snapshot.names_for(self.canonical_name(snapshot.canonical_name)))
+        marks = ",".join("?" for _ in names)
+        return (
+            f"{sender} IN ({marks}) AND NOT ({ChannelTarget.names_channel_sql(target)})",
+            names,
+        )
+
     def wake_policy(self, recipient: FrozenRecipient, mentions: frozenset[str]) -> FullWake:
         return FullWake()
 
@@ -440,6 +458,10 @@ class ChannelTarget(NamedTarget):
         return name.startswith(cls.sigil)
 
     @classmethod
+    def names_channel_sql(cls, name: str) -> str:
+        return f"substr({name},1,{len(cls.sigil)})={sql_literal(cls.sigil)}"
+
+    @classmethod
     def normalize_name(cls, name: str) -> str:
         """The channel address of a catalog name (a tag or saved view); an address is kept."""
         return name if cls.names_channel(name) else f"{cls.sigil}{name}"
@@ -504,6 +526,11 @@ class ChannelTarget(NamedTarget):
 
     def reply_target(self, sender: str) -> str:
         return self.name
+
+    def answered_sql(
+        self, target: str, sender: str, snapshot: RegistryProvenance,
+    ) -> tuple[str, tuple]:
+        return f"{target}=?", (self.name,)
 
     def effective_mentions(self, message: AudiencedMessage):
         return frozenset(mention.thread for mention in message.mentions).intersection(
