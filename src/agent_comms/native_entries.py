@@ -24,7 +24,6 @@ from .native_session_files import BusTranscriptFile
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
-from uuid import uuid4
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
@@ -46,6 +45,7 @@ from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
 from .native_session_reopen import PiSessionId
+from .turn_item import NativeItemId
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ class RecordedEntry(PiPayload):
 
     def imported_child(self, message: ImportedMessage, timestamp: datetime) -> dict[str, object]:
         return {
-            "type": "message", "id": uuid4().hex[:16], "parentId": self.child_parent,
+            "type": "message", "id": FieldCodec.encode(NativeItemId.fresh()), "parentId": self.child_parent,
             "timestamp": timestamp.isoformat(),
             "message": message.pi_message(int(timestamp.timestamp() * 1000)),
         }
