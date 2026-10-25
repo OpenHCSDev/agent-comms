@@ -165,7 +165,7 @@ def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
     user = comms.messaging.user_identity(str(tmp_path))
     message = Message(user.name, "alice", "one input", InfoKind, timestamp=123456.0)
-    origin = HumanOrigin(user.name, user.created_at, user.worktree)
+    origin = HumanOrigin(user.name, user.created_at, str(user.worktree))
     first = comms.bus.publisher.publish_ordinary(message, destination=CommandTarget.named(message.target), origin=origin)
     with pytest.raises(RelationViolationError):
         comms.bus.publisher.publish_ordinary(message, destination=CommandTarget.named(message.target), origin=origin)

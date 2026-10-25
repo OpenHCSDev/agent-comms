@@ -98,6 +98,7 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
         assigner=lead.incarnation, generation=prepare_checkout_goal_id, request=request,
         review_at=RecordedEventTime(now + 3600), order=order)
     monkeypatch.setenv("AGENT_COMMS_THREAD", worker.name)
+    monkeypatch.setenv("PI_WORKTREE", str(worker.worktree))
     return comms
 
 

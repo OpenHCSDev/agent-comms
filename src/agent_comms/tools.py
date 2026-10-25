@@ -114,7 +114,6 @@ from .relationships import RelationshipEdit
 from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl, StartOwnerControl
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
-from .repo import LaunchCheckout
 from .threads import NextTurnConfiguration
 from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
 from .tool_result import ToolResult
@@ -1075,7 +1074,7 @@ class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCreatedResult:
         parent = comms.registry.require(self.parent)
         return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
-                              project=LaunchCheckout.checked(parent.worktree.path), model=parent.model,
+                              project=parent.worktree, model=parent.model,
                               thinking_level=parent.thinking_level,
                               tags=self.tags).apply(comms)
 

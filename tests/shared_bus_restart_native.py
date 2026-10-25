@@ -146,7 +146,7 @@ async def configured_pure_channel(arguments):
         # Existing SessionManager fork owns strict saved-history creation under
         # its native source lock. Its output stays under the owned profile.
         fork = await ForkSessionHelper.run(
-            ForkSessionRequest(str(arguments.package), str(original), source.worktree, str(stage / 'forks')),
+            ForkSessionRequest(str(arguments.package), str(original), str(source.worktree), str(stage / 'forks')),
             cwd=Path(source.worktree), env=dict(os.environ),
         )
         assert Path(fork.session_file).is_relative_to(stage)
@@ -158,7 +158,7 @@ async def configured_pure_channel(arguments):
         names.append(name)
         settings.append({'source_owner':source.name, 'private_owner':name,
             'model':source.model, 'thinking':source.thinking_level.declared_name,
-            'worktree':source.worktree, 'tags':sorted(source.tags),
+            'worktree':str(source.worktree), 'tags':sorted(source.tags),
             'source_session_bytes':original.stat().st_size,
             'source_session_file': str(original),
             'source_session_sha256':before, 'owned_fork':fork.session_file,
@@ -210,14 +210,14 @@ async def configured_pure_channel(arguments):
                 'please answer here with the value of 10+2. This is a fresh question, '
                 'not continuation or retry of any previous input. No project edits are requested.',
                 InfoKind),
-                destination=CommandTarget.named('#openhcs'), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                destination=CommandTarget.named('#openhcs'), origin=HumanOrigin(sender.name,sender.created_at,str(sender.worktree)))
                 for ordinal in range(arguments.wave_size)]
         assert originals and len({row.message_id for row in originals}) == arguments.wave_size
         # All originals exist before dispatch. No coalescing timer or forced FULL
         # changes the channel policy; owners snapshot the already pending wave.
         await asyncio.gather(*(asyncio.to_thread(service.owners.start, name) for name in names))
         await asyncio.gather(*(attach(service, name) for name in names))
-        await asyncio.gather(*(attachment.load_session(cwd=source.worktree, session_id=name)
+        await asyncio.gather(*(attachment.load_session(cwd=str(source.worktree), session_id=name)
             for name, source in zip(names, sources, strict=True)))
         overlap = False
         async with asyncio.timeout(arguments.observation_seconds):
@@ -401,7 +401,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 f'{stage.name} {label}: Fresh isolated acceptance question, not a retry. '
                 'Please answer here with 10+2 only; do not resume inherited work or edit files.',
                 InfoKind),
-                destination=CommandTarget.named('#openhcs'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
+                destination=CommandTarget.named('#openhcs'), origin=HumanOrigin(sender.name, sender.created_at, str(sender.worktree)))
 
     def observe(original):
         with Coordination(str(service.root/'coordination.sqlite3')) as store:
@@ -493,7 +493,7 @@ async def configured_mixed_routes(arguments):
     sender = service.registry.require('human')
     with _store_lock(service._wire_lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
-            InfoKind), destination=CommandTarget.named(target), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+            InfoKind), destination=CommandTarget.named(target), origin=HumanOrigin(sender.name,sender.created_at,str(sender.worktree)))
             for target, body in (
                 ('#team', f'{stage.name}: @{name} Read batch-values.txt with the normal read tool and report PUBLIC_VALUE.'),
                 ('#team', f'{stage.name}: @{name} Also compute 10+2. Combine this with the other channel request.'),
@@ -530,7 +530,7 @@ async def configured_mixed_routes(arguments):
                         with _store_lock(service._wire_lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
                             late = service.bus.publisher.publish_ordinary(Message(sender.name,name,
                                 f'{stage.name}: Separate late batch: compute 20+3; reply directly and once.',InfoKind),
-                                destination=CommandTarget.named(name), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                                destination=CommandTarget.named(name), origin=HumanOrigin(sender.name,sender.created_at,str(sender.worktree)))
                         print('ORIGINAL_WAVE_RESERVED_LATE_BATCH_PUBLISHED',flush=True)
                     assignments = WakeAssignment.select(db,order_by=('wire_seq',))
                     cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
@@ -628,7 +628,7 @@ async def retained_owner():
     agent.inputs.auto_wake = False
     try:
         owner = service.registry.require(name)
-        await agent.load_session(owner.worktree, name)
+        await agent.load_session(str(owner.worktree), name)
         assert await asyncio.to_thread(sys.stdin.readline) == 'GO\n'
         execution = SelectedExecution(
             root=service.root,
@@ -715,7 +715,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
                         f'Batch wave original {index}: compute 10+{index}.'
                         if self.wave_size > 1 else 'New collective channel original: test',
                         InfoKind),
-                destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
+                destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, str(sender.worktree)))
                 for index in range(self.wave_size)]
             return
         self.originals = [self.service.bus.publisher.publish_ordinary(Message(
@@ -731,7 +731,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
             sender = self.service.registry.require('human')
             self.originals = [self.service.bus.publisher.publish_ordinary(
                 Message(sender.name, '#team', body, InfoKind),
-                destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
+                destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, str(sender.worktree)))
                 for body in ('Cancel THIS original before grant.',
                              'Independent saved channel original: reply ONCE.')]
 
@@ -974,7 +974,7 @@ async def run(arguments):
                 cutover.originals = [service.bus.publisher.publish_ordinary(
                     Message(sender.name, '#team',
                         'New isolated retained-source triage: ignore THIS original once.', InfoKind),
-                    destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
+                    destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, str(sender.worktree)))]
             from conftest import accept_initial
             initial = service.bus.bus.delivery(cutover.originals[0].seq)
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
@@ -1045,7 +1045,7 @@ async def run(arguments):
                     sender = service.registry.require('human')
                     late_original = service.bus.publisher.publish_ordinary(Message(
                         sender.name, '#team', 'Batch wave late original: compute 20+3.', InfoKind),
-                        destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                        destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name,sender.created_at,str(sender.worktree)))
                     concurrent_native = True
                     provider.response_gate.set()
                 if provider.posts == expected_posts:

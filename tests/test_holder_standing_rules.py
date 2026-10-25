@@ -195,7 +195,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     elif change == "rename_holder":
         comms.registry.rename("worker", "renamed-worker")
     else:
-        worktree = comms.registry.require("lead").worktree
+        worktree = str(comms.registry.require("lead").worktree)
         comms.registry.unregister("lead")
         comms.registry.remove("lead")
         if change == "recreate":

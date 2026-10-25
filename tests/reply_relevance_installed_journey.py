@@ -68,7 +68,7 @@ async def run(stage, package):
     # retain the actual original model/settings/auth/extension environment.
     service = prepare_native_comms(wire(stage / 'w'))
     fork = await ForkSessionHelper.run(
-        ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
+        ForkSessionRequest(str(package), str(source_file), str(source.worktree), str(stage / 'forks')),
         cwd=Path(source.worktree),
         env=environment,
     )
@@ -101,7 +101,7 @@ async def run(stage, package):
         'source_owner': source.name, 'source_session': str(source_file),
         'source_session_sha256_observed': source_hash,
         'canonical_fork': FieldCodec.encode(fork), 'model': source.model,
-        'thinking': source.thinking_level.declared_name, 'worktree': source.worktree,
+        'thinking': source.thinking_level.declared_name, 'worktree': str(source.worktree),
         'original_task_sha256': hashlib.sha256((source.task or '').encode()).hexdigest(),
         'original_launch_arguments_sha256': hashlib.sha256(json.dumps(launch.arguments).encode()).hexdigest(),
         'settings_hashes': settings_hashes, 'public_inputs': 0,
@@ -118,14 +118,14 @@ async def run(stage, package):
                                 agent_bin=GivenBinary(str(binary)), agent_args=GivenArguments(tuple(launch.arguments)))
         await attach(service, child.name)
         async with acp.spawn_agent_process(Observation(), sys.executable, '-m', 'agent_comms.acp',
-                                           env=environment, cwd=source.worktree) as (client, process):
+                                           env=environment, cwd=str(source.worktree)) as (client, process):
             await client.initialize(protocol_version=1)
-            await client.load_session(cwd=source.worktree, session_id=child.name, mcp_servers=[])
+            await client.load_session(cwd=str(source.worktree), session_id=child.name, mcp_servers=[])
             persist('ordinary-installed-acp-saved-load-ready-before-input')
             original = service.messaging.send_user_message(CommandTarget.named('#openhcs'),
                 'Please reply tersely if you receive this. This is a distinct current '
                 'connectivity request, not continuation of your assigned task or a retry. '
-                'Reply with Received 505-20261002-a1.', worktree=source.worktree)
+                'Reply with Received 505-20261002-a1.', worktree=str(source.worktree))
             acknowledgement['originals'].append(FieldCodec.encode(original.reference))
             persist('one-distinct-user-channel-request-published')
             async with asyncio.timeout(300):

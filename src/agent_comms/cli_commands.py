@@ -2335,7 +2335,7 @@ class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_n
         Argument(flags=("--tags",)),
     ] = InheritedTags()
     project: Annotated[
-        LaunchCheckout,
+        Checkout,
         Argument(flags=("--project",)),
     ]
     model: Annotated[
@@ -2350,15 +2350,17 @@ class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_n
     @classmethod
     def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
         defaults = NativeThreadDefaults()
-        return (cls(name='', project=LaunchCheckout.checked(project), model=defaults.model,
+        return (cls(name='', project=Checkout.from_wire(project), model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 
     def project_directory(self) -> Path:
         return self.project.path
 
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
-        spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)
-                                           for item in fields(self.spec_type)})
+        spec = self.spec_type.from_task(**{
+            **{item.name: getattr(self, item.name) for item in fields(self.spec_type)},
+            'project': LaunchCheckout.checked(self.project.path),
+        })
         asyncio.run(ConfigOptions.configured().validate(self))
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.process_identity)
@@ -2378,7 +2380,7 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
 
     @classmethod
     def thread_binding(cls, thread: Thread) -> Self:
-        return cls(name='', parent=thread.name, tags=GivenTags(thread.tags), project=LaunchCheckout.checked(thread.worktree.path),
+        return cls(name='', parent=thread.name, tags=GivenTags(thread.tags), project=thread.worktree,
                    model=thread.model, thinking_level=thread.thinking_level)
 
 

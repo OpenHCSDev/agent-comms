@@ -30,7 +30,7 @@ def named_target_journey(tmp_path):
 
 def test_named_targets_share_count_changes_and_human_read_contracts(named_target_journey):
     comms = named_target_journey
-    worktree = comms.registry.require("cli").worktree
+    worktree = str(comms.registry.require("cli").worktree)
     direct: NamedTarget = CommandTarget.named("cli")
     channel: NamedTarget = CommandTarget.named("#team")
     for target in (direct, channel):
