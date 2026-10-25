@@ -319,6 +319,9 @@ def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(not
     unreadable = pickle.loads(pickle.dumps(unreadable))
     assert isinstance(unreadable, observation.CommanderHudUnreadable)
     assert "field_from_a_newer_build" in str(unreadable.error)
+    beat(comms, states=state_cards(comms, UnitState))
+    recovered, = reading.read(comms, comms.views.revision())
+    assert pickle.loads(pickle.dumps(recovered)).huds == CommanderFrame.read_all(comms.root)
 
 
 def test_a_verdict_on_the_full_head_or_an_answer_acts_on_its_board_line():
