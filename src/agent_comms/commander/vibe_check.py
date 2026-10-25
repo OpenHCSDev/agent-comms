@@ -1,13 +1,13 @@
 """When the fleet's signals degrade, the heartbeat stops the commander with its indictment.
 
-A degraded signal is a fact Core already reads: answers owed past their window, a held plan
-phase main still lacks, a load past the ceiling. The heartbeat names them, the vibe-check
-sender puts the indictment in front of the commander, and every verb that answers nothing is
-refused until the commander answers that message (the OwedAnswer gate)."""
+A degraded signal is a fact Core already reads that no heartbeat line states: a load past the
+ceiling. An owed answer or a stalled plan phase is a heartbeat line already, on the board the
+commander's tool calls print, so it never stops the commander a second time here. The
+vibe-check sender puts the indictment in front of the commander, and every verb that answers
+nothing is refused until the commander answers that message (the OwedAnswer gate)."""
 
 from __future__ import annotations
 
-import math
 import time
 from collections.abc import Mapping, Sequence
 from abc import abstractmethod
@@ -17,7 +17,7 @@ from typing import ClassVar, Self
 from agent_comms.bus import BusReader
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.questions import SenderMessages, UnansweredBurst
-from agent_comms.commander.standing import AnswersTo, PlanStalled
+from agent_comms.commander.standing import AnswersTo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -104,8 +104,7 @@ class ChokeholdSender(EscalationSender):
 
 
 class Escalation:
-    """An answer owed to an escalation itself. Ignoring one is the chokehold's signal, never a
-    new vibe check, or the check would feed on its own messages."""
+    """An answer owed to an escalation itself. Ignoring one is the chokehold's signal."""
 
     message: Message
 
@@ -113,31 +112,11 @@ class Escalation:
         return (f"Answer the {self.message.sender} burst by its protocol, naming it with "
                 f"--answers {self.message.message_id}.")
 
-    def degradation_signs(self) -> tuple[Sign, ...]:
-        return ()
-
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
         its sender sent before the answer, which UnansweredBurst reads once the answer is sent.
         The gate runs just before the answer is sent, so it reads the answer the same way."""
         return any(message.sender == self.message.sender for message in named)
-
-
-class PlanStalledDegradation(Degradation):
-    """Held plan work that main still lacks. A stall of hours does not clear in one round, so a
-    phase stops the commander when it crosses the window and again each time its age doubles."""
-
-    @classmethod
-    def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
-        now = time.time()
-        return tuple(
-            Sign(cls, (rule.phase, rule.since, cls.doublings(now - rule.since)), rule.line())
-            for rule in PlanStalled.found(frame.plan)
-        )
-
-    @staticmethod
-    def doublings(held: float) -> int:
-        return int(math.log2(max(held, PlanStalled.window) / PlanStalled.window))
 
 
 @dataclass(frozen=True)
@@ -434,7 +413,7 @@ class ChokeholdReleased(ChokeholdAnswer):
 
 @dataclass(frozen=True)
 class ChokeholdHeld(ChokeholdAnswer):
-    """The answer quotes the indictment while load or owed answers stay degraded: the units stay
+    """The answer quotes the indictment while load stays degraded: the units stay
     paused until those clear, and the commander is told which."""
 
     @classmethod
@@ -457,7 +436,7 @@ class ChokeholdHeld(ChokeholdAnswer):
 
     def line(self) -> str:
         return (f"CHOKEHOLD HOLDS: answer {self.answer.seq}:{self.answer.message_id} quoted, but"
-                " load or owed answers are still degraded")
+                " load is still degraded")
 
 
 @dataclass(frozen=True)

@@ -47,10 +47,10 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
     source = SourceRepository.create(tmp_path)
     revision = PullRequestHeadRevision(source.link)
     shape = FixShape(parents=(FileLine('owner.py', 2),), members=(FileLine('owner.py', 4),))
-    shape.require_references(source.checkout, revision)
+    shape.require_references(source.roots, revision)
     for location in (FileLine('owner.py', 1), FileLine('branch.py', 1)):
         with pytest.raises(MissingSourceLine, match='class declaration'):
-            replace(shape, parents=(location,)).require_references(source.checkout, revision)
+            replace(shape, parents=(location,)).require_references(source.roots, revision)
 
 
 def assigned(comms, scope, source, problem='P1'):

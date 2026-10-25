@@ -261,7 +261,8 @@ def test_a_pr_verdict_acts_on_the_unit_holding_that_head(head_bus):
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     verb = judge.JudgeVerb.parse(["ok", "--pr", str(request.pr), "--head", request.head,
                                   "--why", ACCEPTED.text])
-    acted = frozenset(verb.acts_on(order.Commander.read_root(comms.root)))
+    ctx = order.Commander.read_root(comms.root)
+    acted = frozenset(verb.subject(ctx).acts_on(ctx))
     assert acted == {HeadSubject(request), UnitSubject(held.owner_identity)}
 
 
