@@ -1464,6 +1464,18 @@ class RecordMember(WireValue):
         return FieldCodec.encode_record(self)
 
 
+class TaggedRecordMember(RecordMember):
+    """A record member whose wire shape retains its declared family selector."""
+
+    @classmethod
+    def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
+        return _FamilyRecordDecoder(cls)
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return _FamilyRecordDecoder(cls).decode_bound(data, {})
+
+
 class RepresentedProjection(MroDispatch):
     """A represented value's view: its wire encoding, unless its declared record is its wire form."""
 

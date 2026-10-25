@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
-from .field_codec import MessageId, NullMember, RecordMember, RetryDecisionId, SubclassUnion, TurnId
+from .field_codec import MessageId, NullMember, RetryDecisionId, SubclassUnion, TaggedRecordMember, TurnId
 
 
 class WorkDecision(DeclaredFamily, affix="Decision"):
@@ -40,7 +40,7 @@ class AttemptResolution(SubclassUnion, affix="Resolution"):
         return True
 
 
-class RecordedResolution(RecordMember, AttemptResolution, declared_name=None):
+class RecordedResolution(TaggedRecordMember, AttemptResolution, declared_name=None):
     """A supplied outcome keeps its original tagged record representation."""
 
 
