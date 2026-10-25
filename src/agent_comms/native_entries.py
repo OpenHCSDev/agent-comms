@@ -39,7 +39,7 @@ from .field_codec import (
 )
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
-from .pi_payloads import Opaque, PiMessage, PiOmitted, PiPayload
+from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
@@ -491,7 +491,7 @@ class SessionEntry(NativeEntry):
         return FieldCodec.encode(self.parent_id)
 
     version: int | None = None
-    cwd: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
+    cwd: PiField[ReportedText | PiOmitted] = PiOmitted()
     parent_session: Annotated[
         str | PiOmitted, WireName("parentSession"), WireOmitDefault()
     ] = PiOmitted()
