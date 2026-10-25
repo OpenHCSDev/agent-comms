@@ -37,7 +37,7 @@ class CommanderObservation:
         frame = HeartbeatFrame.read(comms, thread.name, reading())
         pulls = frame.pulls
         for repo in comms.registry.snapshot().commander_project.repository_names():
-            pulls.open(repo)
+            pulls.carry_reviews(comms.goals, repo)
         states = UnitState.current(comms, thread.name, frame)
         rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
         # An unreadable holder's checkout already has its card; its checks cannot run there.

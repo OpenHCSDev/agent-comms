@@ -23,6 +23,17 @@ if TYPE_CHECKING:
     from .todos import HeadReviewRecord, HeadVerdict, Todo
 
 
+@dataclass(frozen=True, kw_only=True)
+class HeadReviewStatus:
+    """The forge's review context, shared by listed and linked PR views."""
+
+    status_contexts: tuple[str, ...] = ()
+
+    @property
+    def has_head_review(self) -> bool:
+        return HeadReview.context in self.status_contexts
+
+
 @dataclass(frozen=True)
 class PullRequestChange:
     """Git's whitespace-preserving identity of a pull request's complete patch."""
