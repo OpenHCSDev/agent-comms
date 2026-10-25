@@ -291,9 +291,13 @@ class WordedText(BoundedText):
     says: ClassVar[str]
 
     @classmethod
+    def refusal(cls) -> MalformedRecord:
+        return MalformedRecord(f"{cls.says} ({cls.words}+ words)")
+
+    @classmethod
     def from_text(cls, value: str) -> str:
         if len(super().from_text(value).split()) < cls.words:
-            raise MalformedRecord(f"{cls.says} ({cls.words}+ words)")
+            raise cls.refusal()
         return value
 
 
@@ -314,7 +318,7 @@ class RoastText(WordedText):
     @classmethod
     def from_text(cls, value: str) -> str:
         if not re.search(r'\bbecause\b', super().from_text(value)):
-            raise MalformedRecord(f"{cls.says} ({cls.words}+ words)")
+            raise cls.refusal()
         return value
 
 

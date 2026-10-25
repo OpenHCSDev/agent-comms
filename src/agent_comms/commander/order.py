@@ -882,7 +882,7 @@ class DirectiveVerb(CommanderVerb):
         for rule in refused:
             for asker in rule.answered_in():
                 askers.setdefault(asker, []).append(str(rule.message.message_id))
-        return {f'nothing recorded; one reply to {asker} answers all of them':
+        return {f'--answers {" ".join(ids)} ({asker})':
                 f'agent-comms-commander {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
                 f' --answers {" ".join(ids)}'
                 for asker, ids in askers.items()}

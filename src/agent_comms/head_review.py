@@ -5,14 +5,14 @@ Every path that posts that status goes through here.
 
 from __future__ import annotations
 
-import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, GitCommitText
+from .field_codec import FieldCodec, GitCommitText, RecordProblems
+from .repo import Repo
 from .repository_name import RepositoryName
 
 
@@ -33,36 +33,41 @@ class PullRequestHead:
     def among(cls, repositories: tuple[RepositoryName, ...], pr: int, head: str) -> PullRequestHead:
         """The one candidate repository whose pull request ``pr`` is at ``head``. A single
         candidate is the answer; several are told apart by GitHub, and none or two holding
-        that head is refused with what each one answered."""
+        that head refuses repository selection, including any failed GitHub reads."""
         candidates = tuple(cls(repository, pr, head) for repository in repositories)
         if len(candidates) == 1:
             return candidates[0]
-        reads = tuple((candidate, candidate.read()) for candidate in candidates)
-        held = tuple(candidate for candidate, read in reads
-                     if not read.returncode and read.stdout.strip().startswith(head))
+        observed = []
+        problems = {}
+        for candidate in candidates:
+            try:
+                observed.append(cls.at(candidate.repo, pr))
+            except ToolRefusedError as refused:
+                problems[f'--repo {candidate.repo.to_wire()}'] = str(refused)
+        held = tuple(candidate for candidate in observed if candidate.holds(head))
         if len(held) != 1:
-            answered = "; ".join(
-                f"{candidate.repo.to_wire()}#{pr}: {(read.stdout.strip() or read.stderr.strip())[:60]}"
-                for candidate, read in reads)
-            raise ValueError(f"{len(held)} registered repositories have #{pr} at {head}; "
-                             f"select --repo. {answered}")
-        return held[0]
+            raise RecordProblems({'--repo': Repo.selection_refusal(), **problems})
+        return cls(held[0].repo, pr, head)
 
-    def read(self) -> subprocess.CompletedProcess[str]:
-        """GitHub's answer for this pull request's head commit."""
-        return self.repo.rest(f"pulls/{self.pr}", "--jq", ".head.sha")
+    @classmethod
+    def at(cls, repo: RepositoryName, pr: int) -> PullRequestHead:
+        """Read GitHub's head and decode it through this declaration."""
+        read = repo.rest(f"pulls/{pr}", "--jq", ".head.sha")
+        if read.returncode:
+            raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
+        return cls(repo, pr, read.stdout.strip())
+
+    def holds(self, commit: str) -> bool:
+        return self.head.startswith(commit)
 
     def current(self) -> str:
         """The PR's full head commit, refused unless the reviewed head is still it."""
-        read = self.read()
-        if read.returncode:
-            raise ToolRefusedError(read.stderr.strip() or f"#{self.pr} could not be read.")
-        current = GitCommitText.decode(read.stdout.strip())
-        if not current.startswith(self.head):
+        current = self.at(self.repo, self.pr)
+        if not current.holds(self.head):
             raise ToolRefusedError(
-                f"#{self.pr} moved to {current[:9]} since {self.head} was reviewed; review again."
+                f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
             )
-        return current
+        return current.head
 
 
 class HeadReview(DeclaredFamily, affix="HeadReview"):

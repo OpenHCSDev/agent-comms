@@ -85,10 +85,14 @@ class Repo(BaseModel, WireValue):
         return cls.model_validate_json(FieldCodec.compact(data))
 
     @classmethod
+    def selection_refusal(cls) -> str:
+        return "Select --repo when more than one repository is registered."
+
+    @classmethod
     def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
         candidates = cls.candidates(repositories, name)
         if len(candidates) != 1:
-            raise ValueError("Select --repo when more than one repository is registered.")
+            raise ValueError(cls.selection_refusal())
         repository, = candidates
         return repository
 
