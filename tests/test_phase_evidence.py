@@ -263,19 +263,22 @@ def test_only_foreign_comparison_refusal_exempts_an_owned_type_check(source, all
     assert (not checks.owned()) is allowed
 
 
-@pytest.mark.parametrize(("required", "unskipped", "expected"), (
-    ((HeadReview.context,), True, True),
-    ((HeadReview.context,), False, False),
-    (("review-verdict",), True, False),
-    (("smoke",), True, False),
+@pytest.mark.parametrize(("required", "actors", "expected"), (
+    ((HeadReview.context,), [], True),
+    ((HeadReview.context,), [{"actor_type": "RepositoryRole", "actor_id": 5}], True),
+    ((HeadReview.context,), [{"actor_type": "Integration", "actor_id": 15368}], False),
+    ((HeadReview.context,), [{"actor_type": "RepositoryRole", "actor_id": 5},
+                             {"actor_type": "Team", "actor_id": 9}], False),
+    (("review-verdict",), [], False),
+    (("smoke",), [], False),
 ))
-def test_ruleset_requires_exact_review_context_without_bypass(
-    tmp_path, required, unskipped, expected,
+def test_ruleset_requires_exact_review_context_with_owner_only_bypass(
+    tmp_path, required, actors, expected,
 ):
     main = main_of(tmp_path, {"src/a.py": "x = 1\n"}).main
     rules = [{"ruleset": 7, "required": ["smoke"]},
              {"ruleset": 8, "required": list(required)}]
-    answers = {"rules/branches/main": rules, "rulesets/8": unskipped}
+    answers = {"rules/branches/main": rules, "rulesets/8": actors}
 
     class Answered(RulesetGates):
         @staticmethod
