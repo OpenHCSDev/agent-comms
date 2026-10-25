@@ -326,7 +326,7 @@ class OwnerLifecycle:
         initial_input: LaunchInput = LaunchInput(),
     ) -> Thread:
         """Reserve one owner and its first input before releasing the child's start gate."""
-        owner = self.registry.reserve_owner(previous, identity)
+        owner, = self.registry.reserve_owners((previous, identity))
         owned = owner.thread
         initial_input.record_first_input(partial(
             InputDispositions(self.root).record, owner=owned.name, target=owned.name,

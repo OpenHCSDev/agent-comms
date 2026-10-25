@@ -83,7 +83,7 @@ class Registration:
     ) -> None:
         with self.store.editing() as edit:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
-            self._commit_registration(edit, change)
+            self._commit_registrations(edit, change)
 
     def prepare_native_root(self) -> PrivateRegistryGuard:
         """Prepare native authority, then its complete runtime outside the registry lock."""
@@ -111,8 +111,9 @@ class Registration:
                 execution=CommanderForkExecution))
             with self._preparing_declaration(edit, child, _DEFAULT_PRESENCE) as change:
                 goal = goals.fork_goal(parent, change.thread)
-                return self._commit_registration(edit, replace(
-                    change, thread=replace(change.thread, goal=goal))).thread
+                committed, = self._commit_registrations(edit, replace(
+                    change, thread=replace(change.thread, goal=goal)))
+                return committed.thread
 
     def register_commanded_unit(
         self, name: str, commander: str, worktree: str, process: ProcessIdentity,
@@ -127,28 +128,28 @@ class Registration:
             ))
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
 
-    def reserve_owner(self, original: Thread, process: ProcessIdentity) -> RegistryOwner:
-        """Reserve one process against the exact stopped launch it prepared.
-
-        The registry transaction, not a root-wide lock, prevents concurrent
-        starters from replacing each other's reservation. Unrelated metadata
-        comes from the current declaration rather than the launch's old copy.
-        """
+    def reserve_owners(
+        self, *selected: tuple[Thread, ProcessIdentity],
+    ) -> tuple[RegistryOwner, ...]:
+        """Reserve every prepared process in one checked registry transaction."""
         with self.store.editing() as edit:
-            current = edit.document.require(original.name)
-            if not current.same_launch(original):
-                raise RelationViolationError("Owner launch changed before process reservation.")
-            if current.process_alive:
-                raise RelationViolationError("Thread already has a live owner process.")
-            edit.document.status(current.name).require_visible(
-                "Only visible agent threads can be started.")
-            owned = replace(current.without_turn(), process_identity=process)
-            change = self._commit_registration(edit, edit.document.prepare_registration(
-                owned, _DEFAULT_PRESENCE, new_owner=True))
-            return RegistryOwner(
+            changes = []
+            for original, process in selected:
+                current = edit.document.require(original.name)
+                if not current.same_launch(original):
+                    raise RelationViolationError("Owner launch changed before process reservation.")
+                if current.process_alive:
+                    raise RelationViolationError("Thread already has a live owner process.")
+                edit.document.status(current.name).require_visible(
+                    "Only visible agent threads can be started.")
+                owned = replace(current.without_turn(), process_identity=process)
+                changes.append(edit.document.prepare_registration(
+                    owned, _DEFAULT_PRESENCE, new_owner=True))
+            committed = self._commit_registrations(edit, *changes)
+            return tuple(RegistryOwner(
                 thread=change.thread,
                 claimed_generation=edit.document.entry(change.thread.name).claimed_generation,
-            )
+            ) for change in committed)
 
     @contextmanager
     def external_process(self, name: str, process: ProcessIdentity):
@@ -159,7 +160,7 @@ class Registration:
             if thread.process_alive and thread.process_identity != process:
                 raise RelationViolationError("Another live process owns this CLI endpoint.")
             bound = replace(thread, process_identity=process)
-            self._commit_registration(edit, edit.document.prepare_registration(
+            self._commit_registrations(edit, edit.document.prepare_registration(
                 bound, ConnectedThreadStatus(), new_owner=True))
             owner = edit.document.entry(bound.name).owner_identity
         try:
@@ -168,7 +169,7 @@ class Registration:
             with self.store.editing() as edit:
                 entry = edit.document.entry_if_present(owner.incarnation.name)
                 if entry is not None and entry.owned_by(owner, process):
-                    self._commit_registration(edit, edit.document.prepare_registration(
+                    self._commit_registrations(edit, edit.document.prepare_registration(
                         replace(entry.thread, process_identity=NoProcess()), NoBridgeThreadStatus(),
                         new_owner=False))
 
@@ -205,7 +206,7 @@ class Registration:
         self, edit: RegistryEdit, original: RegistryOwner, session_file: str,
     ) -> RegistryOwner:
         change = edit.prepare_native_source(original, session_file)
-        change = self._commit_registration(edit, change)
+        change, = self._commit_registrations(edit, change)
         # The document owns the next turn's selection. Publishing an
         # observed source must not rewrite this authorized turn's settings.
         observed = replace(change.thread,
@@ -251,7 +252,8 @@ class Registration:
 
     def _declare_in(self, edit: RegistryEdit, thread: Thread, status: ThreadStatus) -> Thread:
         with self._preparing_declaration(edit, thread, status) as change:
-            return self._commit_registration(edit, change).thread
+            committed, = self._commit_registrations(edit, change)
+            return committed.thread
 
     @contextmanager
     def _preparing_declaration(self, edit: RegistryEdit, thread: Thread,
@@ -262,24 +264,28 @@ class Registration:
             yield change
             channels.remember_tags(change.thread.tags)
 
-    def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
-        """Every registration commits here, after inheritance kept a redeclared thread's
-        roots; the registry assigns a new thread its storage roots in this one place."""
-        change.prepare_participant(self.store.path.parent)
-        thread = change.thread
-        change = replace(change, thread=replace(
-            thread, storage_roots=thread.storage_roots.assigned(self.storage_rule, thread.name)))
-        before = change.prior_goal
-        history = None
-        intent = None
-        if before != change.thread.goal:
-            history = GoalHistoryStore(self.store.path)
-            intent = history.begin(change.thread.incarnation.wire_birth, before, change.thread.goal)
-        change.apply(edit.document)
+    def _commit_registrations(
+        self, edit: RegistryEdit, *changes: RegistrationChange,
+    ) -> tuple[RegistrationChange, ...]:
+        """Prepare registrations and goal history, then publish their document once."""
+        committed = []
+        history = GoalHistoryStore(self.store.path)
+        intents: list[int] = []
+        for change in changes:
+            change.prepare_participant(self.store.path.parent)
+            thread = change.thread
+            change = replace(change, thread=replace(
+                thread, storage_roots=thread.storage_roots.assigned(self.storage_rule, thread.name)))
+            before = change.prior_goal
+            if before != change.thread.goal:
+                intents.append(history.begin(
+                    change.thread.incarnation.wire_birth, before, change.thread.goal))
+            change.apply(edit.document)
+            committed.append(change)
         edit.commit()
-        if history is not None and intent:
+        for intent in intents:
             history.commit(intent)
-        return change
+        return tuple(committed)
 
     @staticmethod
     def changing[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[
