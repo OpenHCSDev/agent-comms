@@ -35,12 +35,12 @@ class TurnTerminal(TurnInterruption):
         raise RuntimeError("Turn has no reported backend result")
 
     async def prepare_publication(self, progress: TurnProgress) -> Done:
-        return await progress.record_failure("Native turn ended without a result")
+        return await progress.record_failure(BackendFailed("Native turn ended without a result"))
 
-    async def report_failure(self, progress: TurnProgress, error: Exception):
+    async def report_failure(self, progress: TurnProgress, error: Exception, kind: type[TurnFailure]):
         cause = error.__cause__ or error
         detail = f"Native turn failed: {type(cause).__name__}: {cause}"
-        return (await progress.record_failure(detail)).outcome
+        return (await progress.record_failure(kind(detail))).outcome
 
     def settle_current(self, account: TurnGoalAccount) -> None:
         pass

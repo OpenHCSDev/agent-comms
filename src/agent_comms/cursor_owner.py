@@ -14,6 +14,7 @@ from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCu
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
+from .historical_native_inputs import first_foreign_claim_source
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_input_record import NativeInputReference
@@ -119,8 +120,13 @@ class CursorOwner(RegistryOwner):
             sources = SourceCoverage(bus, store, wire_root_id=self.wire_root_id,
                                      recipient_lookup=self.lookup)
             with store.session.boundary(bus), store.session.read():
-                state = self.state(store.session._connection)
-            coverage = sources.since(state, source_reads=source_reads)
+                db = store.session._connection
+                state = self.state(db)
+                stop_seq = first_foreign_claim_source(
+                    db, wire_root_id=self.wire_root_id, recipient_lookup=self.lookup,
+                    after_seq=state.covered_seq, claimed_generation=self.claimed_generation,
+                )
+            coverage = sources.since(state, stop_seq=stop_seq, source_reads=source_reads)
             proof = coverage.proof
             with store.session.boundary(bus) as boundary, store.session.writing() as db:
                 coverage.source_prefix.require_current(bus.bus)
