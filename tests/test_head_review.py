@@ -59,7 +59,7 @@ def invoke(comms, request, verdict, order=NoHeadOrder()):
 
 def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(head_bus):
     comms, github, request = head_bus
-    before = tuple(todo.strikes for todo in comms.goals.todos.list(request.repo))
+    before = tuple(todo.strike_count for todo in comms.goals.todos.list(request.repo))
     accepted, rejected = ReviewedHeadVerdict(ACCEPTED), RejectedHeadVerdict(REASON)
     invoke(comms, replace(request, head=request.head[:9]), accepted)
     invoke(comms, request, rejected)
@@ -68,7 +68,7 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
     assert tuple(record.verdict for record in records) == (accepted, rejected)
     assert all(record.request == request and record.order == NoHeadOrder() for record in records)
     assert comms.goals.todos.head_reviews(request)[0].verdict == rejected
-    assert tuple(todo.strikes for todo in comms.goals.todos.list(request.repo)) == before
+    assert tuple(todo.strike_count for todo in comms.goals.todos.list(request.repo)) == before
     posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
     assert len(posts) == 2
     assert "state=success" in posts[0] and "state=failure" in posts[1]

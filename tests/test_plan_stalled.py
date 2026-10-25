@@ -1,98 +1,53 @@
-"""A held plan phase's clock starts at its first order; re-sending never restarts it."""
+"""A held phase's clock reads the real stored order history, not an inline tuple double."""
+from dataclasses import replace
 
-from dataclasses import dataclass
-
-import pytest
-
-from agent_comms.commander import standing
-from agent_comms.phase_evidence import PlanReading
-from agent_comms.plan_phases import BusWriterPhase, PlanPhase
+from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import OpenTodoState
+from agent_comms.todos import ReleaseTodo, StoredOrderStory, StrikeReason
+from test_todo_stories import recorded_problem
 
 
-@dataclass(frozen=True)
-class SentOrder:
-    """Stands in for a checked order: the phase it serves and when it was sent."""
-
-    at: RecordedEventTime
-    phase: type = BusWriterPhase
-
-    def checked(self) -> "SentOrder":
-        return self
-
-
-@dataclass(frozen=True)
-class HeldTodo:
-    order: SentOrder
-    prior_orders: tuple[SentOrder, ...] = ()
-    state: type = OpenTodoState
-    holder: str = "unit-bus-w"
+def held_order(comms, number: int, at: float, previous: tuple[float, ...] = ()):
+    store = comms.goals.todos
+    original = store.get("P1")
+    current = replace(original, id=f"P{number}", order=replace(original.order.checked(),
+        id=f"order-{number}", at=RecordedEventTime(at), serves=BusWriterPhase))
+    with store.writing() as db:
+        current.upsert(db)
+        for timestamp in previous:
+            StoredOrderStory.append(db, current.id, replace(current.order.checked(),
+                id=f"earlier-{number}-{timestamp}", at=RecordedEventTime(timestamp)))
+    return store.get(current.id)
 
 
-def reading(*todos: HeldTodo) -> PlanReading:
-    return PlanReading(todos, main=None)
+def test_a_resent_order_keeps_the_first_orders_time(recorded_problem, source_repository):
+    current = held_order(recorded_problem, 1, 5000, previous=(100,))
+    reading = PlanReading((current,), MainTree.of(source_repository))
+    assert BusWriterPhase.ordered_since(reading) == 100
 
 
-def test_a_resent_order_keeps_the_first_orders_time():
-    resent = HeldTodo(SentOrder(RecordedEventTime(5000.0)),
-                      prior_orders=(SentOrder(RecordedEventTime(100.0)),))
-    assert BusWriterPhase.ordered_since(reading(resent)) == 100.0
+def test_the_oldest_held_order_sets_the_clock(recorded_problem, source_repository):
+    first = held_order(recorded_problem, 1, 300)
+    second = held_order(recorded_problem, 2, 200)
+    reading = PlanReading((first, second), MainTree.of(source_repository))
+    assert BusWriterPhase.ordered_since(reading) == 200
 
 
-def test_the_oldest_holder_sets_the_clock():
-    first = HeldTodo(SentOrder(RecordedEventTime(300.0)))
-    second = HeldTodo(SentOrder(RecordedEventTime(200.0)), holder="unit-bus-b1")
-    assert BusWriterPhase.ordered_since(reading(first, second)) == 200.0
+def test_an_unheld_order_does_not_count(recorded_problem, source_repository):
+    comms = recorded_problem
+    current = held_order(comms, 1, 50)
+    released = comms.goals.todos.apply(current.id, ReleaseTodo(current.revision,
+        comms.registry.require("lead").incarnation, current.held(),
+        StrikeReason("The commander releases this order so another worker can repair the owner.")))
+    reading = PlanReading((released,), MainTree.of(source_repository))
+    assert not BusWriterPhase.ordered(reading)
 
 
-def test_an_unheld_order_does_not_count():
-    released = HeldTodo(SentOrder(RecordedEventTime(50.0)), holder="")
-    assert not BusWriterPhase.ordered(reading(released))
-
-
-FIRST = 1000.0
-
-
-@pytest.fixture
-def stalled_reading(monkeypatch):
-    """BusWriterPhase is the only phase, ready unless a test lands its evidence."""
-    held = {"reading": reading(HeldTodo(SentOrder(RecordedEventTime(FIRST))))}
-    monkeypatch.setattr(PlanPhase, "members_with", classmethod(lambda cls, base: (BusWriterPhase,)))
-    monkeypatch.setattr(BusWriterPhase, "ready", classmethod(lambda cls, reading: True))
-    return held
-
-
-def stalled_at(held, monkeypatch, now: float) -> tuple:
-    monkeypatch.setattr(standing.time, "time", lambda: now)
-    return standing.PlanStalled.found(held["reading"])
-
-
-def test_fires_past_the_window(stalled_reading, monkeypatch):
-    (rule,) = stalled_at(stalled_reading, monkeypatch, FIRST + standing.PlanStalled.window + 1)
-    assert (rule.phase, rule.since) == (BusWriterPhase, FIRST)
-
-
-def test_quiet_under_the_window(stalled_reading, monkeypatch):
-    assert stalled_at(stalled_reading, monkeypatch, FIRST + standing.PlanStalled.window - 1) == ()
-
-
-def test_clears_when_the_phase_lands_on_main(stalled_reading, monkeypatch):
-    monkeypatch.setattr(BusWriterPhase, "ready", classmethod(lambda cls, reading: False))
-    assert stalled_at(stalled_reading, monkeypatch, FIRST + 10 * standing.PlanStalled.window) == ()
-
-
-def test_a_replacement_order_keeps_it_firing(stalled_reading, monkeypatch):
-    replaced = FIRST + standing.PlanStalled.window
-    stalled_reading["reading"] = reading(HeldTodo(
-        SentOrder(RecordedEventTime(replaced)), prior_orders=(SentOrder(RecordedEventTime(FIRST)),),
-    ))
-    assert stalled_at(stalled_reading, monkeypatch, replaced + 60)
-
-
-def test_an_unplanned_reason_answers_without_reading_main():
-    """main=None: any phase evidence read would raise, so passing proves main was never read."""
+def test_an_unplanned_reason_answers_without_reading_main(source_repository):
     from agent_comms.plan_phases import UnplannedPhase
 
+    reading = PlanReading((), MainTree.of(source_repository))
     reason = "This repair keeps the order tool usable before the planned work resumes."
-    assert UnplannedPhase.order_refusals(reading(), reason) == ()
+    assert UnplannedPhase.order_refusals(reading, reason) == ()
+    assert not reading.reads

@@ -63,8 +63,8 @@ class UnansweredUnitAsks(SenderMessages):
             return {}
         peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
         since = min(
-            order.at.recorded_at("A held order")
-            for todos in held.values() for todo in todos for order in todo.order_history
+            todo.first_ordered_at
+            for todos in held.values() for todo in todos
         )
         questions = cls(
             RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,

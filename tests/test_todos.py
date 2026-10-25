@@ -209,7 +209,8 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
     assert store.for_commander(lead.incarnation) == ()
     assert withdrawn.state is DoneTodoState and not withdrawn.pending
     assert withdrawn.order.previous == todo.held()
-    assert withdrawn.released == released.released and withdrawn.strikes == ()
+    assert withdrawn.history.events(withdrawn.id, ReleaseTodo) == released.history.events(released.id, ReleaseTodo)
+    assert withdrawn.strike_count == 0
     assert "withdrawn from worker, no strike" in withdrawn.order.withdrawals(withdrawn)[0]
     assert FieldCodec.decode(Todo, FieldCodec.encode(withdrawn)) == withdrawn
 
@@ -519,7 +520,6 @@ def test_order_is_merged_only_when_every_linked_request_merged(pr_commander, git
 def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch):
     """Both real watcher entrypoints, a copied bus, real Git and the external forge stub."""
     pr_work_goal_id = GoalId.mint()
-    print("WATCHPASS SOURCE:", CommanderHeartbeat.watch_pass.__code__.co_filename)
     ctx = pr_commander
     source = ctx.repos[0]
     with LaunchRoot.from_path(ctx.root).selected():
@@ -541,7 +541,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         )[0].merge
         sent = c.messaging.send(ctx.commander, worker.name, original.order.instructions(original)).message
         original = c.goals.todos.apply(original.id, OrderMessage(
-            original.revision, lead.incarnation, sent.message_id))
+            original.revision, lead.incarnation, sent.message_id, at=RecordedEventTime(time.time())))
         claim = OrderClaim.for_order(
             original, worker.incarnation, 1, merged, "The repair is ready for review",
             sent.reference, store=c.goals.todos,

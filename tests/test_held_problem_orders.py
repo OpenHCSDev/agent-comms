@@ -52,7 +52,8 @@ def held_commander(pr_commander, cited_source):
         review_at=RecordedEventTime(time.time() + 1000), order=order(cited_source),
     )
     published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
-    source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
+    source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id,
+                                                      at=RecordedEventTime(time.time())))
     original = source.comms.goals.todos.get(todo.id)
     practice = PracticeCopy(source.root, source.root.parent / f"{source.root.name}-copied")
     practice.include(tuple(RootFile.existing_in(practice.root)))
@@ -127,8 +128,8 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     main(["send", "worker", str(path), "--clean"], ctx)
     saved = ctx.comms.goals.todos.get("P1")
     assert saved.order.id != original.order.id
-    assert saved.messages[-1].message_id != original.messages[-1].message_id
-    assert saved.strikes == original.strikes == ()
+    assert saved.latest_message.message_id != original.latest_message.message_id
+    assert saved.strike_count == original.strike_count == 0
     assert ctx.comms.registry.require("worker").goal.require().id == saved.held().generation
     ThreadCaller("worker").invoke(CommsChannelsTool(), ctx.comms)
 

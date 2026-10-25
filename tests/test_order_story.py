@@ -1,4 +1,4 @@
-"""Native stories use one copied Todo record, including a resent send-back."""
+"""Native stories retain their append-only events across a copied bus and resend."""
 
 
 import time
@@ -16,8 +16,8 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
-    AcceptedVerdict, DoneTodoState, EditSendBackVerdict, JudgedCall, OrderMessage, ReleaseTodo,
-    SendBackVerdict, StrikeReason,
+    AcceptedVerdict, DoneTodoState, EditSendBackVerdict, JudgedCall, OrderMessage, OrderVerdict,
+    ReleaseTodo, SendBackVerdict, StrikeReason,
     StrikeTodo, UnorderedProblemOrder, WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
@@ -50,6 +50,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         commander="lead", assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
+    first_order_id = todo.order.checked().id
     actor = comms.registry.require("lead").incarnation
     reason = "The worker changed the wrong owner and left the decision duplicated."
     standalone = "The worker omitted the requested application check during the final review."
@@ -82,7 +83,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         current.latest_message
     for message_id in map(MessageId.mint, ("initial order", "current order")):
         caller.invoke(CommsChangeProblemTool(problem=current.id, operation=OrderMessage(
-            current.revision, actor, message_id)), comms)
+            current.revision, actor, message_id, at=RecordedEventTime(time.time()))), comms)
         current = comms.goals.todos.get(current.id)
         assert current.latest_message.message_id == message_id
     copied_root = tmp_path / "copy"
@@ -92,11 +93,15 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     stored_at = copied.goals.todos.path.stat().st_mtime_ns
     result = CommsOrderStoryTool.invoke(copied, {"order_id": str(resent_id)}, caller=NoThreadCaller())
     story = FieldCodec.decode(OrderStory, result)
+    archived = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
+        copied, {"order_id": first_order_id}, caller=NoThreadCaller()))
+    assert archived.order_id == first_order_id
+    assert archived.problems == story.problems
     assert story.line.count(reason) == story.line.count(standalone) == 1
     assert story.line.count(f"Ordered {resent_id}:") == story.line.count("Accepted") == 1
     assert story.line.count("bad-call") == story.line.count("accepted-call") == 1
     assert "strike recorded" in story.line
-    assert len(saved.strikes) == len(saved.verdicts) == 2
+    assert len(saved.history.events(saved.id, StrikeTodo)) == len(saved.history.events(saved.id, OrderVerdict)) == 2
     assert CommsOrderStoryTool.invoke(copied, {"order_id": str(resent_id)}, caller=caller) == result
     fleet = FieldCodec.decode(FleetStory, board_read(CommsFleetStoryTool, copied, NoThreadCaller()))
     assert fleet.lines == (f"P1 worker: {saved.order.line}",)
@@ -104,8 +109,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
     with copied.goals.todos.writing() as db:
         for problem in ("P2", "P3"):
-            replace(saved, id=problem, assignment=None, order=UnorderedProblemOrder(),
-                    strikes=(), verdicts=(), messages=()).insert(db)
+            replace(saved, id=problem, assignment=None, order=UnorderedProblemOrder()).insert(db)
     copied.goals.todos.link(actor, "P2", "worker", saved.id)
     linked = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
         copied, {"order_id": str(resent_id)}, caller=caller))
@@ -177,8 +181,9 @@ def test_one_send_back_over_two_edits_cites_their_checkout_and_strikes_once(comm
     caller.invoke(CommsVerdictsTool(verdicts=(sent_back(comms, other, ToolCallId("first-call"), 2, at),
                                               sent_back(comms, other, ToolCallId("second-call"), 2, at))), comms)
     judged = comms.goals.todos.get("P1")
-    assert len(judged.live_strikes("worker")) == 1
-    assert {verdict.tool_call_id for verdict in judged.verdicts} >= {"first-call", "second-call"}
+    assert judged.strikes_against(comms.registry.require("worker").incarnation) == 1
+    assert {verdict.tool_call_id for verdict in judged.history.events(judged.id, SendBackVerdict)} >= {
+        "first-call", "second-call"}
 
 
 def test_two_send_backs_with_the_same_reason_strike_twice(comms, tmp_path):
@@ -187,4 +192,4 @@ def test_two_send_backs_with_the_same_reason_strike_twice(comms, tmp_path):
     for call in map(ToolCallId, ("first-call", "second-call")):
         caller.invoke(CommsVerdictsTool(verdicts=(
             sent_back(comms, other, call, 2, EventTime.capture(time.time())),)), comms)
-    assert len(comms.goals.todos.get("P1").live_strikes("worker")) == 2
+    assert comms.goals.todos.get("P1").strikes_against(comms.registry.require("worker").incarnation) == 2

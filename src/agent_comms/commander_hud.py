@@ -184,7 +184,7 @@ class CommanderHud(ToolResult):
                     tuple(at for due, at in timers if due.id == todo.id),
                     todo.strike_count, edits[todo.id],
                 ) for todo in orders),
-                sum(len(todo.live_strikes(unit.name)) for todo in history),
+                sum(todo.strikes_against(unit) for todo in history),
                 tuple(ready for request in requests.values() for ready in request.as_ready()),
                 tuple(draft for request in requests.values() for draft in request.as_draft()),
             ))
