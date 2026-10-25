@@ -201,7 +201,7 @@ class HeldResources(BusProjectionTables):
 
 @dataclass
 class ProjectionPass(ABC, ProjectionSource):
-    """A projection pass owns its selected tables and admits every write through them."""
+    """A projection pass writes only its selected tables."""
 
     tables: frozenset[type[TypedTable]] = field(
         default_factory=lambda: frozenset(BusProjectionTables.schema_rows()))

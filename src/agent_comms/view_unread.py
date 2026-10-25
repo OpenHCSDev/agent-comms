@@ -15,7 +15,8 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 from weakref import WeakValueDictionary, finalize
 
 from .coordination_errors import CoordinationReadUnavailable
-from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile, StoreBusy
+from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
+from .store_files import StoreBusy
 from .bus import Bus
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
