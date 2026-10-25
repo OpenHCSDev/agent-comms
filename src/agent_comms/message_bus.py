@@ -62,20 +62,29 @@ if TYPE_CHECKING:
 
 
 class HeldBusWrite:
-    """Maintenance delays an unattempted publication, never retries a write."""
+    """A CLI process's publication waits out maintenance on its own loop, never retrying a
+    write; a service's worker thread refuses instead (MessageBus.write_open)."""
 
     def write_when_open[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
         return asyncio.run(comms.bus.when_open(operation))
 
 
-class WatchPass[Observed](HeldBusWrite, ABC):
-    """Observe before entering maintenance to apply the result."""
+class WatchPass[Observed](ABC):
+    """Observe, then apply the result while the bus is open.
 
+    A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
+    in the pass's worker thread kept the connector alive after SIGTERM: the install holding
+    maintenance waits for that stop, so systemd killed it at 90 s (installs 17 and 18).
+    """
+
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        with opened_wire() as comms:
+            await comms.bus.when_open(partial(self.watch_pass, opened_wire))
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
             observed = self.observe(comms)
-            self.write_when_open(comms, partial(self.pass_body, comms, observed))
+            comms.bus.write_open(partial(self.pass_body, comms, observed))
 
     @abstractmethod
     def observe(self, comms: Comms) -> Observed: ...
@@ -150,16 +159,15 @@ class MessageBus[Writes: Publisher]:
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
+    def write_open[Result](self, operation: Callable[[], Result]) -> Result:
+        """Refuse while maintenance holds the bus; the caller's loop owns any wait."""
+        MaintenanceBarrier(self._registry.store.path).assert_open_unlocked()
+        return operation()
+
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
-        maintenance = MaintenanceBarrier(self._registry.store.path)
-
-        def execute():
-            maintenance.assert_open_unlocked()
-            return operation()
-
         while True:
             try:
-                result = await Coordination.run_worker(execute)
+                result = await Coordination.run_worker(partial(self.write_open, operation))
                 return await result if inspect.isawaitable(result) else result
             except MaintenanceHeldError:
                 await self.resumed()

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import builtins
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping
@@ -175,9 +174,8 @@ class UnconfirmedOutcome(Outcome):
 class DeliveredOutcome(FilteredOutcome):
     @classmethod
     async def record(cls, bridge: CliBridge, delivery: DeliveryRow) -> None:
-        await asyncio.to_thread(
-            bridge.comms.bus.mark_delivered, bridge.binding.bus, (delivery.message.reference,),
-        )
+        await bridge.comms.bus.when_open(partial(
+            bridge.comms.bus.mark_delivered, bridge.binding.bus, (delivery.message.reference,)))
         with bridge.db:
             delivery.upsert(bridge.db)
 

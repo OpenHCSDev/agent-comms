@@ -36,6 +36,7 @@ from .locked_store import DurableFile, LockedStore, RegistryFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     AtomicFile,
+    HolderNamingContention,
     SharedLock,
     _async_store_lock,
     _store_lock,
@@ -569,8 +570,9 @@ class MaintenanceBarrier(MaintenanceIngress):
         AtomicFile(self.state_path).write_text(state_text)
 
     def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
-        """Hold new turns before fleet drain; an uncertain write stays closed."""
-        with _store_lock(self.registry_path):
+        """Hold new turns before fleet drain; an uncertain write stays closed. A wait past
+        5 s names the registry's holders in the install's log."""
+        with _store_lock(self.registry_path, contention=HolderNamingContention(5)):
             current = self._current_unlocked()
             # A successor takes an abandoned hold without briefly reopening
             # ingress or making the owner repeat its install command.
