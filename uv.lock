@@ -44,7 +44,7 @@ requires-dist = [
     { name = "agent-client-protocol", specifier = ">=0.8" },
     { name = "aiohttp", specifier = ">=3.14" },
     { name = "black", marker = "extra == 'dev'", specifier = "==26.5.1" },
-    { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main" },
+    { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?rev=main" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.0" },
     { name = "nominal-refactor-advisor", marker = "extra == 'dev'", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main" },
     { name = "packaging", specifier = ">=24" },
@@ -413,7 +413,7 @@ wheels = [
 [[package]]
 name = "metaclass-registry"
 version = "0.4.1"
-source = { git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main#60138d533ef0758c5f093d9110ba9f5656f0934a" }
+source = { git = "https://github.com/OpenHCSDev/metaclass-registry?rev=main#60138d533ef0758c5f093d9110ba9f5656f0934a" }
 
 [[package]]
 name = "multidict"
