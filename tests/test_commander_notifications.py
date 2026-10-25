@@ -68,7 +68,6 @@ def beat(comms, rules=(), *, states=()):
 
 def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
     """Ready and done-but-held phases lead; finished phases are one count per plan."""
-    from agent_comms.commander.vibe_check import OverloadDegradation
     from agent_comms.commander_hud import CommanderPhase
     from agent_comms.plan_phases import (
         DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase, RetainedStorePhase,
@@ -168,7 +167,7 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     first, = notifications(comms)
     assert failing.line() in first.body
     assert not any(state.line() in first.body for state in states)
-    header = replace(lead_hud(comms, states), units=()).frame
+    header = replace(lead_hud(comms, states), units=(), board=()).frame
     assert first.body.splitlines()[0] == CommanderUpdate.header
     assert first.body.splitlines()[-len(header):] == list(header)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
@@ -215,7 +214,7 @@ def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus
         RulePing.capture(rule) for rule in rules}
     assert first.body.splitlines() == [CommanderUpdate.header,
                                        *first.task.lines(first.timestamp),
-                                       *lead_hud(comms).frame]
+                                       *replace(lead_hud(comms), board=()).frame]
     beat(comms, rules)
     assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
@@ -234,7 +233,7 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
-    frame = lead_hud(comms).frame
+    frame = replace(lead_hud(comms), board=()).frame
     assert quiet.body.splitlines()[-len(frame):] == list(frame)
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
     # Nothing new and nothing cleared sends nothing.
