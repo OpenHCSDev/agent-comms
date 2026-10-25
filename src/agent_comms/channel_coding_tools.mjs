@@ -15,7 +15,6 @@ export default function channelCodingTools(pi) {
         { call_id: event.toolCallId, name: event.toolName, arguments: event.input },
         1024 * 1024,
         16384,
-        "Tool claim outcome UNKNOWN; inspect before retrying.",
       );
       if (response?.ok !== true) {
         if (response?.details) refusals.set(event.toolCallId, response.details);
