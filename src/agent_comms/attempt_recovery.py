@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
-from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
+from agent_comms.attempt_states import UnsuccessfulTerminal
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationUncertain,
@@ -33,7 +33,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_results import Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
+from agent_comms.coordination_tables.attempts import AttemptRecord
 from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import CurrentExecutions
 from agent_comms.coordination_tables.recovery import (
@@ -51,7 +51,7 @@ from .native_prompt_binding import (
     expected_prompt_bindings,
     expected_prompt_matches_journal,
 )
-from .pi_vocabulary import PendingStopReason
+from .pi_vocabulary import PendingStopReason, PiStopReason
 from .private_path import (
     FileRevision,
     MissingFile,
@@ -262,7 +262,7 @@ class VerifiedAttemptOwnerLoss(VerifiedOwnerLoss):
                 # Explicitly abandon the fenced, exited LOCAL backend.
                 # This is not evidence of a provider response or its effects.
                 backend_done=True,
-                outcome=UnknownOutcomeAttempt(),
+                terminal=PendingStopReason,
                 reason_code=GivenReasonCode("released_native_unknown"),
                 observed_at_ms=int(time.time() * 1000),
             ),
@@ -337,7 +337,15 @@ class MonitorEvidence:
     backend_done: bool
     reason_code: GivenReasonCode
     observed_at_ms: int
-    outcome: UnsuccessfulTerminal
+    terminal: type[PiStopReason]
+
+    def record_replay(self, db, execution_id: str) -> UnsuccessfulTerminal:
+        outcome, facts = self.terminal.unpublished_attempt()
+        self.terminal.assess_recovery_replay(
+            ReplayAssessments.for_execution(db, execution_id), db, execution_id,
+        )
+        ReplayAssessments.accumulate(db, execution_id, facts | outcome.replay_contribution)
+        return outcome
 
     def __post_init__(self) -> None:
         if any(
@@ -466,7 +474,7 @@ class RecoveryMonitorCapability:
         )
         if source is None:
             raise RecoveryBlocked("native attempt has no original input")
-        terminal = PendingStopReason
+        terminal = source.sent_owner_claimed_generation.recovery_stop_reason()
         revision = MissingFile()
         for session in source.selected_session.present():
             with expected_prompt_bindings(store, (source.input_id,)) as bindings:
@@ -502,18 +510,15 @@ class RecoveryMonitorCapability:
                     raise StaleRevision("native journal changed during recovery")
             current = store.get(execution_id)
             attempt = current.require_current_attempt()
-            outcome, replay_facts = terminal.unpublished_attempt()
             return cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
                 execution_id, attempt.attempt_ordinal, attempt.owner_generation,
                 expected_attempt_revision=attempt.revision,
                 expected_execution_revision=current.execution.revision,
                 expected_pointer_revision=current.pointer_revision,
                 owner_loss=loss,
-                # A recorded terminal is still not permission to replay effects.
-                replay_facts=replay_facts,
                 evidence=MonitorEvidence(
                     subprocess_dead=True, backend_done=True,
-                    outcome=outcome,
+                    terminal=terminal,
                     reason_code=GivenReasonCode("released_native_" + terminal.declared_name),
                     observed_at_ms=int(time.time() * 1000),
                 ),
@@ -530,12 +535,10 @@ class RecoveryMonitorCapability:
         expected_pointer_revision: int,
         evidence: MonitorEvidence,
         owner_loss: VerifiedAttemptOwnerLoss,
-        replay_facts: ReplayFact = ReplayFact.NONE,
     ) -> Applied[RecoverySnapshot]:
         if not evidence.subprocess_dead:
             raise RecoveryBlocked("monitor cannot record a live Pi RPC subprocess as dead")
         store = self._store
-        replay_facts = ReplayFact(replay_facts)
         if not owner_loss.issued_for(store):
             raise RecoveryBlocked("monitor requires an observed release of this exact owner")
         with store.session.settlement(owner_loss.boundary) as boundary:
@@ -558,9 +561,7 @@ class RecoveryMonitorCapability:
             if not owner_loss.owns(store, attempt):
                 raise RecoveryBlocked("monitor requires an observed release of this exact owner")
             now = store.session.now(max(attempt.updated_at_ms, evidence.observed_at_ms))
-            ReplayAssessments.accumulate(
-                db, execution_id, replay_facts | evidence.outcome.replay_contribution
-            )
+            outcome = evidence.record_replay(db, execution_id)
             AttemptRecord.update(
                 db,
                 where="execution_id=? AND attempt_ordinal=?",
@@ -577,7 +578,7 @@ class RecoveryMonitorCapability:
             unresolved = bool(snapshot.publication_intents)
             if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
                 store.get(execution_id).settle(
-                    store.session, evidence.outcome, evidence.reason_code, boundary
+                    store.session, outcome, evidence.reason_code, boundary
                 )
                 settled = store.get(execution_id)
                 kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery

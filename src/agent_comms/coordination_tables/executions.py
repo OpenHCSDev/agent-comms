@@ -681,7 +681,7 @@ class ReplayAssessments(
 
     @classmethod
     def authorize_if_unobserved(cls, db: sqlite3.Connection, execution_id: str) -> None:
-        """Record provider-failure proof only while no output fact exists."""
+        """Record no-output proof only while no earlier assessment exists."""
         cls.for_execution(db, execution_id).authorize_retry(db, execution_id)
 
     @classmethod
@@ -705,7 +705,7 @@ class ReplayAssessments(
         return self
 
     def authorize_retry(self, db: sqlite3.Connection, execution_id: str) -> None:
-        """An existing assessment cannot be authorized by a later provider failure."""
+        """A later no-output proof cannot erase an existing assessment."""
 
     def revoke_retry(self, db: sqlite3.Connection) -> None:
         if self.replay_safe:

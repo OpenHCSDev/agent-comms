@@ -37,11 +37,24 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
         return total
 
     @classmethod
-    def unpublished_attempt(cls):
+    def recovery_outcome(cls):
         from .attempt_states import UnknownOutcomeAttempt
+
+        return UnknownOutcomeAttempt()
+
+    @classmethod
+    def recovery_facts(cls):
         from .coordination_tables.attempts import ReplayFact
 
-        return UnknownOutcomeAttempt(), ReplayFact.NONE
+        return ReplayFact.NONE
+
+    @classmethod
+    def unpublished_attempt(cls):
+        return cls.recovery_outcome(), cls.recovery_facts()
+
+    @classmethod
+    def assess_recovery_replay(cls, replay, db, execution_id: str) -> None:
+        """A terminal alone supplies no new permission to replay."""
 
     @classmethod
     def interrupted(cls, session: TurnSession) -> bool:
@@ -83,14 +96,33 @@ class PendingStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
-class FinishedPiStop:
+class FailedUnpublishedPiStop:
+    """Recovery knows this attempt failed, independently of its output facts."""
+
     @classmethod
-    def unpublished_attempt(cls):
+    def recovery_outcome(cls):
         from .attempt_states import AttemptFailedAttempt
+
+        return AttemptFailedAttempt()
+
+
+class StoppedBeforeGrantStopReason(FailedUnpublishedPiStop, UnfinishedPiStop, PiStopReason):
+    """The stopped owner never received permission to write this input."""
+
+    @classmethod
+    def assess_recovery_replay(cls, replay, db, execution_id: str) -> None:
+        # A grant was required before the writer could send any bytes. Existing
+        # effects from earlier attempts still prevent authorization.
+        replay.authorize_retry(db, execution_id)
+
+
+class FinishedPiStop(FailedUnpublishedPiStop):
+    @classmethod
+    def recovery_facts(cls):
         from .coordination_tables.attempts import ReplayFact
 
         # The native turn finished, but recovery cannot invent a delivered reply.
-        return AttemptFailedAttempt(), ReplayFact.ASSISTANT_OUTPUT
+        return ReplayFact.ASSISTANT_OUTPUT
 
 
 class StopStopReason(Successful, FinishedPiStop, PiStopReason):

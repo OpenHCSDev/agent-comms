@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.attempt_states import UnknownOutcomeAttempt
+from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
 from agent_comms.coordinator import Coordination
@@ -85,8 +85,12 @@ def live_input(private_directory):
         parent.close()
 
 
-@pytest.mark.parametrize("stop_first", (True, False), ids=("stop-first", "grant-first"))
-def test_registry_stop_orders_real_native_grant_and_preserves_input(live_input, stop_first):
+@pytest.mark.parametrize(
+    ("stop_first", "outcome"),
+    ((True, AttemptFailedAttempt), (False, UnknownOutcomeAttempt)),
+    ids=("stop-first", "grant-first"),
+)
+def test_registry_stop_orders_real_native_grant_and_preserves_input(live_input, stop_first, outcome):
     source = live_input.source
     comms = wire(source.root)
     owner = comms.registry.require("beta")
@@ -128,11 +132,14 @@ def test_registry_stop_orders_real_native_grant_and_preserves_input(live_input, 
     with Coordination(source.root / "coordination.sqlite3") as store:
         settled = store.get(source.execution_id)
         assert not settled.is_current
-        assert type(settled.attempt.lifecycle) is UnknownOutcomeAttempt
+        assert type(settled.attempt.lifecycle) is outcome
         assert NativeRuntimeInput.require(store.session._connection, input_id=source.input_id) == original
         assert settled.attempt.attempt_ordinal < settled.execution.max_attempts
-        with pytest.raises(RecoveryBlocked):
+        if stop_first:
             settled.attempt.require_retry(settled)
+        else:
+            with pytest.raises(RecoveryBlocked):
+                settled.attempt.require_retry(settled)
 
 
 def test_public_stop_moves_claim_before_the_real_signal(live_input):

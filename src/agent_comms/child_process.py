@@ -1201,11 +1201,7 @@ class ChildLaunch:
     async def record_async(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
         """Wait for the child's store record before cancellation can retire it."""
         pending = asyncio.get_running_loop().run_in_executor(None, self.record, identity, store)
-        try:
-            await join_retirement(pending)
-        except asyncio.CancelledError:
-            self.cancel_before_release(identity)
-            raise
+        await join_retirement(pending)
 
     @property
     def argv(self) -> tuple[str, ...]:
@@ -1251,7 +1247,6 @@ class ChildLaunch:
     ) -> SpawnedProcess:
         """Record the launch handle before the platform allows exec."""
         store = self.children_store.at(self.runtime.prefix)
-        store.read().require_open()
         process = subprocess.Popen(
             self.argv, cwd=cwd,
             env=self.lifetime.environment(self.runtime.child_environment(env)), stdin=stdin,
@@ -1268,7 +1263,6 @@ class ChildLaunch:
 
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
         store = self.children_store.at(self.runtime.prefix)
-        store.read().require_open()
         process = await asyncio.create_subprocess_exec(
             self.argv[0], *self.argv[1:], cwd=cwd,
             env=self.lifetime.environment(self.runtime.child_environment(env)),
@@ -1279,8 +1273,7 @@ class ChildLaunch:
         try:
             await self.record_async(child.identity, store)
         except BaseException:
-            await process.wait()
-            await child._stderr_task
+            await child.stop()
             raise
         return child
 

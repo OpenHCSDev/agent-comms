@@ -2,7 +2,8 @@
 
 NULL and a positive integer are the original column's storage representations.
 FieldCodec decodes that boundary once into these explicit send states.
-Neither an absent epoch nor a later release proves that prompt bytes were unwritten.
+The raw writer requires a committed grant before writing prompt bytes.
+A recorded grant remains uncertain after release; release never permits replay.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from .coordination_errors import StaleFence
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import JsonShapeFamily, JsonShapeMember
+from .pi_vocabulary import PendingStopReason, PiStopReason, StoppedBeforeGrantStopReason
 from .thread_identity import ClaimedIdentity, GenerationCounter
 
 if TYPE_CHECKING:
@@ -38,6 +40,10 @@ class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):
 
     @abstractmethod
     def require_release(self, acknowledgement, snapshot, current) -> None: ...
+
+    @abstractmethod
+    def recovery_stop_reason(self) -> type[PiStopReason]:
+        """Initial recovery outcome after the exact writer has exited."""
 
     @abstractmethod
     def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:
@@ -75,6 +81,9 @@ class UnrecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
         # original process; no successor claim or turn can prove more about it.
         pass
 
+    def recovery_stop_reason(self) -> type[PiStopReason]:
+        return StoppedBeforeGrantStopReason
+
     def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:
         # VerifiedOwnerLoss holds the registry boundary while observing resources.
         return tuple(files.session for files in stopped_owner.runtime.storage_files())
@@ -105,6 +114,9 @@ class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
         if snapshot.claim_generation(current.name) == acknowledgement.after:
             if not acknowledgement.current(snapshot, current, acknowledgement.before):
                 raise RelationViolationError("Native release differs from its stopped declaration")
+
+    def recovery_stop_reason(self) -> type[PiStopReason]:
+        return PendingStopReason
 
     def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:
         # The original send contract authorized only journals inside this

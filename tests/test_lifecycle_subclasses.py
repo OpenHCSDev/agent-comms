@@ -30,6 +30,7 @@ from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionRecord, AcpOrigin, ReplayAssessments
 from agent_comms.execution_states import DeferredExecution, FailedExecution
 from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.pi_vocabulary import PendingStopReason, StoppedBeforeGrantStopReason
 from test_coordination_store import final_evidence, ready, started
 
 
@@ -84,17 +85,27 @@ def test_unknown_settles_failed_in_current_store(tmp_path, authorized):
         assert not outcome.can_retry
 
 
-@pytest.mark.parametrize("outcome, contribution", [
-    (AttemptFailedAttempt(), ReplayFact.NONE),
-    (UnknownOutcomeAttempt(), ReplayFact.UNKNOWN_EFFECTS),
+@pytest.mark.parametrize("terminal, outcome, contribution, prior, retryable", [
+    (StoppedBeforeGrantStopReason, AttemptFailedAttempt, ReplayFact.NONE, ReplayFact.NONE, True),
+    (StoppedBeforeGrantStopReason, AttemptFailedAttempt, ReplayFact.NONE, ReplayFact.TOOL_EXECUTED, False),
+    (PendingStopReason, UnknownOutcomeAttempt, ReplayFact.UNKNOWN_EFFECTS, ReplayFact.NONE, False),
 ])
-def test_monitor_evidence_preserves_its_outcome_and_owned_replay_contribution(outcome, contribution):
+def test_monitor_evidence_records_its_owned_replay_proof(
+    tmp_path, terminal, outcome, contribution, prior, retryable,
+):
     evidence = MonitorEvidence(
         subprocess_dead=True, backend_done=True, reason_code=GivenReasonCode("observed_exit"),
-        observed_at_ms=1000, outcome=outcome,
+        observed_at_ms=1000, terminal=terminal,
     )
-    assert evidence.outcome is outcome
-    assert evidence.outcome.replay_contribution == contribution
+    with ready(tmp_path / "coordination.sqlite3", origin=AcpOrigin) as store:
+        with store.session.writing() as db:
+            ReplayAssessments.accumulate(db, "exec", prior)
+            observed = evidence.record_replay(db, "exec")
+            assessment = ReplayAssessments.for_execution(db, "exec")
+            assert type(observed) is outcome
+            assert observed.replay_contribution == contribution
+            assert assessment.require_assessment().facts == (contribution | prior)
+            assert assessment.allows_retry is retryable
 
 
 @pytest.mark.parametrize("predecessor", [AttemptFailedAttempt, UnknownOutcomeAttempt])
