@@ -117,7 +117,7 @@ def ready(
         original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
             WakeAssignment(
-                assignment_id=AssignmentId("claim"),
+                assignment_id=AssignmentId.cohort(b"claim"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
@@ -128,7 +128,7 @@ def ready(
                 lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
             )
         )
-        sources = (wire_source(db, AssignmentId("claim"), original, FullWake()),)
+        sources = (wire_source(db, AssignmentId.cohort(b"claim"), original, FullWake()),)
     db.create(
         "exec",
         origin,
@@ -247,7 +247,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
         WireOrigin,
         SENDER_LOOKUP,
         2,
-        sources=(wire_source(db, AssignmentId("claim"), original, FullWake()),),
+        sources=(wire_source(db, AssignmentId.cohort(b"claim"), original, FullWake()),),
     )
     assert isinstance(replay, AlreadyApplied)
     different = Message("different", "Owner", "Original request", InfoKind,
@@ -258,7 +258,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
             WireOrigin,
             SENDER_LOOKUP,
             2,
-            sources=(wire_source(db, AssignmentId("claim"), different, FullWake()),),
+            sources=(wire_source(db, AssignmentId.cohort(b"claim"), different, FullWake()),),
         )
     db.close()
     with store(db_path) as reopened:
@@ -276,7 +276,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             verdict: str | None = None,
         ) -> WakeAssignment:
             return WakeAssignment(
-                assignment_id=AssignmentId(f"claim-{index}"),
+                assignment_id=AssignmentId.cohort(f"claim-{index}".encode()),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=index,
@@ -310,22 +310,22 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             assert isinstance(db.assignments.accept(initial), Applied)
             assert db.assignments.get(initial.assignment_id).revision == 1
         ignored = db.assignments.transition_preengagement(
-            "claim-7",
+            AssignmentId.cohort(b"claim-7"),
             IgnoredAssignment,
             expected_revision=1,
         )
         deferred = db.assignments.transition_preengagement(
-            "claim-8", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim-8"), DeferredAssignment, expected_revision=1
         )
         failed = db.assignments.transition_preengagement(
-            "claim-9", FailedAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim-9"), FailedAssignment, expected_revision=1
         )
         assert ignored.value.revision == deferred.value.revision == failed.value.revision == 2
         assert isinstance(
             db.assignments.accept(assignment(7, BoundedTriageWake(), TriagePendingAssignment)),
             AlreadyApplied,
         )
-        assert type(db.assignments.get("claim-7").lifecycle) is IgnoredAssignment
+        assert type(db.assignments.get(AssignmentId.cohort(b"claim-7")).lifecycle) is IgnoredAssignment
 
 
 def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> None:
@@ -341,7 +341,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                                timestamp=float(index), seq=index)
             db.assignments.accept(
                 WakeAssignment(
-                    assignment_id=AssignmentId(str(index)),
+                    assignment_id=AssignmentId.cohort(str(index).encode()),
                     recipient="Owner",
                     recipient_lookup=SENDER_LOOKUP,
                     wire_seq=index,
@@ -352,13 +352,13 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                     lifecycle=disposition.load(mode, None, None, None),
                 )
             )
-            sources.append(wire_source(db, AssignmentId(str(index)), original, mode))
+            sources.append(wire_source(db, AssignmentId.cohort(str(index).encode()), original, mode))
         deferred = db.assignments.transition_preengagement(
-            "1", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"1"), DeferredAssignment, expected_revision=1
         )
         assert type(deferred.value.lifecycle) is DeferredAssignment
         with pytest.raises(StaleRevision):
-            db.assignments.transition_preengagement("1", FailedAssignment, expected_revision=1)
+            db.assignments.transition_preengagement(AssignmentId.cohort(b"1"), FailedAssignment, expected_revision=1)
         with pytest.raises((IdentityConflict, sqlite3.IntegrityError)):
             db.create(
                 "exec",
@@ -367,7 +367,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                 2,
                 sources=tuple(sources),
             )
-        assert db.assignments.get("1").lifecycle.execution_id is None
+        assert db.assignments.get(AssignmentId.cohort(b"1")).lifecycle.execution_id is None
         assert db.session._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 0
         assert not db.session._connection.in_transaction
 
@@ -872,7 +872,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         db.participants.register(SENDER_LOOKUP, committed=True)
         db.assignments.accept(
             WakeAssignment(
-                assignment_id=AssignmentId("claim"),
+                assignment_id=AssignmentId.cohort(b"claim"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
@@ -884,11 +884,11 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
             )
         )
         deferred = db.assignments.transition_preengagement(
-            "claim", DeferredAssignment, expected_revision=1
+            AssignmentId.cohort(b"claim"), DeferredAssignment, expected_revision=1
         )
         assert deferred.value.lifecycle.execution_id is None
         requeued = db.assignments.transition_preengagement(
-            "claim", FullPendingAssignment, expected_revision=2
+            AssignmentId.cohort(b"claim"), FullPendingAssignment, expected_revision=2
         )
         assert type(requeued.value.lifecycle) is FullPendingAssignment
 
@@ -913,8 +913,9 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
             connection.execute(
                 (
                     "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','deferred'),rev"
-                    "ision=revision+1 WHERE assignment_id='claim'"
-                )
+                    "ision=revision+1 WHERE assignment_id=?"
+                ),
+                (FieldCodec.encode(AssignmentId.cohort(b"claim")),),
             )
         before = db.get("exec")
         assert type(before.execution.lifecycle) is DeferredExecution
