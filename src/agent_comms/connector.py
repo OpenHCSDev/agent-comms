@@ -50,7 +50,7 @@ from .command import Command
 from .comms import Comms, client_wire, wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
-from .coordination_errors import CoordinationError
+from .coordination_errors import CoordinationError, Refused
 from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
     boundary_decoder,
@@ -269,7 +269,7 @@ class InvalidRequestError(McpError):
 
 @dataclass(frozen=True)
 class MethodNotFoundError(McpError):
-    code: Literal[-32601] = -32601
+    code: int = Refused.METHOD_NOT_FOUND
 
 
 @dataclass(frozen=True)

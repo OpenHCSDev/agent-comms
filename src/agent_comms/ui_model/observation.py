@@ -16,7 +16,6 @@ rows, and no longer competes with that work for its interpreter lock.
 from __future__ import annotations
 
 import asyncio
-import copyreg
 import itertools
 import multiprocessing
 import signal
@@ -30,8 +29,6 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
-
-from acp.exceptions import RequestError
 
 from agent_comms.acp_extension import (
     GoalSnapshotReply,
@@ -47,6 +44,7 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     DeferredRead,
     ReloadRequired,
+    Refused,
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
@@ -86,15 +84,6 @@ if TYPE_CHECKING:
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
-
-
-def reduce_request_error(error: RequestError) -> tuple[type[RequestError], tuple[object, ...]]:
-    """The SDK error hands Exception only its message; this pipe carries it whole. The
-    spawned observer imports this module to run serve(), so it registers before sending."""
-    return RequestError, (error.code, str(error), error.data)
-
-
-copyreg.pickle(RequestError, reduce_request_error)
 
 
 class ObservationRequest(ABC):
@@ -434,7 +423,7 @@ class OwnerRead(AwaitedRead):
     def refusal_errors(self) -> tuple[type[Exception], ...]:
         return (
             *super().refusal_errors,
-            RequestError, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
+            Refused, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
         )
 
     def receive(self, service: ObservationService) -> None:

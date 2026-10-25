@@ -4,7 +4,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from copyreg import __newobj__
-from typing import Never
+from typing import ClassVar, Never, Self
 
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
@@ -23,6 +23,33 @@ class CommandFailure(Exception):  # noqa: N818 - capability, not an outcome
 
 class DrainUnavailable(DrainDeferred):
     """A failure meaning the drain's store or coordinator is unavailable right now."""
+
+
+class Refused(CommandFailure, DrainUnavailable):
+    """A Core refusal; JSON-RPC 2.0 section 5.1 declares its standard wire codes.
+
+    ACP translates this value at its boundary, never inside Core's producers.
+    """
+
+    INVALID_PARAMS: ClassVar[int] = -32602
+    METHOD_NOT_FOUND: ClassVar[int] = -32601
+    INTERNAL_ERROR: ClassVar[int] = -32603
+
+    code: int
+    message: str
+    data: object
+
+    def __init__(self, code: int, message: str, data: object = None) -> None:
+        super().__init__(message)
+        self.code, self.message, self.data = code, message, data
+
+    @classmethod
+    def invalid_params(cls, data: object = None) -> Self:
+        return cls(cls.INVALID_PARAMS, "Invalid params", data)
+
+    @classmethod
+    def method_not_found(cls, method: str) -> Self:
+        return cls(cls.METHOD_NOT_FOUND, "Method not found", {"method": method})
 
 
 class CoordinationError(RuntimeError, DrainUnavailable, CommandFailure):
