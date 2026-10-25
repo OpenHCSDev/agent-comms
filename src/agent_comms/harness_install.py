@@ -110,7 +110,7 @@ class InstalledHarness(Harness):
 
     @classmethod
     def found(cls) -> bool:
-        return shutil.which(cls.executable) is not None
+        return bool(shutil.which(cls.executable))
 
     @staticmethod
     def bin(name: str) -> Path:
