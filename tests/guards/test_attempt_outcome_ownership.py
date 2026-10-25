@@ -28,7 +28,7 @@ def test_stores_do_not_restore_outcome_or_row_transition_facades():
         "_require_current",
         "settle_checked",
         "advance_checked",
-        "record_replay",
+        "record_recovery",
     }
     for owner in (GoalAttemptStore, AttemptStore):
         tree = ast.parse(inspect.getsource(owner))

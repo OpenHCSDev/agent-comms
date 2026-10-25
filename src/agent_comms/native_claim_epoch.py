@@ -24,6 +24,7 @@ from .thread_identity import ClaimedIdentity, GenerationCounter
 if TYPE_CHECKING:
     import sqlite3
 
+    from .attempt_states import UnsuccessfulTerminal
     from .coordination_tables.executions import ExecutionRecord
     from .native_session_reopen import NativeSessionIdentity
 
@@ -32,10 +33,11 @@ class StoppedBeforeGrantStopReason(FailedUnpublishedPiStop, UnfinishedPiStop, Pi
     """The stopped owner never received permission to write this input."""
 
     @classmethod
-    def assess_recovery_replay(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> None:
+    def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
         # A grant was required before the writer could send any bytes. Existing
         # effects from earlier attempts still prevent authorization.
         ReplayAssessments.authorize_if_unobserved(db, execution.execution_id)
+        return super().record_recovery(db, execution)
 
 
 class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):

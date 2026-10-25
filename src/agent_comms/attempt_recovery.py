@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
-from agent_comms.attempt_states import UnsuccessfulTerminal
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationUncertain,
@@ -34,7 +33,6 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_results import Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.attempts import AttemptRecord
-from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import CurrentExecutions
 from agent_comms.coordination_tables.recovery import (
     RecoveryAudit,
@@ -66,9 +64,6 @@ from .registration import Registration
 from .threads import Thread
 
 if TYPE_CHECKING:
-    import sqlite3
-
-    from agent_comms.coordination_tables.executions import ExecutionRecord
     from agent_comms.coordination_session import NativeBoundary
     from agent_comms.owner_lifecycle import OwnerLifecycle, OwnerRelease, OwnerReleaseEvidence
 
@@ -342,13 +337,6 @@ class MonitorEvidence:
     observed_at_ms: int
     terminal: type[PiStopReason]
 
-    def record_replay(self, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
-        outcome = self.terminal.recovery_outcome()
-        facts = self.terminal.recovery_facts()
-        self.terminal.assess_recovery_replay(db, execution)
-        ReplayAssessments.accumulate(db, execution.execution_id, facts | outcome.replay_contribution)
-        return outcome
-
     def __post_init__(self) -> None:
         if any(
             type(value) is not bool
@@ -563,7 +551,7 @@ class RecoveryMonitorCapability:
             if not owner_loss.owns(store, attempt):
                 raise RecoveryBlocked("monitor requires an observed release of this exact owner")
             now = store.session.now(max(attempt.updated_at_ms, evidence.observed_at_ms))
-            outcome = evidence.record_replay(db, snapshot.execution)
+            outcome = evidence.terminal.record_recovery(db, snapshot.execution)
             AttemptRecord.update(
                 db,
                 where="execution_id=? AND attempt_ordinal=?",

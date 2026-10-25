@@ -101,7 +101,7 @@ def test_monitor_evidence_records_its_owned_replay_proof(
     with ready(tmp_path / "coordination.sqlite3", origin=AcpOrigin) as store:
         with store.session.writing() as db:
             ReplayAssessments.accumulate(db, "exec", prior)
-            observed = evidence.record_replay(db, store.get("exec").execution)
+            observed = evidence.terminal.record_recovery(db, store.get("exec").execution)
             assessment = ReplayAssessments.for_execution(db, "exec")
             assert type(observed) is outcome
             assert observed.replay_contribution == contribution
