@@ -46,6 +46,7 @@ from agent_comms.field_codec import (
     FieldCodec,
     MalformedRecord,
     Normalize,
+    RecordProblems,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
@@ -64,8 +65,12 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.commander_pings import CommanderUpdate
+from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
 from agent_comms.standing_rules import HuntDue, OwedAnswer
+from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.typed_table import RowNotFoundError
 from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import (
     BluntText,
@@ -345,15 +350,18 @@ class CommanderContext(BaseModel):
         return context
 
     @property
+    def project(self) -> RegisteredCommanderProject:
+        return self.comms.registry.snapshot().commander_project.require()
+
+    @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        project = snapshot.commander_project.require()
-        (thread,) = project.commanders(snapshot)
+        (thread,) = snapshot.commander_project.require().commanders(snapshot)
         return thread.name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
-        return self.comms.registry.snapshot().commander_project.require().repos
+        return self.project.repos
 
     def order_file(self, path: str) -> OrderFile:
         """The order file with its check bound to a registered checkout, once, where it enters."""
@@ -823,8 +831,28 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
         return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
 
 
+class HeartbeatGated(CommanderVerb, declared_name=None):
+    """A writing verb is refused while a heartbeat line sits undisposed past the answer window,
+    unless the verb acts on one such line's subject; Core records that action, and the record
+    is what disposes of the line. Nothing the commander says about a line counts."""
+
+    def gate(self, ctx: Commander) -> None:
+        super().gate(ctx)
+        now = time.time()
+        owed = CommanderUpdate.owed(ctx.comms, ctx.commander, now - AwaitingCommander.seconds)
+        acted = frozenset(self.acts_on(ctx))
+        if owed and not any(subject in acted for ping in owed for subject in ping.subjects):
+            sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
+                     f'{AwaitingCommander.seconds // 60} min; act on one of them:\n'
+                     + '\n'.join(ping.render(now) for ping in owed))
+
+    @abstractmethod
+    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
+        """The heartbeat subjects this verb's recorded action touches."""
+
+
 @dataclass(frozen=True, kw_only=True)
-class DirectiveVerb(CommanderVerb):
+class DirectiveVerb(HeartbeatGated):
     """An action may answer named directives; unrelated work cannot clear them."""
 
     answers: Annotated[
@@ -839,35 +867,51 @@ class DirectiveVerb(CommanderVerb):
     def run(self, ctx: Commander) -> None:
         """Resolve names and uncovered debt once, then pass the exact references to the action.
 
-        Closed or unknown names are dropped: a stale name must not livelock an otherwise
-        valid answer. A wrong name still leaves its real debt uncovered and refuses the action.
+        Closed names answer nothing; unknown identities refuse instead of recording a reply
+        that silently drops its references. A wrong addressee leaves its real debt uncovered.
+        A refusal lists every misaddressed name and every blocking debt together, with the
+        replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
         snapshot = ctx.comms.registry.snapshot()
+        problems: dict[str, str] = {}
+        with ctx.comms.bus.bus.reading() as source:
+            for identity in self.answers:
+                try:
+                    source.message_reference(identity)
+                except RowNotFoundError:
+                    problems[f'--answers {identity}'] = 'unknown message id'
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)
                  if self.answers else self.unnamed_answers(opened, reached))
-        misaddressed = tuple(reason for rule in opened
-                             if (reason := rule.misaddressed(named, reached)))
-        if misaddressed:
-            sys.exit('REFUSED, nothing recorded: --answers names a message this action never'
-                     ' reaches:\n' + '\n'.join(misaddressed))
+        answered = tuple(rule for rule in opened if rule.answered_by(named))
+        problems |= {rule.cited: reason for rule in opened
+                     if (reason := rule.misaddressed(named, reached))}
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
-        blocked = []
         for rule in owed:
-            if rule.blocks(reached, self, named):
-                blocked.append(rule)
+            if rule.blocks(reached, self, answered):
+                problems[rule.cited] = (f'{rule.line()}: {rule.message.body[:80]}\n'
+                                        f'{rule.clearing_action()}')
             else:
                 print(f'WARNING: {rule.line()}')
-        if blocked:
-            lines = '\n'.join(
-                f'{rule.line()}: {rule.message.body[:80]}\n{rule.clearing_action()}'
-                for rule in blocked
-            )
-            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines)
+        if problems:
+            raise RecordProblems(problems | self.replies_clearing(
+                tuple(rule for rule in opened if rule.cited in problems)))
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+
+    @staticmethod
+    def replies_clearing(refused: tuple[OwedAnswer, ...]) -> dict[str, str]:
+        """One `order say` per asker, naming every refused debt a reply to that asker answers."""
+        askers: dict[str, list[str]] = {}
+        for rule in refused:
+            for asker in rule.answered_in():
+                askers.setdefault(asker, []).append(str(rule.message.message_id))
+        return {f'--answers {" ".join(ids)} ({asker})':
+                f'agent-comms-commander {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
+                f' --answers {" ".join(ids)}'
+                for asker, ids in askers.items()}
 
     def unnamed_answers(self, opened: tuple[OwedAnswer, ...],
                         reached: frozenset[str]) -> tuple[Message, ...]:
@@ -878,6 +922,13 @@ class DirectiveVerb(CommanderVerb):
     @abstractmethod
     def addressed(self) -> tuple[str, ...]:
         """The threads this action's message is for; only their asks can it answer."""
+
+    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
+        snapshot = ctx.comms.registry.snapshot()
+        reached = (snapshot.canonical_name(name) for name in self.addressed)
+        # A channel reaches no unit line; only registered threads are subjects.
+        return tuple(UnitSubject(snapshot.threads[name].incarnation)
+                     for name in reached if name in snapshot.threads)
 
     @abstractmethod
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...

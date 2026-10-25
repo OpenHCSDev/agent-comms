@@ -7,6 +7,7 @@ import pytest
 from agent_comms.commander.judge import Edit, main
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.errors import TodoError
+from agent_comms.field_codec import RecordProblems
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.todos import DroppedVerdict, RewrittenVerdict
 from agent_comms.tool_declaration import ToolDeclaration
@@ -41,8 +42,7 @@ def unjudged(ctx) -> dict[str, Edit]:
 
 
 def judge_dropped(ctx, edit: Edit, line: str) -> None:
-    main(["dropped", f"{edit.id}:{edit.code()}", "--why",
-          "the unit reset this formatter branch on the corrected order", "--line", line], ctx)
+    main(["dropped", f"{edit.id}:{edit.code()}", "--line", line], ctx)
 
 
 @pytest.fixture
@@ -87,18 +87,17 @@ def batch_file(ctx, entries) -> str:
 
 
 def dropped_entry(edit: Edit, line: str) -> dict:
-    return {"kind": "dropped", "ids": [f"{edit.id}:{edit.code()}"], "lines": [line],
-            "why": "the unit reset this formatter branch on the corrected order"}
+    return {"kind": "dropped", "ids": [f"{edit.id}:{edit.code()}"], "lines": [line]}
 
 
 def test_batch_lists_every_refusal_and_writes_nothing(discarded_and_kept):
     ctx = discarded_and_kept
     edits = unjudged(ctx)
     before = ctx.comms.goals.todos.get("P1")
-    unread = {"kind": "dropped", "ids": ["dropped-call:0000"], "lines": [DROPPED], "why": "too short"}
-    with pytest.raises(SystemExit) as refused:
+    unread = {"kind": "dropped", "ids": ["dropped-call:0000"], "lines": [DROPPED]}
+    with pytest.raises(RecordProblems) as refused:
         main(["batch", batch_file(ctx, [unread, dropped_entry(edits["kept-call"], "no such line")])], ctx)
-    assert "entry 1 (dropped)" in str(refused.value.code) and "entry 2 (dropped)" in str(refused.value.code)
+    assert "entry 1 (dropped)" in str(refused.value) and "entry 2 (dropped)" in str(refused.value)
     with pytest.raises(TodoError, match="kept-call is still on"):
         main(["batch", batch_file(ctx, [dropped_entry(edits["dropped-call"], DROPPED),
                                         dropped_entry(edits["kept-call"], LIVE)])], ctx)
