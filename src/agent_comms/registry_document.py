@@ -542,6 +542,12 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
 
+    def session_output[Output](self, incarnation: ThreadIncarnation, *,
+                               commander: Output, commanded: Output) -> Output:
+        """A commanded session's last item replies to the senders delivered in its turn; the
+        commander answers its owner in its own transcript and messages units only by tool."""
+        return commanded
+
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
@@ -585,6 +591,10 @@ class RegisteredCommanderProject(CommanderProject):
 
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
         return replace(self, repos=repositories.applied(self.repos))
+
+    def session_output[Output](self, incarnation: ThreadIncarnation, *,
+                               commander: Output, commanded: Output) -> Output:
+        return commander if incarnation == self.commander else commanded
 
 
 @ThreadSlice.required
