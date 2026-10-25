@@ -8,7 +8,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
@@ -66,6 +66,7 @@ class Repo(BaseModel, WireValue):
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
 
     model_config = ConfigDict(frozen=True)
+    ambiguous: ClassVar[str] = "Select --repo when more than one repository is registered."
 
     checkout: Path
     github: InstanceOf[
@@ -88,7 +89,7 @@ class Repo(BaseModel, WireValue):
     def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
         if not name:
             if len(repositories) != 1:
-                raise ValueError("Select --repo when more than one repository is registered.")
+                raise ValueError(cls.ambiguous)
             repository, = repositories
             return repository
         for repository in repositories:

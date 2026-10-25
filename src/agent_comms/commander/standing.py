@@ -45,7 +45,7 @@ from agent_comms.standing_rules import (
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import OrderClaim, OwnerRequest, Todo
+from agent_comms.todos import OrderClaim, OrderQuote, OwnerRequest, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
@@ -326,10 +326,14 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
                      for (owner, problem), messages in originals.items() for message in messages)
 
     def clearing_action(self) -> str:
-        return (f"order done {self.unit} {self.problem} (with --seen FILE for an application run)"
-                " or send the unit its replacement order"
-                " or `judge reviewing --pr N --head SHA --serves WORDS --fork NAME`"
-                " while a fork reads it.")
+        """Both command lines are rendered by the verbs' own parsers, the rules by their owners."""
+        from agent_comms.commander.judge import ReviewingVerb
+        from agent_comms.commander.order import DoneVerb
+
+        return (f"`{DoneVerb.usage()}` with UNIT {self.unit} PROBLEM {self.problem},"
+                " or send the unit its replacement order,"
+                f" or `{ReviewingVerb.usage()}` while a fork reads it."
+                f" --serves: {OrderQuote.rule} --repo: {Repo.ambiguous}")
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False

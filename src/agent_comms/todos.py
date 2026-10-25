@@ -3280,11 +3280,12 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 @dataclass(frozen=True)
 class OrderQuote:
     quote: str
+    rule: ClassVar[str] = "Quote 4+ words of the order this verdict carries out."
 
     def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise TodoError("Quote 4+ words of the order this verdict carries out.")
+            raise TodoError(self.rule)
 
 
 @dataclass(frozen=True)
