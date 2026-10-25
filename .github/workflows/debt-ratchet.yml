@@ -22,14 +22,25 @@ defaults:
     shell: bash .github/run-step.sh {0}
 
 jobs:
-  # Drafts cannot merge, so they hold no runner; every job needs this one.
+  # Drafts cannot merge, so they hold no runner; every job needs this one. It also names the
+  # base every job measures from. A pull request checks out its merge into current main, so the
+  # base is that merge's first parent; pull_request.base.sha is main when the PR was opened, and
+  # measuring from it charges the PR with everything main merged since.
   ready:
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 1
+    outputs:
+      base: ${{ steps.base.outputs.base }}
     steps:
-      - run: true
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: base
         shell: bash
+        env:
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+        run: echo "base=${QUEUE_BASE:-$(git rev-parse HEAD^1)}" >> "$GITHUB_OUTPUT"
 
   smoke:
     needs: ready
@@ -67,7 +78,7 @@ jobs:
       # from, so every name it imports must exist in the tree this change merges onto.
       - name: Stack clients and the installer zip import only names Core has
         env:
-          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          BASE: ${{ needs.ready.outputs.base }}
         run: python tools/module_layers.py --check --previous "$BASE"
 
   native-scripts:
@@ -114,9 +125,8 @@ jobs:
       - name: Whether the change reaches the installed package or the rehearsals
         id: reach
         env:
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          BASE: ${{ needs.ready.outputs.base }}
         run: |
-          BASE="${QUEUE_BASE:-$(git rev-parse HEAD^1)}"
           read -ra rehearsals <<< "$REHEARSALS"
           git diff --quiet "$BASE" HEAD -- src pyproject.toml uv.lock "${rehearsals[@]%%::*}" \
             && echo "reaches=false" >> "$GITHUB_OUTPUT" || echo "reaches=true" >> "$GITHUB_OUTPUT"
@@ -195,18 +205,14 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/agent-comms
-          key: debt-ratchet-${{ matrix.kind }}-${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          key: debt-ratchet-${{ matrix.kind }}-${{ needs.ready.outputs.base }}
           restore-keys: debt-ratchet-${{ matrix.kind }}-
 
-      # A pull request checks out its merge into current main, so the base is that merge's
-      # first parent; pull_request.base.sha is main when the PR was opened, and measuring from
-      # it charges the PR with everything main merged since.
       - name: No new structural debt against the base
         env:
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          BASE: ${{ needs.ready.outputs.base }}
         run: |
           set -o pipefail
-          BASE="${QUEUE_BASE:-$(git rev-parse HEAD^1)}"
           PYTHONPATH=src:tools python tools/debt_ratchet.py \
             --root ${{ matrix.kind }} --base "$BASE" --head HEAD 2>&1 | tee ratchet.txt
 
