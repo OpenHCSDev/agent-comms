@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, get_a
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import Outcome
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
@@ -264,7 +265,7 @@ class PeerGone(SessionReply, declared_name='gone'):
 
 
 @dataclass(frozen=True)
-class SessionRequest[Reply: SessionReply](DeclaredFamily, affix=""):
+class SessionRequest[Reply: SessionReply](CrossesRuntimes, DeclaredFamily, affix=""):
     family_discriminator: ClassVar[str] = "type"
     reply_class: ClassVar[type[SessionReply]]
     reply_timeout: ClassVar[float] = 30

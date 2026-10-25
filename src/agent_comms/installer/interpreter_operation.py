@@ -24,6 +24,7 @@ from typing_extensions import TypeForm
 
 from agent_comms.child_process import Platform
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, JsonValue
 from agent_comms.maintenance_barrier import HOLDER_NONCE
 
@@ -434,6 +435,7 @@ class TargetProgram(InstalledProgram):
 
 @dataclass(frozen=True)
 class RuntimeProbe[Answer](
+    CrossesRuntimes,
     InterpreterOperation[Answer],
     DeclaredFamily,
     affix="Probe",
@@ -444,20 +446,13 @@ class RuntimeProbe[Answer](
     def install_phase(self) -> InstallPhase:
         return ProbePhase(probe=type(self))
 
-    @classmethod
-    def outgoing_wire(cls) -> tuple[type[RuntimeProbe], ...]:
-        """Any probe may reach the outgoing runtime, whose own installer decodes what the
-        target encodes, so its name and fields never change
-        (``tools/module_layers.py --check --base`` holds them to the base)."""
-        return (cls,)
-
 
 class TargetProbe:
     """A probe only a runtime built from the target tree answers; no older runtime
     decodes it."""
 
     @classmethod
-    def outgoing_wire(cls) -> tuple[type[RuntimeProbe], ...]:
+    def outgoing_wire(cls) -> tuple[type[CrossesRuntimes], ...]:
         return ()
 
 
