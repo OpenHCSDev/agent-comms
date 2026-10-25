@@ -46,6 +46,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128, NullMember, RecordMember, SubclassUnion
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .sealed import Sealed
+from .systemd_units import AgentsSlice
 
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
@@ -959,6 +960,7 @@ class SystemdUserManager(ResidentManager):
     @classmethod
     def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
         return ("systemd-run", "--user", "--scope", "--quiet", "--collect",
+                AgentsSlice.launch_option(),
                 f"--unit=agent-comms-resident-{Id128.mint()}", "--", *command)
 
     @staticmethod
@@ -1005,7 +1007,7 @@ class SystemdUserManager(ResidentManager):
         line."""
         subprocess.run(
             ("systemd-run", "--user", "--quiet", "--collect", *(("--wait",) if wait else ()),
-             f"--unit={unit}", f"--working-directory={cwd}",
+             AgentsSlice.launch_option(), f"--unit={unit}", f"--working-directory={cwd}",
              f"--property=StandardInput=file:{stdin}",
              f"--property=StandardOutput=file:{stdout}",
              f"--property=StandardError=file:{stderr}",
