@@ -1,5 +1,6 @@
 """Committed notifications survive a new watcher and use the real publisher/readers."""
 
+import json
 import os
 import pickle
 import time
@@ -25,6 +26,7 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
+from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
 from agent_comms.standing_rules import OrderlessUnreviewedHead, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.text_digest import TextDigest
