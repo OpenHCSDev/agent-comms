@@ -1,6 +1,7 @@
 """Systemd unit definitions and the resource slice shared by agent launches."""
 from __future__ import annotations
 
+import multiprocessing
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import ClassVar
@@ -25,13 +26,15 @@ class SystemdUnit(ABC):
 
 
 class AgentsSlice(SystemdUnit):
-    """Bound aggregate agent CPU time using the delegated CPU controller."""
+    """Cap aggregate agent CPU time, leaving a desktop CPU-time budget."""
 
     unit = "agents.slice"
+    reserved: ClassVar[int] = 2
 
     @classmethod
     def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
-        return "[Slice]\nCPUQuota=1000%\nCPUWeight=50\n"
+        count = multiprocessing.cpu_count()
+        return f"[Slice]\nCPUQuota={(count - cls.reserved) * 100}%\nCPUWeight=50\n"
 
     @classmethod
     def run_prefix(cls) -> tuple[str, ...]:

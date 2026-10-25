@@ -1,9 +1,9 @@
 """Committed commander notifications own what the heartbeat has already handled.
 
 A packet carries only lines that need the commander. New lines wake it; unchanged lines are
-never restated; lines still undisposed past the answer window stand on the commander's HUD
-scoreboard and refuse its writing verbs until a recorded action on their subject disposes of
-them. No process-local cache owns any of it.
+never restated; lines still undisposed past the answer window follow the new ones and refuse
+the commander's writing verbs until a recorded action on their subject disposes of them. No
+process-local cache owns any of it.
 """
 from __future__ import annotations
 
@@ -66,17 +66,21 @@ class Ping(DeclaredFamily, affix="Ping"):
                 and not any(subject.disposed(comms, actors, self.since.recorded_at("A line"))
                             for subject in self.subjects))
 
+    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
+        return any(subject.acted_on(acted) for subject in self.subjects)
+
+    @property
+    def commander_disposes(self) -> bool:
+        """Whether a commander verb disposes of this line; only such a line locks the verbs."""
+        return True
+
+    def locks(self, cut: float) -> bool:
+        """Undisposed past ``cut`` and the commander's to dispose of."""
+        return self.commander_disposes and self.since.before(cut)
+
     def render(self, now: float) -> str:
         minutes = int((now - self.since.recorded_at("A heartbeat line")) // 60)
         return f"{self.text} ({minutes} min)"
-
-    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
-        """Who waits on this line: what each of its subjects holds."""
-        return tuple(name for subject in self.subjects for name in subject.holds(paused))
-
-    def asks(self, reference: MessageReference) -> bool:
-        """Whether this line carries that owed message."""
-        return False
 
 
 @dataclass(frozen=True)
@@ -105,12 +109,9 @@ class UnitPing(Ping):
     def key(self) -> ThreadIncarnation:
         return self.unit
 
-    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
-        """The state owns whether its unit waits on the commander, paused or not."""
-        return (self.unit.name,) if self.state.holds_unit else ()
-
-    def asks(self, reference: MessageReference) -> bool:
-        return reference in self.questions
+    @property
+    def commander_disposes(self) -> bool:
+        return self.state.commander_disposes
 
     @classmethod
     def capture(cls, state: UnitState) -> Self:
@@ -160,18 +161,6 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
             return None
         message, = messages
         return message.task.commander_update(commander)
-
-    @classmethod
-    def shown(cls, comms: Comms, commander: ThreadIncarnation,
-              limit: int = 100) -> tuple[CommanderUpdate, ...]:
-        """The newest ``limit`` packets the heartbeat sent this commander, newest first."""
-        heartbeat = comms.registry.require(CommanderService.sender).incarnation
-        records = comms.bus.bus.received(
-            commander.require_recorded().lookup,
-            sender_lookups=(heartbeat.require_recorded().lookup,), limit=limit,
-        )
-        return tuple(update for record in records for message in record.messages()
-                     if (update := message.task.commander_update(commander)) is not None)
 
     @classmethod
     def owed(cls, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
@@ -230,14 +219,15 @@ class CommanderNotice(CommanderUpdate):
 
 @dataclass(frozen=True)
 class CommanderDecisions(CommanderUpdate):
-    """The new lines that woke the commander. ``waiting`` records which undisposed lines were
-    still current at this packet; every committed packet on the bus decodes it."""
+    """The new lines first, then the lines still undisposed, oldest first."""
 
     decisions: tuple[Ping, ...]
     waiting: tuple[Ping, ...]
     role = ConversationRole()
 
     def body(self, now: float, frame: tuple[str, ...]) -> str:
-        """The frame carries every undisposed line in its scoreboard; the packet adds only the
-        new lines that woke the commander."""
-        return "\n".join((*frame, *(ping.render(now) for ping in self.decisions), *self.not_applied))
+        waiting = sorted(self.waiting, key=lambda ping: ping.since.chronology())
+        return "\n".join((
+            *frame, *(ping.render(now) for ping in self.decisions), *self.not_applied,
+            *(("UNDISPOSED:", *(ping.render(now) for ping in waiting)) if waiting else ()),
+        ))

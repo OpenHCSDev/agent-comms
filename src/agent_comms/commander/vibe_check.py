@@ -116,10 +116,6 @@ class Escalation:
     def degradation_signs(self) -> tuple[Sign, ...]:
         return ()
 
-    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
-        """An ignored escalation holds every unit the chokehold has paused."""
-        return tuple(sorted(paused))
-
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
         its sender sent before the answer, which UnansweredBurst reads once the answer is sent.

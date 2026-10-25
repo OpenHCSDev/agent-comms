@@ -6,7 +6,7 @@ Every path that posts that status goes through here.
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
@@ -53,24 +53,37 @@ class PullRequestHead:
         return cls(held[0].repo, pr, head)
 
     @classmethod
-    def at(cls, repo: RepositoryName, pr: int) -> PullRequestHead:
-        """Read GitHub's head and decode it through this declaration."""
-        read = repo.rest(f"pulls/{pr}", "--jq", ".head.sha")
+    def at(cls, repo: RepositoryName, pr: int) -> ReadPullRequestHead:
+        """Read GitHub's head and the branch it merges into, in one request."""
+        read = repo.rest(f"pulls/{pr}", "--jq", '.head.sha + " " + .base.ref')
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
-        return cls(repo, pr, read.stdout.strip())
+        head, base = read.stdout.split()
+        return ReadPullRequestHead(repo, pr, head, base=base)
 
     def holds(self, commit: str) -> bool:
         return self.head.startswith(commit)
 
-    def current(self) -> str:
-        """The PR's full head commit, refused unless the reviewed head is still it."""
+    def same_head(self, other: PullRequestHead) -> bool:
+        """One pull request head, whichever side spells it abbreviated."""
+        return (self.repo == other.repo and self.pr == other.pr
+                and (self.holds(other.head) or other.holds(self.head)))
+
+    def current(self) -> ReadPullRequestHead:
+        """GitHub's read of the PR, refused unless the reviewed head is still its head."""
         current = self.at(self.repo, self.pr)
         if not current.holds(self.head):
             raise ToolRefusedError(
                 f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
             )
-        return current.head
+        return current
+
+
+@dataclass(frozen=True)
+class ReadPullRequestHead(PullRequestHead):
+    """The head as GitHub reported it, with the base branch the same read named."""
+
+    base: str = field(kw_only=True)
 
 
 class HeadReview(DeclaredFamily, affix="HeadReview"):

@@ -800,10 +800,10 @@ class SQLiteCatalogObject(TypedRow):
 
     @classmethod
     def release_guards(cls, db: sqlite3.Connection, row: builtins.type[TypedTable]) -> None:
-        """Inside the caller's write transaction, lift every stored guard on the row's table,
-        declared or not, so a carry can rewrite rows an older schema refused to change."""
+        """Lift guards on this table and related-table guards owned by its declaration."""
+        declared = row.schema_objects()
         for item in cls.stored(db):
-            if item.tbl_name == row.declared_name:
+            if item.tbl_name == row.declared_name or item.name in declared:
                 item.type.release(db, item)
 
     @classmethod
@@ -921,20 +921,34 @@ class PracticeRoot(SingleFieldValue, Practice):
 
 
 class SchemaChange(ABC):
-    """Who may change a stored schema: the reconcile asks before it writes."""
+    """Who may change a stored schema: the reconcile asks before it writes, and an opening
+    asks what to do with a stored schema that differs."""
 
     @abstractmethod
     def require(self) -> None: ...
 
+    @abstractmethod
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        """An opening of a file that has a stored schema."""
+
 
 @dataclass(frozen=True)
 class HeldBusFile(SchemaChange):
-    """A bus file every runtime on the root opens: its schema changes only in the process
-    holding the root's maintenance, so a newer runtime opening the live bus outside an
-    install refuses instead of moving it under the running owners (install 53, 2026-10-22)."""
+    """A bus file every runtime on the root opens: only the installer's carry changes its
+    schema, in the process holding the root's maintenance, so a newer runtime opening the
+    live bus refuses instead of moving it under the running owners (install 53, 2026-10-22),
+    and no opening rewrites a file outside the carry's backup."""
+
+    carry_verb: ClassVar[str] = "reconcile-stores"
 
     owner: type[RootFile]
     path: Path
+
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        if schema.schema_differs(db):
+            raise schema.schema_error(
+                f"{self.path} differs from {schema.__name__}; "
+                f"agent-comms {self.carry_verb} carries it")
 
     def require(self) -> None:
         barrier = MaintenanceBarrier(RegistryFile.path_in(self.owner.bus_root(self.path)))
@@ -953,6 +967,10 @@ class WriterOwnedFile(SchemaChange):
 
     def require(self) -> None:
         """The owning writer may rebuild this schema."""
+
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        """The writer is this file's carry."""
+        schema.reconcile_schema(db, self)
 
 
 class TableSchema(ABC):
@@ -1088,9 +1106,9 @@ class TableSchema(ABC):
         cls, db: sqlite3.Connection, change: SchemaChange,
         *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> bool:
-        """The writer's answer to a stored schema that differs from the declaration, in a
-        write transaction of its own and only where ``change`` allows; whether it changed
-        the file."""
+        """The carry of a stored schema that differs from the declaration, in a write
+        transaction of its own and only where ``change`` allows; whether it changed the
+        file."""
         if not cls.schema_differs(db):
             return False
         change.require()
@@ -1110,13 +1128,13 @@ class TableSchema(ABC):
     @classmethod
     def install_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> None:
         """Every writer's opening: a file with no stored schema gets its declaration, and
-        one that has a schema is reconciled onto it. The first read also attaches an existing
+        ``change`` answers one that has a schema. The first read also attaches an existing
         WAL, and an opening that finds its schema takes no write lock."""
         if not cls.stored_schema(db):
             with SQLiteFile.write_transaction(db):
                 if not cls.stored_schema(db):
                     cls.create_schema(db)
-        cls.reconcile_schema(db, change)
+        change.opened(cls, db)
 
     @classmethod
     @abstractmethod
@@ -1990,19 +2008,19 @@ class TypedTable(
         cls._writable_fields(tuple(changed))
         fields = cls._writable_fields()
         stored = cls.stored_columns(db)
-        expressions = (
-            changed[item.name] if item.name in changed else item.rebuild_expression(stored)
+        selected = ", ".join(
+            f'{changed[item.name] if item.name in changed else item.rebuild_expression(stored)} AS {_identifier(item.wire_name)}'
             for item in fields
         )
-        selected = ", ".join(f'{expression} AS {_identifier(item.wire_name)}'
-                             for item, expression in zip(fields, expressions, strict=True))
         table = _identifier(cls.declared_name)
         temporary = _identifier(f"rebuild_{cls.declared_name}")
         db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {selected} FROM {table}")
+        SQLiteCatalogObject.release_guards(db, cls)
         cls.drop(db)
-        cls.create(db)
+        db.execute(cls._table_sql())
         columns = cls._column_list(tuple(item.name for item in fields))
         db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
+        cls.create(db, if_not_exists=True)
         db.execute(f"DROP TABLE {temporary}")
 
     @classmethod

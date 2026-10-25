@@ -8,19 +8,22 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
+from agent_comms.commander_hud import CommanderFrame, CommanderHud, CodexUsage, UnreadableUsage
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
+from agent_comms.field_codec import MessageId
+from agent_comms.head_review import PullRequestHead
+from agent_comms.heartbeat_subjects import AnswerSubject, HeadSubject
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
+from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
-from agent_comms.change_report import FileLine
-from agent_comms.installer.launch import InstallReport
-from agent_comms.standing_rules import CrashedStandingRule, ServicePassFailing, StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
+from agent_comms.text_digest import TextDigest
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
@@ -73,12 +76,13 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
         CommanderPhase(RecordPlanePhase, False, True, ()),
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
-    ), OverloadDegradation.from_orders((), 0, 0), (worker,))
+    ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage(reason='not requested')))
     assert hud.frame == (
         str(hud.load),
         "commander_native/record_plane done=False ready=True holders=",
         "commander_native/review_queue done=True ready=False holders=worker",
         "commander_native/design_reconciled done=False ready=False holders=worker",
+        "usage unreadable: not requested",
         "forks: worker",
         "commander_native: 2 phases done",
     )
@@ -221,13 +225,10 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
     assert len(notifications(comms)) == 1
 
 
-def test_failed_rule_scan_keeps_every_other_rule_and_reports_its_traceback(
-        notification_bus, request, caplog):
+def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
     comms = notification_bus
     frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
     states = UnitState.current(comms, "lead", frame)
-    before = StandingRule.broken(comms, "lead", observed=states, frame=frame)
-
     class FailedScan(UndatedStandingRule):
         @classmethod
         def scan_observed(cls, comms, commander, observed, frame):
@@ -237,31 +238,8 @@ def test_failed_rule_scan_keeps_every_other_rule_and_reports_its_traceback(
             return "unreachable scan result"
 
     request.addfinalizer(lambda: StandingRule.__registry__.pop(FailedScan.declared_name))
-    after = StandingRule.broken(comms, "lead", observed=states, frame=frame)
-    crash, = (rule for rule in after if rule not in before)
-    assert isinstance(crash, CrashedStandingRule)
-    assert set(before) <= set(after)
-    assert crash.rule is FailedScan
-    assert crash.error is IndexError
-    assert crash.place.file.endswith("standing_rules.py")
-    assert crash.place.line > 0
-    assert all(value in crash.line() for value in
-               (FailedScan.__name__, IndexError.__name__, crash.place.to_wire()))
-    assert caplog.records[-1].exc_info[0] is IndexError
-    source = frame.plan.main.repo.model_copy(update={"source": "python"})
-    error = caplog.records[-1].exc_info[1]
-    report = InstallReport()
-    report.source = source
-    place = FileLine.raised(error, source)
-    assert place.file == source.module_file(StandingRule.__module__).as_posix()
-    assert report.crashed(error)[1] == place.to_wire()
-    assert CrashedStandingRule not in StandingRule.members_with(StandingRule)
-    beat(comms, after)
-    message, = notifications(comms)
-    assert crash.line() in message.body
-    assert message.body.splitlines()[:len(lead_hud(comms).frame)] == list(lead_hud(comms).frame)
-    beat(comms, StandingRule.broken(comms, "lead", observed=states, frame=frame))
-    assert len(notifications(comms)) == 1
+    with pytest.raises(IndexError):
+        StandingRule.broken(comms, "lead", observed=states, frame=frame)
 
 
 def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_bus):
@@ -275,3 +253,41 @@ def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_
     assert not list(reading.read(comms, comms.views.revision()))
     beat(comms, states=states)
     assert isinstance(next(reading.read(comms, comms.views.revision())), CommanderHudObserved)
+
+
+def test_a_verdict_on_the_full_head_or_an_answer_acts_on_its_board_line():
+    """A delivery claims an abbreviated head and the verdict names the full one; a burst
+    answer names its owed message. Either is board work the stale-line gate lets through."""
+    repo = RepositoryName("OpenHCSDev", "agent-comms")
+    owed = MessageId("cb055200351e")
+    delivery = RulePing(TextDigest.of("JUDGE"), text="JUDGE",
+                        subjects=(HeadSubject(PullRequestHead(repo, 3306, "89c687691")),))
+    chokehold = RulePing(TextDigest.of("ANSWER"), text="ANSWER", subjects=(AnswerSubject(owed),))
+    verdict = frozenset((HeadSubject(PullRequestHead(repo, 3306, "89c6876910086167ca82653bcedac84d78fa4de9")),))
+
+    assert delivery.acted_on(verdict)
+    assert not delivery.acted_on(frozenset((HeadSubject(PullRequestHead(repo, 3307, "89c687691")),)))
+    assert chokehold.acted_on(frozenset((AnswerSubject(owed),)))
+    assert not chokehold.acted_on(verdict)
+
+
+def test_codex_usage_decodes_window_and_keeps_refusal_visible():
+    import json
+    from datetime import datetime
+    from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
+    from agent_comms.field_codec import FieldCodec
+
+    reply = FieldCodec.decode(RateLimitsResponse, json.loads('''{
+        "rateLimits": {"primary": {
+            "usedPercent": 37, "windowDurationMins": 10080, "resetsAt": 1793513456
+        }}
+    }'''))
+    usage = CodexUsage(reply.rate_limits)
+    reset = datetime.fromtimestamp(1793513456).strftime('%a %b %d %H:%M')
+    assert usage.line() == f'usage 37% weekly, resets {reset}'
+    assert not usage.needs_hand()
+    assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
+    refused = CodexUsage(UnreadableUsage(reason='Codex: account unavailable'))
+    assert refused.line() == 'usage unreadable: Codex: account unavailable'
+    assert refused.needs_hand()
+    assert FieldCodec.decode(CodexUsage, FieldCodec.encode(refused)) == refused

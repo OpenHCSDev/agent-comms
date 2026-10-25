@@ -13,10 +13,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from traceback import extract_tb
 from typing import TYPE_CHECKING, ClassVar, cast
 
-import agent_comms
 from pydantic import JsonValue
 
 from agent_comms.errors import MissingSourceLine
@@ -213,19 +211,6 @@ class FileLine(WireValue, SourceReference):
             raise ValueError(f"FileLine file must be a single nonempty path: {self.file!r}")
         if type(self.line) is not int or self.line < 1:
             raise ValueError(f"FileLine line must be a positive line number: {self.line!r}")
-
-    @classmethod
-    def raised(cls, error: BaseException, source: Repo) -> FileLine:
-        # A removed target tree must be compared as imported, never resolved.
-        package = Path(agent_comms.__file__).parent
-        frame = next(
-            frame for frame in reversed(extract_tb(error.__traceback__))
-            if Path(frame.filename).is_relative_to(package)
-        )
-        module = ".".join(
-            Path(frame.filename).relative_to(package.parent).with_suffix("").parts
-        )
-        return cls(source.module_file(module).as_posix(), cast(int, frame.lineno))
 
     def require(self, reason: str) -> FileLine:
         return self

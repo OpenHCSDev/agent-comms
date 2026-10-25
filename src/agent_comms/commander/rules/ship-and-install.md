@@ -9,9 +9,12 @@ type: feedback
 **Why:** a merged fix that is not installed does nothing for the owner, and every wait, gate or serial step costs throughput; one that names no failure nothing else catches buys nothing.
 
 - Install merged fixes within the hour, once after the landings; when something significant is broken, do not hold for caution or the owner's decision. Tristan, 2026-10-13: "when something significant is broken, we don't need to be cautious about breaking things, it's already broken that's more important".
+- INSTALL DUE appears the pass main leaves the installed build, naming every uninstalled merge and the open requests about to land. Due means an install can be used, not that one runs: batch the landing requests, then run `order install`, the one launch of Core's installer. Tristan, 2026-10-25: "due means it can use an install, not install right now, you can batch other pending PRs in the same install".
 - Installs never wait on agent turns: stop every unit at once, install (about 2 minutes), start the same set. Tristan, 2026-10-20 00:59: "there's no such thing as a blocking unit you just stop it why the fuck were you about to wait minutes on it?"
 - The merge queue's hosted ratchets are the only gate; locally run only the tests the change wrote or touched. The full CI matrix runs only before a PyPI release. Per-PR full gates are serial waste.
 - The commander owns the merge queue's ruleset and required checks: it changes them itself and reports the change.
 - Pin only PyPI releases; our own sibling packages track latest `main`. Tristan, 2026-10-18: "why would we not always use latest?"
 - Overcaution is performative stalling. Before adding or keeping a wait, gate, rehearsal or one-at-a-time step, name the failure it alone prevents, or delete it.
 - Profile a slow tool and order the fix the same tick. Tristan, 2026-10-19: "u should be impatient and ask yourself whether things are as slow as they are forced to be."
+- Tool friction hit twice, slow or refusing correct work, gets a fork that tick, ahead of plan work: routing around it pays its cost on every call by every unit. Tristan, 2026-10-25, ten hours after asking for it: "didnt we know this for over 10 hours now".
+- An install under 60 s is healthy: no order hunts single seconds below it, planned cuts still land, and above 60 s is a defect ordered that tick. Tristan, 2026-10-23: "if we stay below 60s its not broken".

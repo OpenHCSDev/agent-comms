@@ -295,7 +295,6 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
     merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
     assert merged.order.checked().check == todo.order.checked().check
     assert merged.order.checked().copy_as(PendingProblemOrder) == todo.order
-    assert merged.order.line == "Merged, waiting on install"
     assert merged.order.waiting_on_install(merged, {}) == (merged,)
 
 

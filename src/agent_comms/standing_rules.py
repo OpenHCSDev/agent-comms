@@ -6,16 +6,15 @@ files are declared in ``agent_comms.commander.standing`` until those files move 
 
 from __future__ import annotations
 
-import logging
 import time
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from itertools import combinations
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.change_report import FileLine
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.errors import RejectedEnforcementError, TodoConflict
@@ -23,7 +22,9 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import PullRequestHead
-from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, UnitSubject
+from agent_comms.heartbeat_subjects import (
+    AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
+)
 from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference, SourceGrowth
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
         MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
+        UnmergedListedPullRequest,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -112,25 +114,18 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]: ...
 
-    @classmethod
-    def scanned(cls, comms: Comms, commander: str,
-                observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
-        """A failed scan is one visible rule, not the end of the independent scans."""
-        try:
-            return tuple(cls.scan_observed(comms, commander, observed, frame))
-        except Exception as error:
-            logging.exception("Standing rule %s crashed", cls.__name__)
-            return (CrashedStandingRule(cls, type(error),
-                                       FileLine.raised(error, frame.plan.main.repo)),)
-
-    def belongs_to(self, family: type[StandingRule]) -> bool:
-        return isinstance(self, family)
-
     @abstractmethod
     def line(self) -> str: ...
 
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
+
+    clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
+
+    @classmethod
+    def cleared_by(cls, verb: type[CommanderVerb]) -> None:
+        """A verb declaring that it clears this rule joins the action its line prints."""
+        cls.clearing_verbs = (*cls.clearing_verbs, verb)
 
     def attention(self) -> bool:
         return True
@@ -193,12 +188,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
                observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
-        """Read each owner once against the supplied frame and its one progress reader,
-        preserving the requested family."""
+        """Read each owner once against the supplied frame and its one progress reader."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         return tuple(rule for owner in owners
-                     for rule in owner.scanned(comms, commander, observed, frame)
-                     if rule.belongs_to(cls) and rule.attention() and rule.broke_after(after))
+                     for rule in owner.scan_observed(comms, commander, observed, frame)
+                     if rule.attention() and rule.broke_after(after))
 
 
 class OrderRefusingStandingRule(StandingRule, declared_name=None):
@@ -244,26 +238,6 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
-class CrashedStandingRule(UndatedStandingRule, declared_name=None):
-    """One failed scan, reported without registering another owner to scan."""
-
-    rule: type[StandingRule]
-    error: type[BaseException]
-    place: FileLine
-
-    @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return ()
-
-    def belongs_to(self, family: type[StandingRule]) -> bool:
-        return True
-
-    def line(self) -> str:
-        return f"{self.rule.__name__}: crashed {self.error.__name__} {self.place.to_wire()}"
-
-
-@dataclass(frozen=True)
 class LostTools(UndatedStandingRule):
     thread: ThreadIncarnation
     changes: tuple[str, ...]
@@ -285,9 +259,10 @@ class LostTools(UndatedStandingRule):
 
 @dataclass(frozen=True)
 class HeldBranch:
-    """One open order joined to its own allocated checkout. Only the branch difference reads
-    that worktree; its unit may retire it mid-frame, so every later Git read goes through the
-    order's repository, which owns the branch refs and remote heads and outlives the worktree."""
+    """One order still writing source, joined to its own allocated checkout. Only the branch
+    difference reads that worktree; its unit may retire it mid-frame, so every later Git read
+    goes through the order's repository, which owns the branch refs and remote heads and
+    outlives the worktree."""
 
     todo: Todo
     holder: ThreadIncarnation
@@ -333,9 +308,12 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, declared_name=None):
         snapshot = comms.registry.snapshot()
         branches = []
         for state in observed:
+            merges = state.source.merges()
+            writing = tuple(todo for todo in state.source.todos
+                            if todo.order.writes_source(todo, merges))
             for unit in state.readable_units():
                 for thread in snapshot.threads_for(unit.require_recorded()):
-                    for todo in state.source.todos:
+                    for todo in writing:
                         path = storage.order_checkout(storage.roots_of(thread), todo.id)
                         if path.is_dir():
                             branches.append(HeldBranch(
@@ -450,12 +428,6 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     and which actions it prevents while it waits."""
 
     message: Message
-    clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
-
-    @classmethod
-    def cleared_by(cls, verb: type[CommanderVerb]) -> None:
-        """A verb declaring that it clears this debt joins the hint the refusal prints."""
-        cls.clearing_verbs = (*cls.clearing_verbs, verb)
 
     def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
         """Only a unit's question belongs on that unit's observation."""
@@ -463,6 +435,9 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     def degradation_signs(self) -> tuple[Sign, ...]:
         return (Sign(AnswersOwedDegradation, (self.cited,), self.line()),)
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (AnswerSubject(self.message.message_id),)
 
     @property
     def cited(self) -> str:
@@ -479,10 +454,6 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     @abstractmethod
     def clearing_action(self) -> str:
         """The action that clears this member's debt, printed by the refusing verb."""
-
-    def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
-        """Who waits on this answer: whoever sent the owed message."""
-        return (self.message.sender,)
 
     def due(self, now: float) -> bool:
         return True
@@ -667,12 +638,16 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnreviewedHead(HeadLine, OrderRefusingStandingRule, DatedStandingRule):
-    """One ready head on any registered repository, with or without an order, waiting too long
-    for a decision; a reviewing mark is not one."""
+class UnreviewedHead(HeadLine, DatedStandingRule, declared_name=None):
+    """One ready head waiting too long for a decision; a reviewing mark is not one."""
     request: PullRequestHead
     due_at: float
     seconds: ClassVar[int] = 10 * 60
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_reviews(comms.goals, commander, frame.pulls)
 
     @classmethod
     def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
@@ -680,11 +655,16 @@ class UnreviewedHead(HeadLine, OrderRefusingStandingRule, DatedStandingRule):
         return tuple(
             cls(request, due)
             for repo in goals.registry.snapshot().commander_project.repository_names()
-            for row in pulls.open(repo)
+            for row in cls.reviewed(pulls, repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
             if not any(review.verdict.decides() for review in goals.todos.head_reviews(request))
         )
+
+    @classmethod
+    @abstractmethod
+    def reviewed(cls, pulls: ProgressRead,
+                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]: ...
 
     def began(self) -> float:
         return self.due_at
@@ -692,6 +672,29 @@ class UnreviewedHead(HeadLine, OrderRefusingStandingRule, DatedStandingRule):
     def line(self) -> str:
         return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
                 f" -> judge ok/back --pr {self.request.pr} --head {self.request.head}")
+
+
+@dataclass(frozen=True)
+class LinkedUnreviewedHead(UnreviewedHead, OrderRefusingStandingRule):
+    """A head linked to the caller's held order: the reader is registered with exactly the
+    caller's holds, so another commander's heads never freeze its orders."""
+
+    @classmethod
+    def reviewed(cls, pulls: ProgressRead,
+                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
+        linked = pulls.linked(repo)
+        return tuple(row for row in pulls.open(repo) if row.number in linked)
+
+
+@dataclass(frozen=True)
+class OrderlessUnreviewedHead(UnreviewedHead):
+    """A head no held order links: a board line that refuses nobody's orders."""
+
+    @classmethod
+    def reviewed(cls, pulls: ProgressRead,
+                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
+        linked = pulls.linked(repo)
+        return tuple(row for row in pulls.open(repo) if row.number not in linked)
 
 
 @dataclass(frozen=True)
@@ -721,6 +724,58 @@ class StuckMerge(HeadLine, DatedStandingRule):
         return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}:"
                 f" auto-merge armed but {self.block.what()}"
                 " -> fix the check at its owner or give it an owner now")
+
+
+@dataclass(frozen=True)
+class IdlePullRequest(HeadLine, DatedStandingRule):
+    """An open head, draft or ready, going nowhere outside the merge queue: unmoved for the
+    idle window, or blocked by a conflict or a red required check. Armed heads are
+    StuckMerge's; every other open request on the configured repositories is a board item."""
+    request: PullRequestHead
+    holders: tuple[ThreadIncarnation, ...] = field(compare=False)
+    blocks: tuple[MergeBlock, ...] = field(compare=False)
+    moved: float = field(compare=False)
+    seconds: ClassVar[int] = 30 * 60
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_pulls(comms.goals, frame.pulls, frame.todos)
+
+    @classmethod
+    def scan_pulls(cls, goals: Goals, pulls: ProgressRead,
+                   held: Sequence[Todo]) -> tuple[Self, ...]:
+        """Holders are the live holds whose orders link the request, as the HUD cards read."""
+        now = time.time()
+        holders: dict[tuple[RepositoryName, int], tuple[ThreadIncarnation, ...]] = {}
+        for todo in held:
+            for request in pulls.open_for(todo):
+                key = (todo.repo, request.number)
+                holders[key] = (*holders.get(key, ()), todo.held().owner_identity)
+        found = (
+            cls(PullRequestHead(repo, row.number, row.head), holders.get((repo, row.number), ()),
+                row.merge_blocks, row.reviewable_at)
+            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for row in pulls.open(repo) if not row.armed_times
+        )
+        return tuple(rule for rule in found if rule.began() <= now)
+
+    def began(self) -> float:
+        return min((*(block.since for block in self.blocks), self.moved + self.seconds))
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        """A verdict on the head or an order to its holder disposes of the line."""
+        return (*super().subjects(), *(UnitSubject(holder) for holder in self.holders))
+
+    def line(self) -> str:
+        held = ", ".join(holder.name for holder in self.holders) or "no live holder"
+        why = "; ".join(block.what() for block in self.blocks) or "head unmoved"
+        actions = ((*(block.remedy() for block in self.blocks),
+                    *(f"order {holder.name}" for holder in self.holders))
+                   or ("land or supersede it",))
+        return (f"IDLE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
+                f" ({held}): {why}, idle {int((time.time() - self.moved) // 60)} min"
+                f" -> {'; '.join(actions)}")
 
 
 @dataclass(frozen=True)

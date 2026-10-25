@@ -18,18 +18,16 @@ from typing import ClassVar
 
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
-from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
 from agent_comms.slop import Slop
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.reread import CommanderDeck
-from agent_comms_hooks.scoreboard import ScoreboardHook
 from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
-class CommanderStart(CommanderDeck, ScoreboardHook):
+class CommanderStart(CommanderDeck):
     part_chars: ClassVar[int] = 60_000
     """The most characters one Read of a part returns in full."""
     def due(self) -> bool:
@@ -56,13 +54,11 @@ class CommanderStart(CommanderDeck, ScoreboardHook):
             " does not count as reading them. This order is given once per session start or"
             " compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(part) for part in parts),
-            self.board().text(),
         )
 
     def prepare(self) -> None:
         """A start or compaction drops what was read: the deck is dealt again from its start."""
         self.calls.unlink(missing_ok=True)
-        self.pointer.write_text("\n".join(str(frame) for frame in self.frames()), encoding="utf-8")
         self.deck.write_text(json.dumps(self.slices()), encoding="utf-8")
         self.parts.mkdir(exist_ok=True)
         for old in self.parts.iterdir():
@@ -77,19 +73,6 @@ class CommanderStart(CommanderDeck, ScoreboardHook):
             size += len(line)
         for number, chunk in enumerate(chunks, 1):
             (self.parts / f"{number:02}.md").write_text("".join(chunk), encoding="utf-8")
-
-    def frames(self) -> tuple[Path, ...]:
-        """The HUD frame files of the commanders this session is bound as."""
-        frames = []
-        for record in WatchClaim(self.session_id).state().bindings():
-            snapshot = RegistryStore.at(Path(record.root)).read_snapshot_unlocked()
-            subject = snapshot.require(record.bus).incarnation
-            frames.extend(
-                CommanderFrameFile.path_in(
-                    record.root, lookup=str(thread.incarnation.require_recorded().lookup))
-                for thread in snapshot.commander_project.commanders(snapshot)
-                if thread.incarnation == subject)
-        return tuple(frames)
 
     @classmethod
     def slices(cls) -> list[str]:

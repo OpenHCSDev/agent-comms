@@ -17,9 +17,9 @@ from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
-from agent_comms_hooks.reread import SliceReminder
+from agent_comms_hooks.reread import DeafReminder, SliceReminder
 from agent_comms_hooks.skill import CommanderStart
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
@@ -84,6 +84,18 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
     assert sum(map(len, taken)) == 3
     assert start.take()  # compaction deals the deck again from its start
     assert [hook.take() for _ in range(SliceReminder.every)][-1] == (slices[0],)
+
+
+def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    claim.path.parent.mkdir(parents=True)
+    assert hook.take() == ()  # no bridge was ever bound: nothing to re-arm
+    with claim.claim.claimed():
+        assert hook.take() == hook.take() == (DeafWatch("now (no Monitor holds its reader claim)").line(),)
+        with claim.reader_held():
+            assert hook.take() == ()
 
 
 def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():

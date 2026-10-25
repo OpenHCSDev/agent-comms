@@ -11,14 +11,17 @@ from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_subjects import HeadSubject
 from agent_comms.head_review import PullRequestHead
+from agent_comms.heartbeat_subjects import HeadSubject, UnitSubject
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import OrderRefusingStandingRule, StuckMerge
-from agent_comms.errors import RelationViolationError, ToolRefusedError
+from agent_comms.standing_rules import (
+    IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule, StuckMerge,
+)
+from agent_comms.errors import ToolRefusedError
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview,
+    ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
@@ -125,38 +128,44 @@ def test_moved_head_posts_and_records_nothing(head_bus):
     assert not any("statuses/" in call[1] for call in github.calls())
 
 
-def test_ready_orderless_review_refuses_backend_orders_until_a_recorded_decision(head_bus):
+def test_only_a_head_linked_to_the_callers_held_order_refuses_its_orders(head_bus):
+    """2026-10-25: dqdock's orders froze on claude-code's orderless #3311."""
     comms, _, request = head_bus
     todo = comms.goals.todos.get("P2")
-    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
     action = CreateProblemGoalAction(
         problem="P3", commander="lead", request=todo.request,
         assigner=comms.registry.require("lead").incarnation,
         repo=todo.repo, text="Repair the next owner", order=todo.order.checked(),
         review_at=RecordedEventTime(time.time() + 3600),
     )
-    with pytest.raises(RelationViolationError):
-        comms.goals.update_goal("outsider", action)
-    assert all(current.id != "P3" for current in comms.goals.todos.list(request.repo))
-    invoke(comms, request, RejectedHeadVerdict(REASON))
     assert not OrderRefusingStandingRule.refusals(comms.goals, "lead")
+    assert [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(
+        comms.goals, "lead", ProgressRead(()))] == [request]
     comms.goals.update_goal("outsider", action)
-    assert comms.goals.todos.get("P3").holder == "outsider"
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity,
+                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
+    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
 
 
 def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
     """A reviewing mark on an open head is not a verdict: the JUDGE line stays owed and its
-    scoreboard line undisposed until ok or back, and reviewing after an ok owes it again."""
+    heartbeat line undisposed until ok or back, and reviewing after an ok owes it again."""
     comms, _, request = head_bus
     subject, since = HeadSubject(request), time.time() - 1
+
+    def owed() -> list[PullRequestHead]:
+        return [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(
+            comms.goals, "lead", ProgressRead(()))]
+
     invoke(comms, request, UnderReviewHeadVerdict())
-    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
+    assert owed() == [request]
     assert not subject.disposed(comms, frozenset(), since)
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-    assert not OrderRefusingStandingRule.refusals(comms.goals, "lead")
+    assert owed() == []
     assert subject.disposed(comms, frozenset(), since)
     invoke(comms, request, UnderReviewHeadVerdict())
-    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
+    assert owed() == [request]
 
 
 def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus):
@@ -210,6 +219,31 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     assert len(posts) == 1 and any(f"(src +{grown})" in part for part in posts[0])
 
 
+def test_a_stacked_head_is_charged_only_its_own_growth_over_its_base_branch(
+        head_bus, reviewed_source):
+    """2026-10-25: judge ok charged a PR stacked on another open PR for its parent's lines."""
+    comms, github, _ = head_bus
+    source = reviewed_source
+
+    def commit(parent, lines, message):
+        module = "".join(f"value_{line} = {line}\n" for line in range(lines))
+        blob = source.git_input(source.checkout, module, "hash-object", "-w", "--stdin")
+        tree = source.git_input(source.checkout, f"100644 blob {blob}\tgrown.py\n", "mktree")
+        tree = source.git_input(source.checkout, f"040000 tree {tree}\tsrc\n", "mktree")
+        return source.git(source.checkout, "commit-tree", tree, "-p", parent, "-m", message).strip()
+
+    parent = commit(source.main_commit, SourceGrowth.limit + 1, "Grow the parent request")
+    head = commit(parent, SourceGrowth.limit + 2, "Grow one line on top")
+    source.git(source.checkout, "push", "-q", "origin",
+               f"{parent}:refs/heads/fix/parent", f"{head}:refs/pull/9/head")
+    stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    github.put(source.github, UnmergedListedPullRequest(
+        9, "fix/child", head, stamp, "fix/parent", reviewable_times=(stamp,)))
+    invoke(comms, PullRequestHead(source.github, 9, head), ReviewedHeadVerdict(ACCEPTED))
+    posts = tuple(call for call in github.calls() if f"statuses/{head}" in call[1])
+    assert len(posts) == 1 and any("(src +1)" in part for part in posts[0])
+
+
 def test_judge_ok_keeps_every_repeated_growth_reason():
     reasons = [f"{name} adds the lines this reviewed request needs to answer one question"
                for name in ("first.py", "second.py", "third.py")]
@@ -234,4 +268,37 @@ def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(hea
     found = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
     assert [(rule.request.pr, rule.block.what()) for rule in found] == [
         (8, "required check debt-src failed")]
-    assert "60 min ago" in found[0].line() and found[0].broke_after(0)
+    # The age is the heartbeat Ping's to render, from began(); the line names no clock.
+    assert found[0].began() == found[0].block.since and found[0].broke_after(0)
+
+
+def test_a_pr_verdict_acts_on_the_unit_holding_that_head(head_bus):
+    """A verdict on a unit's PR named only the head, so a stale CLOSE line on that same unit
+    refused the verdict the line was waiting for."""
+    comms, _, request = head_bus
+    todo = comms.goals.todos.get("P2")
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity,
+                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
+    verb = judge.JudgeVerb.parse(["ok", "--pr", str(request.pr), "--head", request.head,
+                                  "--why", ACCEPTED.text])
+    ctx = order.Commander.read_root(comms.root)
+    acted = frozenset(verb.subject(ctx).acts_on(ctx))
+    assert acted == {HeadSubject(request), UnitSubject(held.owner_identity)}
+
+
+def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
+    """2026-10-25: five open agent-comms PRs, idle for hours or red, raised no line at all."""
+    comms, github, ready = head_bus
+    hour = datetime.fromtimestamp(time.time() - 3600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fresh = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    github.put(ready.repo, DraftListedPullRequest(
+        9, "fix/gone", "c" * 40, hour, "main", reviewable_times=(hour,)))
+    github.put(ready.repo, UnmergedListedPullRequest(
+        7, "fix/head-7", ready.head, fresh, "main", reviewable_times=(fresh,),
+        merge_blocks=(ConflictMergeBlock(fresh),)))
+    found = {rule.request.pr: rule.line()
+             for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), ())}
+    assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 cccccccc")
+    assert "(no live holder): head unmoved, idle 60 min -> land or supersede it" in found[9]
+    assert "conflicts with its base, idle 0 min -> merge main into it" in found[7]

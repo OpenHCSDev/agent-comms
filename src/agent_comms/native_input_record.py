@@ -27,6 +27,7 @@ from .coordination_tables.participants import OwnerGenerations, OwnerRecord
 from .coordination_tables.responses import ResponseObligation
 from .declared_family import DeclaredFamily
 from .field_codec import (
+    AssignmentId,
     FieldCodec,
     InputId,
     JsonShapeFamily,
@@ -217,7 +218,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def source_membership_sql(cls) -> str:
         """Select the assignments included in this stage's input."""
 
-    def source_assignment_ids(self, db: Connection, input_id: InputId) -> tuple[str, ...]:
+    def source_assignment_ids(self, db: Connection, input_id: InputId) -> tuple[AssignmentId, ...]:
         columns = ",".join(f"c.{column}" for column in WakeAssignment.columns())
         originals = WakeAssignment.read(db.execute(
             f"SELECT {columns} FROM {WakeAssignment.declared_name} c "

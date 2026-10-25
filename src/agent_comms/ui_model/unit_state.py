@@ -165,6 +165,11 @@ class UnitObservation:
     def orders(self) -> tuple[str, ...]:
         return tuple(todo.id for todo in self.todos)
 
+    def merges(self) -> dict[str, OrderProgress]:
+        """Each held order's merge as its progress reads it; unmerged orders read no commit."""
+        return {origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
+                for origin in self.sources}
+
 
 class NeedsCommanderAttention:
     """Urgent siblings share their ping behavior without claiming each other's state."""
@@ -182,8 +187,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
     source: UnitObservation = field(compare=False, repr=False)
     verb: ClassVar[str]
     action: ClassVar[str]
-    holds_unit: ClassVar[bool] = True
-    """Whether the unit waits on the commander while this state's line stays owed."""
+    commander_disposes: ClassVar[bool] = True
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:
@@ -457,19 +461,29 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
     verb = "CLOSE"
-    holds_unit = False
     action = "install the merge or close with the working application evidence"
 
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
-        progress: dict[str, OrderProgress] = {
-            origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
-            for origin in source.sources
-        }
+        progress = source.merges()
         return any(
-            todo.order.accepted or todo.order.waiting_on_install(todo, progress)
+            todo.order.accepted
+            or (todo.order.waiting_on_install(todo, progress) and not todo.order.awaits_holder_run())
             for todo in source.todos
         )
+
+
+class AwaitingApplicationRun(NeedsCommanderAttention, ConditionalState, UnitState):
+    """Every merged order is installed and waits on its holder's application run, so no
+    commander verb disposes of the line and it locks none."""
+
+    verb = "AWAIT RUN"
+    action = "its holder runs the application proof on the installed build; close it on its evidence"
+    commander_disposes = False
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        return any(todo.order.awaits_holder_run() for todo in source.todos)
 
 
 class Moving(ConditionalState, UnitState):

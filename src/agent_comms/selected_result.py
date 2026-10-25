@@ -10,7 +10,7 @@ from agent_comms import field_codec
 from .assignment_states import AssignmentState
 from .coordination_tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
-from .field_codec import FieldCodec, InputId
+from .field_codec import AssignmentId, FieldCodec, InputId
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .turn_failure import BackendFailed
@@ -19,7 +19,7 @@ from .turn_outcome import TurnOutcome
 
 @dataclass(frozen=True, slots=True)
 class CoordinatedTurn(TurnOutcome):
-    assignment_ids: Annotated[tuple[str, ...], field_codec.WireName("claim_ids")]
+    assignment_ids: Annotated[tuple[AssignmentId, ...], field_codec.WireName("claim_ids")]
     disposition: type[AssignmentState]
     input_id: InputId
     publications: tuple[PublicationEvidence, ...]

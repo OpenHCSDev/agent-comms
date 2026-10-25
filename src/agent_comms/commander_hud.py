@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.commander.vibe_check import ChokeholdAnswer, OverloadDegradation
+from aiohttp import ClientError
+
+from agent_comms.build_identity import RecordedBuildIdentity
+from agent_comms.cli_bridges.codex import CodexAppServer
+from agent_comms.cli_bridges.codex_protocol import RateLimitReading
+from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
-from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.commander_service import CommanderService
 from agent_comms.field_codec import OrderId, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -18,10 +23,10 @@ from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, UnmergedListedPullRequest
+from agent_comms.todos import OrderProgress, ProgressRead, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
-from agent_comms.ui_model.unit_state import AwaitingCommander, UnitClock, UnitState
+from agent_comms.ui_model.unit_state import UnitClock, UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -50,28 +55,6 @@ class HudRow(ABC):
 
     @abstractmethod
     def line(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class OwedLine(HudRow):
-    """One line the commander owes Tristan: who waits on it, how long it has been owed, how many
-    heartbeat packets already showed it, and its text ending in the command that disposes of it."""
-
-    holds: tuple[str, ...]
-    minutes: int
-    shown: int
-    text: str
-
-    def cost(self) -> tuple[int, int]:
-        """Worst first: the most held, then the longest owed."""
-        return (-len(self.holds), -self.minutes)
-
-    def needs_hand(self) -> bool:
-        return True
-
-    def line(self) -> str:
-        holds = ", ".join(self.holds) or "nobody"
-        return f"holds {holds}; owed {self.minutes} min; shown {self.shown}x: {self.text}"
 
 
 @dataclass(frozen=True)
@@ -144,6 +127,34 @@ class FinishedPhases(HudRow):
         return f"{self.plan.declared_name}: {len(self.phases)} phases done"
 
 
+class UnreadableUsage(RateLimitReading):
+    reason: str
+
+    def line(self) -> str:
+        return f'usage unreadable: {self.reason}'
+
+    def needs_hand(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class CodexUsage(HudRow):
+    reading: RateLimitReading
+
+    @classmethod
+    def read(cls) -> CodexUsage:
+        try:
+            return cls(asyncio.run(CodexAppServer.rate_limits()))
+        except (OSError, ClientError) as error:
+            return cls(UnreadableUsage(reason=f'{type(error).__name__}: {error}'))
+
+    def line(self) -> str:
+        return self.reading.line()
+
+    def needs_hand(self) -> bool:
+        return self.reading.needs_hand()
+
+
 @dataclass(frozen=True)
 class CommanderForks(HudRow):
     """The commander's forks Core registered and still hears; a fork never registered, such as
@@ -170,8 +181,7 @@ class CommanderHud(ToolResult):
     phases: tuple[CommanderPhase, ...]
     load: OverloadDegradation
     forks: tuple[ThreadIncarnation, ...]
-    owed: tuple[OwedLine, ...] = ()
-    paused: tuple[str, ...] = ()
+    usage: CodexUsage
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -190,6 +200,7 @@ class CommanderHud(ToolResult):
         held = frame.todos
         progress = pulls.progress(held, comms.registry)
         timers = store.timers_up_in(held, now, progress)
+        installed = RecordedBuildIdentity.installed()
         edits = dict.fromkeys((todo.id for todo in held), 0) | {
             read.todo.id: read.read()
             for read in OrderEditCountRead.judgeable(comms.root, frame.live, progress)
@@ -200,12 +211,13 @@ class CommanderHud(ToolResult):
             requests = {
                 (todo.repo, request.number): request
                 for todo in orders
-                for request in pulls.listed(todo.repo, UnmergedListedPullRequest, todo)
+                for request in pulls.open_for(todo)
             }
             units.append(CommanderUnit(
                 unit, type(state), state.clock(),
                 tuple(CommanderOrder(
-                    todo.id, todo.text, todo.order.checked().id, todo.order.line, progress[todo.id],
+                    todo.id, todo.text, todo.order.checked().id, todo.order.installed_line(installed),
+                    progress[todo.id],
                     tuple(at for due, at in timers if due.id == todo.id),
                     todo.strike_count, edits[todo.id],
                 ) for todo in orders),
@@ -219,22 +231,9 @@ class CommanderHud(ToolResult):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
-        paused = ChokeholdAnswer.held(comms)
-        packets = CommanderUpdate.shown(comms, owner)
-        owed = (
-            *(OwedLine(ping.holds(frozenset(paused)),
-                       int((now - ping.since.recorded_at("A heartbeat line")) // 60),
-                       sum(ping in packet.handled for packet in packets), ping.text)
-              for ping in CommanderUpdate.owed(comms, commander, now - AwaitingCommander.seconds)),
-            *(OwedLine(rule.holds(frozenset(paused)), int((now - rule.message.timestamp) // 60),
-                       sum(any(ping.asks(rule.message.reference) for ping in packet.handled)
-                           for packet in packets),
-                       f"{rule.line()} -> {rule.clearing_action()}")
-              for rule in frame.answers if rule.due(now)),
-        )
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, owed, paused)
+                   forks, CodexUsage.read())
 
     def rows(self) -> tuple[HudRow, ...]:
         """The rows under the load line: every row needing the commander's hand, in the
@@ -245,6 +244,7 @@ class CommanderHud(ToolResult):
         return (
             *(row for row in live if row.needs_hand()),
             *(row for row in live if not row.needs_hand()),
+            self.usage,
             CommanderForks(self.forks),
             *(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
               for phases in (tuple(phase for phase in finished if phase.plan is plan),)
@@ -253,26 +253,8 @@ class CommanderHud(ToolResult):
 
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
-        """Tristan's scoreboard first, then the load line, then one line per row in the order
-        rows() declares."""
-        return (*self.scoreboard(), str(self.load), *(row.line() for row in self.rows()))
-
-    @projected(view="wire")
-    def owed_count(self) -> int:
-        """The lines owed: a turn may end only at zero."""
-        return len(self.owed)
-
-    def scoreboard(self) -> tuple[str, ...]:
-        """The owed lines under their header, worst first; nothing when nothing is owed."""
-        if not self.owed:
-            return ()
-        oldest = max(line.minutes for line in self.owed)
-        return (
-            "TRISTAN'S SCOREBOARD. This is Tristan speaking through Core, not a background event."
-            f" You are losing: {len(self.owed)} owed, oldest {oldest} min,"
-            f" {len(self.paused)} units paused.",
-            *(line.line() for line in sorted(self.owed, key=OwedLine.cost)),
-        )
+        """The load line, then one line per row in the order rows() declares."""
+        return (str(self.load), *(row.line() for row in self.rows()))
 
 
 

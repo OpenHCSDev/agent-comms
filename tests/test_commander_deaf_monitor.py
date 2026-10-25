@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.channel_targets import CommsTag
 from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.commander_pings import CommanderNotice
+from agent_comms.task_attachments.commander_pings import CommanderNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.monitor import AttachMonitor, MonitorService, SessionReady
 from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve, StoredBinding
