@@ -30,7 +30,7 @@ from agent_comms.installer.interpreter_operation import (
     WorkerClosePhase,
 )
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
-from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import GitCommandError, Repo
 
@@ -71,7 +71,7 @@ class InterpreterWorker:
             try:
                 child = SpawnedProcess.launch(
                     (str(key.python), "-P", *map(str, key.program.entry())), cwd=key.cwd,
-                    env=dict(key.environment), runtime=RestoredRuntime(key.python),
+                    env=dict(key.environment), runtime=LaunchRuntime(key.python),
                     pass_fds=key.program.descriptors,
                     stdin=request_read, output=answer_write, stderr=diagnostics,
                 )

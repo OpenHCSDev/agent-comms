@@ -473,14 +473,14 @@ class TestActivityLayer:
     def test_activity_persistence(self, tmp_path):
         from agent_comms.activity import Activity, ActivityStore
 
-        store = ActivityStore.at(tmp_path)
+        store = ActivityStore(tmp_path)
         store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
-        assert ActivityStore.at(tmp_path).current("a").detail == "bash"
+        assert ActivityStore(tmp_path).current("a").detail == "bash"
 
     def test_all_current_latest_per_thread(self, tmp_path):
         from agent_comms.activity import Activity, ActivityStore
 
-        store = ActivityStore.at(tmp_path)
+        store = ActivityStore(tmp_path)
         store.emit(Activity(thread="a", state=ActivityState.THINKING))
         store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
         store.emit(Activity(thread="b", state=ActivityState.THINKING))
