@@ -24,6 +24,7 @@ from agent_comms.installer.interpreter_operation import InstallClock, TargetProg
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
     ExistingBusInstall,
+    HeldOwnersStopped,
     PracticeBus,
     PreparedMigration,
     RehearsalFiles,
@@ -240,6 +241,39 @@ def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
         backup.undo()
         assert saved.read_text() == "original"
         assert staged.verify(comms.root) == migration.read
+    maintenance.clear(hold)
+
+
+def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
+        comms, staged, noisy_step):
+    """A failed carry undone by its backup opens under the outgoing runtime and releases;
+    a store the backup left in another shape (install 13's short ledger) is named, keeps
+    the hold and starts no owner."""
+    _, step = noisy_step
+    saved = comms.root / "saved"
+    saved.write_text("original")
+    (comms.root / "fail").touch()
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    hold = maintenance.begin(MaintenanceOperator.current())
+    owners = HeldOwnersStopped()
+    started: list[str] = []
+    owners.give_back.callback(started.append, "owners")
+    owners.hold.callback(maintenance.clear, hold)
+    with hold.holding():
+        backup = StoreBackup.take(
+            comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill")
+        migration = PreparedMigration.capture(hold, staged)
+        with pytest.raises(UpgradeRefused):
+            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
+        backup.undo()
+        staged.require_opens(comms.root, owners)
+        ledger_one_failure_short(comms.root)
+        with pytest.raises(UpgradeRefused, match="goal_attempts.sqlite3"):
+            staged.require_opens(comms.root, owners)
+    owners.release()
+    owners.give_back.close()
+    assert started == []
+    assert maintenance.read().phase is DrainingPhase
     maintenance.clear(hold)
 
 

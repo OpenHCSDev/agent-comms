@@ -511,6 +511,11 @@ class HeldOwnersStopped(OwnersStopped):
         """Clears the hold once; a later call finds nothing left to clear."""
         self.hold.close()
 
+    def keep_held(self) -> None:
+        """A root its runtime cannot open keeps the hold and starts no owner on it."""
+        self.hold.pop_all()
+        self.give_back.pop_all()
+
 
 @dataclass(frozen=True)
 class Stack:
@@ -750,6 +755,21 @@ class Stack:
             HostService.start_enabled()
             self.probe(ServingProbe())
             return services
+
+    def require_opens(self, root: Path, owners: HeldOwnersStopped) -> None:
+        """A restored root opens under this runtime's declarations, the check every opening
+        makes (TableSchema.require_schema), answered by this runtime's own CLI. A store that
+        differs keeps the hold and starts no owner: install 13 released a half-restored
+        ledger that every later opening refused (install 14, 2026-10-24)."""
+        try:
+            differing = self.cli(root, PlannedReconcileCliCommand).rewritten
+            if differing:
+                raise UpgradeRefused(
+                    f"Rollback left stores that differ from {self.runtime.prefix.name}'s "
+                    f"declarations: {', '.join(map(str, differing))}; maintenance stays held")
+        except BaseException:
+            owners.keep_held()
+            raise
 
     def verify(self, root: Path) -> BusReadBack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
@@ -1236,6 +1256,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                                 self.checkout, "reset", "-q", "--keep", self.current)
                             Checkout(self.checkout).prepare()
                     self.installed.publish(self.root)
+                    self.installed.require_opens(self.root, report.owners)
                     holder.close()
                     report.owners.release()
                     print(f"install: restored after failure ({type(error).__name__}: {error}); "
