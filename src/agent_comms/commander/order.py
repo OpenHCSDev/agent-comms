@@ -109,7 +109,7 @@ def refuse(text, *families):
 
 def struck(todo, unit):
     """Strikes count per unit and task, across every order of that task the unit held."""
-    return todo.history.strike_count(todo.id, unit)
+    return todo.history.facts_for(todo.id).strike_count(unit)
 
 
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.

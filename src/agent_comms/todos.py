@@ -3221,7 +3221,7 @@ class FailedCheckStrike(StrikeTodo):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         if changed.revision == self.expected_revision:
             return
-        count = len(changed.live_strikes(self.previous.owner))
+        count = changed.history.facts_for(changed.id).strike_count(self.previous.owner)
         line = (f"Core strike {count} on {changed.id} order {self.order_id}: "
                 f"{self.previous.owner} {self.reason}"
                 + (f"; {changed.id} taken away" if not changed.holder else ""))
@@ -4182,7 +4182,7 @@ class Todo(TodoStoreRows, TypedTable):
 
     @property
     def judged_calls(self) -> tuple[str, ...]:
-        return self.history.judged_calls(self.id)
+        return self.history.facts_for(self.id).judged_calls
 
     @property
     def order_history(self) -> tuple[CheckedProblemOrder, ...]:
@@ -4211,11 +4211,12 @@ class Todo(TodoStoreRows, TypedTable):
 
     @property
     def held_order_ids(self) -> tuple[str, ...]:
-        return (*self.history.order_ids(self.id), *(order.id for order in self.order.declarations))
+        return (*self.history.facts_for(self.id).order_ids, *(order.id for order in self.order.declarations))
 
     @property
     def first_ordered_at(self) -> float:
-        return self.history.first_ordered_at(self.id, self.order.checked().at.recorded_at("An order"))
+        return min((self.order.checked().at.recorded_at("An order"),
+                    *self.history.facts_for(self.id).ordered_at))
 
     @property
     def reference_pattern(self) -> str:
@@ -4305,7 +4306,7 @@ class Todo(TodoStoreRows, TypedTable):
 
     @property
     def strike_count(self) -> int:
-        return self.history.strike_count(self.id, self.holder)
+        return self.history.facts_for(self.id).strike_count(self.holder)
 
     def live_strikes(self, unit: str | None = None) -> tuple[StrikeTodo, ...]:
         """The strikes still counting on this task, against ``unit`` on any order of it."""
@@ -4314,12 +4315,14 @@ class Todo(TodoStoreRows, TypedTable):
     def struck_on_order(self, unit: str) -> bool:
         """A live strike on ``unit`` recorded since the current order was sent; a send-back that
         replaces this order is that same miss, so it counts no second strike."""
-        return self.history.struck_since(self.id, unit, self.order.at.recorded_at("An order"))
+        since = self.order.at.recorded_at("An order")
+        return any(count.owner == unit and count.latest >= since
+                   for count in self.history.facts_for(self.id).strike_totals)
 
     def struck_out(self, unit: str) -> bool:
         """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
         orders reach it."""
-        return self.history.strike_count(self.id, unit) >= ProblemGoalOrder.StrikeLimit
+        return self.history.facts_for(self.id).strike_count(unit) >= ProblemGoalOrder.StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:
@@ -4607,22 +4610,6 @@ class TodoHistory:
     ) -> tuple[Event, ...]:
         with self.snapshot() as db:
             return StoredOrderStory.events_as(db, problem, member, limit=limit, descending=descending)
-
-    def judged_calls(self, problem: str) -> tuple[str, ...]:
-        return self.facts_for(problem).judged_calls
-
-    def order_ids(self, problem: str) -> tuple[str, ...]:
-        return self.facts_for(problem).order_ids
-
-    def first_ordered_at(self, problem: str, current: float) -> float:
-        return min((current, *self.facts_for(problem).ordered_at))
-
-    def struck_since(self, problem: str, unit: str, since: float) -> bool:
-        return any(count.owner == unit and count.latest >= since
-                   for count in self.facts_for(problem).strike_totals)
-
-    def strike_count(self, problem: str, unit: str | None = None) -> int:
-        return self.facts_for(problem).strike_count(unit)
 
     def live_strikes(self, problem: str, unit: str | None = None) -> tuple[StrikeTodo, ...]:
         with self.snapshot() as db:
