@@ -28,7 +28,6 @@ from agent_comms.cli_commands import (
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_attempts import GoalAttemptStore
-from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
 from agent_comms.installer.backup import bus_files
@@ -37,13 +36,12 @@ from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHold
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_runtime_schema import PrivateCoordinatorSchema
 from agent_comms.triage_native_sources import TriageNativeSources
-from agent_comms.turn_failure import TurnFailure
 from agent_comms.typed_table import (
     Column, DurableTables, ReconciledFile, SharedFileTables, TableSchema, TypedTable,
-    WriterOwnedStore, sql_literal,
+    WriterOwnedStore,
 )
 from bus_record_fixture import OWNER_LOOKUP
-from conftest import maintenance_held
+from conftest import ledger_one_failure_short, maintenance_held
 
 NO_MAINTENANCE_HOLDER = NoMaintenanceHolder()
 
@@ -259,18 +257,9 @@ def test_the_goal_ledger_carries_a_family_that_gained_a_member(private_comms):
     """Install 13: the ledger kept a failure CHECK one member short, nothing carried it, and
     every opening refused. Its owner is a reconciled file, so the install carries it."""
     root = private_comms.root
-    directory = root / GoalAttemptStore.root_directory
-    directory.mkdir(mode=0o700)
-    path = GoalAttemptStore.initialize(directory).path
-    newest = sql_literal(TurnFailure.names()[-1])
-    with closing(sqlite3.connect(path)) as db:
-        (table,) = db.execute("SELECT sql FROM sqlite_master WHERE name=?",
-                              (FailedTurnEvidence.declared_name,)).fetchone()
-        db.execute(f'DROP TABLE "{FailedTurnEvidence.declared_name}"')
-        db.execute(table.replace(f", {newest}", ""))
-        db.commit()
+    path = ledger_one_failure_short(root)
     with maintenance_held(root) as holder:
         completed = reconcile(root, holder)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert str(path.relative_to(root)) in json.loads(completed.stdout)["rewritten"]
-    GoalAttemptStore(directory)
+    GoalAttemptStore(path.parent)

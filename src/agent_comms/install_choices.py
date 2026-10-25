@@ -56,8 +56,8 @@ class RunMode(SubclassUnion, affix="Mode"):
     def destination(self, live: RootWriter) -> RootWriter: ...
 
     @abstractmethod
-    def owners_stopped(self, member: type[Install], root: Path,
-                       installed: Stack) -> AbstractContextManager[OwnersStopped]: ...
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]: ...
 
     @abstractmethod
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
@@ -73,9 +73,9 @@ class RehearsalMode(SingleFieldValue, RunMode):
         from agent_comms.installer.reporting import UnpostedWriter
         return UnpostedWriter()
 
-    def owners_stopped(self, member: type[Install], root: Path,
-                       installed: Stack) -> AbstractContextManager[OwnersStopped]:
-        return member.owners_kept(root, installed)
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+        return member.owners_kept(root, installed, staged)
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
@@ -90,9 +90,9 @@ class LiveMode(SingleFieldValue, RunMode):
     def destination(self, live: RootWriter) -> RootWriter:
         return live
 
-    def owners_stopped(self, member: type[Install], root: Path,
-                       installed: Stack) -> AbstractContextManager[OwnersStopped]:
-        return member.owners_stopped(root, installed)
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+        return member.owners_stopped(root, installed, staged)
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
