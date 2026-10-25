@@ -136,6 +136,7 @@ class InputObservation(ABC):
             state.observation_watcher = None
 
     def wake_observer(self, session_id: str) -> None:
+        self.ensure_live_drain(session_id)
         state = self.state(session_id)
         # A process-local wake can carry work that did not change an input file.
         state.repeat_observation = True

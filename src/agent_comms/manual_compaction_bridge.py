@@ -84,14 +84,12 @@ async def compact_context(
 
 
 async def _compact_started(runner, session_id, thread_name, instructions):
-    task = asyncio.current_task()
-    assert task is not None
     async with AsyncExitStack() as resources:
+        resources.enter_context(runner.own_turn_task(session_id))
         owner = await Coordination.run_worker(partial(
             runner.acquire_turn, resources, session_id, thread_name,
-            TurnId.mint(), "Compacting context", task=task,
+            TurnId.mint(), "Compacting context",
         ))
-        runner.turn_tasks[session_id] = task
         await runner.transition_turn(
             session_id, owner.turn_lease, CompactionPhase(resume=PublishingPhase())
         )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -124,6 +124,24 @@ class TurnRunner:
         self.inputs = inputs
         self.goals.bind(sessions, inputs)
 
+    @contextmanager
+    def own_turn_task(self, session_id: str):
+        """Hold the busy task through lease/input cleanup, then wake its observer.
+
+        A READY goal is not a new inbox message. Every turn exit must publish
+        that this owner can schedule again, including a reused idle observer.
+        Shutdown clears the slots before cancellation and therefore cannot wake.
+        """
+        task = asyncio.current_task()
+        assert task is not None
+        self.turn_tasks[session_id] = task
+        try:
+            yield
+        finally:
+            if self.turn_tasks.get(session_id) is task:
+                self.turn_tasks.pop(session_id)
+                self.inputs.wake_observer(session_id)
+
     def session_busy(self, session_id: str) -> bool:
         return session_id in self.turn_tasks or self.turn_state(session_id).active.phase.busy
 
@@ -196,54 +214,48 @@ class TurnRunner:
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
         session_id = request.session_id
-        turn_task = asyncio.current_task()
-        assert turn_task is not None
-        self.turn_tasks[session_id] = turn_task
-        try:
-            thread_name = await self.sessions.sync_identity(session_id)
-            await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
-            text = self.effects._prompt_text(request)
-            agent_task: str | None = None
-            relay_text: str | None = None
-            if text.startswith(AGENT_PREFIX):
-                agent_task = text[len(AGENT_PREFIX) :].strip()
-            elif text.startswith(RELAY_PREFIX):
-                relay_text = text[len(RELAY_PREFIX) :].strip()
-            elif NamedTarget.leads(text):
-                relay_text = text
-            else:
-                agent_task = text.strip()
-            if relay_text:
-                target, body = parse_target(relay_text)
-                sent = await Coordination.run_worker(partial(
-                    self.comms.messaging.send, thread_name, target, body,
-                ))
-                for notice in sent.notices:
-                    await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(
-                        events.Notice(text=notice)
-                    )
-            self.effects._debug_log(
-                f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
-            )
-            if images or agent_task:
-                await InitialInput.run(self.inputs,
-                    session_id,
-                    thread_name,
-                    agent_task or "",
-                    images=images,
-                    display_text=display_text,
-                    input_id=input_id,
-                    origin=origin,
+        with self.own_turn_task(session_id):
+            try:
+                thread_name = await self.sessions.sync_identity(session_id)
+                await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+                text = self.effects._prompt_text(request)
+                agent_task: str | None = None
+                relay_text: str | None = None
+                if text.startswith(AGENT_PREFIX):
+                    agent_task = text[len(AGENT_PREFIX) :].strip()
+                elif text.startswith(RELAY_PREFIX):
+                    relay_text = text[len(RELAY_PREFIX) :].strip()
+                elif NamedTarget.leads(text):
+                    relay_text = text
+                else:
+                    agent_task = text.strip()
+                if relay_text:
+                    target, body = parse_target(relay_text)
+                    sent = await Coordination.run_worker(partial(
+                        self.comms.messaging.send, thread_name, target, body,
+                    ))
+                    for notice in sent.notices:
+                        await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(
+                            events.Notice(text=notice)
+                        )
+                self.effects._debug_log(
+                    f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
                 )
-            self.effects._debug_log("prompt:returning")
-            return PromptResponse(stop_reason="end_turn")
-        except asyncio.CancelledError:
-            self.effects._debug_log("prompt:cancelled")
-            return PromptResponse(stop_reason="cancelled")
-        finally:
-            if self.turn_tasks.get(session_id) is turn_task:
-                self.turn_tasks.pop(session_id, None)
-            self.inputs.ensure_live_drain(session_id)
+                if images or agent_task:
+                    await InitialInput.run(self.inputs,
+                        session_id,
+                        thread_name,
+                        agent_task or "",
+                        images=images,
+                        display_text=display_text,
+                        input_id=input_id,
+                        origin=origin,
+                    )
+                self.effects._debug_log("prompt:returning")
+                return PromptResponse(stop_reason="end_turn")
+            except asyncio.CancelledError:
+                self.effects._debug_log("prompt:cancelled")
+                return PromptResponse(stop_reason="cancelled")
 
     def pause_active_goal(self, thread: Thread) -> None:
         for goal in thread.goal.active():
@@ -311,8 +323,7 @@ class TurnRunner:
 
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: str, thread_name: str,
-        turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(), *,
-        task: TurnTask | None = None,
+        turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(),
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
 
@@ -323,7 +334,6 @@ class TurnRunner:
         owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
         resources.push_async_callback(
             self.settle_turn, session_id, owner.turn_lease,
-            task=task,
         )
         return owner
 
@@ -342,16 +352,12 @@ class TurnRunner:
         self,
         session_id: str,
         lease: TurnLeaseFence,
-        *,
-        task: TurnTask | None = None,
     ) -> None:
         """Settle after terminal publication, releasing waiters even if the UI fails.
 
         Native output completion is not lifecycle settlement. Keep the exact
         lease until Done, durable input retirement and relay publication finish.
         """
-        if task is not None and self.turn_tasks.get(session_id) is task:
-            self.turn_tasks.pop(session_id, None)
         async with AsyncExitStack() as resources:
             update = await Coordination.run_worker(partial(
                 self.finish_turn, resources, session_id, lease,
@@ -405,33 +411,29 @@ class TurnRunner:
         inbox without pretending that its pending prompts reached the model.
         """
         async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
-            task = asyncio.current_task()
-            assert task is not None
-            owner = await Coordination.run_worker(partial(
-                self.comms.registry.require, execution.owner_name,
-            ))
-            following = OwnerFollowingInputs(
-                self.inputs, session_id, owner, self.inputs.bind_native_turn(session_id, owner),
-            )
-            self.turn_tasks[session_id] = task
-            try:
-                result = await execution.run(
-                    on_compaction=AcpEventConsumer(self.effects, session_id, self.runtime).dispatch,
-                    pi_session=self.backend_for(session_id, owner),
-                    following=following,
+            with self.own_turn_task(session_id):
+                owner = await Coordination.run_worker(partial(
+                    self.comms.registry.require, execution.owner_name,
+                ))
+                following = OwnerFollowingInputs(
+                    self.inputs, session_id, owner, self.inputs.bind_native_turn(session_id, owner),
                 )
-                return result
-            finally:
                 try:
-                    await self.inputs.finish_turn_inputs(following)
-                finally:
-                    if self.turn_tasks.get(session_id) is task:
-                        self.turn_tasks.pop(session_id, None)
-                    # SelectedParticipant closed the registry lease while unwinding
-                    # execution. Publish that canonical end on success and failure.
-                    await self.publish_turn_state(
-                        AcpEventConsumer(self.effects, session_id, self.runtime)
+                    result = await execution.run(
+                        on_compaction=AcpEventConsumer(self.effects, session_id, self.runtime).dispatch,
+                        pi_session=self.backend_for(session_id, owner),
+                        following=following,
                     )
+                    return result
+                finally:
+                    try:
+                        await self.inputs.finish_turn_inputs(following)
+                    finally:
+                        # SelectedParticipant closed the registry lease while unwinding
+                        # execution. Publish that canonical end on success and failure.
+                        await self.publish_turn_state(
+                            AcpEventConsumer(self.effects, session_id, self.runtime)
+                        )
 
     async def run_agent_turn(
         self,

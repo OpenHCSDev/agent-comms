@@ -133,8 +133,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
                 pending, remaining = ScheduledTurn.take_batch(pending)
                 if remaining:
                     state.pending_turns = remaining
-                inputs.effects.turns.turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
-                try:
+                with inputs.effects.turns.own_turn_task(session_id):
                     await inputs.effects.turns.run_agent_turn(
                         session_id,
                         inputs.sessions.require(session_id),
@@ -143,8 +142,6 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
                         origins=tuple(origin for turn in pending for origin in turn.origin.messages()),
                         autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
                     )
-                finally:
-                    inputs.effects.turns.turn_tasks.pop(session_id, None)
         return WakeDue()
 
     @staticmethod
