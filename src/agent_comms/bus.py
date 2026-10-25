@@ -499,7 +499,8 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     ) -> Iterator[sqlite3.Connection]:
         """Borrow one read-only snapshot, including for an archived bus. Root adoption
         creates the bus, so an absent file is a deleted bus and fails to open."""
-        with self._attached(lambda: SQLiteFile.observing(self.path), contention) as db:
+        with self.attached(
+                self.path, lambda: SQLiteFile.observing(self.path), contention) as db:
             yield db
 
     def backup(self, destination: Path) -> None:

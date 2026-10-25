@@ -55,7 +55,7 @@ from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.errors import MissingSourceLine, ToolRefusedError
+from agent_comms.errors import MissingSourceLine, TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import (
     GoalId,
     FieldCodec,
@@ -122,6 +122,7 @@ from agent_comms.typed_table import (
     TextStorage,
     TypedTable,
 )
+from .goal_scope import OneGoal
 from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -2770,10 +2771,6 @@ class HuntRecord(TodoStoreRows, TypedTable):
     hunt: Hunt
 
 
-class TodoError(ToolRefusedError):
-    """A todo request is invalid or its persisted state cannot be trusted."""
-
-
 class SharedWorktreeRefusal(TodoError):
     """Two different order holders cannot write into the same physical worktree."""
 
@@ -2792,15 +2789,6 @@ class SharedWorktreeRefusal(TodoError):
 
 class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
     """The todo store could not complete its write; its original cause is preserved."""
-
-
-class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
-    """The expected revision, assignee or generation is no longer current."""
-
-    def __init__(self, current: Todo):
-        self.current = current
-        owner = current.assignment.owner if current.assignment else "unassigned"
-        super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
 
 
 class NotOrderCommander(TodoError):  # noqa: N818 - domain-specific refusal outcome
@@ -3529,7 +3517,7 @@ class OrderHeadReview(HeadReviewOrder):
         record = OrderHeadReviewRecord(request, actor, RecordedEventTime(time.time()), verdict, self.link)
         operation = RecordOrderHeadVerdict(self.expected_revision, record)
         goals.update_goal(self.link.previous.owner, HeadReviewedOrderGoalAction(
-            expect=GoalPrecondition(goal_id=self.link.previous.generation),
+            expect=GoalPrecondition(goal_id=OneGoal(self.link.previous.generation)),
             problem=self.link.problem, operation=operation,
         ))
         return record

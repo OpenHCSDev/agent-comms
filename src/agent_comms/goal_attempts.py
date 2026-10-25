@@ -76,6 +76,7 @@ from .typed_table import (
 )
 
 if TYPE_CHECKING:
+    from .goal_scope import GoalScope
     from .goal_management import Goals
     from .threads import Thread
     from .turn_context import TurnContext
@@ -750,23 +751,26 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
         AtomicFile(self.path).sync()
 
     @contextmanager
-    def writing(self) -> Iterator[sqlite3.Connection]:
-        with closing(self._connect()) as conn, self.transaction(conn):
+    def writing(self, committed: Callable[[], None] = lambda: None) -> Iterator[sqlite3.Connection]:
+        with closing(self._connect()) as conn, self.transaction(conn, committed):
             yield conn
 
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]
     ) -> _T:
-        """A failed commit, sync, or readback is never a launch authorization."""
-        try:
-            with self.writing() as conn:
-                result = operation(conn)
+        """A failed commit, sync, or readback is never a launch authorization, and is never
+        announced: the fsync and readback run before the change is published."""
+        def attest() -> None:
             self._sync()
             try:
                 if not verify(result):
                     raise StorageUncertainError("Goal attempt readback does not attest the write.")
             except sqlite3.Error as error:
                 raise StorageUncertainError("Goal attempt readback failed.") from error
+
+        try:
+            with self.writing(attest) as conn:
+                result = operation(conn)
         except errors.GoalAttemptError:
             raise
         except (sqlite3.Error, OSError) as error:
@@ -791,6 +795,18 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
     def read_attempt(self, attempt_id: str) -> LedgerAttempt:
         with closing(self._connect()) as conn:
             return AttemptRecord.read_in(conn, attempt_id)
+
+    def failures(
+        self, owner_created_at: float, scope: GoalScope
+    ) -> tuple[FailedTurnEvidence, ...]:
+        with closing(self._connect()) as conn:
+            try:
+                return tuple(FailedTurnEvidence.select(
+                    conn, order_by=("generation",), owner_created_at=owner_created_at,
+                    **scope.failure_key(),
+                ))
+            except (sqlite3.Error, MalformedRecord) as error:
+                raise StorageUncertainError("Cannot read goal attempt failures.") from error
 
     def stopped_permit(self, goal_id: GoalId) -> GoalTurnPermit:
         generation = self.require_generation(goal_id)

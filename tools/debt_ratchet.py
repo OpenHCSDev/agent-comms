@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import atexit
 import dataclasses
 import enum
 import fcntl
@@ -20,6 +21,7 @@ import json
 import os
 import pickle
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,6 +52,7 @@ from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.carry import STEPS
+from module_layers import PACKAGE, StackClient
 from stored_formats import StoredForm
 from typing_names import TypingImports, TypingReference
 from agent_comms.field_codec import FieldCodec, ViewExclusion, boundary_decoder, projected
@@ -136,11 +139,29 @@ class ContentCache:
 
 
 
-class Side(enum.Enum):
-    """The two revisions a comparison measures; the value names a checker's cache."""
+class Side(DeclaredFamily, affix="Side"):
+    """One of the two revisions a comparison measures; its declared name names a checker's cache."""
 
-    BASE = "base"
-    HEAD = "head"
+    @staticmethod
+    @abstractmethod
+    def ref(base: str, head: str) -> str:
+        """This side's revision of the compared pair."""
+
+    @classmethod
+    def sides(cls) -> tuple[type[Side], ...]:
+        return cls.members_with(cls)
+
+
+class BaseSide(Side):
+    @staticmethod
+    def ref(base: str, head: str) -> str:
+        return base
+
+
+class HeadSide(Side):
+    @staticmethod
+    def ref(base: str, head: str) -> str:
+        return head
 
 
 class Measure(DeclaredFamily, affix="Measure"):
@@ -175,6 +196,14 @@ class Measure(DeclaredFamily, affix="Measure"):
     def environment(root: str, tree: Path) -> dict[str, str]:
         """The environment of a tool run in a revision extracted to the tree."""
         return dict(os.environ)
+
+    @classmethod
+    def checker_output(cls, result: subprocess.CompletedProcess[bytes], subject: str) -> str:
+        """A checker's report, once it exits as a finding run: zero or one."""
+        output = (result.stdout + result.stderr).decode()
+        if result.returncode not in (0, 1):
+            raise ValueError(f"{cls.__name__} could not check {subject}: {output}")
+        return output
 
     @staticmethod
     def source_paths(root: str, tree: Path) -> tuple[str, ...]:
@@ -276,6 +305,16 @@ class PhaseSiteCount(MeasureCount):
 
     def grew(self, grown: int) -> str:
         return f"done plan phase {self.phase.__name__} no longer holds: {self.site}"
+
+
+@dataclass(frozen=True)
+class ClientFileCount(FileCount):
+    """Type errors in one stack client file, which the client's own code cannot add: both sides
+    check the same client commit."""
+
+    def grew(self, grown: int) -> str:
+        return (f"grew {self.text} +{grown}: this change removes or changes an agent_comms name "
+                "that client file uses; run mypy on it to see which")
 
 
 # One revision's counts, each under the record of what it counts.
@@ -587,8 +626,8 @@ class SyntaxPasses(InventoryMeasure[dict[type[CountedSource], int]]):
             [(path, reading[measure]) for path, reading in readings.items()]).items()}
 
     @classmethod
-    def side(cls, side: Side, repo: Path, ref: str,
-             paths: list[str]) -> tuple[Side, dict[str, dict[type[CountedSource], int]]]:
+    def side(cls, side: type[Side], repo: Path, ref: str,
+             paths: list[str]) -> tuple[type[Side], dict[str, dict[type[CountedSource], int]]]:
         return side, cls.read(repo, ref, paths)
 
     @classmethod
@@ -596,20 +635,20 @@ class SyntaxPasses(InventoryMeasure[dict[type[CountedSource], int]]):
               root: str) -> tuple[Callable[[], object], ...]:
         shards = os.process_cpu_count() or 1
         return tuple(partial(cls.side, side, repo, ref, paths[shard::shards])
-                     for side, ref in zip(Side, (base, head), strict=True)
+                     for side in Side.sides() for ref in (side.ref(base, head),)
                      for paths in (sorted(changed & cls.inventory(repo, ref, root)),)
                      for shard in range(min(shards, len(paths))))
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
                 root: str) -> tuple[Counts, Counts]:
-        readings: dict[Side, dict[str, dict[type[CountedSource], int]]] = {
-            side: {} for side in Side}
+        readings: dict[type[Side], dict[str, dict[type[CountedSource], int]]] = {
+            side: {} for side in Side.sides()}
         for side, read in results:
             readings[side].update(read)
-        return PerFileMeasure.align(*(cls.measured(repo, ref, base, head,
+        return PerFileMeasure.align(*(cls.measured(repo, side.ref(base, head), base, head,
                                                    dict(sorted(readings[side].items())), root)
-                                      for side, ref in zip(Side, (base, head), strict=True)))
+                                      for side in Side.sides()))
 
 
 class MetadataKeys(ast.NodeVisitor):
@@ -688,7 +727,27 @@ class PlainStrIdAnnotation(PerFileOccurrenceMeasure):
         return 1
 
 
-class CheckedRevision(Measure):
+class SideCounts(Measure):
+    """Findings counted per subject on each side, summed over the measure's parts."""
+
+    @classmethod
+    def measured(cls, found: dict[type[Side], Counter[str]], changed: set[str]) -> list[str]:
+        """The subjects compared: every changed file, counting zero where a side has none."""
+        return sorted(changed)
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[Counts, Counts]:
+        found: dict[type[Side], Counter[str]] = {side: Counter() for side in Side.sides()}
+        for side, counted in results:
+            found[side] += counted
+        subjects = cls.measured(found, changed)
+        def counts(side: type[Side]) -> Counts:
+            return {cls.at(subject): found[side][subject] for subject in subjects}
+        return counts(BaseSide), counts(HeadSide)
+
+
+class CheckedRevision(SideCounts):
     """A checker's findings per changed file. Both revisions are checked under the head's
     configuration, so the difference is the code's alone. A path missing at one revision counts
     zero there, as in every per-file measure."""
@@ -697,7 +756,7 @@ class CheckedRevision(Measure):
 
     @staticmethod
     @abstractmethod
-    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
+    def command(tree: Path, selected: list[str], side: type[Side]) -> list[str]:
         """The checker's arguments after `python -m`, run in the revision extracted to the tree."""
 
     @staticmethod
@@ -726,14 +785,14 @@ class CheckedRevision(Measure):
 
     @classmethod
     def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
-                 side: Side) -> tuple[Side, Counter[str]]:
+                 side: type[Side]) -> tuple[type[Side], Counter[str]]:
         return side, ContentCache.memo(
             partial(cls.checked, repo, ref, head, root, selected, side),
             cls.__name__, root, cls.inputs(repo, ref, head, root, selected), *selected)
 
     @classmethod
     def checked(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
-                side: Side) -> Counter[str]:
+                side: type[Side]) -> Counter[str]:
         # A missing checker exits 1 like a finding run, so importing it first fails loud instead.
         importlib.import_module(cls.command(Path(), [], side)[0])
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
@@ -747,11 +806,9 @@ class CheckedRevision(Measure):
                 (sys.executable, "-m", *cls.command(tree, selected, side)),
                 cwd=tree, env=cls.environment(root, tree), timeout=600,
             )
-        if result.returncode not in (0, 1):
-            raise ValueError(f"{cls.__name__} could not check {ref}: {result.stderr}")
         # A checker reports each file under the path it was given, inside the tree or relative to
         # it; mypy also reports the modules it follows outside the tree, which are not measured.
-        output = (result.stdout + result.stderr).decode()
+        output = cls.checker_output(result, ref)
         reported = (Path(tree, match[1]) for match in cls.finding.finditer(output))
         return Counter(path.relative_to(tree).as_posix()
                        for path in reported if path.is_relative_to(tree))
@@ -760,19 +817,9 @@ class CheckedRevision(Measure):
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
         return tuple(partial(cls.findings, repo, ref, head, root, batch, side)
-                     for side, ref in zip(Side, (base, head), strict=True)
+                     for side in Side.sides() for ref in (side.ref(base, head),)
                      for batch in cls.batches(sorted(changed & python_paths(repo, ref, root)))
                      if batch)
-
-    @classmethod
-    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
-                root: str) -> tuple[Counts, Counts]:
-        found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
-        for side, counted in results:
-            found[side] += counted
-        def counts(side: Side) -> Counts:
-            return {cls.at(path): found[side][path] for path in sorted(changed)}
-        return counts(Side.BASE), counts(Side.HEAD)
 
 
 class Advisory(Measure):
@@ -813,12 +860,12 @@ class Unformatted(Advisory, CheckedRevision):
             (scratch / path).write_bytes(source)
 
     @staticmethod
-    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
+    def command(tree: Path, selected: list[str], side: type[Side]) -> list[str]:
         return Unformatted.black("--check", *selected)
 
     @classmethod
     def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
-                 side: Side) -> tuple[Side, Counter[str]]:
+                 side: type[Side]) -> tuple[type[Side], Counter[str]]:
         """Black reads only the file and the configuration, so each file's finding is stored
         under its own blob and one Black run checks the batch's unstored files."""
         configuration = cls.configuration(repo, head)
@@ -838,7 +885,7 @@ class LintFindings(Advisory, CheckedRevision):
     finding = re.compile(r"^(.+?\.py):\d+:\d+: ", re.MULTILINE)
 
     @staticmethod
-    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
+    def command(tree: Path, selected: list[str], side: type[Side]) -> list[str]:
         return ["ruff", "check", "--no-cache", "--output-format", "concise", *selected]
 
 
@@ -849,20 +896,99 @@ class TypeErrors(CheckedRevision):
     finding = re.compile(r"^(.+?\.py):\d+: error: ", re.MULTILINE)
 
     @staticmethod
-    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
+    def mypy(cache: Path, *arguments: str) -> list[str]:
+        """Mypy's arguments after `python -m`, keeping its analysis in the cache directory."""
+        return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
+                *arguments]
+
+    @staticmethod
+    def command(tree: Path, selected: list[str], side: type[Side]) -> list[str]:
         # Mypy reuses a cached module whose path, size and whole-second mtime match its file, and
         # hashes the file otherwise. Every extracted tree has a new path, so each module is checked
         # against its content while unchanged analysis carries from one run to the next. Each side
         # keeps its own cache: the two revisions run at once, and a base usually matches the
         # previous run's base.
-        cache = ContentCache.directory.with_name("debt-ratchet-mypy") / side.value
-        return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
-                *(str(tree / path) for path in selected)]
+        cache = ContentCache.directory.with_name("debt-ratchet-mypy") / side.declared_name
+        return TypeErrors.mypy(cache, *(str(tree / path) for path in selected))
 
     @staticmethod
     def environment(root: str, tree: Path) -> dict[str, str]:
         """Module names start at the source directory, as they do when the package is installed."""
         return {**os.environ, "MYPYPATH": os.pathsep.join(Measure.source_paths(root, tree))}
+
+
+class ClientTypeErrors(SideCounts):
+    """Mypy errors in each stack client file that imports agent_comms, checked against each
+    revision's package. Both sides read the same client commit, so the client's own errors cancel
+    and an error the head adds is a name or signature the client uses that the change took away:
+    #3110 deleted TurnState.settles as unused while Toad's conversation_turn.py:262 called it, and
+    only the running app found it."""
+
+    finding = TypeErrors.finding
+
+    @staticmethod
+    @cache
+    def clients(repo: Path, head: str) -> tuple[StackClient, ...]:
+        """The head's stack clients, cloned once per run and read by both sides; a revision
+        declaring no stack has none."""
+        if not git(repo, "ls-tree", "--name-only", head, "--", "stack/pyproject.toml"):
+            return ()
+        into = Path(tempfile.mkdtemp(prefix="debt-ratchet-clients-"))
+        atexit.register(shutil.rmtree, into, True)
+        (into / "stack").mkdir()
+        (into / "stack/pyproject.toml").write_bytes(git(repo, "show", f"{head}:stack/pyproject.toml"))
+        return StackClient.fetched(into / "stack", into)
+
+    @staticmethod
+    def selected(client: StackClient) -> list[str]:
+        return sorted({entry.path for entry in client.imports
+                       if entry.module.partition(".")[0] == PACKAGE})
+
+    @classmethod
+    def findings(cls, repo: Path, ref: str, client: StackClient, side: type[Side]) -> tuple[type[Side], Counter[str]]:
+        commit = git(client.checkout, "rev-parse", "HEAD").decode().strip()
+        tree = git(repo, "rev-parse", f"{ref}:src").decode().strip()
+        return side, ContentCache.memo(partial(cls.checked, repo, ref, client, side),
+                                       cls.__name__, client.name, commit, tree)
+
+    @classmethod
+    def checked(cls, repo: Path, ref: str, client: StackClient, side: type[Side]) -> Counter[str]:
+        selected = cls.selected(client)
+        cache = ContentCache.directory.with_name("debt-ratchet-mypy-clients") / client.name / side.declared_name
+        with tempfile.TemporaryDirectory(prefix="debt-ratchet-client-") as scratch:
+            subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref, "src"),
+                           check=True, timeout=60)
+            # The client checks under its own configuration, from its checkout.
+            result = SpawnedProcess.run(
+                (sys.executable, "-m", *TypeErrors.mypy(
+                    cache, "--follow-imports=silent", "--ignore-missing-imports", *selected)),
+                cwd=client.checkout, timeout=600,
+                env={**os.environ, "MYPYPATH": os.pathsep.join(
+                    (str(Path(scratch, "src")), str(client.checkout / "src")))},
+            )
+        output = cls.checker_output(result, f"{client.name} at {ref}")
+        return Counter(f"{client.name}/{match[1]}" for match in cls.finding.finditer(output)
+                       if match[1] in selected)
+
+    @classmethod
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        # Only a change to the package the clients import can change what they see.
+        if not any(path.startswith(f"src/{PACKAGE}/") for path in changed):
+            return ()
+        return tuple(partial(cls.findings, repo, side.ref(base, head), client, side)
+                     for client in cls.clients(repo, head)
+                     if cls.selected(client)
+                     for side in Side.sides())
+
+    @classmethod
+    def measured(cls, found: dict[type[Side], Counter[str]], changed: set[str]) -> list[str]:
+        """The client files with an error on either side; changed paths are the package's."""
+        return sorted(found[BaseSide].keys() | found[HeadSide].keys())
+
+    @classmethod
+    def at(cls, path: str) -> ClientFileCount:
+        return ClientFileCount(cls, path)
 
 
 @dataclass(frozen=True)
@@ -1246,6 +1372,21 @@ class FunctionLocalImport(PerFileMeasure, LocatedSource):
         collector = cls.Collector()
         collector.visit(cls.tree(source, filename))
         return collector.found
+
+
+class EnumDeclaration(PerFileMeasure, LocatedSource):
+    """Classes built on the standard enum types: a family whose members cannot own their
+    behaviour, so every case is decided by a switch outside it."""
+
+    bases: typing.ClassVar[frozenset[str]] = frozenset(
+        name for name, value in vars(enum).items()
+        if isinstance(value, type) and issubclass(value, enum.Enum))
+
+    @classmethod
+    def lines(cls, source: bytes, filename: str) -> list[int]:
+        return [node.lineno for node in ast.walk(cls.tree(source, filename))
+                if isinstance(node, ast.ClassDef)
+                and any(ast.unparse(base).rpartition(".")[2] in cls.bases for base in node.bases)]
 
 
 class IdentityReading:

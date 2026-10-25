@@ -192,10 +192,10 @@ class Fleet:
         )
         return claimed
 
-    def pull_request(self, number: int, branch: str, head: str) -> None:
+    def pull_request(self, number: int, branch: str, head: str, *, draft: bool = False) -> None:
         stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         self.github.put(self.repository, UnmergedListedPullRequest(
-            number, branch, head, stamp, "main", reviewable_times=(stamp,),
+            number, branch, head, stamp, "main", reviewable_times=(stamp,), draft=draft,
         ))
 
 
@@ -509,6 +509,17 @@ def test_replay_raises_each_incident_once(fleet):
     assert {rule.observation_key() for rule in first.rules} == {
         rule.observation_key() for rule in second.rules
     }
+
+
+def test_an_empty_draft_is_the_first_commit_not_an_empty_pr(fleet):
+    built, _ = fleet
+    worktree = built.worktree("draft", base=built.main)
+    built.push(worktree)
+    todo = built.unit("draft", worktree)
+    built.pull_request(21, "draft", built.main, draft=True)
+    built.claim(todo, 21, built.main, at=time.time())
+    assert not any(isinstance(rule, EmptyPullRequest) and rule.problem == todo.id
+                   for rule in built.observe().rules)
 
 
 def test_a_stopped_unit_is_not_spinning(fleet):

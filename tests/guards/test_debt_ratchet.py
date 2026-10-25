@@ -1,6 +1,7 @@
 """Exercise the command against real Git commits, without mocking Git or ASTs."""
 
 import ast
+import asyncio
 import json
 import os
 import subprocess
@@ -15,7 +16,7 @@ import pytest
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from fixture_git import IDENTITY
-from process_tree_fixture import TREE, identities
+from process_tree_fixture import TREE, identities, ready
 
 from debt_ratchet import (
     AUDIT_SCRIPTS,
@@ -26,6 +27,7 @@ from debt_ratchet import (
     DonePhaseBroken,
     ForeignFieldSpellings,
     FrozenFieldWrite,
+    EnumDeclaration,
     FunctionLocalImport,
     GitMeasure,
     NoneAbsence,
@@ -231,11 +233,7 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
     observed = ()
     try:
         with repo.comparing(base, head) as child:
-            deadline = time.monotonic() + 30
-            while not announcement.exists():
-                assert child.alive(), child.process.communicate()
-                assert time.monotonic() < deadline, "stored-format probe did not become ready"
-                time.sleep(.01)
+            asyncio.run(ready(announcement, child.alive))
             observed = identities(announcement)
             assert all(member.alive() for member in observed)
             pool = child.platform.group_members(child.identity)
@@ -1207,6 +1205,11 @@ def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):
 def test_local_import_scope_counts_nested_functions_and_classes_once():
     source = b"""import top\nclass ModuleClass:\n    import top_class\ndef outer():\n    import one\n    class Local:\n        import two\n        def method(self):\n            from package import three\n    async def inner():\n        import four\n"""
     assert FunctionLocalImport.count(source, "imports.py") == 4
+
+
+def test_enum_declarations_count_every_stdlib_enum_base_and_nothing_else():
+    source = b"""import enum\nfrom enum import Enum, StrEnum\nclass A(Enum): pass\nclass B(enum.IntFlag): pass\nclass C(str, StrEnum): pass\nclass Family: pass\nclass Member(Family): pass\ndef local():\n    class D(enum.Flag): pass\n"""
+    assert EnumDeclaration.lines(source, "kinds.py") == [3, 4, 5, 9]
 
 
 def string_identity_readings(source: bytes) -> list[tuple[str, type]]:

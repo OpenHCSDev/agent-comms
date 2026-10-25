@@ -15,8 +15,10 @@ from agent_comms.coordination_errors import (
     IntegrityViolationError,
 )
 from agent_comms.diagnostics import PublicationMeasurements
-from agent_comms.locked_store import DEFAULT_STORE_CONTENTION, RegistryFile, StoreContention
-from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
+from agent_comms.locked_store import RegistryFile
+from agent_comms.store_files import (
+    DEFAULT_STORE_CONTENTION, UNBOUNDED_CONTENTION, StoreContention, StoreLockContention,
+)
 
 from .store_files import (
     SharedLock,

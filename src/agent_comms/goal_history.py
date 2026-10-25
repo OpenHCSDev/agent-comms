@@ -15,18 +15,21 @@ from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self
 
-from agent_comms.field_codec import WireOmitDefault, GoalId
+from agent_comms.field_codec import WireOmitDefault
 from agent_comms.owner_requests import NoRequestRevision, RequestRevision
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
+from .goal_failure_observation import FailedTurnEvidence
+from .goal_scope import GoalScope
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
+from .tool_result import DeclaredReply
 from .reported_turn import ReportedTurnState
 from .typed_table import (
     Column,
@@ -167,6 +170,19 @@ class RegistryWriterObserver(JournalObserver):
 
 
 @dataclass(frozen=True)
+class RecordedGoalHistory(DeclaredReply):
+    """A thread's goal revisions beside the attempt ledger's failures, which only the ledger writes."""
+
+    history: tuple[RecordedGoalRevision, ...]
+    failures: tuple[FailedTurnEvidence, ...]
+
+    @classmethod
+    def empty(cls) -> Self:
+        """No owner answered: no revisions and no failed attempts."""
+        return cls((), ())
+
+
+@dataclass(frozen=True)
 class GoalHistoryEntry(RecordedGoalRevision, RowidSequenced, DurableTables):
     # The durable kind field is a journal fact, not the TypedTable family tag.
     schema_error = GoalHistoryError
@@ -267,22 +283,12 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             transaction.set_state(sequence, CommittedEntry)
 
     def history(
-        self, owner_created_at: float, current: GoalDeclaration, goal_id: GoalId | None = None
+        self, owner_created_at: float, current: GoalDeclaration, scope: GoalScope
     ) -> tuple[GoalHistoryEntry, ...]:
         with self._transaction() as transaction:
             entries = transaction.observe(owner_created_at, current, LockFreeObserver)
         return tuple(
-            row
-            for entry in entries
-            for row in entry.state.recorded(entry)
-            if (
-                goal_id is None
-                or goal_id
-                in {
-                    row.before.reported_id(),
-                    row.after.reported_id(),
-                }
-            )
+            row for entry in entries for row in entry.state.recorded(entry) if scope.keeps(row)
         )
 
 
