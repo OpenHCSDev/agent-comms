@@ -70,7 +70,8 @@ from .input_attempt import (
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .threads import Thread
-from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoError, TodoStore
+from .errors import TodoError
+from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 from .turn_lease import TurnCompletion
 
 _LOG = logging.getLogger(__name__)

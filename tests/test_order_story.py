@@ -13,7 +13,7 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.change_report import FileLine
-from agent_comms.errors import MissingSourceLine
+from agent_comms.errors import MissingSourceLine, TodoConflict, TodoError
 from agent_comms.order_tools import (
     CommsChangeProblemTool,
     CommsFleetStoryTool,
@@ -37,8 +37,6 @@ from agent_comms.todos import (
     SendBackVerdict,
     StrikeReason,
     StrikeTodo,
-    TodoConflict,
-    TodoError,
     UnorderedProblemOrder,
     WithdrawTodo,
 )
