@@ -59,3 +59,9 @@ def test_a_launch_inside_a_long_lived_process_does_not_count_the_process_age():
     assert age > 0.1
     assert hosted.seconds < 0.05
     assert launched.seconds >= age
+
+
+def test_a_process_launcher_timing_keeps_the_deployed_launcher_wire():
+    timing = PhaseTiming(ProcessLauncherPhase(), 1.0, 1.0)
+
+    assert FieldCodec.encode(timing.launched()) == LAUNCHER_PHASES[0]

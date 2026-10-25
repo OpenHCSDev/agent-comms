@@ -85,7 +85,10 @@ class LauncherPhase(InstallPhase):
 
 class ProcessLauncherPhase(LauncherPhase):
     """A launcher process that exists for this install starts before Python imports its
-    CLI."""
+    CLI. Its wire name stays the launcher's, which older installers decode."""
+
+    def launched(self) -> LaunchedPhase:
+        return LaunchedPhase(LauncherPhase)
 
     def started_at(self, now: float) -> float:
         platform = Platform.current()
