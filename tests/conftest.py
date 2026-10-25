@@ -234,50 +234,6 @@ def cursor_delivery(source_reads: NativeEvidenceScope) -> CursorDelivery:
     return CursorDelivery(source_reads=source_reads)
 
 
-@contextmanager
-def foreign_store_lock(store: Path, flag: int) -> Iterator[None]:
-    """Another process holding ``store``'s lock with ``flag`` until the block ends; a
-    fresh interpreter shares none of this process's lock reentry."""
-    from agent_comms.store_files import store_lock_path
-
-    holder = subprocess.Popen([
-        sys.executable, "-c",
-        "import fcntl,sys\n"
-        "stream = open(sys.argv[1], 'a+b')\n"
-        "fcntl.flock(stream, int(sys.argv[2]))\n"
-        "print('held', flush=True)\n"
-        "sys.stdin.read()\n",
-        str(store_lock_path(store)), str(flag),
-    ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-    try:
-        assert holder.stdout is not None and holder.stdout.readline() == "held\n"
-        yield
-    finally:
-        assert holder.stdin is not None
-        holder.stdin.close()
-        holder.wait(timeout=10)
-
-
-def finishes_within[R](seconds: float, operation: Callable[[], R]) -> R:
-    """Run ``operation`` on a daemon thread and fail, instead of hanging, when it waits longer."""
-    import concurrent.futures
-    import threading
-
-    result: concurrent.futures.Future[R] = concurrent.futures.Future()
-
-    def run() -> None:
-        try:
-            result.set_result(operation())
-        except BaseException as error:
-            result.set_exception(error)
-
-    threading.Thread(target=run, daemon=True).start()
-    try:
-        return result.result(timeout=seconds)
-    except concurrent.futures.TimeoutError:
-        pytest.fail(f"still waiting after {seconds} s")
-
-
 @pytest.fixture(scope="session")
 def pinned_native() -> Path:
     """The pinned Pi build, prepared the first time a test asks for it.

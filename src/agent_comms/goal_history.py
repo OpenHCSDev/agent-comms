@@ -47,17 +47,15 @@ class JournalState(DeclaredFamily, affix="Entry"):
 
     @classmethod
     def settle(
-        cls, history: GoalHistoryStore, connection: sqlite3.Connection,
-        row: GoalHistoryEntry, current: GoalDeclaration,
+        cls, transaction: GoalHistoryTransaction, row: GoalHistoryEntry, current: GoalDeclaration,
     ) -> None:
         """Resolved journal entries need no reconciliation."""
 
     @classmethod
     def reconcile(
-        cls, history: GoalHistoryStore, connection: sqlite3.Connection,
-        row: GoalHistoryEntry, current: GoalDeclaration,
+        cls, transaction: GoalHistoryTransaction, row: GoalHistoryEntry, current: GoalDeclaration,
     ) -> None:
-        cls.settle(history, connection, row, current)
+        cls.settle(transaction, row, current)
 
     @classmethod
     def recorded(cls, row: GoalHistoryEntry) -> tuple[GoalHistoryEntry, ...]:
@@ -68,27 +66,25 @@ class JournalState(DeclaredFamily, affix="Entry"):
 class PendingEntry(JournalState):
     @classmethod
     def settle(
-        cls, history: GoalHistoryStore, connection: sqlite3.Connection,
-        row: GoalHistoryEntry, current: GoalDeclaration,
+        cls, transaction: GoalHistoryTransaction, row: GoalHistoryEntry, current: GoalDeclaration,
     ) -> None:
         """A registry already showing the intent's value committed it, whether or not
         its writer is still running: that writer's own commit then finds nothing pending."""
         if current == row.after:
-            history._sync_visible_registry()
-            history._set_state_in(connection, row.sequence, CommittedEntry)
+            transaction.history._sync_visible_registry()
+            transaction.set_state(row.sequence, CommittedEntry)
 
     @classmethod
     def reconcile(
-        cls, history: GoalHistoryStore, connection: sqlite3.Connection,
-        row: GoalHistoryEntry, current: GoalDeclaration,
+        cls, transaction: GoalHistoryTransaction, row: GoalHistoryEntry, current: GoalDeclaration,
     ) -> None:
         if current == row.after:
-            cls.settle(history, connection, row, current)
+            cls.settle(transaction, row, current)
         elif current == row.before:
-            history._set_state_in(connection, row.sequence, AbortedEntry)
+            transaction.set_state(row.sequence, AbortedEntry)
         else:
             # A changed registry is not evidence that this intent committed.
-            history._set_state_in(connection, row.sequence, UncertainEntry)
+            transaction.set_state(row.sequence, UncertainEntry)
 
 
 class CommittedEntry(JournalState):
@@ -148,12 +144,11 @@ class JournalObserver(DeclaredFamily, affix="Observer"):
 
     @classmethod
     def reconcile(
-        cls, history: GoalHistoryStore, connection: sqlite3.Connection,
-        row: GoalHistoryEntry, current: GoalDeclaration,
+        cls, transaction: GoalHistoryTransaction, row: GoalHistoryEntry, current: GoalDeclaration,
     ) -> None:
         """No registry lock: a writer may sit between its intent and its registry save,
         so only an intent the registry already shows is settled."""
-        row.state.settle(history, connection, row, current)
+        row.state.settle(transaction, row, current)
 
 
 class LockFreeObserver(JournalObserver):
@@ -166,10 +161,9 @@ class RegistryWriterObserver(JournalObserver):
 
     @classmethod
     def reconcile(
-        cls, history: GoalHistoryStore, connection: sqlite3.Connection,
-        row: GoalHistoryEntry, current: GoalDeclaration,
+        cls, transaction: GoalHistoryTransaction, row: GoalHistoryEntry, current: GoalDeclaration,
     ) -> None:
-        row.state.reconcile(history, connection, row, current)
+        row.state.reconcile(transaction, row, current)
 
 
 @dataclass(frozen=True)
@@ -242,68 +236,14 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Goal history initialization is uncertain.") from error
 
     @contextmanager
-    def _transaction(self) -> Iterator[sqlite3.Connection]:
-        """Share durable commit mechanics without inventing an operation result."""
+    def _transaction(self) -> Iterator[GoalHistoryTransaction]:
+        """One durable write transaction; every journal operation runs inside one."""
         try:
             with closing(self._connect()) as connection, self.write_transaction(connection):
-                yield connection
+                yield GoalHistoryTransaction(self, connection)
             self._sync()
-        except (OSError, sqlite3.Error) as error:
+        except (OSError, sqlite3.Error, MalformedRecord) as error:
             raise GoalHistoryError("Goal history write durability is uncertain.") from error
-
-    def _insert(
-        self,
-        owner_created_at: float,
-        kind: type[RevisionKind],
-        state: type[JournalState],
-        before: GoalDeclaration,
-        after: GoalDeclaration,
-    ) -> int:
-        with self._transaction() as connection:
-            return self._insert_in(connection, owner_created_at, kind, state, before, after)
-
-    @staticmethod
-    def _insert_in(
-        connection: sqlite3.Connection,
-        owner_created_at: float,
-        kind: type[RevisionKind],
-        state: type[JournalState],
-        before: GoalDeclaration,
-        after: GoalDeclaration,
-    ) -> int:
-        # SQLite assigns the sequence; a stored entry always has one.
-        cursor = GoalHistoryEntry.insert_values(
-            connection,
-            kind=kind,
-            observed_at=time.time(),
-            before=before,
-            after=after,
-            owner_created_at=owner_created_at,
-            state=state,
-        )
-        sequence = cursor.lastrowid
-        if sequence is None:
-            raise GoalHistoryError("Goal history insert returned no sequence.")
-        return sequence
-
-    def _set_state(
-        self, sequence: int, state: type[JournalState]
-    ) -> None:
-        with self._transaction() as connection:
-            self._set_state_in(connection, sequence, state)
-
-    @staticmethod
-    def _set_state_in(
-        connection: sqlite3.Connection, sequence: int, state: type[JournalState]
-    ) -> None:
-        GoalHistoryEntry.update(
-            connection,
-            where="sequence=? AND state=?",
-            parameters=(
-                sequence, GoalHistoryEntry._fields_named(("state",))[0].encode(PendingEntry)
-            ),
-            state=state,
-        )
 
     def _sync_visible_registry(self) -> None:
         """Adopt a visible post-crash registry value before attesting an intent."""
@@ -317,59 +257,23 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
         except OSError as error:
             raise GoalHistoryError("Cannot sync visible goal authority.") from error
 
-    def _rows(self, owner_created_at: float) -> list[GoalHistoryEntry]:
-        try:
-            with closing(self._connect()) as connection:
-                return self._rows_in(connection, owner_created_at)
-        except (sqlite3.Error, MalformedRecord) as error:
-            raise GoalHistoryError("Cannot read goal history.") from error
-
-    @staticmethod
-    def _rows_in(connection: sqlite3.Connection, owner_created_at: float) -> list[GoalHistoryEntry]:
-        return GoalHistoryEntry.select(
-            connection,
-            where="owner_created_at=?",
-            parameters=(owner_created_at,),
-            order_by=("sequence",),
-        )
-
-    def observe(
-        self, owner_created_at: float, current: GoalDeclaration, observer: type[JournalObserver],
-    ) -> None:
-        """Reconcile uncertain writes and label unjournaled changes truthfully, in one
-        write transaction, so concurrent observers record a gap once."""
-        with self._transaction() as connection:
-            for row in self._rows_in(connection, owner_created_at):
-                observer.reconcile(self, connection, row, current)
-            committed = [
-                entry for row in self._rows_in(connection, owner_created_at)
-                for entry in row.state.recorded(row)
-            ]
-            if not committed:
-                for goal in current:
-                    self._insert_in(
-                        connection, owner_created_at, BaselineRevision, CommittedEntry, NoGoal(), goal)
-                return
-            last = committed[-1].after
-            if last != current:
-                # Known endpoints do not manufacture unobserved revisions or timing.
-                self._insert_in(
-                    connection, owner_created_at, ObservedGapRevision, CommittedEntry, last, current)
-
     def begin(self, owner_created_at: float, before: GoalDeclaration, after: GoalDeclaration) -> int:
-        self.observe(owner_created_at, before, RegistryWriterObserver)
-        return self._insert(owner_created_at, TransitionRevision, PendingEntry, before, after)
+        with self._transaction() as transaction:
+            transaction.observe(owner_created_at, before, RegistryWriterObserver)
+            return transaction.insert(owner_created_at, TransitionRevision, PendingEntry, before, after)
 
     def commit(self, sequence: int) -> None:
-        self._set_state(sequence, CommittedEntry)
+        with self._transaction() as transaction:
+            transaction.set_state(sequence, CommittedEntry)
 
     def history(
         self, owner_created_at: float, current: GoalDeclaration, goal_id: GoalId | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
-        self.observe(owner_created_at, current, LockFreeObserver)
+        with self._transaction() as transaction:
+            entries = transaction.observe(owner_created_at, current, LockFreeObserver)
         return tuple(
             row
-            for entry in self._rows(owner_created_at)
+            for entry in entries
             for row in entry.state.recorded(entry)
             if (
                 goal_id is None
@@ -380,3 +284,71 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
                 }
             )
         )
+
+
+@dataclass(frozen=True)
+class GoalHistoryTransaction:
+    """One open write transaction on a goal journal; its operations share it."""
+
+    history: GoalHistoryStore
+    connection: sqlite3.Connection
+
+    def rows(self, owner_created_at: float) -> list[GoalHistoryEntry]:
+        return GoalHistoryEntry.select(
+            self.connection,
+            where="owner_created_at=?",
+            parameters=(owner_created_at,),
+            order_by=("sequence",),
+        )
+
+    def insert(
+        self,
+        owner_created_at: float,
+        kind: type[RevisionKind],
+        state: type[JournalState],
+        before: GoalDeclaration,
+        after: GoalDeclaration,
+    ) -> int:
+        # SQLite assigns the sequence; a stored entry always has one.
+        cursor = GoalHistoryEntry.insert_values(
+            self.connection,
+            kind=kind,
+            observed_at=time.time(),
+            before=before,
+            after=after,
+            owner_created_at=owner_created_at,
+            state=state,
+        )
+        sequence = cursor.lastrowid
+        if sequence is None:
+            raise GoalHistoryError("Goal history insert returned no sequence.")
+        return sequence
+
+    def set_state(self, sequence: int, state: type[JournalState]) -> None:
+        GoalHistoryEntry.update(
+            self.connection,
+            where="sequence=? AND state=?",
+            parameters=(
+                sequence, GoalHistoryEntry._fields_named(("state",))[0].encode(PendingEntry)
+            ),
+            state=state,
+        )
+
+    def observe(
+        self, owner_created_at: float, current: GoalDeclaration, observer: type[JournalObserver],
+    ) -> list[GoalHistoryEntry]:
+        """Reconcile uncertain writes and label unjournaled changes truthfully, inside this
+        one transaction, so concurrent observers record a gap once; returns the journal."""
+        for row in self.rows(owner_created_at):
+            observer.reconcile(self, row, current)
+        committed = [
+            entry for row in self.rows(owner_created_at) for entry in row.state.recorded(row)
+        ]
+        if not committed:
+            for goal in current:
+                self.insert(owner_created_at, BaselineRevision, CommittedEntry, NoGoal(), goal)
+        elif committed[-1].after != current:
+            # Known endpoints do not manufacture unobserved revisions or timing.
+            self.insert(owner_created_at, ObservedGapRevision, CommittedEntry,
+                        committed[-1].after, current)
+        return self.rows(owner_created_at)

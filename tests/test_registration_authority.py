@@ -1,18 +1,17 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
 
-import fcntl
 import os
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from conftest import finishes_within, foreign_store_lock
+from test_locked_store import _hold_lock, event, process
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import TurnId, GoalId
 from agent_comms.goals import Goal
-from agent_comms.store_files import store_lock_path
+from agent_comms.store_files import SharedLock, store_lock_path
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_lease import RecordedGeneration
@@ -116,8 +115,14 @@ def test_a_phase_change_completes_while_another_process_reads_the_registry(tmp_p
     registry.live_owner_with_claim('owner')
     leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     lease = leased.require_turn_lease()
-    with foreign_store_lock(registry.store.path, fcntl.LOCK_SH):
-        effects = finishes_within(10, lambda: lease.record.transition(lease, PreparingPhase('reading')))
-        assert [state.active.phase for state in effects] == [PreparingPhase('reading')]
-        assert finishes_within(10, lease.record.read).phase == PreparingPhase('reading')
+    ready, release = event(), event()
+    # A phase change still waiting on the registry outlives the holder's bound, which fails it.
+    with process(_hold_lock, registry.store.path, SharedLock(), ready, release):
+        try:
+            assert ready.wait(5)
+            effects = lease.record.transition(lease, PreparingPhase('reading'))
+            assert [state.active.phase for state in effects] == [PreparingPhase('reading')]
+            assert lease.record.read().phase == PreparingPhase('reading')
+        finally:
+            release.set()
 

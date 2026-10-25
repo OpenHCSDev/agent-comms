@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-import fcntl
 import json
 import os
 from dataclasses import replace
@@ -12,7 +11,8 @@ import pytest
 
 from agent_comms.child_process import Platform
 from agent_comms.comms import Comms, wire
-from conftest import finishes_within, foreign_store_lock, installed_comms
+from conftest import installed_comms
+from test_locked_store import _hold_lock, event, process
 from agent_comms.goal_actions import (
     ClearGoalAction,
     CompletedGoalAction,
@@ -28,6 +28,7 @@ from agent_comms.goal_history import (
     TransitionRevision,
 )
 from agent_comms.goals import NoGoal
+from agent_comms.store_files import ExclusiveLock
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.tool_request import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
@@ -195,8 +196,13 @@ def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
 def test_goal_history_reads_while_another_process_writes_the_registry(tmp_path):
     comms = _wire(tmp_path)
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Ask @reviewer about the release"))
-    with foreign_store_lock(comms.registry.store.path, fcntl.LOCK_EX):
-        entries = finishes_within(10, lambda: comms.goals.goal_history("worker"))
+    ready, release = event(), event()
+    with process(_hold_lock, comms.registry.store.path, ExclusiveLock(), ready, release):
+        try:
+            assert ready.wait(5)
+            entries = comms.goals.goal_history("worker")
+        finally:
+            release.set()
     assert [entry.after for entry in entries][-1:] == [goal]
 
 
