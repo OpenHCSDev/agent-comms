@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.heartbeat_subjects import HeadSubject
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import OrderRefusingStandingRule, StuckMerge
@@ -20,7 +21,7 @@ from agent_comms.todos import (
     FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
-    StrikeReason, UnmergedListedPullRequest, VerdictReason,
+    StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
 
@@ -141,6 +142,21 @@ def test_ready_orderless_review_refuses_backend_orders_until_a_recorded_decision
     assert not OrderRefusingStandingRule.refusals(comms.goals, "lead")
     comms.goals.update_goal("outsider", action)
     assert comms.goals.todos.get("P3").holder == "outsider"
+
+
+def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
+    """A reviewing mark on an open head is not a verdict: the JUDGE line stays owed and its
+    scoreboard line undisposed until ok or back, and reviewing after an ok owes it again."""
+    comms, _, request = head_bus
+    subject, since = HeadSubject(request), time.time() - 1
+    invoke(comms, request, UnderReviewHeadVerdict())
+    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
+    assert not subject.disposed(comms, frozenset(), since)
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    assert not OrderRefusingStandingRule.refusals(comms.goals, "lead")
+    assert subject.disposed(comms, frozenset(), since)
+    invoke(comms, request, UnderReviewHeadVerdict())
+    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
 
 
 def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus):

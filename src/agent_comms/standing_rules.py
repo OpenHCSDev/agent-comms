@@ -668,7 +668,8 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
 
 @dataclass(frozen=True)
 class UnreviewedHead(HeadLine, OrderRefusingStandingRule, DatedStandingRule):
-    """One ready head, including an orderless PR, waiting too long for a recorded verdict."""
+    """One ready head on any registered repository, with or without an order, waiting too long
+    for a decision; a reviewing mark is not one."""
     request: PullRequestHead
     due_at: float
     seconds: ClassVar[int] = 10 * 60
@@ -682,7 +683,7 @@ class UnreviewedHead(HeadLine, OrderRefusingStandingRule, DatedStandingRule):
             for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
-            if not goals.todos.head_reviews(request)
+            if not any(review.verdict.decides() for review in goals.todos.head_reviews(request))
         )
 
     def began(self) -> float:

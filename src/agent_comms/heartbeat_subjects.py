@@ -54,4 +54,5 @@ class HeadSubject(HeartbeatSubject):
         return (f"{self.request.repo.name}#{self.request.pr}",)
 
     def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
-        return any(review.at.since(since) for review in comms.goals.todos.head_reviews(self.request))
+        return any(review.at.since(since) and review.verdict.decides()
+                   for review in comms.goals.todos.head_reviews(self.request))

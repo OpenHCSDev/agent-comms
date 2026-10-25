@@ -3647,6 +3647,10 @@ class HeadVerdict(HeadReview, declared_name=None):
         """Edits before this cut are judged by the head; only a decision judges them."""
         return began
 
+    def decides(self) -> bool:
+        """Whether this record answers the head: a reviewing mark still owes the verdict."""
+        return False
+
     def order_events(self, record: OrderHeadReviewRecord, revision: int) -> tuple[StrikeTodo, ...]:
         return ()
 
@@ -3660,6 +3664,9 @@ class DecidedHeadVerdict(HeadVerdict, declared_name=None):
 
     def settles_edits(self, record: HeadReviewRecord, began: float) -> float:
         return record.at.latest_with(began)
+
+    def decides(self) -> bool:
+        return True
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"{self.verb} by {reviewer} on {subject}: {self.reason.text}"
