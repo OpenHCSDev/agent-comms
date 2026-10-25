@@ -45,6 +45,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
+from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
 from agent_comms.todos import (
@@ -203,6 +204,10 @@ class ReviewSubject(DeclaredFamily):
     @abstractmethod
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None: ...
 
+    def acts_on(self) -> tuple[HeartbeatSubject, ...]:
+        """Edit verdicts touch no heartbeat subject; a PR verdict touches its head."""
+        return ()
+
     @abstractmethod
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]: ...
@@ -281,6 +286,9 @@ class PullRequestReview(ReviewSubject):
         return cls(PullRequestHead.among(
             ctx.project.repository_names(options.repo),
             options.pr, options.head))
+
+    def acts_on(self) -> tuple[HeartbeatSubject, ...]:
+        return (HeadSubject(self.request),)
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
         options.check_edits([])
@@ -388,7 +396,7 @@ class VerdictVerb(JudgeVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HeadVerdictVerb(VerdictVerb, declared_name=None):
+class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
     pr: Annotated[int, Argument(options={"help": "review this PR instead of individual edits"})] = 0
     head: Annotated[str, Argument(options={"help": "the exact reviewed SHA; required with --pr"})] = ""
     repo: Annotated[str, Argument(options={
@@ -400,6 +408,9 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
     def order_link(self, todo: Todo) -> OrderLink:
         """Reading or rejecting a head carries out no clause of the order it is linked to."""
         return UnquotedHeadReview.of(todo, self.head_evidence())
+
+    def acts_on(self, ctx: order.Commander) -> tuple[HeartbeatSubject, ...]:
+        return self.subject(ctx).acts_on()
 
     def head_evidence(self) -> tuple[FileLine, ...]:
         return ()
