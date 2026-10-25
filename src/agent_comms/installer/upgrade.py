@@ -1069,7 +1069,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path,
                   *, lifetime: ExitStack) -> tuple[Install, Rehearsal]:
-        CarryChain.require_crossed(checkout, current, target)
+        CarryChain.require_crossed(checkout, root, target)
         practice = lifetime.enter_context(
             PracticeBus.of(root, installer, spill_dir, staged.commands.clock))
         pending = practice.pending(chain, staged)
