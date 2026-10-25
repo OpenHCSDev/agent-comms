@@ -127,7 +127,9 @@ from agent_comms.typed_table import (
     TypedTable,
 )
 from .goal_scope import OneGoal
-from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError, WorkBranches
+from agent_comms.work_branches import (
+    BranchComparison, BranchDifference, SourceGrowth, WorkBranchError, WorkBranches,
+)
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import (
@@ -559,8 +561,20 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     orders: tuple[str, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
-    draft: bool = field(default=False, kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
+
+    def as_ready(self) -> tuple[PullRequest, ...]:
+        return (self,)
+
+    def as_draft(self) -> tuple[PullRequest, ...]:
+        return ()
+
+    def head_review_due(self, now: float, due_at: float) -> tuple[float, ...]:
+        return () if self.has_head_review or now < due_at else (due_at,)
+
+    def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
+        compared = reader.pull_request_diff(self.base, self.head)
+        return () if compared.paths else (compared,)
 
     @property
     def has_head_review(self) -> bool:
@@ -583,6 +597,28 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
 
 class UnmergedPullRequest(PullRequest):
     """An open or closed request has no merge commit or integration time."""
+
+    @classmethod
+    def from_listed(cls, row: ListedPullRequest, problems: tuple[str, ...],
+                    orders: tuple[str, ...]) -> Self:
+        return cls(row.number, row.branch, row.head, row.updated_at, orders,
+                   base=row.base, problems=problems, status_contexts=row.status_contexts)
+
+
+class DraftPullRequest(UnmergedPullRequest):
+    """A draft promises neither a change nor a reviewable head."""
+
+    def as_ready(self) -> tuple[PullRequest, ...]:
+        return ()
+
+    def as_draft(self) -> tuple[PullRequest, ...]:
+        return (self,)
+
+    def head_review_due(self, now: float, due_at: float) -> tuple[float, ...]:
+        return ()
+
+    def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -629,7 +665,6 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     updated: str
     base: str
     reviewable_times: tuple[str, ...] = field(kw_only=True)
-    draft: bool = field(default=False, kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
 
     def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
@@ -655,12 +690,10 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 
     def review_due(self, now: float, seconds: float) -> tuple[float, ...]:
         due = self.reviewable_at + seconds
-        return () if self.draft or now < due else (due,)
+        return () if now < due else (due,)
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> PullRequest:
-        return UnmergedPullRequest(self.number, self.branch, self.head, self.updated_at,
-                                   orders, base=self.base, problems=problems, draft=self.draft,
-                                   status_contexts=self.status_contexts)
+        return UnmergedPullRequest.from_listed(self, problems, orders)
 
 
 class UnmergedListedPullRequest(ListedPullRequest):
@@ -672,6 +705,16 @@ class UnmergedListedPullRequest(ListedPullRequest):
     @classmethod
     def picked(cls, row: ListedPullRequest) -> tuple[UnmergedListedPullRequest, ...]:
         return row.as_unmerged()
+
+
+class DraftListedPullRequest(UnmergedListedPullRequest):
+    """An open draft is selectable but never due for review."""
+
+    def review_due(self, now: float, seconds: float) -> tuple[float, ...]:
+        return ()
+
+    def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> DraftPullRequest:
+        return DraftPullRequest.from_listed(self, problems, orders)
 
 
 class ClosedListedPullRequest(ListedPullRequest):
@@ -701,8 +744,7 @@ class MergedListedPullRequest(ListedPullRequest):
         return MergedPullRequest(self.number, self.branch, self.head, self.updated_at,
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
-                                 problems=problems, draft=self.draft,
-                                 status_contexts=self.status_contexts)
+                                 problems=problems, status_contexts=self.status_contexts)
 
 
 class PullRequests:
@@ -793,12 +835,14 @@ class PullRequests:
             "--jq", '.data.repository | map_values((if .merged == null then '
             '(if .closed then '
             f'del(.merge,.merged) + {{kind: "{ClosedListedPullRequest.declared_name}"}} else '
-            f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) else '
+            '(if .draft then '
+            f'del(.merge,.merged) + {{kind: "{DraftListedPullRequest.declared_name}"}} else '
+            f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) end) else '
             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
             '| . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context], '
             'reviewable_times: [.created, .head_statuses.nodes[].commit.committedDate, '
             '.ready_events.nodes[].createdAt]} '
-            '| del(.closed,.created,.head_statuses,.ready_events))')
+            '| del(.draft,.closed,.created,.head_statuses,.ready_events))')
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
