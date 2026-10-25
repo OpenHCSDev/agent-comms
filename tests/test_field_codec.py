@@ -1064,6 +1064,32 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
         assert FieldCodec.encode(message, MessageId) == expected
 
 
+@pytest.mark.parametrize("count", (1, 9, 17))
+def test_hex_spelling_derives_new_lengths_from_the_declaration(count: int) -> None:
+    from agent_comms.field_codec import HexDigits
+
+    class DeclaredHex(HexDigits):
+        digits = count
+
+    value = "a" * count
+    annotation = Annotated[str, DeclaredHex]
+    assert FieldCodec.decode(annotation, value) == value
+    assert FieldCodec.encode(value, annotation) == value
+    for malformed in (value.upper(), value[:-1], value + "a", "g" * count):
+        with pytest.raises(MalformedRecord):
+            FieldCodec.decode(annotation, malformed)
+
+
+def test_hex_commit_spelling_keeps_its_bounded_length_contract() -> None:
+    from agent_comms.field_codec import GitCommitText
+
+    for count in (7, 12, 40):
+        assert GitCommitText.decode("a" * count) == "a" * count
+    for malformed in ("a" * 6, "a" * 41, "A" * 40, "g" * 7):
+        with pytest.raises(MalformedRecord):
+            GitCommitText.decode(malformed)
+
+
 def test_order_identity_owns_minting_and_wire_spelling() -> None:
     from agent_comms.field_codec import OrderId, OrderIdText
 

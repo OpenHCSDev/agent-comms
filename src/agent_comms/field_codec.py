@@ -1668,6 +1668,20 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return {"type": "string", "pattern": cls.anchored()}
 
 
+class HexDigits(SpelledText):
+    """Lowercase hexadecimal text; members declare their digit count."""
+
+    digits: ClassVar[int]
+
+    @classmethod
+    def repetition(cls) -> str:
+        return str(cls.digits)
+
+    def __init_subclass__(cls, **options: object) -> None:
+        super().__init_subclass__(**options)
+        cls.spelling = re.compile(f"[0-9a-f]{{{cls.repetition()}}}")
+
+
 class NominalText(PresentMember, str):
     """Text whose declared class carries its identity."""
 
@@ -1907,10 +1921,10 @@ class OwnerRequestKey(Id128):
     """One original owner directive and the work serving it."""
 
 
-class Id128Text(NominalSpelling[Id128]):
+class Id128Text(NominalSpelling[Id128], HexDigits):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
 
-    spelling = re.compile("[0-9a-f]{32}")
+    digits = 32
 
 
 class MessageId(NominalText):
@@ -1919,13 +1933,12 @@ class MessageId(NominalText):
         return cls(hashlib.sha256(text.encode()).hexdigest()[:MessageIdText.digits])
 
 
-class MessageIdText(NominalSpelling[MessageId]):
+class MessageIdText(NominalSpelling[MessageId], HexDigits):
     """A bus message's content identity, the first twelve hex digits of the SHA-256
     of sender, target, timestamp and body.
     """
 
-    digits: ClassVar[int] = 12
-    spelling = re.compile(f"[0-9a-f]{{{digits}}}")
+    digits = 12
 
 
 class OrderId(NominalText):
@@ -1933,18 +1946,17 @@ class OrderId(NominalText):
 
     @classmethod
     def mint(cls) -> Self:
-        return cls(uuid4().hex[:OrderIdText.digits])
+        return cls(Id128.mint()[:OrderIdText.digits])
 
 
-class OrderIdText(NominalSpelling[OrderId]):
-    digits: ClassVar[int] = 12
-    spelling = re.compile(f"[0-9a-f]{{{digits}}}")
+class OrderIdText(NominalSpelling[OrderId], HexDigits):
+    digits = 12
 
 
-class Hex256Text(SpelledText):
+class Hex256Text(HexDigits):
     """256 bits written as 64 lowercase hex digits."""
 
-    spelling = re.compile("[0-9a-f]{64}")
+    digits = 64
 
 
 class Sha256Text(Hex256Text):
@@ -1955,10 +1967,15 @@ class Token256Text(Hex256Text):
     """A random 256-bit secret token."""
 
 
-class GitCommitText(SpelledText):
+class GitCommitText(HexDigits):
     """A git commit, abbreviated to no fewer than seven digits."""
 
-    spelling = re.compile("[0-9a-f]{7,40}")
+    digits = 40
+    minimum_digits: ClassVar[int] = 7
+
+    @classmethod
+    def repetition(cls) -> str:
+        return f"{cls.minimum_digits},{cls.digits}"
 
 
 class Projected(property):
