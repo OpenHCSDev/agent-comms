@@ -1162,3 +1162,31 @@ def test_record_context_stays_at_its_declared_binding():
     with pytest.raises(MalformedRecord, match="Missing decode context: token"):
         FieldCodec.decode_bound(Plain, {"child": {}}, token="must not leak")
     assert FieldCodec.decode(Bound, {"outer": "kept", "child": {}}) == Bound("kept", Child("kept"))
+
+
+def test_decode_into_preserves_each_declared_field_plan_behavior():
+    @dataclass
+    class Child:
+        token: Annotated[str, WireContext()]
+
+    @dataclass
+    class Inline:
+        label: str
+
+    @dataclass
+    class Record:
+        context: Annotated[str, WireContext()]
+        bound: Annotated[Child, WireBind({"token": "source"})]
+        inline: Annotated[Inline, WireInline()]
+        null_default: Annotated[int, WireNullDefault()] = 7
+        missing: Annotated[str | None, WireAbsentNone()] = "constructor default"
+        source: str = "default source"
+
+    data = {"bound": {}, "label": "inline", "null_default": None, "source": "sibling"}
+    context = {"context": "caller"}
+    for plan in FieldCodec._record_plan(Record).bindings:
+        out = {"previous": "kept"}
+        plan.decode_into(data, context, out)
+        assert out == {"previous": "kept", **plan.decoded_bound(data, context)}
+    assert FieldCodec.decode_bound(Record, data, **context) == Record(
+        "caller", Child("sibling"), Inline("inline"), 7, None, "sibling")

@@ -591,6 +591,7 @@ class FieldPlan:
             raise MalformedRecord(f"Missing required field {self.key}")
         return values[self.name]
 
+    @boundary_decoder
     def decoded(self, data: object) -> dict[str, object]:
         return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, {}))
 
@@ -602,10 +603,7 @@ class FieldPlan:
     def decode_into(
         self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
     ) -> None:
-        if self.key in data:
-            value = data[self.key]
-            self.require_value(value)
-            out[self.name] = self.value.decode_bound(value, {})
+        out.update(self.decoded_bound(data, context))
 
     def require_value(self, value: object) -> None:
         if self.reject_null and value is None:
@@ -661,11 +659,6 @@ class NullDefaultFieldPlan(DeclaredFieldPlan):
         return {name: value for name, value in super().captured(data).items()
                 if value is not None}
 
-    def decode_into(
-        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
-    ) -> None:
-        out.update(self.decoded(data))
-
 
 class NullMemberOmission(DeclaredFieldPlan):
     """A declared null member is absent from the wire, as its key's absence."""
@@ -685,11 +678,6 @@ class MissingNoneFieldPlan(NullMemberOmission):
 
     def captured(self, data: object) -> dict[str, object]:
         return {self.name: super().captured(data).get(self.name)}
-
-    def decode_into(
-        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
-    ) -> None:
-        out.update(self.decoded(data))
 
 
 class ContextFieldPlan(DeclaredFieldPlan):
@@ -717,11 +705,6 @@ class ContextFieldPlan(DeclaredFieldPlan):
             raise MalformedRecord(f"Missing decode context: {self.name}")
         return {self.name: self.value.decode_bound(context[self.name], context)}
 
-    def decode_into(
-        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
-    ) -> None:
-        out.update(self.decoded_bound(data, context))
-
 
 class BoundFieldPlan(DeclaredFieldPlan):
     """A nested record receives its context from declared sibling fields."""
@@ -737,11 +720,6 @@ class BoundFieldPlan(DeclaredFieldPlan):
     ) -> dict[str, object]:
         bound = {name: data[source] for name, source in self.bound_sources.items()}
         return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, bound))
-
-    def decode_into(
-        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
-    ) -> None:
-        out.update(self.decoded_bound(data, context))
 
 
 class InlineFieldPlan(DeclaredFieldPlan):
@@ -776,11 +754,6 @@ class InlineFieldPlan(DeclaredFieldPlan):
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
         return {self.name: {key: data[key] for key in self.wire_keys if key in data}}
-
-    def decode_into(
-        self, data: dict[str, object], context: Mapping[str, object], out: dict[str, object],
-    ) -> None:
-        out.update(self.decoded(data))
 
 
 class InlineFamilyPlan(InlineFieldPlan):
@@ -1107,6 +1080,7 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     def accepts_value(self, value: object) -> bool:
         return self.structural.accepts_value(value)
 
+    @boundary_decoder
     def decode(self, data: object) -> T:
         return self.representation.decode_field(data, self.structural)
 
