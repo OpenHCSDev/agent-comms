@@ -116,3 +116,9 @@ def test_success_finishes_without_entering_retry(heads, tmp_path: Path):
         subprocess.CompletedProcess(("pytest",), 1), tmp_path / "failed.log",
     )
     assert failed.code == 1
+    timed_out = integration.TestAttempt.from_process(
+        subprocess.CompletedProcess(("timeout",), integration.TimedOutTestAttempt.exit_code),
+        tmp_path / "timed-out.log",
+    )
+    with pytest.raises(integration.IntegrationFailed, match="no automatic replay"):
+        timed_out.finish(run, "a" * 40, heads, NewTestRun())

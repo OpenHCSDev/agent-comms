@@ -155,6 +155,8 @@ class TestAttempt:
         # The subprocess boundary decodes exit status once into its behavior.
         if result.returncode == 0:
             return PassedTestAttempt(log)
+        if result.returncode == TimedOutTestAttempt.exit_code:
+            return TimedOutTestAttempt(log)
         return FailedTestAttempt(log, result.returncode)
 
     @property
@@ -181,6 +183,18 @@ class FailedTestAttempt(TestAttempt):
     def finish(self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...],
                start: LeaseStart) -> int:
         return run.retry(self, base, heads, start)
+
+
+class TimedOutTestAttempt(TestAttempt):
+    exit_code: ClassVar[int] = 124
+
+    @property
+    def code(self) -> int:
+        return self.exit_code
+
+    def finish(self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...],
+               start: LeaseStart) -> int:
+        raise IntegrationFailed(f"Timed out: {self.log}; no automatic replay")
 
 
 @dataclass(frozen=True)
