@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.pinned_audit import ParsedModule
-from agent_comms.store_files import StoreLockOwner
+from agent_comms.store_files import RankedStoreLock, StoreGuard, StoreLockOwner
 
 
 @dataclass(frozen=True, order=True)
@@ -26,6 +26,14 @@ class StoreLockGraph:
     this boundary. Reentry in these captured paths uses the same registry root, so the
     original held acquisition, rather than its intervening catalog, is the lender.
     """
+
+    # Conservatively include lock-free reads: this may add edges, never hide a cycle.
+    guard_names = frozenset(method.__name__ for method in (
+        StoreLockOwner.guarded_read, StoreLockOwner.guarded_write,
+        StoreLockOwner.guarded_write_async, StoreLockOwner.read_now,
+        StoreGuard.read_guard, StoreGuard.write_guard,
+        StoreGuard.read_guard_async, StoreGuard.write_guard_async,
+    ))
 
     def __init__(self, root: Path):
         self.root = root
@@ -151,7 +159,7 @@ class StoreLockGraph:
         for name in self.classes:
             inherited = [
                 tier.lock_rank()
-                for tier in StoreLockOwner.lock_tiers()
+                for tier in RankedStoreLock.lock_tiers()
                 if self.derives(name, tier.__name__)
             ]
             if len(inherited) == 1:
@@ -319,7 +327,7 @@ class StoreLockGraph:
             value = env.get(expr.id)
             if isinstance(value, tuple):
                 return value
-            if isinstance(value, str) and self.derives(value, StoreLockOwner.__name__):
+            if isinstance(value, str) and self.derives(value, StoreGuard.__name__):
                 return (value,)
             for node in ast.walk(env["__function__"]):
                 if isinstance(node, ast.Assign) and any(
@@ -327,7 +335,7 @@ class StoreLockGraph:
                 ):
                     return self.iteration_types(node.value, env, seen)
         concrete = self.typeof(expr, env)
-        if self.derives(concrete, StoreLockOwner.__name__):
+        if self.derives(concrete, StoreGuard.__name__):
             return (concrete,)
         if isinstance(expr, ast.Attribute):
             owner = self.typeof(expr.value, env)
@@ -369,8 +377,7 @@ class StoreLockGraph:
         return any(
             isinstance(call, ast.Call)
             and isinstance(call.func, ast.Attribute)
-            and call.func.attr
-            in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}
+            and call.func.attr in self.guard_names
             for call in ast.walk(node)
         )
 
@@ -380,9 +387,9 @@ class StoreLockGraph:
         owner = self.typeof(call.func.value, env)
         name = call.func.attr
         site = f"{module.path}:{call.lineno}"
-        if name in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}:
+        if name in self.guard_names:
             self.all_sites.add((site, owner, ast.unparse(call)))
-            if self.derives(owner, StoreLockOwner.__name__):
+            if self.derives(owner, StoreGuard.__name__):
                 return (Acquisition(owner, site, site, ast.unparse(call.func.value)),)
             self.unresolved.add((site, ast.unparse(call), owner))
             return ()
@@ -394,7 +401,7 @@ class StoreLockGraph:
             return ()
         if (
             budget <= 0
-            and not self.derives(owner, StoreLockOwner.__name__)
+            and not self.derives(owner, StoreGuard.__name__)
             and not self.calls_physical_lock(node)
         ):
             return ()
@@ -449,7 +456,7 @@ class StoreLockGraph:
             return ()
         owner = self.typeof(call.func.value, env)
         name = call.func.attr
-        if name in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}:
+        if name in self.guard_names:
             return self.locks(call, env, module, budget)
         found = self.method(owner, name)
         if not found:
@@ -457,7 +464,7 @@ class StoreLockGraph:
         callee_module, node = found
         if (
             budget <= 0
-            and not self.derives(owner, StoreLockOwner.__name__)
+            and not self.derives(owner, StoreGuard.__name__)
             and not self.calls_physical_lock(node)
         ):
             return ()
@@ -509,7 +516,10 @@ class StoreLockGraph:
             if isinstance(node, (ast.With, ast.AsyncWith)):
                 held = list(active)
                 for item in node.items:
-                    acquisitions = self.context_locks(item.context_expr, env, module, 3)
+                    acquisitions = tuple(
+                        lock for lock in self.context_locks(item.context_expr, env, module, 3)
+                        if lock.store in self.ranks
+                    )
                     if len(acquisitions) > 1:
                         acquisitions = tuple(
                             sorted(acquisitions, key=lambda x: self.ranks[x.store])

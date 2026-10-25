@@ -32,15 +32,13 @@ from .store_files import (
     AtomicFile,
     DEFAULT_ISOLATION,
     DEFAULT_STORE_CONTENTION,
-    SharedLock,
     SqliteStore,
     StoreContention,
     StoreLock,
-    StoreLockContention,
     StoreLockFile,
     StoreLockOwner,
+    RankedStoreLock,
     StoreOwner,
-    _store_lock,
     is_store_lock,
     store_lock_path,
 )
@@ -544,14 +542,14 @@ class LockedFile(RootFile, StoreLockOwner, declared_name=None):
 
     @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
-        with _store_lock(source, mode=SharedLock()):
+        with cls.read_guard(source):
             return super().copy_group(source, target)
 
     @classmethod
     @contextmanager
     def writers_drained(cls, path: Path) -> Iterator[None]:
         """Its writers ask maintenance under this lock, so holding it waits out the last."""
-        with _store_lock(path):
+        with cls.write_guard(path):
             yield
 
 
@@ -679,7 +677,7 @@ class RegistryFile(RollbackRetained, WireWakeFile):
         from .registry_store import RegistryStore
 
         registry = RegistryStore(source)
-        with registry.locked(mode=SharedLock()):
+        with registry.guarded_read():
             copied = frozenset(path for path in registry.cut_paths if path.exists())
             for path in copied:
                 destination = target.parent / path.relative_to(source.parent)
@@ -935,12 +933,13 @@ class PublishedSQLiteFile(SQLiteFile):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
+class LockedStore(RankedStoreLock, FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Ordered document transactions; callbacks never mutate or reenter."""
     @contextmanager
     def reading(self, *sources) -> Iterator[T]:
-        """Retain dependent source owners before this document's shared lock."""
-        with StoreLock.ordered(dict.fromkeys((*sources, self), SharedLock())):
+        """Retain dependent source owners under each store's declared read guard."""
+        with StoreLock.ordered(*(source.guarded_read() for source in
+                                 sorted((*sources, self), key=RankedStoreLock.rank_key))):
             yield self._read_unlocked()
 
     def read(self) -> T:
@@ -948,7 +947,7 @@ class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
             return value
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
-        with self.locked():
+        with self.guarded_write():
             original = self._read_unlocked()
             changed = change(original)
             if changed.document is not original:
@@ -962,5 +961,5 @@ class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
         through capture and replacement; this document lock alone is not source
         authority or a cross-document transaction.
         """
-        with self.locked():
+        with self.guarded_write():
             self._publish_unlocked(value)

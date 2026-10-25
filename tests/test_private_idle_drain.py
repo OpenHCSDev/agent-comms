@@ -13,7 +13,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.private_path import FileRevision
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import ExclusiveLock, UNBOUNDED_CONTENTION, _store_lock
 from agent_comms.threads import Thread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from bus_history import read_history
@@ -28,7 +28,7 @@ async def test_observation_waits_for_the_held_bus_attachment(tmp_path):
     held, release = threading.Event(), threading.Event()
 
     def holder():
-        with _store_lock(comms.bus.bus.path):
+        with _store_lock(comms.bus.bus.path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             held.set()
             assert release.wait(5)
 
@@ -102,7 +102,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             await progress.done(events.Done("refused", False))
             # A real writer holds the bus, so the failure notice's worker waits
             # on the flock while the turn is cancelled.
-            with _store_lock(comms.bus.bus.path):
+            with _store_lock(comms.bus.bus.path, ExclusiveLock(), UNBOUNDED_CONTENTION):
                 task = asyncio.create_task(progress.publish_result())
                 await asyncio.sleep(0.04)
                 task.cancel()

@@ -14,7 +14,6 @@ from .field_codec import RootId
 from .goals import GoalCheckpoint
 from .input_key import InputKey, InputKeyText
 from .message_reference import MessageReference
-from .store_files import SharedLock
 from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
 
@@ -127,7 +126,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
 
     @classmethod
     def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
-        with comms.registry.store.locked():
+        with comms.registry.store.guarded_write():
             snapshot = comms.registry.store.read_snapshot_unlocked()
             owner = snapshot.require_active(claim_scope.incarnation.name)
             if snapshot.claimed_identity(owner.name) != claim_scope:
@@ -147,7 +146,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
         if controller is None or controller.attached(None) is None:
             raise RelationViolationError("User input origin requires its attached ACP controller")
 
-        with comms.registry.store.locked(mode=SharedLock()):
+        with comms.registry.store.guarded_read():
             comms.registry.store.private_guard_unlocked().require_root(
                 self.root_id, RelationViolationError("User input origin belongs to another native namespace"),
             )

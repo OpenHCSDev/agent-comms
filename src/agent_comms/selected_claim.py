@@ -33,7 +33,6 @@ from .errors import RelationViolationError
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registry_document import RegistrySnapshot
-from .store_files import SharedLock
 from .threads import Thread
 
 
@@ -127,7 +126,7 @@ def _selected_claim_boundary(
     """
     if store.session.path.resolve() != (CoordinationStore.path_in(comms.root)).resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    with comms.registry.store.locked(mode=SharedLock()):
+    with comms.registry.store.guarded_read():
         registry = comms.registry.store.read_snapshot_unlocked()
         canonical = registry.canonical_name(owner_name)
         try:

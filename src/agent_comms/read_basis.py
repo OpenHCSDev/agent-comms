@@ -33,7 +33,6 @@ from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
 from .projection_source import ProducedRow, ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
-from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
@@ -734,7 +733,7 @@ class DMDisplayBasis:
             displayed=displayed,
             fetched_through=page.newest_seq or 0,
         )
-        with registry.store.locked(mode=SharedLock()):
+        with registry.store.guarded_read():
             basis.validate_identity(
                 registry.store.read_snapshot_unlocked(),
                 RecordedBusIdentity.capture(bus.bus.path), registry.user_thread())
@@ -776,7 +775,7 @@ class DMDisplayBasis:
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
         user = registry.user_thread()
-        with registry.store.locked():
+        with registry.store.guarded_write():
             snapshot = registry.store.read_snapshot_unlocked()
             self.validate_for(
                 root, worktree, peer, through, snapshot,

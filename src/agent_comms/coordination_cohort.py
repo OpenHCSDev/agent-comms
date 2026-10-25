@@ -7,7 +7,6 @@ pure digest, caller-supplied DTO, or unbound singleton claim is not bus proof.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import sqlite3
 from dataclasses import dataclass
@@ -113,7 +112,7 @@ class AcceptedCohort:
 
 def _assignment_id(root: str, seq: int, lookup: ThreadLookup) -> AssignmentId:
     identity = f"agent-comms:cohort-claim:v1\0{root}:{seq}:{lookup}".encode()
-    return AssignmentId("cohort-v1:" + hashlib.sha256(identity).hexdigest())
+    return AssignmentId.cohort(identity)
 
 
 def _expected_assignments(

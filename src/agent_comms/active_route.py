@@ -25,13 +25,24 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
-from .store_files import StoreLockContention, _store_lock
+from .store_files import DependentStateTier, SingleFileStore, StoreLockContention
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
 
 # Publishers exclude only each other: a second one waits out the first install's route step.
 ROUTE_PUBLICATION_WAIT_SECONDS = 30.0
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRouteFile(SingleFileStore, DependentStateTier):
+    """One route publication; competing installers spend a fresh bounded wait."""
+
+    path: Path
+
+    @classmethod
+    def contention(cls) -> StoreLockContention:
+        return StoreLockContention(ROUTE_PUBLICATION_WAIT_SECONDS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,7 +341,7 @@ def route_directory(path: Path) -> Iterator[int]:
     route has left behind is refused by its store, under that store's write lock."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     refusal = ValueError("active comms route directory changed or is not owned")
-    with _store_lock(path, contention=StoreLockContention(ROUTE_PUBLICATION_WAIT_SECONDS)):
+    with ActiveRouteFile(path).guarded_write():
         directory = OwnedDirectoryRole.read(path.parent, refusal)
         try:
             OwnedDirectoryRole.held(directory, path.parent, refusal)

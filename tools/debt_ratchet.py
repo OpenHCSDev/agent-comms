@@ -2323,14 +2323,10 @@ class StoreLockCalls(PerFileOccurrenceMeasure):
     owners: typing.ClassVar[tuple[str, ...]] = tuple(
         Path(inspect.getfile(module)).relative_to(Path(inspect.getfile(agent_comms)).parents[1]).as_posix()
         for module in (store_files, locked_store))
-    attributes: typing.ClassVar[frozenset[str]] = frozenset(
-        method.__name__ for method in (store_files.StoreLockOwner.locked,
-                                       store_files.StoreLockOwner.locked_async))
     functions: typing.ClassVar[frozenset[str]] = frozenset(
         function.__name__ for function in (store_files._store_lock, store_files._async_store_lock))
     qualified: typing.ClassVar[frozenset[tuple[str, str]]] = frozenset(
-        {(store_files.StoreLock.__name__, store_files.StoreLock.ordered.__name__),
-         (fcntl.__name__, fcntl.flock.__name__)})
+        {(fcntl.__name__, fcntl.flock.__name__)})
 
     @classmethod
     def lines(cls, source: bytes, filename: str) -> list[int]:
@@ -2343,7 +2339,7 @@ class StoreLockCalls(PerFileOccurrenceMeasure):
                     (owner, name) in StoreLockCalls.qualified):
                 return 1
             case ast.Call(func=ast.Attribute(attr=name)) | ast.Call(func=ast.Name(id=name)):
-                return int(name in StoreLockCalls.attributes | StoreLockCalls.functions)
+                return int(name in StoreLockCalls.functions)
         return 0
 
 

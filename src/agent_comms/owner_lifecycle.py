@@ -435,7 +435,7 @@ class OwnerLifecycle:
 
     @contextmanager
     def _signal_guard(self, thread: Thread, claimed_generation: int):
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             self._require_same_stop_owner(thread, claimed_generation)
             yield
 
@@ -455,7 +455,7 @@ class OwnerLifecycle:
 
     def _stop_selection(self, name: str) -> tuple[Thread, int] | None:
         """Settle an owner that needs no signal, or capture the one that does."""
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
             thread.role.require_executable(
@@ -560,7 +560,7 @@ class OwnerLifecycle:
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
         caller = ThreadLaunch.current().name
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             canonical = self.registry.require(name).name
             if self.registry.require(caller).name != canonical:
                 raise RelationViolationError(f"Thread {caller!r} cannot release {canonical!r}.")

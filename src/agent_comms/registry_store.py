@@ -32,7 +32,7 @@ from .registry_document import (
 )
 from .routing import Routing
 from .session_file import RegistrySessionLocation
-from .store_files import RegistryTier, SharedLock
+from .store_files import RegistryLocking
 from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
@@ -203,7 +203,7 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTier):
+class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument]):
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
@@ -251,7 +251,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
 
     @contextmanager
     def reading_snapshot(self) -> Iterator[RegistrySnapshot]:
-        with self.locked(mode=SharedLock()):
+        with self.guarded_read():
             yield self.read_snapshot_unlocked()
 
     @property
@@ -281,7 +281,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
         was read from, not an earlier stat taken while a write was in flight.
         A decoded revision already in this process's cache answers directly.
         """
-        with self.locked(mode=SharedLock()):
+        with self.guarded_read():
             self.private_guard_unlocked()
             revision = self.revision_unlocked()
             return RegistryEntryRevision(revision, revision[0].either(
@@ -311,7 +311,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
 
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
-        with self.locked():
+        with self.guarded_write():
             # Refuse before an editor can prepare participants or journal a registration.
             self.require_maintenance_open()
             original = self.read_revision_unlocked()
@@ -325,7 +325,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
 
     def mark_historical(self) -> None:
         """Explicit archive creation/carry seals this declaration, idempotently."""
-        with self.locked():
+        with self.guarded_write():
             original = self.read_revision_unlocked()
             document = replace(original.document, purpose=HistoricalRootPurpose())
             RegistryEdit(self, document, original).commit()
