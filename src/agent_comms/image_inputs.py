@@ -9,9 +9,12 @@ from acp.schema import (
     PromptRequest,
     TextResourceContents,
 )
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
 from . import image_input
-from .mro_dispatch import MroDispatch, handles
 
 MAX_PROMPT_IMAGES = 8
 

@@ -12,6 +12,10 @@ from acp.schema import (
     AgentMessageChunk,
     TextContentBlock,
 )
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
 from . import agent_events as events
 from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
@@ -22,7 +26,6 @@ from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_request_progress, record_terminal_failure
 from .messages import AlertKind, NoticeRole
-from .mro_dispatch import MroDispatch, handles
 from .send_result import SendResult
 from .thread_identity import ClaimedIdentity
 from .transcript_updates import TurnTranscriptUpdate

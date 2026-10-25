@@ -12,6 +12,10 @@ from acp.schema import (
     PromptRequest,
     PromptResponse,
 )
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 from pydantic import JsonValue
 
 from .input_key import InputKey
@@ -38,7 +42,6 @@ from .goal_scheduler import GoalScheduler
 from .image_input import ImageInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
-from .mro_dispatch import MroDispatch, handles
 from .native_arguments import LaunchArguments, LaunchBinary
 from .native_input_owner import RegistryOwner
 from .owned_turn import OwnedTurn

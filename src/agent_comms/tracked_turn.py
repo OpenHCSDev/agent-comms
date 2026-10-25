@@ -13,6 +13,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
+from metaclass_registry.mro_dispatch import handles
+
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
@@ -23,7 +25,6 @@ from .external_transcript import DraftRow
 from .field_codec import InputId, MalformedRecord
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
-from .mro_dispatch import handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_failures import NativePiUnavailable

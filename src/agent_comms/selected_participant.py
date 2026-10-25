@@ -8,6 +8,11 @@ from dataclasses import dataclass, field
 from functools import partial
 
 from agent_comms.reason_codes import GivenReasonCode
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 from .agent_events import CompactionEvent, NativePhaseChanged
 from .bus_publication import Delivered
 from .cohort_schema import CohortTable
@@ -27,7 +32,6 @@ from .errors import RelationViolationError
 from .field_codec import TurnId, RootId, ThreadLookup
 from .message_bus import MessageBus
 from .message_reference import MessageReference
-from .mro_dispatch import MroDispatch, handles
 from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner

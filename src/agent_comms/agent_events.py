@@ -11,6 +11,11 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 from .acp_failure import (
     FailedNativeTurnOutcome,
     FailureSource,
@@ -25,7 +30,6 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import InputId, NullMember, TurnId
 from .input_attempt import InputAttempt
-from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage

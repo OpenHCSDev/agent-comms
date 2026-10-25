@@ -16,6 +16,10 @@ from acp.schema import (
     ToolKind,
     UsageUpdate,
 )
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
 from . import agent_events as events
 from .acp_extension import (
@@ -28,7 +32,6 @@ from .acp_extension import (
 from .context_reading import ContextUsage, UnsizedContext
 from .coordinator import Coordination
 from .field_codec import TurnId
-from .mro_dispatch import MroDispatch, handles
 from .tool_declaration import (
     EditAction,
     ExecuteAction,

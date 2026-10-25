@@ -37,6 +37,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.pi_payloads import RequestId
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
 from . import agent_events as events
 from . import pi_commands as commands
@@ -48,7 +52,6 @@ from .coordinator import Coordination
 from .extension_ui import ExtensionUiSession
 from .field_codec import InputId, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
-from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_failures import NativePiUnavailable

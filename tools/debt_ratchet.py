@@ -52,11 +52,14 @@ from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.carry import STEPS
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 from module_layers import PACKAGE, StackClient
 from stored_formats import StoredForm
 from typing_names import TypingImports, TypingReference
 from agent_comms.field_codec import FieldCodec, ViewExclusion, boundary_decoder, projected
-from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo

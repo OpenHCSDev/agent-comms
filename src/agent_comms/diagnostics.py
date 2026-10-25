@@ -14,12 +14,16 @@ from traceback import TracebackException
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 
 from .child_process import Platform
 from .field_codec import FieldCodec, InputId, TurnId
 from .locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
-from .mro_dispatch import MroDispatch, handles
 from .store_files import AtomicFile
 from .turn_failure import TurnFailure
 

@@ -36,12 +36,15 @@ from typing import (
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
 from .json_schema import JsonScalar, JsonSchemaOwner
-from .mro_dispatch import MroDispatch, handles
 from .sealed import Sealed
 
 if TYPE_CHECKING:

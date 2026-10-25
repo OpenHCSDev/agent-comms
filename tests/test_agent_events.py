@@ -8,8 +8,11 @@ from pathlib import Path
 import pytest
 
 import agent_comms.agent_events as events
-from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.pending_requests import PendingRequests
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
 
 async def test_mro_specific_before_shared_and_consumer_override():
