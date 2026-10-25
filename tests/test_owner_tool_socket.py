@@ -14,9 +14,9 @@ def test_only_a_written_request_leaves_its_claim_unknown(tmp_path):
 import {createServer} from 'node:net';
 import {pathToFileURL} from 'node:url';
 const [module] = process.argv.slice(1);
-const {requestOwnerTool} = await import(pathToFileURL(module));
-const outcome = (path) => requestOwnerTool(path, Buffer.from('{}\n'), 16384, 'UNKNOWN')
-  .then(() => 'answered', (error) => error.message);
+const {requestOwnerTool, ToolNotStarted, ToolOutcomeUnknown} = await import(pathToFileURL(module));
+const outcome = (path) => requestOwnerTool(path, Buffer.from('{}\n'), 16384)
+  .then(() => 'answered', (error) => [error instanceof ToolNotStarted, error instanceof ToolOutcomeUnknown]);
 const closing = createServer((socket) => socket.once('data', () => socket.end()));
 // Relative paths keep the endpoint below the AF_UNIX path-length limit.
 const path = 's';
@@ -31,6 +31,6 @@ console.log(JSON.stringify(results));
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "missing": "Tool owner is unavailable; no tool was started.",
-        "unanswered": "UNKNOWN",
+        "missing": [True, False],
+        "unanswered": [False, True],
     }
