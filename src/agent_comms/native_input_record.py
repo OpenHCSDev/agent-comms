@@ -271,10 +271,16 @@ class TriageNativeExecution(NativeInputExecution):
     ) -> None:
         from .triage_native_sources import TriageNativeSource
 
-        if not assignments or len({row.assignment_id for row in assignments}) != len(assignments):
-            raise IdentityConflict("Native input membership must name distinct original sources")
-        for ordinal, row in enumerate(assignments):
-            TriageNativeSource(input_id, ordinal, row.assignment_id).insert(db)
+        if not assignments:
+            raise IdentityConflict("Native input membership names at least one original source")
+        try:
+            for ordinal, row in enumerate(assignments):
+                TriageNativeSource(input_id, ordinal, row.assignment_id).insert(db)
+        except sqlite3.IntegrityError as error:
+            # Only assignment_id is UNIQUE here; a key, CHECK or guard refusal is a bug.
+            if error.sqlite_errorcode != sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+                raise
+            raise IdentityConflict("Native input membership must name distinct original sources") from error
 
     @classmethod
     def from_columns(cls, execution_id: NativeColumn, attempt_ordinal: NativeColumn) -> TriageNativeExecution:

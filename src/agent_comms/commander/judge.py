@@ -81,6 +81,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
+from agent_comms.commander.standing import DeliveryAwaitingJudgement
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
@@ -477,6 +478,7 @@ class OkVerb(ReasonedVerb, QuotingVerb):
 @dataclass(frozen=True, kw_only=True)
 class ReviewingVerb(HeadVerdictVerb):
     help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
+    clears = (DeliveryAwaitingJudgement,)
 
     def head_operation(self) -> HeadVerdict:
         return UnderReviewHeadVerdict()
