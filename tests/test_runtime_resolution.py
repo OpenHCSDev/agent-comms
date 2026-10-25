@@ -103,6 +103,15 @@ def test_missing_and_ambiguous_lock_evidence_refuses():
         ambiguous.pins({"agent-comms": "1"}, "core")
 
 
+def test_stack_refresh_includes_sources_declared_by_its_local_core():
+    root = Path(__file__).resolve().parents[1]
+    stack = StackProject.read(root / "stack")
+    core = StackProject.read(root)
+    assert set(stack.refresh_names(root / "stack")) == (
+        set(stack.tool.uv.sources) | set(core.tool.uv.sources)
+    )
+
+
 def test_the_stack_tracks_the_main_install_due_measures_and_refuses_a_unit_branch():
     """Toad pinned to work/unit-toad--P694 after its merge: every install relocked the same
     branch head while InstallDue saw main ahead, and launched the same install again."""

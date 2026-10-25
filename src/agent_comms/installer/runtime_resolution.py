@@ -110,7 +110,12 @@ class LocalPackage(LockedPackage):
     source: EditableSource | VirtualSource
 
 
-class ProjectGitSource(BaseModel):
+class ProjectSource(BaseModel):
+    def refresh_names(self, name: str, directory: Path) -> tuple[str, ...]:
+        return (name,)
+
+
+class ProjectGitSource(ProjectSource):
     """Our sibling packages track main, the ref InstallDue measures them against; a unit
     branch here pins the stack to a head main already merged, and every install relocks it
     unchanged (f39412d88 held Toad on work/unit-toad--P694 after #1239 merged, 2026-10-25)."""
@@ -119,9 +124,14 @@ class ProjectGitSource(BaseModel):
     branch: Literal["main"]
 
 
-class ProjectPathSource(BaseModel):
+class ProjectPathSource(ProjectSource):
     path: Path
     editable: bool
+
+    def refresh_names(self, name: str, directory: Path) -> tuple[str, ...]:
+        local = (directory / self.path).resolve()
+        return (*super().refresh_names(name, directory),
+                *StackProject.read(local).refresh_names(local))
 
 
 class UvProject(BaseModel):
@@ -134,6 +144,18 @@ class ProjectTools(BaseModel):
 
 class StackProject(BaseModel):
     tool: ProjectTools
+
+    @classmethod
+    def read(cls, directory: Path) -> StackProject:
+        with (directory / "pyproject.toml").open("rb") as definition:
+            return cls.model_validate(tomllib.load(definition))
+
+    def refresh_names(self, directory: Path) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(
+            package
+            for name, source in self.tool.uv.sources.items()
+            for package in source.refresh_names(name, directory)
+        ))
 
 
 class ResolvedLock(BaseModel):

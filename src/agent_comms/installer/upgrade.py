@@ -26,7 +26,6 @@ import shutil
 import sys
 import tempfile
 import time
-import tomllib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
@@ -608,9 +607,8 @@ class Stack(Extendable):
 
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
-        with self.lock.with_name("pyproject.toml").open("rb") as definition:
-            project = StackProject.model_validate(tomllib.load(definition))
-        upgrades = tuple(argument for name in project.tool.uv.sources
+        project = StackProject.read(self.lock.parent)
+        upgrades = tuple(argument for name in project.refresh_names(self.lock.parent)
                          for argument in ("--upgrade-package", name))
         self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
                           cwd=self.checkout)
