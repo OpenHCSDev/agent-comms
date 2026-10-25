@@ -712,21 +712,24 @@ class UnitDeaf(InboxUnavailable):
 
 
 @dataclass(frozen=True)
-class Scrutinize(ReasonedStandingRule, UndatedStandingRule):
+class Scrutinize(IndependentStandingRule, UndatedStandingRule):
     threshold: ClassVar[int] = 2
-    text = ("Scrutinize {why} -> read the unit's trail and diff, name the cause, "
-            "and order the fix to the cause")
+    holder: Assignment
+    todo: Todo
+    count: int
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         actor = comms.registry.require(commander).incarnation
-        named = []
-        for todo in comms.goals.todos.held_for_commander(actor):
-            for held in todo.current_holder.current_assignments():
-                count = todo.strikes_against(held.owner_identity)
-                if count >= cls.threshold:
-                    named.append(f"{held.owner} {todo.id} {count} strikes")
-        return ", ".join(named) or None
+        return tuple(cls(held, todo, count)
+                     for todo in comms.goals.todos.held_for_commander(actor)
+                     for held in todo.current_holder.current_assignments()
+                     for count in (todo.strikes_against(held.owner_identity),)
+                     if count >= cls.threshold)
+
+    def line(self) -> str:
+        return (f"SCRUTINIZE {self.holder.owner} {self.todo.id}: {self.count} strikes"
+                " -> read the unit's trail and diff, name the cause, and order the fix to the cause")
 
 
 @dataclass(frozen=True)

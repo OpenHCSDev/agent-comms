@@ -191,9 +191,10 @@ def test_third_strike_keeps_holder_and_order_and_requests_scrutiny(held_commande
         assert todo.order == original.order
     assert todo.strikes_against(ctx.comms.registry.require("worker").incarnation) == 3
     assert not todo.history.events(todo.id, ReleaseTodo)
-    why = Scrutinize.reason(ctx.comms, ctx.commander)
-    assert why == "worker P1 3 strikes"
-    assert "read the unit's trail and diff" in Scrutinize(why).line()
+    scrutiny, = Scrutinize.violations(ctx.comms, ctx.commander)
+    assert scrutiny.holder == todo.held()
+    assert scrutiny.todo == todo
+    assert scrutiny.count == 3
     main(["unstrike", "P1", "--why",
           "The third strike counted the same duplicated decision from the earlier review twice."], ctx)
     after = store.get("P1")
