@@ -322,7 +322,8 @@ class TestThreadOps:
         assert wired.registry.status("fixer").declared_name == "running"
 
     def test_release_only_allows_the_calling_thread(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+        for variable, value in ThreadLaunch.from_thread(wired.registry.require("fixer")).encode().items():
+            monkeypatch.setenv(variable, value)
 
         with pytest.raises(RelationViolationError):
             wired.owners.release("PR111")

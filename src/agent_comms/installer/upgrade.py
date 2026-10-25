@@ -762,6 +762,7 @@ class Stack(Extendable):
             return ()
         with OwnersPhase(command=command).running(self.commands.clock):
             invocation = TargetActionCliCommand.invocation(
+                "--project", str(self.checkout),
                 "--operation", command.declared_name, "--targets", *names)
             return self.cli_reply(OwnerActionsProbe(("--root", str(root), *invocation)),
                                   partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))

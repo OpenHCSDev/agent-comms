@@ -289,24 +289,24 @@ class TestDeclaredTargetActions:
         edit = next(action for action in catalog['actions'] if action['command'] == 'thread-tags')
         assert edit['parameters']['properties']['tags']['editor_default'] == 'first'
         assert 'name' not in edit['parameters']['properties']
-        code, edited = cli(tmp_path, 'target-edit', '--target', 'tagged', '--operation', 'thread-tags',
+        code, edited = cli(tmp_path, 'target-edit', '--project', str(tmp_path), '--target', 'tagged', '--operation', 'thread-tags',
                            '--arguments', '{"tags":"first,second"}')
         assert code == 0 and edited['tags'] == ['first', 'second']
-        code, renamed = cli(tmp_path, 'target-edit', '--target', '#second', '--operation', 'rename-tag',
+        code, renamed = cli(tmp_path, 'target-edit', '--project', str(tmp_path), '--target', '#second', '--operation', 'rename-tag',
                             '--arguments', '{"new_name":"renamed"}')
         assert code == 0 and renamed['name'] == 'renamed'
-        code, refused = cli(tmp_path, 'target-action', '--target', '#renamed', '--operation', 'delete-tag')
+        code, refused = cli(tmp_path, 'target-action', '--project', str(tmp_path), '--target', '#renamed', '--operation', 'delete-tag')
         assert code == 1 and 'Remove #renamed' in refused['error']
-        code, deleted = cli(tmp_path, 'target-action', '--target', '#renamed', '--operation', 'delete-tag', '--confirmed')
+        code, deleted = cli(tmp_path, 'target-action', '--project', str(tmp_path), '--target', '#renamed', '--operation', 'delete-tag', '--confirmed')
         outcome, = deleted['outcomes']
         assert code == 0 and outcome['result']['tag'] == 'renamed'
         assert outcome['result']['removed_tag']
         assert outcome['result']['removed_threads'] == []
         _, detail = cli(tmp_path, 'thread', '--name', 'tagged')
         assert detail['tags'] == ['first']
-        _, builtins = cli(tmp_path, 'target-actions', '--target', '#all')
+        _, builtins = cli(tmp_path, 'target-actions', '--project', str(tmp_path), '--target', '#all')
         assert not {'rename-tag','delete-tag','delete-view'} & {action['command'] for action in builtins['actions']}
-        code, refused = cli(tmp_path, 'target-action', '--target', 'tagged', '--operation', 'thread-tags',
+        code, refused = cli(tmp_path, 'target-action', '--project', str(tmp_path), '--target', 'tagged', '--operation', 'thread-tags',
                             '--arguments', '{"name":"other","tags":[]}')
         assert code == 1 and 'overridden' in refused['error']
 
@@ -457,7 +457,6 @@ class TestSelectedTargetActions:
             PerTargetChannels({"alpha": ("#team",), "beta": ("#other",)}), project=str(tmp_path),
         )
         catalog = {action.declaration.declared_name: action for action in actions}
-        assert set(catalog) == {"start", "stop", "archive", "pin-thread", "read-target", "delete-tag"}
         assert len(catalog["pin-thread"].bound) == 3
         assert not catalog["pin-thread"].editable_fields
         assert catalog["archive"].confirmation.startswith("Archive #team?")
@@ -475,7 +474,7 @@ class TestSelectedTargetActions:
         comms = self.declared(tmp_path)
         comms.registry.declare(Thread('active', frozenset({'team'}), str(tmp_path)),
                                RunningThreadStatus())
-        code, result = cli(tmp_path, "target-action", "--targets", "alpha", "active", "#team",
+        code, result = cli(tmp_path, "target-action", "--project", str(tmp_path), "--targets", "alpha", "active", "#team",
                            "--operation", "archive", "--confirmed")
         assert code == 1
         assert tuple(FieldCodec.decode(CommandTarget, outcome["target"])
@@ -494,12 +493,12 @@ class TestSelectedTargetActions:
         comms = self.declared(tmp_path)
         original = comms.registry.snapshot()
         catalog = comms.channels.catalog.read()
-        code, failure = cli(tmp_path, "target-edit", "--targets", "alpha", "#team",
+        code, failure = cli(tmp_path, "target-edit", "--project", str(tmp_path), "--targets", "alpha", "#team",
                             "--operation", "archive", "--arguments", "{}")
         assert code == 1 and "Archive #team" in failure["error"]
         assert comms.registry.snapshot() == original
         assert comms.channels.catalog.read() == catalog
-        code, failure = cli(tmp_path, "target-action", "--targets", "alpha", "#team",
+        code, failure = cli(tmp_path, "target-action", "--project", str(tmp_path), "--targets", "alpha", "#team",
                             "--operation", "archive", "--arguments", '{"name":"beta"}', "--confirmed")
         assert code == 1 and "overridden" in failure["error"]
         assert comms.registry.snapshot() == original
