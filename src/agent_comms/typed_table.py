@@ -2231,14 +2231,18 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
         """The file whose kind permits writes and whose committed row changes are published."""
 
     @contextmanager
-    def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """Publish through the physical store after its row transaction commits. Maintenance
-        is asked under the write lock, so a hold taken before this transaction refuses it and
-        an installer's drain of the write lock waits out every transaction that passed."""
+    def transaction(
+        self, connection: sqlite3.Connection, committed: Callable[[], None] = lambda: None,
+    ) -> Iterator[sqlite3.Connection]:
+        """Publish through the physical store after its row transaction commits and
+        ``committed`` returns; a raise there announces nothing. Maintenance is asked under
+        the write lock, so a hold taken before this transaction refuses it and an
+        installer's drain of the write lock waits out every transaction that passed."""
         with self.publishing_changes(connection, self.store.path):
             with self.write_transaction(connection):
                 self.store.require_maintenance_open()
                 yield connection
+            committed()
 
     @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:

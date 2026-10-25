@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.cli_bridges.monitor import (
     ClaimedReplacement, InspectSession, PauseSession, SessionInformation,
 )
@@ -361,19 +361,19 @@ def test_a_bridge_that_dies_during_pause_counts_as_stopped(tmp_path, bridge_home
     current.symlink_to(tmp_path / 'runtime', target_is_directory=True)
     monkeypatch.setenv('HOME', str(bridge_home))
     claim.socket_path.parent.mkdir(parents=True, exist_ok=True)
-    dying = subprocess.Popen((sys.executable, '-c', (
+    with SpawnedProcess.launch((sys.executable, '-c', (
         'import socket, sys; s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); '
         's.listen(); print(flush=True); peer, _ = s.accept(); peer.makefile("rb").readline()'),
-        str(claim.socket_path)), stdout=subprocess.PIPE)
-    dying.stdout.readline()
-    me = ProcessIdentity.capture(os.getpid())
-    observed = SessionInformation(owner=me, process=ProcessIdentity.capture(dying.pid),
-                                  runtime=LaunchRuntime.running(),
-                                  transcript=tmp_path / 'dying-session.jsonl')
-    bridges = SessionBridgeResumes()
-    with bridges.holding((SessionBridge(claim, observed),)):
-        pass
-    assert dying.wait(10) == 0
+        str(claim.socket_path)), output=subprocess.PIPE) as dying:
+        dying.process.stdout.readline()
+        me = ProcessIdentity.capture(os.getpid())
+        observed = SessionInformation(owner=me, process=dying.identity,
+                                      runtime=LaunchRuntime.running(),
+                                      transcript=tmp_path / 'dying-session.jsonl')
+        bridges = SessionBridgeResumes()
+        with bridges.holding((SessionBridge(claim, observed),)):
+            pass
+        assert dying.process.wait(10) == 0
     assert bridges.failures == ()
     assert bridges.lines() == ('Session bridge dying-session: bridge exited during pause; '
                                'left stopped',)

@@ -29,7 +29,7 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
+from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
 from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
@@ -68,7 +68,6 @@ from agent_comms.todos import (
     OrderMessage,
     PendingProblemOrder,
     ProgressRead,
-    TodoConflict,
 )
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.turn_digests import OrderEditCountRead
