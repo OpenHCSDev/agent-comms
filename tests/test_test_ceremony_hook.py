@@ -11,6 +11,7 @@ def pre_tool_use(command: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-m", "agent_comms_hooks.test_ceremony"],
         input=json.dumps({"session_id": "s", "hook_event_name": "PreToolUse",
+                          "transcript_path": "s.jsonl",
                           "tool_name": "Bash", "tool_input": {"command": command}}),
         capture_output=True, text=True, timeout=60,
     )

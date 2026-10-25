@@ -157,8 +157,7 @@ class CodexUsage(HudRow):
 
 @dataclass(frozen=True)
 class CommanderForks(HudRow):
-    """The commander's forks Core registered and still hears; a fork never registered, such as
-    a Claude subagent spawned without `--fork NAME`, has no record here to show."""
+    """The commander's forks Core registered and still hears."""
 
     forks: tuple[ThreadIncarnation, ...]
 
