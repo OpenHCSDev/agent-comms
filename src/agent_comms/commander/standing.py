@@ -21,7 +21,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject
+from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, PassSubject
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer import launch as installer_launch
 from agent_comms.installer.interpreter_operation import LauncherPhase
@@ -588,10 +588,14 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
 
     seconds: ClassVar[int] = 180
     since: float
+    commander: ThreadIncarnation
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
         return HeartbeatSilent
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (PassSubject(self.commander),)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[HeartbeatSilent, ...]:
@@ -601,9 +605,9 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
         found = []
         for request in CommanderService.requested_by(owner, comms.goals):
             if completed is None or completed < request.created_at:
-                rule = HeartbeatNotStarted(request.created_at + cls.seconds, request.id)
+                rule = HeartbeatNotStarted(request.created_at + cls.seconds, owner.incarnation, request.id)
             else:
-                rule = MissedHeartbeat(completed + cls.seconds)
+                rule = MissedHeartbeat(completed + cls.seconds, owner.incarnation)
             if rule.since < now:
                 found.append(rule)
         return tuple(found)

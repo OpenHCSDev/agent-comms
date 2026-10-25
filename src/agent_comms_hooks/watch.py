@@ -15,10 +15,10 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, TextIO
+from typing import TYPE_CHECKING, TextIO
 
 from agent_comms.process_claim import ProcessSingleton
-from agent_comms_hooks.board import BoardLine
+from agent_comms_hooks.board import SessionBoard
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -57,12 +57,6 @@ class WatchRecord:
     root: str
     command: tuple[str, ...]
     base_state: Path
-    store_name: ClassVar[str] = "delivery.sqlite3"
-
-    @property
-    def store(self) -> Path:
-        """The bridge's delivery store, in its bus thread's folder under the base directory."""
-        return self.base_state / self.bus / self.store_name
 
     @classmethod
     def decode(cls, bus: str, root: str, command: Sequence[str], base_state: str) -> WatchRecord:
@@ -204,8 +198,8 @@ class WatchState:
         """No session binding exists until this watch is enrolled."""
         return ()
 
-    def board(self) -> tuple[BoardLine, ...]:
-        """Only a running bridge keeps a board; a lapsed one's last packet is stale."""
+    def board(self) -> tuple[str, ...]:
+        """Only a running bridge can derive a board."""
         return ()
 
     def announce_absence(self, announce: Callable[[], None]) -> bool:
@@ -254,9 +248,13 @@ class RecordedWatch(WatchState):
 
 
 class LiveWatch(RecordedWatch):
-    def board(self) -> tuple[BoardLine, ...]:
-        """The heartbeat lines this session's bridge recorded from its newest packet."""
-        return BoardLine.recorded(self.record.store)
+    def board(self) -> tuple[str, ...]:
+        """The lines this session's bridge derives from Core when asked; a refusal from a
+        bridge older than the request, or no answer at all, prints as unreadable."""
+        try:
+            return SessionBoard.asked(self.claim.socket_path).lines
+        except (OSError, ValueError, LookupError) as error:
+            return SessionBoard.unreadable(error).lines
 
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         raise RuntimeError(

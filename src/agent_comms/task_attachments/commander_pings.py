@@ -30,7 +30,6 @@ from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
-from agent_comms_hooks.board import BoardLine
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -64,11 +63,20 @@ class Ping(DeclaredFamily, affix="Ping"):
     @abstractmethod
     def key(self) -> object: ...
 
+    def disposed(self, comms: Comms, actors: frozenset[str]) -> bool:
+        """Whether a subject has a recorded action since this line began; a line about nothing
+        a verb can act on is disposed only by a packet that no longer carries it."""
+        since = self.since.recorded_at("A line")
+        return any(subject.disposed(comms, actors, since) for subject in self.subjects)
+
     def undisposed(self, comms: Comms, actors: frozenset[str], cut: float) -> bool:
         """Began before ``cut`` and no subject has a recorded action since it began."""
-        return (self.since.before(cut) and bool(self.subjects)
-                and not any(subject.disposed(comms, actors, self.since.recorded_at("A line"))
-                            for subject in self.subjects))
+        return self.since.before(cut) and self.disposable and not self.disposed(comms, actors)
+
+    @property
+    def disposable(self) -> bool:
+        """Whether a recorded action can dispose of this line: only such a line is owed."""
+        return bool(self.subjects)
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         return any(subject.acted_on(acted) for subject in self.subjects)
@@ -79,20 +87,22 @@ class Ping(DeclaredFamily, affix="Ping"):
         return True
 
     def locks(self, cut: float) -> bool:
-        """Undisposed past ``cut`` and the commander's to dispose of."""
-        return self.commander_disposes and self.since.before(cut)
+        """Past ``cut``, the commander's to dispose of, and disposable by a recorded action."""
+        return self.commander_disposes and self.disposable and self.since.before(cut)
 
-    def board_line[Line: BoardLine](self, kind: type[Line]) -> Line:
-        """This line as the commander's board holds it: locked once the answer window passes."""
-        since = self.since.recorded_at("A heartbeat line")
-        return kind(self.text, since, since + AwaitingCommander.seconds)
+    def on_board(self, comms: Comms, actors: frozenset[str]) -> bool:
+        """The commander's to dispose of, and no recorded action has yet."""
+        return self.commander_disposes and not self.disposed(comms, actors)
 
-    def board[Line: BoardLine](self, kind: type[Line]) -> tuple[Line, ...]:
-        """The board line the commander's tool calls print; a line no verb disposes of has none."""
-        return (self.board_line(kind),) if self.commander_disposes else ()
+    def board_line(self, now: float, cut: float) -> str:
+        """This line as the commander's tool calls print it: locked as the gate refuses on it,
+        once a line a verb can dispose of is past the answer window."""
+        locked = " -> LOCKS your writing verbs until a recorded action disposes of it"
+        return f"BOARD: {self.render(now)}{locked if self.locks(cut) else ''}"
 
     def render(self, now: float) -> str:
-        return self.board_line(BoardLine).aged(now)
+        since = self.since.recorded_at("A heartbeat line")
+        return f"{self.text} ({int((now - since) // 60)} min)"
 
 
 @dataclass(frozen=True)
@@ -156,8 +166,13 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         a status feed and the action lines scrolled under it."""
         return "\n".join((self.header, *self.lines(now), *frame))
 
-    def board[Line: BoardLine](self, kind: type[Line]) -> tuple[Line, ...]:
-        return tuple(line for ping in self.handled for line in ping.board(kind))
+    def board(self, comms: Comms, commander: str, now: float) -> tuple[str, ...]:
+        """This packet's lines the commander disposes of, through the same recorded actions the
+        gate reads: a verdict drops its line on the next read, not the next packet."""
+        actors = CommanderService.actors(comms.registry.snapshot(), commander)
+        cut = now - AwaitingCommander.seconds
+        return tuple(ping.board_line(now, cut) for ping in self.handled
+                     if ping.on_board(comms, actors))
 
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         return await bridge.deliver_board(self, message)
@@ -196,6 +211,12 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         """The newest packet's lines still undisposed past ``cut``."""
         latest = cls.latest(comms, comms.registry.require(commander).incarnation)
         return latest.undisposed(comms, commander, cut) if latest else ()
+
+    @classmethod
+    def current_board(cls, comms: Comms, commander: str, now: float) -> tuple[str, ...]:
+        """The newest packet's board, derived at the moment of asking."""
+        latest = cls.latest(comms, comms.registry.require(commander).incarnation)
+        return latest.board(comms, commander, now) if latest else ()
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],

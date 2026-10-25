@@ -9,13 +9,12 @@ parse can stall it.
 
 The same call carries the RE-ARM line while this session's bridge runs with no Monitor
 reading it, since every other route to the commander goes through that dead reader, and the
-heartbeat's board, which the bridge records instead of sending it to the Monitor.
+heartbeat's board, which the bridge derives from Core whenever this hook asks.
 """
 
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -68,13 +67,11 @@ class DeafReminder(SliceReminder):
 
 @dataclass(frozen=True)
 class BoardReminder(DeafReminder):
-    """Beside those, every line of the newest heartbeat packet the commander disposes of, on
-    every tool call until the next packet clears it."""
+    """Beside those, every line of the newest heartbeat packet the commander still owes an
+    action, as its bridge derives them from Core at this tool call."""
 
     def take(self) -> tuple[str, ...]:
-        now = time.time()
-        board = WatchClaim(self.session_id).state().board()
-        return super().take() + tuple(line.line(now) for line in board)
+        return super().take() + WatchClaim(self.session_id).state().board()
 
 
 class ReminderProgram(ClaudeHookProgram):

@@ -937,12 +937,13 @@ class PullRequests:
             'reviewable_times: [.created, .head_statuses.nodes[].commit.committedDate, '
             '.ready_events.nodes[].createdAt], '
             'armed_times: [.auto.enabledAt? // empty], '
-            'merge_blocks: ([.head_statuses.nodes[].commit.statusCheckRollup.contexts.nodes[]? '
+            # A required check run once per workflow suite fails once per run: one block per name.
+            'merge_blocks: (([.head_statuses.nodes[].commit.statusCheckRollup.contexts.nodes[]? '
             '| select(.isRequired) | select((.conclusion // .state) as $c '
             '| ["FAILURE","TIMED_OUT","CANCELLED","ACTION_REQUIRED","STARTUP_FAILURE","ERROR"] '
             '| index($c)) '
             f'| {{kind: "{FailedCheckMergeBlock.declared_name}", name: (.name // .context), '
-            'at: (.completedAt // .createdAt)}] '
+            'at: (.completedAt // .createdAt)}] | group_by(.name) | map(min_by(.at))) '
             f'+ [select(.merge_state == "DIRTY") | {{kind: "{ConflictMergeBlock.declared_name}", '
             'at: .updated}])} '
             '| del(.draft,.closed,.created,.head_statuses,.ready_events,.auto,.merge_state))')

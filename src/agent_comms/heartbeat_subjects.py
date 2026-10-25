@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
+from agent_comms.service_passes import ServicePassStore
 from agent_comms.thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
@@ -61,6 +62,17 @@ class HeadSubject(HeartbeatSubject):
 
     def reviews(self, request: PullRequestHead) -> bool:
         return self.request.same_head(request)
+
+
+@dataclass(frozen=True)
+class PassSubject(HeartbeatSubject):
+    """The commander's heartbeat pass: a pass that completes after the line answers it."""
+
+    commander: ThreadIncarnation
+
+    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
+        completed = ServicePassStore.at(comms.root).read().commander_completed.get(self.commander)
+        return completed is not None and completed >= since
 
 
 @dataclass(frozen=True)

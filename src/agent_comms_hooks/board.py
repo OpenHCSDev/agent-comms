@@ -1,46 +1,48 @@
 """The commander's board, printed on every tool call of its Claude session.
 
-The Claude bridge writes the newest heartbeat packet's lines into its own delivery store
-instead of handing them to a Monitor, whose events the harness frames as routine background
-and which expires between turns. The session's tool-call hook reads them back here, with the
-standard library only, and prints them on every call until the next packet replaces them.
+The board is the newest heartbeat packet's lines that no recorded action has disposed of yet.
+Only Core can answer that, and importing Core costs the hook over a second, so the hook asks
+the session's bridge, which holds Core open, over the socket it already serves. The bridge
+derives the lines when asked, so a verdict drops its line on the next tool call. This module
+is the hook's half of that exchange, with the standard library only.
 """
 
 from __future__ import annotations
 
-import sqlite3
-from contextlib import closing
-from dataclasses import dataclass, fields
+import json
+import socket
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
-from urllib.parse import quote
+
+
+class SessionWire:
+    """The session socket's records: one JSON line each, its family member named by the key."""
+
+    family_discriminator: ClassVar[str] = "type"
 
 
 @dataclass(frozen=True)
-class BoardLine:
-    """One heartbeat line the commander disposes of: its text, when its condition began, and
-    when it starts refusing the commander's writing verbs."""
+class SessionBoard(SessionWire):
+    """The board lines the bridge derived from Core at the moment of asking."""
 
-    table: ClassVar[str] = "board_line"
+    request: ClassVar[str] = "board"
+    # Past this the bridge is held behind an install's maintenance turn; a tool call never waits it out.
+    timeout: ClassVar[float] = 2
 
-    text: str
-    since: float
-    locks_at: float
-
-    def aged(self, now: float) -> str:
-        return f"{self.text} ({int((now - self.since) // 60)} min)"
-
-    def line(self, now: float) -> str:
-        locked = " -> LOCKS your writing verbs until a recorded action disposes of it"
-        return f"BOARD: {self.aged(now)}{locked if now >= self.locks_at else ''}"
+    lines: tuple[str, ...]
 
     @classmethod
-    def recorded(cls, store: Path) -> tuple[BoardLine, ...]:
-        """The lines the bridge recorded from its newest packet, oldest first."""
-        columns = ", ".join(f'"{column.name}"' for column in fields(cls))
-        # Path.as_uri imports urllib.request: 25 ms on every tool call.
-        with closing(sqlite3.connect(f"file:{quote(str(store))}?mode=ro", uri=True)) as db:
-            return tuple(
-                cls(*row)
-                for row in db.execute(f'SELECT {columns} FROM "{cls.table}" ORDER BY "since"')
-            )
+    def asked(cls, endpoint: Path) -> SessionBoard:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+            peer.settimeout(cls.timeout)
+            peer.connect(str(endpoint))
+            peer.sendall(json.dumps({cls.family_discriminator: cls.request}).encode() + b"\n")
+            with peer.makefile("rb") as stream:
+                reply = json.loads(stream.readline())
+        return cls(tuple(reply["lines"]))
+
+    @classmethod
+    def unreadable(cls, error: OSError) -> SessionBoard:
+        """A bridge that cannot answer says so on the board instead of printing it empty."""
+        return cls((f"BOARD UNREADABLE: the session bridge did not answer ({error!r})",))

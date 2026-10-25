@@ -74,6 +74,7 @@ from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.threads import Thread
@@ -104,9 +105,6 @@ from .monitor import (
     read_monitor,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.task_attachments.commander_pings import CommanderUpdate
-
 
 class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
@@ -117,7 +115,7 @@ class BridgeStateTable(DurableTables):
     """
 
     __slots__ = ()
-    filename = WatchRecord.store_name
+    filename = 'delivery.sqlite3'
 
 
 class BindingRequest(ABC):
@@ -1429,6 +1427,11 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def declare_reader(self, status: ThreadStatus) -> None:
         await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
+
+    async def board(self) -> tuple[str, ...]:
+        """The commander board this session's tool calls print, derived from Core when asked."""
+        return await self.comms.bus.when_open(partial(
+            CommanderUpdate.current_board, self.comms, self.binding.bus, time.time()))
 
     def watch_record(self) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
