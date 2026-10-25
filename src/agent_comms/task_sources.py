@@ -187,8 +187,14 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
             raise RelationViolationError("Retained correction lacks its original source") from error
 
 
-class TaskAttachment(DeclaredFamily, ProjectionSource, affix="TaskAttachment"):
-    """Absent attachments have no publication, fact or author effects."""
+class TaskAttachment(
+    DeclaredFamily, ProjectionSource, affix="TaskAttachment", discovery_package="agent_comms",
+):
+    """Absent attachments have no publication, fact or author effects.
+
+    Members live outside this module (commander_pings declares the commander
+    updates), so the registry acquires the package before any name is decoded.
+    """
 
     retains_authored_task = False
     permits_agent_revision = False
