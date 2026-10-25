@@ -11,8 +11,9 @@ permissions:
   contents: read
 
 # A superseded push to a pull request stops its old run; queue groups never share a group.
-# The draft state is part of the key: a draft run skips every job, so one that starts in the
-# same second as ready_for_review must not cancel the ready run (#3164 and #3154 lost every check).
+# The draft state is part of the key: a draft run skips every job but the ratchets, so one that
+# starts in the same second as ready_for_review must not cancel the ready run (#3164 and #3154 lost
+# every check).
 concurrency:
   group: merge-queue-${{ github.event.pull_request.number && format('{0}-{1}', github.event.pull_request.number, github.event.pull_request.draft && 'draft' || 'ready') || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -22,7 +23,9 @@ defaults:
     shell: bash .github/run-step.sh {0}
 
 jobs:
-  # Drafts cannot merge, so they hold no runner; every job needs this one.
+  # Drafts cannot merge, so they hold no runner for the slow jobs, which need this one. The
+  # ratchets run on drafts too: units hold drafts for hours, and a merge from main that left a
+  # name undefined (#3107, partial at cli_protocol.py:177) went unseen until someone ran one.
   ready:
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
@@ -162,7 +165,6 @@ jobs:
 
   ratchet:
     name: debt-${{ matrix.kind }}
-    needs: ready
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
