@@ -21,7 +21,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar, cast
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
@@ -1142,7 +1142,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     @classmethod
     def state_directories(cls) -> tuple[Path, ...]:
         """Relative state directories declared by the loaded bridge members."""
-        return tuple(bridge.state_directory for bridge in History.members_with(CliBridge))
+        return tuple(bridge.state_directory for bridge in cast(
+            tuple[type[CliBridge], ...], History.members_with(CliBridge)))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
