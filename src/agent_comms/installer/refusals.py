@@ -21,6 +21,13 @@ class UpgradeRefused(CoordinationError):
         return (f"Install failed: {self}",)
 
 
+class RuntimeWireChanged(UpgradeRefused):
+    """The outgoing runtime cannot decode the target's cross-runtime declarations."""
+
+    def __init__(self, commit: str, drift: tuple[str, ...]) -> None:
+        super().__init__(f"Installed Core {commit} has incompatible runtime wire: " + "; ".join(drift))
+
+
 class InterpreterWorkerDied(UpgradeRefused):
     """A worker ends only when an operation raised in it; its exit and its stderr, which
     holds that traceback, are the failure."""
