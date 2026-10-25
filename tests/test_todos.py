@@ -60,13 +60,16 @@ from agent_comms.todos import (
     PendingProblemOrder,
     ProgressRead,
     PullRequestCommit,
+    PullRequestLink,
     PullRequestSource,
     PullRequests,
+    RecordPullRequest,
     ReleaseTodo,
     StrikeReason,
     Todo,
     TodoCommand,
     TodoConflict,
+    TodoError,
     TodoState,
     TodoStore,
     UnmergedListedPullRequest,
@@ -290,6 +293,25 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
     assert merged.order.line == "Merged, waiting on install"
     assert merged.order.waiting_on_install(merged, {}) == (merged,)
 
+
+
+def test_merged_order_refuses_a_new_pull_request(tmp_path: Path, source_repository) -> None:
+    """P605: #3085 linked after #3073 merged left a merged order with an open PR."""
+    store = TodoStore(tmp_path)
+    lead = thread("lead", tmp_path, 1.0)
+    repo = RepositoryName.from_wire("OpenHCSDev/agent-comms")
+    todo = store.create(
+        "P1", repo, "Fix the sidebar", creator=lead, assigner=lead.incarnation,
+        request=store.add_request(lead.incarnation, "Repair the sidebar").id, owner=lead,
+        generation=GoalId.mint(), review_at=RecordedEventTime(1000.0),
+        order=order(source_repository))
+    merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
+    held = merged.held()
+    link = RecordPullRequest(merged.revision, held.owner_identity,
+                             PullRequestLink(repo, 3085), held.generation)
+    with pytest.raises(TodoError, match="merged as 2b9c1f1ab"):
+        link.changed(merged)
+    assert link.changed(todo).order.checked().pull_requests == (PullRequestLink(repo, 3085),)
 
 @pytest.fixture
 def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, github_cli):

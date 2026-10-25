@@ -1929,6 +1929,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def linked_requests(self) -> tuple[PullRequestLink, ...]:
         return (*self.pull_requests, *(claim.pull_request for claim in self.commander_claims()))
 
+    def linked_to(self, link: PullRequestLink) -> Self:
+        return replace(self, pull_requests=(*self.pull_requests, link))
+
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -2220,6 +2223,10 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
     def closed_in(self, todo: Todo) -> Todo:
         return DoneTodoState.closed(todo, self)
+
+    def linked_to(self, link: PullRequestLink) -> Self:
+        raise TodoError(f"Order {self.id} merged as {self.sha[:9]}; its pull requests are closed. "
+                         "Send it back for new work instead of linking another PR.")
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -3836,8 +3843,7 @@ class RecordPullRequest(TodoCommand):
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
-        return replace(current, revision=current.revision + 1,
-                       order=replace(order, pull_requests=(*order.pull_requests, self.link)))
+        return replace(current, revision=current.revision + 1, order=order.linked_to(self.link))
 
 
 @dataclass(frozen=True)
