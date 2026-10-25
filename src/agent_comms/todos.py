@@ -1922,6 +1922,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return ()
 
+    def awaits_holder_run(self) -> bool:
+        """Whether this order's next action belongs to its holder's application run."""
+        return False
+
     def commander_claims(self) -> tuple[OrderClaim, ...]:
         return ()
 
@@ -2427,6 +2431,9 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
     def require_close(self) -> None:
         self.run.require_merge_close()
+
+    def awaits_holder_run(self) -> bool:
+        return self.installation().awaits_holder(self.run)
 
     @property
     def installation_commits(self) -> tuple[str, ...]:

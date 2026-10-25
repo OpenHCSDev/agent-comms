@@ -12,7 +12,8 @@ import pytest
 
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.store_files import ClaimHeldError, ProcessSingleton, StoreBusy, StoreLockContention
+from agent_comms.process_claim import ClaimHeldError, ProcessSingleton
+from agent_comms.store_files import StoreBusy, StoreLockContention
 
 from test_locked_store import assert_writer_excluded, event, process
 

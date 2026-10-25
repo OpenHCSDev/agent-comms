@@ -15,6 +15,7 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
+    from agent_comms.order_runs import OrderRun
     from agent_comms.todos import MergedProblemOrder, Todo
 
 
@@ -39,11 +40,18 @@ class CommitInstallation(DeclaredFamily, affix="CommitInstallation"):
     @abstractmethod
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
 
+    def awaits_holder(self, run: OrderRun) -> bool:
+        """Whether the merged order now waits on its holder rather than the commander's install."""
+        return False
+
 
 @dataclass(frozen=True)
 class InstalledCommitInstallation(CommitInstallation):
     def require(self) -> None:
         pass
+
+    def awaits_holder(self, run: OrderRun) -> bool:
+        return run.holder_runs()
 
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
         return merged.closed_in(todo)

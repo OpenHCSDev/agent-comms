@@ -35,12 +35,11 @@ from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
+from .process_claim import ClaimHeldError, ProcessSingleton
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .store_files import (
     AtomicFile,
-    ClaimHeldError,
-    ProcessSingleton,
     StoreLockFile,
     StoreGuard,
 )
