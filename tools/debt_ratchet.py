@@ -45,7 +45,7 @@ from audit.measures import FamilyFlattened as AuditFamilyFlattened
 from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 import agent_comms
-from agent_comms import coordination_schema, field_codec, typed_table
+from agent_comms import coordination_schema, field_codec, locked_store, store_files, typed_table
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
@@ -2086,6 +2086,34 @@ class CodecSubclass(PerFileOccurrenceMeasure):
         match node:
             case ast.ClassDef(bases=bases):
                 return int(any(CodecSubclass.codec_base(base) for base in bases))
+        return 0
+
+
+class StoreLockCalls(PerFileOccurrenceMeasure):
+    """Lock calls outside the store modules that own locking. A store's guard is declared on
+    its family (plans/STORE-GUARDS-PLAN.md), so every lock a call site takes by hand restates
+    which lock guards which write; the count only falls, file by file, to zero."""
+
+    owners: typing.ClassVar[tuple[str, ...]] = tuple(
+        Path(module.__file__).relative_to(Path(agent_comms.__file__).parents[1]).as_posix()
+        for module in (store_files, locked_store))
+    attributes: typing.ClassVar[frozenset[str]] = frozenset({"locked", "locked_async"})
+    functions: typing.ClassVar[frozenset[str]] = frozenset({"_store_lock", "_async_store_lock"})
+    qualified: typing.ClassVar[frozenset[tuple[str, str]]] = frozenset(
+        {("StoreLock", "ordered"), ("fcntl", "flock")})
+
+    @classmethod
+    def lines(cls, source: bytes, filename: str) -> list[int]:
+        return [] if filename.endswith(cls.owners) else super().lines(source, filename)
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.Call(func=ast.Attribute(value=ast.Name(id=owner), attr=name)) if (
+                    (owner, name) in StoreLockCalls.qualified):
+                return 1
+            case ast.Call(func=ast.Attribute(attr=name)) | ast.Call(func=ast.Name(id=name)):
+                return int(name in StoreLockCalls.attributes | StoreLockCalls.functions)
         return 0
 
 
