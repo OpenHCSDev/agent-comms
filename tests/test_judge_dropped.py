@@ -7,6 +7,7 @@ import pytest
 from agent_comms.commander.judge import Edit, main
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.errors import TodoError
+from agent_comms.field_codec import RecordProblems
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.todos import DroppedVerdict, RewrittenVerdict
 from agent_comms.tool_declaration import ToolDeclaration
@@ -94,9 +95,9 @@ def test_batch_lists_every_refusal_and_writes_nothing(discarded_and_kept):
     edits = unjudged(ctx)
     before = ctx.comms.goals.todos.get("P1")
     unread = {"kind": "dropped", "ids": ["dropped-call:0000"], "lines": [DROPPED]}
-    with pytest.raises(SystemExit) as refused:
+    with pytest.raises(RecordProblems) as refused:
         main(["batch", batch_file(ctx, [unread, dropped_entry(edits["kept-call"], "no such line")])], ctx)
-    assert "entry 1 (dropped)" in str(refused.value.code) and "entry 2 (dropped)" in str(refused.value.code)
+    assert "entry 1 (dropped)" in str(refused.value) and "entry 2 (dropped)" in str(refused.value)
     with pytest.raises(TodoError, match="kept-call is still on"):
         main(["batch", batch_file(ctx, [dropped_entry(edits["dropped-call"], DROPPED),
                                         dropped_entry(edits["kept-call"], LIVE)])], ctx)
