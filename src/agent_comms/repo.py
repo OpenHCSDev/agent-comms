@@ -302,6 +302,16 @@ class CheckoutStart(DeclaredFamily, affix="CheckoutStart"):
     @abstractmethod
     def worktree_arguments(self, path: Path) -> tuple[str, ...]: ...
 
+    @property
+    @abstractmethod
+    def reference(self) -> str: ...
+
+    def tracked_gib(self, repository: Path) -> float:
+        """Decode Git's tracked payload sizes before creating the working tree."""
+        listing = Repo.git(repository, 'ls-tree', '-r', '-l', self.reference)
+        sizes = (line.split(None, 4)[3] for line in listing.splitlines())
+        return sum(int(size) for size in sizes if size != '-') / 2**30
+
     @classmethod
     def of(cls, repository: Path, branch: str, base: str) -> CheckoutStart:
         if Repo.answers(repository, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"):
@@ -313,6 +323,10 @@ class CheckoutStart(DeclaredFamily, affix="CheckoutStart"):
 class DetachedStart(CheckoutStart):
     revision: str
 
+    @property
+    def reference(self) -> str:
+        return self.revision
+
     def worktree_arguments(self, path: Path) -> tuple[str, ...]:
         return ("--detach", "-q", str(path), self.revision)
 
@@ -322,6 +336,10 @@ class NewBranchStart(CheckoutStart):
     branch: str
     base: str
 
+    @property
+    def reference(self) -> str:
+        return self.base
+
     def worktree_arguments(self, path: Path) -> tuple[str, ...]:
         return ("-q", "-b", self.branch, str(path), self.base)
 
@@ -329,6 +347,10 @@ class NewBranchStart(CheckoutStart):
 @dataclass(frozen=True)
 class KeptBranchStart(CheckoutStart):
     branch: str
+
+    @property
+    def reference(self) -> str:
+        return self.branch
 
     def worktree_arguments(self, path: Path) -> tuple[str, ...]:
         return ("-q", str(path), self.branch)
