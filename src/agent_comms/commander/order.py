@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import ast
 import dataclasses
+import json
 import re
 import shlex
 import subprocess
@@ -305,7 +306,8 @@ class OrderFile:
         if not clean and (timid := BluntText.refused(self.prose)):
             problems.append(timid + '; fix: name the defect in why_stupid, or use --clean')
         if re.search(r'\bslop\b', self.prose, re.I) and not self.slop:
-            problems.append('slop: fix: supply pattern, fact, at, derive and by citation fields')
+            problems.append('slop: fix: supply one slop item matching this JSON schema: '
+                            + json.dumps(FieldCodec.record_schema(Slop)))
         return problems
 
     def resolved(self, finding: ProblemFinding) -> OrderFile:

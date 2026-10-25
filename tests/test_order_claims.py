@@ -8,6 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.commander.order import OrderFile, main
+from agent_comms.change_report import FileLine
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec, GoalId, OrderId, RecordProblems
@@ -22,6 +23,7 @@ from agent_comms.order_tools import (
     TodoChanged,
 )
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.slop import DeclarationDerivation, DeleteCopyDerivation, Derivation, ExistingLine, Slop
 from agent_comms.todos import (
     ClaimedProblemOrder,
     CheckedProblemOrder,
@@ -424,3 +426,40 @@ def test_say_without_answers_answers_the_target_units_open_asks(held_commander, 
     history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
     assert [message.answers for message in history.messages
             if message.sender == ctx.commander][:2] == [(unnamed.reference,), (named.reference,)]
+
+
+def test_recurrence_refusal_names_accepted_derivations(held_commander, cited_source):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    original = store.get("P1")
+    planned = replace(original.order.checked(), id=OrderId.mint())
+    where = planned.owner
+    outside = FileLine("owner.py", 1)
+    rejected = (
+        Slop("IMPL-3", "the count of open orders", where,
+             DeleteCopyDerivation, ExistingLine(outside)),
+        Slop("IMPL-3", "the count of open orders", where,
+             DeclarationDerivation, ExistingLine(where)),
+    )
+    with pytest.raises(TodoError) as refusal:
+        store.require_recurrence_declaration(planned, where, cited_source.checkout, rejected, 20)
+    text = str(refusal.value)
+    for mechanism in Derivation.members_with(DeclarationDerivation):
+        assert mechanism.declared_name in text
+    assert "derive delete-copy never satisfies recurrence" in text
+    assert f"by {where.to_wire()} is inside the same declaration" in text
+    assert "Parent" in text and "owner.py:2-3" in text
+    assert store.get(original.id) == original
+
+    accepted = replace(rejected[0], derive=DeclarationDerivation)
+    store.require_recurrence_declaration(planned, where, cited_source.checkout, (accepted,), 20)
+    assert store.get(original.id) == original
+
+    document = OrderFile(planned,
+        "The slop repeats the count instead of reading its declaration",
+        "This is stupid because the same count has two independent decisions")
+    guidance = "\n".join(document.problems_found(clean=True))
+    for mechanism in Derivation.members_with(Derivation):
+        assert mechanism.declared_name in guidance
+    assert "src/agent_comms/FILE.py:LINE" in guidance
+    json.loads(guidance.split("this JSON schema: ", 1)[1])
