@@ -19,7 +19,7 @@ from agent_comms.execution_states import (
     ExecutionState,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.field_codec import AssignmentId, FieldCodec, MessageId
 from agent_comms.lifecycle_capability import Failed
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
 from agent_comms.reason_codes import NoReasonCode
@@ -132,7 +132,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                     created_at_ms=0, updated_at_ms=0,
                 ).insert(db)
                 WakeAssignment(
-                    assignment_id="c", recipient="owner", recipient_lookup=OWNER_LOOKUP,
+                    assignment_id=AssignmentId("c"), recipient="owner", recipient_lookup=OWNER_LOOKUP,
                     wire_seq=1, message_id=MessageId.mint("m"), audience=MessageAudience.DIRECT,
                     lifecycle=EngagedAssignment.build(FullWake(), "e", "requester"),
                     accepted_at_ms=0, updated_at_ms=0,
@@ -141,7 +141,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                     execution_id="e", exact_target="requester", lifecycle=ReviewedResponse(),
                     reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0, revision=1,
                 ).insert(db)
-                ExecutionAssignmentLink("e", "c", 0).insert(db)
+                ExecutionAssignmentLink("e", AssignmentId("c"), 0).insert(db)
             obligation, = store.get("e").obligations
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
@@ -166,7 +166,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
         with Coordination(tmp_path / "coordination.sqlite3") as store:
             store.participants.register(OWNER_LOOKUP, committed=True)
             assignment = WakeAssignment(
-                assignment_id="assignment",
+                assignment_id=AssignmentId("assignment"),
                 recipient="owner",
                 recipient_lookup=OWNER_LOOKUP,
                 wire_seq=1,

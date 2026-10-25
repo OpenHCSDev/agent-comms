@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .activity import ActivityCapture, ObservedActivity
 from .activity_clocks import ChannelActivity
 import logging
 import time
@@ -28,6 +29,7 @@ from .view_unread import transcript_read_state
 
 
 if TYPE_CHECKING:
+    from .registry_provenance import DeletedThread
     from .historical_views import HistoricalThread, HistorySource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -62,6 +64,8 @@ from .presentation import (
     CountedRead,
     InboxRead,
     MessageNotification,
+    NoRevision,
+    ReadState,
     ThreadRecord,
     ThreadView,
     WireRevision,
@@ -194,6 +198,26 @@ class HistoryViews:
         self.ledger = ledger
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents, goals)
         self.transcript_reads = transcript_read_state(bus.reads.path)
+        self.captured_activity: tuple[ReadState, ActivityCapture[ObservedActivity | DeletedThread]] = (
+            NoRevision(), ActivityCapture.empty())
+
+    def observed_activity(
+        self, revision: WireRevision, names: Iterable[str],
+    ) -> dict[str, ObservedActivity | DeletedThread]:
+        """The named threads' activity as of one observer revision.
+
+        Every notification request and every thread read asks; each revision captures
+        a name once, so a busy bus opens the activity and room stores once per
+        revision instead of once per reader. A busy row turning idle with age moves
+        no revision field, so the capture also ends when its own expiry passes."""
+        held, capture = self.captured_activity
+        if held != revision or capture.expired():
+            capture = ActivityCapture.empty()
+        wanted = tuple(names)
+        if missing := set(wanted) - capture.activity.keys():
+            capture = capture.joined(self.registry.snapshot().observed_activity(self.agents, missing))
+        self.captured_activity = (revision, capture)
+        return {name: capture.activity[name] for name in wanted if name in capture.activity}
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.bus, references)

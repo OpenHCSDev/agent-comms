@@ -1238,11 +1238,15 @@ class ProgressRead(PullRequests, CheckoutReads):
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         CheckoutReads.__init__(self)
         PullRequests.__init__(self, todos)
+        self._progress: dict[str, OrderProgress] = {}
 
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
-        """Each held order's progress, read through this frame's one reader."""
+        """Each held order's progress, read once per frame however many readers ask."""
         self.register(held)
-        return {todo.id: OrderProgress.read(todo, registry, self) for todo in held}
+        for todo in held:
+            if todo.id not in self._progress:
+                self._progress[todo.id] = OrderProgress.read(todo, registry, self)
+        return {todo.id: self._progress[todo.id] for todo in held}
 
 
 @dataclass(frozen=True)
@@ -1363,6 +1367,11 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
+    @property
+    def judgeable(self) -> bool:
+        """Whether a head verdict can still gate this order's work: until its PR merges."""
+        return True
+
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
         """Linked merges this progress incorrectly reports as no commit."""
         return ()
@@ -1438,6 +1447,11 @@ class MergedProgress(FoundProgress):
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
+
+    @property
+    def judgeable(self) -> bool:
+        """A merged head has nothing left for a verdict to gate."""
+        return False
 
 
 @dataclass(frozen=True)
