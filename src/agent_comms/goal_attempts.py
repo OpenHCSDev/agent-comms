@@ -750,23 +750,26 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
         AtomicFile(self.path).sync()
 
     @contextmanager
-    def writing(self) -> Iterator[sqlite3.Connection]:
-        with closing(self._connect()) as conn, self.transaction(conn):
+    def writing(self, committed: Callable[[], None] = lambda: None) -> Iterator[sqlite3.Connection]:
+        with closing(self._connect()) as conn, self.transaction(conn, committed):
             yield conn
 
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]
     ) -> _T:
-        """A failed commit, sync, or readback is never a launch authorization."""
-        try:
-            with self.writing() as conn:
-                result = operation(conn)
+        """A failed commit, sync, or readback is never a launch authorization, and is never
+        announced: the fsync and readback run before the change is published."""
+        def attest() -> None:
             self._sync()
             try:
                 if not verify(result):
                     raise StorageUncertainError("Goal attempt readback does not attest the write.")
             except sqlite3.Error as error:
                 raise StorageUncertainError("Goal attempt readback failed.") from error
+
+        try:
+            with self.writing(attest) as conn:
+                result = operation(conn)
         except errors.GoalAttemptError:
             raise
         except (sqlite3.Error, OSError) as error:
