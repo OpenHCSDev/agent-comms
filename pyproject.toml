@@ -98,8 +98,6 @@ path = "src/agent_comms/__init__.py"
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
 
 [tool.pytest.ini_options]
-# Load before conftest's application imports, including in uninstalled worktrees.
-addopts = ["-p", "agent_comms.pytest_lease"]
 testpaths = ["tests"]
 pythonpath = [".", "src", "tools"]
 python_files = ["test_*.py"]
