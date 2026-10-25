@@ -1,13 +1,18 @@
 """The change-report kind and its declared evidence, through the real send path."""
 
 import os
+from dataclasses import replace
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.change_report import ChangedFact, ChangeReport, FileLine
+from agent_comms.registry_document import NoCommanderProject
+from agent_comms.change_report import ChangedFact, ChangeReport, FileLine, OrderRoots
+from agent_comms.errors import MissingSourceLine
+from agent_comms.repository_name import RepositoryName
+from source_revision_fixture import SourceRepository
 from agent_comms.read_basis import NamedViewer
 from agent_comms.messages import (
     AckKind, AlertKind, ChangeReportKind, HandoffKind, InfoKind, Message,
@@ -90,6 +95,27 @@ class TestChangeReportKind:
         with pytest.raises(ValueError):
             reporter.messaging.send("reporter", "fixer", "review this", ChangeReportKind, report=invalid).message.message_id
 
+    def test_a_reference_naming_a_registered_repository_is_read_at_its_main(
+            self, reporter_repo, tmp_path):
+        other = SourceRepository.create(tmp_path / 'other', RepositoryName.from_wire('example/other'))
+        roots = OrderRoots(reporter_repo, other.project)
+
+        def naming(owner):
+            return ChangeReport(branch="main", facts=(ChangedFact(
+                fact="fact", owner=FileLine.from_wire(owner),
+                consumers=(FileLine.from_wire("src/demo.py:3"),),
+                search_command="grep -rn fact src", edits_before=1, edits_after=1,
+            ),))
+
+        naming("example/other:owner.py:2").require_references_exist(roots)
+        with pytest.raises(MissingSourceLine, match='does not exist'):
+            naming("example/other:owner.py:400").require_references_exist(roots)
+        with pytest.raises(MissingSourceLine, match="'ghost' does not resolve"):
+            replace(naming("example/other:owner.py:2"), branch="ghost").require_references_exist(roots)
+        with pytest.raises(ValueError, match='no registered commander project'):
+            naming("example/other:owner.py:2").require_references_exist(
+                OrderRoots(reporter_repo, NoCommanderProject()))
+
     def test_declared_report_publishes_and_round_trips(self, reporter, reporter_repo):
         committed = reporter.messaging.send(
             "reporter", "fixer", "review this", ChangeReportKind, report=report(reporter_repo)).message
@@ -157,7 +183,7 @@ class TestKindDeclarations:
         })
         assert stored.type is HandoffKind
         with pytest.raises(ValueError):
-            stored.report.require_references_exist(Path())
+            stored.report.require_references_exist(OrderRoots(Path(), NoCommanderProject()))
 
     def test_kind_selector_resolves_once(self):
         assert MessageKind.member_named("change-report") is ChangeReportKind
@@ -165,5 +191,6 @@ class TestKindDeclarations:
         assert MessageKind.field_value(AlertKind) is AlertKind
 
     def test_file_line_scans_references_from_text(self):
-        references = FileLine.scan("see src/a.py:12, org.py:3, `/home/ts/a.py:9` and plain seq:7")
+        references = FileLine.scan("see src/a.py:12, org.py:3, `/home/ts/a.py:9` and plain seq:7",
+                                   NoCommanderProject())
         assert [r.to_wire() for r in references] == ["src/a.py:12", "org.py:3", "/home/ts/a.py:9"]
