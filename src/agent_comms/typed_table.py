@@ -508,6 +508,8 @@ class _Field(SqlValue):
     init: bool
     nullable: bool
     column: Column
+    required: bool = True
+    absent: str = "NULL"
 
     def reference(self, alias: str) -> str:
         return f"{alias}.{_identifier(self.wire_name)}"
@@ -523,22 +525,38 @@ class _Field(SqlValue):
     @classmethod
     def for_field(cls, plan: FieldPlan) -> _Field:
         column = Column.declared(plan.annotation)
+        storage = column.storage or SqlStorage.for_type(plan.annotation)
         return cls(
             name=plan.name,
             wire_name=plan.key if column.record_key else plan.name,
             init=plan.declared.init,
             annotation=plan.annotation,
             nullable=_base_type(plan.annotation)[1] or column.nullable,
-            storage=column.storage or SqlStorage.for_type(plan.annotation),
+            storage=storage,
             column=column,
             value=plan.value,
+            required=plan.constructor_required,
+            absent="NULL" if plan.constructor_required else sql_constant(
+                storage.to_sql(plan.value.encode(plan.default()))),
         )
 
+    @property
+    def fillable(self) -> bool:
+        """A row stored before this column existed gets a valid value: NULL or the declared default."""
+        return self.nullable or not self.required
+
     def rebuild_expression(self, stored: tuple[str, ...]) -> str:
-        """A carried value remains stored; table constraints own whether NULL is valid."""
+        """A carried value remains stored; a column the row predates takes its declared
+        default, else NULL, and the table constraints own whether NULL is valid."""
         if self.wire_name in stored:
             return _identifier(self.wire_name)
-        return "NULL"
+        return self.absent
+
+
+def sql_constant(value: object) -> str:
+    """SQLite's own literal for a stored value, from its quote() function."""
+    with closing(sqlite3.connect(":memory:")) as db:
+        return SqlValue.for_annotation(str).read(db.execute("SELECT quote(?)", (value,)))[0]
 
 
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
@@ -1092,11 +1110,11 @@ class TableSchema(ABC):
     ) -> None:
         """Inside the caller's write transaction, the stored schema onto the declaration
         wherever the declaration says how: declared earlier table names, missing
-        nullable fields, an index, trigger or view rebuilt from its SQL, or a missing object.
+        nullable or defaulted fields, an index, trigger or view rebuilt from its SQL, or a missing object.
         Other table differences are refused with the rows untouched."""
         for row in cls.schema_rows():
             row.take_previous_name(db)
-            row.derive_nullable_fields(db)
+            row.derive_missing_fields(db)
             row.derive_relaxed_fields(db)
             if SQLiteColumnShape.only_constraints_differ(db, row):
                 row.rebuild(db)
@@ -2027,8 +2045,9 @@ class TypedTable(
         db.execute(f"DROP TABLE {temporary}")
 
     @classmethod
-    def derive_nullable_fields(cls, db: sqlite3.Connection) -> None:
-        """Only an exact earlier declaration missing nullable fields can grow rows.
+    def derive_missing_fields(cls, db: sqlite3.Connection) -> None:
+        """Only an exact earlier declaration missing fields its rows can fill (nullable, or
+        with a declared default) can grow rows.
 
         Extra columns or any other table difference still require a data conversion.
         Compare through the same DDL owner; do not maintain a second column schema.
@@ -2038,7 +2057,7 @@ class TypedTable(
         missing = tuple(item for item in fields if item.wire_name not in stored)
         if not stored or not missing:
             return
-        if not all(item.nullable and item.column.writable for item in missing):
+        if not all(item.fillable and item.column.writable for item in missing):
             return
         previous = cls._table_sql(
             columns=tuple(item.name for item in fields if item.wire_name in stored),

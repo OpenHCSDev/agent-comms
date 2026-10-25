@@ -253,6 +253,23 @@ def test_durable_writer_relaxes_not_null_without_losing_rows():
         assert RelaxedValueRow.count(db) == len(rows) + 1
 
 
+def test_durable_writer_fills_a_missing_field_from_its_declared_default():
+    from agent_comms.cli_bridges.claude import BoardLineRow
+    from agent_comms.typed_table import WriterOwnedFile
+
+    with sqlite3.connect(":memory:") as db:
+        db.execute(
+            'CREATE TABLE "board_line" ("text" TEXT NOT NULL, "since" REAL NOT NULL, '
+            '"locks_at" REAL NOT NULL) STRICT'
+        )
+        db.execute('INSERT INTO "board_line" VALUES (?, ?, ?)', ("IDLE #1", 1.0, 2.0))
+        db.commit()
+
+        BoardLineRow.reconcile_schema(db, WriterOwnedFile())
+
+        assert BoardLineRow.select(db) == [BoardLineRow("IDLE #1", 1.0, 2.0, urgent=False)]
+
+
 def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
     from agent_comms.native_pi import NativeContextJournal
 
