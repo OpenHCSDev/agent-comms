@@ -1029,6 +1029,11 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
             yield AnsweredSource(original.seq, self.seq)
 
 
+    @property
+    def history_record(self) -> BusRecord:
+        """What a copied history appends: display facts, never another root's claims."""
+        return PublicRecord.from_message(self.history_snapshot)
+
     def append_to(self, db: sqlite3.Connection, seq: int) -> int:
         """The caller's transaction owns the sequence, including preserved history."""
         self.require_answers(db)
@@ -1053,6 +1058,10 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         super().__init_subclass__()
         dataclass(cls, frozen=True, kw_only=True)
         cls.tables()
+
+
+class PublicRecord(BusRecord):
+    sender_lookup: ClassVar[PublicSender] = PublicSender()
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -249,7 +249,9 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
             yield session.context_info()
 
 
-CATALOG_TIMEOUT = 10  # seconds for one metadata child to start and answer
+# Seconds for one metadata child to start and answer. An idle Pi boot answers in 6-7 s, so
+# 10 s timed out `fork --model` on a loaded host (CI, a machine running tests).
+CATALOG_TIMEOUT = 30
 
 
 class CatalogQuery(NativeQuery):

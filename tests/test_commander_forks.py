@@ -35,6 +35,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from agent_comms.errors import TodoError
 from agent_comms.todos import (
     PendingProblemOrder,
     ProblemAllocation,
@@ -42,7 +43,6 @@ from agent_comms.todos import (
     StrikeReason,
     SupersededVerdict,
     Todo,
-    TodoError,
 )
 from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration

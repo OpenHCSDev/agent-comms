@@ -7,6 +7,7 @@ import sys
 
 import pytest
 
+from agent_comms.child_process import NoResidentManager, ResidentManager, SystemdUserManager
 from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander import standing
 from agent_comms.field_codec import FieldCodec, Id128
@@ -28,7 +29,7 @@ with open({record!r}, "w") as record:
 
 
 @pytest.fixture
-def systemd(tmp_path, monkeypatch):
+def systemd(tmp_path, monkeypatch, user_manager):
     """A systemd-run on PATH that records its argv; ``show`` answers a collected unit."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -37,7 +38,7 @@ def systemd(tmp_path, monkeypatch):
     fake.write_text(FAKE.format(python=sys.executable, record=str(record)))
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-    monkeypatch.setattr(InstallUnit, "shown", staticmethod(lambda unit, name: "inactive"))
+    monkeypatch.setattr(user_manager, "shown", staticmethod(lambda unit, name: "inactive"))
     return record
 
 
@@ -47,7 +48,7 @@ def test_spawn_starts_a_unit_whose_request_round_trips(tmp_path, systemd):
     command = InstallCliCommand(checkout=tmp_path / "checkout", to="HEAD")
     run = InstallRun(command, root, tmp_path / "scratch", "a" * 40)
 
-    run.spawn()
+    run.spawn(wait=False)
 
     argv = json.loads(systemd.read_text())
     assert f"--unit={run.unit.unit}" in argv
@@ -110,10 +111,23 @@ def test_a_launched_unit_gone_without_a_result_died(tmp_path, systemd):
     assert logs.member(repo, "c" * 40) is standing.PendingInstallDue
 
 
-def test_a_missing_systemd_run_refuses_at_once(tmp_path, monkeypatch):
+def test_a_missing_systemd_run_refuses_at_once(tmp_path, monkeypatch, user_manager):
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(FileNotFoundError, match="systemd-run"):
-        InstallUnit(Id128.mint(), tmp_path).start(tmp_path, ("true",), "")
+        InstallUnit(Id128.mint(), tmp_path).start(tmp_path, ("true",), "", wait=False)
+
+
+def test_a_home_without_a_manager_runs_its_install_in_the_waiting_caller(tmp_path, monkeypatch):
+    """A private home owns its install only while its caller waits; nothing outlives it."""
+    monkeypatch.setattr(ResidentManager, "current", staticmethod(lambda: NoResidentManager))
+    unit = InstallUnit(Id128.mint(), tmp_path)
+    unit.request.write_text("request ")
+    echo = "import os, sys; print(sys.stdin.read() + os.environ['PYTHONPATH'])"
+    unit.start(tmp_path, (sys.executable, "-c", echo), "tree", wait=True)
+    assert unit.result.read_text() == "request tree\n"
+    assert not unit.running()
+    with pytest.raises(subprocess.CalledProcessError):
+        unit.start(tmp_path, (sys.executable, "-c", "raise SystemExit(3)"), "", wait=True)
 
 
 def test_a_second_launch_on_one_root_refuses_until_the_first_lets_go(tmp_path, systemd):
@@ -127,7 +141,7 @@ def test_a_second_launch_on_one_root_refuses_until_the_first_lets_go(tmp_path, s
 
 
 def running_only(monkeypatch, unit: InstallUnit) -> None:
-    monkeypatch.setattr(InstallUnit, "shown", staticmethod(
+    monkeypatch.setattr(SystemdUserManager, "shown", staticmethod(
         lambda name, field: "active" if name == unit.unit else "inactive"))
 
 
@@ -144,7 +158,7 @@ def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, syst
     run = InstallRun(InstallCliCommand(checkout=core.checkout, to="HEAD"), root,
                      tmp_path / "scratch", "a" * 40)
     with logs.launching():
-        run.spawn()
+        run.spawn(wait=False)
     logs.record(run.unit.logs, core.github, "a" * 40)
     running_only(monkeypatch, run.unit)
 

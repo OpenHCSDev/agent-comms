@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.errors import ToolRefusedError
+from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
@@ -35,8 +35,6 @@ from agent_comms.todos import (
     StrikeReason,
     StrikeTodo,
     Todo,
-    TodoConflict,
-    TodoError,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool

@@ -22,6 +22,7 @@ from agent_comms.order_tools import (
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread
+from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     AcceptedVerdict,
     DoneTodoState,
@@ -30,8 +31,6 @@ from agent_comms.todos import (
     SendBackVerdict,
     StrikeReason,
     StrikeTodo,
-    TodoConflict,
-    TodoError,
     UnorderedProblemOrder,
     WithdrawTodo,
 )

@@ -216,6 +216,16 @@ async def tool_listener() -> AsyncIterator[Callable[[Path, str], ToolListener]]:
 
 
 @pytest.fixture
+def user_manager(monkeypatch: pytest.MonkeyPatch) -> type:
+    """A test that stands in for systemd's own commands names the manager it plays; every
+    other test home has no user manager (``ResidentManager.current``)."""
+    from agent_comms.child_process import ResidentManager, SystemdUserManager
+
+    monkeypatch.setattr(ResidentManager, "current", staticmethod(lambda: SystemdUserManager))
+    return SystemdUserManager
+
+
+@pytest.fixture
 def durable_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A credential-free durable host never reads the developer's Pi account."""
     home = tmp_path / "home"
