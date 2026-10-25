@@ -666,12 +666,8 @@ class UserRecord(ClaudeRecord, TimedRecord, Originated, declared_name='user'):
         session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
-    @property
-    def text(self) -> str:
-        return self.message.text()
-
     def request(self) -> str:
-        return self.origin.request(self.text)
+        return self.origin.request(self.message.text())
 
 
 class CompactSummary(UserRecord, declared_name='compact-summary'):
@@ -679,7 +675,7 @@ class CompactSummary(UserRecord, declared_name='compact-summary'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
-        return (TurnStarted(), Summarized(self.text))
+        return (TurnStarted(), Summarized(self.message.text()))
 
     def request(self) -> str:
         return ''
