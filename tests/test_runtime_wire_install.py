@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from fixture_git import IDENTITY
 from module_layers import OutgoingWire
 
 from agent_comms.bus import Bus
@@ -36,11 +37,9 @@ def outgoing_tree(tmp_path):
     cutover.mkdir(parents=True)
     (cutover / "__init__.py").touch()
     subprocess.run(("git", "init", "-q", str(checkout)), check=True)
-    subprocess.run(("git", "-C", str(checkout), "config", "user.name", "Wire test"), check=True)
-    subprocess.run(("git", "-C", str(checkout), "config", "user.email", "wire@example.invalid"), check=True)
     subprocess.run(("git", "-C", str(checkout), "add", "src", "tools"), check=True)
-    subprocess.run(("git", "-C", str(checkout), "-c", "user.name=Wire test",
-                    "-c", "user.email=wire@example.invalid", "commit", "-qm", "outgoing source"), check=True)
+    subprocess.run(("git", *IDENTITY, "-C", str(checkout),
+                    "commit", "-qm", "outgoing source"), check=True)
     return wire, checkout
 
 
@@ -68,12 +67,13 @@ def test_crosses_runtimes_installed_stamp_refuses_session_drift_before_maintenan
     field, = (node for node in declaration.body if isinstance(node, ast.AnnAssign))
     field.target = ast.Name(id="old_process", ctx=ast.Store())
     path.write_text(ast.unparse(tree))
-    subprocess.run(("git", "-C", str(checkout), "commit", "-qam", "old wire"), check=True)
+    subprocess.run(("git", *IDENTITY, "-C", str(checkout),
+                    "commit", "-qam", "old wire"), check=True)
     runtime = stamped_child(tmp_path, checkout)
     # HEAD is now compatible. Only the installed stamp still selects the older fields.
     path.write_text((wire.checkout / session.path).read_text())
-    subprocess.run(("git", "-C", str(checkout), "-c", "user.name=Wire test",
-                    "-c", "user.email=wire@example.invalid", "commit", "-qam", "new compatible HEAD"), check=True)
+    subprocess.run(("git", *IDENTITY, "-C", str(checkout),
+                    "commit", "-qam", "new compatible HEAD"), check=True)
     home = tmp_path / "home"
     pointer = home / ".local/share/agent-comms/current"
     pointer.parent.mkdir(parents=True)
