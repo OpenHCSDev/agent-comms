@@ -25,6 +25,7 @@ from .context_reading import ContextReading
 from .declared_family import DeclaredFamily
 from .external_transcript import DraftRow
 from .field_codec import (
+    AssignmentId,
     ClaimId,
     AcceptsNull,
     ExternalJsonShape,
@@ -771,7 +772,7 @@ class SelectedWriteRequest(CommsRequest):
 class SelectedWriteAcceptedUpdate(AgentCommsUpdate):
     operation_id: ClaimId
     source_seq: int
-    claim_id: str
+    claim_id: AssignmentId
 
 
 def encode_request(request: CommsRequest) -> dict:

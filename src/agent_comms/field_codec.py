@@ -1936,14 +1936,6 @@ class Id128Text(NominalSpelling[Id128], HexDigits):
     digits = 32
 
 
-class AssignmentId(NominalText):
-    """One recipient's wake claim on one bus message."""
-
-
-class AssignmentIdText(NominalSpelling[AssignmentId]):
-    spelling = re.compile(".{1,256}")
-
-
 class MessageId(NominalText):
     @classmethod
     def mint(cls, text: str) -> Self:
@@ -1978,6 +1970,21 @@ class Hex256Text(HexDigits):
 
 class Sha256Text(Hex256Text):
     """A SHA-256 digest."""
+
+
+class AssignmentId(NominalText):
+    """One recipient's wake claim on one bus message, minted only by its sealed cohort."""
+
+    cohort_codec: ClassVar[str] = "cohort-v1:"
+
+    @classmethod
+    def cohort(cls, identity: bytes) -> Self:
+        """The claim a sealed cohort mints for one member's identity."""
+        return cls(cls.cohort_codec + hashlib.sha256(identity).hexdigest())
+
+
+class AssignmentIdText(NominalSpelling[AssignmentId]):
+    spelling = re.compile(re.escape(AssignmentId.cohort_codec) + Sha256Text.spelling.pattern)
 
 
 class Token256Text(Hex256Text):
