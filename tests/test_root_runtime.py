@@ -68,6 +68,8 @@ def test_recorded_runtime_launches_its_own_source_without_borrowing_a_runtime(tm
         capture_output=True, text=True, check=True,
     )
     assert Path(completed.stdout.strip()).resolve() == Path(agent_comms.__file__).resolve()
+    alternate = LaunchRuntime(runtime.interpreter.with_name("python3"))
+    assert alternate.environment(os.environ) == runtime.environment(os.environ)
     foreign = LaunchRuntime.at_prefix(tmp_path / "foreign")
     assert "PYTHONPATH" not in foreign.environment({"PYTHONPATH": "foreign-source"})
 

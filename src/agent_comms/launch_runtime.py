@@ -149,7 +149,7 @@ class RunningSource(ABC):
     def serving(runtime: LaunchRuntime) -> RunningSource:
         """The source a runtime's children import: this process's own when the runtime is this
         process's interpreter, otherwise that installation's site-packages."""
-        if runtime.interpreter == Path(sys.executable):
+        if runtime.prefix == LaunchRuntime.running().prefix:
             return RunningSource.current()
         return InstalledSource(runtime.prefix)
 
