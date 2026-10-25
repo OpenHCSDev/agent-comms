@@ -2271,6 +2271,11 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     """A table derives its producers from the writers that declare it as an output."""
 
     @classmethod
+    def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
+        """A row contributes itself; extra writes belong to the class declaring them."""
+        return (cls,) if "writes" in vars(cls) else ()
+
+    @classmethod
     def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
         """Only the identity-owning row contributes a verified history prefix."""
         return 0

@@ -1207,6 +1207,18 @@ def test_local_import_scope_counts_nested_functions_and_classes_once():
     assert FunctionLocalImport.count(source, "imports.py") == 4
 
 
+def test_a_new_enum_fails_the_ratchet_and_folding_one_passes(repo):
+    plain = "class Family:\n    pass\n"
+    base = repo.commit({"kinds.py": plain})
+    grown = repo.commit({"kinds.py": plain + "import enum\nclass Kind(enum.StrEnum):\n    A = 'a'\n"})
+    status, report = repo.compare(base, grown, EnumDeclaration)
+    identity = EnumDeclaration.at(f"{repo.root}/kinds.py").text
+    assert status == 1
+    assert report["head"][identity] == 1
+    folded = repo.commit({"kinds.py": plain})
+    assert repo.compare(grown, folded, EnumDeclaration)[0] == 0
+
+
 def test_enum_declarations_count_every_stdlib_enum_base_and_nothing_else():
     source = b"""import enum\nfrom enum import Enum, StrEnum\nclass A(Enum): pass\nclass B(enum.IntFlag): pass\nclass C(str, StrEnum): pass\nclass Family: pass\nclass Member(Family): pass\ndef local():\n    class D(enum.Flag): pass\n"""
     assert EnumDeclaration.lines(source, "kinds.py") == [3, 4, 5, 9]

@@ -857,7 +857,7 @@ class DirectiveVerb(CommanderVerb):
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         blocked = []
         for rule in owed:
-            if rule.blocks(reached, self):
+            if rule.blocks(reached, self, named):
                 blocked.append(rule)
             else:
                 print(f'WARNING: {rule.line()}')

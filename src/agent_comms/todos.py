@@ -37,6 +37,7 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
     CitedRevisions,
     CommitRevision,
+    Declaration,
     FileLine,
     MainRevision,
     NoSourceReference,
@@ -1112,15 +1113,17 @@ class PresentCheckout(ProgressCheckout):
 
     @cached_property
     def origin_pushes(self) -> tuple[tuple[str, float], ...]:
-        """Each push to a retained origin reference, as its commit and push time."""
-        origin = frozenset(self.origin_refs)
+        """Each push to a retained origin reference, as its commit and push time.
+
+        Git walks only the origin references' reflogs; `--all` also walked every
+        worktree HEAD, note and PR fetch to throw them away, ten times the work."""
+        if not self.origin_refs:
+            return ()
         pushes = []
-        for row in self.git("reflog", "show", "--all", "--date=unix",
-                            "--grep-reflog=update by push", "--format=%gD%x09%H").splitlines():
+        for row in self.git("reflog", "show", "--date=unix", "--grep-reflog=update by push",
+                            "--format=%gD%x09%H", *self.origin_refs).splitlines():
             selector, sha = row.split("\t")
-            reference, stamp = selector.rsplit("@{", 1)
-            if reference in origin:
-                pushes.append((sha, float(stamp.removesuffix("}"))))
+            pushes.append((sha, float(selector.rsplit("@{", 1)[1].removesuffix("}"))))
         return tuple(pushes)
 
     @cached_property
@@ -1236,11 +1239,15 @@ class ProgressRead(PullRequests, CheckoutReads):
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         CheckoutReads.__init__(self)
         PullRequests.__init__(self, todos)
+        self._progress: dict[str, OrderProgress] = {}
 
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
-        """Each held order's progress, read through this frame's one reader."""
+        """Each held order's progress, read once per frame however many readers ask."""
         self.register(held)
-        return {todo.id: OrderProgress.read(todo, registry, self) for todo in held}
+        for todo in held:
+            if todo.id not in self._progress:
+                self._progress[todo.id] = OrderProgress.read(todo, registry, self)
+        return {todo.id: self._progress[todo.id] for todo in held}
 
 
 @dataclass(frozen=True)
@@ -1361,6 +1368,11 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
+    @property
+    def judgeable(self) -> bool:
+        """Whether a head verdict can still gate this order's work: until its PR merges."""
+        return True
+
     def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
         """Linked merges this progress incorrectly reports as no commit."""
         return ()
@@ -1436,6 +1448,11 @@ class MergedProgress(FoundProgress):
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
+
+    @property
+    def judgeable(self) -> bool:
+        """A merged head has nothing left for a verdict to gate."""
+        return False
 
 
 @dataclass(frozen=True)
@@ -1758,7 +1775,7 @@ class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         """An unlocated finding has no source reference to validate."""
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
         return False
 
     def instructions(self) -> tuple[str, ...]:
@@ -1780,8 +1797,8 @@ class LocatedProblemFinding(ProblemFinding):
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         self.where.require_exists(root, revision)
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
-        return any(self.where.same_file(location, root) for location in locations)
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
+        return any(declaration.holds(self.where, root) for declaration in declarations)
 
     def instructions(self) -> tuple[str, ...]:
         return (f"Where: {self.place()}",)
@@ -2108,9 +2125,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
 
-    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
-        return (any(self.owner.same_file(location, root) for location in locations)
-                or self.finding.on_files(locations, root))
+    def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
+        return (any(declaration.holds(self.owner, root) for declaration in declarations)
+                or self.finding.in_declarations(declarations, root))
 
     def checked(self) -> CheckedProblemOrder:
         return self
@@ -4465,12 +4482,12 @@ class Todo(TodoStoreRows, TypedTable):
                       if order.id not in current}.values())
 
     def recurrence(
-        self, locations: tuple[FileLine, ...], root: Path, now: float,
+        self, declarations: tuple[Declaration, ...], root: Path, now: float,
     ) -> tuple[str, ...]:
         recent = tuple(order for order in self.order_history
                        if order.at.since(now - 7 * 86400)
                        and order.at.recorded_at("An earlier order") <= now
-                       and order.on_files(locations, root))
+                       and order.in_declarations(declarations, root))
         if not recent:
             return ()
         previous = max(recent, key=lambda order: order.at.chronology())
@@ -5008,13 +5025,14 @@ class TodoStore(OwnerRequestStore):
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
         slop: tuple[Slop, ...], now: float,
     ) -> None:
+        declarations = (order.owner.declaration(root), where.declaration(root))
         previous = tuple(line for todo in self.list(Repo.of(root).github)
-                         for line in todo.recurrence((order.owner, where), root, now))
+                         for line in todo.recurrence(declarations, root, now))
         if previous and not any(
             item.derive.declaration_elsewhere(item.by.line, where, root) for item in slop
         ):
             raise TodoError('\n'.join((*previous,
-                'the same file broke again, name the fact written in more than one place '
+                'the same declaration broke again, name the fact written in more than one place '
                 'and the declaration that replaces the copies.')))
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
