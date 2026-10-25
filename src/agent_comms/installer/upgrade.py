@@ -250,7 +250,7 @@ class Extendable:
     """A record a subclass extends with facts of its own; the shared ones carry over."""
 
     def extended[Record](self, kind: type[Record], **facts: object) -> Record:
-        return kind(**{each.name: getattr(self, each.name) for each in fields(self)}, **facts)
+        return kind(**({each.name: getattr(self, each.name) for each in fields(self)} | facts))
 
 
 @dataclass(frozen=True)
@@ -263,7 +263,7 @@ class CarriedPass(Extendable):
     read: BusReadBack
     retired_inputs: tuple[StepRun, ...] = field(default=(), kw_only=True)
 
-    def after_acceptance(self, pending: tuple[Carry, ...], stack: Stack) -> Self:
+    def after_acceptance(self, pending: tuple[Carry, ...], stack: TargetStack) -> Self:
         return replace(self, retired_inputs=tuple(
             StepRun(step.declared_name, retired) for step, retired in
             zip(pending, stack.call_steps(pending, RetireInputsOperation()), strict=True)
@@ -516,7 +516,7 @@ class HeldOwnersStopped(OwnersStopped):
 
 
 @dataclass(frozen=True)
-class Stack:
+class Stack(Extendable):
     """One built installation and the source checkout containing its install tools."""
 
     checkout: Path
@@ -586,19 +586,20 @@ class Stack:
         self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
                           "--python", "3.14", cwd=self.checkout)
 
-    @classmethod
-    def build(cls, checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> Stack:
+    @staticmethod
+    def build(checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> TargetStack:
         """Resolve current mains once, then build or reuse their immutable installation."""
         with BuildPhase().running(commands.clock):
-            source = cls(checkout.path, commands, home, runtime=LaunchRuntime.running())
+            source = Stack(checkout.path, commands, home, runtime=LaunchRuntime.running())
             source.require_uv()
             source.resolve()
             core = commands.git(checkout.path, "rev-parse", "HEAD").strip()
             resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
             runtimes = home / ".local/share/agent-comms/runtimes"
             prefix = runtimes / f"core-{core[:9]}-lock-{resolution}"
-            built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"),
-                            program=TargetProgram(checkout.path / STEPS.parent))
+            built = source.extended(
+                TargetStack, runtime=LaunchRuntime(prefix / "bin/python"),
+                program=TargetProgram(checkout.path / STEPS.parent))
             if prefix.exists():
                 if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
                     raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
@@ -640,21 +641,6 @@ class Stack:
         return self.commands.probe(probe, self.python, cwd=self.home,
                                    env=self.environment(*self.program.import_roots()),
                                    program=self.program)
-
-    @contextmanager
-    def borrowing(self, stores: tuple[type[WriterOwnedStore], ...], root: Path,
-                  original_root: Path) -> Iterator[Stack]:
-        """The installer retains file locks through rollback; workers only borrow them."""
-        if not stores:
-            yield self
-            return
-        with ExitStack() as lifetime:
-            locks = tuple(lifetime.enter_context(store.retaining(store.source_path(
-                root, original_root, store.retained_name(root, store.path()),
-            ))) for store in stores)
-            program = self.program.borrowing(locks)
-            lifetime.callback(self.commands.close_program, self.python, program)
-            yield replace(self, program=program)
 
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
@@ -726,16 +712,6 @@ class Stack:
             time.sleep(5)
         raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {waited}")
 
-    def call_steps[Answer](self, steps: tuple[Carry, ...],
-                           operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
-        """Run one pass of steps, in order, in this stack's worker; the operation owns
-        traversal and its answer tuple. Every caller passes the staged stack, built from
-        the target tree, so Core comes from its compiled installation and only the steps
-        come from the tree (``TargetProgram``)."""
-        if not steps:
-            return ()
-        return self.probe(CarryProbe(operation, steps))
-
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
@@ -773,6 +749,35 @@ class Stack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
         with ReadBackVerifyPhase().running(self.commands.clock):
             return self.cli(root, ReadBackCliCommand)
+
+
+@dataclass(frozen=True)
+class TargetStack(Stack):
+    """The built target owns carry declarations and the locks its worker borrows."""
+
+    program: TargetProgram = field(kw_only=True)
+
+    @contextmanager
+    def borrowing(self, stores: tuple[type[WriterOwnedStore], ...], root: Path,
+                  original_root: Path) -> Iterator[TargetStack]:
+        """The installer retains file locks through rollback; workers only borrow them."""
+        if not stores:
+            yield self
+            return
+        with ExitStack() as lifetime:
+            locks = tuple(lifetime.enter_context(store.retaining(store.source_path(
+                root, original_root, store.retained_name(root, store.path()),
+            ))) for store in stores)
+            program = self.program.borrowing(locks)
+            lifetime.callback(self.commands.close_program, self.python, program)
+            yield replace(self, program=program)
+
+    def call_steps[Answer](self, steps: tuple[Carry, ...],
+                           operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
+        """Run the target's declared passes in order, in its own worker."""
+        if not steps:
+            return ()
+        return self.probe(CarryProbe(operation, steps))
 
 
 @dataclass(frozen=True)
@@ -845,7 +850,7 @@ class PracticeBus:
             yield cls(Path(scratch), PracticeCopy(root, Path(scratch) / "bus"), root,
                       Path(spill), clock)
 
-    def pending(self, chain: CarryChain, staged: Stack) -> tuple[type[Carry], ...]:
+    def pending(self, chain: CarryChain, staged: TargetStack) -> tuple[type[Carry], ...]:
         """Read-only dry runs in one worker stop at the first step that says work remains."""
         unfinished = chain.unfinished_at(self.original_root).steps
         if not unfinished:
@@ -925,7 +930,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     chain: CarryChain
     pending: tuple[Carry, ...]
     installed: Stack
-    staged: Stack
+    staged: TargetStack
     tree: TargetTree
     installer: InstallerChoice
     spill_dir: Path
@@ -970,7 +975,7 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     @classmethod
     @contextmanager
-    def bridges_paused(cls, installed: Stack, staged: Stack,
+    def bridges_paused(cls, installed: Stack, staged: TargetStack,
                        bridges: SessionBridgeResumes) -> Iterator[None]:
         """Session bridges close their bus resources before the install holds the bus. A
         bridge paused under the hold dies on its exit-time registry write and never answers
@@ -983,19 +988,19 @@ class Install[Rehearsed: Rehearsal](ABC):
     @classmethod
     @contextmanager
     def owners_kept(cls, root: Path, installed: Stack,
-                    staged: Stack) -> Iterator[OwnersStopped]:
+                    staged: TargetStack) -> Iterator[OwnersStopped]:
         """Every owner keeps running: none runs at the root, or the run touches only a copy."""
         yield OwnersStopped()
 
     @classmethod
     def owners_stopped(cls, root: Path, installed: Stack,
-                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+                       staged: TargetStack) -> AbstractContextManager[OwnersStopped]:
         return cls.owners_kept(root, installed, staged)
 
     @classmethod
     @abstractmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
-                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  chain: CarryChain, installed: Stack, staged: TargetStack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
         """This member's install, with what is pending, and its rehearsal."""
 
@@ -1052,7 +1057,7 @@ class StopsOwners:
     @classmethod
     @contextmanager
     def owners_stopped(cls, root: Path, installed: Stack,
-                       staged: Stack) -> Iterator[OwnersStopped]:
+                       staged: TargetStack) -> Iterator[OwnersStopped]:
         owners = OwnersStopped()
         with owners.give_back:
             owners.give_back.callback(owners.start_on, installed, root)
@@ -1068,7 +1073,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     @classmethod
     @contextmanager
     def owners_stopped(cls, root: Path, installed: Stack,
-                       staged: Stack) -> Iterator[OwnersStopped]:
+                       staged: TargetStack) -> Iterator[OwnersStopped]:
         """One hold, one retarget and one stop per install, all at its start. The target
         stops the owners: stopping settles their turns in stores this install carries,
         which the outgoing runtime may be unable to open (install 14, 2026-10-24: a ledger
@@ -1095,7 +1100,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
 
     @classmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
-                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  chain: CarryChain, installed: Stack, staged: TargetStack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
         CarryChain.require_crossed(checkout, root, target)
         with PracticeBus.of(root, installer, spill_dir, staged.commands.clock) as practice:
@@ -1113,7 +1118,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
            pending: tuple[type[Carry], ...], reconciled: tuple[Path, ...],
-           installed: Stack, staged: Stack, tree: TargetTree,
+           installed: Stack, staged: TargetStack, tree: TargetTree,
            installer: InstallerChoice, spill_dir: Path) -> ExistingBusInstall:
         """A bus already carried, on the target, built from the installed lock needs nothing."""
         unchanged = not pending and not reconciled and current == target and RuntimeResolution.installed().matches(
@@ -1158,7 +1163,7 @@ class PreparedMigration(Extendable):
             before = bus_files(root, original_root, writer_stores)
         return cls(hold, before, outgoing.verify(root), original_root, writer_stores)
 
-    def carry(self, pending: tuple[Carry, ...], staged: Stack) -> CarriedPass:
+    def carry(self, pending: tuple[Carry, ...], staged: TargetStack) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
@@ -1322,7 +1327,7 @@ class FreshInstall(Install[FreshRehearsal]):
 
     @classmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
-                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  chain: CarryChain, installed: Stack, staged: TargetStack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
         """Nothing at the root to copy, so nothing is pending."""
         install = cls(checkout, root, current, target, chain, (), installed, staged,

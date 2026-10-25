@@ -407,14 +407,9 @@ class InterpreterOperation[Answer, *Arguments](ABC):
 class ProbeProgram(ABC):
     """Where an operation's declaration is executable by the selected interpreter."""
 
-    inherited_locks: tuple[BorrowedStoreLock, ...] = ()
-
-    def borrowing(self, locks: tuple[BorrowedStoreLock, ...]) -> ProbeProgram:
-        raise NotImplementedError("Only the target interpreter can borrow install file locks")
-
     @property
     def descriptors(self) -> tuple[int, ...]:
-        return tuple(lock.descriptor for lock in self.inherited_locks)
+        return ()
 
     @abstractmethod
     def entry(self) -> tuple[str | Path, ...]: ...
@@ -443,6 +438,10 @@ class TargetProgram(InstalledProgram):
 
     def borrowing(self, locks: tuple[BorrowedStoreLock, ...]) -> TargetProgram:
         return replace(self, inherited_locks=locks)
+
+    @property
+    def descriptors(self) -> tuple[int, ...]:
+        return tuple(lock.descriptor for lock in self.inherited_locks)
 
     def entry(self) -> tuple[str, ...]:
         return (*super().entry(), FieldCodec.compact(FieldCodec.encode(

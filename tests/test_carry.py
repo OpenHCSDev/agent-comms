@@ -29,6 +29,7 @@ from agent_comms.installer.upgrade import (
     RehearsalFiles,
     Stack,
     StepRun,
+    TargetStack,
     TargetTree,
     carried,
 )
@@ -188,7 +189,7 @@ def noisy_step(tmp_path_factory):
 def staged(stack, noisy_step):
     """The runtime built from the noisy tree takes its carry steps from that tree."""
     tree, _ = noisy_step
-    return replace(stack, program=TargetProgram(tree.steps_package))
+    return stack.extended(TargetStack, program=TargetProgram(tree.steps_package))
 
 
 def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
