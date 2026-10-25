@@ -81,8 +81,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
-from agent_comms.commander.standing import DeliveryAwaitingJudgement
-from agent_comms.standing_rules import LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp
+from agent_comms.standing_rules import HeadReviewRule
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
@@ -443,7 +442,7 @@ class VerdictVerb(JudgeVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
-    clears = (DeliveryAwaitingJudgement, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp)
+    clears = (HeadReviewRule,)
     verdict: ClassVar[type[HeadVerdict]]
 
     @classmethod

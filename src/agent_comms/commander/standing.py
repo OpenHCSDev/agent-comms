@@ -42,6 +42,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     CoreActsStandingRule,
     DatedStandingRule,
+    HeadReviewRule,
     IndependentStandingRule,
     OwedAnswer,
     ReasonedStandingRule,
@@ -358,7 +359,7 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
+class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule, HeadReviewRule):
     """A holder's delivery needs a verdict or a replacement order, never a chat reply."""
 
     problem: str

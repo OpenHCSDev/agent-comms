@@ -100,7 +100,7 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     todo = claim() if claim_it else link()
     rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
     rule, = rules
-    assert rule.orders == (todo,)
+    assert rule.todo == todo
     assert (UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)) == claim_it
     frame = HeartbeatFrame.read(comms, "lead", ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
@@ -116,10 +116,31 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
         assert_review_preconditions(delivery, comms, request)
 
 
+def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_review):
+    comms, request, _, link = board_review
+    first = link()
+    second = comms.goals.todos.get("P1")
+    RecordPullRequest(second.revision, second.creator_identity,
+                      PullRequestLink(request.repo, request.pr), second.held().generation).record(
+                          comms.goals, second.id)
+    second = comms.goals.todos.get(second.id)
+    rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    assert {rule.todo.id for rule in rules} == {first.id, second.id}
+    for rule in rules:
+        assert_review_preconditions(rule, comms, request)
+    frame = HeartbeatFrame.read(comms, "lead", ProgressRead(()))
+    timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
+    frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
+    timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
+    assert {timer.todo.id for timer in timers} == {first.id, second.id}
+    for timer in timers:
+        assert_review_preconditions(timer, comms, request)
+
+
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     comms, request, _, _ = board_review
     rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
-    assert rule.orders == ()
+    assert "problem" not in rule.command_values()
     assert "--problem" not in rule.clearing_commands()
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
 
