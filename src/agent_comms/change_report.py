@@ -32,8 +32,41 @@ if TYPE_CHECKING:
     from .todos import PullRequestLink
 
 
+class SourceText(ABC):
+    """Where cited source lines are read: a fetched git revision or a checkout's files."""
+
+    @abstractmethod
+    def lines(self, repository: Path, file: str) -> tuple[str, ...]: ...
+
+    def candidates(self) -> tuple[SourceText, ...]:
+        """The sources a cite may stand on; one source stands alone."""
+        return (self,)
+
+    def require_any(self, check: Callable[[SourceText], None]) -> None:
+        """A cite stands when one candidate source passes its check."""
+        *earlier, last = self.candidates()
+        for revision in earlier:
+            try:
+                check(revision)
+                return
+            except MissingSourceLine:
+                pass
+        check(last)
+
+
 @dataclass(frozen=True)
-class SourceRevision(ABC):
+class WorkingTree(SourceText):
+    """The files on disk in a checkout, where an edit not yet committed lives."""
+
+    def lines(self, repository: Path, file: str) -> tuple[str, ...]:
+        path = repository / file
+        if not path.resolve().is_relative_to(repository.resolve()) or not path.is_file():
+            raise MissingSourceLine(f'Source file {file} does not exist in {repository}.')
+        return tuple(path.read_text(errors='replace').splitlines())
+
+
+@dataclass(frozen=True)
+class SourceRevision(SourceText):
     """One validation call captures each repository's successfully fetched commit once."""
 
     _commits: dict[Path, str] = field(
@@ -43,21 +76,6 @@ class SourceRevision(ABC):
     @property
     @abstractmethod
     def reference(self) -> str: ...
-
-    def candidates(self) -> tuple[SourceRevision, ...]:
-        """The revisions a cite may stand on; one revision stands alone."""
-        return (self,)
-
-    def require_any(self, check: Callable[[SourceRevision], None]) -> None:
-        """A cite stands when one candidate revision passes its check."""
-        *earlier, last = self.candidates()
-        for revision in earlier:
-            try:
-                check(revision)
-                return
-            except MissingSourceLine:
-                pass
-        check(last)
 
     @property
     @abstractmethod
@@ -192,10 +210,10 @@ class FileLine(WireValue, SourceReference):
     def same_file(self, other: FileLine, root: Path) -> bool:
         return (root / self.file).resolve() == (root / other.file).resolve()
 
-    def require_exists(self, repository: Path, revision: SourceRevision) -> None:
+    def require_exists(self, repository: Path, revision: SourceText) -> None:
         revision.require_any(lambda candidate: self.require_line(repository, candidate))
 
-    def require_line(self, repository: Path, revision: SourceRevision) -> None:
+    def require_line(self, repository: Path, revision: SourceText) -> None:
         if self.line > len(revision.lines(repository, self.file)):
             raise MissingSourceLine(
                 f"Source owner {self.to_wire()} does not exist at the cited revision."
@@ -220,10 +238,10 @@ class FileLine(WireValue, SourceReference):
                 )
         return cls(file, node.lineno)
 
-    def require_class(self, repository: Path, revision: SourceRevision) -> None:
+    def require_class(self, repository: Path, revision: SourceText) -> None:
         revision.require_any(lambda candidate: self.require_class_at(repository, candidate))
 
-    def require_class_at(self, repository: Path, revision: SourceRevision) -> None:
+    def require_class_at(self, repository: Path, revision: SourceText) -> None:
         tree = ast.parse('\n'.join(revision.lines(repository, self.file)), filename=self.file)
         if not any(isinstance(node, ast.ClassDef) and node.lineno == self.line
                    for node in ast.walk(tree)):

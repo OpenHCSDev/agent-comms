@@ -3,6 +3,7 @@
 
 from agent_comms.repository_name import RepositoryName
 
+import time
 from dataclasses import replace
 
 import pytest
@@ -11,18 +12,22 @@ from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
-    AcceptedVerdict, DoneTodoState, OrderMessage, ReleaseTodo, SendBackVerdict, StrikeReason,
+    AcceptedVerdict, DoneTodoState, EditSendBackVerdict, JudgedCall, OrderMessage, ReleaseTodo,
+    SendBackVerdict, StrikeReason,
     StrikeTodo, UnorderedProblemOrder, WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.order_tools import CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool
+from agent_comms.change_report import FileLine
+from agent_comms.errors import MissingSourceLine
+from agent_comms.order_tools import CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool, CommsVerdictsTool
 from agent_comms.installer.backup import StoreBackup
 from test_todos import order
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
+from agent_comms.registry_document import RegisteredCommanderProject
 
 
 def board_read(tool, comms, caller, thread="lead"):
@@ -63,7 +68,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     published = comms.bus.bus.lookup(before_send_back + 1)
     assert published.target == "#comms" and published.body.count(reason) == 1
     assert published.includes_lookup(comms.registry.require("worker").incarnation.lookup)
-    with pytest.raises(TodoConflict):
+    with pytest.raises(TodoError, match="bad-call: Tool call bad-call already has a verdict on P1"):
         caller.invoke(CommsVerdictTool(problem="P1", operation=sent_back), comms)
     assert comms.bus.bus.revision() == before_send_back + 1
     todo = comms.goals.todos.get("P1")
@@ -124,3 +129,61 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         FleetStory, board_read(CommsFleetStoryTool, copied, caller)).lines == linked_fleet.lines[1:]
     with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)
+
+
+def edit_order(comms, tmp_path):
+    """An order on one registered repository whose holder edits a second one."""
+    source = SourceRepository.create(tmp_path / 'source')
+    other = SourceRepository.create(tmp_path / 'other', RepositoryName.from_wire("org/other"))
+    for name in ("lead", "worker"):
+        comms.registry.declare(Thread(name, frozenset({"comms"}), str(tmp_path)))
+    lead = comms.registry.require('lead').incarnation
+    request = comms.goals.todos.add_request(lead, 'Repair the worker').id
+    caller = ThreadCaller("lead")
+    caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
+        problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
+        request=request, review_at=RecordedEventTime(1000),
+        commander="lead", assigner=lead, repo=source.github, text="Repair the worker")), comms)
+    # Registered after the order is sent: the edit's repository is found among these.
+    comms.registry.set_commander_project(RegisteredCommanderProject(lead, (source, other)))
+    (other.checkout / "other_module.py").write_text("first\nsecond\n")
+    return caller, other
+
+
+def sent_back(comms, other, call: str, line: int, at: EventTime) -> JudgedCall:
+    todo = comms.goals.todos.get("P1")
+    return JudgedCall("P1", EditSendBackVerdict(
+        todo.revision, comms.registry.require("lead").incarnation, todo.held(), call,
+        StrikeReason("The worker wrote the same marker decision twice in one module."),
+        evidence=(FileLine("other_module.py", line),),
+        path=str(other.checkout / "other_module.py"), at=at))
+
+
+def test_one_send_back_over_two_edits_cites_their_checkout_and_strikes_once(comms, tmp_path):
+    """The order's check repository holds no other_module.py: the cited line is read from the
+    checkout the edits were made in, and two edits judged by one call are one miss."""
+    caller, other = edit_order(comms, tmp_path)
+    todo = comms.goals.todos.get("P1")
+    actor = comms.registry.require("lead").incarnation
+    reason = StrikeReason("The worker wrote the same marker decision twice in one module.")
+    at = EventTime.capture(time.time())
+    with pytest.raises(MissingSourceLine, match="other_module.py:3 does not exist"):
+        caller.invoke(CommsVerdictsTool(verdicts=(sent_back(comms, other, "first-call", 3, at),)), comms)
+    with pytest.raises(MissingSourceLine, match="other_module.py does not exist at"):
+        caller.invoke(CommsVerdictTool(problem="P1", operation=SendBackVerdict(
+            todo.revision, actor, todo.held(), "first-call", reason,
+            evidence=(FileLine("other_module.py", 2),))), comms)
+    caller.invoke(CommsVerdictsTool(verdicts=(sent_back(comms, other, "first-call", 2, at),
+                                              sent_back(comms, other, "second-call", 2, at))), comms)
+    judged = comms.goals.todos.get("P1")
+    assert len(judged.live_strikes("worker")) == 1
+    assert {verdict.tool_call_id for verdict in judged.verdicts} >= {"first-call", "second-call"}
+
+
+def test_two_send_backs_with_the_same_reason_strike_twice(comms, tmp_path):
+    """A unit that repeats a miss after it was sent back is struck again, whatever the words."""
+    caller, other = edit_order(comms, tmp_path)
+    for call in ("first-call", "second-call"):
+        caller.invoke(CommsVerdictsTool(verdicts=(
+            sent_back(comms, other, call, 2, EventTime.capture(time.time())),)), comms)
+    assert len(comms.goals.todos.get("P1").live_strikes("worker")) == 2

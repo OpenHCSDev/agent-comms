@@ -43,6 +43,8 @@ from agent_comms.change_report import (
     PullRequestHeadRevision,
     SourceReference,
     SourceRevision,
+    SourceText,
+    WorkingTree,
 )
 from agent_comms.channel_targets import CommandTarget, CommsTag, IncarnationThreadTarget, NamedTarget
 from agent_comms.child_process import (
@@ -58,6 +60,8 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import MissingSourceLine, TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import (
+    DefaultNonNull,
+    Description,
     GoalId,
     FieldCodec,
     GitCommitText,
@@ -3091,6 +3095,39 @@ class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, affix="
     def changed(self, current: Todo) -> Todo: ...
 
 
+@dataclass(frozen=True)
+class ProblemCommand:
+    """One command addressed to one problem's Todo."""
+    problem: str
+    operation: TodoCommand
+
+
+@dataclass(frozen=True)
+class JudgedCall(ProblemCommand):
+    """One verdict on one tool call of the order a problem holds."""
+    problem: Annotated[str, Description("Problem ID that holds the judged tool call"),
+                       DefaultNonNull()]
+    operation: Annotated[ToolCallVerdict, Description("Verdict on that tool call"),
+                         DefaultNonNull()]
+
+
+@dataclass
+class TodoBatch:
+    """Verdicts written together: the Todo-only ones in one transaction, then each one
+    that writes beyond the Todo store on its own owner path, in that order."""
+    together: list[JudgedCall] = field(default_factory=list)
+    alone: list[JudgedCall] = field(default_factory=list)
+
+    def ordered(self) -> tuple[JudgedCall, ...]:
+        return (*self.together, *self.alone)
+
+    def record(self, goals: Goals) -> tuple[Todo, ...]:
+        written = goals.todos.apply_all(self.together)
+        for call, changed in zip(self.together, written):
+            call.operation.after_record(goals, changed)
+        return (*written, *(call.operation.record(goals, call.problem) for call in self.alone))
+
+
 class TodoOperation(TodoCommand, declared_name=None):
     """Commands the ordinary commander's tools accept."""
 
@@ -3153,12 +3190,14 @@ class CitedEvidence:
         default=(), kw_only=True)
 
     def require_evidence(self, current: Todo) -> None:
+        order = current.order.checked()
+        self.require_cited(order.check.directory, order.cited_revision)
+
+    def require_cited(self, root: Path, source: SourceText) -> None:
         if not self.evidence:
             raise TodoError("A strike needs a checkable file:line, not a board row or goal text.")
-        order = current.order.checked()
-        root, revision = order.check.directory, order.cited_revision
         for cited in self.evidence:
-            cited.require_exists(root, revision)
+            cited.require_exists(root, source)
 
 
 @dataclass(frozen=True)
@@ -3187,8 +3226,11 @@ class StrikeTodo(CitedStrike, StoryEvent):
         StrikeReason(self.reason)
         if any(self.repeats(recorded) for recorded in self.prior_strikes(current)):
             return current
-        return self.taken_away(
+        return self.recorded(
             replace(current, strikes=(*current.strikes, self), revision=current.revision + 1))
+
+    def recorded(self, struck: Todo) -> Todo:
+        return self.taken_away(struck)
 
     def taken_away(self, struck: Todo) -> Todo:
         """The strike that reaches StrikeLimit takes the task away in the same write, through
@@ -3199,14 +3241,6 @@ class StrikeTodo(CitedStrike, StoryEvent):
         limit = StrikeReason(f"{self.previous.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
                              f"on {struck.id}, so the task goes to another unit.")
         return ReleaseTodo(struck.revision, self.actor, self.previous, limit, self.at).apply(struck)
-
-    @classmethod
-    def send_back(cls, current: Todo, actor: ThreadIncarnation, previous: Assignment,
-                  reason: StrikeReason, at: EventTime, evidence: tuple[FileLine, ...]) -> Todo:
-        struck = cls(current.revision, actor, previous, reason.text, at,
-                     evidence=evidence).apply(current)
-        order = current.order.checked().sent_back(reason)
-        return replace(struck, order=order, prior_orders=current.orders_before(order))
 
     def story_text(self) -> str:
         return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
@@ -3219,6 +3253,20 @@ class StrikeTodo(CitedStrike, StoryEvent):
 
     def repeats(self, recorded: StrikeTodo) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class SendBackStrike(StrikeTodo):
+    """One send-back is one miss: the verdicts of one judging call share its recorded moment,
+    so every edit after the first repeats that call's strike and the order is sent back once;
+    a later call with the same words is a second miss and a second strike."""
+
+    def repeats(self, recorded: StrikeTodo) -> bool:
+        return recorded.previous.owner == self.previous.owner and recorded.at == self.at
+
+    def recorded(self, struck: Todo) -> Todo:
+        order = struck.order.checked().sent_back(StrikeReason(self.reason))
+        return replace(super().recorded(struck), order=order, prior_orders=struck.orders_before(order))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -3300,6 +3348,10 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
         return ()
 
+    def staged(self, batch: TodoBatch, call: JudgedCall) -> None:
+        """A Todo-only verdict joins the batch's one write transaction."""
+        batch.together.append(call)
+
     def judged_calls(self) -> tuple[str, ...]:
         """The holder's tool calls this verdict judges by identity."""
         return ()
@@ -3335,6 +3387,8 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
     def require_current(self, current: Todo) -> None:
         current.require_commander(self.actor)
         _text(self.tool_call_id, "Judged tool call ID", 200)
+        if self.tool_call_id in current.judged_calls:
+            raise TodoError(f"Tool call {self.tool_call_id} already has a verdict on {current.id}.")
         super().require_current(current)
 
 
@@ -3399,6 +3453,10 @@ class HeadVerdict(HeadReview, declared_name=None):
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
         return current
 
+    def settles_edits(self, record: HeadReviewRecord, began: float) -> float:
+        """Edits before this cut are judged by the head; only a decision judges them."""
+        return began
+
 
 @dataclass(frozen=True)
 class DecidedHeadVerdict(HeadVerdict, declared_name=None):
@@ -3406,6 +3464,9 @@ class DecidedHeadVerdict(HeadVerdict, declared_name=None):
 
     reason: VerdictReason
     verb: ClassVar[str]
+
+    def settles_edits(self, record: HeadReviewRecord, began: float) -> float:
+        return record.at.latest_with(began)
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"{self.verb} by {reviewer} on {subject}: {self.reason.text}"
@@ -3455,8 +3516,9 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
         link.require_evidence(current)
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
-        return StrikeTodo.send_back(current, record.actor, record.order.previous,
-                                    self.reason, record.at, record.order.evidence)
+        return SendBackStrike(current.revision, record.actor, record.order.previous,
+                              self.reason.text, record.at,
+                              evidence=record.order.evidence).apply(current)
 
 
 @dataclass(frozen=True)
@@ -3682,26 +3744,85 @@ class SupersededVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class DroppedVerdict(ToolCallVerdict):
-    """The unit discarded the edit: no branch, remote branch or worktree of its repository holds it.
+class EditVerdict(ToolCallVerdict, declared_name=None):
+    """A verdict on a file edit: the edited path names the registered repository it was made
+    in, whichever repository the order's check names."""
+    path: str = field(kw_only=True)
 
-    Git answers this at judge time; the commander supplies only the edit Core recorded.
-    """
-    path: str
-    added: tuple[str, ...]
-    line = "Dropped: on no branch, remote branch or worktree"
+    def edited(self, goals: Goals, current: Todo) -> tuple[Repo, Path]:
+        """The repository the edit belongs to and the checkout it was made in: the holder's
+        allocation of that repository for this problem, or the repository's own checkout."""
+        rule = goals.registry.storage_rule
+        roots = rule.roots_of(goals.registry.require(self.previous.owner))
+        edited = Path(self.path).absolute()
+        for repo in goals.registry.snapshot().commander_project.require().repos:
+            allocated = (rule.order_checkout(roots, current.id) if repo.github == current.repo
+                         else rule.repository_checkout(roots, current.id, repo.github))
+            for checkout in (allocated, repo.checkout.absolute()):
+                if edited.is_relative_to(checkout):
+                    return repo, checkout
+        raise TodoError(f"Edit {self.tool_call_id} at {self.path} is in no checkout of a "
+                        f"registered repository for {current.id}.")
+
+
+@dataclass(frozen=True)
+class GitSettledVerdict(EditVerdict, declared_name=None):
+    """Git answers at judge time that no reviewable copy of the edit is left; the commander
+    supplies only the edit Core recorded."""
+    added: tuple[str, ...] = field(kw_only=True)
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
         lines = tuple(text.strip() for text in self.added if len(text.strip()) >= 4)
         if not lines:
-            raise TodoError(
-                "An edit that adds no line cannot be shown dropped; judge it ok or back.")
-        self.refuse_held(current.order.checked().check.directory, lines)
+            raise TodoError("An edit that adds no line cannot be settled by git; judge it ok or back.")
+        self.refuse_held(self.edited(goals, current)[0], lines)
         return self
 
-    def refuse_held(self, checkout: Path, lines: tuple[str, ...]) -> None:
+    @abstractmethod
+    def refuse_held(self, repo: Repo, lines: tuple[str, ...]) -> None: ...
+
+    def refuse(self, holder: str) -> None:
+        raise TodoError(f"Edit {self.tool_call_id} is still on {holder}; judge it ok or back.")
+
+    def judged(self, current: Todo) -> Todo:
+        return current
+
+
+@dataclass(frozen=True)
+class RewrittenVerdict(GitSettledVerdict):
+    """A later pushed commit holds none of the lines the edit added, so the head review of
+    that commit judges what replaced it."""
+    commit: str = field(kw_only=True)
+    reason: str = field(kw_only=True)
+    line = "Rewritten: no added line survives a later pushed commit"
+
+    def story_text(self) -> str:
+        return f"{super().story_text()} at {self.commit}: {self.reason}"
+
+    def refuse_held(self, repo: Repo, lines: tuple[str, ...]) -> None:
+        checkout = repo.checkout
+        if not repo.has_commit(self.commit):
+            raise TodoError(f"Commit {self.commit} is not in {repo.github.to_wire()}, where the edit "
+                            "was made.")
+        if not Repo.git(checkout, "branch", "-r", "--contains", self.commit).strip():
+            raise TodoError(
+                f"Commit {self.commit} is on no remote branch; push it before judging edits rewritten.")
+        patterns = [arg for line in lines for arg in ("-e", line)]
+        found = Repo.grep(checkout, "-l", "-F", *patterns, self.commit,
+                          "--", f":(glob)**/{Path(self.path).name}")
+        if found:
+            self.refuse(found[0])
+
+
+@dataclass(frozen=True)
+class DroppedVerdict(GitSettledVerdict):
+    """The unit discarded the edit: no branch, remote branch or worktree of its repository holds it."""
+    line = "Dropped: on no branch, remote branch or worktree"
+
+    def refuse_held(self, repo: Repo, lines: tuple[str, ...]) -> None:
         """Refuse while any place still holds every added line: the file on disk, then any
-        branch, remote branch or worktree HEAD of the checkout."""
+        branch, remote branch or worktree HEAD of the repository."""
+        checkout = repo.checkout
         target = Path(self.path)
         if target.is_file() and all(line in target.read_text(errors="replace") for line in lines):
             self.refuse(str(target))
@@ -3715,12 +3836,6 @@ class DroppedVerdict(ToolCallVerdict):
                                 *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}")
         if found:
             self.refuse(found[0].split(":", 1)[0])
-
-    def refuse(self, holder: str) -> None:
-        raise TodoError(f"Edit {self.tool_call_id} is still on {holder}; judge it ok or back.")
-
-    def judged(self, current: Todo) -> Todo:
-        return current
 
 
 @dataclass(frozen=True)
@@ -3736,15 +3851,21 @@ class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
         return f"Sent back: {self.reason.text}"
 
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
-        return (StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
-                           self.at, evidence=self.evidence),)
+        return (self.strike(self.expected_revision),)
+
+    def strike(self, revision: int) -> SendBackStrike:
+        return SendBackStrike(revision, self.actor, self.previous, self.reason.text,
+                              self.at, evidence=self.evidence)
 
     def story_text(self) -> str:
         return f"{super().story_text()} (strike recorded)"
 
     def judged(self, current: Todo) -> Todo:
-        return StrikeTodo.send_back(current, self.actor, self.previous, self.reason,
-                                    self.at, self.evidence)
+        return self.strike(current.revision).apply(current)
+
+    def staged(self, batch: TodoBatch, call: JudgedCall) -> None:
+        """A send-back revises the holder's Goal and posts, so it records after the transaction."""
+        batch.alone.append(call)
 
     def record(self, goals: Goals, problem: str) -> Todo:
         changed = goals.send_back(problem, self)
@@ -3752,6 +3873,16 @@ class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
             goals, self.actor, f"{changed.id}: {self.story_text()}",
         )
         return changed
+
+
+@dataclass(frozen=True)
+class EditSendBackVerdict(SendBackVerdict, EditVerdict):
+    """A send-back of a file edit cites lines in the checkout the edit was made in, as it
+    stands on disk."""
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        self.require_cited(self.edited(goals, current)[1], WorkingTree())
+        return self
 
 
 @dataclass(frozen=True)
@@ -4789,20 +4920,23 @@ class TodoStore(OwnerRequestStore):
             ))
 
     def unjudged_since(self, todo: Todo) -> float:
-        order = todo.order.checked()
+        """The problem's work starts at its first order; a send-back reissues the order but
+        judges none of the edits before it, so only a decided head review moves the cut."""
         with self.snapshot() as db:
-            reviews = StoredHeadReview.select(
-                db, problem=todo.id, order_id=order.id,
-                order_by=("seq",), descending=True, limit=1,
-            )
-        began = order.at.recorded_at("An order")
-        return max((began, *(row.record.at.latest_with(began) for row in reviews)))
+            reviews = StoredHeadReview.select(db, problem=todo.id)
+        began = min(order.at.recorded_at("An order") for order in todo.order_history)
+        return max((began, *(row.record.verdict.settles_edits(row.record, began)
+                             for row in reviews)))
 
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
+        return self.apply_all((ProblemCommand(todo_id, command),))[0]
+
+    def apply_all(self, changes: Sequence[ProblemCommand]) -> tuple[Todo, ...]:
+        """Every command in one write transaction: any refusal writes none of them."""
         with self.writing() as db:
-            current = self._current(db, todo_id)
-            command.write(db, current, self)
-            return self._current(db, todo_id)
+            for change in changes:
+                change.operation.write(db, self._current(db, change.problem), self)
+            return tuple(self._current(db, change.problem) for change in changes)
 
     def correct(
         self, unit: ThreadIncarnation, message_id: MessageId, text: str,
