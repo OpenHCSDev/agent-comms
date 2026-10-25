@@ -128,17 +128,16 @@ class AttemptResolutions(Carry):
             dropped: list[StoredDecision] = []
             if legacy or decisions:
                 root = GoalAttemptStore.bus_root(path)
-                todo_path = TodoStore.path_in(TodoStore.directory_in(root))
+                orders: set[OrderId] = set()
+                for todo_path in TodoStore.matching_in(TodoStore.directory_in(root)):
+                    self.require_confined(todo_path)
+                    with closing(TodoStore.read_snapshot(todo_path)) as todos:
+                        orders.update(
+                            order.id for todo in Todo.select(todos) for order in todo.order_history
+                        )
                 bus_path = Bus.path_in(Bus.directory_in(root))
-                for dependency in (todo_path, bus_path):
-                    self.require_confined(dependency)
-                with (
-                    closing(TodoStore.read_snapshot(todo_path)) as todos,
-                    closing(Bus.read_snapshot(bus_path)) as bus,
-                ):
-                    orders = {
-                        order.id for todo in Todo.select(todos) for order in todo.order_history
-                    }
+                self.require_confined(bus_path)
+                with closing(Bus.read_snapshot(bus_path)) as bus:
                     for stored in legacy:
                         try:
                             resolution = stored.carried(bus, orders)
