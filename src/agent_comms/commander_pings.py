@@ -33,6 +33,7 @@ from agent_comms.ui_model.unit_state import UnitState
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
     from agent_comms.comms import Comms
+    from agent_comms.commander_hud import CommanderHud
     from agent_comms.registry_document import RegistrySnapshot
 
 
@@ -118,7 +119,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         return self if self.commander == commander else None
 
     @abstractmethod
-    def body(self, now: float) -> str: ...
+    def body(self, now: float, frame: tuple[str, ...]) -> str: ...
 
     def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
         """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
@@ -178,12 +179,13 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
             return CommanderNotice(commander, handled, not_applied=not_applied)
         return None
 
-    def send(self, comms: Comms, now: float) -> Message:
+    def send(self, comms: Comms, now: float, hud: CommanderHud) -> Message:
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(now), type=InfoKind, role=self.role, task=self,
+            body=self.body(now, replace(hud, units=()).frame),
+            type=InfoKind, role=self.role, task=self,
         )
         return comms.bus.publisher.publish_ordinary(
             message, origin=AgentOrigin(), destination=ThreadTarget(self.commander.name),
@@ -194,8 +196,9 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 class CommanderNotice(CommanderUpdate):
     role = NoticeRole()
 
-    def body(self, now: float) -> str:
-        return "\n".join((f"Lines cleared; {len(self.handled)} still current.", *self.not_applied))
+    def body(self, now: float, frame: tuple[str, ...]) -> str:
+        return "\n".join((*frame, f"Lines cleared; {len(self.handled)} still current.",
+                          *self.not_applied))
 
 
 @dataclass(frozen=True)
@@ -206,9 +209,9 @@ class CommanderDecisions(CommanderUpdate):
     waiting: tuple[Ping, ...]
     role = ConversationRole()
 
-    def body(self, now: float) -> str:
+    def body(self, now: float, frame: tuple[str, ...]) -> str:
         waiting = sorted(self.waiting, key=lambda ping: ping.since.chronology())
         return "\n".join((
-            *(ping.render(now) for ping in self.decisions), *self.not_applied,
+            *frame, *(ping.render(now) for ping in self.decisions), *self.not_applied,
             *(("UNDISPOSED:", *(ping.render(now) for ping in waiting)) if waiting else ()),
         ))

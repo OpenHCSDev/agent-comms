@@ -92,7 +92,7 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 )
                 if update is not None:
-                    update.send(comms, now)
+                    update.send(comms, now, item.hud)
                 completed.append(item.thread.incarnation)
         finally:
             # A later commander's failure does not erase passes already completed.
