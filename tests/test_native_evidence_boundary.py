@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.pi_payloads import PiOmitted, TextContent, UnknownContent
+from agent_comms.pi_payloads import PiOmitted, ReportedText, TextContent, UnknownContent
 
 
 def test_original_header_preserves_project_and_fork_lineage(tmp_path):
@@ -25,7 +25,7 @@ def test_original_header_preserves_project_and_fork_lineage(tmp_path):
     with NativeEntry.open_evidence(file) as evidence:
         header, entries = evidence.observe()
         assert entries == (header,)
-        assert header.cwd == raw["cwd"]
+        assert header.cwd == ReportedText(raw["cwd"])
         assert header.parent_session == raw["parentSession"]
         encoded = header.to_wire()
         assert all(encoded[name] == value for name, value in raw.items())

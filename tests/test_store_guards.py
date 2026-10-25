@@ -5,11 +5,12 @@ import select
 import sqlite3
 import subprocess
 import sys
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 
 import pytest
 
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.store_files import ClaimHeldError, ProcessSingleton, StoreBusy, StoreLockContention
 
@@ -38,27 +39,18 @@ def _hold_boundary(path, ready, release):
 
 @contextmanager
 def _exec_adopter(claim):
-    with claim.claimed() as held:
-        child = subprocess.Popen(
-            (sys.executable, __file__, str(claim.path), str(held.fileno())),
-            pass_fds=(held.fileno(),), stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
-        try:
-            assert select.select((child.stdout,), (), (), 10)[0], "adopter did not start"
-            assert child.stdout.readline() == "held\n"
-        except BaseException:
-            child.kill()
-            child.communicate(timeout=10)
-            raise
-    try:
+    with ExitStack() as owned:
+        with claim.claimed() as held:
+            child = owned.enter_context(SpawnedProcess.launch(
+                (sys.executable, __file__, str(claim.path), str(held.fileno())),
+                pass_fds=(held.fileno(),), stdin=subprocess.PIPE,
+                output=subprocess.PIPE, stderr=subprocess.PIPE,
+            ))
+            assert select.select((child.process.stdout,), (), (), 10)[0], "adopter did not start"
+            assert child.process.stdout.readline() == b"held\n"
         yield
-        _, errors = child.communicate("release\n", timeout=10)
-        assert child.returncode == 0, errors
-    finally:
-        if child.poll() is None:
-            child.kill()
-            child.communicate(timeout=10)
+        _, errors = child.process.communicate(b"release\n", timeout=10)
+        assert child.process.returncode == 0, errors
 
 
 def test_process_singleton_refuses_competitors_and_keeps_an_exec_adoption(tmp_path):
