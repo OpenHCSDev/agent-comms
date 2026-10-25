@@ -89,7 +89,7 @@ jobs:
       - name: Stack clients import only names Core has; the outgoing wire matches the base
         env:
           BASE: ${{ needs.base.outputs.base }}
-        run: python tools/module_layers.py --check --base "$BASE"
+        run: python tools/module_layers.py --check --base "$BASE" --report "$GITHUB_STEP_SUMMARY"
 
   native-scripts:
     name: native-scripts
