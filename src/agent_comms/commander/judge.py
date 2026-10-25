@@ -282,6 +282,10 @@ class ReasonedVerb(JudgeVerb, declared_name=None):
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
 
+    def refused(self, number: int, code: object) -> str:
+        """One batch entry's refusal, named by its own verb."""
+        return f'entry {number} ({self.declared_name}): {code}'
+
 
 @dataclass(frozen=True, kw_only=True)
 class VerdictVerb(ReasonedVerb):
@@ -510,7 +514,7 @@ class BatchVerb(JudgeVerb):
                 entry.require_why()
                 verdicts += entry.subject(ctx).verdicts(entry, ctx, unjudged)
             except SystemExit as refused:
-                refusals.append(f'entry {number} ({entry.declared_name}): {refused.code}')
+                refusals.append(entry.refused(number, refused.code))
         judged = [call.operation.tool_call_id for call in verdicts]
         if twice := sorted({i for i in judged if judged.count(i) > 1}):
             refusals.append(f'edits judged twice in this batch: {twice}')

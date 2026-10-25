@@ -2611,10 +2611,8 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
         return (self.claim,)
 
     def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
-        if not record.request.head.startswith(self.claim.head):
-            raise TodoError(
-                f"Review head {record.request.head} does not match claimed head {self.claim.head}."
-            )
+        """The reviewed head is GitHub's current head (HeadVerdict.reviewed); the claim's head
+        is what the unit said at claim time and never gates a later push."""
         return self.copy_as(ReviewingProblemOrder, review=record)
 
 
@@ -2628,6 +2626,10 @@ class ReviewingProblemOrder(ClaimedProblemOrder):
     def line(self) -> str:
         return (f"Under review by {self.review.actor.name} on #{self.review.request.pr} "
                 f"at {self.review.request.head[:9]}")
+
+    @property
+    def work_commit(self) -> str:
+        return self.review.request.head
 
     def owed_claims(self) -> tuple[OrderClaim, ...]:
         return ()

@@ -66,6 +66,11 @@ class Delivered(BusRecord, AudiencedMessage, declared_name=None):
                     self.role.response_policy(self).starts_direct_turn,
                 )
 
+    @property
+    def history_record(self) -> Self:
+        """A copied delivery keeps its frozen audience: its recipients received it there too."""
+        return self
+
     def deliveries(self) -> tuple[Self, ...]:
         return (self,)
 

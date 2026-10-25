@@ -8,13 +8,12 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .bus_tables import ReceivedSource
 from .class_fact import ClassFact
 from .field_codec import FieldCodec, ThreadLookup
-from .messages import BusProjectionTables, BusRow, Message, PublicSender
+from .messages import BusProjectionTables, BusRow, Message, PublicRecord, PublicSender
 from .projection_source import ProducedRow
 from .read_basis import ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedTable
 
 if TYPE_CHECKING:
-    from .bus import PublicRecord
     from .bus_publication import Delivered
     from .page_traversal import PageTraversal
 

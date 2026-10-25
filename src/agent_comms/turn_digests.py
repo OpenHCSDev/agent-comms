@@ -241,7 +241,7 @@ class EditWorkplaces:
     def of(cls, rule: StorageRule, holder: Thread, todos: tuple[Todo, ...]) -> Self:
         roots = rule.roots_of(holder)
         return cls({todo.id: rule.problem_checkouts(roots, todo.id) for todo in todos},
-                   max(todos, key=lambda todo: todo.order.at.recorded_at("An order")).id)
+                   max(todos, key=lambda todo: todo.order.checked().at.recorded_at("An order")).id)
 
     def order_of(self, path: str) -> str:
         edited = Path(path)
