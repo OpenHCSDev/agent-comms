@@ -180,7 +180,10 @@ class MessageBus[Writes: Publisher]:
                     return
 
     def pending_count(self, name: str, target: NamedTarget = AnyChannel.target()) -> int:
-        with self.snapshot() as (basis, source):
+        with self.bus.reading() as source:
+            basis = CapturedSelection.read(
+                self._registry, self._channels, self.reads, AnonymousViewer(), source.activity_clocks(),
+            )
             counts = self._pending_projection(source, basis, [name])[name]
             return target.pending_count(counts, basis.registry,
                 lambda name: basis.catalog.require_channel(name, basis.activity))
@@ -188,7 +191,10 @@ class MessageBus[Writes: Publisher]:
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
         if not names:
             return {}
-        with self.snapshot() as (basis, source):
+        with self.bus.reading() as source:
+            basis = CapturedSelection.read(
+                self._registry, self._channels, self.reads, AnonymousViewer(), source.activity_clocks(),
+            )
             return {name: sum(counts.values())
                     for name, counts in self._pending_projection(source, basis, names).items()}
 

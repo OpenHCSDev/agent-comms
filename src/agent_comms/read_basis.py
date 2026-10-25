@@ -1179,6 +1179,15 @@ class CapturedSelection:
         return cls(snapshot, catalog, activity, viewer, reads, document)
 
     @classmethod
+    def read(
+        cls, registry: Registration, catalog: ChannelCatalog,
+        reads: ReadLedger, viewer: DisplayViewer, activity: ActivityClocks,
+    ) -> CapturedSelection:
+        """Capture a value; readers do not borrow the identity guards for their work."""
+        with cls.reading(registry, catalog, reads, viewer, activity) as selected:
+            return selected
+
+    @classmethod
     @contextmanager
     def reading(
         cls, registry: Registration, catalog: ChannelCatalog,
