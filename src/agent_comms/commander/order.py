@@ -1283,8 +1283,16 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class JoinVerb(OrderVerb):
+    help = "register a commander fork before its first record"
+
+    def run(self, ctx: Commander) -> None:
+        print(f'{ctx.actor_name} registered')
+
+
+@dataclass(frozen=True, kw_only=True)
 class RetireVerb(OrderVerb):
-    help = "stop a commander fork without discarding its open orders"
+    help = "stop and archive a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
         ctx.actor.retire(ctx.comms)

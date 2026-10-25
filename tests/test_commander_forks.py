@@ -1,5 +1,6 @@
 """Commander forks use registered identity and the original Todo assignment."""
 
+import io
 import json
 import os
 import subprocess
@@ -32,6 +33,7 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
@@ -45,6 +47,7 @@ from agent_comms.todos import (
     Todo,
 )
 from agent_comms.tool_caller import CommanderForkCaller
+from agent_comms_hooks import forks
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -526,3 +529,57 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
     unknown = replace(verdict, replacement="P99")
     with pytest.raises(ValueError, match="not held for this commander"):
         unknown.prepare(comms.goals, current)
+
+
+@pytest.fixture
+def subagent_hook(fork_bus, tmp_path, monkeypatch, capsys):
+    """Runs a hook program as Claude Code does, against this bus through the real command."""
+    comms = fork_bus[0]
+    scripts = tmp_path / "commander-bin"
+    scripts.mkdir()
+    script = scripts / "agent-comms-commander"
+    script.write_text(f"#!/bin/sh\nexec {sys.executable} -c 'from agent_comms.commander.cli"
+                      f" import main; main()' --root {comms.root} \"$@\"\n")
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{scripts}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
+    transcript = tmp_path / "commander.jsonl"
+    transcript.with_suffix(".reread").mkdir()
+
+    def run(program, event):
+        record = {"session_id": "commander", "hook_event_name": event,
+                  "transcript_path": str(transcript), "agent_id": "a1"}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
+        program()
+        return capsys.readouterr().out
+
+    return comms, run
+
+
+def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_thread(
+        subagent_hook, tmp_path):
+    comms, run = subagent_hook
+    told = json.loads(run(forks.started, "SubagentStart"))["hookSpecificOutput"]
+    assert "--fork claude-a1" in told["additionalContext"]
+    fork = comms.registry.require("claude-a1")
+    assert fork.parent.named("lead") and comms.registry.status("claude-a1").receiving
+    found = tmp_path / "found.txt"
+    found.write_text("The fork recorded its finding.")
+    assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
+    assert run(forks.stopped, "SubagentStop") == ""
+    run(forks.started, "SubagentStart")
+    assert comms.registry.require("claude-a1").incarnation == fork.incarnation
+    assert comms.registry.status("claude-a1").receiving
+
+
+def test_a_subagent_stop_is_refused_until_its_fork_records_then_archives_it(
+        subagent_hook, tmp_path):
+    comms, run = subagent_hook
+    run(forks.started, "SubagentStart")
+    assert json.loads(run(forks.stopped, "SubagentStop"))["decision"] == "block"
+    assert comms.registry.status("claude-a1").receiving
+    found = tmp_path / "found.txt"
+    found.write_text("The fork recorded its finding.")
+    assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
+    assert run(forks.stopped, "SubagentStop") == ""
+    assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
