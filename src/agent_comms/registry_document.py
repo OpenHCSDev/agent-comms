@@ -280,7 +280,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     """A revision's thread rows, decoded and bound only when read."""
 
     def __init__(self) -> None:
-        self._raw: dict[str, JsonValue] = {}
+        # checked_rows proved each stored row an object, so the type keeps that proof.
+        self._raw: dict[str, dict[str, JsonValue]] = {}
         self._decoded: dict[str, Thread] = {}
         self._binding: Callable[[Thread], Thread] = self.unbound
 
@@ -345,7 +346,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         return {"type": "object", "additionalProperties": FieldCodec.record_schema(Thread)}
 
     @classmethod
-    def checked_rows(cls, raw: object) -> dict[str, JsonValue]:
+    def checked_rows(cls, raw: object) -> dict[str, dict[str, JsonValue]]:
         if not isinstance(raw, dict):
             raise MalformedRecord("registry threads must be an object")
         for name, row in raw.items():
