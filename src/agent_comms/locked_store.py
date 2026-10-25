@@ -225,14 +225,7 @@ class RootFile:
     def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
         """Each declaring owner and its directory, once across composed capabilities."""
         RootFile.load_declarations()
-        pending: list[type[Self]] = [cls]
-        visited: set[type[Self]] = set()
-        while pending:
-            family = pending.pop()
-            if family in visited:
-                continue
-            visited.add(family)
-            pending.extend(family.__subclasses__())
+        for family in cls.families():
             if "filename" in vars(family):
                 yield family, family.directory_in(root)
 
@@ -305,7 +298,7 @@ class RootFile:
         return declarations
 
     @classmethod
-    def families(cls) -> Iterator[type[RootFile]]:
+    def families(cls) -> Iterator[type[Self]]:
         pending = [cls]
         visited = set()
         while pending:
