@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from .todos import TodoStore
+from .todos import ProgressRead, TodoStore
 
 from .turn_item import NativeTurnId
 from .declared_family import DeclaredFamily
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .threads import Thread
     from .transcript_sources import TranscriptSource
-    from .todos import Todo
+    from .todos import OrderProgress, Todo
 
 
 @dataclass(frozen=True)
@@ -199,7 +199,16 @@ class OrderEditRead[Result](OrderRead[Result]):
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
-        yield from cls.for_orders(comms.root, HeldOrders.read(comms, commander).live)
+        held = HeldOrders.read(comms, commander)
+        yield from cls.judgeable(
+            comms.root, held.live, ProgressRead().progress(held.todos, comms.registry))
+
+    @classmethod
+    def judgeable(cls, root: Path, holds: Iterable[LiveHold],
+                  progress: Mapping[str, OrderProgress]) -> Iterator[Self]:
+        """The reads a verdict can still clear: an order whose PR merged has no head left to
+        judge, so its edits are nobody's review and its transcript is never read."""
+        return (read for read in cls.for_orders(root, holds) if progress[read.todo.id].judgeable)
 
     @classmethod
     def for_orders(cls, root: Path, holds: Iterable[LiveHold]) -> Iterator[Self]:
@@ -260,10 +269,6 @@ class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
 
 class OrderEditCountRead(OrderEditRead[int]):
     """Load counts the edits each order owns; ownership reads each edit's path."""
-
-    @classmethod
-    def count(cls, comms: Comms, commander: str) -> int:
-        return sum(read.read() for read in cls.for_commander(comms, commander))
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(self.edits_from_turns(turns))
