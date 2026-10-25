@@ -27,7 +27,7 @@ from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import BinaryIO, ClassVar, TextIO
+from typing import BinaryIO, ClassVar, TextIO, cast
 
 from .child_process import LockHolder, Platform
 from .coordination_errors import CoordinationReadUnavailable
@@ -387,7 +387,9 @@ class StoreContention(ABC):
     def writer(
         self, path: str | os.PathLike[str], options: dict[str, object]
     ) -> sqlite3.Connection:
-        return sqlite3.connect(path, timeout=self.timeout, **options)
+        # SQLite validates its open-ended options; do not copy its keyword schema here.
+        return cast(Callable[..., sqlite3.Connection], sqlite3.connect)(
+            path, timeout=self.timeout, **options)
 
     def lock_budget(self) -> StoreLockContention:
         """The same wait spent on the store's file locks: one fresh budget per operation."""
