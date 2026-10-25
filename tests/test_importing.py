@@ -384,12 +384,12 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, c
 
 
 def test_rehome_moves_a_codex_unit_to_pi_on_its_own_birth(
-    tmp_path: Path, comms: Comms, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, comms: Comms, monkeypatch: pytest.MonkeyPatch, user_manager: type,
 ) -> None:
-    import agent_comms.host_services as host_services
+    import subprocess
 
     systemctl: list[tuple[str, ...]] = []
-    monkeypatch.setattr(host_services.subprocess, "run", lambda argv, **_: systemctl.append(argv))
+    monkeypatch.setattr(subprocess, "run", lambda argv, **_: systemctl.append(argv))
     worktree = tmp_path / "unit-worktree"
     worktree.mkdir()
     before = comms.registry.declare(Thread(
