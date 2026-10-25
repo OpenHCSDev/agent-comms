@@ -143,8 +143,9 @@ class PlanStalledDegradation(Degradation):
 @dataclass(frozen=True)
 class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     """More owed orders, expired timers and unjudged edits than one commander keeps up with.
-    Forks relieve it by judging and ordering, which lowers the debt; load moves every beat, so
-    it stops the commander once per round while it stays over."""
+    Every unread edit is a point, so one unit running unwatched trips it alone. Forks relieve it
+    by judging and ordering, which lowers the debt; load moves every beat, so it stops the
+    commander once per round while it stays over."""
 
     ceiling: ClassVar[float] = 100.0
     round_seconds: ClassVar[int] = 30 * 60
@@ -172,7 +173,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @projected(view="wire")
     def total(self) -> float:
-        return self.owed + 2 * self.timers_up + self.unjudged / 10
+        return self.owed + 2 * self.timers_up + self.unjudged
 
     @projected(view="wire")
     def overloaded(self) -> bool:
