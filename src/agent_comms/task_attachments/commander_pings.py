@@ -81,7 +81,7 @@ class Ping(DeclaredFamily, affix="Ping"):
     def waits_on_commander(self, cut: float) -> bool:
         """The commander's to dispose of, began before ``cut``, and about a subject a verb can
         act on: a line about nothing a verb touches never waits."""
-        return self.commander_disposes and bool(self.subjects) and self.since.before(cut)
+        return self.commander_disposes and self.since.before(cut)
 
     def on_board(self, comms: Comms, actors: frozenset[str]) -> bool:
         """The commander's to dispose of, and no recorded action has yet."""
@@ -123,7 +123,7 @@ class RulePing(Ping):
 
     @property
     def commander_disposes(self) -> bool:
-        return self.rule.commander_disposes
+        return self.rule.disposes_subjects(self.subjects)
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
@@ -145,7 +145,7 @@ class UnitPing(Ping):
 
     @property
     def commander_disposes(self) -> bool:
-        return self.state.commander_disposes
+        return self.state.disposes_subjects(self.subjects)
 
     @classmethod
     def capture(cls, state: UnitState) -> Self:

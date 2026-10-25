@@ -18,8 +18,13 @@ from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
 from agent_comms.heartbeat_subjects import UnitSubject
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
+from agent_comms.commander.standing import PlanIdle
+from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.plan_phases import BusWriterPhase
+from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
@@ -171,7 +176,46 @@ def test_board_decoder_names_a_refusal_instead_of_a_constructor_error():
     reply = json.loads(FieldCodec.compact(FieldCodec.encode(refused)))
     with pytest.raises(UnexpectedBoardReply) as caught:
         SessionBoard.replied(**reply)
-    assert refused.error in SessionBoard.unreadable(caught.value).lines[0]
+    assert refused.error in str(caught.value)
+
+
+def test_board_read_failure_is_a_typed_hook_failure(tmp_path):
+    with pytest.raises(UnexpectedBoardReply) as caught:
+        SessionBoard.asked(tmp_path / "missing.socket")
+    assert caught.value.__cause__ is not None
+
+
+def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_bus, tmp_path, monkeypatch):
+    comms = notification_bus
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    claim = WatchClaim(hook.session_id)
+    claim.path.parent.mkdir(parents=True)
+    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    reading = HeartbeatFrame.read(comms, "lead", ProgressRead()).plan
+    beat(comms, (PlanIdle(BusWriterPhase, reading),))
+    phase_name = f"{BusWriterPhase.plan.declared_name}/{BusWriterPhase.declared_name}"
+    lead = comms.registry.require("lead").incarnation
+    request = comms.goals.todos.add_request(lead, "Start the ready bus writer phase").id
+    original = comms.goals.todos.get("P1").order.checked()
+    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
+          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
+        server.bind(str(claim.socket_path))
+        server.listen()
+        server.settimeout(5)
+        before = tool_call(hook, server, comms, db, time.time())
+        assert sum(phase_name in line for line in before) == 1
+        comms.goals.update_goal("worker", CreateProblemGoalAction(
+            problem="P3", commander="lead", request=request, assigner=lead,
+            repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
+            text="Start the ready bus writer phase", review_at=RecordedEventTime(time.time() + 3600),
+            order=replace(original, id=OrderId.mint(), serves=BusWriterPhase,
+                          at=RecordedEventTime(time.time())),
+        ))
+        after = tool_call(hook, server, comms, db, time.time())
+        assert sum(phase_name in line for line in after) == 0
+        assert not after
 
 
 def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus, tmp_path, monkeypatch):

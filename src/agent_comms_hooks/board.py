@@ -18,7 +18,7 @@ from typing import ClassVar
 
 
 class UnexpectedBoardReply(ValueError):
-    """The bridge answered with a different declared reply, preserving its refusal."""
+    """The session bridge refused or could not answer the board read."""
 
 
 class SessionWire:
@@ -73,12 +73,15 @@ class SessionBoard(SessionWire):
 
     @classmethod
     def asked(cls, endpoint: Path) -> SessionBoard:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
-            peer.settimeout(cls.timeout)
-            peer.connect(str(endpoint))
-            peer.sendall(json.dumps({cls.family_discriminator: cls.request}).encode() + b"\n")
-            with peer.makefile("rb") as stream:
-                return cls.replied(**json.loads(stream.readline()))
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+                peer.settimeout(cls.timeout)
+                peer.connect(str(endpoint))
+                peer.sendall(json.dumps({cls.family_discriminator: cls.request}).encode() + b"\n")
+                with peer.makefile("rb") as stream:
+                    return cls.replied(**json.loads(stream.readline()))
+        except (OSError, json.JSONDecodeError) as error:
+            raise UnexpectedBoardReply(f"The session bridge did not answer: {error}") from error
 
     @classmethod
     def replied(cls, **reply: Sequence[str]) -> SessionBoard:
@@ -92,8 +95,3 @@ class SessionBoard(SessionWire):
     def decoded(cls, lines: Sequence[str]) -> SessionBoard:
         """Decode this member's field only after its discriminator matched."""
         return cls(tuple(lines))
-
-    @classmethod
-    def unreadable(cls, error: Exception) -> SessionBoard:
-        """A bridge that cannot answer says so instead of printing an empty board."""
-        return cls((f"BOARD UNREADABLE: the session bridge did not answer ({error!r})",))

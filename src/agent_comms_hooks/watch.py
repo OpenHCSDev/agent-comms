@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from agent_comms.process_claim import ProcessSingleton
-from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
+from agent_comms_hooks.board import SessionBoard
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -249,12 +249,8 @@ class RecordedWatch(WatchState):
 
 class LiveWatch(RecordedWatch):
     def board(self) -> tuple[str, ...]:
-        """The lines this session's bridge derives from Core when asked; a refusal from a
-        bridge older than the request, or no answer at all, prints as unreadable."""
-        try:
-            return SessionBoard.asked(self.claim.socket_path).lines
-        except (OSError, UnexpectedBoardReply) as error:
-            return SessionBoard.unreadable(error).lines
+        """The bridge derives the current board; a failed read is a hook failure."""
+        return SessionBoard.asked(self.claim.socket_path).lines
 
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         raise RuntimeError(

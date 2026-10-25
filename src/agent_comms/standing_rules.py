@@ -124,6 +124,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     urgent: ClassVar[bool] = False
 
     @classmethod
+    def disposes_subjects(cls, subjects: tuple[HeartbeatSubject, ...]) -> bool:
+        """A commander verb can dispose of this rule only through its declared subjects."""
+        return cls.commander_disposes and bool(subjects)
+
+    @classmethod
     def cleared_by(cls, verb: type[CommanderVerb]) -> None:
         """A verb declaring that it clears this rule joins the action its line prints."""
         cls.clearing_verbs = (*cls.clearing_verbs, verb)

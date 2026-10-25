@@ -254,6 +254,22 @@ class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
 
 
 @dataclass(frozen=True)
+class PhaseSubject(HeartbeatSubject):
+    """An order serving this phase answers its ready-without-an-owner line."""
+
+    phase: type[PlanPhase]
+
+    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
+        snapshot = comms.registry.snapshot()
+        return any(
+            todo.order.checked().at.since(since)
+            for actor in actors
+            for todo in self.phase.serving(comms.goals.todos.history_for_commander(
+                snapshot.require(actor).incarnation))
+        )
+
+
+@dataclass(frozen=True)
 class PlanIdle(PlanRule):
     """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
 
@@ -267,6 +283,9 @@ class PlanIdle(PlanRule):
             for phase in PlanPhase.members_with(PlanPhase)
             if phase.ready(reading) and not phase.ordered(reading)
         )
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (PhaseSubject(self.phase),)
 
     def enforce(self, comms: Comms, commander: str) -> None:
         self.phase.task.start(comms, comms.registry.require(commander), self.phase, self.reading)
