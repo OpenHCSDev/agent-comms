@@ -249,7 +249,7 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
     comms.registry.rename("alpha", "renamed")
     comms.registry.rename("renamed", "final")
     aliases = comms.registry.snapshot().aliases
-    assert message in comms.bus.incoming_page("final", after=0).messages
+    assert message in comms.bus.inbox("final").page.messages
     assert message.role.response_policy(message).starts_turn_for(message, "final", aliases=aliases)
     assert not message.role.response_policy(message).starts_turn_for(message, "observer", aliases=aliases)
     assert message.response_eligibility(("final", "observer"), aliases=aliases).recipients == (
@@ -262,7 +262,7 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
     assert message.mentions[0].thread == "alpha"  # Original wire record is unchanged.
     outside = comms.messaging.send_user_message(CommandTarget.named('#team'), "@outsider review", worktree=str(tmp_path))
     comms.registry.rename("outsider", "outside-renamed")
-    assert not comms.bus.incoming_page("outside-renamed", after=0).messages
+    assert not comms.bus.inbox("outside-renamed").page.messages
     assert (
         outside.response_eligibility(
             ("final", "observer"), aliases=comms.registry.snapshot().aliases

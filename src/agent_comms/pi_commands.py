@@ -15,6 +15,7 @@ from pydantic import JsonValue
 from . import agent_events as events
 from . import turn_phase as phases
 from .agent_backend import StreamingInputPolicy
+from .child_process import BoundedRun
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     FieldCodec,
@@ -27,6 +28,7 @@ from .field_codec import (
 from .image_input import ImageInput
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
+from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import OwnerToolConnection
 from .native_turn_context import NativeContextData
@@ -259,9 +261,7 @@ class CatalogQuery(NativeQuery):
         worktree: Path | None = None, root: Path | str | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
-        from .child_process import BoundedRun
         from .native_child import PiChild
-        from .native_pi import NativePiRpcLaunch
         from .pi_rpc import PiRpcChannel
 
         try:

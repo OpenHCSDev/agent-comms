@@ -11,8 +11,10 @@ permissions:
   contents: read
 
 # A superseded push to a pull request stops its old run; queue groups never share a group.
+# The draft state is part of the key: a draft run skips every job, so one that starts in the
+# same second as ready_for_review must not cancel the ready run (#3164 and #3154 lost every check).
 concurrency:
-  group: merge-queue-${{ github.event.pull_request.number || github.run_id }}
+  group: merge-queue-${{ github.event.pull_request.number && format('{0}-{1}', github.event.pull_request.number, github.event.pull_request.draft && 'draft' || 'ready') || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
@@ -211,7 +213,7 @@ jobs:
         run: |
           marker="<!-- $KIND findings -->"
           { echo "$marker"; echo "**$KIND** at $(git rev-parse --short HEAD), every finding:"; echo '```';
-            grep -E '^(introduced|grew) ' ratchet.txt; echo '```'; } > body.md
+            grep -E '^(introduced|found|grew) ' ratchet.txt; echo '```'; } > body.md
           old=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
                 --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
           if [ -n "$old" ]; then

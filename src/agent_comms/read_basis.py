@@ -7,6 +7,8 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+from .bus_tables import AwaitingAnswerSource
+
 from .class_fact import ClassFact
 import asyncio
 import json
@@ -990,7 +992,6 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import AwaitingAnswerSource
         return (AwaitingAnswerSource,)
 
 

@@ -19,7 +19,14 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from acp.schema import PromptRequest, PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
+from .acp_extension import (
+    GoalSnapshotReply,
+    TurnChangedUpdate,
+    UpdateMetadata,
+)
+
 from .agent_event_updates import AcpEventConsumer
+from .cli_commands import CorrectAnnotationCliCommand
 from .command import Command
 from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore
@@ -30,6 +37,7 @@ from .field_codec import FieldCodec, NullMember, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
+from .manual_compaction_bridge import compact_context
 from .owner_connection import OwnerConnection
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
 from .thread_identity import ThreadIncarnation
@@ -44,6 +52,7 @@ from .turn_context import (
     SegmentManifest,
     TurnContext,
 )
+from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel
 from .working_memory_questions import SpanAnswer
 from .turn_item import PiRequestKey
@@ -324,8 +333,6 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
     instructions: str | None = None
 
     async def result(self, ctx: RuntimeRequestContext) -> CompactionOutcome:
-        from .manual_compaction_bridge import compact_context
-
         return await compact_context(ctx.server.agent.turns, ctx.session_id, self.instructions)
 
 
@@ -368,7 +375,6 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
     async def change(self, ctx: RuntimeRequestContext) -> None: ...
 
     async def result(self, ctx: RuntimeRequestContext) -> GoalSnapshotReply:
-        from .acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
         await self.change(ctx)
         snapshot = await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
@@ -546,8 +552,6 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
     classifier: ClassifierVersion
 
     async def result(self, ctx):
-        from .working_memory_annotations import WorkingMemoryAnnotations
-
         segment = await self.selected_segment(ctx)
         labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
             CoordinationStore.path_in(ctx.server.agent._comms.root),
@@ -562,8 +566,6 @@ class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeReq
     worktree: str
 
     async def result(self, ctx):
-        from .cli_commands import CorrectAnnotationCliCommand
-
         segment = await self.selected_segment(ctx)
         if not segment.contains_span(self.label.span):
             raise ValueError("Correction belongs to another original context source")

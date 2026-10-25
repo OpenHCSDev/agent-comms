@@ -27,7 +27,6 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
-from agent_comms.active_route import guard_original_root_write
 from agent_comms.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -1687,6 +1686,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def check_base(self, repo: Path) -> str:
         raise TodoError("This problem has no active checked order.")
 
+    def occupies_holder(self) -> bool:
+        """Whether this order still has work for the unit holding it."""
+        return True
+
     def corrected(self, correction: CorrectOrderTodo) -> ProblemOrder:
         raise TodoError("Only an active checked order takes a correction.")
 
@@ -1931,6 +1934,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def linked_requests(self) -> tuple[PullRequestLink, ...]:
         return (*self.pull_requests, *(claim.pull_request for claim in self.commander_claims()))
 
+    def require_linkable(self) -> None:
+        """An order still taking work accepts another pull request."""
+
+    def linked_to(self, link: PullRequestLink) -> Self:
+        self.require_linkable()
+        return replace(self, pull_requests=(*self.pull_requests, link))
+
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -2128,6 +2138,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                           store: TodoStore, actor: ThreadIncarnation) -> str:
         """Create once; record the returned identity on this order, not in its prose."""
         todo.require_actor(actor, todo.held().generation)
+        self.require_linkable()
         created = subprocess.run(
             ("gh", "pr", "create", "--draft", "-R", todo.repo.to_wire(),
              "--title", title, "--body-file", "-"),
@@ -2203,6 +2214,9 @@ class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
+    def occupies_holder(self) -> bool:
+        return False
+
     def orphan_clearing(self, todo: Todo) -> str:
         return (f"its work is done and waits on install; once installed, close it with "
                 f"`order close {todo.id} --works WHAT-RAN --artifact FILE`")
@@ -2222,6 +2236,10 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
     def closed_in(self, todo: Todo) -> Todo:
         return DoneTodoState.closed(todo, self)
+
+    def require_linkable(self) -> None:
+        raise TodoError(f"Order {self.id} merged as {self.sha[:9]}; its pull requests are closed. "
+                         "Ask the commander for a send-back before opening or linking another PR.")
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -2297,7 +2315,8 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         reading = context.plan_reading(
             context.comms.goals.todos.history_for_commander(context.incarnation))
         problems = list(self.phase.order_refusals(reading, document.unplanned_reason))
-        held = tuple(todo for todo in listed.values() if todo.holder_state.current_assignments())
+        held = tuple(todo for todo in listed.values()
+                     if todo.holder_state.current_assignments() and todo.order.occupies_holder())
         holder = context.comms.registry.require(unit).incarnation
         busy = tuple(todo for todo in held
                      if todo.held().owner_identity == holder and todo.id not in group)
@@ -3837,8 +3856,7 @@ class RecordPullRequest(TodoCommand):
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
-        return replace(current, revision=current.revision + 1,
-                       order=replace(order, pull_requests=(*order.pull_requests, self.link)))
+        return replace(current, revision=current.revision + 1, order=order.linked_to(self.link))
 
 
 @dataclass(frozen=True)
@@ -3863,7 +3881,7 @@ class ClaimOrder(TodoCommand):
 
     def record(self, goals: Goals, problem: str) -> Todo:
         """Retain the publication's actual address before saving its content identity."""
-        with guard_original_root_write(goals.root), NativeBoundary(goals.bus) as boundary:
+        with NativeBoundary(goals.bus) as boundary:
             current = goals.todos.get(problem)
             target = IncarnationThreadTarget(
                 goals.todos.owner_request(current.request.require()).commander)

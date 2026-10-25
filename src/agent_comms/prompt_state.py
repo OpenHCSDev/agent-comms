@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Never
 
 from . import turn_failure as failures
 from .agent_backend import TurnInboxItem
+from .native_pi import NativePiInputNotSent
 
 if TYPE_CHECKING:
     from .backend import NativeSession, TurnSession
@@ -68,8 +69,6 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
         session.rejected_signal.set()
 
     def raise_native_failure(self, error, attestation) -> Never:
-        from .native_pi import NativePiInputNotSent
-
         raise NativePiInputNotSent(error, attestation) from error
 
 

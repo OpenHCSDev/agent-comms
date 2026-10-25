@@ -15,6 +15,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, TextIO, cast
 
 from .locked_store import DurableFile
+from .native_pi import (
+    NativeEvidencePrefixChanged,
+    NativeInputUncommitted,
+    PrivateEvidenceRead,
+)
 from .native_session_files import BusTranscriptFile
 
 if TYPE_CHECKING:
@@ -27,6 +32,7 @@ from .field_codec import (
     InputId,
     MalformedRecord,
     RecordedTimestamp,
+    Sha256Text,
     TimestampText,
     WireName,
     WireOmitDefault,
@@ -285,8 +291,6 @@ class NativeEvidenceRead:
     @contextmanager
     def open(cls, session_file):
         """One original descriptor and byte-verification lifetime for every read."""
-        from .native_pi import PrivateEvidenceRead
-
         with PrivateEvidenceRead.open(session_file) as source:
             evidence = cls(source)
             try:
@@ -326,8 +330,6 @@ class NativeEvidenceRead:
 
     def position(self, input_id: InputId) -> int:
         """Where the observed session committed this input; the one answer to whether it did."""
-        from .native_pi import NativeInputUncommitted
-
         try:
             return self.inputs[input_id]
         except KeyError as missing:
@@ -369,8 +371,6 @@ class NativeEvidenceRead:
         A later turn, a fork or a partial tool round cannot finish this input.
         This observes the native result; it grants no input or reply replay.
         """
-        from .native_pi import NativeInputUncommitted
-
         _header, entries = self.observe()
         try:
             start = self.position(input_id)
@@ -392,8 +392,6 @@ class NativeEvidenceRead:
         return acquired.reobserve(self)
 
     def _observe(self, *, reverified: bool) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
-        from .native_pi import NativeEvidencePrefixChanged
-
         try:
             header = self.header()
             appended = tuple(self.decode_rows(self.source.rows()))
@@ -567,8 +565,6 @@ class MessageEntry(NativeEntry):
 
     @property
     def tracked_user(self) -> MessageEntry | None:
-        from .field_codec import Sha256Text
-
         for input_id in self.message.input_id.present():
             if not self.message.user or not self.message.input_digest.reported or not self.id:
                 raise MalformedRecord("Native Pi session has ambiguous tracked user input")

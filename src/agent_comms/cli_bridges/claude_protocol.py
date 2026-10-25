@@ -15,9 +15,11 @@ from pydantic import (
     model_validator,
 )
 
+from agent_comms.agent_events import TranscriptModelUsage
 from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.native_tool_call import ToolCallId
+from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
@@ -27,6 +29,7 @@ from agent_comms.runtime_updates import (
     HistoryNotice,
     OfferedToolsObserved,
     ReadingPhase,
+    RuntimeInfoObserved,
     RuntimeUpdate,
     SessionFacts,
     StartedItem,
@@ -36,6 +39,7 @@ from agent_comms.runtime_updates import (
     TurnStarted,
 )
 from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
+from agent_comms.thread_model import ThreadModel
 from agent_comms.thread_text import ThreadText
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
@@ -147,9 +151,14 @@ class ClaudeReaderPhase(ReadingPhase):
 class CatchUp(ClaudeReaderPhase):
     pending: tuple[StatusUpdate, ...] = ()
     latest_tools: tuple[OfferedToolsObserved, ...] = ()
+    latest_info: tuple[RuntimeInfoObserved, ...] = ()
 
     def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
         self.latest_tools = (update,)
+        return ()
+
+    def runtime_info(self, update: RuntimeInfoObserved) -> tuple[RuntimeUpdate, ...]:
+        self.latest_info = (update,)
         return ()
 
     def status(self, update: StatusUpdate) -> tuple[RuntimeUpdate, ...]:
@@ -158,7 +167,7 @@ class CatchUp(ClaudeReaderPhase):
 
     def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.phase = Live()
-        return (*self.latest_tools, *self.pending)
+        return (*self.latest_tools, *self.latest_info, *self.pending)
 
     def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
         return ()
@@ -248,6 +257,7 @@ class ClaudeSession:
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
     offered_tools: OfferedTools = field(default_factory=UnobservedTools)
+    answered_by: TranscriptModelUsage = field(default_factory=TranscriptModelUsage)
 
     def version_reported(self, version: str | None) -> tuple[RuntimeUpdate, ...]:
         if version is None:
@@ -258,6 +268,16 @@ class ClaudeSession:
     def offered(self, offered: OfferedTools) -> tuple[RuntimeUpdate, ...]:
         self.offered_tools = offered
         return (OfferedToolsObserved(offered),)
+
+    def answered(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
+        """A model call reports its model and usage once; Claude repeats them on every block."""
+        for used in message.usage.context_used.present():
+            observation = TranscriptModelUsage(
+                model=ThreadModel.reported(message.model), context_used=used)
+            if observation != self.answered_by:
+                self.answered_by = observation
+                return (RuntimeInfoObserved(observation),)
+        return ()
 
     def located(self, cwd: str) -> tuple[RuntimeUpdate, ...]:
         if not cwd or cwd == self.project:
@@ -396,15 +416,32 @@ class ToolUse(AssistantBlock, declared_name='tool_use'):
         return CliToolArguments.decode(ToolCall(self.id, self.name, self.input), self.input)
 
 
+class ClaudeUsage(WireModel):
+    """Tokens one model call read; their sum is the context the next call starts from."""
+
+    input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+
+    @property
+    def context_used(self) -> PiCount:
+        """Claude's local notices carry zero usage: no model call, nothing reported."""
+        return PiCountWire.decode(
+            self.input_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens)
+
+
 class AssistantMessage(WireModel):
     content: list[AssistantBlock.declared_union()]
+    model: str = ''
+    usage: ClaudeUsage = Field(default_factory=ClaudeUsage)
 
 
 class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
     message: AssistantMessage
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return tuple(update for block in self.message.content for update in block.updates(self, session))
+        return (*(update for block in self.message.content for update in block.updates(self, session)),
+                *session.answered(self.message))
 
 
 class ResultPart(TaggedWire, ABC, affix=""):
@@ -840,6 +877,10 @@ class CustomTitle(MetadataRecord, declared_name='custom-title'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(title=ThreadText.external(self.customTitle)),)
+
+
+class BridgeSession(MetadataRecord, declared_name='bridge-session'):
+    """The session was opened to claude.ai by /remote-control; nothing here reaches the bus."""
 
 
 class AgentName(MetadataRecord, declared_name='agent-name'):

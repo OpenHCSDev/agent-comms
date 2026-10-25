@@ -22,7 +22,10 @@ from .native_arguments import (
     LaunchBinary,
 )
 from .owner_launch import RetainedOwnerLaunch
-from .owner_lifecycle import OwnerRestartSelection
+from .owner_lifecycle import (
+    OwnerRestartResult,
+    OwnerRestartSelection,
+)
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .restart_scope import AllOwners, RestartScope
 from .thread_identity import ThreadAuthority
@@ -126,8 +129,6 @@ class OwnerRestartHandoff:
         ))
 
     def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:
-        from .owner_lifecycle import OwnerRestartResult
-
         if str(lifecycle.root) != self.root:
             raise RelationViolationError('Retained batch belongs to another root')
         snapshot = lifecycle.registry.snapshot()

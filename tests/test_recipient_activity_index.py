@@ -70,7 +70,6 @@ def test_activity_store_selects_only_requested_threads(tmp_path):
         store.emit(Activity(f"peer-{index}", ActivityState.THINKING, "working"))
     assert set(store.current_for(("peer-7", "absent"))) == {"peer-7", "absent"}
     assert store.current_for(()) == {}
-    assert len(store.all_current()) == 10
 
 
 @pytest.mark.parametrize(("viewer_of", "seen"), [

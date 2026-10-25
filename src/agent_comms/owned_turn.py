@@ -15,6 +15,8 @@ from acp.exceptions import RequestError
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
+from .channel_coding_tools import CodingToolMode
+
 from .input_key import InputKey
 
 from . import agent_events as events
@@ -351,7 +353,6 @@ class OwnedTurn:
             goal_permit=self.goal_permit,
             original_source=replace(self.original, prompt=rendered.text),
         )
-        from .channel_coding_tools import CodingToolMode
 
         delivery = TurnDelivery(
             tool_mode=CodingToolMode(sender),

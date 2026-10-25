@@ -11,6 +11,9 @@ from math import inf
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
+from .errors import RelationViolationError
+from .native_pi import NativeContextJournal
+
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
     from .read_ledger import ReadLedger
@@ -318,8 +321,6 @@ class NativeTranscript(TranscriptSource):
         journal owns context inclusion for the actual header/input/entry identity;
         this bounded indexed lookup does not guess a request kind or options.
         """
-        from .native_pi import NativeContextJournal
-
         files.require_private_directory(self.path.parent)
         with self.path.open("rb") as stream:
             header = SessionEntry.read(stream.readline())
@@ -379,8 +380,6 @@ class NativeTranscript(TranscriptSource):
         This bounded reverse walk runs before any BUS/registry lock is acquired.
         A display-tolerant malformed record cannot supply publication evidence.
         """
-        from .errors import RelationViolationError
-
         for record in self.reverse(through):
             if record.start < after:
                 break

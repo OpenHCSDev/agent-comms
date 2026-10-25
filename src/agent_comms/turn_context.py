@@ -18,6 +18,7 @@ from pydantic import JsonValue
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     IdentityExclude,
@@ -35,6 +36,8 @@ from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnIdentity
 from .tool_result import DeclaredReply
 from .turn_item import NativeItemId, PiRequestKey
+from .wake_policy import WakePolicy
+
 
 if TYPE_CHECKING:
     from .context_store import RecordedContextState
@@ -79,8 +82,6 @@ class Provenance(DeclaredFamily, affix="Provenance"):
         return ()
 
     def require_human_input(self):
-        from .errors import RelationViolationError
-
         raise RelationViolationError("Source is not an original human input")
 
 
@@ -1118,8 +1119,6 @@ class CoordinationSegment(InstructionSegment):
     def capture(
         cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], goals
     ) -> CoordinationSegment:
-        from .wake_policy import WakePolicy
-
         response_instruction = WakePolicy.relevance_instruction()
         viewed = {view.thread.incarnation: view for view in views}
         peers = tuple(PeerState.from_view(viewed[r.peer], r, goals)

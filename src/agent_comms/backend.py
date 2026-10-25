@@ -557,6 +557,10 @@ class NativeSession(MroDispatch, ABC):
                 self.output.record_failure,
                 failures.BackendDidNotExit("agent backend did not exit"),
             ))
+            outcome.report_stopped(partial(
+                self.output.record_failure,
+                failures.NativeChildSignaled(f"Pi RPC child {outcome.summary}"),
+            ), failures.NativeChildSignaled.stop_exits)
 
     async def finish_diagnostics(self) -> None:
         self.error_text = (

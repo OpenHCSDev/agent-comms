@@ -16,14 +16,23 @@ from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 from acp.exceptions import RequestError
 
-from .agent_backend import InputRequest
+from .acp_extension import QueueItem
+
+from .agent_backend import (
+    InputContent,
+    InputRequest,
+)
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
+from .context_segments.wake import DeliveredMessageSegment
 from .controller import Controller
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
-from .coordination_session import ReadNativeCoordinationSession
+from .coordination_session import (
+    NativeBoundary,
+    ReadNativeCoordinationSession,
+)
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import InputId, GoalId, RootId
@@ -33,8 +42,10 @@ from .input_attempt import InputAttempt, ReservedInput
 from .input_key import AcpInputKey, InputKey
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
+from .routing import ScheduledTurn
 from .thread_identity import ClaimedIdentity, ClaimScoped
 from .threads import Thread
+from .turn_context import TurnContext
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
 from .turn_input_source import AcceptedFollowingInput, AcceptedTurn, DeliveredFollowingInput
 
@@ -98,8 +109,6 @@ class QueuedInput:
 
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
         """Show the item only when its recorded input generation matches the queue."""
-        from .acp_extension import QueueItem
-
         return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claimed_identity) else ()
 
     def source(self) -> AcceptedFollowingInput:
@@ -336,11 +345,6 @@ class DeliveredInput(QueuedInput):
         so cancellation cannot lose a successfully paused but unplaced input.
         The worker opens/closes SQLite and never reads or mutates live queues.
         """
-        from .agent_backend import InputContent
-        from .context_segments.wake import DeliveredMessageSegment
-        from .routing import ScheduledTurn
-        from .turn_context import TurnContext
-
         with inputs.comms.registry.store.locked():
             accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
             if not accepted:
@@ -479,8 +483,6 @@ class DeliveredInput(QueuedInput):
         lookup = owner.incarnation.lookup
 
         def read(store: Coordination):
-            from .coordination_session import NativeBoundary
-
             with store.session.read():
                 assignments = tuple(
                     assignment for assignment in pending_sealed_assignments(

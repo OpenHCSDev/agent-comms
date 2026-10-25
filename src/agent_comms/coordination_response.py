@@ -58,7 +58,9 @@ from agent_comms.typed_table import (
 )
 
 from .field_codec import MessageId, RootId, ThreadLookup
+from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
+from .response_conversation import ResponseConversation
 
 
 class ResponseTable(ImmutableRows, PrivateCoordinatorTable):
@@ -379,9 +381,6 @@ def _require_final_owner(
 
 def _answered_by(bus, boundary, owner: LiveResponseOwner, snapshot, obligation):
     """Selected originals and started inputs share the held native boundary."""
-    from .input_disposition import InputDispositions
-    from .response_conversation import ResponseConversation
-
     lease = owner.thread.require_turn_lease()
     inputs = InputDispositions(bus.bus.path.parent).in_turn(lease.turn_id)
     with bus.bus.reading() as source:

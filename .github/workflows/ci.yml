@@ -9,8 +9,9 @@ on:
   workflow_dispatch:
   workflow_call:
 
+# A push runs once per commit: a shared main group let each new pending run cancel the last.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: false
 
 env:

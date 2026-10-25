@@ -25,9 +25,11 @@ from agent_comms.child_process import (
     ObservedProcess,
     Platform,
     ProcessIdentity,
+    ResidentManager,
     STOP_GRACE_SECONDS,
     SpawnedProcess,
     SynchronousProcess,
+    SystemdUserManager,
     TimedOutOutcome,
 )
 from agent_comms.field_codec import FieldCodec
@@ -400,6 +402,43 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
             if member.alive():
                 ObservedProcess(member).stop_sync()
 
+
+
+UNIT_LAUNCHER = """import json,subprocess,sys
+from pathlib import Path
+from agent_comms.child_process import OutlivesLauncherLifetime, Platform, SpawnedProcess
+from agent_comms.field_codec import FieldCodec
+sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
+# A new session and a reparent to init leave the process tree, never the unit's cgroup.
+plain = Platform.current().identity(subprocess.Popen(sleeper, start_new_session=True).pid)
+resident = SpawnedProcess.launch(sleeper, lifetime=OutlivesLauncherLifetime).identity
+Path(sys.argv[1]).write_text(json.dumps([FieldCodec.encode(c) for c in (plain, resident)]))
+"""
+
+
+@pytest.mark.skipif(ResidentManager.current() is not SystemdUserManager,
+                    reason="the cgroup a unit kills exists only under a user manager")
+@pytest.mark.asyncio
+async def test_ended_unit_takes_its_plain_child_and_leaves_its_resident(tmp_path: Path) -> None:
+    announcement = tmp_path / "children.json"
+    # Default KillMode: ending the unit signals every process left in its cgroup.
+    subprocess.run(
+        ("systemd-run", "--user", "--wait", "--quiet", "--collect",
+         f"--unit=agent-comms-test-launcher-{os.getpid()}",
+         f"--working-directory={Path.cwd()}", f"--setenv=HOME={os.environ['HOME']}",
+         f"--setenv=PYTHONPATH={os.pathsep.join(sys.path)}",
+         sys.executable, "-c", UNIT_LAUNCHER, str(announcement)),
+        check=True, timeout=30)
+    plain, resident = observed = identities(announcement)
+    try:
+        async with asyncio.timeout(5):
+            while plain.alive():
+                await asyncio.sleep(.01)
+        assert resident.alive(), "a declared resident must outlive its launcher's unit"
+    finally:
+        for member in observed:
+            if member.alive():
+                ObservedProcess(member).stop_sync()
 
 def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "started"

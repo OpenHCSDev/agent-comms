@@ -28,6 +28,7 @@ from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 from .turn_item import NativeItemId, NativeTurnId, TurnItem
 
 if TYPE_CHECKING:
+    from .agent_events import RuntimeInfoObservation
     from .cli_bridges.shared import TranscriptBridge
     from .importing import ImportBuffer
     from .comms import Comms
@@ -286,6 +287,9 @@ class ReadingPhase(ABC):
     def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
         return (update,)
 
+    def runtime_info(self, update: RuntimeInfoObserved) -> tuple[RuntimeUpdate, ...]:
+        return (update,)
+
 
 @dataclass(frozen=True)
 class RuntimeUpdate(ABC):
@@ -344,6 +348,19 @@ class OfferedToolsObserved(RuntimeUpdate):
 
     def publish(self, output: ThreadOutput) -> None:
         output.agents.registry.observe_offered_tools(output.transcript.incarnation, self.offered)
+
+
+@dataclass(frozen=True)
+class RuntimeInfoObserved(RuntimeUpdate):
+    """A CLI runtime's observation, recorded by the same runtime-info owner native threads use."""
+
+    observation: RuntimeInfoObservation
+
+    def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
+        return phase.runtime_info(self)
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.agents.observe_runtime_info(output.activity_thread, self.observation)
 
 
 @dataclass(frozen=True)

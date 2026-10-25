@@ -16,7 +16,8 @@ from agent_comms.comms import wire
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
-from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from conftest import accept_initial
+from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
@@ -70,8 +71,7 @@ def _root(
                 recipient.recipient_lookup,
                 committed=True,
             )
-        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-        assert accepted.value.member_count == len(initial.recipients)
+        accept_initial(comms.bus, root_id, message.seq, store)
     return root, root_id, comms, initial, people
 
 

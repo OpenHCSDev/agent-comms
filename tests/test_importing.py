@@ -709,7 +709,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path: P
         assert record["parentId"] == parent
         parent = record["id"]
     imported: list[ImportedMessage] = []
-    for event in comms.transcripts.thread_transcript_page(thread.name).events:
+    for event in comms.transcripts.capture_page_read(thread.name).read().events:
         event.import_to(imported.append)
     context = "\n".join(message.body for message in imported)
     assert "Keep model authority" in context and "42 passed" in context
