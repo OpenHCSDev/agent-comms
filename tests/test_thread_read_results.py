@@ -59,7 +59,9 @@ def test_changed_interest_retains_one_results_mapping_and_starts_empty():
     assert next_read.initial == {'two'}
 
 
-@pytest.mark.parametrize('changed_name, expected', [('beta', {'beta'}), ('outside', set())])
+@pytest.mark.parametrize('changed_name, expected', [
+    ('beta', {'beta'}), ('outside', set()), ('read', {'beta'}), ('unrelated_read', set()),
+])
 def test_assignment_row_changes_attribute_only_their_view_without_projection(
     private_directory, changed_name, expected,
 ):
@@ -80,23 +82,36 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
         with Coordination(str(root / 'coordination.sqlite3')) as store:
             store.participants.register(comms.registry.require(name).incarnation.lookup, committed=True)
             accept_initial(comms.bus, root_id, message.seq, store)
+    notification_source = initial.message
+    if changed_name in ('read', 'unrelated_read'):
+        human = comms.messaging.user_identity(str(private_directory))
+        read_source = publish_initial(comms, 'beta' if changed_name == 'read' else 'outside',
+                                      human.name, 'Human read receipt')
+        if changed_name == 'read':
+            notification_source = read_source
     names = frozenset(('alpha', 'beta', 'gamma'))
     batch = comms.views.thread_presentations(names)
     results = {name: ThreadPresented(batch.require(name)) for name in names}
     revision = comms.views.revision()
     activity = comms.views.observed_activity(revision, names)
     previous = ThreadsObserved(revision, results, names, activity)
-    notification_window = ReadNotifications(root_id, (initial.message.reference,)).read(comms)
+    notification_window = ReadNotifications(root_id, (notification_source.reference,)).read(comms)
     notification_read = NotificationsRead.of(revision, comms, activity, notification_window)
-    with Coordination(str(root / 'coordination.sqlite3')) as store:
-        assignment, = sealed_cohort_assignments(
-            store, comms.registry.require(changed_name).incarnation.lookup,
-        )
-        store.assignments.transition_preengagement(
-            assignment.assignment_id, DeferredAssignment, expected_revision=assignment.revision,
-        )
+    if changed_name in ('read', 'unrelated_read'):
+        ledger = comms.bus.reads
+        basis = ledger.capture(human.name, (read_source,), comms.registry.snapshot(),
+                               comms.bus.bus, document=ledger.read())
+        ledger.mark_displayed(human.name, basis)
+    else:
+        with Coordination(str(root / 'coordination.sqlite3')) as store:
+            assignment, = sealed_cohort_assignments(
+                store, comms.registry.require(changed_name).incarnation.lookup,
+            )
+            store.assignments.transition_preengagement(
+                assignment.assignment_id, DeferredAssignment, expected_revision=assignment.revision,
+            )
     later = comms.views.revision()
-    assert later.notifications != revision.notifications
+    assert later != revision
     calls = 0
     projection_code = MessageNotification.delivery_window.__func__.__code__
 

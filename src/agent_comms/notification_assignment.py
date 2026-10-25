@@ -25,7 +25,7 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .presentation import MessageNotification
+from .notification_read import NotificationAssignmentRead, NotificationWindow
 from .private_registry_guard import RegistryPrivacy
 from .typed_table import BooleanStorage, TypedRow
 
@@ -223,56 +223,28 @@ class UnrecordedNotificationSource(NotificationSource):
 
 
 @dataclass(frozen=True)
-class NotificationAssignmentRead:
-    """Assignment rows captured from one caller-owned coordination snapshot."""
-
-    sources: tuple[Delivered, ...]
-    rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
-
-    @classmethod
-    def empty(cls) -> NotificationAssignmentRead:
-        return cls((), ())
-
-    def rows_by_source(self) -> dict[MessageReference, tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]]:
-        grouped: dict[MessageReference, list[tuple[WakeAssignment, AssignmentActivityEvidence]]] = {
-            source.message.reference: [] for source in self.sources
-        }
-        for row in self.rows:
-            grouped.setdefault(row[0].source, []).append(row)
-        return {source: tuple(rows) for source, rows in grouped.items()}
+class NotificationAssignment(NotificationSource):
+    assignment: WakeAssignment
+    activity: AssignmentActivity
 
     @classmethod
     def changed(cls, reads: Iterable[NotificationAssignmentRead], root: Path) -> tuple[NotificationAssignmentRead, ...]:
-        """Compare retained typed evidence without projecting another delivery window."""
+        """Acquire fresh bounded rows once; retained reads own their equality."""
         reads = tuple(reads)
         sources = tuple({source.message.reference: source
                          for read in reads for source in read.sources}.values())
         fresh = {}
-        for start in range(0, len(sources), MessageNotification.window_limit):
-            fresh.update(NotificationAssignment.read(
-                root, sources[start:start + MessageNotification.window_limit],
+        for start in range(0, len(sources), NotificationWindow.window_limit):
+            fresh.update(cls.read(
+                root, sources[start:start + NotificationWindow.window_limit],
             ).rows_by_source())
-        return tuple(read for read in reads if any(
-            previous != fresh.get(source, ())
-            for source, previous in read.rows_by_source().items()
-        ))
+        return tuple(read for read in reads if read.differs_from(fresh))
 
-    def resolve(self, root: Path) -> tuple[NotificationAssignment, ...]:
-        resolved = tuple(
-            NotificationAssignment(
-                assignment, activity.resolve(pending_at_ms=assignment.updated_at_ms)
-            )
-            for assignment, activity in self.rows
-        )
-        return NotificationAssignment._recorded_conversation_responses(
-            root, self.sources, resolved
-        )
-
-
-@dataclass(frozen=True)
-class NotificationAssignment(NotificationSource):
-    assignment: WakeAssignment
-    activity: AssignmentActivity
+    @classmethod
+    def resolve(cls, root: Path, read: NotificationAssignmentRead) -> tuple[NotificationAssignment, ...]:
+        resolved = tuple(cls(assignment, activity.resolve(pending_at_ms=assignment.updated_at_ms))
+                         for assignment, activity in read.rows)
+        return cls._recorded_conversation_responses(root, read.sources, resolved)
 
     @classmethod
     def for_deliveries(
@@ -333,7 +305,7 @@ class NotificationAssignment(NotificationSource):
         """Capture detached assignment evidence for one bounded window of originals
         from the caller's SQLite snapshot."""
         sources = tuple(sources)
-        if len(sources) > MessageNotification.window_limit:
+        if len(sources) > NotificationWindow.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         if not sources:
             return NotificationAssignmentRead((), ())

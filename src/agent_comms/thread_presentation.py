@@ -12,10 +12,10 @@ from agent_comms.errors import RelationViolationError, RouteChangedError, Unregi
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
+from .notification_read import NotificationAssignmentRead, NotificationReadMark
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
-    from .notification_assignment import NotificationAssignmentRead
     from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
     from agent_comms.registry_document import RegistrySnapshot
@@ -207,13 +207,6 @@ class ThreadStatusDisplay:
         return self.status_display() == other.status_display()
 
 
-def empty_notification_read() -> NotificationAssignmentRead:
-    # Notification progress imports this module's status family.
-    from .notification_assignment import NotificationAssignmentRead
-
-    return NotificationAssignmentRead.empty()
-
-
 @dataclass(frozen=True, slots=True)
 class ThreadPresentation(ThreadStatusDisplay):
     """A thread's acquired presentation, or its declared absence."""
@@ -223,7 +216,8 @@ class ThreadPresentation(ThreadStatusDisplay):
     read_identity: TranscriptReadIdentity | None = None
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
-    notification_read: NotificationAssignmentRead = field(default_factory=empty_notification_read)
+    notification_read: NotificationAssignmentRead = field(default_factory=NotificationAssignmentRead.empty)
+    notification_marks: tuple[NotificationReadMark, ...] = ()
 
     def notification_activity_names(self) -> frozenset[str]:
         return frozenset(name for item in (*self.notifications, *self.sent_notifications)
@@ -284,12 +278,12 @@ class ThreadPresentation(ThreadStatusDisplay):
         incoming, sent = (
             tuple(replace(notification, message=source.message)
                   for source in selected
-                  for notification in projected[source.message.seq, source.message.message_id])
+                  for notification in projected.outcomes[source.message.seq, source.message.message_id])
             for selected in (window.sources, window.sent_sources)
         )
         return replace(
             self, notifications=incoming, sent_notifications=sent,
-            notification_read=notification_read,
+            notification_read=notification_read, notification_marks=projected.read_marks,
             read_identity=window.read.identity,
             incoming_references=tuple(source.message.reference for source in window.sources),
             sent_references=tuple(source.message.reference for source in window.sent_sources),

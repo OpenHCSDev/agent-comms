@@ -46,13 +46,13 @@ from .private_nk_entrypoint import (
 from .private_path import PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
+from .notification_read import NotificationAssignmentRead
 
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
     from .bus_publication import Delivered
     from .cursor_publication import CursorPublication
-    from .notification_assignment import NotificationAssignmentRead
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
     from .typed_table import TableSchema
@@ -205,8 +205,6 @@ class PublicRegistry(RegistryPrivacy):
     def missing_notification_assignments(
         self, sources: Sequence[Delivered],
     ) -> NotificationAssignmentRead:
-        from .notification_assignment import NotificationAssignmentRead
-
         return NotificationAssignmentRead(tuple(sources), ())
 
     def cursor_scope(

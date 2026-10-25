@@ -26,7 +26,7 @@ from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut
-from .presentation import MessageNotification
+from .notification_read import NotificationWindow
 from .private_path import FileObservation, FileRevision
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
@@ -542,9 +542,9 @@ class Transcripts:
         bus evidences contribute to the same projection. Registry-owned thread
         metadata also carries inherited fork text and source selection.
         """
-        if not 1 <= source_limit <= MessageNotification.window_limit:
+        if not 1 <= source_limit <= NotificationWindow.window_limit:
             raise ValueError("Transcript source capture requires a bounded window")
-        if not 0 <= sent_source_limit <= MessageNotification.window_limit:
+        if not 0 <= sent_source_limit <= NotificationWindow.window_limit:
             raise ValueError("Sent source capture requires a bounded window")
         page = self._page_source(name, through, historical_source)
         captured = page.projection.window(limit=source_limit, sent_limit=sent_source_limit)

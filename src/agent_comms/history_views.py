@@ -57,6 +57,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
 from .page_traversal import LiveCursor
+from .notification_read import NotificationWindow
 from .presentation import (
     BusPresentation,
     ChannelView,
@@ -64,7 +65,6 @@ from .presentation import (
     CountedRead,
     InboxRead,
     MessageNotification,
-    NotificationWindow,
     NoRevision,
     ReadState,
     ThreadRecord,

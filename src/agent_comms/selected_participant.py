@@ -31,7 +31,8 @@ from .mro_dispatch import MroDispatch, handles
 from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner
-from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
+from .notification_assignment import NotificationAssignment
+from .notification_read import NotificationAssignmentRead, NotificationWindow
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
@@ -235,7 +236,7 @@ class SelectedParticipant(MroDispatch):
         lookup = thread.incarnation.lookup
         sent_owner, sent_sources = MessageNotification.sent_sources(
             comms.root, comms.registry, comms.bus.bus, name,
-            limit=MessageNotification.window_limit,
+            limit=NotificationWindow.window_limit,
         )
         LiveResponseOwner(
             thread=thread, claimed_generation=generation
