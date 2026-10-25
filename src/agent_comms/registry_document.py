@@ -295,9 +295,10 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def __eq__(self, other: object) -> bool:
         """Rows still stored on both sides compare as their JSON; only rows that differ there,
-        or that either side wrote, are decoded, so a one-row edit never decodes the registry."""
+        or that either side wrote, are decoded, so a one-row edit never decodes the registry.
+        Rows equal only rows: a plain mapping is a different value."""
         if not isinstance(other, ThreadRows):
-            return super().__eq__(other)
+            return NotImplemented
         return self.keys() == other.keys() and all(
             (name in self._raw and name in other._raw and self._raw[name] == other._raw[name])
             or self[name] == other[name]

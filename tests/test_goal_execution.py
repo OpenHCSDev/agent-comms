@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_failure import NativeTurnError
 from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
@@ -193,3 +194,18 @@ async def test_verified_productive_turn_recovers_blocked_generation(execution_bu
     assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
     assert comms.registry.require("worker").goal.state == ActiveGoal()
     assert failure_count(comms) == 1  # The old failure remains evidence, never replayed.
+
+
+@pytest.mark.asyncio
+async def test_turn_refused_by_coordination_is_resumable_not_blocked(execution_bus):
+    """A bus refusal inside the turn's own drain says nothing about the backend; the goal resumes.
+
+    The copied bus is not a private root, so the turn's drain (prepare_native) is refused
+    by the real coordinator, as a stale fence or coverage deadline refuses it on a live bus.
+    """
+    comms = execution_bus
+    async with turn_on(comms) as turn:
+        with pytest.raises(NativeTurnError, match="PublicationActivationBlocked"):
+            await turn.run_native()
+    assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
+    assert failure_count(comms) == 0

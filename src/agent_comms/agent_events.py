@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from .transcript_events import SentTranscript
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
+    from .turn_progress import TurnProgress
 
 
 class AgentEvent(ABC):
@@ -316,10 +317,12 @@ class Done(AgentEvent, FailedGoalTurn):
     def require_reported(self) -> Done:
         return self
 
-    async def prepare_publication(self, progress) -> Done:
+    async def prepare_publication(self, progress: TurnProgress) -> Done:
         return self
 
-    async def report_failure(self, progress, error):
+    async def report_failure(
+        self, progress: TurnProgress, error: Exception, kind: type[TurnFailure]
+    ) -> NativeTurnOutcome:
         return self.outcome
 
 
