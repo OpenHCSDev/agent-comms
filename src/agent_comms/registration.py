@@ -264,9 +264,6 @@ class Registration:
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         """Every registration commits here, after inheritance kept a redeclared thread's
         roots; the registry assigns a new thread its storage roots in this one place."""
-        # The registry write refuses during maintenance; refuse first, so the goal journal
-        # never records an intent for a registration that cannot commit.
-        self.store.require_maintenance_open()
         change.prepare_participant(self.store.path.parent)
         thread = change.thread
         change = replace(change, thread=replace(

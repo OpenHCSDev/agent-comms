@@ -410,19 +410,28 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
 def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
     """The installer stops only its owners; the connector, bridges and forks keep running, so the
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
+    from agent_comms.coordination_errors import ParticipantNotRegistered
+    from agent_comms.coordination_session import CoordinationSession
     from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.participant_store import ParticipantStore
 
     comms = wire(tmp_path)
     comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt'))
+    requested = Thread(name='b', tags=frozenset(), worktree='/wt')
     before = comms.registry.store.path.read_bytes()
     gate = MaintenanceBarrier(comms.registry.store.path)
     hold = gate.begin(MaintenanceOperator.current())
     monkeypatch.delenv(HOLDER_NONCE, raising=False)
     with pytest.raises(RelationViolationError):
-        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(requested)
     assert comms.registry.store.path.read_bytes() == before
-    monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
-    comms.registry.declare(Thread(name='b', tags=frozenset(), worktree='/wt'))
+    with CoordinationSession(str(CoordinationSession.path_in(tmp_path))) as session:
+        participants = ParticipantStore(session)
+        with pytest.raises(ParticipantNotRegistered):
+            participants.get(requested.incarnation.lookup)
+        monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
+        comms.registry.declare(requested)
+        assert participants.get(requested.incarnation.lookup).committed
     assert 'b' in comms.registry
     gate.clear(hold)
 
