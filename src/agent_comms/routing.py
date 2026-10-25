@@ -149,7 +149,6 @@ class ScheduledTurn:
     prompt: str
     origin: turn_origin.TurnOrigin = NO_TURN_ORIGIN
     goal_id: GoalId | None = None
-    goal_wait_id: str | None = None
 
     @property
     def autonomous_goal(self) -> bool:
@@ -163,11 +162,6 @@ class ScheduledTurn:
             "If the request was only to switch projects, report that you are ready; "
             "do not invent extra work."
         )
-
-    def require_dependency_wake(self, error: Exception) -> None:
-        """Only dependency launches use standby refusal settlement."""
-        if self.goal_wait_id is None:
-            raise error
 
     @classmethod
     def incoming(
