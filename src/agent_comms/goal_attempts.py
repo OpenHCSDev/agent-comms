@@ -794,6 +794,19 @@ class GoalAttemptStore(DurableFile, ReconciledFile, PublishedSQLiteFile, WireWak
         with closing(self._connect()) as conn:
             return AttemptRecord.read_in(conn, attempt_id)
 
+    def failures(
+        self, owner_created_at: float, goal_id: GoalId | None
+    ) -> tuple[FailedTurnEvidence, ...]:
+        """One owner incarnation's failed attempts, oldest generation first."""
+        key = {} if goal_id is None else {"goal_id": goal_id}
+        with closing(self._connect()) as conn:
+            try:
+                return tuple(FailedTurnEvidence.select(
+                    conn, order_by=("generation",), owner_created_at=owner_created_at, **key,
+                ))
+            except (sqlite3.Error, MalformedRecord) as error:
+                raise StorageUncertainError("Cannot read goal attempt failures.") from error
+
     def stopped_permit(self, goal_id: GoalId) -> GoalTurnPermit:
         generation = self.require_generation(goal_id)
         return generation.lifecycle.stopped_permit(self, generation)

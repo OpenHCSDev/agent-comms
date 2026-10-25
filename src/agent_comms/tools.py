@@ -60,7 +60,7 @@ from .field_codec import (
     GoalId,
 )
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
-from .goal_history import RecordedGoalRevision
+from .goal_history import RecordedGoalHistory
 from .goal_presentation import GoalExecution, GoalSnapshot
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
@@ -191,8 +191,8 @@ class GoalUpdated(OwnGoalPublication):
 
 
 @dataclass(frozen=True)
-class GoalHistory(ToolResult):
-    history: tuple[RecordedGoalRevision, ...]
+class GoalHistory(ToolResult, RecordedGoalHistory):
+    pass
 
 
 
@@ -651,8 +651,9 @@ class CommsGoalHistoryTool(ThreadReadTool):
     ] = None
 
     def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
-        entries = comms.goals.goal_history(caller.subject(self.thread), goal_id=self.goal_id)
-        return GoalHistory(tuple(entry.recorded() for entry in entries))
+        return comms.goals.recorded_history(
+            GoalHistory, caller.subject(self.thread), goal_id=self.goal_id
+        )
 
 
 

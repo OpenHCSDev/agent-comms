@@ -23,10 +23,12 @@ from agent_comms.owner_requests import NoRequestRevision, RequestRevision
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
+from .goal_failure_observation import FailedTurnEvidence
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
+from .tool_result import DeclaredReply
 from .reported_turn import ReportedTurnState
 from .typed_table import (
     Column,
@@ -122,6 +124,14 @@ class RecordedGoalRevision(RequestHistory):
     observed_at: float
     before: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
     after: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
+
+
+@dataclass(frozen=True)
+class RecordedGoalHistory(DeclaredReply):
+    """A thread's goal revisions beside the attempt ledger's failures, which only the ledger writes."""
+
+    history: tuple[RecordedGoalRevision, ...]
+    failures: tuple[FailedTurnEvidence, ...]
 
 
 @dataclass(frozen=True)
