@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.errors import RejectedEnforcementError
+from agent_comms.errors import RejectedEnforcementError, TodoConflict
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -77,6 +77,33 @@ class BlocksRelease:
     the signal is gone: a quote is the answer, never the relief."""
 
 
+class StaleTodoDecision(RejectedEnforcementError):
+    """A rule cannot refresh its decision after the row changes."""
+
+    reason: ClassVar[str] = "todo decision is stale"
+
+    def __init__(self, current: Todo) -> None:
+        self.current = current
+        super().__init__(self.explanation())
+
+    def explanation(self) -> str:
+        return f"{self.current.id}: decision is stale at revision {self.current.revision}"
+
+
+class RepeatedTodoChange(StaleTodoDecision):
+    """The one refreshed decision also lost its observed revision."""
+
+    reason: ClassVar[str] = "todo changed again"
+
+    def __init__(self, previous: Todo, current: Todo) -> None:
+        self.previous = previous
+        super().__init__(current)
+
+    def explanation(self) -> str:
+        return (f"{self.previous.id}: revision {self.previous.revision} changed again "
+                f"to revision {self.current.revision}")
+
+
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
     @classmethod
     @abstractmethod
@@ -93,10 +120,14 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return True
 
     def rejected_line(self, error: RejectedEnforcementError) -> str:
-        return f"Not applied ({error.reason}): {self.line()}"
+        return f"Not applied ({error.explanation()}): {self.line()}"
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
+
+    def redecided(self, comms: Comms, commander: str, current: Todo) -> tuple[StandingRule, ...]:
+        """Rules without a Todo decision cannot refresh one."""
+        raise StaleTodoDecision(current)
 
     @staticmethod
     def enforce_all(
@@ -107,7 +138,15 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         rejected: dict[StandingRule, RejectedEnforcementError] = {}
         for rule in rules:
             try:
-                rule.enforce(comms, commander)
+                try:
+                    rule.enforce(comms, commander)
+                except TodoConflict as conflict:
+                    fresh = rule.redecided(comms, commander, conflict.current)
+                    try:
+                        for decided in fresh:
+                            decided.enforce(comms, commander)
+                    except TodoConflict as changed:
+                        raise RepeatedTodoChange(conflict.current, changed.current) from changed
             except RejectedEnforcementError as error:
                 rejected[rule] = error
         return rejected

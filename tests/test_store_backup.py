@@ -13,7 +13,8 @@ from agent_comms.coordination_database import (
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.locked_store import SQLiteFile, StoreBusy
+from agent_comms.locked_store import SQLiteFile
+from agent_comms.store_files import StoreBusy
 
 
 def _try_external_writer(path, result):

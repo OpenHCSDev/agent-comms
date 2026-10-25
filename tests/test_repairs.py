@@ -24,6 +24,7 @@ PACKAGE = {
 
 
 def tree(root: Path) -> Path:
+    (root / "pyproject.toml").write_text('[project.scripts]\nac = "agent_comms.cli:main"\n')
     for name, source in PACKAGE.items():
         path = root / "src" / "agent_comms" / name
         path.parent.mkdir(parents=True, exist_ok=True)

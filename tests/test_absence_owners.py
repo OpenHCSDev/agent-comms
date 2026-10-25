@@ -8,6 +8,7 @@ from agent_comms import agent_events as events
 from agent_comms.agent_backend import InputStartListener, NoInputStartListener, SendNow, TurnInbox
 from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.change_report import FileLine, NoSourceReference
+from agent_comms.errors import TodoError
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.input_drain import DrainedSession
 from agent_comms.native_child import NoInputForwarder
@@ -49,7 +50,7 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
 def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
     from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
     from agent_comms.coordination_tables.attempts import NoPreviousAttempt
-    from agent_comms.todos import NoTodoHolder, TodoError
+    from agent_comms.todos import NoTodoHolder
 
     holder = NoTodoHolder()
     assert holder.current_assignments() == ()

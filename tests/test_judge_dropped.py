@@ -6,8 +6,9 @@ import pytest
 
 from agent_comms.commander.judge import Edit, main
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.errors import TodoError
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.todos import DroppedVerdict, RewrittenVerdict, TodoError
+from agent_comms.todos import DroppedVerdict, RewrittenVerdict
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeTurnId
