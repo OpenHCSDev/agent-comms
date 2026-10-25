@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import fcntl
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
@@ -226,8 +225,7 @@ class PiDurableBackend(AgentBackend, Compacts):
                 path = Path(thread.writable_runtime.path)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with ExitStack() as resources:
-                    lock = resources.enter_context(thread.writable_runtime.writer_lock.open('a+b'))
-                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    lock = resources.enter_context(thread.writable_runtime.writer_claim.claimed())
                     child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
                         cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
                 async with child.failures():
