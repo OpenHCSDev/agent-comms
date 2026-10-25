@@ -11,16 +11,22 @@ class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
     """A failure an inbox drain records and retries later instead of stopping on."""
 
 
+class CommandFailure(Exception):  # noqa: N818 - capability, not an outcome
+    """A failure a command reports to its caller as a failed result instead of crashing.
+
+    It crosses a worker's pipe as its class, args and state, never through a member's own
+    ``__init__``, whose parameters are not its args, and keeps its original cause."""
+
+    def __reduce__(self):
+        return __newobj__, (type(self), *self.args), self.__dict__ | {"__cause__": self.__cause__}
+
+
 class DrainUnavailable(DrainDeferred):
     """A failure meaning the drain's store or coordinator is unavailable right now."""
 
 
-class CoordinationError(RuntimeError, DrainUnavailable):
+class CoordinationError(RuntimeError, DrainUnavailable, CommandFailure):
     """Base class for fail-loud coordinator errors."""
-
-    def __reduce__(self):
-        """Keep the original cause when an observation sends this error over its pipe."""
-        return __newobj__, (type(self), *self.args), self.__dict__ | {"__cause__": self.__cause__}
 
 
 class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome

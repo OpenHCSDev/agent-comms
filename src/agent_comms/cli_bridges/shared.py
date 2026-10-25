@@ -1155,7 +1155,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         delivery = DeliveryRow(message.message_id, FieldCodec.compact(message.to_wire()) + '\n', outcome)
         # The thread's claim leaves the native queue before the journal row exists,
         # so no crash between them lets a later native owner replay this message.
-        await asyncio.to_thread(self.comms.bus.hand_to_harness, self.binding.bus, (message.reference,))
+        await self.comms.bus.when_open(partial(
+            self.comms.bus.hand_to_harness, self.binding.bus, (message.reference,)))
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:
@@ -1382,7 +1383,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         self.retirement: BridgeExit = BridgeExit()
 
     async def declare_reader(self, status: ThreadStatus) -> None:
-        await asyncio.to_thread(lambda: self.comms.registry.register(
+        await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
 
     def watch_record(self) -> WatchRecord:

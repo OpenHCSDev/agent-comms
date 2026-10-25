@@ -92,6 +92,20 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
     assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
 
 
+def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(head_bus):
+    """GitHub keeps the newest status per context on a commit, so reviewing an approved head
+    holds it out of the merge queue until a new ok."""
+    comms, github, request = head_bus
+    context = order.Commander.read_root(comms.root)
+    common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
+              "--why", ACCEPTED.text]
+    judge.main(["ok", *common], context)
+    judge.main(["reviewing", *common], context)
+    posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
+    assert [next(part for part in post if part.startswith("state=")) for post in posts] == [
+        "state=success", "state=pending"]
+
+
 def test_moved_head_posts_and_records_nothing(head_bus):
     comms, github, request = head_bus
     moved = replace(request, head="a" * 40)
@@ -167,3 +181,16 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
         "grown.py declares forty one values that the reviewed request needs as separate names")))
     posts = tuple(call for call in github.calls() if f"statuses/{head}" in call[1])
     assert len(posts) == 1 and any(f"(src +{grown})" in part for part in posts[0])
+
+
+def test_judge_ok_keeps_every_repeated_growth_reason():
+    reasons = [f"{name} adds the lines this reviewed request needs to answer one question"
+               for name in ("first.py", "second.py", "third.py")]
+    verb = judge.JudgeVerb.parse(["ok", "--pr", "8", "--head", "abc123def", "--why", ACCEPTED.text,
+                            *(part for reason in reasons for part in ("--growth", reason))])
+    growth = verb.head_operation().growth
+    assert all(growth.names(f"src/{name}") for name in ("first.py", "second.py", "third.py"))
+    assert not growth.names("src/fourth.py")
+    with pytest.raises(ToolRefusedError, match="12\\+ words"):
+        judge.JudgeVerb.parse(["ok", "--pr", "8", "--head", "abc123def", "--why", ACCEPTED.text,
+                         "--growth", reasons[0], "--growth", "short.py grows"]).head_operation()

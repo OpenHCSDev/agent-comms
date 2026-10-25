@@ -26,6 +26,7 @@ from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, Succee
 from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore, GoalWorkDecision, ProviderUsageTotal, ReservationConflictError, StorageUncertainError
 from agent_comms.errors import UnresolvedAttemptError
+from agent_comms.maintenance_barrier import MaintenanceNotHeldError
 from agent_comms.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -45,7 +46,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def _competing_reserve(root: str, goal_id: GoalId, grant: str, start, results) -> None:
-    store = GoalAttemptStore(root)
+    store = GoalAttemptStore.at(root)
     start.wait(5)
     try:
         reservation = store.reserve(goal_id, 1, ready_grant=grant)
@@ -55,19 +56,19 @@ def _competing_reserve(root: str, goal_id: GoalId, grant: str, start, results) -
 
 
 def _die_after_reservation(root: str, goal_id: GoalId, grant: str) -> None:
-    GoalAttemptStore(root).reserve(goal_id, 1, ready_grant=grant)
+    GoalAttemptStore.at(root).reserve(goal_id, 1, ready_grant=grant)
     os._exit(0)
 
 
 def _die_after_claim(root: str, goal_id: GoalId, grant: str) -> None:
-    store = GoalAttemptStore(root)
+    store = GoalAttemptStore.at(root)
     reservation = store.reserve(goal_id, 1, ready_grant=grant)
     store.claim_launch(reservation)
     os._exit(0)
 
 
 def _die_before_ready_ack(root: str, goal_id: GoalId) -> None:
-    store = GoalAttemptStore(root)
+    store = GoalAttemptStore.at(root)
     store._sync = lambda: os._exit(0)
     store.create_goal(goal_id)
     os._exit(1)
@@ -80,6 +81,18 @@ def store(tmp_path) -> Iterator[GoalAttemptStore]:
     yield GoalAttemptStore.initialize(root)
 
 
+def test_a_readback_that_disagrees_with_the_commit_grants_no_launch(store):
+    """The commit landed but the fresh-connection readback does not attest it: the change
+    fails loud and the ready grant it minted is never handed out."""
+    goal_id = GoalId.mint()
+    store._is_generation = lambda generation: False
+    with pytest.raises(StorageUncertainError, match="does not attest"):
+        store.create_goal(goal_id)
+    with pytest.raises(UnresolvedAttemptError):
+        store.ready_grant(goal_id, 1)
+    assert GoalAttemptStore.at(store.root).snapshot(goal_id).lifecycle == ReadyGeneration()
+
+
 def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
     missing_goal_id = GoalId.mint()
     with pytest.raises(StorageUncertainError):
@@ -88,7 +101,7 @@ def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
     assert store.path.stat().st_mode & 0o777 == 0o600
-    assert GoalAttemptStore(root).snapshot(missing_goal_id) is None
+    assert GoalAttemptStore.at(root).snapshot(missing_goal_id) is None
 
 
 def test_one_reservation_across_two_independent_supervisors(store):
@@ -128,7 +141,7 @@ def test_claim_is_one_shot_and_reopened_store_cannot_replay(store):
     goal_id = GoalId.mint()
     store.create_goal(goal_id)
     reservation = store.reserve(goal_id, 1)
-    reopened = GoalAttemptStore(store.root)
+    reopened = GoalAttemptStore.at(store.root)
     with pytest.raises(UnresolvedAttemptError):
         reopened.claim_launch(reservation)
     permit = store.claim_launch(reservation)
@@ -143,7 +156,7 @@ def test_owner_can_rotate_only_unused_ready_grant_without_changing_generation(st
     goal_id = GoalId.mint()
     initial = store.create_goal(goal_id)
     old_grant = store.ready_grant(goal_id, 1)
-    reopened = GoalAttemptStore(store.root)
+    reopened = GoalAttemptStore.at(store.root)
     assert reopened.recover_unreserved_ready(goal_id, 1) == initial
     with pytest.raises(UnresolvedAttemptError):
         store.reserve(goal_id, 1, ready_grant=old_grant)
@@ -165,7 +178,7 @@ def test_ready_recovery_never_replays_an_existing_attempt(store, phase):
         elif phase == "completed":
             permit.record_verified_completion(store, "verified terminal")
     before = store.snapshot(goal_id)
-    reopened = GoalAttemptStore(store.root)
+    reopened = GoalAttemptStore.at(store.root)
     with pytest.raises(ReservationConflictError):
         reopened.recover_unreserved_ready(goal_id, 1)
     assert reopened.snapshot(goal_id) == before
@@ -185,7 +198,7 @@ def test_crash_after_reservation_before_outcome_never_auto_reissues(store):
         child.terminate()
         child.join(timeout=5)
     assert child.exitcode == 0
-    reopened = GoalAttemptStore(store.root)
+    reopened = GoalAttemptStore.at(store.root)
     assert reopened.snapshot(goal_id).lifecycle == ReservedGeneration()
     with pytest.raises(ReservationConflictError):
         reopened.reserve(goal_id, 1)
@@ -203,7 +216,7 @@ def test_crash_after_ready_commit_before_ack_requires_explicit_human_recovery(st
         child.terminate()
         child.join(timeout=5)
     assert child.exitcode == 0
-    reopened = GoalAttemptStore(store.root)
+    reopened = GoalAttemptStore.at(store.root)
     assert reopened.snapshot(goal_id).lifecycle == ReadyGeneration()
     with pytest.raises(UnresolvedAttemptError):
         reopened.reserve(goal_id, 1)
@@ -299,7 +312,7 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     with pytest.raises(ValueError):
         permit.record_provider_usage(store, "response-1", second)
 
-    reopened = GoalAttemptStore(store.root)
+    reopened = GoalAttemptStore.at(store.root)
     totals = ProviderUsageTotal.for_goal(reopened, goal_id)
     assert totals.responses == 2
     assert totals.input_tokens == PiCount.from_wire(140)
@@ -339,7 +352,7 @@ def test_ready_grant_is_not_persisted_and_stale_decisions_cannot_launch(store):
     store.create_goal(goal_id)
     grant = store.ready_grant(goal_id, 1)
     assert grant.encode() not in store.path.read_bytes()
-    reopened = GoalAttemptStore(store.root)
+    reopened = GoalAttemptStore.at(store.root)
     with pytest.raises(UnresolvedAttemptError):
         reopened.reserve(goal_id, 1)
     rotated = reopened.authorize_ready_recovery(
@@ -480,8 +493,8 @@ def test_incomplete_current_schema_is_not_repaired_or_regranted(store):
     with sqlite3.connect(store.path) as conn:
         GoalWorkDecision.drop(conn)
     before = store.path.read_bytes()
-    with pytest.raises(StorageUncertainError):
-        GoalAttemptStore(store.root)
-    with pytest.raises(StorageUncertainError):
+    with pytest.raises(MaintenanceNotHeldError):
+        GoalAttemptStore.at(store.root)
+    with pytest.raises(MaintenanceNotHeldError):
         GoalAttemptStore.initialize(store.root)
     assert store.path.read_bytes() == before

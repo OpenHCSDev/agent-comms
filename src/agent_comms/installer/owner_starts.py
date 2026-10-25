@@ -15,6 +15,9 @@ class OwnerStart(DeclaredFamily, affix="Owner"):
 
     name: str
 
+    def require_success(self, refusal: type[Exception]) -> None:
+        """A successful owner action needs no refusal."""
+
     @abstractmethod
     def lines(self) -> tuple[str, ...]: ...
 
@@ -28,6 +31,9 @@ class StartedOwner(OwnerStart):
 @dataclass(frozen=True)
 class RefusedOwner(OwnerStart):
     error: str
+
+    def require_success(self, refusal: type[Exception]) -> None:
+        raise refusal(self.error)
 
     def lines(self) -> tuple[str, ...]:
         return (f"Owner not started: {self.name}: {self.error}",)

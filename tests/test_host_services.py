@@ -39,7 +39,6 @@ from agent_comms.host_services.connector import (
 )
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
@@ -272,10 +271,6 @@ def test_failure_restores_stopped_services_once(
     monkeypatch.setattr(subprocess, "run", control)
     monkeypatch.setattr(subprocess, "check_output", output)
 
-    class OwnerStartFailure(Stack):
-        def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
-            raise failure
-
     class RestoreStack(Stack):
         def start_services(
             self, stopped: tuple[HostService, ...],
@@ -286,7 +281,7 @@ def test_failure_restores_stopped_services_once(
     with InstallCommands() as commands:
         runtime = LaunchRuntime.running()
         installed = RestoreStack(tmp_path, commands, Path.home(), runtime)
-        staged = OwnerStartFailure(tmp_path, commands, Path.home(), runtime)
+        staged = Stack(tmp_path, commands, Path.home(), runtime)
         with (
             pytest.raises(OSError) as raised,
             staged.services_stopped(installed) as stopped,
@@ -294,7 +289,7 @@ def test_failure_restores_stopped_services_once(
             descriptions = tuple(item.described() for item in stopped.services)
             assert descriptions == (service.described(),)
             assert service.pid() == 0
-            staged.start(service.launch.path, ["worker"])
+            raise failure
         assert raised.value is failure
         assert restores == [installed]
         assert starts == [service.unit_name()]

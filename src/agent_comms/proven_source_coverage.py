@@ -141,7 +141,7 @@ class InjectedInput(CoverageInput):
         if not owner.permits_input(self.original.input_id):
             return False
         row = NativeRuntimeInput.one(db, input_id=self.original.input_id)
-        if row is not None and not row.sent_owner_claimed_generation.matches(owner.claimed_generation):
+        if row is not None and not row.sent_owner_claimed_generation.sent_by_lineage(owner.claimed_generation):
             return state.claim_mismatch(self.original.source_seq)
         owner.require_recorded_reference(db, self.original.reference)
         return True

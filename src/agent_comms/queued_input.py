@@ -484,11 +484,7 @@ class DeliveredInput(QueuedInput):
 
         def read(store: Coordination):
             with store.session.read():
-                assignments = tuple(
-                    assignment for assignment in pending_sealed_assignments(
-                        store, lookup, after_seq=after_seq
-                    ) if assignment.audience.joins_active_turn()
-                )
+                assignments = pending_sealed_assignments(store, lookup, after_seq=after_seq)
             with NativeBoundary(bus) as boundary, bus.bus.reading() as source:
                 boundary.privacy.require_root(root_id, IdentityConflict("delivered native namespace changed"))
                 originals = source.deliveries_for_references(tuple(
