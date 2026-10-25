@@ -42,6 +42,7 @@ dev = [
     "ruff==0.16.0",
     "mypy==2.3.0",
     "uv==0.13.1",
+    "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor@main",
 ]
 
 [project.urls]

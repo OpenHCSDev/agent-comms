@@ -65,14 +65,14 @@ from .locked_store import (
     RootFile,
     RuntimeFile,
     SQLiteFile,
-    StoreBusy,
     StoreCommittedError,
+    WrittenFile,
 )
 from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionSource
 from .store_files import (
-    UNBOUNDED_CONTENTION, StoreLockContention, StoreLockFile, _store_lock,
+    UNBOUNDED_CONTENTION, StoreBusy, StoreLockContention, StoreLockFile,
 )
 
 if TYPE_CHECKING:
@@ -2183,7 +2183,7 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits a
-    CarriedFile kind or RuntimeWriter, and a TypedStore inherits DurableStore or DerivedStore.
+    CarriedFile kind or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
     """
 
     def __init__(self, path: Path) -> None:
@@ -2194,23 +2194,23 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
         return self._path
 
     @property
-    def store(self) -> StoreWriter:
-        """The store whose committed row changes this writer publishes."""
-        return self
+    @abstractmethod
+    def store(self) -> WrittenFile:
+        """The file whose kind permits writes and whose committed row changes are published."""
 
     @contextmanager
-    def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """Publish through the physical store after its row transaction commits. Maintenance
-        is asked under the write lock, so a hold taken before this transaction refuses it and
-        an installer's drain of the write lock waits out every transaction that passed."""
+    def transaction(
+        self, connection: sqlite3.Connection, committed: Callable[[], None] = lambda: None,
+    ) -> Iterator[sqlite3.Connection]:
+        """Publish through the physical store after its row transaction commits and
+        ``committed`` returns; a raise there announces nothing. Maintenance is asked under
+        the write lock, so a hold taken before this transaction refuses it and an
+        installer's drain of the write lock waits out every transaction that passed."""
         with self.publishing_changes(connection, self.store.path):
             with self.write_transaction(connection):
-                self.require_maintenance_open()
+                self.store.require_maintenance_open()
                 yield connection
-
-    @abstractmethod
-    def require_maintenance_open(self) -> None:
-        """Whether maintenance refuses this writer, which the file's kind declares."""
+            committed()
 
     @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:
@@ -2242,7 +2242,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
     def reconcile_at(cls, path: Path) -> bool:
         """Whether reconciling the file at ``path`` changed it."""
         schema = cls.schema_at(path)
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with cls.exclusive_writer(path) as db:
             return schema.reconcile_schema(db, cls.schema_change(path))
 
 
@@ -2298,46 +2298,15 @@ class CarriedWriter(HolderWrittenFile, StoreWriter):
     writes while maintenance runs."""
 
 
-class RuntimeWriter(StoreWriter, RuntimeFile):
+class RuntimeWriter(RuntimeFile, StoreWriter):
     """A writer of a file no carry writes: running owners rewrite it at any time,
     maintenance included."""
-
-    def require_maintenance_open(self) -> None:
-        """No installation reads this file, so maintenance never refuses its writers."""
 
 
 class WalStore(StoreWriter, StoreLockFile):
     """One WAL file owns connection setup, attachment and retirement."""
 
     synchronous: ClassVar[str] = "FULL"
-
-    @contextmanager
-    def _attached(
-        self, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention = UNBOUNDED_CONTENTION,
-    ) -> Iterator[sqlite3.Connection]:
-        """Serialize WAL attachment and retirement, not authorized SQL work.
-
-        Even a read-only cold attachment initializes the WAL index. Another
-        attachment or last-connection cleanup can make that initialization
-        return BUSY before any query competes with a data writer. The same
-        physical owner serializes these connection boundaries; readers and
-        writers retain SQLite's parallel WAL transactions between them.
-
-        Attachment spends the caller's lock budget, so a read that may defer raises
-        BlockingIOError when it runs out instead of waiting; retirement always runs.
-        """
-        with ExitStack() as lifetime:
-            with _store_lock(self.path, contention=contention):
-                resource = opening()
-                connection = resource.__enter__()
-
-            def retire(*error):
-                with _store_lock(self.path):
-                    return resource.__exit__(*error)
-
-            lifetime.push(retire)
-            yield connection
 
     @contextmanager
     def committed_or_empty(
@@ -2351,7 +2320,7 @@ class WalStore(StoreWriter, StoreLockFile):
         An absent file is established absence: a reader sees every declared table empty
         and creates no storage."""
         if self.path.exists():
-            with self._attached(opening, contention) as connection:
+            with self.attached(self.path, opening, contention) as connection:
                 yield connection
             return
         with closing(self.writer(":memory:", isolation_level=None)) as connection:
@@ -2388,7 +2357,7 @@ class WalStore(StoreWriter, StoreLockFile):
     def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Own attachment; joined workers may borrow one serialized connection."""
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with self._attached(lambda: self._open_writer(
+        with self.attached(self.path, lambda: self._open_writer(
                 check_same_thread=check_same_thread)) as connection:
             yield connection
 

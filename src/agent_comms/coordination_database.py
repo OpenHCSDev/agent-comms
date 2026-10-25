@@ -23,7 +23,7 @@ from agent_comms.typed_table import (
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
-from .locked_store import DEFAULT_STORE_CONTENTION, StoreContention
+from .store_files import DEFAULT_STORE_CONTENTION, StoreContention
 
 
 class StoreFile(DeclaredFamily):

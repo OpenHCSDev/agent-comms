@@ -32,7 +32,7 @@ from agent_comms.connector import (
     ServeVerb,
     RevokeVerb,
 )
-from agent_comms.connector_caller import CALLER
+from agent_comms.connector_caller import CALLER, DirectorCaller
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
     IssuedCode, TrustedBrowser, digest,
@@ -48,7 +48,8 @@ from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.maintenance_barrier import (
-    InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase, ReadyPhase,
+    InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
+    ReadyPhase,
 )
 from agent_comms.store_files import _store_lock
 from agent_comms.tools import CommsChannelsTool, invoke_tool
@@ -364,6 +365,52 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
     assert passes.read().failing == {}
     assert comms.bus.bus.revision() == original.seq
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+
+
+async def test_watch_held_by_install_stops_when_cancelled(copied_connector):
+    """The install holds maintenance until the connector has stopped, so a watch waiting out
+    the hold must still stop when the connector does; systemd killed it at 90 s before."""
+    connector = await copied_connector()
+    barrier = MaintenanceBarrier(wire(connector.root).registry.store.path)
+    held = barrier.advance(barrier.advance(
+        barrier.begin(MaintenanceOperator.current()), PausedPhase), InstallingPhase)
+    watch = PublishingWatch()
+    opened = threading.Event()
+
+    @contextmanager
+    def opened_wire():
+        with connector.service_wire() as service:
+            opened.set()
+            yield service
+
+    pending = asyncio.create_task(Coordination.watch_worker(
+        watch, opened_wire, ServicePassStore.at(connector.root)))
+    try:
+        assert await asyncio.to_thread(opened.wait, 3)
+        await asyncio.sleep(.1)
+        pending.cancel()
+        with suppress(asyncio.CancelledError):
+            await asyncio.wait_for(pending, 3)
+        assert pending.cancelled()
+        assert watch.calls == 0
+    finally:
+        barrier.advance(held, ReadyPhase)
+
+
+def test_publishing_tool_held_mid_call_refuses_at_once(comms):
+    """A hold that begins after the call's entry check refuses the publication, as the entry
+    would have; waiting in the connector's worker thread would hold the connector's stop."""
+    before = comms.bus.bus.revision()
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    held = barrier.advance(barrier.advance(
+        barrier.begin(MaintenanceOperator.current()), PausedPhase), InstallingPhase)
+    try:
+        with pytest.raises(MaintenanceHeldError):
+            invoke_tool(comms, "comms_send", {"to": "worker", "body": "Held send"},
+                        caller=DirectorCaller("claude-ai"))
+    finally:
+        barrier.advance(held, ReadyPhase)
+    assert comms.bus.bus.revision() == before
 
 
 class FailingWatch(WatchPass[None]):

@@ -17,7 +17,7 @@ from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from typing import ClassVar, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
 
@@ -27,7 +27,11 @@ from .field_codec import FieldCodec, MalformedRecord
 from .private_path import PrivateFileRole
 from .store_files import (
     AtomicFile,
+    DEFAULT_ISOLATION,
+    DEFAULT_STORE_CONTENTION,
     SharedLock,
+    SqliteStore,
+    StoreContention,
     StoreLock,
     StoreLockContention,
     StoreLockFile,
@@ -37,6 +41,9 @@ from .store_files import (
     is_store_lock,
     store_lock_path,
 )
+
+if TYPE_CHECKING:
+    from sqlite3 import _IsolationLevel
 
 T = TypeVar("T")
 
@@ -415,10 +422,31 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
-class RuntimeFile(RootFile):
+class WrittenFile(RootFile, ABC):
+    """A file whose kind declares when maintenance permits its writers."""
+
+    __slots__ = ()
+    if TYPE_CHECKING:
+        @property
+        def path(self) -> Path: ...
+
+    @property
+    def store(self) -> Self:
+        """A file writer publishes to itself; borrowed writers name their file instead."""
+        return self
+
+    @abstractmethod
+    def require_maintenance_open(self) -> None:
+        """Refuse writes that this file kind does not permit during maintenance."""
+
+
+class RuntimeFile(WrittenFile):
     """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
 
     __slots__ = ()
+
+    def require_maintenance_open(self) -> None:
+        """No installation reads this file, so maintenance never refuses its writers."""
 
 
 class BusFile(DurableFile):
@@ -459,6 +487,8 @@ class RegistryFile(DurableFile, WireWakeFile):
 
     @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """The copy names no live process: a signal, stop or wake aimed through it would reach
+        the source root's units."""
         from .registry_store import RegistryStore
 
         registry = RegistryStore(source)
@@ -468,51 +498,13 @@ class RegistryFile(DurableFile, WireWakeFile):
                 destination = target.parent / path.relative_to(source.parent)
                 destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
                 cls.copy_file(path, destination)
+        RegistryStore(target).retire_processes()
         return copied
 
 
 
 
-class StoreContention(ABC):
-    """Typed SQLite busy behavior shared by snapshots and writers."""
-
-    @property
-    @abstractmethod
-    def timeout(self) -> float: ...
-
-    def reader(self, uri: str) -> sqlite3.Connection:
-        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
-
-    def writer(
-        self, path: str | os.PathLike[str], options: dict[str, object]
-    ) -> sqlite3.Connection:
-        return sqlite3.connect(path, timeout=self.timeout, **options)
-
-    def lock_budget(self) -> StoreLockContention:
-        """The same wait spent on the store's file locks: one fresh budget per operation."""
-        return StoreLockContention(self.timeout)
-
-
-@dataclass(frozen=True)
-class StoreWait(StoreContention):
-    timeout: ClassVar[float] = 5.0
-
-
-@dataclass(frozen=True)
-class StoreBusy(StoreContention):
-    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
-
-    timeout: ClassVar[float] = 0.0
-
-    def reader(self, uri: str) -> sqlite3.Connection:
-        with CoordinationReadUnavailable.checking():
-            return super().reader(uri)
-
-
-DEFAULT_STORE_CONTENTION = StoreWait()
-
-
-class SQLiteFile(RootFile):
+class SQLiteFile(RootFile, SqliteStore):
     """SQLite connections, snapshots, copies and companions share one file owner."""
 
     __slots__ = ()
@@ -522,10 +514,13 @@ class SQLiteFile(RootFile):
     @classmethod
     def writer(
         cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
-        **options: object,
+        *, isolation_level: _IsolationLevel = DEFAULT_ISOLATION,
+        uri: bool = False, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open a writer through the store family's typed busy behavior."""
-        return cls.identifiers_only(contention.writer(path, options))
+        return cls.identifiers_only(contention.writer(
+            path, isolation_level=isolation_level, uri=uri, check_same_thread=check_same_thread,
+        ))
 
     @staticmethod
     def identifiers_only(db: sqlite3.Connection) -> sqlite3.Connection:
@@ -642,7 +637,7 @@ class SQLiteFile(RootFile):
         wal = cls.wal_path(path)
         if not (wal.is_file() and wal.stat().st_size):
             return
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with cls.exclusive_writer(path) as db:
             busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
         if busy:
             raise sqlite3.OperationalError(f"Another connection holds the WAL of {path}")

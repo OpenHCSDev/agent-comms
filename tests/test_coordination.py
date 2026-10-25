@@ -34,7 +34,7 @@ from agent_comms.attempt_states import (
     SucceededAttempt,
 )
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.locked_store import StoreBusy
+from agent_comms.store_files import StoreBusy
 from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION, CoordinatorTable
 from agent_comms.coordination_snapshot import RecoverySnapshot

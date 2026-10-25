@@ -14,8 +14,8 @@ from agent_comms.comms import (
     client_wire,
 )
 from agent_comms.field_codec import AbsolutePathText, Argument, PathText
-from agent_comms.harness_install import InstalledHarness
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.harness_install import Harness
+from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.registry_document import CommanderProject
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
@@ -69,11 +69,11 @@ class HarnessInstallation:
             project,
             {
                 type(harness).declared_name: self.declare_bus_threads(ctx, harness)
-                for harness in InstalledHarness.present(home)
+                for harness in Harness.present(home)
             },
         )
 
-    def declare_bus_threads(self, ctx: Comms, harness: InstalledHarness) -> tuple[str, ...]:
+    def declare_bus_threads(self, ctx: Comms, harness: Harness) -> tuple[str, ...]:
         """Declare the bus threads this harness needs and the registry does not hold yet."""
         names = ctx.registry.snapshot()
         registered = tuple(name for name in harness.bus_threads if not names.taken(name))
@@ -90,7 +90,7 @@ class HarnessInstallation:
 
 
 @dataclass(frozen=True)
-class HarnessesProbe(RuntimeProbe[InstallResult]):
+class HarnessesProbe(TargetProbe, RuntimeProbe[InstallResult]):
     root: Annotated[Path, PathText]
     install: HarnessInstallation
 

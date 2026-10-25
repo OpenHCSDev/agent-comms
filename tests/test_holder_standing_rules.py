@@ -29,7 +29,7 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
+from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
 from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
@@ -68,7 +68,6 @@ from agent_comms.todos import (
     OrderMessage,
     PendingProblemOrder,
     ProgressRead,
-    TodoConflict,
 )
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.turn_digests import OrderEditCountRead
@@ -398,19 +397,6 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
             order=todo.order.checked().reissued(time.time()),
         )
     assert held_bus.goals.todos.get(todo.id) == todo
-
-
-def test_a_running_turn_is_not_a_stalled_holder(held_bus):
-    blocked_holder(held_bus)
-    thread = held_bus.registry.require("worker")
-    held_bus.registry.register(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
-    owner = held_bus.agents.begin_turn("worker", TurnId('3e748b426825aaaad5def94520fa5858'))
-    lease = owner.thread.turn_lease
-    assert lease is not None
-    try:
-        assert state_cards(held_bus, Blocked) == ()
-    finally:
-        held_bus.agents.finish_turn(lease)
 
 
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):

@@ -19,7 +19,6 @@ import os
 import secrets
 import sqlite3
 import stat
-import fcntl
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
     from .agent_backend import StreamingInputPolicy
 
 from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
-from .store_files import StoreOwner
+from .store_files import ExclusiveLock, StoreOwner
 from .typed_table import (
     AllObjectsTables,
     ImmutableRows,
@@ -141,8 +140,8 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
         )
         stack.callback(os.close, lock)
         PrivateFileRole.require(os.fstat(lock), UnprivateSidecarFile())
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        stack.callback(fcntl.flock, lock, fcntl.LOCK_UN)
+        # Closing the description, already on the stack, gives the hold back.
+        ExclusiveLock().wait(lock)
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
         directory.lock_identity = _identity(os.fstat(lock))

@@ -92,6 +92,20 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
     assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
 
 
+def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(head_bus):
+    """GitHub keeps the newest status per context on a commit, so reviewing an approved head
+    holds it out of the merge queue until a new ok."""
+    comms, github, request = head_bus
+    context = order.Commander.read_root(comms.root)
+    common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
+              "--why", ACCEPTED.text]
+    judge.main(["ok", *common], context)
+    judge.main(["reviewing", *common], context)
+    posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
+    assert [next(part for part in post if part.startswith("state=")) for post in posts] == [
+        "state=success", "state=pending"]
+
+
 def test_moved_head_posts_and_records_nothing(head_bus):
     comms, github, request = head_bus
     moved = replace(request, head="a" * 40)

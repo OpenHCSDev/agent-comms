@@ -13,6 +13,7 @@ from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import GoalId, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
+from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange
@@ -264,9 +265,6 @@ class Registration:
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         """Every registration commits here, after inheritance kept a redeclared thread's
         roots; the registry assigns a new thread its storage roots in this one place."""
-        # The registry write refuses during maintenance; refuse first, so the goal journal
-        # never records an intent for a registration that cannot commit.
-        self.store.require_maintenance_open()
         change.prepare_participant(self.store.path.parent)
         thread = change.thread
         change = replace(change, thread=replace(
@@ -373,13 +371,13 @@ class Registration:
     user_thread = reading(RegistryDocument.user_thread)
 
     def goal_history(
-        self, name: str, *, goal_id: GoalId | None = None
+        self, name: str, scope: GoalScope = AllGoals()
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read this owner's recorded transitions without waiting on a registry writer;
         goal history's own transaction settles what the snapshot already shows."""
         thread = self.store.read_snapshot_unlocked().require(name)
         return GoalHistoryStore(self.store.path).history(
-            thread.incarnation.wire_birth, thread.goal, goal_id=goal_id
+            thread.incarnation.wire_birth, thread.goal, scope
         )
 
     def session_thread(

@@ -20,7 +20,7 @@ from typing import ClassVar, Self
 
 from agent_comms_hooks import ClaudeHookProgram
 
-from .child_process import Platform
+from .child_process import Platform, ResidentManager
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .host_services import SystemdUserService
@@ -51,9 +51,22 @@ def merge_json(path: Path, merge) -> None:
 
 @dataclass(frozen=True)
 class Harness(DeclaredFamily, affix="Harness"):
-    """A coding agent whose stored sessions a thread can be imported from."""
+    """A coding agent whose stored sessions a thread can be imported from; install finds, links
+    and configures the ones present on this machine."""
 
     home: Path
+
+    # External threads install registers for this harness; a harness that registers itself has none.
+    bus_threads: ClassVar[tuple[str, ...]] = ()
+
+    @classmethod
+    def found(cls) -> bool:
+        """Whether install finds this harness on this machine."""
+        return False
+
+    @classmethod
+    def present(cls, home: Path) -> tuple[Self, ...]:
+        return tuple(member(home) for member in cls.members_with(cls) if member.found())
 
     @classmethod
     def retire_session(cls, session: str) -> SystemdUserService:
@@ -61,44 +74,13 @@ class Harness(DeclaredFamily, affix="Harness"):
         raise RelationViolationError(
             f"{cls.declared_name} sessions have no declared bridge to retire; re-home refused.")
 
-
-@dataclass(frozen=True)
-class PiHarness(Harness, declared_name="pi"):
-    """agent-comms' own native Pi: its sessions are already the format every thread runs, so an
-    import keeps one byte for byte. Install builds Pi as the native package, never as a harness."""
-
-
-@dataclass(frozen=True)
-class InstalledHarness(Harness):
-    """A harness install finds on this machine, links skills into and configures."""
-
-    executable: ClassVar[str]
-    skills_dir: ClassVar[str]
-    # External threads install registers for this harness; a harness that registers itself has none.
-    bus_threads: ClassVar[tuple[str, ...]] = ()
-
-    @classmethod
-    def present(cls, home: Path) -> tuple[Self, ...]:
-        return tuple(
-            member(home) for member in cls.members_with(cls) if shutil.which(member.executable)
-        )
-
-    @staticmethod
-    def bin(name: str) -> Path:
-        return Path(sys.executable).parent / name
-
     def links(self) -> dict[Path, Path]:
         """Every packaged skill, linked where this harness looks for skills."""
-        skills = Path(str(files("agent_comms") / "skills"))
-        return {
-            self.home / self.skills_dir / skill.name: skill
-            for skill in skills.iterdir()
-            if skill.is_dir()
-        }
+        return {}
 
-    @abstractmethod
     def configure(self) -> tuple[Path, ...]:
         """Write this harness's own config in its own format; returns the files written."""
+        return ()
 
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:
@@ -110,6 +92,40 @@ class InstalledHarness(Harness):
             for link, target in member(home).links().items()
             if member in available or link.is_symlink()
         }
+
+
+@dataclass(frozen=True)
+class PiHarness(Harness, declared_name="pi"):
+    """agent-comms' own native Pi: its sessions are already the format every thread runs, so an
+    import keeps one byte for byte. Install builds Pi as the native package and never finds,
+    links or configures it as a harness."""
+
+
+@dataclass(frozen=True)
+class InstalledHarness(Harness):
+    """A harness CLI install finds on PATH, links skills into and configures."""
+
+    executable: ClassVar[str]
+    skills_dir: ClassVar[str]
+
+    @classmethod
+    def found(cls) -> bool:
+        return bool(shutil.which(cls.executable))
+
+    @staticmethod
+    def bin(name: str) -> Path:
+        return Path(sys.executable).parent / name
+
+    def links(self) -> dict[Path, Path]:
+        skills = Path(str(files("agent_comms") / "skills"))
+        return {
+            self.home / self.skills_dir / skill.name: skill
+            for skill in skills.iterdir()
+            if skill.is_dir()
+        }
+
+    @abstractmethod
+    def configure(self) -> tuple[Path, ...]: ...
 
 
 class ConnectorClientHarness(InstalledHarness):
@@ -174,7 +190,7 @@ class CodexHarness(InstalledHarness):
     skills_dir: ClassVar[str] = ".codex/skills"
 
     def configure(self) -> tuple[Path, ...]:
-        CodexInboxService.install(home=self.home)
+        ResidentManager.current().install(CodexInboxService, home=self.home)
         return (CodexInboxService.unit_file(self.home),)
 
     @classmethod
