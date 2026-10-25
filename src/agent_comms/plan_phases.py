@@ -73,6 +73,10 @@ class Id128NominalPlan(Plan):
     document = "plans/ID128-NOMINAL-PLAN.md"
 
 
+class StoreGuardsPlan(Plan):
+    document = "plans/STORE-GUARDS-PLAN.md"
+
+
 class OrderPhase(DeclaredFamily, affix="Phase"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
@@ -163,6 +167,14 @@ class Id128NominalPhase(PlanPhase, declared_name=None):
     def plain(cls, names: str) -> PatternAbsent:
         """No field or parameter named ``names`` keeps a plain ``str`` or bare ``Id128``."""
         return cls.absent(rf"\b({names}): (str\b|Id128\b|Annotated\[(str|Id128)\b)")
+
+
+class StoreGuardsPhase(PlanPhase, declared_name=None):
+    plan = StoreGuardsPlan
+    owners: ClassVar[tuple[str, ...]] = (
+        ":!src/agent_comms/store_files.py", ":!src/agent_comms/locked_store.py",
+        ":!src/agent_comms/skills/",
+    )
 
 
 class RetainedStorePhase(CommanderNativePhase):
@@ -920,3 +932,56 @@ class FleetReplayPhase(FleetAwarenessPhase):
         LostToolsPhase,
     )
     evidence = FunctionDeclared("test_replay_raises_each_incident_once", ("tests",))
+
+
+class StoreGuardFamiliesPhase(StoreGuardsPhase):
+    """1: each store's guard is declared on its family; SQLite and hand flocks go."""
+
+    evidence = AllEvidence(
+        (
+            *(ClassDeclared(name, ("src/agent_comms/store_files.py",))
+              for name in ("SingleFileStore", "SqliteStore", "MultiFileStore", "ProcessSingleton")),
+            PatternAbsent(r"fcntl\.flock\(",
+                          ("src", ":!src/agent_comms/child_process.py", ":!src/agent_comms/skills/")),
+            PatternAbsent(r"_store_lock\(", ("src/agent_comms/typed_table.py",)),
+            PatternAbsent(r"_store_lock\(path\), closing", ("src/agent_comms/locked_store.py",)),
+        )
+    )
+
+
+class ReadWriteMembersPhase(StoreGuardsPhase):
+    """2: stores expose reading and writing; no caller picks a mode, a wait or ``locked()``."""
+
+    after = (StoreGuardFamiliesPhase,)
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"(\.locked|_store_lock|_async_store_lock|ordered)\([^)]*(mode|contention)=",
+                          ("src", ":!src/agent_comms/skills/")),
+            PatternAbsent(r"\.locked\(", ("src", *StoreGuardsPhase.owners)),
+        )
+    )
+
+
+class BoundedWaitPhase(StoreGuardsPhase):
+    """3: every guard's wait is bounded and declared on its family."""
+
+    after = (ReadWriteMembersPhase,)
+    evidence = PatternAbsent(r"UNBOUNDED_CONTENTION|UnboundedContention",
+                             ("src", ":!src/agent_comms/skills/"))
+
+
+class MaintenanceInWritePhase(StoreGuardsPhase):
+    """4: a guard's write asks its store kind about maintenance; no hand-placed check."""
+
+    after = (ReadWriteMembersPhase,)
+    evidence = PatternAbsent(
+        r"assert_open_unlocked\(\)|require_maintenance_open\((path)?\)",
+        ("src", *StoreGuardsPhase.owners, ":!src/agent_comms/typed_table.py",
+         ":!src/agent_comms/maintenance_barrier.py"),
+    )
+
+
+class LockCensusPhase(StoreGuardsPhase):
+    """5: the debt ratchet counts lock calls outside the store owners and refuses growth."""
+
+    evidence = PatternPresent(r"^class StoreLockCalls\(", ("tools/debt_ratchet.py",))
