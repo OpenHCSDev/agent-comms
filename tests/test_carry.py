@@ -16,7 +16,7 @@ from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.installer.backup import StoreBackup, bus_files
-from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
 from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
@@ -34,8 +34,12 @@ from agent_comms.installer.upgrade import (
     StepRun,
     TargetStack,
     TargetTree,
+    UnchangedInstall,
+    UnchangedRehearsal,
     carried,
 )
+from agent_comms.installer.launch import InstallReport
+from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.maintenance_barrier import (
     DrainingPhase,
@@ -288,6 +292,27 @@ def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
     assert started == []
     assert maintenance.read().phase is DrainingPhase
     maintenance.clear(hold)
+
+
+def test_an_unchanged_install_opens_the_bus_before_its_bridges_resume(comms, staged):
+    """A resumed bridge serves its socket only once the bus opens (MessageBus.when_open),
+    so every exit of the live step clears the hold before bridges.confirm waits on it:
+    install 66c36dea republished 513d7f794 and sat 604 s on a socket its own hold forbade.
+    The editable stack refuses to publish, the exit this run takes."""
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    started: list[str] = []
+    hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), staged.runtime)
+    report = InstallReport()
+    report.owners = held_owners(maintenance, hold, started)
+    report.owners.hold.enter_context(hold.holding())
+    install = UnchangedInstall(
+        comms.root, comms.root, "a" * 40, "a" * 40, None, (), staged, staged, None, None,
+        comms.root.parent / "spill")
+    with pytest.raises(InterpreterWorkerDied, match="Editable Core cannot publish"):
+        install.install(UnchangedRehearsal(), SessionBridgeResumes(), report)
+    assert not maintenance.read().turn_pending
+    report.owners.give_back.close()
+    assert started == ["owners"]
 
 
 def test_a_restore_that_fails_midway_keeps_the_hold(comms, staged, noisy_step):

@@ -47,7 +47,7 @@ class CommanderObservation:
             closed
             for todo in comms.goals.todos.for_commander(thread.incarnation)
             if not any(held.owner_identity in unreadable
-                       for held in todo.holder_state.current_assignments())
+                       for held in todo.current_holder.current_assignments())
             for closed in todo.order.closed_by_merge(
                 todo, pulls, comms.registry.storage_rule.checkout_base)
         )
