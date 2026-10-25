@@ -78,12 +78,8 @@ class WatchPass[Observed](ABC):
     """
 
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        while True:
-            try:
-                return await Coordination.run_worker(partial(self.watch_pass, opened_wire))
-            except MaintenanceHeldError:
-                with opened_wire() as comms:
-                    await comms.bus.resumed()
+        with opened_wire() as comms:
+            await comms.bus.when_open(partial(self.watch_pass, opened_wire))
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
