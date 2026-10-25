@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
     from .pi_events import DialogUiRequest, ExtensionUiChoice
+    from .session_revision import SessionObservation
     from .thread_model import ThreadModel
     from .threads import Thread
     from .transcript_sources import TranscriptSource
@@ -102,6 +103,9 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     @abstractmethod
     def storage_files(self): ...
+
+    @abstractmethod
+    def session_observation(self, root: Path, thread: Thread) -> SessionObservation: ...
 
     @property
     def model_choice(self):

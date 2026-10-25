@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from .agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from .external_transcript import ExternalTranscript
+from .session_revision import NoSessionObservation
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,9 @@ class UnstartedRuntime(RuntimeLocation):
 
     def storage_files(self):
         return ()
+
+    def session_observation(self, root, thread):
+        return NoSessionObservation()
 
     @property
     def read_key(self) -> str | None:
