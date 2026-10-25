@@ -517,7 +517,8 @@ def test_replay_raises_each_incident_once(fleet):
 def test_holders_in_one_plain_directory_share_no_worktree(fleet, tmp_path):
     built, _ = fleet
     home = tmp_path / "plain-project"
-    home.mkdir()
+    # Like /home/ts: an empty .git folder that Git itself refuses as a repository.
+    (home / ".git").mkdir(parents=True)
     declare_test_bus(
         built.comms,
         threads=tuple(
