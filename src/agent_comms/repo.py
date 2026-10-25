@@ -129,6 +129,19 @@ class Repo(BaseModel, WireValue):
     def holds(self, todo: Todo) -> bool:
         return self.github == todo.repo
 
+    def default_branch(self) -> str:
+        """The origin's declared default, never a guessed branch name."""
+        try:
+            reference = self.git(
+                self.checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD",
+            ).strip()
+        except GitCommandError as error:
+            raise ValueError(
+                f"Origin's default branch is unset in {self.checkout}; "
+                "run git remote set-head origin --auto in that checkout."
+            ) from error
+        return reference.removeprefix("origin/")
+
     def contains(self, sha: str, revision: str = "HEAD") -> bool:
         """Prove ancestry in the requested fetched revision without moving the checkout.
 
