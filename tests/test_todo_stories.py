@@ -109,6 +109,15 @@ def test_voided_strike_uses_its_stored_sequence_and_count_returns_to_zero(record
         assert void.voids == first.seq
 
 
+def test_undated_strike_counts_without_inventing_an_order_time(recorded_problem):
+    store = recorded_problem.goals.todos
+    strike = replace(story_members(recorded_problem)[0], at=UnrecordedEventTime())
+    saved = store.apply("P1", strike)
+    assert saved.strike_count == 1
+    assert not saved.struck_on_order(strike.previous.owner_identity)
+    assert saved.history.events(saved.id, StrikeTodo) == (strike,)
+
+
 def test_commander_unstrike_selects_the_newest_live_record(recorded_problem, source_repository):
     comms = recorded_problem
     store = comms.goals.todos

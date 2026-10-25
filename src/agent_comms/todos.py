@@ -4295,7 +4295,7 @@ class Todo(TodoStoreRows, TypedTable):
         """A live strike on ``unit`` recorded since the current order was sent; a send-back that
         replaces this order is that same miss, so it counts no second strike."""
         since = self.order.at.recorded_at("An order")
-        return any(count.owner_identity == unit and count.latest >= since
+        return any(count.owner_identity == unit and count.latest.since(since)
                    for count in self.history.facts_for(self.id).strike_totals)
 
     def struck_out(self, unit: ThreadIncarnation) -> bool:
@@ -4440,7 +4440,7 @@ class ProblemAllocation(TodoStoreRows, TypedTable):
 @dataclass(frozen=True, kw_only=True)
 class StrikeTotal(Assignment):
     total: int
-    latest: float
+    latest: EventTime
 
 
 @dataclass(frozen=True)
@@ -4552,16 +4552,18 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         query = cls._sql(f"""
             WITH selected AS (
                 SELECT problem, seq, kind, call_id, order_id, event_at, strike_owner,
-                    strike_created, strike_assignment, actor
+                    strike_created, strike_assignment, actor,
+                    json_extract({{event}}, '$.{FieldCodec.record_key(StrikeTodo, 'at')}') event_time
                 FROM {cls.declared_name} WHERE {{problem}} IN ({slots})
             ), live AS (
-                SELECT s.problem, s.strike_assignment, count(*) total, max(s.event_at) latest
+                SELECT s.problem, s.strike_assignment, count(*) total,
+                    json_extract(json_group_array(json(s.event_time) ORDER BY s.event_at DESC, s.seq DESC), '$[0]') latest
                 FROM selected s LEFT JOIN {cls.declared_name} v ON v.voids=s.seq
                 WHERE s.kind IN {StrikeTodo.sql_choices()} AND v.seq IS NULL
                 GROUP BY s.problem, s.strike_owner, s.strike_created
             ), counts AS (
                 SELECT problem, json_group_array(json_patch(json(strike_assignment), json_object(
-                    '{total}', total, '{latest}', latest))) strike_totals
+                    '{total}', total, '{latest}', json(latest)))) strike_totals
                 FROM live GROUP BY problem
             ), releases AS (
                 SELECT problem, actor, max(seq),
