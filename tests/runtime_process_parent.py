@@ -2,9 +2,10 @@
 
 import subprocess
 import sys
-
+from pathlib import Path
 
 if __name__ == "__main__":
     subprocess.run(
-        [sys.executable, "-m", "agent_comms.runtime_processes", sys.argv[1]], check=True,
+        [sys.executable, str(Path(__file__).with_name("runtime_process_child.py")), sys.argv[1]],
+        check=True,
     )

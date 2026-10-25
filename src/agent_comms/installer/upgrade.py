@@ -32,7 +32,7 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
@@ -81,9 +81,6 @@ from agent_comms.installer.interpreter_operation import (
     BackupRetirePhase,
     BeforeMigrationFileScanPhase,
     BeginMaintenancePhase,
-    BindingStartBridgePhase,
-    BindingStartRevertBridgePhase,
-    BridgePhase,
     BuildPhase,
     ClearMaintenancePhase,
     ConfirmBridgePhase,
@@ -581,7 +578,7 @@ class Stack:
         store = NativePackageStore.at_home(self.home)
         native = store.package_for(manifest)
         if not native.is_dir():
-            self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
+            self.commands.run(self.checkout / "stack/native/prepare-pi-native", "--python",
                               self.python, cwd=self.checkout,
                               env=self.environment(self.checkout / "src"))
         store.link(manifest, manifest.parent)
@@ -667,15 +664,19 @@ class Stack:
 
     @contextmanager
     def services_stopped(self, restore_on: Stack) -> Iterator[ServicesStopped]:
-        with StopServicesPhase().running(self.commands.clock):
-            stopped = HostService.stop_running()
+        """The restart is registered before the stop, so a stop interrupted after systemd
+        acted (a SIGTERM to an installer inside the stopped unit) still starts them again."""
+        stopped = HostService.instances()
         with ExitStack() as give_back:
             give_back.callback(restore_on.start_services, stopped)
+            with StopServicesPhase().running(self.commands.clock):
+                HostService.stop_all(stopped)
             yield ServicesStopped(stopped, give_back)
 
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
         with StartServicesPhase().running(self.commands.clock):
             services = tuple(service.start_onto(self.python) for service in stopped)
+            HostService.start_enabled()
             self.probe(ServingProbe())
             return services
 
@@ -683,35 +684,6 @@ class Stack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
         with ReadBackVerifyPhase().running(self.commands.clock):
             return self.cli(root, ReadBackCliCommand)
-
-
-T = TypeVar('T')
-
-
-@dataclass(frozen=True)
-class BindingStartCutover:
-    """Undo the host-only binding conversion before the bus/runtime restore path."""
-
-    staged: Stack
-    checkout: Path
-    home: Path
-    root: Path
-
-    def run(self, phase: BridgePhase, *arguments: str) -> None:
-        with phase.running(self.staged.commands.clock):
-            self.staged.commands.run(
-                self.staged.python, self.checkout / STEPS / 'binding_start.py',
-                '--home', self.home, '--root', self.root, *arguments,
-                cwd=self.home, env=self.staged.environment(),
-            )
-
-    def around(self, start: Callable[[], T]) -> T:
-        try:
-            self.run(BindingStartBridgePhase())
-            return start()
-        except BaseException:
-            self.run(BindingStartRevertBridgePhase(), '--revert')
-            raise
 
 
 @dataclass(frozen=True)
@@ -1128,9 +1100,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
                         holder.close()
                         maintenance.clear(held)
-                    restarted_services = BindingStartCutover(
-                        self.staged, self.checkout, self.installed.home, self.root,
-                    ).around(lambda: stopped.start_on(self.staged))
+                    restarted_services = stopped.start_on(self.staged)
                 except BaseException as error:
                     print(f"install: install failed ({type(error).__name__}: {error}); "
                           "restoring original installation", file=sys.stderr)

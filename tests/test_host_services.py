@@ -225,9 +225,13 @@ def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_s
     assert not service.store.read().access  # Its one short-lived proof grant was revoked.
 
 
-def test_owner_start_failure_restores_stopped_services_once(
+@pytest.mark.parametrize("stop_interrupted", [False, True], ids=["owner-start", "stop-call"])
+def test_failure_restores_stopped_services_once(
     connector_service: SystemdConnectorService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    stop_interrupted: bool,
 ) -> None:
+    """A failure after the stop, or one raised inside the stop call once systemd has stopped
+    the unit (the SIGTERM an installer inside that unit receives), starts it again once."""
     service = connector_service
     unit = service.unit_file(Path.home())
     unit.parent.mkdir(parents=True, exist_ok=True)
@@ -244,6 +248,8 @@ def test_owner_start_failure_restores_stopped_services_once(
         if command[:3] == ("systemctl", "--user", "stop"):
             assert command[3:] == (service.unit_name(),)
             type(service).stop_all((service,))
+            if stop_interrupted:
+                raise failure
         elif command == ("systemctl", "--user", "start", service.unit_name()):
             starts.append(service.unit_name())
             service.start()

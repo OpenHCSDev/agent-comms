@@ -78,7 +78,7 @@ def pinned_location() -> Path:
 def pinned_native_package() -> Path:
     if not (package := pinned_location()).is_dir():
         raise NativePackageMissing(f"Pinned native package directory is missing: {package}; "
-                                   f"run {MANIFEST.parent / 'bin/prepare-pi-native'} first")
+                                   f"run {MANIFEST.parent / 'native/prepare-pi-native'} first")
     return package.resolve(strict=True)
 
 
@@ -90,9 +90,6 @@ class PackageInventory(ABC):
     bytes: int = 0
 
     def inspect(self, root: Path) -> None:
-        Platform.current().require_posix(
-            NativePackageError("Native package filesystem verification requires POSIX")
-        )
         try:
             self.visit(os.fspath(root), ".", 0)
         except OSError as error:

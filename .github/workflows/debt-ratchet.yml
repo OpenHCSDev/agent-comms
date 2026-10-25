@@ -92,25 +92,41 @@ jobs:
     needs: ready
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      REHEARSALS: >-
+        tests/test_install_rehearsal.py
+        tests/test_native_input_bus_path.py
+        tests/test_install.py::test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      # The rehearsal installs the package and runs its own tests; a change to neither
+      # (tools, guards, docs) cannot change what it observes.
+      - name: Whether the change reaches the installed package or the rehearsals
+        id: reach
+        env:
+          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+        run: |
+          read -ra rehearsals <<< "$REHEARSALS"
+          git diff --quiet "$BASE" HEAD -- src pyproject.toml uv.lock "${rehearsals[@]%%::*}" \
+            && echo "reaches=false" >> "$GITHUB_OUTPUT" || echo "reaches=true" >> "$GITHUB_OUTPUT"
+      - if: steps.reach.outputs.reaches == 'true'
+        uses: actions/setup-python@v5
         with:
           python-version-file: pyproject.toml
       - name: Install uv
+        if: steps.reach.outputs.reaches == 'true'
         run: |
           python -m pip install packaging
           python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
       - name: Install non-editable Core and test dependencies
+        if: steps.reach.outputs.reaches == 'true'
         run: python -m pip install -e src/agent_comms/skills/refactor-audit '.[dev]'
       - name: Build the installer's private runtime and rehearse through its CLI
-        run: >-
-          python -m agent_comms.installer.test_runtime tests/test_install_rehearsal.py
-          tests/test_native_input_bus_path.py
-          tests/test_install.py::test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none
+        if: steps.reach.outputs.reaches == 'true'
+        run: python -m agent_comms.installer.test_runtime $REHEARSALS
 
   review-verdict:
     name: review-verdict
@@ -166,6 +182,14 @@ jobs:
           uv sync --locked --all-extras
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
+      # Saved by debt-ratchet-cache.yml on main; entries are keyed by content, so any
+      # older main's cache only misses where the code differs.
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/agent-comms
+          key: debt-ratchet-${{ matrix.kind }}-${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          restore-keys: debt-ratchet-${{ matrix.kind }}-
+
       - name: No new structural debt against the base
         env:
           BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
@@ -187,7 +211,7 @@ jobs:
         run: |
           marker="<!-- $KIND findings -->"
           { echo "$marker"; echo "**$KIND** at $(git rev-parse --short HEAD), every finding:"; echo '```';
-            grep -E '^(introduced|grew) ' ratchet.txt; echo '```'; } > body.md
+            grep -E '^(introduced|found|grew) ' ratchet.txt; echo '```'; } > body.md
           old=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
                 --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
           if [ -n "$old" ]; then

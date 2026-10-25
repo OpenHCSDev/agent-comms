@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -25,6 +25,9 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
 
     def require_artifact(self, path: str) -> None:
         pass
+
+    def retexted(self, text: str) -> OrderRun:
+        raise ToolRefusedError("A mechanical run has no text; its check alone closes the order.")
 
     @property
     def merged_line(self) -> str:
@@ -86,6 +89,9 @@ class ApplicationOrderRun(OrderRun):
     def require_artifact(self, path: str) -> None:
         if not Path(path).is_file():
             raise ToolRefusedError("This order needs --seen FILE showing its requested run.")
+
+    def retexted(self, text: str) -> OrderRun:
+        return replace(self, text=text)
 
     text: str
     least_words: ClassVar[int] = 8  # the run, and the evidence that it happened

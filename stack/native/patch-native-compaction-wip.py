@@ -15,7 +15,10 @@ import re
 import sys
 from pathlib import Path
 
-INSTRUCTION = Path(__file__).resolve().parents[1] / "src/agent_comms/instructions/coordination.md"
+from agent_comms.native_build_inputs import NativeRepositoryInputs
+
+REPO = Path(__file__).resolve().parents[2]
+INSTRUCTION = REPO / NativeRepositoryInputs.of(REPO).compaction_instruction
 WORK_IN_PROGRESS_MARKERS = re.search(
     r"^`([A-Za-z]+):`[^\n]*\n"
     r"`([A-Za-z]+):`[^\n]*\n"

@@ -35,6 +35,7 @@ from acp.exceptions import RequestError
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -47,7 +48,13 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
-from agent_comms.revision_views import NotificationsView, RegistrationsView, SidebarView, StoresView
+from agent_comms.revision_views import (
+    CommanderFramesView,
+    NotificationsView,
+    RegistrationsView,
+    SidebarView,
+    StoresView,
+)
 from agent_comms.ui_model.delivery import ReadDeliveryView
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
@@ -761,6 +768,34 @@ class ObserveThreads(InterestRequest):
 
 
 @dataclass(frozen=True)
+class ObserveCommanderHud(InterestRequest):
+    """Each commander's newest heartbeat frame; Core derived it, a view only shows it."""
+
+    def observation(self) -> CommanderHudReading:
+        return CommanderHudReading(self)
+
+
+@dataclass(frozen=True)
+class StopCommanderHud(ObservationRequest):
+    def receive(self, service: ObservationService) -> None:
+        service.interest.remove(CommanderHudReading)
+
+
+class CommanderHudReading(ReadingObservation[ObserveCommanderHud]):
+    """Reads the frame files only when the heartbeat replaced one of them."""
+
+    def __init__(self, request: ObserveCommanderHud):
+        super().__init__(request)
+        self.revision: ReadState = NoRevision()
+
+    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
+        if not self.revision.changed_since(CommanderFramesView(), revision):
+            return
+        self.revision = revision
+        yield CommanderHudObserved(revision, CommanderFrame.read_all(comms.root))
+
+
+@dataclass(frozen=True)
 class ObserveViews(InterestRequest):
     """The thread incarnations and channel views open in the UI, to learn when one is retired."""
 
@@ -1125,6 +1160,13 @@ class NotificationsObserved(Observed):
 class NotificationsUnreadable(Observed):
     request: ReadNotifications
     error: UnreadableHistory
+
+
+@dataclass(frozen=True)
+class CommanderHudObserved(Observed):
+    """Every beating commander's newest frame, by commander name."""
+
+    huds: tuple[CommanderHud, ...]
 
 
 @dataclass(frozen=True)

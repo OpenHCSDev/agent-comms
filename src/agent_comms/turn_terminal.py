@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from .errors import StaleAttemptError
 import asyncio
 from abc import ABC, abstractmethod
-from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from .turn_failure import BackendFailed, TurnFailure
 from .goal_failure_observation import FailedTurnObservation
+from .turn_failure import BackendFailed, TurnFailure
 
 if TYPE_CHECKING:
     from .agent_events import Done
     from .goal_attempts import LaunchPermit
+    from .maintenance_barrier import MaintenanceBarrier
     from .turn_goal_account import TurnGoalAccount
     from .turn_progress import TurnProgress
 
@@ -78,12 +77,8 @@ class FailedGoalTurn(TurnTerminal):
     def settle_launched(self, account, permit, store, captured, current) -> None:
         if permit.has_verified_progress(store):
             return
-        observation = self.failure_observation(account, permit, captured)
-        with suppress(StaleAttemptError):
-            permit.reservation.fail(
-                store, self.failure_kind.declared_name,
-                observation=observation,
-            )
+        self.failure_kind.settle_attempt(
+            permit, store, self.failure_observation(account, permit, captured))
 
 
 class EndedWithoutResult(FailedGoalTurn):
@@ -105,7 +100,15 @@ class OperatorStopped(TurnTerminal):
 
 
 class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
-    """The worker's existing stop wait carries the operator's actual reason."""
+    """The worker's existing stop wait carries the operator's actual reason.
+
+    An install holds maintenance before it signals owners, so a turn that ends in
+    that window reads the hold, not a backend failure the signal has not yet named.
+    """
+
+    def __init__(self, maintenance: MaintenanceBarrier) -> None:
+        super().__init__()
+        self.maintenance = maintenance
 
     def interrupting(self, prior: TurnTerminal) -> TurnTerminal:
         return self.terminal.interrupting(prior)
@@ -116,4 +119,8 @@ class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
 
     @property
     def terminal(self) -> TurnTerminal:
-        return self.result() if self.done() else EndedWithoutResult()
+        if self.done():
+            return self.result()
+        # A held ingress is the install's stop, declared before any owner is signalled.
+        return self.maintenance.read().selected(
+            held=OperatorStopped(), granted=EndedWithoutResult())
