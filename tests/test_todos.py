@@ -409,7 +409,7 @@ def released_published_orders(pr_commander, github_cli):
     c, source = ctx.comms, ctx.repos[0]
     declared = {}
     for name in ('pi-mi', 'unit-installer', 'unit-backend', 'aaa-idle'):
-        checkout = ctx.root.parent / name
+        checkout = ctx.root / name
         source.git(source.checkout, 'worktree', 'add', '-q', '-b', name, str(checkout))
         source.git(checkout, 'commit', '-q', '--allow-empty', '-m', 'Published work')
         source.git(checkout, 'push', '-q', '-u', 'origin', name)
