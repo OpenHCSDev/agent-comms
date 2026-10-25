@@ -117,8 +117,8 @@ class Escalation:
         return ()
 
     def holds(self, paused: frozenset[str]) -> tuple[str, ...]:
-        """An ignored escalation pauses every unit: the ones paused now, or all of them next."""
-        return tuple(sorted(paused)) or ("every unit, at the chokehold",)
+        """An ignored escalation holds every unit the chokehold has paused."""
+        return tuple(sorted(paused))
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
