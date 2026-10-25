@@ -841,7 +841,8 @@ class WireRevision(ReadState):
     bus_seq: Annotated[int, WatchViews(StatusSourced.views())]
     history: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: (views.bus.history.path,), *StatusSourced.views()),
+        *revision_source(lambda views: (views.bus.history.path,),
+                         *StatusSourced.views(), NotificationsView),
     ]
     activity: Annotated[
         tuple[FileRevision, ...],

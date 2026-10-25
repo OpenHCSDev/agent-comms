@@ -638,8 +638,8 @@ class NotificationsRead:
             return True
         current = (comms.views.observed_activity(revision, self.activity)
                    if self.activity and revision.changed_since(ActivityView(), self.revision)
-                   else {})
-        return (any(seen != self.activity[name] for name, seen in current.items())
+                   else self.activity)
+        return (any(current.get(name) != seen for name, seen in self.activity.items())
                 or self.notification_window.changed(comms, revision, self.revision))
 
 
@@ -733,7 +733,7 @@ class SidebarReading(ReadingObservation[ObserveSidebar]):
         service.interest.prepared(self, service)
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        yield from self.stage.read(self.request, comms, revision).finish_read(self)
+        yield from self.publish(self.stage.read(self.request, comms, revision))
 
     def publish(self, result: SidebarResult) -> Iterator[SidebarResult]:
         result.advance(self)
@@ -1023,9 +1023,6 @@ class NoSidebarResult(PublishState):
 class SidebarResult(PublishState, Observed):
     revision: WireRevision = field(compare=False)
     request: ObserveSidebar
-
-    def finish_read(self, reading: SidebarReading) -> Iterator[SidebarResult]:
-        return reading.publish(self)
 
     def advance(self, reading: SidebarReading) -> None:
         """Keep this stage until its source revision changes."""

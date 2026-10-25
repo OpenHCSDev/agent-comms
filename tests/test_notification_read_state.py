@@ -5,7 +5,8 @@ from agent_comms.history_views import HistoryViews
 from agent_comms.private_path import FileRevision
 from agent_comms.presentation import NoRevision, WireRevision
 from agent_comms.revision_views import (
-    ActivityView, NotificationsView, RegistrationsView, SidebarView, StatusView, StoresView,
+    ActivityView, NotificationEvidenceView, NotificationsView, RegistrationsView,
+    SidebarView, StatusView, StoresView,
 )
 from agent_comms.ui_model.observation import (
     NotificationsRead, ReadNotifications, ReadRecordedNotifications, UnreadableNotificationsRead,
@@ -30,6 +31,7 @@ def test_notification_read_only_acquires_activity_when_its_source_changed(comms,
     marker.write_text('changed')
     source = FileRevision.capture(marker).revisions()
     original = WireRevision.empty()
+    assert replace(original, history=source).changed_since(NotificationsView(), original)
     settled = NotificationsRead(original, {'absent-participant': None})
     calls = 0
 
@@ -55,6 +57,7 @@ def test_activity_views_receive_expiry_without_expiring_store_or_evidence_views(
     for view in (ActivityView(), SidebarView(), StatusView(), NotificationsView()):
         assert later.changed_since(view, original)
     assert not later.changed_since(StoresView(), original)
+    assert not later.changed_since(NotificationEvidenceView(), original)
 
 
 def test_first_revision_requires_reads_even_for_unchanged_empty_stores():
