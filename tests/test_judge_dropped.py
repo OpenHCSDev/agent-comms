@@ -157,7 +157,7 @@ def test_rewritten_reads_the_repository_the_edit_was_made_in(discarded_and_kept,
     rule = ctx.comms.registry.storage_rule
     allocated = rule.repository_checkout(rule.roots_of(ctx.comms.registry.require("worker")),
                                          "P1", other.github)
-    recorded_edit(ctx, "other-call", str(allocated / "other_module.py"), FOREIGN)
+    recorded_edit(ctx, ToolCallId("other-call"), str(allocated / "other_module.py"), FOREIGN)
     committed(other, "other_module.py", "REPLACED_MARKER_LINE = 'what the later commit wrote'")
     other.git(other.checkout, "push", "-q", "origin", "HEAD:refs/heads/unit-rewrite")
     head = other.git(other.checkout, "rev-parse", "HEAD").strip()
