@@ -13,12 +13,13 @@ from pydantic import (
     Field,
     JsonValue,
     ValidateAs,
+    field_validator,
 )
 
 from agent_comms.cli_protocol import Declared, TaggedWire, TextWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.field_codec import FieldCodec, MessageId, boundary_decoder
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (
@@ -460,8 +461,15 @@ class ToolInput(WireModel):
 class DynamicToolItem(ToolInput, ToolItem):
     wire_tag = 'dynamicToolCall'
     tool: str
-    contentItems: list[Declared[ToolContentPart]] | None = None
+    contentItems: list[Declared[ToolContentPart]] = Field(default_factory=list)
     success: bool | None = None
+
+    @field_validator('contentItems', mode='before')
+    @classmethod
+    @boundary_decoder
+    def no_content(cls, value: list[JsonValue] | None) -> list[JsonValue]:
+        # The app server sends null for a call that has no content items.
+        return [] if value is None else value
 
     @property
     def tool_name(self) -> str:
@@ -469,7 +477,7 @@ class DynamicToolItem(ToolInput, ToolItem):
 
     @property
     def output(self) -> str:
-        return '\n'.join(part.display for part in self.contentItems or ())
+        return '\n'.join(part.display for part in self.contentItems)
 
     @property
     def succeeded(self) -> bool:
