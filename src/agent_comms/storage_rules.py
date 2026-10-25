@@ -21,6 +21,8 @@ from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
     FieldRepresentation,
+    GoalId,
+    MalformedRecord,
     NullMember,
     PathText,
     RecordMember,
@@ -202,16 +204,14 @@ class OrderCheckoutAllocation(ProblemCheckoutAllocation):
         return path == rule.order_checkout(rule.roots_of(owner), self.problem)
 
 
-@dataclass(frozen=True)
-class RepositoryCheckoutAllocation(ProblemCheckoutAllocation):
-    verb: ClassVar[str] = 'repository-checkout'
-    problem: str
+class RepositoryAllocation(CheckoutAllocation):
+    """A repository-suffixed allocation reads its origin once to establish ownership."""
+
     suffix: str
 
-    @classmethod
-    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
-        if suffix:
-            yield cls(problem, suffix)
+    @abstractmethod
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool: ...
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
         try:
@@ -221,9 +221,42 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation):
                 f'Cannot read repository {self.suffix} of checkout {path}: {error}') from error
         return self.owns_declared(rule, owner, path, repository)
 
+
+@dataclass(frozen=True)
+class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocation):
+    verb: ClassVar[str] = 'repository-checkout'
+    problem: str
+    suffix: str
+
+    @classmethod
+    def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
+        if suffix:
+            yield cls(problem, suffix)
+
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
                       repository: RepositoryName) -> bool:
         return path == rule.repository_checkout(rule.roots_of(owner), self.problem, repository)
+
+
+@dataclass(frozen=True)
+class GoalCheckoutAllocation(RepositoryAllocation):
+    goal: GoalId
+    suffix: str
+
+    @classmethod
+    def read(cls, owner: Thread, path: Path, problem: str,
+             suffix: str) -> Iterator[CheckoutAllocation]:
+        if path == owner.project_path or not suffix:
+            return
+        try:
+            goal = FieldCodec.decode(GoalId, problem)
+        except MalformedRecord:
+            return  # Another allocation member owns names outside the goal-id spelling.
+        yield cls(goal, suffix)
+
+    def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
+                      repository: RepositoryName) -> bool:
+        return path == rule.repository_checkout(rule.roots_of(owner), self.goal, repository)
 
 
 @dataclass(frozen=True)
@@ -325,8 +358,8 @@ class StorageRule(RoomAllocation, DurableFile):
                    for allocation in CheckoutAllocation.for_path(self, owner, path))
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
-        """Declared home and order locations; Git metadata supplies their branches."""
-        ordered = self.order_checkout(self.roots_of(owner), 'P*')
+        """Declared home and work allocations; Git metadata supplies their branches."""
+        ordered = self.order_checkout(self.roots_of(owner), '*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
                      if path.is_dir() and self.owns_present_checkout(owner, path))
