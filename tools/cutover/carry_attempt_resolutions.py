@@ -114,7 +114,10 @@ class AttemptResolutions(Carry):
                     )
                 )
                 decisions: tuple[StoredDecision, ...] = ()
+                schema_changes = 0
                 if "decision_id" in GoalWorkDecision.stored_columns(db):
+                    # An empty retired table still needs its declared schema carried.
+                    schema_changes += 1
                     decisions = tuple(
                         StoredDecision.read(
                             db.execute(
@@ -156,15 +159,16 @@ class AttemptResolutions(Carry):
                             continue
                         counts.update(("decisions",))
                         mapped[row.legacy] = str(decision_column.encode(decision))
-            changed += len(updates) + len(decisions)
-            if apply and (updates or decisions):
+            counts += Counter(decision_schema=schema_changes)
+            changed += len(updates) + len(decisions) + schema_changes
+            if apply and (updates or schema_changes):
                 with (
                     closing(GoalAttemptStore.writer(path)) as db,
                     GoalAttemptStore.write_transaction(db),
                 ):
                     if updates:
                         self.rewrite_stored(db, AttemptRecord, column, updates)
-                    if decisions:
+                    if schema_changes:
                         for row in dropped:
                             GoalWorkDecision.delete(
                                 db,

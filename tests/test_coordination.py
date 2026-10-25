@@ -1147,7 +1147,7 @@ def test_membership_ordinals_contiguous_and_frozen_after_activation(db):
     c, path = db
     sql_wire_execution(c, pending=False)
 
-    original = WakeAssignment.one(c, assignment_id="a")
+    original = WakeAssignment.one(c, assignment_id=AssignmentId("a"))
     assert original is not None
 
     def bind(identifier, seq):
@@ -1235,7 +1235,7 @@ def test_claim_target_and_recipient_lineage_is_immutable(db):
     c, path = db
     sql_wire_execution(c, pending=False)
     Participants(participant_lookup=RECIPIENT_LOOKUP, committed=True).insert(c)
-    original = WakeAssignment.one(c, assignment_id="a")
+    original = WakeAssignment.one(c, assignment_id=AssignmentId("a"))
     assert original is not None
     c.execute("BEGIN IMMEDIATE")
     replace(original, assignment_id=AssignmentId("b"), recipient="other-worker",
