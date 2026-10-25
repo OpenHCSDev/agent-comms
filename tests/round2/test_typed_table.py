@@ -267,7 +267,7 @@ def test_durable_writer_fills_a_missing_field_from_its_declared_default():
 
         BoardLineRow.reconcile_schema(db, WriterOwnedFile())
 
-        assert BoardLineRow.select(db) == [BoardLineRow("IDLE #1", 1.0, 2.0, urgent=False)]
+        assert BoardLineRow.select(db) == [BoardLineRow("IDLE #1", 1.0, urgent=False)]
 
 
 def test_durable_writer_drops_a_declared_dropped_field_and_keeps_rows():

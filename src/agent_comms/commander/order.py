@@ -833,11 +833,21 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def run(self, ctx: Commander) -> None: ...
 
     @classmethod
-    def usage(cls) -> str:
-        """This verb's command line, rendered by the parser its options declare."""
+    def command(cls, values: Mapping[str, str]) -> str:
+        """This verb's name and the arguments ``values`` fills, in the order its parser
+        declares them; a required positional left unfilled shows its placeholder, and every
+        other option is left out."""
         verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
         cls.add_parser(verbs)
-        return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
+        parser, = verbs.choices.values()
+        placeholder = parser._get_formatter()._format_args  # the usage line's own metavar text
+        words = [cls.tool(), cls.declared_name]
+        for action in parser._actions:
+            if action.dest in values:
+                words += [*action.option_strings[:1], values[action.dest]]
+            elif action.required and not action.option_strings:
+                words.append(placeholder(action, action.dest))
+        return ' '.join(words)
 
 
 class HeartbeatGated(CommanderVerb, declared_name=None):

@@ -29,7 +29,7 @@ from agent_comms.standing_rules import StandingRule
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
+from agent_comms.ui_model.unit_state import UnitState
 from agent_comms_hooks.board import BoardLine
 
 if TYPE_CHECKING:
@@ -88,12 +88,11 @@ class Ping(DeclaredFamily, affix="Ping"):
     @property
     @abstractmethod
     def commander_disposes(self) -> bool:
-        """Whether a commander verb disposes of this line; only such a line locks the verbs."""
+        """Whether a commander verb disposes of this line; only such a line goes on the board."""
 
     def board_line[Line: BoardLine](self, kind: type[Line]) -> Line:
-        """This line as the commander's board holds it: locked once the answer window passes."""
-        since = self.since.recorded_at("A heartbeat line")
-        return kind(self.text, since, since + AwaitingCommander.seconds, urgent=self.urgent)
+        """This line as the commander's board holds it."""
+        return kind(self.text, self.since.recorded_at("A heartbeat line"), urgent=self.urgent)
 
     def board[Line: BoardLine](self, kind: type[Line]) -> tuple[Line, ...]:
         """The board line the commander's tool calls print; a line no verb disposes of has none."""
