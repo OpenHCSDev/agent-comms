@@ -7,7 +7,7 @@ from typing import Annotated
 
 from agent_comms.comms import wire
 from agent_comms.field_codec import PathText
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import OutgoingProbe, RuntimeProbe
 from agent_comms.installer.probes.commands import CliCommandProbe
 from agent_comms.owner_restart import OwnerRestartRequest
 
@@ -15,8 +15,7 @@ from agent_comms.owner_restart import OwnerRestartRequest
 class OwnerActionsProbe(CliCommandProbe):
     """Execute and decode the batch in one isolated, selected-runtime process.
 
-    The entry source ships with the installer snapshot. Its imports belong to
-    the selected runtime alone, never the worker's mixed installer namespace.
+    The entry source ships with the selected runtime's own installer.
     """
 
     def entry(self) -> tuple[str, ...]:
@@ -27,7 +26,7 @@ class OwnerActionsProbe(CliCommandProbe):
 
 
 @dataclass(frozen=True)
-class RunningOwnersProbe(RuntimeProbe[list[str]]):
+class RunningOwnersProbe(RuntimeProbe[list[str]], OutgoingProbe):
     root: Annotated[Path, PathText]
 
     def run(self) -> list[str]:

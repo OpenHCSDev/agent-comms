@@ -63,12 +63,12 @@ jobs:
         run: pytest --collect-only -q -p no:cacheprovider
       - name: The native pin matches the tree
         run: pytest tests/test_native_pin.py --noconftest --no-cov -q -p no:cacheprovider
-      # install ships installer/** in installer.zip and runs it on the runtime it upgrades
-      # from, so every name it imports must exist in the tree this change merges onto.
-      - name: Stack clients and the installer zip import only names Core has
+      # The installed runtime answers each OutgoingProbe with its own installer, so the tree
+      # this change merges onto must declare every one of them with the same fields.
+      - name: Stack clients import only names Core has; the outgoing wire matches the base
         env:
           BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
-        run: python tools/module_layers.py --check --previous "$BASE"
+        run: python tools/module_layers.py --check --base "$BASE"
 
   native-scripts:
     name: native-scripts

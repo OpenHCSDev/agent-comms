@@ -9,7 +9,7 @@ from pydantic import TypeAdapter, ValidationError
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.installer.interpreter_operation import CliProbePhase, RuntimeProbe
+from agent_comms.installer.interpreter_operation import CliProbePhase, OutgoingProbe, RuntimeProbe
 
 CORE_ERROR = TypeAdapter(CoreError.declared_union())
 
@@ -68,13 +68,9 @@ class CliOutput:
 
 
 @dataclass(frozen=True)
-class CliCommandProbe(RuntimeProbe[CliOutput]):
-    """One command-line call, answered by the selected runtime's own command line.
-
-    The worker overlays the target's installer package on this runtime, so Core
-    modules imported here that import the installer would get the target's copy
-    beside their own runtime's Core. The command line therefore runs in its own
-    process of this interpreter, which imports this runtime alone."""
+class CliCommandProbe(RuntimeProbe[CliOutput], OutgoingProbe):
+    """One command-line call, answered by the selected runtime's own command line in its
+    own process of this interpreter."""
 
     arguments: tuple[str, ...]
 

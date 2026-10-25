@@ -11,18 +11,19 @@ branch head, so its imports root the reachability like a console script does. Mo
 neither reaches are listed as deletion candidates, and a client import naming a module
 Core no longer has fails --check, the step the merge queue runs.
 
-The installer package is a client too, of the Core it upgrades from: install ships it in
-installer.zip and runs it on the runtime already installed. --previous REV reads Core at REV,
-and --check fails when the installer imports a module or name that tree lacks.
+The outgoing wire is a client too, of the Core an install upgrades from: the installed
+runtime answers each OutgoingProbe with its own installer, so --base REV reads Core at REV
+and --check fails when it lacks one of those probes or declares its fields differently.
 
     python tools/module_layers.py > docs/layout/MODULE_LAYERS.md
-    python tools/module_layers.py --check [--previous REV]
+    python tools/module_layers.py --check [--base REV]
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import inspect
 import subprocess
 import sys
 import tempfile
@@ -31,7 +32,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"
@@ -125,6 +125,39 @@ class ClientImport:
 
     def __str__(self) -> str:
         return f"{self.client}:{self.path}:{self.line} imports {self.module}"
+
+    def drift(self, package: Package) -> tuple[str, ...]:
+        """How the tree declares an imported name differently from what this client needs;
+        an import needs only the names."""
+        return ()
+
+
+@dataclass(frozen=True)
+class WireClass(ClientImport):
+    """A class one runtime encodes and another decodes: the tree must declare the same
+    annotated class attributes, its fields, in the same order."""
+
+    fields: tuple[str, ...] = ()
+
+    @staticmethod
+    def declared(node: ast.ClassDef) -> tuple[str, ...]:
+        fields = []
+        for statement in node.body:
+            match statement:
+                case ast.AnnAssign(target=target, annotation=annotation):
+                    fields.append(f"{ast.unparse(target)}: {ast.unparse(annotation)}")
+        return tuple(fields)
+
+    def drift(self, package: Package) -> tuple[str, ...]:
+        path = package.modules[self.module]
+        drifted = []
+        for node in ast.parse(path.read_text(), str(path)).body:
+            match node:
+                case ast.ClassDef(name=name) if name in self.names:
+                    if (fields := self.declared(node)) != self.fields:
+                        drifted.append(f"{name} declares ({', '.join(fields)}), "
+                                       f"sent as ({', '.join(self.fields)})")
+        return tuple(drifted)
 
 
 class ClientImportNames(ModuleReferences):
@@ -229,45 +262,41 @@ class StackClient:
             clients.append(cls(name, checkout))
         return tuple(clients)
 
-    @property
-    def root(self) -> Path:
-        """The directory whose Python files are this client's."""
-        return self.checkout
-
-    def reader(self, relative: Path, found: list[ClientImport]) -> ClientImportNames:
-        return ClientImportNames(self.name, str(relative), found)
-
-    def keeps(self, entry: ClientImport) -> bool:
-        return True
-
     @cached_property
     def imports(self) -> tuple[ClientImport, ...]:
         found: list[ClientImport] = []
-        for path in sorted(self.root.rglob("*.py")):
-            relative = path.relative_to(self.checkout)
-            self.reader(relative, found).visit(ast.parse(path.read_text(), str(relative)))
-        return tuple(entry for entry in found if self.keeps(entry))
+        for path in sorted(self.checkout.rglob("*.py")):
+            relative = str(path.relative_to(self.checkout))
+            ClientImportNames(self.name, relative, found).visit(
+                ast.parse(path.read_text(), relative)
+            )
+        return tuple(found)
 
 
-@dataclass(frozen=True)
-class InstallerZip(StackClient):
-    """The installer package as installer.zip carries it to the runtime already installed
-    (RetainedProgram in installer/interpreter_operation.py). Its own modules come from the zip;
-    every other agent_comms import resolves in that older runtime."""
-
-    PACKAGE: ClassVar[str] = f"{PACKAGE}.installer"
+class OutgoingWire(StackClient):
+    """The probes an installed runtime answers with its own installer (``OutgoingProbe`` in
+    installer/interpreter_operation.py), read from the family as this tree declares it."""
 
     @classmethod
-    def at(cls, root: Path) -> InstallerZip:
-        return cls("installer.zip", root / "src")
+    def at(cls) -> OutgoingWire:
+        from agent_comms.installer import probes
 
-    @property
-    def root(self) -> Path:
-        return self.checkout.joinpath(*self.PACKAGE.split("."))
+        return cls("outgoing wire", Path(inspect.getfile(probes)).parents[3])
 
-    def keeps(self, entry: ClientImport) -> bool:
-        """The zip carries the installer's own modules; only the rest resolve in the runtime."""
-        return entry.module != self.PACKAGE and not entry.module.startswith(self.PACKAGE + ".")
+    @cached_property
+    def imports(self) -> tuple[ClientImport, ...]:
+        from agent_comms.installer import probes
+        from agent_comms.installer.interpreter_operation import OutgoingProbe, RuntimeProbe
+
+        found: list[ClientImport] = []
+        for probe in RuntimeProbe.discover_members(probes, OutgoingProbe):
+            lines, line = inspect.getsourcelines(probe)
+            (node,) = ast.parse("".join(lines)).body
+            found.append(WireClass(
+                self.name, str(Path(inspect.getfile(probe)).relative_to(self.checkout)), line,
+                probe.__module__, (probe.__name__,), WireClass.declared(node),
+            ))
+        return tuple(found)
 
 
 class Package:
@@ -415,6 +444,16 @@ class Package:
         return tuple(found)
 
     @cached_property
+    def drifted(self) -> tuple[tuple[ClientImport, str], ...]:
+        """Names a client needs that this tree declares differently."""
+        return tuple(
+            (entry, drift)
+            for entry in self.client_imports
+            if self.provides(entry.module)
+            for drift in entry.drift(self)
+        )
+
+    @cached_property
     def client_surface(self) -> dict[str, set[str]]:
         """Each unit a client imports directly, with the clients importing it."""
         surface: dict[str, set[str]] = {}
@@ -514,15 +553,18 @@ def report(package: Package) -> bool:
         print(f"missing module: {entry}", file=sys.stderr)
     for entry, name in package.missing_names:
         print(f"missing name: {entry} {name}", file=sys.stderr)
+    for entry, drift in package.drifted:
+        print(f"changed fields: {entry} {drift}", file=sys.stderr)
     print(
         f"{len(package.client_imports)} client imports of {len(package.client_surface)} units; "
         f"{len(package.missing)} name a module this tree lacks, "
-        f"{len(package.missing_names)} a name its module does not define"
+        f"{len(package.missing_names)} a name its module does not define, "
+        f"{len(package.drifted)} a name it declares differently"
     )
-    return bool(package.missing or package.missing_names)
+    return bool(package.missing or package.missing_names or package.drifted)
 
 
-def previous_tree(revision: str, into: Path) -> Path:
+def base_tree(revision: str, into: Path) -> Path:
     """Core's source and project file at ``revision``, the runtime an install upgrades from."""
     into.mkdir()
     archive = subprocess.run(
@@ -541,9 +583,9 @@ def main() -> int:
         help="fail when a stack client imports an agent_comms module this tree lacks",
     )
     parser.add_argument(
-        "--previous",
+        "--base",
         metavar="REV",
-        help="with --check, also fail when the installer imports what Core at REV lacks",
+        help="with --check, also fail when Core at REV lacks an outgoing probe or its fields",
     )
     arguments = parser.parse_args()
     with tempfile.TemporaryDirectory() as clones:
@@ -552,10 +594,10 @@ def main() -> int:
             sys.stdout.write(package.markdown())
             return 0
         lacking = report(package)
-        if arguments.previous:
-            previous = previous_tree(arguments.previous, Path(clones) / "previous")
-            print(f"installer.zip against Core at {arguments.previous}:")
-            lacking = report(Package(previous, (InstallerZip.at(ROOT),))) or lacking
+        if arguments.base:
+            base = base_tree(arguments.base, Path(clones) / "base")
+            print(f"outgoing wire against Core at {arguments.base}:")
+            lacking = report(Package(base, (OutgoingWire.at(),))) or lacking
         return 1 if lacking else 0
 
 

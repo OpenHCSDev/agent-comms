@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from module_layers import InstallerZip, Package, StackClient
+from module_layers import OutgoingWire, Package, StackClient
 
 
 def write(path: Path, text: str = "") -> None:
@@ -60,27 +60,39 @@ def test_client_names_must_be_defined_by_their_module(tmp_path):
     ]
 
 
-def test_installer_zip_imports_only_names_the_previous_core_defines(tmp_path):
-    previous = tmp_path / "previous"
-    write(previous / "pyproject.toml", '[project.scripts]\nac = "agent_comms.cli:main"\n')
-    write(previous / "src/agent_comms/__init__.py")
-    write(previous / "src/agent_comms/cli.py")
-    write(previous / "src/agent_comms/harness_install.py", "class Harness: ...\n")
-    current = tmp_path / "current"
-    write(
-        current / "src/agent_comms/installer/probes/harnesses.py",
-        "from agent_comms.harness_install import Harness, InstalledHarness\n"
-        "from agent_comms.installer.publication import Publication\n",
-    )
-    write(current / "src/agent_comms/installer/publication.py", "class Publication: ...\n")
+def wire_base(tmp_path: Path, wire: OutgoingWire) -> Path:
+    """A base tree holding only the modules the outgoing wire names, copied from this tree."""
+    base = tmp_path / "base"
+    write(base / "pyproject.toml")
+    write(base / "src/agent_comms/__init__.py")
+    for entry in wire.imports:
+        write(base / "src" / entry.path, (wire.checkout / entry.path).read_text())
+    return base
 
-    package = Package(previous, (InstallerZip.at(current),))
 
-    assert [(str(entry), name) for entry, name in package.missing_names] == [
-        (
-            "installer.zip:agent_comms/installer/probes/harnesses.py:1 "
-            "imports agent_comms.harness_install",
-            "InstalledHarness",
-        )
+def test_outgoing_wire_matches_the_tree_that_declares_it(tmp_path):
+    wire = OutgoingWire.at()
+
+    package = Package(wire_base(tmp_path, wire), (wire,))
+
+    assert (package.missing, package.missing_names, package.drifted) == ((), (), ())
+
+
+def test_outgoing_wire_fails_on_a_renamed_field_or_a_missing_probe(tmp_path):
+    wire = OutgoingWire.at()
+    base = wire_base(tmp_path, wire)
+    owners = base / "src/agent_comms/installer/probes/owners.py"
+    owners.write_text(owners.read_text().replace(
+        "class RunningOwnersProbe(RuntimeProbe[list[str]], OutgoingProbe):\n    root:",
+        "class RunningOwnersProbe(RuntimeProbe[list[str]], OutgoingProbe):\n    bus_root:",
+    ))
+    publication = base / "src/agent_comms/installer/probes/publication.py"
+    publication.write_text(publication.read_text().replace("class PublicationProbe", "class Gone"))
+
+    package = Package(base, (wire,))
+
+    assert [name for _, name in package.missing_names] == ["PublicationProbe"]
+    assert [drift for _, drift in package.drifted] == [
+        "RunningOwnersProbe declares (bus_root: Annotated[Path, PathText]), "
+        "sent as (root: Annotated[Path, PathText])"
     ]
-    assert package.missing == ()

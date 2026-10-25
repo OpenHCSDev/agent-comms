@@ -20,13 +20,13 @@ from agent_comms.installer.interpreter_operation import (
     GitPhase,
     InstallClock,
     InstallPhase,
+    InstalledProgram,
     PhaseTiming,
     ProbeProgram,
     ProbeReply,
     ProbeRequest,
     RuntimeProbe,
     RuntimeWorkerClosePhase,
-    SourceProgram,
     WorkerClosePhase,
 )
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
@@ -182,7 +182,7 @@ class InstallCommands:
 
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
-                      program: ProbeProgram = SourceProgram()) -> Answer:
+                      program: ProbeProgram = InstalledProgram()) -> Answer:
         key = InterpreterWorkerKey(python, tuple(map(str, program.entry())), cwd.absolute(),
                                    tuple(sorted(MaintenanceHolder.outside(env).items())))
         with self.timing(probe.install_phase()) as measured:

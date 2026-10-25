@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from agent_comms.active_route import RouteFile, RouteFileSelection, active_route_path
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import OutgoingProbe, RuntimeProbe
 
 
-class PublicationProbe(RuntimeProbe[None]):
+class PublicationProbe(RuntimeProbe[None], OutgoingProbe):
     """The selected interpreter publishes itself: console launchers and harness links move
     to it, then ``current`` does."""
 
