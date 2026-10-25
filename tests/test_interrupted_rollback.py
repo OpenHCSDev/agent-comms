@@ -55,7 +55,7 @@ def killed_publication(source, target, **directories):
 os.replace = killed_publication
 hold = MaintenanceBarrier(registry.path).begin(MaintenanceOperator.current())
 with hold.holding():
-    StoreBackup(root, route, path).restore()
+    StoreBackup(root, route, path).restore(lambda: None)
 raise AssertionError("The selected registry publication was never restored")
 """
 

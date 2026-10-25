@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 from contextlib import closing
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -240,9 +241,10 @@ def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
             migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
         assert saved.read_text() == "migrated"
-        backup.undo()
+        hold = backup.restore(partial(staged.restore_stores, hold))
         assert saved.read_text() == "original"
-        assert staged.verify(comms.root) == migration.read
+        with hold.holding():
+            assert staged.verify(comms.root) == migration.read
     maintenance.clear(hold)
 
 
@@ -273,12 +275,14 @@ def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
         with pytest.raises(UpgradeRefused):
             migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
         with owners.held_on_failure():
-            backup.undo()
-            staged.require_opens(comms.root)
-        ledger_one_failure_short(comms.root)
-        with pytest.raises(UpgradeRefused, match="goal_attempts.sqlite3"):
-            with owners.held_on_failure():
+            hold = backup.restore(partial(staged.restore_stores, hold))
+            with hold.holding():
                 staged.require_opens(comms.root)
+        with hold.holding():
+            ledger_one_failure_short(comms.root)
+            with pytest.raises(UpgradeRefused, match="goal_attempts.sqlite3"):
+                with owners.held_on_failure():
+                    staged.require_opens(comms.root)
     owners.release()
     owners.give_back.close()
     assert started == []
@@ -308,8 +312,9 @@ def test_a_restore_that_fails_midway_keeps_the_hold(comms, staged, noisy_step):
         (backup.data_root / second.name).unlink()
         with pytest.raises(FileNotFoundError):
             with owners.held_on_failure():
-                backup.undo()
-                staged.require_opens(comms.root)
+                hold = backup.restore(partial(staged.restore_stores, hold))
+                with hold.holding():
+                    staged.require_opens(comms.root)
     assert first.read_text() == "original"
     assert second.read_text() == "migrated"
     owners.release()

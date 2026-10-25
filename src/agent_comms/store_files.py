@@ -466,10 +466,10 @@ class SqliteStore(ABC):
     @classmethod
     @contextmanager
     def exclusive_writer(
-        cls, path: Path, *, isolation_level: _IsolationLevel = None,
+        cls, path: Path, *, isolation_level: _IsolationLevel = None, uri: bool = False,
     ) -> Iterator[sqlite3.Connection]:
         """Keep other connections out, with transaction semantics declared by the caller."""
-        with _store_lock(path), closing(cls.writer(path, isolation_level=isolation_level)) as db:
+        with _store_lock(path), closing(cls.writer(path, isolation_level=isolation_level, uri=uri)) as db:
             yield db
 
 

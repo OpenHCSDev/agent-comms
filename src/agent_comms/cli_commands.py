@@ -203,7 +203,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import ReconciledFile, WriterOwnedStore
+from .typed_table import NoPractice, Practice, ReconciledFile, StoreRewrite, WriterOwnedStore
 from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
@@ -1875,6 +1875,21 @@ class ReconciledStoresResult(CliResult):
 
 
 @dataclass(frozen=True)
+class PlannedStoresResult(CliResult):
+    """Target-only rewrite plans; outgoing reconcile replies remain unchanged."""
+
+    rewrites: tuple[StoreRewrite, ...]
+
+    @property
+    def rewritten(self) -> tuple[Path, ...]:
+        return tuple(rewrite.path for rewrite in self.rewrites)
+
+    @property
+    def backup_files(self) -> tuple[Path, ...]:
+        return tuple(path for rewrite in self.rewrites for path in rewrite.backup_files())
+
+
+@dataclass(frozen=True)
 class BusReadBack(CliResult):
     """What a bus's registry holds that a carry must keep: its threads."""
 
@@ -1905,22 +1920,15 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
+class StoreReconcileCliCommand[Answer: CliResult](CliCommand[Answer]):
     """Every declared store whose schema differs from this runtime's declarations; each
     member says what it does with one."""
 
-    @staticmethod
     @abstractmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        """Whether this member changes, or would change, the store at ``path``."""
+    def answer(self, root: Path) -> Answer:
+        """This operation's result from the files declared under the root."""
 
-    def answer(self, root: Path) -> ReconciledStoresResult:
-        return ReconciledStoresResult(tuple(
-            path.relative_to(root)
-            for path, owner in sorted(ReconciledFile.existing_in(root).items())
-            if self.changes(owner, path)))
-
-    def apply(self, ctx: Comms) -> ReconciledStoresResult:
+    def apply(self, ctx: Comms) -> Answer:
         return self.answer(ctx.root)
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
@@ -1929,33 +1937,39 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReconcileStoresCliCommand(StoreReconcileCliCommand, declared_name="reconcile-stores"):
+class ReconcileStoresCliCommand(
+    StoreReconcileCliCommand[ReconciledStoresResult], declared_name="reconcile-stores",
+):
     help = ("Reconcile every declared store's schema onto this runtime's declarations; "
             "the installer runs it under maintenance after the outgoing owners stop")
 
-    @staticmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        return owner.reconcile_at(path)
+    practice: Annotated[Practice, Argument(flags=("--practice-root",))] = NoPractice()
+
+    def answer(self, root: Path) -> ReconciledStoresResult:
+        return ReconciledStoresResult(tuple(
+            path.relative_to(root)
+            for path, owner in sorted(ReconciledFile.existing_in(root).items())
+            if owner.reconcile_at(path, self.practice)))
 
 
 @dataclass(frozen=True, kw_only=True)
-class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planned-reconcile"):
+class PlannedReconcileCliCommand(
+    StoreReconcileCliCommand[PlannedStoresResult], declared_name="planned-reconcile",
+):
     carrying: Annotated[tuple[type[WriterOwnedStore], ...], Argument(options={"nargs": "*"})] = ()
     """These declarations are validated after their pending carries, not before them."""
-
     help = ("Name every store reconcile-stores would rewrite, reading each without writing; "
             "the installer backs them up and checks them against its rehearsal first")
 
-    @staticmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        schema = owner.schema_at(path)
-        with closing(owner.read_snapshot(path)) as db:
-            return schema.reconcile_writes(db)
-
-    def answer(self, root: Path) -> ReconciledStoresResult:
+    def answer(self, root: Path) -> PlannedStoresResult:
         """A store outside the bus that the target's writer could not open refuses the plan."""
         WriterOwnedStore.practice_openings(root, excluding=self.carrying)
-        return super().answer(root)
+        rewrites: list[StoreRewrite] = []
+        for path, owner in sorted(ReconciledFile.existing_in(root).items()):
+            schema = owner.schema_at(path)
+            with closing(owner.read_snapshot(path)) as db:
+                rewrites.extend(schema.reconcile_plan(db, path.relative_to(root)))
+        return PlannedStoresResult(tuple(rewrites))
 
 @dataclass(frozen=True)
 class CheckoutResult(CliResult):
