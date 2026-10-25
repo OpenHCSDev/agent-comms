@@ -43,7 +43,7 @@ Each phase, its predecessors and its evidence on `origin/main` are declared in `
 | Phase | Done when, on main | Now | Done |
 |---|---|---|---|
 | 1 `StoreGuardFamiliesPhase` | `SqliteStore` declared in `store_files.py`, `ProcessSingleton` in `process_claim.py`; `fcntl\.flock\(` outside `process_claim.py`; `_store_lock\(` in `typed_table.py`; `_store_lock\(path\), closing` in `locked_store.py` | 17 | 0 |
-| 2 `ReadWriteMembersPhase` | `SingleFileStore`, `MultiFileStore` declared in `store_files.py`; `(\.locked\|_store_lock\|_async_store_lock\|ordered)\([^)]*(mode\|contention)=` | 24 | 0 |
+| 2 `ReadWriteMembersPhase` | `SingleFileStore`, `MultiFileStore` declared in `store_files.py`; `(\.locked\|_store_lock\|_async_store_lock\|ordered)\([^)]*(mode\|contention)=` | 0 | 0 |
 | | `def locked\(` outside `store_files.py` and `locked_store.py` | 1 | 0 |
 | 3 `BoundedWaitPhase` | `UNBOUNDED_CONTENTION\|UnboundedContention` | 19 | 0 |
 | 4 `MaintenanceInWritePhase` | `assert_open_unlocked\(\)\|require_maintenance_open\((path)?\)` outside `store_files.py`, `locked_store.py`, `typed_table.py` and `maintenance_barrier.py` | 9 | 0 |
