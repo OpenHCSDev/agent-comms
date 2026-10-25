@@ -337,7 +337,7 @@ def _require_cohort_assignments(
                 "ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq "
                 "JOIN cohort_delivery_receipts d "
                 "ON d.wire_root_id=m.wire_root_id AND d.wire_seq=m.wire_seq "
-                "AND d.claim_id=m.claim_id AND d.kind='selected' "
+                "AND d.claim_id=m.claim_id AND d.claim_id IS NOT NULL "
                 "WHERE m.claim_id=? AND m.wire_root_id=? AND r.sealed=1",
                 (assignment.assignment_id, wire_root_id),
             )

@@ -135,7 +135,7 @@ def read_historical_native_inputs(
                     "AND r.wire_seq=m.wire_seq AND r.message_id=c.message_id AND r.sealed=1 "
                     "JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
                     "AND d.wire_seq=r.wire_seq AND d.claim_id=c.assignment_id "
-                    "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
+                    "AND d.recipient_lookup=n.owner_lookup AND d.claim_id IS NOT NULL "
                     "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
                     "AND n.owner_lookup=c.recipient_lookup AND n.session_entry_id IS NOT NULL",
                     (wire_root_id, recipient_lookup, source_seq),

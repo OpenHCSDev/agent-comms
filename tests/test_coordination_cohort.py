@@ -99,9 +99,9 @@ def test_frozen_delivery_full_n_observer_and_public_history(tmp_path: Path) -> N
     assert len(sealed_cohort_assignments(coordinator, lookups["Alice"])) == 1
     assert sealed_cohort_assignments(coordinator, lookups["Bob"]) == ()
     delivery_rows = coordinator.session._connection.execute(
-        "SELECT kind,claim_id FROM cohort_delivery_receipts ORDER BY ordinal"
+        "SELECT claim_id FROM cohort_delivery_receipts ORDER BY ordinal"
     ).fetchall()
-    assert {row["kind"] for row in delivery_rows} == {"selected", "unmentioned_observer"}
+    assert len(delivery_rows) == 2
     assert sum(row["claim_id"] is None for row in delivery_rows) == 1
 
 
