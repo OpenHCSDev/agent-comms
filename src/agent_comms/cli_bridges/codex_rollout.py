@@ -21,7 +21,7 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader
+from agent_comms.cli_protocol import Declared, OpenWire, TimestampedWire, WireHeader
 from agent_comms.runtime_updates import (
     FinishedItem,
     HistoryNotice,
@@ -227,7 +227,7 @@ class TurnContextRecord(RolloutRecord, declared_name='turn_context'):
 class Compaction(WireModel):
     message: str = ''
     summary: str = ''
-    replacement_history: list[RolloutItem.declared_union()] = Field(default_factory=list)
+    replacement_history: list[Declared[RolloutItem]] = Field(default_factory=list)
     guardian_history: list[JsonValue] = Field(default_factory=list)
 
 
@@ -248,7 +248,7 @@ class CompactedRecord(RolloutRecord, declared_name='compacted'):
 
 
 class ResponseItemRecord(RolloutRecord, declared_name='response_item'):
-    payload: RolloutItem.declared_union()
+    payload: Declared[RolloutItem]
 
     def entries(self) -> tuple[RolloutItem, ...]:
         return (self.payload,)
