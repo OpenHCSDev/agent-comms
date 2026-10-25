@@ -505,7 +505,7 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     async def register(self, bridge: CliBridge) -> None:
         """Most operations require an already registered reader."""
 
-    async def prepare(self, bridge: CliBridge) -> SessionBinding:
+    async def prepare(self, bridge: CliBridge) -> Binding:
         await self.register(bridge)
         return bridge.binding.registered(bridge.comms).bind(bridge.db)
 
@@ -1233,8 +1233,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         print(text, file=sys.stderr, flush=True)
 
     async def prepare_delivery(self) -> None:
-        """Resolve the registered reader before a transport waits for its harness."""
-        self.binding.recipient(self.comms)
+        """A transport may prepare its harness after the operation bound its reader."""
 
     async def deliver_board(self, update: CommanderUpdate, message: messages.Message) -> type[Outcome]:
         """A harness with no tool-call route takes a heartbeat packet like any message."""
@@ -1247,7 +1246,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         # The thread's claim leaves the native queue before the journal row exists,
         # so no crash between them lets a later native owner replay this message.
         await self.comms.bus.when_open(partial(
-            self.comms.bus.hand_to_harness, self.binding.recipient(self.comms).name,
+            self.comms.bus.hand_to_harness, self.binding.bus,
             (message.reference,)))
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
@@ -1269,7 +1268,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         child = await AttachedChild.start((
             str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
             '--root', self.binding.root, 'watch', '--thread',
-            self.binding.recipient(self.comms).name,
+            self.binding.bus,
             '--after', json.dumps(FieldCodec.encode(
                 DeliveryRow.resume_after(self.db, self.binding))),
             '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),

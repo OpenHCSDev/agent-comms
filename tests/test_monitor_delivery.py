@@ -138,6 +138,75 @@ def test_resume_cursor_reads_seq_and_id_without_decoding_an_old_payload(bridge):
     assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(
         MessageReference(message.seq, message.message_id))
 
+@pytest.mark.asyncio
+async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(tmp_path):
+    from bus_record_fixture import prepare_native_comms
+    from conftest import accept_initial, publish_initial
+    from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
+    from agent_comms.comms import wire
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.coordinator import Coordination
+    from agent_comms.thread_execution import ExternalThreadExecution
+
+    comms = prepare_native_comms(wire(tmp_path / 'wire'))
+    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path)))
+    original = comms.registry.declare(Thread(
+        'viewer', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    lookup = original.incarnation.require_recorded().lookup
+    root_id = comms.registry.prepare_native_root().namespace
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+        store.participants.register(lookup, committed=True)
+    state = tmp_path / 'bridge-state'
+    with Binding.open(state) as db:
+        binding = Binding(root=str(comms.root), owner=original.incarnation,
+                          thread='session', start=Binding.bus_head(str(comms.root)))
+        binding.bind(db)
+        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding, db)
+        comms.registry.rename('viewer', 'renamed-viewer')
+        bridge.binding = await bridge.options.operation.prepare(bridge)
+        assert bridge.binding.bus == 'renamed-viewer'
+        assert bridge.binding.owner == original.incarnation
+        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+            message = publish_initial(comms, 'peer', bridge.binding.bus, 'same reader').message
+            accept_initial(comms.bus, root_id, message.seq, store)
+
+        bridge_socket, monitor_socket = socket.socketpair()
+        bridge_peer = MonitorPeer(*await asyncio.open_connection(sock=bridge_socket))
+        monitor_reader, monitor_writer = await asyncio.open_connection(sock=monitor_socket)
+        service = MonitorService(bridge, ProcessIdentity.capture(os.getpid()), lambda: None)
+        attachment = asyncio.create_task(bridge.reader.attach(service, bridge_peer))
+        accepting = None
+        try:
+            async with asyncio.timeout(15):
+                await monitor_reader.readline()
+                probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
+                await probe.confirm(bridge, ObservedMonitor('probe', 1.))
+                accepting = asyncio.create_task(bridge.accept(message))
+                line = (await monitor_reader.readline()).decode().rstrip('\n')
+                await accepting
+                with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+                    handed, = WakeAssignment.select(store.session._connection,
+                        recipient_lookup=lookup, wire_seq=message.seq)
+                    assert type(handed.lifecycle) is DeferredAssignment
+                for update in notification(line).updates(ClaudeSession()):
+                    await update.observed(bridge)
+                with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+                    confirmed, = WakeAssignment.select(store.session._connection,
+                        recipient_lookup=lookup, wire_seq=message.seq)
+                    assert type(confirmed.lifecycle) is DeliveredAssignment
+                assert comms.bus.inbox(bridge.binding.bus).page.messages == ()
+        finally:
+            if accepting is not None:
+                accepting.cancel()
+                with suppress(asyncio.CancelledError):
+                    await accepting
+            monitor_writer.close()
+            await monitor_writer.wait_closed()
+            await attachment
+            await bridge_peer.close()
+
+
 def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
 

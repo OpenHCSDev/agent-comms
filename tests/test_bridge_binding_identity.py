@@ -60,5 +60,5 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         bridge.binding = renamed
         message = comms.messaging.send('commander', 'renamed-reader', 'new incarnation only').message
         with pytest.raises(KeyError):
-            await bridge.accept(message)
+            await operation.prepare(bridge)
         assert comms.bus.pending_count('renamed-reader') == 1
