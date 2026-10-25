@@ -35,7 +35,10 @@ def test_multiline_checks_keep_quoted_newlines_and_command_boundaries():
 
 @pytest.mark.parametrize('command', [
     'pytest tests/test_todos.py',
+    'py.test tests/test_todos.py',
+    '/venv/bin/pytest tests/test_todos.py',
     'python -m pytest tests/test_todos.py',
+    'python3.14 -m pytest tests/test_todos.py',
     'timeout 300 bash -c "python -m pytest tests/test_todos.py"',
 ])
 def test_saved_pytest_checks_decode_but_cannot_run(command, tmp_path):

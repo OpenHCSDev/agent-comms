@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import test_session as sessions
+import pytest_session as sessions
 from agent_comms.test_lease import HostTestLease, NewTestRun, TestLeaseBusy
 
 pytest_plugins = ("pytester",)
@@ -21,7 +21,7 @@ def test_controller_acquires_before_imports_and_confirmation_does_not_reacquire(
     tmp_path: Path, controller_session: pytest.Session,
 ):
     lease = HostTestLease.in_home(tmp_path)
-    with sessions.TestSession.from_worker_hint(None, NewTestRun(), lease) as owner:
+    with sessions.TestSession.from_worker_hint("", NewTestRun(), lease) as owner:
         owner.prepare()
         owner.confirm(controller_session)
         with pytest.raises(TestLeaseBusy, match=lease.refusal):

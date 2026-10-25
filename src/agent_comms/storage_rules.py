@@ -29,6 +29,7 @@ from agent_comms.field_codec import (
     SubclassUnion,
 )
 from agent_comms.locked_store import DurableFile
+from agent_comms.native_build_inputs import GitLaunch
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
@@ -41,6 +42,7 @@ from agent_comms.storage_room import (
 )
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.work_branches import WorkBranches
+
 from .shell_commands import ShellCommand
 
 if TYPE_CHECKING:
@@ -615,15 +617,19 @@ class ShellProgram:
     programs: ClassVar[dict[str, type[ShellProgram]]] = {}
     versioned = False
 
+    @classmethod
+    def name_set(cls) -> frozenset[str]:
+        return cls.names
+
     def __init_subclass__(cls):
         super().__init_subclass__()
-        for name in cls.__dict__.get('names', ()):
+        for name in cls.name_set():
             ShellProgram.programs[name] = cls
 
     @classmethod
     def named(cls, name):
         kind = cls.programs.get(name if name in cls.programs else re.sub(r'\d+(?:\.\d+)*$', '', name))
-        return (kind if kind and (kind.versioned or name in kind.names) else cls)()
+        return (kind if kind and (kind.versioned or name in kind.name_set()) else cls)()
 
     def matches(self, args, prefixes):
         return any(tuple(args[:len(prefix)]) == prefix for prefix in prefixes)
@@ -767,7 +773,7 @@ class MeasuredCommands(ShellProgram):
             return ()
         return tuple(owner.effect() for owner in type(self).__mro__
                      if 'commands' in owner.__dict__ and any(
-                         self.matches((name, *args), owner.commands) for name in self.names))
+                         self.matches((name, *args), owner.commands) for name in self.name_set()))
 
 
 class BuildsOnCommands(MeasuredCommands):
@@ -799,40 +805,28 @@ class WritesWorkingTree(ShellProgram):
         return (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
 
 
-class GitProgram(ForbidsCommands, WritesWorkingTree):
-    names = frozenset({Repo.program})
+class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
+    @classmethod
+    def name_set(cls) -> frozenset[str]:
+        return frozenset({cls.program})
+
     forbidden = (('clone',), ('worktree', 'add'), ('worktree', 'move'), ('worktree', 'remove'))
     reason = ('git clone and git worktree add, move and remove are forbidden; run agent-comms '
               'checkout add PROBLEM or checkout remove PROBLEM, which own the pinned submodules')
 
-    chdir_option = '-C'
-    directory_options = frozenset({chdir_option, '--git-dir', '--work-tree'})
-    value_options = (*sorted(directory_options), '-c', '--config-env', '--namespace',
-                     '--list-cmds', '--attr-source', '--super-prefix')
-    optional_options = ('--exec-path',)
-    switch_options = ('-v', '-h', '-p', '-P', '--version', '--help', '--no-pager', '--paginate',
-                      '--html-path', '--man-path', '--info-path', '--no-replace-objects', '--bare',
-                      '--literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs',
-                      '--icase-pathspecs', '--no-optional-locks', '--no-lazy-fetch', '--no-advice')
-
     @classmethod
     def invocation(cls, args: list[str], cwd: Path) -> GitInvocation:
-        short = ''.join(name[1:] + ':' for name in cls.value_options if len(name) == 2)
-        short += ''.join(name[1:] for name in cls.switch_options if len(name) == 2)
-        long = [name[2:] + '=' for name in cls.value_options if name.startswith('--')]
-        long.extend(name[2:] for name in cls.switch_options if name.startswith('--'))
-        long.extend(name[2:] + '=?' for name in cls.optional_options)
         try:
-            options, remaining = getopt.getopt(args, short, long)
+            selected = cls.options(args)
         except getopt.GetoptError as error:
             raise SelectedToolDenied(
                 f'StorageRule: incomplete or unknown git option: {error}') from error
-        for option, value in options:
+        for option, value in selected.values:
             if option in cls.directory_options:
                 path = physical_path(value, cwd)
                 if option == cls.chdir_option:
                     cwd = path
-        return GitInvocation(remaining, cwd)
+        return GitInvocation(selected.arguments, cwd)
 
     def effects(self, args, cwd):
         invocation = self.invocation(args, cwd)

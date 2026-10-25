@@ -1,14 +1,19 @@
-"""One pytest admission lifetime, before imports and after xdist identifies a worker."""
+"""One pytest controller lifetime, before imports and after xdist identifies a worker."""
 
 from __future__ import annotations
 
-from contextlib import ExitStack
 import os
+from contextlib import ExitStack
 
 import pytest
 from xdist import is_xdist_worker
 
-from .test_lease import InheritedTestRun, LeaseStart, NewTestRun, TestLease, TestLeaseBusy
+from agent_comms.test_lease import (
+    InheritedTestRun,
+    LeaseStart,
+    TestLease,
+    TestLeaseBusy,
+)
 
 
 class TestSession(ExitStack):
@@ -20,9 +25,9 @@ class TestSession(ExitStack):
         self.lease = lease
 
     @classmethod
-    def from_worker_hint(cls, hint: str | None, start: LeaseStart, lease: TestLease) -> TestSession:
+    def from_worker_hint(cls, hint: str, start: LeaseStart, lease: TestLease) -> TestSession:
         # xdist publishes this hint before _prepareconfig, but only sets the real
-        # Config.workerinput afterwards. It can defer admission, never exempt it.
+        # Config.workerinput afterwards. It can defer the claim, never exempt it.
         if hint:
             return DeferredWorkerCheck(start, lease)
         return cls(start, lease)
@@ -55,18 +60,24 @@ _SESSION = pytest.StashKey[TestSession]()
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
-        InheritedTestRun.option, type=InheritedTestRun.argument, default=NewTestRun(),
+        InheritedTestRun.option,
+        type=InheritedTestRun.argument,
+        default=TestLease.default_start,
         help="adopt the integrator's kernel-held descriptor (not an exemption)",
     )
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_load_initial_conftests(
-    early_config: pytest.Config, parser: pytest.Parser, args: list[str],
+    early_config: pytest.Config,
+    parser: pytest.Parser,
+    args: list[str],
 ) -> None:
     start: LeaseStart = parser.parse_known_args(args).integration_lease
     owner = TestSession.from_worker_hint(
-        os.environ.get("PYTEST_XDIST_WORKER"), start, TestLease.current(),
+        os.environ.get("PYTEST_XDIST_WORKER", ""),
+        start,
+        TestLease.current(),
     )
     owner.prepare()
     early_config.stash[_SESSION] = owner

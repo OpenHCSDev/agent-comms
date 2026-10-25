@@ -62,6 +62,7 @@ class InheritedTestRun(LeaseStart):
 class TestLease(ProcessSingleton, SourceTier, declared_name=None):
     refusal: ClassVar[str] = "integration run already holds the test lease"
     runner_program: ClassVar[str] = ""
+    default_start: ClassVar[NewTestRun] = NewTestRun()
 
     @classmethod
     def in_home(cls, home: Path) -> TestLease:
@@ -71,8 +72,10 @@ class TestLease(ProcessSingleton, SourceTier, declared_name=None):
     def for_runner_programs(cls, programs: tuple[Path, ...], home: Path) -> TestLease:
         """Decode the runner's process lineage, not CI/HOME environment flags."""
         names = frozenset(program.name for program in programs)
-        member = next((member for member in cls.members_with(cls)
-                       if member.runner_program in names), HostTestLease)
+        member = next(
+            (member for member in cls.members_with(cls) if member.runner_program in names),
+            HostTestLease,
+        )
         return member.in_home(home)
 
     @classmethod
@@ -86,7 +89,7 @@ class TestLease(ProcessSingleton, SourceTier, declared_name=None):
         return cls.for_runner_programs(tuple(programs), Path(account.pw_dir))
 
     @contextmanager
-    def held(self, start: LeaseStart = NewTestRun()) -> Iterator[LeaseStart]:
+    def held(self, start: LeaseStart = default_start) -> Iterator[LeaseStart]:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with ExitStack() as lifetime:
             try:
@@ -106,5 +109,5 @@ class GithubActionsTestLease(TestLease):
     runner_program = "Runner.Worker"
 
     @contextmanager
-    def held(self, start: LeaseStart = NewTestRun()) -> Iterator[LeaseStart]:
-        yield NewTestRun()
+    def held(self, start: LeaseStart = TestLease.default_start) -> Iterator[LeaseStart]:
+        yield self.default_start

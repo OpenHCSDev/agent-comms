@@ -13,8 +13,8 @@ import re
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
-from agent_comms_hooks import BashRefusal, ClaudeToolHook
 from agent_comms.shell_commands import Program, ShellCommand
+from agent_comms_hooks import BashRefusal, ClaudeToolHook
 
 GH = Program("gh")
 

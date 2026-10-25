@@ -15,8 +15,8 @@ from .coordination_errors import CommandFailure
 from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
 from .field_codec import FieldCodec, WireValue
-from .repository_name import RepositoryName
 from .native_build_inputs import GitLaunch
+from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .todos import Todo

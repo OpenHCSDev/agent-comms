@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
+import getopt
 import signal
 import subprocess
 import tempfile
@@ -13,8 +12,19 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
-                            ExitedOutcome, SignaledOutcome, TimedOutOutcome)
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.lifecycle_capability import Active
+
+from .child_process import (
+    BoundedRun,
+    CheckPrinted,
+    ChildOutcome,
+    ChildResult,
+    CountPrinted,
+    ExitedOutcome,
+    SignaledOutcome,
+    TimedOutOutcome,
+)
 from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
 from .declared_family import DeclaredFamily
 from .errors import RejectedEnforcementError, RelationViolationError
@@ -31,15 +41,14 @@ from .field_codec import (
     TurnId,
 )
 from .goal_states import ActiveGoal, GoalState
-from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
-from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
+from .reported_turn import NoReportedTurn, ReportedTurnState
 from .shell_commands import ShellCommand
 from .test_invocation import PYTEST
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
-from .reported_turn import NoReportedTurn, ReportedTurnState
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
@@ -51,10 +60,10 @@ if TYPE_CHECKING:
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
     from .goal_attempts import GoalAttemptStore, LaunchPermit
-    from .turn_goal_account import VerifiedGoalSettlement
+    from .goal_management import Goals
     from .todos import Todo
+    from .turn_goal_account import VerifiedGoalSettlement
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -323,12 +332,13 @@ class CheckCommand:
     @staticmethod
     def git_command(words: Sequence[str]) -> str:
         """The git subcommand ``words`` run, or "" when they run no git."""
-        from .storage_rules import GitProgram
-
-        if not words or Path(words[0]).name not in GitProgram.names:
+        if not words or Path(words[0]).name != Repo.program:
             return ""
-        invocation = GitProgram.invocation(list(words[1:]), Path.cwd())
-        return next(iter(invocation.args), "")
+        try:
+            selected = Repo.options(list(words[1:]))
+        except getopt.GetoptError as error:
+            raise ValueError(f"Incomplete or unknown git option: {error}") from error
+        return next(iter(selected.arguments), "")
 
 
 @dataclass(frozen=True)

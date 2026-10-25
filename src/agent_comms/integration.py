@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 import argparse
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tomllib
-from typing import ClassVar
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Annotated, ClassVar
 
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireName
 from .head_review import HeadReview, PullRequestHead
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, GitCommandError, Repo
-from .test_lease import LeaseStart, TestLease
 from .systemd_unit import AgentsSlice
+from .test_lease import LeaseStart, TestLease
 from .todos import PullRequests
 
 
@@ -28,24 +28,37 @@ class IntegrationFailed(RuntimeError):
 
 @dataclass(frozen=True)
 class TestSelection:
-    directories: tuple[str, ...]
-    patterns: tuple[str, ...]
+    directories: Annotated[tuple[str, ...], WireName("testpaths")]
+    patterns: Annotated[tuple[str, ...], WireName("python_files")]
 
     @classmethod
     def read(cls, checkout: Path) -> TestSelection:
-        # The TOML boundary: consume pytest's declaration, not a second tests/ roster.
+        # Decode only this consumer's declared fields; pytest owns the other options.
         with (checkout / "pyproject.toml").open("rb") as source:
-            configuration = tomllib.load(source)["tool"]["pytest"]["ini_options"]
-        return cls(
-            FieldCodec.decode(tuple[str, ...], configuration["testpaths"]),
-            FieldCodec.decode(tuple[str, ...], configuration["python_files"]),
-        )
+            match tomllib.load(source):
+                case {"tool": {"pytest": {"ini_options": {**configuration}}}}:
+                    return FieldCodec.decode(
+                        cls,
+                        {
+                            entry.key: configuration[entry.key]
+                            for entry in FieldCodec.argument_fields(cls)
+                            if entry.key in configuration
+                        },
+                    )
+        raise IntegrationFailed("pyproject.toml requires [tool.pytest.ini_options]")
 
     def files(self, checkout: Path, changed: tuple[Path, ...]) -> tuple[str, ...]:
-        return tuple(sorted({str(path) for path in changed
-                             if any(path.is_relative_to(root) for root in self.directories)
-                             and any(path.match(pattern) for pattern in self.patterns)
-                             and (checkout / path).is_file()}))
+        return tuple(
+            sorted(
+                {
+                    str(path)
+                    for path in changed
+                    if any(path.is_relative_to(root) for root in self.directories)
+                    and any(path.match(pattern) for pattern in self.patterns)
+                    and (checkout / path).is_file()
+                }
+            )
+        )
 
 
 class FailureAction(ABC):
@@ -53,14 +66,16 @@ class FailureAction(ABC):
         pass
 
     @abstractmethod
-    def remaining(self, heads: tuple[PullRequestHead, ...], log: Path
-                  ) -> tuple[PullRequestHead, ...]: ...
+    def remaining(
+        self, heads: tuple[PullRequestHead, ...], log: Path
+    ) -> tuple[PullRequestHead, ...]: ...
 
 
 @dataclass(frozen=True)
 class StopAfterFailure(FailureAction):
-    def remaining(self, heads: tuple[PullRequestHead, ...], log: Path
-                  ) -> tuple[PullRequestHead, ...]:
+    def remaining(
+        self, heads: tuple[PullRequestHead, ...], log: Path
+    ) -> tuple[PullRequestHead, ...]:
         raise IntegrationFailed(
             f"Combined tests failed; {log}. No head is blamed from a test filename. "
             f"A source-supported exclusion must be named with {ExcludeAfterFailure.option}."
@@ -83,8 +98,9 @@ class ExcludeAfterFailure(FailureAction):
         if not any(head.pr == self.pr for head in heads):
             raise IntegrationFailed(f"#{self.pr} is not in the reviewed integration heads")
 
-    def remaining(self, heads: tuple[PullRequestHead, ...], log: Path
-                  ) -> tuple[PullRequestHead, ...]:
+    def remaining(
+        self, heads: tuple[PullRequestHead, ...], log: Path
+    ) -> tuple[PullRequestHead, ...]:
         self.require_heads(heads)
         remaining = tuple(head for head in heads if head.pr != self.pr)
         if not remaining:
@@ -112,8 +128,7 @@ class IntegrationCheckout(Checkout):
         Repo.git(self.path, "fetch", "origin", timeout=300)
         return Repo.git(self.path, "rev-parse", "origin/main").strip()
 
-    def combine(self, base: str, heads: tuple[PullRequestHead, ...]
-                ) -> tuple[PullRequestHead, ...]:
+    def combine(self, base: str, heads: tuple[PullRequestHead, ...]) -> tuple[PullRequestHead, ...]:
         self.require_editable()
         Repo.git(self.path, "switch", "--detach", base)
         combined = []
@@ -140,8 +155,9 @@ class IntegrationCheckout(Checkout):
         changed = tuple(
             Path(path)
             for head in heads
-            for path in Repo.git(self.path, "diff", "--name-only", "-z",
-                                 "--diff-filter=AMR", f"{base}...{head.head}").split("\0")
+            for path in Repo.git(
+                self.path, "diff", "--name-only", "-z", "--diff-filter=AMR", f"{base}...{head.head}"
+            ).split("\0")
         )
         return TestSelection.read(self.path).files(self.path, changed)
 
@@ -163,8 +179,9 @@ class TestAttempt:
     def code(self) -> int:
         return 0
 
-    def finish(self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...],
-               start: LeaseStart) -> int:
+    def finish(
+        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart
+    ) -> int:
         return self.code
 
 
@@ -180,8 +197,9 @@ class FailedTestAttempt(TestAttempt):
     def code(self) -> int:
         return self.returncode
 
-    def finish(self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...],
-               start: LeaseStart) -> int:
+    def finish(
+        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart
+    ) -> int:
         return run.retry(self, base, heads, start)
 
 
@@ -192,8 +210,9 @@ class TimedOutTestAttempt(TestAttempt):
     def code(self) -> int:
         return self.exit_code
 
-    def finish(self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...],
-               start: LeaseStart) -> int:
+    def finish(
+        self, run: IntegrationRun, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart
+    ) -> int:
         raise IntegrationFailed(f"Timed out: {self.log}; no automatic replay")
 
 
@@ -222,23 +241,38 @@ class IntegrationRun:
             if HeadReview.accepted(repo.github, request.head)
         )
 
-    def test(self, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart,
-             attempt: int) -> TestAttempt:
+    def test(
+        self, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart, attempt: int
+    ) -> TestAttempt:
         selected = self.checkout.test_files(base, heads)
         if not selected:
             raise IntegrationFailed("The touched-test union is empty; no suite fallback was run")
         self.checkout.prepare()
         log = self.output / f"attempt-{attempt}.log"
-        command = ("timeout", "-s", "INT", str(self.timeout),
-                   sys.executable, "-m", "pytest", *self.pytest_arguments,
-                   "-o", "faulthandler_timeout=60",
-                   "--basetemp", str(self.output / f"pytest-{attempt}"),
-                   *start.arguments(), *selected)
-        print(f"RUN {attempt}: {len(selected)} test files; risk: {self.risk}; output: {log}",
-              flush=True)
+        command = (
+            "timeout",
+            "-s",
+            "INT",
+            str(self.timeout),
+            sys.executable,
+            "-m",
+            "pytest",
+            *self.pytest_arguments,
+            "-o",
+            "faulthandler_timeout=60",
+            "--basetemp",
+            str(self.output / f"pytest-{attempt}"),
+            *start.arguments(),
+            *selected,
+        )
+        print(
+            f"RUN {attempt}: {len(selected)} test files; risk: {self.risk}; output: {log}",
+            flush=True,
+        )
         runtime = RestoredRuntime(Path(sys.executable))
         environment = CheckoutSource(self.checkout.path / "src").environment(
-            runtime.environment(os.environ))
+            runtime.environment(os.environ)
+        )
         with log.open("xb") as output:
             tree = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
             output.write(f"Base: {base}\nTree: {tree}\nRisk: {self.risk}\n".encode())
@@ -246,8 +280,12 @@ class IntegrationRun:
                 output.write(f"Head: #{head.pr} {head.head}\n".encode())
             output.flush()
             with SpawnedProcess.launch(
-                command, cwd=self.checkout.path, env=environment, output=output,
-                stderr=subprocess.STDOUT, pass_fds=start.descriptors(),
+                command,
+                cwd=self.checkout.path,
+                env=environment,
+                output=output,
+                stderr=subprocess.STDOUT,
+                pass_fds=start.descriptors(),
                 runtime=runtime,
             ) as child:
                 try:
@@ -259,8 +297,13 @@ class IntegrationRun:
             print(f"COMBINED EXIT {answer.code}: #{head.pr} {head.head}; {log}", flush=True)
         return answer
 
-    def retry(self, failed: FailedTestAttempt, base: str, heads: tuple[PullRequestHead, ...],
-              start: LeaseStart) -> int:
+    def retry(
+        self,
+        failed: FailedTestAttempt,
+        base: str,
+        heads: tuple[PullRequestHead, ...],
+        start: LeaseStart,
+    ) -> int:
         remaining = self.failure.remaining(heads, failed.log)
         combined = self.checkout.combine(base, remaining)
         if not combined:
@@ -287,28 +330,39 @@ class IntegrationRun:
 
 def main() -> None:
     """Enter the existing CPU-slice owner before acquiring a transferable lease."""
-    command = ResidentManager.current().command(
-        (sys.executable, "-m", __name__, *sys.argv[1:]))
+    command = ResidentManager.current().command((sys.executable, "-m", __name__, *sys.argv[1:]))
     os.execvpe(command[0], command, dict(os.environ))
 
 
 def run() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkout", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True,
-                        help="new persistent directory for this run's two bounded logs")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="new persistent directory for this run's two bounded logs",
+    )
     parser.add_argument("--risk", required=True)
-    parser.add_argument(ExcludeAfterFailure.option, type=ExcludeAfterFailure.argument,
-                        default=StopAfterFailure())
-    parser.add_argument("pytest_arguments", nargs=argparse.REMAINDER,
-                        help="pytest's full argument surface after --; touched files are appended")
+    parser.add_argument(
+        ExcludeAfterFailure.option, type=ExcludeAfterFailure.argument, default=StopAfterFailure()
+    )
+    parser.add_argument(
+        "pytest_arguments",
+        nargs=argparse.REMAINDER,
+        help="pytest's full argument surface after --; touched files are appended",
+    )
     arguments = parser.parse_args()
     pytest_arguments = arguments.pytest_arguments
     if pytest_arguments[:1] == ["--"]:
         pytest_arguments = pytest_arguments[1:]
-    return IntegrationRun(IntegrationCheckout(arguments.checkout.resolve()),
-                          arguments.output.resolve(), arguments.risk,
-                          arguments.drop_on_failure, tuple(pytest_arguments)).execute()
+    return IntegrationRun(
+        IntegrationCheckout(arguments.checkout.resolve()),
+        arguments.output.resolve(),
+        arguments.risk,
+        arguments.drop_on_failure,
+        tuple(pytest_arguments),
+    ).execute()
 
 
 if __name__ == "__main__":

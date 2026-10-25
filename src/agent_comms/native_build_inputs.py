@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import getopt
 import hashlib
 import json
 import os
@@ -19,10 +20,62 @@ INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
 PREPARATION_SCHEME = "sealed-native-store-v1"
 
 
+@dataclass(frozen=True)
+class GitOptions:
+    values: list[tuple[str, str]]
+    arguments: list[str]
+
+
 class GitLaunch:
     """One Git child boundary, also usable by the isolated stdlib bootstrap."""
 
     program: ClassVar[str] = "git"
+    chdir_option: ClassVar[str] = "-C"
+    directory_options: ClassVar[frozenset[str]] = frozenset(
+        {chdir_option, "--git-dir", "--work-tree"}
+    )
+    value_options: ClassVar[tuple[str, ...]] = (
+        *sorted(directory_options),
+        "-c",
+        "--config-env",
+        "--namespace",
+        "--list-cmds",
+        "--attr-source",
+        "--super-prefix",
+    )
+    optional_options: ClassVar[tuple[str, ...]] = ("--exec-path",)
+    switch_options: ClassVar[tuple[str, ...]] = (
+        "-v",
+        "-h",
+        "-p",
+        "-P",
+        "--version",
+        "--help",
+        "--no-pager",
+        "--paginate",
+        "--html-path",
+        "--man-path",
+        "--info-path",
+        "--no-replace-objects",
+        "--bare",
+        "--literal-pathspecs",
+        "--glob-pathspecs",
+        "--noglob-pathspecs",
+        "--icase-pathspecs",
+        "--no-optional-locks",
+        "--no-lazy-fetch",
+        "--no-advice",
+    )
+
+    @classmethod
+    def options(cls, args: list[str]) -> GitOptions:
+        short = "".join(name[1:] + ":" for name in cls.value_options if len(name) == 2)
+        short += "".join(name[1:] for name in cls.switch_options if len(name) == 2)
+        long = [name[2:] + "=" for name in cls.value_options if name.startswith("--")]
+        long.extend(name[2:] for name in cls.switch_options if name.startswith("--"))
+        long.extend(name[2:] + "=?" for name in cls.optional_options)
+        values, arguments = getopt.getopt(args, short, long)
+        return GitOptions(values, arguments)
 
     @classmethod
     def command(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
@@ -33,32 +86,44 @@ class GitLaunch:
     def _local_environment(program: Path, modified_ns: int) -> frozenset[str]:
         """Git declares local selectors; the binary's stamp keys this immutable answer."""
         probe = subprocess.run(
-            (program, "rev-parse", "--local-env-vars"), capture_output=True, text=True,
-            timeout=10, check=True,
-            env={name: value for name, value in os.environ.items()
-                 if not name.startswith("GIT_")} | {"LC_ALL": "C"},
+            (program, "rev-parse", "--local-env-vars"),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+            env={name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+            | {"LC_ALL": "C"},
         )
         return frozenset(probe.stdout.splitlines())
 
     @classmethod
     def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
         """The checkout selects the repository; inherit auth and command configuration."""
-        executable = shutil.which(cls.program, path=source.get("PATH", os.defpath))
-        if executable is None:
-            raise FileNotFoundError(cls.program)
-        program = Path(executable)
+        match shutil.which(cls.program, path=source.get("PATH", os.defpath)):
+            case str(executable):
+                program = Path(executable)
+            case _:
+                raise FileNotFoundError(cls.program)
         local = cls._local_environment(program, program.stat().st_mtime_ns)
         # GIT_CONFIG_* carries command configuration, including auth and fixture
         # identity; GIT_CONFIG instead selects an alternate configuration file.
-        return {name: value for name, value in source.items()
-                if name not in local or name.startswith("GIT_CONFIG_")} | {"LC_ALL": "C"}
+        return {
+            name: value
+            for name, value in source.items()
+            if name not in local or name.startswith("GIT_CONFIG_")
+        } | {"LC_ALL": "C"}
 
     @classmethod
     def _run(
         cls, checkout: Path | str, *args: str, timeout: float = 60, input: bytes = b""
     ) -> subprocess.CompletedProcess[bytes]:
-        return subprocess.run(cls.command(checkout, *args), capture_output=True,
-                              input=input, timeout=timeout, env=cls.environment(os.environ))
+        return subprocess.run(
+            cls.command(checkout, *args),
+            capture_output=True,
+            input=input,
+            timeout=timeout,
+            env=cls.environment(os.environ),
+        )
 
 
 def built_tree_pin(manifest: Path) -> str:
@@ -144,7 +209,12 @@ class NativeBuildInputs(GitLaunch):
         repository inputs it declares.
         """
         tracked = self._run(
-            self.root, "ls-files", "-z", "--cached", "--", "stack/native",
+            self.root,
+            "ls-files",
+            "-z",
+            "--cached",
+            "--",
+            "stack/native",
             *NativeRepositoryInputs.of(self.root).pathspecs(),
         )
         tracked.check_returncode()

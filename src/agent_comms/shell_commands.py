@@ -60,9 +60,10 @@ class Program:
     """An external program, named once by the executable name it is invoked by."""
 
     name: str
+    aliases: ClassVar[tuple[str, ...]] = ()
 
     def runs(self, command: ShellCommand) -> bool:
-        return command.program == self.name
+        return command.program in (self.name, *self.aliases)
 
 
 @dataclass(frozen=True)

@@ -38,7 +38,7 @@ class AgentsSlice(SystemdUnit):
 
     @classmethod
     def require_current(cls) -> None:
-        """Admission uses the actual kernel placement, not a requested launch flag."""
+        """Require the actual kernel placement, not a requested launch flag."""
         paths = (Path(line.split(":", 2)[2])
                  for line in Path("/proc/self/cgroup").read_text().splitlines())
         if not any(cls.unit in path.parts for path in paths):

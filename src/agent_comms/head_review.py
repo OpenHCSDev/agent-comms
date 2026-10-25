@@ -5,8 +5,8 @@ Every path that posts that status goes through here.
 
 from __future__ import annotations
 
-from abc import abstractmethod
 import json
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar
 
