@@ -26,7 +26,7 @@ from agent_comms.commander.standing import (
     UnitAskUnanswered,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.commander_pings import CommanderUpdate
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict

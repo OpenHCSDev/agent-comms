@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.bus import Bus
-from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, Ping
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, Ping
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
