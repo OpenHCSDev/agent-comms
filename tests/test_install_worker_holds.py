@@ -1,14 +1,26 @@
 import io
 import os
 from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
 
 import pytest
 
+from agent_comms.cli_commands import StartCliCommand, StopCliCommand
 from agent_comms.field_codec import ClaimId, FieldCodec
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.refusals import InterpreterWorkerDied
+from agent_comms.installer.interpreter_operation import (
+    ProbeReply,
+    ProbeRequest,
+    RuntimeProbe,
+    serve,
+)
+from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
+from agent_comms.installer.probes.commands import CliCommandProbe, CliOutput
+from agent_comms.installer.probes.owners import OwnerActionsProbe
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
-from agent_comms.installer.interpreter_operation import ProbeReply, ProbeRequest, RuntimeProbe, serve
+from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
+from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 
@@ -17,6 +29,35 @@ from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 class HolderSeenProbe(RuntimeProbe[str]):
     def run(self) -> str:
         return os.environ.get(HOLDER_NONCE, "")
+
+
+@pytest.mark.parametrize("command", [StartCliCommand, StopCliCommand])
+def test_owner_actions_decode_in_the_selected_worker(comms, command):
+    runtime = LaunchRuntime.running()
+    with InstallCommands() as commands:
+        stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)
+        outcomes = stack.owners(comms.root, command, ["missing-owner"])
+    assert len(outcomes) == 1
+    assert outcomes[0].name == "missing-owner"
+    with pytest.raises(UpgradeRefused):
+        outcomes[0].require_success(UpgradeRefused)
+
+
+@pytest.mark.parametrize("probe_type", [CliCommandProbe, OwnerActionsProbe])
+def test_cli_reply_preserves_declared_failure_from_each_entry(comms, probe_type):
+    runtime = LaunchRuntime.running()
+    with InstallCommands() as commands:
+        stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)
+        probe = probe_type(("--root", str(comms.root), "not-a-command"))
+        with pytest.raises(UpgradeRefused, match="invalid choice") as refused:
+            stack.cli_reply(probe, partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))
+    assert "undecodable answer" not in str(refused.value)
+
+
+def test_owner_reports_own_their_refusal():
+    StartedOwner("ready").require_success(UpgradeRefused)
+    with pytest.raises(UpgradeRefused):
+        RefusedOwner("missing", "not registered").require_success(UpgradeRefused)
 
 
 def test_probes_under_successive_holds_share_one_worker():

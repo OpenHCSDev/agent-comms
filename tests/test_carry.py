@@ -15,6 +15,7 @@ from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
 from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
 from agent_comms.installer.probes.commands import CliOutput, CliUndecodableError
@@ -39,6 +40,7 @@ from agent_comms.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.registry_store import RegistryStore
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
@@ -115,7 +117,7 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
     head = repo.commit(step)
     changed = {"src/agent_comms/record.py"}
     assert UncarriedRecordFormat.compare(tmp_path, base, head, changed, "src/agent_comms") == (
-        {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
+        {UncarriedRecordFormat.total(): 0}, {UncarriedRecordFormat.total(): uncarried})
 
 
 def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
@@ -265,7 +267,8 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
 
     # A missing target must not prevent the batch from stopping its available owners.
     with pytest.raises(UpgradeRefused, match="failed"):
-        stack.owners(comms.root, StopCliCommand, names).require_success(UpgradeRefused)
+        for outcome in stack.owners(comms.root, StopCliCommand, names):
+            outcome.require_success(UpgradeRefused)
     saved = comms.registry.snapshot()
     assert all(saved.status(name).stopped for name in names[1:])
 
@@ -293,7 +296,7 @@ def test_the_install_start_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_
                 assert maintenance.read().phase is ReadyPhase
         finally:
             owner.kill()
-    GoalAttemptStore(path.parent)
+    GoalAttemptStore.at(path.parent)
 
 
 def test_a_command_line_that_dies_before_answering_refuses_with_its_own_error():
@@ -312,16 +315,32 @@ def test_upgrade_refuses_at_start_without_its_own_uv(stack):
 
 
 
+def bus_installed_at(root: Path, commit: str) -> Path:
+    """A bus whose runtime was built from ``commit``, as an install leaves it."""
+    prefix = root.parent / f"runtime-{commit[:12]}"
+    prefix.mkdir(parents=True)
+    record = RuntimeResolution(core_commit=commit, packages={})
+    (prefix / "build.json").write_text(record.model_dump_json())
+    RootRuntimeStore.at(root).replace(RootRuntime(prefix))
+    return root
+
+
 def test_an_install_refuses_a_bus_that_never_held_a_retired_step(tmp_path):
-    repository = Repository(tmp_path)
+    """Laptop, 10-24: its bus was built at f3194f95f while `git pull` had moved the checkout
+    to 456726ace, past the 37 steps that bus never ran. The guard asks the bus, not HEAD."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    repository = Repository(checkout)
     before = repository.commit({"carry_first": step_source()})
     held = repository.commit({"carry_retired": step_source()})
     target = repository.commit({"carry_retired": None})
     deleting = target[:12]
+    assert repository.git("rev-parse", "HEAD") == target
 
-    CarryChain.require_crossed(tmp_path, held, target)
+    CarryChain.require_crossed(checkout, bus_installed_at(tmp_path / "held/bus", held), target)
+    stale = bus_installed_at(tmp_path / "before/bus", before)
     with pytest.raises(UpgradeRefused) as refused:
-        CarryChain.require_crossed(tmp_path, before, target)
+        CarryChain.require_crossed(checkout, stale, target)
     assert str(refused.value) == (
         "install: refused: "
         f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "

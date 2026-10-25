@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import builtins
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping
@@ -15,6 +14,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, Union
 
 from pydantic import (
     Discriminator,
+    GetCoreSchemaHandler,
     InstanceOf,
     PlainSerializer,
     PlainValidator,
@@ -23,16 +23,16 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
-from .coordination_errors import CoordinationError, CoordinationReadUnavailable
+from .coordination_errors import CommandFailure, CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .field_codec import FieldCodec, TimestampText
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .recorded_time import UnrecordedTimeError
-from .repo import GitCommandError
 from .turn_item import NativeTurnId, TurnItem
 from .wire_models import DeclaredWireFamily, WireModel
 
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import BindingThread, CliBridge, DeliveryRow
 
 
-CLI_FAILURES = (ValueError, OSError, CoordinationError, GitCommandError)
+CLI_FAILURES = (ValueError, OSError, CommandFailure)
 
 
 async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
@@ -119,6 +119,18 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
         return Annotated[Union[*variants], Discriminator(cls.tag_of)]
 
 
+class DeclaredMembers:
+    """Decodes the annotated family as the union of its declared members."""
+
+    def __get_pydantic_core_schema__(
+        self, family: type[TaggedWire], handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        return handler(family.declared_union())
+
+
+type Declared[Family: TaggedWire] = Annotated[Family, DeclaredMembers()]
+
+
 class OpenWire(TaggedWire, ABC, declared_name=None):
     """A family whose source adds kinds freely: a tag it does not declare decodes as its
     member tagged 'foreign', which carries no conversation."""
@@ -163,9 +175,8 @@ class UnconfirmedOutcome(Outcome):
 class DeliveredOutcome(FilteredOutcome):
     @classmethod
     async def record(cls, bridge: CliBridge, delivery: DeliveryRow) -> None:
-        await asyncio.to_thread(
-            bridge.comms.bus.mark_delivered, bridge.binding.bus, (delivery.message.reference,),
-        )
+        await bridge.comms.bus.when_open(partial(
+            bridge.comms.bus.mark_delivered, bridge.binding.bus, (delivery.message.reference,)))
         with bridge.db:
             delivery.upsert(bridge.db)
 
