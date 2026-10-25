@@ -361,7 +361,7 @@ def test_real_message_record_round_trip(bus, declaration, role):
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
-def test_record_family_rebuild_and_public_history_install_preserve_scope(bus, declaration, tmp_path):
+def test_record_family_rebuild_and_history_install_preserve_scope(bus, declaration, tmp_path):
     original = bus.append(lambda seq, db: PublicRecord.from_message(
         Message("author", "worker", "original", InfoKind, seq=seq),
     ))
@@ -384,13 +384,14 @@ def test_record_family_rebuild_and_public_history_install_preserve_scope(bus, de
     copied = Bus.install(
         Bus.path_in(tmp_path / "selected-history"), history=scope.history(bus, limit=2),
     )
-    public = copied.lookup(record.seq)
-    assert type(public) is PublicRecord
-    assert public.publication_snapshot == record.history_snapshot.publication_snapshot
-    assert copied.lookup_message(record.message_id) == public
-    assert copied.received("b" * 32) == ()
-    assert copied.page(record.seq + 1, 10) == (public, copied.lookup(original.seq))
-    assert copied.replies((original.reference,)) == (public,)
+    kept = copied.lookup(record.seq)
+    assert kept == record.history_record
+    assert kept.publication_snapshot == record.history_snapshot.publication_snapshot
+    assert copied.lookup_message(record.message_id) == kept
+    # A delivered record keeps its frozen audience, so its recipient still received it.
+    assert copied.received("b" * 32) == record.deliveries()
+    assert copied.page(record.seq + 1, 10) == (kept, copied.lookup(original.seq))
+    assert copied.replies((original.reference,)) == (kept,)
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(Claimed))
