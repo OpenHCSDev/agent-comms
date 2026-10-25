@@ -830,19 +830,6 @@ class SQLiteStorage(RootFile, SqliteStore):
 
     @classmethod
     @contextmanager
-    def relations_suspended(cls, connection: sqlite3.Connection) -> Iterator[None]:
-        """Suspend relations around a transaction owner, restoring the caller's setting."""
-        if connection.in_transaction:
-            raise sqlite3.ProgrammingError("Relations can only be suspended between transactions")
-        enabled, = connection.execute("PRAGMA foreign_keys").fetchone()
-        connection.execute("PRAGMA foreign_keys = OFF")
-        try:
-            yield
-        finally:
-            connection.execute(f"PRAGMA foreign_keys = {enabled}")
-
-    @classmethod
-    @contextmanager
     def write_transaction(cls, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         """The one write transaction: committed when the block returns, rolled back when it raises."""
         cls._begin_transaction(connection)
