@@ -66,6 +66,9 @@ class Ping(DeclaredFamily, affix="Ping"):
                 and not any(subject.disposed(comms, actors, self.since.recorded_at("A line"))
                             for subject in self.subjects))
 
+    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
+        return any(subject.acted_on(acted) for subject in self.subjects)
+
     def render(self, now: float) -> str:
         minutes = int((now - self.since.recorded_at("A heartbeat line")) // 60)
         return f"{self.text} ({minutes} min)"

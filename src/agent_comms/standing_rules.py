@@ -24,7 +24,9 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import PullRequestHead
-from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, UnitSubject
+from agent_comms.heartbeat_subjects import (
+    AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
+)
 from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference, SourceGrowth
@@ -457,6 +459,9 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     def degradation_signs(self) -> tuple[Sign, ...]:
         return (Sign(AnswersOwedDegradation, (self.cited,), self.line()),)
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (AnswerSubject(self.message.message_id),)
 
     @property
     def cited(self) -> str:

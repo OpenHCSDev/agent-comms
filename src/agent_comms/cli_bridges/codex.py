@@ -16,6 +16,7 @@ from typing import AsyncIterator, Self
 import aiohttp
 from pydantic import JsonValue
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
@@ -29,6 +30,7 @@ from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, InitializeResponse, Initialized,
     Request, RPC_RESPONSE, RpcReply, RpcNotification,
     ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
+    ReadRateLimits, RateLimits, RateLimitsResponse,
 )
 
 
@@ -106,6 +108,14 @@ class CodexAppServer(CodexHistory, OnlineHistory):
     @classmethod
     def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:
         return cls(thread, address.otherwise(str(cls.SOCKET)))
+
+    @classmethod
+    async def rate_limits(cls) -> RateLimits:
+        """Read account-wide usage from the running server, never from session logs."""
+        async with CodexConnection.open(str(cls.SOCKET)) as codex:
+            return FieldCodec.decode(
+                RateLimitsResponse, await codex.call(ReadRateLimits()),
+            ).rate_limits
 
     async def history(self) -> AsyncIterator[RuntimeUpdate]:
         async with CodexConnection.open(self.socket) as codex:

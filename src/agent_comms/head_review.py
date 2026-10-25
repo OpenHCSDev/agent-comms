@@ -63,6 +63,11 @@ class PullRequestHead:
     def holds(self, commit: str) -> bool:
         return self.head.startswith(commit)
 
+    def same_head(self, other: PullRequestHead) -> bool:
+        """One pull request head, whichever side spells it abbreviated."""
+        return (self.repo == other.repo and self.pr == other.pr
+                and (self.holds(other.head) or other.holds(self.head)))
+
     def current(self) -> str:
         """The PR's full head commit, refused unless the reviewed head is still it."""
         current = self.at(self.repo, self.pr)
