@@ -26,7 +26,13 @@ class GitOptions:
     arguments: list[str]
 
 
-class GitLaunch:
+class Executable:
+    """A child-launch capability declares its executable name."""
+
+    program: ClassVar[str]
+
+
+class GitLaunch(Executable):
     """One Git child boundary, also usable by the isolated stdlib bootstrap."""
 
     program: ClassVar[str] = "git"

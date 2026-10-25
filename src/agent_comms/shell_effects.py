@@ -4,16 +4,16 @@ from __future__ import annotations
 import getopt
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .errors import ToolRefusedError
-from .native_build_inputs import GitLaunch
+from .native_build_inputs import Executable, GitLaunch
 from .repository_name import RepositoryName
 from .shell_commands import ShellCommand
-from .storage_room import AllocationRoomWork, BuildRoomWork, TestGateRoomWork
+from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
@@ -23,33 +23,39 @@ if TYPE_CHECKING:
 class ShellProgram:
     names: ClassVar[frozenset[str]] = frozenset()
     programs: ClassVar[dict[str, type[ShellProgram]]] = {}
-    versioned = False
 
     @classmethod
     def executable_names(cls) -> frozenset[str]:
-        """Names declared here or inherited from an executable capability such as GitLaunch."""
-        return cls.names | frozenset(owner.program for owner in cls.__mro__
-                                     if 'program' in owner.__dict__)
+        """Aliases and executable capabilities declare names; consumers derive them."""
+        return cls.names | frozenset(
+            owner.program for owner in cls.__mro__ if issubclass(owner, Executable)
+        )
 
-    def __init_subclass__(cls):
+    def __init_subclass__(cls, *, names: frozenset[str] = frozenset()) -> None:
         super().__init_subclass__()
-        for name in cls.__dict__.get('names', ()):
+        cls.names = cls.names | names
+        for name in names:
             ShellProgram.programs[name] = cls
         for name in cls.executable_names():
             ShellProgram.programs.setdefault(name, cls)
 
     @classmethod
-    def named(cls, name):
-        kind = cls.programs.get(name if name in cls.programs else re.sub(r'\d+(?:\.\d+)*$', '', name))
-        return (kind if kind and (kind.versioned or name in kind.executable_names()) else cls)()
+    def named(cls, name: str) -> ShellProgram:
+        normalized = name if name in cls.programs else re.sub(r'\d+(?:\.\d+)*$', '', name)
+        kind = cls.programs.get(normalized, cls)
+        return (kind if kind.accepts(name) else cls)()
 
-    def matches(self, args, prefixes):
+    @classmethod
+    def accepts(cls, name: str) -> bool:
+        return name in cls.executable_names()
+
+    @staticmethod
+    def matches(args: Sequence[str], prefixes: Sequence[tuple[str, ...]]) -> bool:
         return any(tuple(args[:len(prefix)]) == prefix for prefix in prefixes)
 
-    def effects(self, args, cwd):
-        return tuple(effect for owner in type(self).__mro__
-                     if (decode := owner.__dict__.get('decode')) is not None
-                     for effect in decode(self, args, cwd))
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
+        """Unknown programs have no declared effects; capabilities compose through super()."""
+        return ()
 
 
 class StorageDenied(SelectedToolDenied, ToolRefusedError):  # noqa: N818 - existing nominal refusal
@@ -58,7 +64,7 @@ class StorageDenied(SelectedToolDenied, ToolRefusedError):  # noqa: N818 - exist
 
 class StorageEffect(ABC):
     """Preflight one actual operation and declare its measured work, if any."""
-    work: ClassVar[tuple] = ()
+    work: ClassVar[tuple[type[RoomWork], ...]] = ()
 
     def require_order_check(self) -> None:
         """Ordinary storage effects remain valid in an order check."""
@@ -72,7 +78,7 @@ class StorageEffect(ABC):
 class WriteStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, projection: StorageProjection):
+    def check(self, projection: StorageProjection) -> None:
         projection.rule.require_path(projection.thread, self.path)
 
 
@@ -80,25 +86,25 @@ class WriteStorageEffect(StorageEffect):
 class ForbiddenStorageEffect(StorageEffect):
     reason: str
 
-    def check(self, projection: StorageProjection):
+    def check(self, projection: StorageProjection) -> None:
         projection.rule.deny(self.reason)
 
 
 @dataclass(frozen=True)
 class AllocateStorageEffect(StorageEffect):
-    work = (AllocationRoomWork,)
+    work: ClassVar[tuple[type[RoomWork], ...]] = (AllocationRoomWork,)
 
-    def check(self, projection: StorageProjection):
+    def check(self, projection: StorageProjection) -> None:
         projection.rule.require_floor()
         projection.storage.require_quota()
 
 
 class BuildStorageEffect(AllocateStorageEffect):
-    work = (BuildRoomWork,)
+    work: ClassVar[tuple[type[RoomWork], ...]] = (BuildRoomWork,)
 
 
 class TestGateStorageEffect(AllocateStorageEffect):
-    work = (TestGateRoomWork,)
+    work: ClassVar[tuple[type[RoomWork], ...]] = (TestGateRoomWork,)
 
     def require_order_check(self) -> None:
         raise ValueError(
@@ -114,7 +120,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     path: Path
     repository: RepositoryName
 
-    def check(self, projection: StorageProjection):
+    def check(self, projection: StorageProjection) -> None:
         rule, thread = projection.rule, projection.thread
         rule.require_destination(thread, self.path)
         if not rule.owns_checkout(thread, self.path, self.repository):
@@ -128,13 +134,13 @@ class CheckoutStorageEffect(AllocateStorageEffect):
 class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, projection: StorageProjection):
+    def check(self, projection: StorageProjection) -> None:
         if self.path == projection.thread.project_path:
             projection.rule.deny(f'{self.path} is where {projection.thread.name} runs; choose another existing project first: agent-comms set-project {projection.thread.name} <existing-project>')
         projection.storage = projection.storage.removing(self.path)
 
 
-def physical_path(value, cwd):
+def physical_path(value: str, cwd: Path) -> Path:
     if '$' in value or '`' in value:
         raise StorageDenied(f'StorageRule: use a literal storage destination, not {value!r}')
     path = Path(value).expanduser()
@@ -170,60 +176,77 @@ class GitInvocation:
 
 
 class ForbidsCommands(ShellProgram):
-    forbidden = ((),)
-    reason = 'virtualenv creation and uv sync are forbidden; use the shared environment'
+    forbidden: ClassVar[tuple[tuple[str, ...], ...]] = ((),)
+    reason: ClassVar[str] = 'virtualenv creation and uv sync are forbidden; use the shared environment'
 
-    def decode(self, args, cwd):
-        return (ForbiddenStorageEffect(self.reason),) if self.matches(args, self.forbidden) else ()
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
+        selected = (ForbiddenStorageEffect(self.reason),) if self.matches(args, self.forbidden) else ()
+        return super().effects(args, cwd) + selected
 
 
 class AllocatesOnCommands(ShellProgram):
-    prefixes = ((),)
+    prefixes: ClassVar[tuple[tuple[str, ...], ...]] = ((),)
 
-    def decode(self, args, cwd):
-        if not {'--help', '-h'}.isdisjoint(args):
-            return ()  # asking a tool for its help allocates nothing
-        return (AllocateStorageEffect(),) if self.matches(args, self.prefixes) else ()
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
+        selected = (AllocateStorageEffect(),) if (
+            {'--help', '-h'}.isdisjoint(args) and self.matches(args, self.prefixes)
+        ) else ()
+        return super().effects(args, cwd) + selected
 
 
 class MeasuredCommands(ShellProgram):
-    """Compose command declarations, including sibling capabilities in the MRO."""
+    """A capability's own command/effect declarations, not a second MRO registry."""
 
-    def decode(self, args, cwd):
+    commands: ClassVar[tuple[tuple[str, ...], ...]] = ()
+    effect: ClassVar[type[AllocateStorageEffect]] = AllocateStorageEffect
+
+    @classmethod
+    def measured(cls, args: list[str], names: frozenset[str]) -> tuple[StorageEffect, ...]:
         if not {'--help', '-h'}.isdisjoint(args):
             return ()
-        return tuple(owner.effect() for owner in type(self).__mro__
-                     if 'commands' in owner.__dict__ and any(
-                         self.matches((name, *args), owner.commands) for name in self.executable_names()))
+        return (cls.effect(),) if any(
+            cls.matches((name, *args), cls.commands) for name in names
+        ) else ()
 
 
 class BuildsOnCommands(MeasuredCommands):
-    effect = BuildStorageEffect
-    commands = (('build_runtime.py',), ('python', 'build_runtime.py'),
+    effect: ClassVar[type[AllocateStorageEffect]] = BuildStorageEffect
+    commands: ClassVar[tuple[tuple[str, ...], ...]] = (('build_runtime.py',), ('python', 'build_runtime.py'),
                 ('python', '-m', 'hatchling', 'build'), ('python', '-m', 'build'))
+
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
+        return super().effects(args, cwd) + BuildsOnCommands.measured(args, self.executable_names())
 
 
 class TestsOnCommands(MeasuredCommands):
-    effect = TestGateStorageEffect
-    commands = (('pytest',), ('py.test',), ('python', '-m', 'pytest'),
+    effect: ClassVar[type[AllocateStorageEffect]] = TestGateStorageEffect
+    commands: ClassVar[tuple[tuple[str, ...], ...]] = (('pytest',), ('py.test',), ('python', '-m', 'pytest'),
                 ('python', 'test_gate.py'))
+
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
+        return super().effects(args, cwd) + TestsOnCommands.measured(args, self.executable_names())
 
 
 class WritesTargets(ShellProgram):
-    targets = slice(None)
-    minimum = 1
+    targets: ClassVar[slice] = slice(None)
+    minimum: ClassVar[int] = 1
 
-    def decode(self, args, cwd):
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         paths = [arg for arg in args if not arg.startswith('-')]
-        return tuple(WriteStorageEffect(physical_path(p, cwd)) for p in paths[self.targets]) if len(paths) >= self.minimum else ()
+        selected = tuple(
+            WriteStorageEffect(physical_path(path, cwd)) for path in paths[self.targets]
+        ) if len(paths) >= self.minimum else ()
+        return super().effects(args, cwd) + selected
 
 
 class WritesWorkingTree(ShellProgram):
-    verbs = (('switch',), ('checkout',), ('commit',),
-             ('merge',), ('reset',), ('stash',))
+    verbs: ClassVar[tuple[tuple[str, ...], ...]] = (
+        ('switch',), ('checkout',), ('commit',), ('merge',), ('reset',), ('stash',)
+    )
 
-    def decode(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
-        return (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
+        selected = (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
+        return super().effects(args, cwd) + selected
 
 
 class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
@@ -246,69 +269,84 @@ class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
                     cwd = path
         return GitInvocation(selected.arguments, cwd)
 
-    def effects(self, args, cwd):
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         invocation = self.invocation(args, cwd)
         return super().effects(invocation.args, invocation.cwd)
 
 
-class PythonProgram(ForbidsCommands, BuildsOnCommands, TestsOnCommands, AllocatesOnCommands):
-    names = frozenset({'python'})
-    versioned = True
+class VersionedProgram(ShellProgram):
+    """An executable capability whose external command also accepts version suffixes."""
+
+    @classmethod
+    def accepts(cls, name: str) -> bool:
+        return super().accepts(re.sub(r'\d+(?:\.\d+)*$', '', name))
+
+
+class PythonProgram(VersionedProgram, ForbidsCommands, BuildsOnCommands, TestsOnCommands,
+                    AllocatesOnCommands, names=frozenset({'python'})):
     forbidden = (('-m', 'venv'),)
     prefixes = (('-m', 'pip', 'install'),)
 
-    def effects(self, args, cwd):
-        while args and args[0] in ('-I', '-B', '-u', '-E', '-s'):
-            args = args[1:]
-        args = [Path(args[0]).name, *args[1:]] if args and not args[0].startswith('-') else args
-        return super().effects(args, cwd)
+    # The interpreter owns these flags. -m/-c begin its program, whose flags are not ours.
+    interpreter_options: ClassVar[str] = 'bBdEhiIOPqRsuUvVW:xX:'
+    long_options: ClassVar[tuple[str, ...]] = (
+        'help', 'help-env', 'help-xoptions', 'help-all', 'version', 'check-hash-based-pycs=',
+    )
+    execution_options: ClassVar[frozenset[str]] = frozenset({'-m', '-c'})
+
+    def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
+        end = next((index for index, word in enumerate(args) if word in self.execution_options), len(args))
+        try:
+            _, arguments = getopt.getopt(args[:end], self.interpreter_options, self.long_options)
+        except getopt.GetoptError as error:
+            raise SelectedToolDenied(f'StorageRule: incomplete or unknown Python option: {error}') from error
+        arguments += args[end:]
+        if arguments and not arguments[0].startswith('-'):
+            arguments[0] = Path(arguments[0]).name
+        return super().effects(arguments, cwd)
 
 
-class UvProgram(ForbidsCommands, AllocatesOnCommands):
-    names = frozenset({'uv'})
+class UvProgram(ForbidsCommands, AllocatesOnCommands, names=frozenset({'uv'})):
     forbidden = (('venv',), ('sync',))
     prefixes = (('pip', 'install'),)
 
 
-class MakeEnvironmentProgram(ForbidsCommands):
-    names = frozenset({'virtualenv'})
+class MakeEnvironmentProgram(ForbidsCommands, names=frozenset({'virtualenv'})):
+    pass
 
 
-class DiskProgram(AllocatesOnCommands):
-    names = frozenset({'ffmpeg', 'recordmydesktop'})
+class DiskProgram(AllocatesOnCommands, names=frozenset({'ffmpeg', 'recordmydesktop'})):
+    pass
 
 
-class BuildProgram(BuildsOnCommands):
-    names = frozenset({'build_runtime.py'})
+class BuildProgram(BuildsOnCommands, names=frozenset({'build_runtime.py'})):
+    pass
 
 
-class TestGateProgram(TestsOnCommands):
-    names = frozenset({'pytest', 'py.test'})
+class TestGateProgram(TestsOnCommands, names=frozenset({'pytest', 'py.test'})):
+    pass
 
 
-class PackageProgram(AllocatesOnCommands):
-    names = frozenset({'pip', 'pip3', 'npm', 'pnpm', 'yarn'})
+class PackageProgram(AllocatesOnCommands, names=frozenset({'pip', 'pip3', 'npm', 'pnpm', 'yarn'})):
     prefixes = (('install',), ('ci',), ('add',))
 
 
-class ProfileProgram(AllocatesOnCommands):
-    names = frozenset({'py-spy'})
+class ProfileProgram(AllocatesOnCommands, names=frozenset({'py-spy'})):
     prefixes = (('record',),)
 
 
-class FileWriterProgram(WritesTargets):
-    names = frozenset({'mkdir', 'touch', 'tee'})
+class FileWriterProgram(WritesTargets, names=frozenset({'mkdir', 'touch', 'tee'})):
+    pass
 
 
-class CopyProgram(WritesTargets):
-    names = frozenset({'cp', 'mv', 'rsync', 'install', 'ln'})
+class CopyProgram(WritesTargets, names=frozenset({'cp', 'mv', 'rsync', 'install', 'ln'})):
     targets = slice(-1, None)
     minimum = 2
 
 
-def shell_storage_effects(command, cwd):
+def shell_storage_effects(command: str, cwd: Path) -> tuple[StorageEffect, ...]:
     """Decode known shell operations, not arbitrary interpreter programs."""
-    effects = []
+    effects: list[StorageEffect] = []
     for invocation in ShellInvocation.parse(command, cwd):
         args = invocation.args
         for index, word in enumerate(args[:-1]):
