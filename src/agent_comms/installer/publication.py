@@ -15,7 +15,7 @@ import agent_comms
 from agent_comms.connector import LOOPBACK, PORT
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.field_codec import PathText
-from agent_comms.harness_install import ConnectorClientHarness, InstalledHarness, replace_link
+from agent_comms.harness_install import ConnectorClientHarness, Harness, replace_link
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage,
     RuntimePackage,
@@ -42,7 +42,7 @@ class RuntimePublication:
             for package in packages
             for entry in distribution(package).entry_points.select(group='console_scripts')
         }
-        links |= InstalledHarness.published_links(Path.home())
+        links |= Harness.published_links(Path.home())
         for link, target in links.items():
             target.stat()
             if link.exists() and not link.is_symlink():
@@ -63,7 +63,7 @@ class RuntimePublication:
         for link, target in self.links.items():
             replace_link(link, self.published_target(current, target))
         replace_link(current, selected)
-        for harness in InstalledHarness.present(Path.home()):
+        for harness in Harness.present(Path.home()):
             harness.configure()
         store = ConnectorStore.owned()
         for client in ConnectorClientHarness.present(Path.home()):
