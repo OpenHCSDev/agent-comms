@@ -363,3 +363,20 @@ def test_say_without_answers_answers_the_target_units_open_asks(held_commander, 
     history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
     assert [message.answers for message in history.messages
             if message.sender == ctx.commander][:2] == [(unnamed.reference,), (named.reference,)]
+
+
+def test_an_answer_to_one_owed_ask_is_admitted_while_another_still_waits(held_commander, capsys):
+    from test_holder_standing_rules import publish
+
+    ctx = held_commander
+    reply = ctx.root / "answer.txt"
+    reply.write_text("Take the owner fix at the declaration and push it.")
+    answered = publish(ctx.comms, "worker", ctx.commander, time.time() - 960)
+    waiting = publish(ctx.comms, "worker", ctx.commander, time.time() - 950)
+    capsys.readouterr()
+    main(["say", "worker", str(reply), "--answers", answered.message_id], ctx)
+    out = capsys.readouterr().out
+    assert f"WARNING: UNANSWERED worker: message {waiting.seq}:{waiting.message_id}" in out
+    history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), ctx.comms)
+    assert [message.answers for message in history.messages
+            if message.sender == ctx.commander][:1] == [(answered.reference,)]

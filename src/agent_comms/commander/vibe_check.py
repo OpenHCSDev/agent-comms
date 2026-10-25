@@ -12,7 +12,7 @@ import time
 from collections.abc import Mapping, Sequence
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.bus import BusReader
 from agent_comms.commander.package import CommanderPackage
@@ -46,6 +46,9 @@ from agent_comms.todos import OwnerRequest, ProgressRead, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.turn_digests import OrderEditCountRead
+
+if TYPE_CHECKING:
+    from agent_comms.commander.order import CommanderVerb
 
 
 class EscalationSender(ServiceSender):
@@ -115,6 +118,11 @@ class Escalation:
 
     def degradation_signs(self) -> tuple[Sign, ...]:
         return ()
+
+    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+               named: tuple[Message, ...]) -> bool:
+        """An escalation refuses every answering verb until it is answered itself."""
+        return True
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
