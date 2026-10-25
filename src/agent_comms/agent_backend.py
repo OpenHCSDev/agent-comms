@@ -406,6 +406,12 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     async def context_for_input(self, thread, context):
         return context
 
+    async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
+        """Backends without RunsTurns have no turn work to interrupt."""
+
+    async def close_idle(self) -> None:
+        """A backend without a retained process has nothing to retire."""
+
     def __init_subclass__(cls, **options: str | None) -> None:
         if AgentBackend._sealed:
             raise BackendDeclarationError(
