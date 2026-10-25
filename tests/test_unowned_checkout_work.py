@@ -212,6 +212,9 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
         assert c.goals.todos.get('P2').holder is None
         beat()
         c.registry.set_work_state('idle', ReadyThreadWorkState())
+        # Copies retire source processes; this test process explicitly owns the copied unit.
+        c.registry.register(replace(c.registry.require('idle'),
+                                    process_identity=ProcessIdentity.capture(os.getpid())))
         available = UnownedWheelSpin.violations(c, 'lead')
         assert len(available) == 1
         assert isinstance(available[0], ReassignedWheelSpin)

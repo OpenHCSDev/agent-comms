@@ -482,6 +482,9 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
         copied = wire(root)
         with LaunchRoot.from_path(root).selected():
+            # Copied PIDs are deliberately retired; this test explicitly runs the copied commander.
+            copied.registry.register(replace(copied.registry.require(ctx.commander),
+                                             process_identity=ProcessIdentity.capture(os.getpid())))
             with copied.bus.bus.writer_connection():
                 pass  # Create the writer lock through its owner before the child probes it.
             lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))

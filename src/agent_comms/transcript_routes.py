@@ -19,7 +19,7 @@ from .private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting
 from .text_digest import TextDigest
 from .transcript_events import ContextTranscript, TranscriptEvent
-from .typed_table import Column, DurableStore, StoreRows, WithoutRowid
+from .typed_table import Column, DurableStore, StoreRows, TextStorage, WithoutRowid
 
 
 if TYPE_CHECKING:
@@ -91,9 +91,6 @@ class SentTextDigest(TextDigest, SingleFieldValue):
 class NoSentTextDigest(NullMember):
     """No exact sent text was bound; retain the surrounding route."""
 
-    def matches(self, text: str) -> bool:
-        return True
-
     def project_message(
         self, message: UserMessage, display: InputDisplay,
         context: TranscriptProjection, timestamp: float,
@@ -147,7 +144,9 @@ class InputDisplay(TranscriptRoutesRows, WithoutRowid, InputPresentation):
     native_id: Annotated[InputId, Column(primary_key=True)]
     text: DisplayText | NoDisplayText
     routing: Routing = NoTurnRouting()
-    sent_text_digest: SentTextDigest | NoSentTextDigest = NoSentTextDigest()
+    sent_text_digest: Annotated[
+        SentTextDigest | NoSentTextDigest, Column(storage=TextStorage),
+    ] = NoSentTextDigest()
     checks = ("routing IS NULL OR sent_text_digest IS NOT NULL",)
 
     def project_message(

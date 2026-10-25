@@ -331,7 +331,7 @@ def test_two_commanders_allocate_distinct_global_problem_ids(fork_bus, tmp_path)
 
     def assign(pair):
         name, unit = pair
-        body = document(tmp_path / f"{name}.json", replace(order, id=name))
+        body = document(tmp_path / f"{name}.json", replace(order, id=OrderId.mint()))
         return process_command(
             comms, "order", "problem", body, "--to", unit, "--where", "owner.py:2", "--fork", name
         )
@@ -354,7 +354,7 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     comms, source, order = fork_bus
 
     def assign(name):
-        body = document(tmp_path / f"{name}.json", replace(order, id=name))
+        body = document(tmp_path / f"{name}.json", replace(order, id=OrderId.mint()))
         return process_command(
             comms,
             "order",

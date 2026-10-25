@@ -20,7 +20,7 @@ from agent_comms.attempt_resolution import (
 )
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.field_codec import GoalId, MessageId, OrderId, RetryDecisionId, TurnId
+from agent_comms.field_codec import FieldCodec, GoalId, MessageId, OrderId, RetryDecisionId, TurnId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
@@ -49,7 +49,7 @@ class StoredResolution(TypedRow):
     goal_id: GoalId
     generation: int
 
-    def carried(self, bus: Connection, orders: set[str]) -> AttemptResolution:
+    def carried(self, bus: Connection, orders: set[OrderId]) -> AttemptResolution:
         if self.resolution in RETIRED_TEXT:
             return RETIRED_TEXT[self.resolution]
         legacy = StoredDecision(self.goal_id, self.resolution, self.generation)
@@ -62,21 +62,20 @@ class StoredDecision(TypedRow):
     legacy: str
     generation: int
 
-    def carried(self, bus: Connection, orders: set[str]) -> WorkDecision:
+    def carried(self, bus: Connection, orders: set[OrderId]) -> WorkDecision:
         if re.fullmatch("[0-9a-f]{32}", self.legacy):
             return RetryDecision(RetryDecisionId(self.legacy))
         if re.fullmatch("verified-turn:[0-9a-f]{32}", self.legacy):
             return VerifiedTurnDecision(TurnId(self.legacy.removeprefix("verified-turn:")))
-        if not re.fullmatch("[0-9a-f]{12}", self.legacy):
-            raise ValueError(f"Unknown legacy decision shape: {self}")
+        order_id = FieldCodec.decode(OrderId, self.legacy)
         answer = MessageIdentitySource.exists(bus, message_id=MessageId(self.legacy))
-        order = self.legacy in orders
+        order = order_id in orders
         if answer and order:
             raise ValueError(f"Both an order and a message own legacy decision: {self}")
         if answer:
             return ComplianceDecision(MessageId(self.legacy))
         if order:
-            return OrderDecision(OrderId(self.legacy))
+            return OrderDecision(order_id)
         if self == KNOWN_ORPHAN:
             raise OrphanedDecisionError(self)
         raise ValueError(f"No message or order owns legacy decision: {self}")
