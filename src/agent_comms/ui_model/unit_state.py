@@ -187,7 +187,6 @@ class UnitState(UndatedStandingRule, declared_name=None):
     source: UnitObservation = field(compare=False, repr=False)
     verb: ClassVar[str]
     action: ClassVar[str]
-    commander_disposes: ClassVar[bool] = True
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:

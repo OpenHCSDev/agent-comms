@@ -74,9 +74,9 @@ class Ping(DeclaredFamily, affix="Ping"):
         return any(subject.acted_on(acted) for subject in self.subjects)
 
     @property
+    @abstractmethod
     def commander_disposes(self) -> bool:
         """Whether a commander verb disposes of this line; only such a line locks the verbs."""
-        return True
 
     def locks(self, cut: float) -> bool:
         """Undisposed past ``cut`` and the commander's to dispose of."""
@@ -98,6 +98,7 @@ class Ping(DeclaredFamily, affix="Ping"):
 @dataclass(frozen=True)
 class RulePing(Ping):
     observation: TextDigest
+    commander_disposes: bool = field(default=True, compare=False, kw_only=True)
 
     @property
     def key(self) -> TextDigest:
@@ -105,7 +106,8 @@ class RulePing(Ping):
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
-        return cls(rule.observation_key(), text=rule.line(), subjects=rule.subjects())
+        return cls(rule.observation_key(), text=rule.line(), subjects=rule.subjects(),
+                   commander_disposes=rule.commander_disposes)
 
 
 @dataclass(frozen=True)

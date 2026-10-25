@@ -120,6 +120,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def broke_after(self, after: float) -> bool: ...
 
     clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
+    commander_disposes: ClassVar[bool] = True
 
     @classmethod
     def cleared_by(cls, verb: type[CommanderVerb]) -> None:
@@ -214,6 +215,12 @@ class OrderRefusingStandingRule(StandingRule, declared_name=None):
         owners = dict.fromkeys(member.scan_owner() for member in cls.members_with(cls))
         return tuple(rule.line() for owner in owners
                      for rule in owner.scan_reviews(goals, commander, pulls))
+
+
+class CoreActsStandingRule(StandingRule, declared_name=None):
+    """Core's own enforce acts on this line, so no commander verb disposes of it and it locks none."""
+
+    commander_disposes = False
 
 
 class IndependentStandingRule(StandingRule, declared_name=None):

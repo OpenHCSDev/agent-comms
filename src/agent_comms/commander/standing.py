@@ -513,7 +513,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True, eq=False)
-class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
+class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin, declared_name=None):
     dispatch: WorkDispatch
 
     @property
@@ -531,7 +531,7 @@ class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
 
 
 @dataclass(frozen=True, eq=False)
-class RetainedHolderWheelSpin(UnownedWheelSpin, declared_name=None):
+class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin, declared_name=None):
     previous: Assignment
 
     def comparison_values(self) -> tuple[object, ...]:
