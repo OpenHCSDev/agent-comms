@@ -65,12 +65,16 @@ from .read_basis import (
     NamedViewer,
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
+from .notification_assignment import NotificationAssignment
+from .notification_evidence import NotificationAssignmentRead, NotificationReadMark, NotificationWindow
+from .notification_read import CapturedNotificationWindow
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
     BusSourceView,
     CommanderFramesView,
     ExternalTranscriptsView,
+    NotificationEvidenceView,
     NotificationsView,
     RegistrationsView,
     RevisionView,
@@ -103,7 +107,6 @@ if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .messages import Message
-    from .notification_assignment import NotificationAssignmentRead
     from .pi_counts import PiCount
     from .read_ledger import ReadLedger
     from .registration import Registration
@@ -156,7 +159,6 @@ class OwnerOutcomes(OutcomeViewer):
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
 
-    window_limit: ClassVar[int] = 120
     recipient_identity: FrozenRecipient
     sender_lookup: ThreadLookup
     state: DeliveryProgress
@@ -216,41 +218,39 @@ class MessageNotification:
     def references(
         cls, root: Path, registry: Registration, log: Bus,
         references: Sequence[MessageReference],
-    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+    ) -> NotificationWindow:
         """Borrow mounted references in the original bounded delivery windows."""
-        from .notification_assignment import NotificationAssignment
+        def project(sources: Sequence[Delivered]) -> NotificationWindow:
+            read = NotificationAssignment.read(root, sources)
+            return cls.delivery_window(root, registry, sources, read, viewer=AllOutcomes())
 
-        return cls.read_references(
-            log,
-            references,
-            lambda sources: cls.delivery_window(
-                root, registry, sources, NotificationAssignment.read(root, sources),
-                viewer=AllOutcomes(),
-            ),
-        )
+        return cls.read_references(log, references, project)
 
     @classmethod
     def read_references(
         cls, log: Bus, references: Sequence[MessageReference],
-        project: Callable[[Sequence[Delivered]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
-    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+        project: Callable[[Sequence[Delivered]], NotificationWindow],
+    ) -> NotificationWindow:
         """Share bounded original delivery acquisition across live/recorded cuts."""
         result = {}
-        for start in range(0, len(references), cls.window_limit):
-            sources = log.deliveries_for_references(
-                references[start : start + cls.window_limit]
-            )
-            result.update(project(sources))
-        return result
+        reads = []
+        read_marks = []
+        for references_chunk in NotificationWindow.chunks(references):
+            sources = log.deliveries_for_references(references_chunk)
+            window = project(sources)
+            result.update(window.outcomes)
+            reads.extend(window.reads)
+            read_marks.extend(window.read_marks)
+        return CapturedNotificationWindow(result, tuple(reads), tuple(read_marks))
 
     @classmethod
     def delivery_window(
         cls, root: Path, registry: Registration, sources: Sequence[Delivered],
         assignment_read: NotificationAssignmentRead, *, viewer: OutcomeViewer,
-    ):
+    ) -> NotificationWindow:
         """Project the original frozen audience even before handling is recorded."""
         if not sources:
-            return {}
+            return CapturedNotificationWindow({}, (assignment_read,))
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
             ((source, recipient) for source in sources for recipient in source.recipients
@@ -264,16 +264,15 @@ class MessageNotification:
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
-                                 sources: Sequence[Delivered]):
-        from .notification_assignment import NotificationAssignment
-
+                                 sources: Sequence[Delivered]) -> NotificationWindow:
         observations = {
             recipient.recipient_lookup: RecordedRecipientActivity()
             for source in sources for recipient in source.recipients
         }
+        read = NotificationAssignment.read(root, sources)
         return cls.project_delivery_window(
             root, namespace, sources, observations,
-            assignment_read=NotificationAssignment.read(root, sources), viewer=AllOutcomes(),
+            assignment_read=read, viewer=AllOutcomes(),
         )
 
     @classmethod
@@ -281,17 +280,16 @@ class MessageNotification:
         cls, root: Path, snapshot: RegistryProvenance,
         sources: Sequence[Delivered], observations: Mapping[ThreadLookup, RecipientActivity],
         *, assignment_read: NotificationAssignmentRead, viewer: OutcomeViewer,
-    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+    ) -> NotificationWindow:
         """Original assignment and read authorities own both display projections."""
-        from .notification_assignment import NotificationAssignment
-
-        if len(sources) > cls.window_limit:
+        if len(sources) > NotificationWindow.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         keys = {(source.message.seq, source.message.message_id) for source in sources}
         result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
         if not keys:
-            return {}
-        rows = assignment_read.resolve(root)
+            return CapturedNotificationWindow({}, (assignment_read,))
+        rows = NotificationAssignment.resolve(root, assignment_read)
+        read_marks = []
         reads = ReadLedger.at(root)
         document = reads.read()
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
@@ -307,6 +305,7 @@ class MessageNotification:
                 displayed_to = observation.displayed_recipient(
                     notification, source, reads, document, snapshot
                 )
+                read_marks.append(NotificationReadMark(source, notification.recipient_identity, displayed_to))
                 result[key].append(
                     replace(
                         notification,
@@ -317,41 +316,37 @@ class MessageNotification:
             direct_read = cls.direct_read_notification(
                 source, snapshot, reads, document, viewer=viewer
             )
-            if direct_read is not None:
-                result[key].append(direct_read)
-        return {key: tuple(rows) for key, rows in result.items()}
+            read_marks.extend(direct_read.read_marks)
+            result[key].extend(direct_read.outcomes.get(key, ()))
+        return CapturedNotificationWindow({key: tuple(rows) for key, rows in result.items()},
+                                  (assignment_read,), tuple(read_marks))
 
     @classmethod
     def direct_read_notification(
         cls, source, snapshot, reads, document, *, viewer: OutcomeViewer
-    ) -> MessageNotification | None:
-        """Project a human DM read even though humans have no wake assignment."""
+    ) -> NotificationWindow:
+        """Keep a direct message with no human read mark so its first display is observable."""
         message = source.message
         if source.recipients or not viewer.sees_direct_read(source):
-            return None
+            return CapturedNotificationWindow({}, ())
         peer = CommandTarget.named(message.target).direct_peer(snapshot)
         for target in () if peer is None else peer.role.human(peer):
             recipient = FrozenRecipient(target.incarnation.lookup, target.name)
             displayed_to = reads.displayed_recipient(
                 source, recipient, snapshot, document=document
             )
-            if not displayed_to:
-                return None
-            return cls(
-                recipient,
-                source.sender_lookup,
-                HumanReadProgress(),
-                displayed_to=displayed_to,
-                changed=True,
-            )
-        return None
+            mark = NotificationReadMark(source, recipient, displayed_to)
+            notification = (cls(recipient, source.sender_lookup, HumanReadProgress(),
+                                displayed_to=displayed_to, changed=True),) if displayed_to else ()
+            return CapturedNotificationWindow({(message.seq, message.message_id): notification}, (), (mark,))
+        return CapturedNotificationWindow({}, ())
 
     @classmethod
     def sent_sources(
         cls, root: Path, registry: Registration, log: Bus, name: str, *, limit: int = 5
     ):
         """Read up to the requested number of messages sent by this thread."""
-        if not 1 <= limit <= cls.window_limit:
+        if not 1 <= limit <= NotificationWindow.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
 
@@ -373,7 +368,7 @@ class MessageNotification:
         return tuple(
             replace(notification, message=source.message)
             for source in sources
-            for notification in projected[source.message.seq, source.message.message_id]
+            for notification in projected.outcomes[source.message.seq, source.message.message_id]
         )
 
 
@@ -864,7 +859,8 @@ class WireRevision(ReadState):
     reads: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: (views.bus.reads.path,), *StatusSourced.views(), NotificationsView
+            lambda views: (views.bus.reads.path,), *StatusSourced.views(),
+            NotificationsView, NotificationEvidenceView,
         ),
     ]
     native_unread: Annotated[
@@ -883,7 +879,8 @@ class WireRevision(ReadState):
     ]
     notifications: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(notification_paths, *StatusSourced.views(), NotificationsView),
+        *revision_source(notification_paths, *StatusSourced.views(), NotificationsView,
+                         NotificationEvidenceView),
     ]
     external_transcripts: Annotated[
         tuple[FileRevision, ...],
@@ -967,24 +964,10 @@ class WireRevision(ReadState):
             status_batch = comms.views.thread_presentations(status_names)
             changed.update(name for name in status_names
                            if not previous.results[name].same_status(status_batch.view(name)))
-        notifications_changed = self.changed_since(NotificationsView(), earlier)
-        remaining = {name: view for name, view in readable.items() if name not in changed
-                     and (notifications_changed
-                          or view.notification_activity_names() & activity_changed)}
-        references = tuple(dict.fromkeys(reference for view in remaining.values()
-                                        for reference in (*view.incoming_references, *view.sent_references)))
-        if references:
-            outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.bus, references)
-            for name, view in remaining.items():
-                viewer = OwnerOutcomes.of(view.read_identity.thread)
-                current = tuple(replace(item, message=None)
-                                for reference in (*view.incoming_references, *view.sent_references)
-                                for item in outcomes[reference.seq, reference.message_id]
-                                if viewer.includes(item.sender_lookup, item.recipient_identity))
-                before = tuple(replace(item, message=None)
-                               for item in (*view.notifications, *view.sent_notifications))
-                if current != before:
-                    changed.add(name)
+        remaining = {name: view for name, view in readable.items() if name not in changed}
+        changed.update(name for name, view in remaining.items()
+                       if view.notification_window.activity_names() & activity_changed
+                       or view.notification_window.changed(comms, self, earlier))
         return frozenset(changed & names)
 
     @property

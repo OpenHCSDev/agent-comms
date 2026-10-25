@@ -14,7 +14,7 @@ def test_notification_read_states_use_the_request_revision_contract():
     recorded = ReadRecordedNotifications("root", (), "archive")
     settled = NotificationsRead(original, {})
     assert not live.changed_since(None, original, settled)
-    assert live.changed_since(None, later, settled)
+    assert not live.changed_since(None, later, settled)
     assert not recorded.changed_since(None, later, settled)
     assert live.changed_since(None, later, UnreadableNotificationsRead(original))
     assert not live.changed_since(None, original, UnreadableNotificationsRead(original))
