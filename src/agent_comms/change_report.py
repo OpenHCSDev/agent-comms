@@ -229,7 +229,6 @@ class FileLine(WireValue, SourceReference):
             spans += (range(node.lineno, node.end_lineno + 1)
                       for node in ast.walk(ast.parse(text, filename=self.file))
                       if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-                      and node.end_lineno is not None
                       and node.lineno <= self.line <= node.end_lineno)
         return Declaration(self, min(spans, key=len))
 
