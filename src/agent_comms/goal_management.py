@@ -30,7 +30,8 @@ from .goal_actions import (
 )
 from .goal_attempts import Generation, GoalAttemptStore
 from .errors import UnresolvedAttemptError
-from .goal_history import AllGoals, GoalHistoryEntry, GoalScope, RecordedGoalHistory
+from .goal_history import GoalHistoryEntry, RecordedGoalHistory
+from .goal_scope import AllGoals, GoalScope, OneGoal
 from .goal_waits import (
     GoalInputReview,
     GoalWait,
@@ -108,7 +109,7 @@ class Goals:
         """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
         holder = verdict.previous
         self.update_goal(holder.owner, SentBackOrderGoalAction(
-            expect=GoalPrecondition(goal_id=holder.generation), problem=problem, operation=verdict))
+            expect=GoalPrecondition(goal_id=OneGoal(holder.generation)), problem=problem, operation=verdict))
         sent_back: Todo = self.todos.get(problem)
         return sent_back
 

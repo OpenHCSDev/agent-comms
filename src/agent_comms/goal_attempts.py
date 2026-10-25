@@ -76,7 +76,7 @@ from .typed_table import (
 )
 
 if TYPE_CHECKING:
-    from .goal_history import GoalScope
+    from .goal_scope import GoalScope
     from .goal_management import Goals
     from .threads import Thread
     from .turn_context import TurnContext
@@ -798,7 +798,10 @@ class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFi
     ) -> tuple[FailedTurnEvidence, ...]:
         with closing(self._connect()) as conn:
             try:
-                return scope.failures(conn, owner_created_at)
+                return tuple(FailedTurnEvidence.select(
+                    conn, order_by=("generation",), owner_created_at=owner_created_at,
+                    **scope.failure_key(),
+                ))
             except (sqlite3.Error, MalformedRecord) as error:
                 raise StorageUncertainError("Cannot read goal attempt failures.") from error
 

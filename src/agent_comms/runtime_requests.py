@@ -35,7 +35,8 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
-from .goal_history import AllGoals, OneGoal, RecordedGoalHistory
+from .goal_history import RecordedGoalHistory
+from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .owner_connection import OwnerConnection

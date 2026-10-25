@@ -60,7 +60,8 @@ from .field_codec import (
     GoalId,
 )
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
-from .goal_history import AllGoals, OneGoal, RecordedGoalHistory
+from .goal_history import RecordedGoalHistory
+from .goal_scope import AllGoals, OneGoal
 from .goal_presentation import GoalExecution, GoalSnapshot
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import GoalDeclaration
@@ -608,7 +609,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
             ActiveGoalAction(
                 expect=GoalPrecondition(
                     expected_goal=current,
-                    goal_id=goal_id,
+                    goal_id=OneGoal(goal_id),
                 ),
                 progress=progress,
             ),
@@ -636,7 +637,7 @@ class CommsEditGoalTool(ThreadToolRequest):
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(
-                expect=GoalPrecondition(expected_goal=current, goal_id=goal_id), text=self.text
+                expect=GoalPrecondition(expected_goal=current, goal_id=OneGoal(goal_id)), text=self.text
             ),
         )
         return GoalUpdated(goal)

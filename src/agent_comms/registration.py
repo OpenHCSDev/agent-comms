@@ -12,7 +12,8 @@ from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import GoalId, TurnId
-from .goal_history import AllGoals, GoalHistoryEntry, GoalHistoryStore, GoalScope
+from .goal_history import GoalHistoryEntry, GoalHistoryStore
+from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange

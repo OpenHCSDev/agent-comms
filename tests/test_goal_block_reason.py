@@ -16,7 +16,7 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_history import OneGoal
+from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goal_presentation import PausedExecution, UnrecordedBlockExecution
 from agent_comms.goals import Goal
@@ -54,7 +54,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
     ):
         with pytest.raises(ValueError):
             comms.goals.update_goal(
-                "worker", BlockedGoalAction(expect=GoalPrecondition(goal_id=original.id), **kwargs)
+                "worker", BlockedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(original.id)), **kwargs)
             )
         assert comms.registry.require("worker").goal == progressed
         assert (tmp_path / "registry.json").read_bytes() == before_registry
@@ -101,7 +101,7 @@ def test_owner_resume_refusal_preserves_pause_and_prior_progress(tmp_path):
         comms.goals.update_goal(
             "worker",
             ActiveGoalAction(
-                expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=original.id)
+                expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=OneGoal(original.id))
             ),
             actor=OwnerInvocable,
         )

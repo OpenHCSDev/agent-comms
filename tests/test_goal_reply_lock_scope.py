@@ -34,6 +34,7 @@ from agent_comms.tools import CommsGoalTool
 from agent_comms.reported_turn import NoReportedTurn
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 class RegistryProbeBus(Bus):
@@ -106,7 +107,7 @@ def probed(reviewing):
 
 def standby(comms, reviewed_inputs=()):
     return StandbyGoalAction(
-        expect=GoalPrecondition(goal_id=comms.registry.require("owner").goal.require().id),
+        expect=GoalPrecondition(goal_id=OneGoal(comms.registry.require("owner").goal.require().id)),
         wait_for=("child",), reviewed_inputs=reviewed_inputs,
     )
 

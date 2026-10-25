@@ -29,7 +29,7 @@ from agent_comms.goal_presentation import (
     RunnableExecution,
     RunningExecution,
 )
-from agent_comms.goal_history import OneGoal
+from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn

@@ -17,13 +17,14 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Self
 
-from agent_comms.field_codec import NullMember, WireOmitDefault, WireValue, GoalId
+from agent_comms.field_codec import WireOmitDefault
 from agent_comms.owner_requests import NoRequestRevision, RequestRevision
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
 from .goal_failure_observation import FailedTurnEvidence
+from .goal_scope import GoalScope
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
@@ -166,57 +167,6 @@ class RegistryWriterObserver(JournalObserver):
         cls, transaction: GoalHistoryTransaction, row: GoalHistoryEntry, current: GoalDeclaration,
     ) -> None:
         row.state.reconcile(transaction, row, current)
-
-
-class GoalScope:
-    """Which goals a history read covers; the default answers every goal of the thread."""
-
-    __slots__ = ()
-
-    def keeps(self, revision: RecordedGoalRevision) -> bool:
-        return True
-
-    def failures(
-        self, conn: sqlite3.Connection, owner_created_at: float
-    ) -> tuple[FailedTurnEvidence, ...]:
-        """One owner incarnation's failed attempts, oldest generation first."""
-        return tuple(FailedTurnEvidence.select(
-            conn, order_by=("generation",), owner_created_at=owner_created_at,
-        ))
-
-
-@dataclass(frozen=True, slots=True)
-class AllGoals(GoalScope, NullMember):
-    """No goal ID was given: the thread's full history."""
-
-
-@dataclass(frozen=True, slots=True)
-class OneGoal(GoalScope, WireValue):
-    """The revisions that name this goal before or after, and its failed attempts."""
-
-    goal_id: GoalId
-
-    def keeps(self, revision: RecordedGoalRevision) -> bool:
-        return self.goal_id in {revision.before.reported_id(), revision.after.reported_id()}
-
-    def failures(
-        self, conn: sqlite3.Connection, owner_created_at: float
-    ) -> tuple[FailedTurnEvidence, ...]:
-        return tuple(FailedTurnEvidence.select(
-            conn, order_by=("generation",), owner_created_at=owner_created_at,
-            goal_id=self.goal_id,
-        ))
-
-    def to_wire(self) -> str:
-        return self.goal_id
-
-    @classmethod
-    def from_wire(cls, data: object) -> OneGoal:
-        return cls(FieldCodec.decode(GoalId, data))
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(GoalId)
 
 
 @dataclass(frozen=True)

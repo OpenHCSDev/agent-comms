@@ -28,6 +28,7 @@ from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 def _wire(tmp_path: Path) -> Comms:
@@ -158,7 +159,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     ]
     edited = comms.goals.update_goal(
         "owner",
-        EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text="@peer please inspect"),
+        EditGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), text="@peer please inspect"),
     )
     assert edited is not None and edited.mention_source is not None
     assert edited.mention_source.text_revision == edited.revision
@@ -190,17 +191,17 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
     assert len(rows) == 1 and rows["peer"].sources == ("explicit", "goal_mention")
     assert manual is not None and manual.note in rows["peer"].detail
     progress = comms.goals.update_goal(
-        "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Progress")
+        "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), progress="Progress")
     )
     assert progress is not None and progress.revision > goal.revision
     assert _rows(comms, "owner")[0]["peer"].goal_contacts[0].text_revision == 1
     assert comms.relationships.store.path.read_bytes() == original
     comms.goals.update_goal(
-        "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
+        "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
     )
     assert _rows(comms, "owner")[0]["peer"].sources == ("explicit",)
     comms.goals.update_goal(
-        "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
+        "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
     )
     assert _rows(comms, "owner")[0]["peer"].sources == ("explicit", "goal_mention")
     comms.relationships.edit("owner", RelationshipEdit.member_named("remove"), "peer")
@@ -209,18 +210,18 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
         "owner", RelationshipEdit.member_named("add"), "peer", "Explicit retained note"
     )
     comms.goals.update_goal(
-        "owner", EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text="No peer mention")
+        "owner", EditGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), text="No peer mention")
     )
     assert _rows(comms, "owner")[0]["peer"].sources == ("explicit",)
     assert comms.relationships.collaborations("peer")[0].note == "Explicit retained note"
     comms.goals.update_goal(
-        "owner", EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text="@peer reconsider")
+        "owner", EditGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), text="@peer reconsider")
     )
     assert _rows(comms, "owner")[0]["peer"].sources == ("explicit", "goal_mention")
-    comms.goals.update_goal("owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+    comms.goals.update_goal("owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))))
     assert _rows(comms, "owner")[0]["peer"].sources == ("explicit",)
     replacement = comms.goals.update_goal(
-        "owner", SetGoalAction(expect=GoalPrecondition(goal_id=goal.id), text="@other")
+        "owner", SetGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), text="@other")
     )
     assert replacement is not None and replacement.id != goal.id
     assert {row.target for row in _rows(comms, "owner")[0].values()} == {"other", "peer"}
