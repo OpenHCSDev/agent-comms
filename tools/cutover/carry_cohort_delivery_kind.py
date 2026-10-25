@@ -18,12 +18,11 @@ class CohortDeliveryKind(Carry):
 
     @staticmethod
     def require_consistent(db: sqlite3.Connection, path: Path) -> None:
-        inconsistent = db.execute(
+        for inconsistent in db.execute(
             "SELECT wire_root_id,wire_seq,ordinal FROM cohort_delivery_receipts "
             "WHERE (claim_id IS NOT NULL AND kind IS NOT 'selected') "
             "OR (claim_id IS NULL AND kind IS NOT 'unmentioned_observer') LIMIT 1"
-        ).fetchone()
-        if inconsistent is not None:
+        ):
             raise RelationViolationError(
                 f"{path}: delivery {tuple(inconsistent)} has a kind inconsistent with its claim"
             )
