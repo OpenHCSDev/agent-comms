@@ -24,7 +24,7 @@ from agent_comms.installer.interpreter_operation import (
     SubjectPhase,
     TargetProbe,
 )
-from agent_comms.locked_store import RootFile
+from agent_comms.locked_store import FilesRequest, RootFile
 from agent_comms.store_files import BorrowedStoreLock, is_store_lock
 from agent_comms.typed_table import TriggerKind, TypedTable, WriterOwnedStore, _Field
 
@@ -42,9 +42,9 @@ class Carried:
     def for_step(self, step: Carry) -> Carried:
         resources = tuple(item for path in self.rewritten
                           for item in RootFile.referenced_files(
-                              step.root, step.original_root, path))
+                              step.files, path))
         for resource in resources:
-            step.require_confined(resource.located(step.root, step.original_root))
+            step.require_confined(step.files.location(resource))
         return replace(self, rewritten=tuple(resource.path for resource in resources))
 
     def __post_init__(self) -> None:
@@ -59,9 +59,12 @@ class Carried:
 class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     """One migration's decoded source, destination and retirement location."""
 
-    root: Annotated[Path, PathText]
-    original_root: Annotated[Path, PathText]
+    files: FilesRequest
     spill_dir: Annotated[Path, PathText]
+
+    @property
+    def root(self) -> Path:
+        return self.files.root
 
     writer_owned: ClassVar[tuple[type[WriterOwnedStore], ...]] = ()
     """External durable declarations this step is allowed to read and carry."""
@@ -72,7 +75,7 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
             raise RelationViolationError(
                 f"{type(self).__name__} does not declare writer-owned input {store.declared_name}"
             )
-        return store.located(self.root, self.original_root)
+        return self.files.writer_path(store)
 
     @staticmethod
     def writer_declarations(steps: Iterable[Carry | type[Carry]]) -> tuple[type[WriterOwnedStore], ...]:
@@ -212,16 +215,15 @@ class RetireInputsOperation(CarriedOperation):
 class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, PathText], ...]]):
     """Validate carried external rows in the target, at the selected live or copied paths."""
 
-    root: Annotated[Path, PathText]
-    original_root: Annotated[Path, PathText]
+    files: FilesRequest
     stores: tuple[type[WriterOwnedStore], ...]
 
     def run(self) -> tuple[Annotated[Path, PathText], ...]:
         paths = []
         with TemporaryDirectory() as directory:
             for store in self.stores:
-                store.practice_opening(self.root, self.original_root, Path(directory))
-                paths.append(store.located(self.root, self.original_root))
+                store.practice_opening(self.files, Path(directory))
+                paths.append(self.files.writer_path(store))
         return tuple(paths)
 
 

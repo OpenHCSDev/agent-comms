@@ -18,13 +18,14 @@ from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
 
 from .child_process import Platform
 from .coordination_errors import CoordinationReadUnavailable
-from .field_codec import FieldCodec, MalformedRecord
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
 from .private_path import PrivateFileRole
 from .store_files import (
@@ -46,6 +47,8 @@ from .store_files import (
 
 if TYPE_CHECKING:
     from sqlite3 import _IsolationLevel
+
+    from .typed_table import WriterOwnedStore
 
 T = TypeVar("T")
 
@@ -274,11 +277,15 @@ class RootFile:
         return path.relative_to(root)
 
     @classmethod
-    def source_path(cls, root: Path, original_root: Path, name: Path) -> Path:
+    def retained(cls, root: Path, name: Path) -> Path:
         return root / name
 
     @classmethod
-    def external_members(cls, root: Path, original_root: Path) -> Mapping[Path, type[RootFile]]:
+    def resource(cls, name: Path) -> DeclaredFile:
+        return DeclaredFile(cls, name)
+
+    @classmethod
+    def external_members(cls, files: FilesRequest) -> Mapping[Path, type[RootFile]]:
         return {}
 
     @classmethod
@@ -286,7 +293,8 @@ class RootFile:
         """Declarations with a reserved namespace validate it here."""
 
     @classmethod
-    def installation_declarations(cls, root: Path, original_root: Path) -> dict[Path, type[RootFile]]:
+    def installation_declarations(cls, files: FilesRequest) -> dict[Path, type[RootFile]]:
+        root = files.root
         declarations = {
             member: owner.declaring_owner()
             for owner, directory in cls.declarations_in(root)
@@ -294,7 +302,7 @@ class RootFile:
         }
         declarations.update((path, owner.declaring_owner())
                             for path, owner in cls.primaries_in(root).items())
-        declarations.update(cls.external_declarations(root, original_root))
+        declarations.update(cls.external_declarations(files))
         return declarations
 
     @classmethod
@@ -310,33 +318,33 @@ class RootFile:
             pending.extend(family.__subclasses__())
 
     @classmethod
-    def external_declarations(cls, root: Path, original_root: Path) -> dict[Path, type[RootFile]]:
+    def external_declarations(cls, files: FilesRequest) -> dict[Path, type[RootFile]]:
         return {path: owner for family in cls.families()
-                for path, owner in family.external_members(root, original_root).items()}
+                for path, owner in family.external_members(files).items()}
 
     @classmethod
-    def referenced_files(cls, root: Path, original_root: Path, path: Path
+    def referenced_files(cls, files: FilesRequest, path: Path
                          ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
         if path.is_absolute():
-            return cls.owned_files(root, (path,), original_root)
-        return cls.named_files(root, (path,), original_root)
+            return cls.owned_files(files, (path,))
+        return cls.named_files(files, (path,))
 
     @classmethod
-    def named_files(cls, root: Path, names: Collection[Path], original_root: Path
+    def named_files(cls, files: FilesRequest, names: Collection[Path]
                     ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
-        declarations = cls.installation_declarations(root, original_root)
+        root = files.root
+        declarations = cls.installation_declarations(files)
         known = {owner.retained_name(root, path): path for path, owner in declarations.items()}
         for name in names:
             if name.is_absolute() or ".." in name.parts:
                 raise RelationViolationError(f"Installation refuses a retained name: {name}")
             for family in cls.families():
                 family.require_retained_name(name)
-        return cls.owned_files(root, tuple(known.get(name, root / name) for name in names),
-                               original_root)
+        return cls.owned_files(files, tuple(known.get(name, root / name) for name in names))
 
     @classmethod
     def owned_files(
-        cls, root: Path, paths: Collection[Path], original_root: Path,
+        cls, files: FilesRequest, paths: Collection[Path],
     ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
         """Resolve primaries once; companions belong to their primary's declaration.
 
@@ -344,10 +352,11 @@ class RootFile:
         undeclared existing file acquires content behavior without inventing a
         store declaration for it.
         """
-        declarations = cls.installation_declarations(root, original_root)
+        root = files.root
+        declarations = cls.installation_declarations(files)
         primaries = cls.primaries_in(root)
         primaries.update((path, owner) for path, owner in cls.external_declarations(
-            root, original_root).items() if path.is_file())
+            files).items() if path.is_file())
         selected = frozenset(paths)
         owners: dict[Path, type[RootFile]] = {
             path: owner for path, owner in primaries.items() if path in selected
@@ -372,7 +381,7 @@ class RootFile:
             if path not in declarations and not path.is_relative_to(root):
                 raise RelationViolationError(f"Installation refuses an undeclared file: {path}")
             name = owner.retained_name(root, path)
-            resource = (DeclaredFile(declarations[path], name) if path in declarations
+            resource = (declarations[path].resource(name) if path in declarations
                         else UndeclaredFile(name))
             if name in names:
                 raise RelationViolationError(f"Installation file names collide: {name}")
@@ -473,17 +482,17 @@ class JsonDocument(RootFile, ABC, Generic[T]):
 
 
 
-class FileResource(RootFile):
+class FileResource:
     """A retained resource owns its declaration and resolves its own location."""
 
     owner: type[RootFile]
     path: Path
 
-    def located(self, root: Path, original_root: Path) -> Path:
-        return self.owner.source_path(root, original_root, self.path)
+    def retained(self, root: Path) -> Path:
+        return self.owner.retained(root, self.path)
 
     def live(self, root: Path) -> Path:
-        return self.located(root, root)
+        return self.retained(root)
 
 
 @dataclass(frozen=True)
@@ -503,6 +512,29 @@ class UndeclaredFile(FileResource):
     path: Path
     declared: ClassVar[bool] = False
     """No declaration answers whether its writers take a lock, so a lock beside it is unknown."""
+
+
+@dataclass(frozen=True)
+class FilesRequest(DeclaredFamily, affix="Request"):
+    """The caller's explicit choice of live files or a retained installation copy."""
+
+    root: Annotated[Path, PathText]
+
+    @abstractmethod
+    def location(self, resource: FileResource) -> Path: ...
+
+    def writer_path(self, store: type[WriterOwnedStore]) -> Path:
+        return self.location(store.resource(store.retained_filename))
+
+
+class LiveFilesRequest(FilesRequest):
+    def location(self, resource: FileResource) -> Path:
+        return resource.live(self.root)
+
+
+class RetainedCopyRequest(FilesRequest):
+    def location(self, resource: FileResource) -> Path:
+        return resource.retained(self.root)
 
 
 class LockedFile(RootFile, StoreLockOwner, declared_name=None):

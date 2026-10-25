@@ -16,6 +16,7 @@ from typing import Annotated
 
 import pytest
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.activity import ActivityStore
 from agent_comms.bus import Bus
 from agent_comms.cli_commands import (
@@ -102,11 +103,11 @@ def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comm
     with projection.writing() as db:
         db.execute('CREATE TABLE retired_derived_shape (unused INTEGER)')
     with maintenance_held(root) as holder:
-        before = bus_files(root, root)
+        before = bus_files(LiveFilesRequest(root))
         completed = reconcile(root, holder, PlannedReconcileCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
-        assert bus_files(root, root) == before
+        assert bus_files(LiveFilesRequest(root)) == before
         completed = reconcile(root, holder)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
@@ -121,10 +122,10 @@ def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms)
     root = private_comms.root
     drop_one_index_each(root)
     with maintenance_held(root) as holder:
-        before = bus_files(root, root)
+        before = bus_files(LiveFilesRequest(root))
         completed = reconcile(root, holder, ReadBackCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
-        assert bus_files(root, root) == before
+        assert bus_files(LiveFilesRequest(root)) == before
 
 
 def test_a_settled_bus_reconciles_without_moving_committed_wal_frames(private_comms):
@@ -157,11 +158,11 @@ def test_a_settled_bus_reconciles_without_moving_committed_wal_frames(private_co
     assert SQLiteFile.wal_path(database).stat().st_size
     with maintenance_held(root) as holder:
         SQLiteFile.settle(database)
-        before = bus_files(root, root)
+        before = bus_files(LiveFilesRequest(root))
         completed = reconcile(root, holder)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert json.loads(completed.stdout)["rewritten"] == []
-        assert bus_files(root, root) == before
+        assert bus_files(LiveFilesRequest(root)) == before
 
 
 def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
@@ -173,11 +174,11 @@ def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
         store.session._connection.execute(f"DROP TABLE {TriageNativeSource.declared_name}")
 
     with maintenance_held(root) as holder:
-        before = bus_files(root, root)
+        before = bus_files(LiveFilesRequest(root))
         planned = reconcile(root, holder, PlannedReconcileCliCommand)
         assert planned.returncode == 0, planned.stdout + planned.stderr
         assert json.loads(planned.stdout)["rewritten"] == [database.name]
-        assert bus_files(root, root) == before
+        assert bus_files(LiveFilesRequest(root)) == before
         carried = reconcile(root, holder)
         assert carried.returncode == 0, carried.stdout + carried.stderr
         assert json.loads(carried.stdout)["rewritten"] == [database.name]
@@ -195,14 +196,14 @@ def test_public_reconcile_does_not_install_native_state(tmp_path):
     database = CoordinationStore.path_in(root)
     with CoordinationSession(database):
         pass
-    before = bus_files(root, root)
+    before = bus_files(LiveFilesRequest(root))
     planned = reconcile(root, command=PlannedReconcileCliCommand)
     assert planned.returncode == 0, planned.stdout + planned.stderr
     assert json.loads(planned.stdout)["rewritten"] == []
     carried = reconcile(root)
     assert carried.returncode == 0, carried.stdout + carried.stderr
     assert json.loads(carried.stdout)["rewritten"] == []
-    assert bus_files(root, root) == before
+    assert bus_files(LiveFilesRequest(root)) == before
     with closing(sqlite3.connect(database)) as db:
         assert not db.execute(
             "SELECT name FROM sqlite_master WHERE name=?", (NativeRuntimeInput.declared_name,)

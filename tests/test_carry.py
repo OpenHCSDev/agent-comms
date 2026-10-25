@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from debt_ratchet import UncarriedRecordFormat, git
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.installer.backup import StoreBackup, bus_files
@@ -129,17 +130,17 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
         db.execute("CREATE TABLE todo (id)")
         db.execute("INSERT INTO todo VALUES (1)")
         db.commit()
-    before = bus_files(tmp_path, tmp_path)
+    before = bus_files(LiveFilesRequest(tmp_path))
     with closing(sqlite3.connect(store, autocommit=True)) as opened:
         opened.execute("BEGIN IMMEDIATE")
         opened.execute("ROLLBACK")
         assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
         steps = (StepRun("carry_nothing", Carried(0)),)
-        assert carried(tmp_path, before, steps, RehearsalFiles.declared(steps), tmp_path) == (
+        assert carried(LiveFilesRequest(tmp_path), before, steps, RehearsalFiles.declared(steps)) == (
             RehearsalFiles(1, 0, (), 0))
         opened.execute("UPDATE todo SET id = 2")
         with pytest.raises(UpgradeRefused):
-            carried(tmp_path, before, steps, RehearsalFiles.declared(steps), tmp_path)
+            carried(LiveFilesRequest(tmp_path), before, steps, RehearsalFiles.declared(steps))
 
 
 @pytest.fixture
@@ -199,7 +200,7 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     _, step = noisy_step
     root = tmp_path / "bus"
     root.mkdir()
-    request = step(root, root, tmp_path / "spill")
+    request = step(LiveFilesRequest(root), tmp_path / "spill")
     assert staged.call_steps((request,), MigrateOperation(False)) == (
         Carried(1, {"applied": False}, (Path("saved"),)),)
     assert not (root / "saved").exists()
@@ -235,9 +236,9 @@ def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
     with hold.holding():
         backup = StoreBackup.take(
             comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill")
-        migration = PreparedMigration.capture(hold, staged)
+        migration = PreparedMigration.capture(hold, staged, LiveFilesRequest(comms.root))
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
-            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
+            migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
         assert saved.read_text() == "migrated"
         backup.undo()
         assert saved.read_text() == "original"
@@ -268,9 +269,9 @@ def test_a_rollback_holds_the_root_until_every_store_opens_under_its_runtime(
     with hold.holding():
         backup = StoreBackup.take(
             comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill")
-        migration = PreparedMigration.capture(hold, staged)
+        migration = PreparedMigration.capture(hold, staged, LiveFilesRequest(comms.root))
         with pytest.raises(UpgradeRefused):
-            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
+            migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
         with owners.held_on_failure():
             backup.undo()
             staged.require_opens(comms.root)
@@ -300,9 +301,9 @@ def test_a_restore_that_fails_midway_keeps_the_hold(comms, staged, noisy_step):
     with hold.holding():
         backup = StoreBackup.take(
             comms.root, comms.root / "no-route", (first, second), comms.root.parent / "spill")
-        migration = PreparedMigration.capture(hold, staged)
+        migration = PreparedMigration.capture(hold, staged, LiveFilesRequest(comms.root))
         with pytest.raises(UpgradeRefused):
-            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
+            migration.carry((step(LiveFilesRequest(comms.root), comms.root.parent / "spill"),), staged)
         first.write_text("carried")
         (backup.data_root / second.name).unlink()
         with pytest.raises(FileNotFoundError):

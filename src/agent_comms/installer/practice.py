@@ -12,7 +12,7 @@ from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import DeclaredFile, RegistryFile, RootFile, UndeclaredFile
+from agent_comms.locked_store import DeclaredFile, LiveFilesRequest, RegistryFile, RootFile, UndeclaredFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage_rules import StorageRule
 
@@ -112,7 +112,7 @@ class PracticeCopy:
         if shutil.disk_usage(self.path.parent).free < floor:
             raise UpgradeRefused("Insufficient free space before building the practice copy")
         witnesses = set(MaintenanceBarrier(RegistryFile.path_in(self.root)).witness_paths)
-        for resource in RootFile.owned_files(self.root, paths, self.root):
+        for resource in RootFile.owned_files(LiveFilesRequest(self.root), paths):
             source = resource.live(self.root)
             if source in self.copied or source in witnesses or not source.exists():
                 continue
@@ -122,7 +122,7 @@ class PracticeCopy:
 
     def retain(self, paths: tuple[Path, ...]) -> None:
         """Discard inputs used only to establish that an earlier carry was finished."""
-        selected = RootFile.owned_files(self.root, paths, self.root)
+        selected = RootFile.owned_files(LiveFilesRequest(self.root), paths)
         discarded = tuple(source for source, resource in self.copied.items() if resource not in selected)
         for source in discarded:
             resource = self.copied[source]

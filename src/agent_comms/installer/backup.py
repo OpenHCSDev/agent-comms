@@ -31,6 +31,8 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.locked_store import (
     DeclaredFile,
+    FilesRequest,
+    LiveFilesRequest,
     LockedStore,
     RootFile,
     RuntimeFile,
@@ -55,9 +57,9 @@ class SavedFile:
         return cls(observed.st_size, observed.st_mtime_ns, observed.st_ino)
 
 
-def bus_paths(root: Path, original_root: Path,
-              external: tuple[type[WriterOwnedStore], ...]) -> tuple[Path, ...]:
+def bus_paths(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...]) -> tuple[Path, ...]:
     """One inventory of bus content and the selected writer-owned stores."""
+    root = files.root
     excluded = RuntimeFile.paths_in(root)
     observed: list[Path] = []
     for path in root.rglob("*"):
@@ -66,24 +68,23 @@ def bus_paths(root: Path, original_root: Path,
         info = path.lstat()
         if stat.S_ISREG(info.st_mode):
             observed.append(path)
-    return (*observed, *(store.located(root, original_root) for store in external))
+    return (*observed, *(files.writer_path(store) for store in external))
 
 
-def settle_bus_files(root: Path, original_root: Path,
-                     external: tuple[type[WriterOwnedStore], ...] = ()) -> None:
+def settle_bus_files(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...] = ()) -> None:
     """Each selected declaration owns whether settling is valid for its file."""
-    paths = bus_paths(root, original_root, external)
-    for resource in RootFile.owned_files(root, paths, original_root):
-        resource.owner.settle(resource.located(root, original_root))
+    paths = bus_paths(files, external)
+    for resource in RootFile.owned_files(files, paths):
+        resource.owner.settle(files.location(resource))
 
 
-def bus_files(root: Path, original_root: Path, external: tuple[type[WriterOwnedStore], ...] = ()
+def bus_files(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...] = ()
               ) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
     """One declaration-derived inventory for bus and writer-owned resources."""
-    paths = bus_paths(root, original_root, external)
+    paths = bus_paths(files, external)
     saved = {}
-    for resource in RootFile.owned_files(root, paths, original_root):
-        source = resource.located(root, original_root)
+    for resource in RootFile.owned_files(files, paths):
+        source = files.location(resource)
         observed = {member: member.stat() for member in resource.owner.files(source) if member.is_file()}
         saved[resource] = {
             resource.owner.relocated(source, resource.path, member): SavedFile.at(member)
@@ -305,7 +306,7 @@ class StoreBackup(ResourceBackup):
             files = tuple(dict.fromkeys((*files, *registry)))
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
-        resources = RootFile.owned_files(root, files, root)
+        resources = RootFile.owned_files(LiveFilesRequest(root), files)
         selected = tuple(resource.path for resource in resources)
         if path.exists():
             if backup.selected_files() != selected:
@@ -358,7 +359,7 @@ class StoreBackup(ResourceBackup):
         paths = tuple(path for path in source.rglob("*")
                       if path.is_file() and not path.is_symlink())
         owners = {resource.live(source): resource.owner
-                  for resource in RootFile.owned_files(source, paths, source)}
+                  for resource in RootFile.owned_files(LiveFilesRequest(source), paths)}
         omitted = set(paths) - owners.keys() | set(excluded)
         omitted.update(member for path, owner in owners.items()
                        for member in owner.files(path) if member != path)
@@ -392,12 +393,12 @@ class StoreBackup(ResourceBackup):
         saved = self.files()
         return all(resource.owner.file_matches(resource.live(self.root), resource.path, saved)
                    for resource in RootFile.named_files(
-                       self.root, self.selected_files(), self.root))
+                       LiveFilesRequest(self.root), self.selected_files()))
 
     def restore(self) -> None:
         saved = self.files()
         selected = {resource.path: resource for resource in RootFile.named_files(
-            self.root, self.selected_files(), self.root)}
+            LiveFilesRequest(self.root), self.selected_files())}
         registry = tuple(path.relative_to(self.root) for path in RegistryStore.at(self.root).written)
         # The registry owns this ordering: restore its snapshot before publishing
         # the matching guard, after every unrelated selected file.

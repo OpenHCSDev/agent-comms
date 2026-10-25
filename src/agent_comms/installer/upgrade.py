@@ -150,7 +150,9 @@ from agent_comms.installer.runtime_resolution import RuntimeResolution, StackPro
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
+from agent_comms.locked_store import (
+    BusFile, DeclaredFile, FilesRequest, LiveFilesRequest, RetainedCopyRequest, RootFile, UndeclaredFile,
+)
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -219,13 +221,13 @@ class RehearsalFiles:
 
 
 def carried(
-    root: Path,
+    files: FilesRequest,
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
     steps: tuple[StepRun, ...], expected: frozenset[Path],
-    original_root: Path, external: tuple[type[WriterOwnedStore], ...] = (),
+    external: tuple[type[WriterOwnedStore], ...] = (),
 ) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
-    after = bus_files(root, original_root, external)
+    after = bus_files(files, external)
     physical = {key for key in before.keys() | after.keys()
                 if before.get(key) != after.get(key)}
     members = {member: resource.path for resource, snapshot in (*before.items(), *after.items())
@@ -787,14 +789,14 @@ class TargetStack(Stack):
     program: TargetProgram = field(kw_only=True)
 
     @contextmanager
-    def borrowing(self, stores: tuple[type[WriterOwnedStore], ...], root: Path,
-                  original_root: Path) -> Iterator[TargetStack]:
+    def borrowing(self, stores: tuple[type[WriterOwnedStore], ...],
+                  files: FilesRequest) -> Iterator[TargetStack]:
         """The installer retains file locks through rollback; workers only borrow them."""
         if not stores:
             yield self
             return
         with ExitStack() as lifetime:
-            locks = tuple(lifetime.enter_context(store.retaining(store.located(root, original_root)))
+            locks = tuple(lifetime.enter_context(store.retaining(files.writer_path(store)))
                           for store in stores)
             program = self.program.borrowing(locks)
             lifetime.callback(self.commands.close_program, self.python, program)
@@ -883,7 +885,7 @@ class PracticeBus:
         unfinished = chain.unfinished_at(self.original_root).steps
         if not unfinished:
             return ()
-        steps = tuple(step(self.original_root, self.original_root, self.spill_dir)
+        steps = tuple(step(LiveFilesRequest(self.original_root), self.spill_dir)
                       for step in unfinished)
         (position,) = staged.call_steps(steps, FirstPendingOperation())
         return unfinished[position:]
@@ -1154,7 +1156,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
         unchanged = not pending and not reconciled and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
-        steps = tuple(step(root, root, spill_dir) for step in pending)
+        steps = tuple(step(LiveFilesRequest(root), spill_dir) for step in pending)
         return member(checkout, root, current, target, chain, steps, installed, staged,
                       tree, installer, spill_dir)
 
@@ -1173,38 +1175,36 @@ class PreparedMigration(Extendable):
     hold: MaintenanceState
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]
     read: BusReadBack
-    original_root: Path
+    files: FilesRequest
     writer_stores: tuple[type[WriterOwnedStore], ...] = ()
 
     @property
     def root(self) -> Path:
-        return Path(self.hold.root)
+        return self.files.root
 
     @classmethod
-    def capture(cls, hold: MaintenanceState, outgoing: Stack,
+    def capture(cls, hold: MaintenanceState, outgoing: Stack, files: FilesRequest,
                 steps: tuple[Carry, ...] = ()) -> PreparedMigration:
         """Snapshot the held bus and the chain's declared external locations.
         Only bus resources settle; external bytes reach backup without a prior write."""
-        root = Path(hold.root)
-        original_root = next((step.original_root for step in steps), root)
         writer_stores = Carry.writer_declarations(steps)
         with BeforeMigrationFileScanPhase().running(outgoing.commands.clock):
-            settle_bus_files(root, original_root, writer_stores)
-            before = bus_files(root, original_root, writer_stores)
-        return cls(hold, before, outgoing.verify(root), original_root, writer_stores)
+            settle_bus_files(files, writer_stores)
+            before = bus_files(files, writer_stores)
+        return cls(hold, before, outgoing.verify(files.root), files, writer_stores)
 
     def carry(self, pending: tuple[Carry, ...], staged: TargetStack) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
-        staged.probe(WriterOwnedOpeningProbe(self.root, self.original_root, self.writer_stores))
+        staged.probe(WriterOwnedOpeningProbe(self.files, self.writer_stores))
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
         declared = tuple(steps)
         with AfterMigrationFileScanPhase().running(staged.commands.clock):
-            files = carried(self.root, self.before, declared,
-                            RehearsalFiles.declared(declared), self.original_root, self.writer_stores)
+            files = carried(self.files, self.before, declared,
+                            RehearsalFiles.declared(declared), self.writer_stores)
         passed = CarriedPass(declared, files, staged.verify(self.root))
         passed.require_read(self.read)
         return passed
@@ -1213,20 +1213,21 @@ class PreparedMigration(Extendable):
 class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> CarriedRehearsal:
         copied = practice.copy.path
+        files = RetainedCopyRequest(copied)
         home = practice.scratch / "home"
         RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(self.staged, home=home)
-        pending = tuple(replace(step, root=copied, spill_dir=practice.spill_dir)
+        pending = tuple(replace(step, files=files, spill_dir=practice.spill_dir)
                         for step in self.pending)
         inputs = practice.select(self.pending, reconciled)
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
         with hold.holding(), stack.borrowing(
-            Carry.writer_declarations(pending), copied, self.root,
+            Carry.writer_declarations(pending), files,
         ) as stack:
-            migration = PreparedMigration.capture(hold, self.installed, pending)
+            migration = PreparedMigration.capture(hold, self.installed, files, pending)
             passed = migration.carry(pending, stack)
             passed = passed.after_acceptance(pending, stack)
         maintenance.clear(hold)
@@ -1236,9 +1237,11 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         return UncopiedRehearsal()
 
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
+        files = LiveFilesRequest(self.root)
+        pending = tuple(replace(step, files=files) for step in self.pending)
         expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
-        selected = tuple(resource.live(self.root)
-                         for resource in RootFile.named_files(self.root, expected, self.root))
+        selected = tuple(files.location(resource)
+                         for resource in RootFile.named_files(files, expected))
         with RestoreSpaceBackupPhase().running(self.staged.commands.clock):
             restore = RestoreSpace.measure(max(
                 rehearsal.files.restore_bytes,
@@ -1246,7 +1249,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             ), self.root.parent)
             restore.require()
         with self.staged.borrowing(
-            Carry.writer_declarations(self.pending), self.root, self.root,
+            Carry.writer_declarations(pending), files,
         ) as staged, staged.services_stopped(self.installed) as stopped:
             # The install's start holds the root and stopped its owners (owners_stopped).
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
@@ -1264,7 +1267,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
                     migration = PreparedMigration.capture(
                         maintenance.held_by(MaintenanceOperator.current()), self.installed,
-                        self.pending)
+                        files, pending)
                     backup, selected_route = self.backed_up(selected)
                 except BaseException as error:
                     with AbortMaintenancePhase().running(self.staged.commands.clock):
@@ -1276,7 +1279,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     raise
                 try:
                     self.checkout_target()
-                    passed = migration.carry(self.pending, staged)
+                    passed = migration.carry(pending, staged)
                     passed.files.require_rehearsal(rehearsal.files)
                     self.publish(backup, selected_route)
                     with ClearMaintenancePhase().running(self.staged.commands.clock):

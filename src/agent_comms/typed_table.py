@@ -60,7 +60,10 @@ from .field_codec import (
 )
 from .lifecycle import LifecycleState
 from .locked_store import (
+    DeclaredFile,
     DurableFile,
+    FilesRequest,
+    LiveFilesRequest,
     PublishedSQLiteFile,
     RegistryFile,
     RootFile,
@@ -2159,6 +2162,16 @@ class TypedTable(
         )
 
 
+@dataclass(frozen=True)
+class WriterOwnedResource(DeclaredFile):
+    """An external writer's declared live path, retaining the shared copy behavior."""
+
+    owner: type[WriterOwnedStore]
+
+    def live(self, root: Path) -> Path:
+        return self.owner.live(root)
+
+
 class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=None):
     """A table derives its producers from the writers that declare it as an output."""
 
@@ -2331,17 +2344,17 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
         return cls.retained_filename
 
     @classmethod
-    def located(cls, root: Path, original_root: Path) -> Path:
-        return cls.source_path(root, original_root, cls.retained_filename)
+    def live(cls, root: Path) -> Path:
+        return cls.path()
 
     @classmethod
-    def source_path(cls, root: Path, original_root: Path, name: Path) -> Path:
-        return cls.path() if root == original_root else root / name
+    def resource(cls, name: Path) -> WriterOwnedResource:
+        return WriterOwnedResource(cls, name)
 
     @classmethod
-    def external_members(cls, root: Path, original_root: Path) -> Mapping[Path, type[RootFile]]:
+    def external_members(cls, files: FilesRequest) -> Mapping[Path, type[RootFile]]:
         cls.load_declarations()
-        return {store.located(root, original_root): store for store in cls.members_with(cls)}
+        return {files.writer_path(store): store for store in cls.members_with(cls)}
 
     @classmethod
     def require_retained_name(cls, name: Path) -> None:
@@ -2350,8 +2363,8 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
             raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
 
     @classmethod
-    def practice_opening(cls, root: Path, original_root: Path, directory: Path) -> None:
-        path = cls.located(root, original_root)
+    def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
+        path = files.writer_path(cls)
         if not path.is_file():
             return
         copied = directory / cls.declared_name
@@ -2370,7 +2383,7 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
         stores = set(WriterOwnedStore.members_with(WriterOwnedStore)) - set(excluding)
         with TemporaryDirectory() as directory:
             for store in stores:
-                store.practice_opening(root, root, Path(directory))
+                store.practice_opening(LiveFilesRequest(root), Path(directory))
 
     @classmethod
     @abstractmethod

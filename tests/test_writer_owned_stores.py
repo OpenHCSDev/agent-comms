@@ -7,6 +7,7 @@ from typing import Annotated, ClassVar
 
 import pytest
 
+from agent_comms.locked_store import LiveFilesRequest, RetainedCopyRequest
 from agent_comms.channel_targets import ChannelTarget, CommandTarget
 from agent_comms.cli import build_parser
 from agent_comms.cli_commands import PlannedReconcileCliCommand
@@ -64,7 +65,7 @@ def test_writer_owned_carry_refuses_an_undecodable_target_with_its_rowid(
         db.execute('INSERT INTO open_tabs VALUES (?, ?)', (BARE_TARGET, 0))
     original = store.path().read_bytes()
     with pytest.raises(RelationViolationError) as refused:
-        store.practice_opening(tmp_path, tmp_path, tmp_path)
+        store.practice_opening(LiveFilesRequest(tmp_path), tmp_path)
     text = str(refused.value)
     assert str(store.path()) in text
     assert "open_tabs rowid 1 cannot decode" in text
@@ -79,7 +80,7 @@ def test_writer_owned_carry_opens_valid_targets_without_writing_the_source(
     with closing(SQLiteFile.writer(store.path())) as db, db:
         row(ChannelTarget("#comms"), 0).insert(db)
     original = store.path().read_bytes()
-    store.practice_opening(tmp_path, tmp_path, tmp_path)
+    store.practice_opening(LiveFilesRequest(tmp_path), tmp_path)
     assert store.path().read_bytes() == original
 
 
@@ -109,7 +110,7 @@ def test_writer_owned_carry_validates_without_rowid_tables(tmp_path):
     directory = tmp_path / "copy"
     directory.mkdir()
     try:
-        KeyedStore.practice_opening(directory, directory, directory)
+        KeyedStore.practice_opening(LiveFilesRequest(directory), directory)
     finally:
         stored.unlink(missing_ok=True)
 
@@ -151,7 +152,7 @@ def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
     original = store.path().read_bytes()
     root = tmp_path / "bus"
     root.mkdir()
-    step = writer_owned_step(root, root, tmp_path / "spill")
+    step = writer_owned_step(LiveFilesRequest(root), tmp_path / "spill")
     assert step.input_files() == (store.path(),)
     assert step.carry(apply=False).changed == 1
     name = store.retained_filename
@@ -163,13 +164,13 @@ def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
 
     copy = PracticeCopy(root, tmp_path / "practice")
     copy.include(step.input_files())
-    copied_step = replace(step, root=copy.path)
+    copied_step = replace(step, files=RetainedCopyRequest(copy.path))
     copied_path = copied_step.writer_path(store)
     assert Carried(1, rewritten=(copied_path,)).for_step(copied_step).rewritten == (name,)
     with pytest.raises(RelationViolationError):
         copied_step.require_confined(store.path())
     assert copied_step.carry(apply=True).rewritten == (name,)
-    assert WriterOwnedOpeningProbe(copy.path, root, (store,)).run() == (copied_path,)
+    assert WriterOwnedOpeningProbe(RetainedCopyRequest(copy.path), (store,)).run() == (copied_path,)
     with closing(store.read_snapshot(copied_path)) as db:
         assert row.select(db)[0].target == ChannelTarget("#comms")
     assert store.path().read_bytes() == original
@@ -186,7 +187,7 @@ def test_writer_owned_carry_refuses_an_undeclared_external_file(
 ):
     root = tmp_path / "bus"
     root.mkdir()
-    step = writer_owned_step(root, root, tmp_path / "spill")
+    step = writer_owned_step(LiveFilesRequest(root), tmp_path / "spill")
     outside = tmp_path / "unrelated.db"
     outside.touch()
     with pytest.raises(RelationViolationError):
@@ -212,15 +213,15 @@ def test_writer_owned_carry_preserves_its_declaration_across_cli_and_worker_boun
         "planned-reconcile", "--carrying",
     ]))
     assert empty.carrying == ()
-    probe = WriterOwnedOpeningProbe(tmp_path, tmp_path, (store,))
+    probe = WriterOwnedOpeningProbe(LiveFilesRequest(tmp_path), (store,))
     decoded = FieldCodec.decode(WriterOwnedOpeningProbe, FieldCodec.encode(probe))
     assert decoded == probe
     assert decoded.run() == (store.path(),)
     copied_root = tmp_path / "copied"
-    copied_probe = WriterOwnedOpeningProbe(copied_root, tmp_path, (store,))
+    copied_probe = WriterOwnedOpeningProbe(RetainedCopyRequest(copied_root), (store,))
     copied_decoded = FieldCodec.decode(WriterOwnedOpeningProbe, FieldCodec.encode(copied_probe))
     assert copied_decoded.stores == (store,)
-    assert copied_decoded.root == copied_root
+    assert copied_decoded.files.root == copied_root
     assert copied_decoded == copied_probe
 
 
@@ -230,7 +231,7 @@ def test_writer_owned_backup_preserves_primary_and_committed_wal_bytes(
     store, row = writer_owned_store
     root = tmp_path / "bus"
     root.mkdir()
-    step = writer_owned_step(root, root, tmp_path / "spill")
+    step = writer_owned_step(LiveFilesRequest(root), tmp_path / "spill")
     wal = SQLiteFile.wal_path(store.path())
     with closing(SQLiteFile.writer(store.path())) as db:
         db.execute("PRAGMA journal_mode=WAL")
