@@ -18,7 +18,7 @@ def test_agent_slice_cpu_reservation(monkeypatch: pytest.MonkeyPatch, cores: int
 
 def test_agent_slice_unknown_cpu_count(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(os, "cpu_count", lambda: None)
-    with pytest.raises(RuntimeError, match="CPU count is unknown"):
+    with pytest.raises(NotImplementedError, match="cannot determine number of cpus"):
         AgentsSlice.unit_text()
 
 

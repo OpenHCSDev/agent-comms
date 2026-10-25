@@ -1,7 +1,7 @@
 """Systemd unit definitions and the resource slice shared by agent launches."""
 from __future__ import annotations
 
-import os
+import multiprocessing
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import ClassVar
@@ -33,9 +33,7 @@ class AgentsSlice(SystemdUnit):
 
     @classmethod
     def unit_text(cls, arguments: tuple[str, ...] = ()) -> str:
-        count = os.cpu_count()
-        if count is None:
-            raise RuntimeError("Cannot reserve desktop CPUs: machine CPU count is unknown.")
+        count = multiprocessing.cpu_count()
         return f"[Slice]\nAllowedCPUs={cls.reserved}-{count - 1}\nCPUWeight=50\n"
 
     @classmethod
