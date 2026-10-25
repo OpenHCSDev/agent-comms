@@ -746,7 +746,10 @@ class Stack:
     def restore_stores(self, hold: MaintenanceState) -> MaintenanceState:
         """Retarget the caller's hold while the outgoing runtime rebuilds projections."""
         root = Path(hold.root)
-        runtime = RootRuntimeStore.at(root).read().runtime()
+        recorded = RootRuntimeStore.at(root).read()
+        # The restored identity may already be this stack's selected runtime. Keep
+        # that object's launch environment; reconstruct only a different runtime.
+        runtime = self.runtime if self.runtime.prefix == recorded.prefix else recorded.runtime()
         outgoing = replace(self, runtime=runtime)
         maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
         hold = maintenance.retarget(hold, runtime)

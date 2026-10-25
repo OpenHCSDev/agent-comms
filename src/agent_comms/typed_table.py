@@ -2276,11 +2276,6 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         return 0
 
     @classmethod
-    def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
-        """A row contributes itself; extra writes belong to the class declaring them."""
-        return (cls,) if "writes" in vars(cls) else ()
-
-    @classmethod
     def producer_digest(cls) -> str:
         return cls._producer_digest()
 

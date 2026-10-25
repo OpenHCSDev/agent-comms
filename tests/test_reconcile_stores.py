@@ -6,7 +6,6 @@ differs is refused, naming the store, and the file stays as it was."""
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import subprocess
 import sys
@@ -53,6 +52,7 @@ from agent_comms.typed_table import (
     SharedFileTables, TableSchema, TypedTable, WriterOwnedStore,
 )
 from bus_record_fixture import OWNER_LOOKUP
+from cli_command import core
 from conftest import ledger_one_failure_short, maintenance_held
 from test_bus_resource_claims import ClaimBus, claims
 
@@ -62,12 +62,8 @@ NO_MAINTENANCE_HOLDER = NoMaintenanceHolder()
 def reconcile(root: Path, holder: MaintenanceHolder = NO_MAINTENANCE_HOLDER,
               command: type[CliCommand] = ReconcileStoresCliCommand,
               *arguments: str) -> subprocess.CompletedProcess:
-    environment = MaintenanceHolder.outside(os.environ)
-    holder.exported(environment)
-    return subprocess.run(
-        [sys.executable, "-m", "agent_comms.cli", "--root", str(root),
-         *command.invocation(*arguments)], capture_output=True, text=True, timeout=120,
-        env=environment)
+    with holder.acting():
+        return core("--root", str(root), *command.invocation(*arguments))
 
 
 def planned_reconcile(

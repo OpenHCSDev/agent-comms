@@ -35,7 +35,7 @@ from .channel_targets import CommandTarget
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
-    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim,
+    ClaimOwner, ClaimProducer, ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim,
     UnclaimedResource,
 )
 from .errors import RelationViolationError
@@ -134,13 +134,8 @@ class ClaimOperations(BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class HeldResources(BusProjectionTables):
+class HeldResources(ClaimProducer, BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return ClaimTransition.writes
-
 
     resource: Annotated[str, Column(primary_key=True)]
     claim_seq: int
@@ -1091,13 +1086,8 @@ class PublicRecord(BusRecord):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Claimed(BusCapability):
+class Claimed(ClaimProducer, BusCapability):
     """The transition attesting this row, stored in its append transaction."""
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return ClaimTransition.writes
-
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
 
