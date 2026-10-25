@@ -11,8 +11,12 @@ branch head, so its imports root the reachability like a console script does. Mo
 neither reaches are listed as deletion candidates, and a client import naming a module
 Core no longer has fails --check, the step the merge queue runs.
 
+The installer package is a client too, of the Core it upgrades from: install ships it in
+installer.zip and runs it on the runtime already installed. --previous REV reads Core at REV,
+and --check fails when the installer imports a module or name that tree lacks.
+
     python tools/module_layers.py > docs/layout/MODULE_LAYERS.md
-    python tools/module_layers.py --check
+    python tools/module_layers.py --check [--previous REV]
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
+from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"
@@ -143,6 +148,31 @@ class ClientImportNames(ModuleReferences):
                 self.record(node, module, tuple(alias.name for alias in node.names))
 
 
+class InstallerImportNames(ClientImportNames):
+    """A file of the installer package: relative imports resolve from its own package, and
+    imports under TYPE_CHECKING never run on the installed runtime."""
+
+    def __init__(self, client: str, path: str, package: str, found: list[ClientImport]) -> None:
+        super().__init__(client, path, found)
+        self.package = package
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if not node.level:
+            return super().visit_ImportFrom(node)
+        parts = self.package.split(".")
+        base = ".".join(parts[: len(parts) - node.level + 1])
+        module = ".".join(part for part in (base, node.module or "") if part)
+        self.record(node, module, tuple(alias.name for alias in node.names))
+
+    def visit_If(self, node: ast.If) -> None:
+        match node.test:
+            case ast.Name(id="TYPE_CHECKING") | ast.Attribute(attr="TYPE_CHECKING"):
+                for statement in node.orelse:
+                    self.visit(statement)
+            case _:
+                self.generic_visit(node)
+
+
 class TopLevelNames(ast.NodeVisitor):
     """The names one module binds at its top level: definitions, assignments and imports,
     including those inside top-level if and try blocks."""
@@ -233,6 +263,33 @@ class StackClient:
                 ast.parse(path.read_text(), relative)
             )
         return tuple(found)
+
+
+@dataclass(frozen=True)
+class InstallerZip(StackClient):
+    """The installer package as installer.zip carries it to the runtime already installed
+    (RetainedProgram in installer/interpreter_operation.py). Its own modules come from the zip;
+    every other agent_comms import resolves in that older runtime."""
+
+    PACKAGE: ClassVar[str] = f"{PACKAGE}.installer"
+
+    @classmethod
+    def at(cls, root: Path) -> InstallerZip:
+        return cls("installer.zip", root / "src")
+
+    @cached_property
+    def imports(self) -> tuple[ClientImport, ...]:
+        found: list[ClientImport] = []
+        for path in sorted(self.checkout.joinpath(*self.PACKAGE.split(".")).rglob("*.py")):
+            relative = path.relative_to(self.checkout)
+            InstallerImportNames(
+                self.name, str(relative), ".".join(relative.parent.parts), found
+            ).visit(ast.parse(path.read_text(), str(relative)))
+        return tuple(
+            entry
+            for entry in found
+            if entry.module != self.PACKAGE and not entry.module.startswith(self.PACKAGE + ".")
+        )
 
 
 class Package:
@@ -473,6 +530,31 @@ class Package:
         return "\n".join(lines) + "\n"
 
 
+def report(package: Package) -> bool:
+    """Print what a checked tree lacks for its clients; whether it lacks anything."""
+    for entry in package.missing:
+        print(f"missing module: {entry}", file=sys.stderr)
+    for entry, name in package.missing_names:
+        print(f"missing name: {entry} {name}", file=sys.stderr)
+    print(
+        f"{len(package.client_imports)} client imports of {len(package.client_surface)} units; "
+        f"{len(package.missing)} name a module this tree lacks, "
+        f"{len(package.missing_names)} a name its module does not define"
+    )
+    return bool(package.missing or package.missing_names)
+
+
+def previous_tree(revision: str, into: Path) -> Path:
+    """Core's source and project file at ``revision``, the runtime an install upgrades from."""
+    into.mkdir()
+    archive = subprocess.run(
+        ["git", "-C", str(ROOT), "archive", revision, "src", "pyproject.toml"],
+        check=True, capture_output=True,
+    ).stdout
+    subprocess.run(["tar", "-x", "-C", str(into)], input=archive, check=True)
+    return into
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.partition("\n")[0])
     parser.add_argument(
@@ -480,22 +562,23 @@ def main() -> int:
         action="store_true",
         help="fail when a stack client imports an agent_comms module this tree lacks",
     )
+    parser.add_argument(
+        "--previous",
+        metavar="REV",
+        help="with --check, also fail when the installer imports what Core at REV lacks",
+    )
     arguments = parser.parse_args()
     with tempfile.TemporaryDirectory() as clones:
         package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones)))
         if not arguments.check:
             sys.stdout.write(package.markdown())
             return 0
-        for entry in package.missing:
-            print(f"missing module: {entry}", file=sys.stderr)
-        for entry, name in package.missing_names:
-            print(f"missing name: {entry} {name}", file=sys.stderr)
-        print(
-            f"{len(package.client_imports)} client imports of {len(package.client_surface)} units; "
-            f"{len(package.missing)} name a module this tree lacks, "
-            f"{len(package.missing_names)} a name its module does not define"
-        )
-        return 1 if package.missing or package.missing_names else 0
+        lacking = report(package)
+        if arguments.previous:
+            previous = previous_tree(arguments.previous, Path(clones) / "previous")
+            print(f"installer.zip against Core at {arguments.previous}:")
+            lacking = report(Package(previous, (InstallerZip.at(ROOT),))) or lacking
+        return 1 if lacking else 0
 
 
 if __name__ == "__main__":

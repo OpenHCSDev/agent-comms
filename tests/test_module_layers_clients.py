@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from module_layers import Package, StackClient
+from module_layers import InstallerZip, Package, StackClient
 
 
 def write(path: Path, text: str = "") -> None:
@@ -58,3 +58,31 @@ def test_client_names_must_be_defined_by_their_module(tmp_path):
     assert [(str(entry), name) for entry, name in package.missing_names] == [
         ("toad:tests/test_routes.py:1 imports agent_comms.routes", "implicit")
     ]
+
+
+def test_installer_zip_imports_only_names_the_previous_core_defines(tmp_path):
+    previous = tmp_path / "previous"
+    write(previous / "pyproject.toml", '[project.scripts]\nac = "agent_comms.cli:main"\n')
+    write(previous / "src/agent_comms/__init__.py")
+    write(previous / "src/agent_comms/cli.py")
+    write(previous / "src/agent_comms/harness_install.py", "class Harness: ...\n")
+    current = tmp_path / "current"
+    write(
+        current / "src/agent_comms/installer/probes/harnesses.py",
+        "from typing import TYPE_CHECKING\n"
+        "from agent_comms.harness_install import Harness, InstalledHarness\n"
+        "from ..publication import Publication\n"
+        "if TYPE_CHECKING:\n    from agent_comms.threads import Thread\n",
+    )
+    write(current / "src/agent_comms/installer/publication.py", "class Publication: ...\n")
+
+    package = Package(previous, (InstallerZip.at(current),))
+
+    assert [(str(entry), name) for entry, name in package.missing_names] == [
+        (
+            "installer.zip:agent_comms/installer/probes/harnesses.py:2 "
+            "imports agent_comms.harness_install",
+            "InstalledHarness",
+        )
+    ]
+    assert package.missing == ()
