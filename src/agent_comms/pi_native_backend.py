@@ -43,7 +43,7 @@ from .native_fork import (
     RuntimeForkRequest,
 )
 from .native_pi import NativePiRpcLaunch
-from agent_comms.native_session_files import NativeSessionLocks
+from agent_comms.native_session_files import ForkedSession, NativeSessionLocks
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .pi_commands import Compact
@@ -320,14 +320,17 @@ class PiNativeBackend(
     # -- Forks ------------------------------------------------------------
 
     @classmethod
-    async def fork(cls, parent: Thread, launcher: str, runtime: LaunchRuntime) -> PiSessionFile:
+    async def fork(
+        cls, parent: Thread, launcher: str, runtime: LaunchRuntime, root: Path,
+    ) -> PiSessionFile:
         """Copy the parent's whole saved history with Pi's own session manager."""
         package = await Coordination.run_worker(partial(
             NativePiRpcLaunch.package_for_command, launcher, runtime,
         ))
+        directory = await Coordination.run_worker(partial(ForkedSession.prepared_directory, root))
         identity = await RuntimeForkHelper.run(
             RuntimeForkRequest(str(package.path), parent.runtime.path, parent.worktree,
-                               runtime=runtime), cwd=Path(parent.worktree),
+                               str(directory), runtime=runtime), cwd=Path(parent.worktree),
         )
         return PiSessionFile(identity.session_file)
 

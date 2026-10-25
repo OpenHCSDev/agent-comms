@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property, partial
@@ -35,6 +35,7 @@ from agent_comms.build_identity import (
 )
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
+    CitedRevisions,
     CommitRevision,
     FileLine,
     MainRevision,
@@ -54,7 +55,7 @@ from agent_comms.child_process import (
 )
 from agent_comms.command import Command
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.commander.rule_file import RuleFile
+from agent_comms.commander.rule_file import RuleAudience, RuleFile
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import MissingSourceLine, TodoConflict, TodoError, ToolRefusedError
@@ -1757,6 +1758,11 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
         return ()
 
+    @property
+    def linked_requests(self) -> tuple[PullRequestLink, ...]:
+        """The pull requests this order's work holds; an unchecked order holds none."""
+        return ()
+
     def closed_by_merge(
         self, todo: Todo, pulls: ProgressRead, checkout_base: Path
     ) -> tuple[Todo, ...]:
@@ -2031,7 +2037,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     @cached_property
     def cited_revision(self) -> SourceRevision:
-        return (*map(PullRequestHeadRevision, self.linked_requests), MainRevision())[0]
+        return CitedRevisions((*map(PullRequestHeadRevision, self.linked_requests), MainRevision()))
 
     def require_references(self) -> None:
         root, revision = self.check.directory, self.cited_revision
@@ -2214,18 +2220,14 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return url
 
     def work_instructions(self) -> tuple[str, ...]:
-        fleet_rules = ", ".join(
-            name for rule in RuleFile.packaged()
-            for name in rule.audience.order_reference(rule)
-        )
         return (f"Owner: {self.owner.to_wire()}",
                 f"Check: {self.check.directory} :: {self.check.command}",
                 *self.deletes.instructions(), *self.run.instructions(),
                 *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
                 "Banned: " + "; ".join(self.banned), "Report: " + self.report,
                 CommanderPackage.voice().read_text(encoding="utf-8").strip(),
-                f"Standing rules for this order: follow the fleet rules {fleet_rules} in "
-                f"{CommanderPackage.rules()}.")
+                *(audience.order_line(", ".join(rule.name for rule in rules))
+                  for audience, rules in RuleAudience.grouped(RuleFile.packaged())))
 
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
@@ -2448,6 +2450,21 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         """Validate the complete issuance before recording, then publish its owned effects."""
         group = target.group(document)
         listed = {todo.id: todo for todo in context.todos()}
+        target.carried(self, group, listed).issue(
+            context, document, unit, clean, reassign, target, traced, answers, request,
+            group, listed)
+
+    def carrying(self, links: Iterable[PullRequestLink]) -> Self:
+        """This order holding the problem's pull requests too, so its cites stand on their heads."""
+        carried = tuple(link for link in dict.fromkeys(links) if link not in self.pull_requests)
+        return replace(self, pull_requests=(*self.pull_requests, *carried)) if carried else self
+
+    def issue(
+        self, context: Commander, document: OrderFile, unit: str, clean: bool,
+        reassign: Reassignment, target: OrderedProblems,
+        traced: FileLine | NoSourceReference, answers: tuple[MessageReference, ...],
+        request: RequestSelection, group: Sequence[str], listed: Mapping[str, Todo],
+    ) -> None:
         holder = context.comms.registry.require(unit).incarnation
         holders = sorted({assignment.owner for pid in group if pid in listed
                           for assignment in listed[pid].current_holder.current_assignments()
