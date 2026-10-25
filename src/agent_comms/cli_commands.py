@@ -1144,7 +1144,7 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
         Argument(
             flags=("--source",),
             options={
-                "help": "The harness's stored session: a session JSONL, OpenCode export JSON or opencode.db"
+                "help": "The harness's stored session: session JSONL, OpenCode export or opencode.db"
             },
         ),
     ]

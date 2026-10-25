@@ -23,7 +23,9 @@ from pydantic import TypeAdapter
 from agent_comms.agent_runtime import ReadsHistory
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import SubclassUnion
-from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness, PiHarness
+from agent_comms.harness_install import (
+    ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness, PiHarness,
+)
 from agent_comms.importing import ImportLimits, ImportSnapshot, ImportedConversation
 
 from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts

@@ -70,17 +70,18 @@ class ImportedSessionMetadata:
         return ContextSourceText(source.public_description(), source.public_text(comms))
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ImportedConversation(ABC):
-    """A session an import registers as a stopped thread: where it ran and the Pi session it becomes."""
+    """A session imported as a stopped thread: where it ran and the Pi session it becomes."""
 
     harness: type[Harness]
     source_id: str
     project: str
-    title: ThreadText
     messages_seen: int
-    truncated_messages: int
-    notices: tuple[str, ...]
-    historical_instructions: tuple[CodexRolloutProvenance, ...]
+    title: ThreadText = NoThreadText()
+    truncated_messages: int = 0
+    notices: tuple[str, ...] = ()
+    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     @property
     @abstractmethod
@@ -91,19 +92,11 @@ class ImportedConversation(ABC):
         """The thread's Pi session file, for a thread working in ``project``."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class KeptPiSession(ImportedConversation):
     """A native Pi session is already what a thread runs: its file is the session, unchanged."""
 
-    harness: type[Harness]
     source: Path
-    source_id: str
-    project: str
-    messages_seen: int
-    title: ThreadText = NoThreadText()
-    truncated_messages: int = 0
-    notices: tuple[str, ...] = ()
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     @property
     def imported_messages(self) -> int:
@@ -113,19 +106,11 @@ class KeptPiSession(ImportedConversation):
         return self.source.read_bytes()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ImportSnapshot(ImportedConversation):
-    harness: type[Harness]
-    source_id: str
-    project: str
-    title: ThreadText
     messages: tuple[ImportedMessage, ...]
     summary: str
-    messages_seen: int
-    truncated_messages: int
-    notices: tuple[str, ...]
     latest_request: str = ""
-    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     @classmethod
     def read(cls, history: History, limits: ImportLimits) -> ImportSnapshot:
@@ -237,9 +222,12 @@ class ImportBuffer:
         if self.instructions:
             self.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return ImportSnapshot(
-            harness, self.source_id, self.project, self.title, tuple(self.messages), self.summary,
-            self.seen, self.truncated, tuple(sorted(self.notices)), self.latest_request,
-            tuple(sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
+            harness=harness, source_id=self.source_id, project=self.project, title=self.title,
+            messages=tuple(self.messages), summary=self.summary, messages_seen=self.seen,
+            truncated_messages=self.truncated, notices=tuple(sorted(self.notices)),
+            latest_request=self.latest_request,
+            historical_instructions=tuple(
+                sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
         )
 
 

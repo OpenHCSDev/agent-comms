@@ -241,7 +241,7 @@ class ThreadManagement:
         tags: frozenset[str] = frozenset(),
         limits: ImportLimits = ImportLimits(),
     ) -> ThreadImported:
-        """Import a stopped, resumable thread from any harness session, without adopting its executor."""
+        """Import a stopped, resumable thread from any harness session, not its executor."""
         snapshot = history.imported(limits)
         directory = worktree.project(snapshot)
         if not directory:
