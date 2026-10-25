@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from tools.debt_ratchet import UncarriedRecordFormat, git
+from debt_ratchet import UncarriedRecordFormat, git
 
 from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
 from agent_comms.goal_attempts import GoalAttemptStore

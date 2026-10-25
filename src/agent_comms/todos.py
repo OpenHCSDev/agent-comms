@@ -126,6 +126,7 @@ from agent_comms.typed_table import (
     TypedRow,
     TypedTable,
 )
+from .goal_scope import OneGoal
 from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -3574,7 +3575,7 @@ class OrderHeadReview(HeadReviewOrder):
         record = OrderHeadReviewRecord(request, actor, RecordedEventTime(time.time()), verdict, self.link)
         operation = RecordOrderHeadVerdict(self.expected_revision, record)
         goals.update_goal(self.link.previous.owner, HeadReviewedOrderGoalAction(
-            expect=GoalPrecondition(goal_id=self.link.previous.generation),
+            expect=GoalPrecondition(goal_id=OneGoal(self.link.previous.generation)),
             problem=self.link.problem, operation=operation,
         ))
         return record
