@@ -455,8 +455,9 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     def blocks(self, reached: frozenset[str], action: CommanderVerb,
                answered: tuple[OwedAnswer, ...]) -> bool:
-        """An unanswered question must be answered before unrelated work."""
-        return True
+        """An owed message refuses only an action that answers nothing: an answer to any open
+        message is progress and is never refused, so the others it leaves owed only warn."""
+        return not answered
 
     def answered_in(self) -> tuple[str, ...]:
         """The threads a reply must reach to answer this debt by naming it; none when a reply
