@@ -9,7 +9,7 @@ from importlib.metadata import distributions
 from pathlib import Path
 from typing import Self
 
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel, JsonValue, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 
 import agent_comms
@@ -76,7 +76,7 @@ class PackageRecord(BaseModel, WireValue):
     def pin(self) -> PackagePin:
         return self.source.pin(self.version)
 
-    def to_wire(self) -> dict[str, object]:
+    def to_wire(self) -> JsonValue:
         return self.model_dump(mode="json")
 
     @classmethod
@@ -86,7 +86,7 @@ class PackageRecord(BaseModel, WireValue):
     @classmethod
     def schema(
         cls, by_alias: bool = True, ref_template: str = DEFAULT_REF_TEMPLATE
-    ) -> dict[str, object]:
+    ) -> dict[str, JsonValue]:
         return cls.model_json_schema(by_alias=by_alias, ref_template=ref_template)
 
 
