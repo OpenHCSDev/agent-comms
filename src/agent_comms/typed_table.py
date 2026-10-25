@@ -1088,8 +1088,17 @@ class TableSchema(ABC):
         if not cls.schema_differs(db):
             return False
         change.require()
-        with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
-            cls.carry_schema(db, rebuild=attached)
+        with SQLiteFile.relations_suspended(db):
+            with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
+                cls.carry_schema(db, rebuild=attached)
+                with closing(SQLiteForeignKeyViolation.iterate(
+                    db.execute("PRAGMA foreign_key_check"),
+                )) as violations:
+                    for violation in violations:
+                        raise cls.schema_error(
+                            f"{cls.__name__} foreign-key violation: table={violation.table}, "
+                            f"rowid={violation.rowid}, parent={violation.parent}"
+                        )
         return True
 
     @classmethod
@@ -1710,6 +1719,14 @@ class ProjectionProducerTables(SharedFileTables, DerivedTables):
 @dataclass(frozen=True)
 class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
+
+
+@dataclass(frozen=True)
+class SQLiteForeignKeyViolation(TypedRow):
+    table: str
+    rowid: int | None
+    parent: str
+    fkid: int
 
 
 @dataclass(frozen=True)
