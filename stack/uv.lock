@@ -204,7 +204,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#58f0f8f0b47ead92ca1b94e152cf43739278d027" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#f241a8dcaa732c9b46d3e7139ca0332c58a28d56" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
@@ -213,6 +213,7 @@ dependencies = [
     { name = "format-currency" },
     { name = "formbridge" },
     { name = "httpx" },
+    { name = "jeepney", marker = "sys_platform == 'linux'" },
     { name = "notify-py" },
     { name = "objectstate" },
     { name = "packaging" },
@@ -982,7 +983,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#cdddff395cefb49f3f47ac689af60bbb693b0c5a" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#e67b62c09c387a9e78edaab8ccc826d00cb27b53" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
@@ -1366,7 +1367,7 @@ wheels = [
 [[package]]
 name = "ui-theme"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#60a324455552a6feeb3868c41551948a58bdcc67" }
+source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#ba614bcb90b38c1f70789059a3c6aef8c017971b" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "terminaltexteffects" },
