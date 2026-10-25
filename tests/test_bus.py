@@ -21,6 +21,7 @@ from agent_comms.bus import (
 )
 from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.bus_activity_index import ActivityMaximum
+from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
 from agent_comms.messages import (
@@ -30,12 +31,15 @@ from agent_comms.messages import (
     Claimed,
     ClaimHolders,
     ClaimHistoryKind,
+    ClaimNoticeKind,
     ConversationActivity,
+    HandoffKind,
     InfoKind,
     MembershipTransition,
     Message,
     MessageKind,
     MessageRoleWire,
+    MessageRoutes,
     NoticeRole,
 )
 from agent_comms.channel_targets import ThreadTarget
@@ -240,6 +244,18 @@ def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
         BusProjectionTables.reset_schema(db)
     Bus.install(bus.path)
     assert bus.page(3, 2) == (second, record)
+
+
+def test_producer_digest_reads_routing_not_send_checks():
+    """A send-time check produces no route row, so editing it rebuilds no history."""
+    members = dict(BusRouteCounts.producer_members())
+    assert MessageRoutes in BusRouteCounts.producer_owners()
+    assert MessageKind not in BusRouteCounts.producer_owners()
+    assert members[HandoffKind] == ()
+    assert {
+        name for member in members[ClaimNoticeKind]
+        for name in BusRouteCounts.bound_names(member)
+    } == {"conversation_message", "route_rows"}
 
 
 def test_projection_freshness_follows_its_producing_source(bus):

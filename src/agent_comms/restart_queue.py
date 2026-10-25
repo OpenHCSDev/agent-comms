@@ -12,7 +12,7 @@ import json
 import os
 import sys
 from collections.abc import Iterator, Mapping
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -41,7 +41,7 @@ from .restart_scope import OwnersNamed
 from .store_files import (
     AtomicFile,
     StoreLockFile,
-    StoreGuard,
+    MultiFileStore,
 )
 from .thread_identity import RecordedThreadIncarnation
 from .tool_result import ToolResult
@@ -211,12 +211,8 @@ class RestartQueueLock(RuntimeFile, StoreLockFile):
     root_directory: ClassVar[str] = DIRECTORY
 
 
-class RestartQueueLayoutError(RelationViolationError):
-    """The one-use queue layout migration must precede new queue writers."""
-
-
 @dataclass(frozen=True)
-class RestartQueue(StoreGuard):
+class RestartQueue(MultiFileStore):
     """One active record per recorded owner; settled records never enter that set."""
 
     directory: Path
@@ -232,21 +228,12 @@ class RestartQueue(StoreGuard):
         return self.directory / 'active'
 
     @property
-    def lock_path(self) -> Path:
+    def path(self) -> Path:
         return RestartQueueLock.path_in(self.directory)
 
     @property
     def watcher_claim(self) -> ProcessSingleton:
         return ProcessSingleton(self.directory / "watcher.lock")
-
-    @contextmanager
-    def locked(self):
-        with self.write_guard(self.lock_path):
-            if next(self.directory.glob('*.json'), None) is not None:
-                raise RestartQueueLayoutError(
-                    'Restart queue uses a retired layout; existing records require explicit conversion'
-                )
-            yield self
 
     def active_path(self, owner: RecordedThreadIncarnation) -> Path:
         return self.active_directory / f'{owner.lookup}.json'
@@ -283,14 +270,22 @@ class RestartQueue(StoreGuard):
         if not record.state.items_with(Active, record):
             self.move(path, record)
 
-    def _active_record(self, path: Path) -> Iterator[QueuedRestart]:
+    def read_active(self, path: Path) -> QueuedRestart:
         record = self.read(path)
         if path != self.active_path(record.selection.identity.incarnation.require_recorded()):
             raise ValueError('Restart queue record has another owner key')
-        if record.state.items_with(Active, record):
-            yield record
-        else:
-            self.move(path, record)
+        return record
+
+    def _active_record(self, path: Path) -> Iterator[QueuedRestart]:
+        record = self.read_active(path)
+        yield from record.state.items_with(Active, record)
+
+    def settle_interrupted(self) -> None:
+        """Finish interrupted terminal moves while the caller holds the write guard."""
+        for path in self.active_directory.glob('*.json'):
+            record = self.read_active(path)
+            if not record.state.items_with(Active, record):
+                self.move(path, record)
 
     def active_for(self, owner: RecordedThreadIncarnation) -> Iterator[QueuedRestart]:
         path = self.active_path(owner)
@@ -302,7 +297,9 @@ class RestartQueue(StoreGuard):
             yield from self._active_record(path)
 
     def history(self, owner: RecordedThreadIncarnation) -> Iterator[QueuedRestart]:
-        yield from self.active_for(owner)
+        path = self.active_path(owner)
+        if path.exists() or path.is_symlink():
+            yield self.read_active(path)
         for path in sorted((self.directory / 'settled' / owner.lookup).glob('*.json')):
             yield self.read(path)
 
@@ -321,7 +318,8 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
     target = RestartTarget.capture(comms, launch.environment, launch_runtime)
     target.require_available(comms)
     # Queueing itself never signals or interrupts the owner, even if it is busy.
-    with queue.locked():
+    with queue.guarded_write():
+        queue.settle_interrupted()
         for previous in queue.active_for(owner.incarnation.require_recorded()):
             result = previous.state.enqueue(previous, selection, target)
             if result.state.items_with(Active, result):
@@ -350,7 +348,7 @@ def _start_watcher(root: Path, target: RestartTarget) -> SpawnedProcess:
 def status(comms: Comms, name: str) -> list[QueuedRestart]:
     owner = comms.registry.require(name).incarnation.require_recorded()
     queue = RestartQueue(comms.root / DIRECTORY)
-    with queue.locked():
+    with queue.guarded_read():
         return list(queue.history(owner))
 
 
@@ -359,7 +357,7 @@ def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
     owner = comms.registry.require(name).incarnation.require_recorded()
     queue = RestartQueue(comms.root / DIRECTORY)
     changed = []
-    with queue.locked():
+    with queue.guarded_write():
         for record in queue.active_for(owner):
             for pending in record.state.items_with(Pending, record):
                 cancelled = pending.transition(CancelledRestart())
@@ -370,12 +368,14 @@ def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
 
 def step(comms: Comms) -> None:
     queue = RestartQueue(comms.root / DIRECTORY)
-    with queue.locked():
+    with queue.guarded_write():
+        queue.settle_interrupted()
+    with queue.guarded_read():
         initial_records = tuple(queue.active_records())
     for initial in initial_records:
         if not initial.state.items_with(Pending, initial) or not initial.target.is_current_watcher:
             continue
-        with queue.locked():
+        with queue.guarded_write():
             current = tuple(queue.active_for(initial.selection.identity.incarnation.require_recorded()))
             if current != (initial,):
                 continue
@@ -402,7 +402,7 @@ def step(comms: Comms) -> None:
                         record = record.transition(AttemptingRestart())
             queue.save(record)
         for result in record.state.restart(comms, record, owner):
-            with queue.locked():
+            with queue.guarded_write():
                 queue.save(result)
 
 
@@ -418,7 +418,7 @@ async def run(comms: Comms) -> None:
             return
         def release_if_empty():
             # Enqueue and release share this lock, so no request is orphaned.
-            with queue.locked():
+            with queue.guarded_write():
                 pending = tuple(pending for record in queue.active_records()
                                 for pending in record.state.items_with(Pending, record))
                 if any(record.target.is_current_watcher for record in pending):
@@ -447,7 +447,7 @@ def main() -> None:
         asyncio.run(run(comms))
     except (OSError, ValueError, CoordinationError) as exc:
         queue = RestartQueue(comms.root / DIRECTORY)
-        with queue.locked():
+        with queue.guarded_write():
             for record in queue.active_records():
                 if record.state.items_with(Pending, record) and record.target.is_current_watcher:
                     queue.save(record.transition(
