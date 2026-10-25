@@ -38,6 +38,7 @@ from agent_comms.standing_rules import (
     OwedAnswer,
     ReviewTimerUp,
     StandingRule,
+    FamilyScan,
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
@@ -330,16 +331,12 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ChokeholdAnswer(UndatedStandingRule, declared_name=None):
+class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
     """The commander's newest answer to a chokehold, once every chokehold message is answered.
     The family judges each answer against one read of the signs still blocking release."""
 
     answer: Message
     blocking: tuple[Sign, ...] = field(compare=False)
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return ChokeholdAnswer
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,

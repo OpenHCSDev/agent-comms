@@ -23,7 +23,7 @@ from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.repo import GitCommandError
-from agent_comms.standing_rules import StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import FamilyScan, StandingRule, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.todos import (
@@ -180,22 +180,17 @@ class NeedsCommanderAttention:
 
 
 @dataclass(frozen=True)
-class UnitState(UndatedStandingRule, declared_name=None):
+class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     unit: ThreadIncarnation
     orders: tuple[str, ...]
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
     verb: ClassVar[str]
     action: ClassVar[str]
-    commander_disposes: ClassVar[bool] = True
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:
         return UnitState.members_with(UnitState)
-
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return UnitState
 
     @classmethod
     def scan_observed(
@@ -367,23 +362,20 @@ class Blocked(NeedsCommanderAttention, UnitState):
 
 @dataclass(frozen=True)
 class Detached(NeedsCommanderAttention, UnitState):
-    unread: int = field(compare=False)
+    """A pending order whose holder's presence takes no delivery: an order sent now is not
+    read now. The registered status owns that fact; the inbox's read marker is the owner's,
+    marks what he opened, and says nothing about the unit."""
+
     verb = "WAKE"
     action = "wake it or reassign the order"
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
         if source.pending and not source.presence.receiving:
-            yield cls(
-                source.thread.incarnation,
-                source.orders,
-                source.presence,
-                source,
-                source.comms.bus.pending_count(source.thread.name),
-            )
+            yield cls(source.thread.incarnation, source.orders, source.presence, source)
 
     def detail(self) -> str:
-        return f"{self.unread} unread; {super().detail()}"
+        return f"{self.presence.declared_name}, takes no delivery; {super().detail()}"
 
 
 @dataclass(frozen=True)

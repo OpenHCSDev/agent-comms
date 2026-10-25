@@ -16,7 +16,7 @@ Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlli
 2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll.
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
 4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
-5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Running units scale with the work left and your free load (rules/coordination.md).
+5. **Dispatch from the main loop; units implement, Claude forks diagnose, shape and review.** Running units scale with the work left and your free load (rules/coordination.md).
 
 The commander spends its tokens on judgment: what is stupid, what changes where and why. Every unit keeps moving toward an installed fix or deleted slop.
 
