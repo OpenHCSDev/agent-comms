@@ -11,15 +11,15 @@ from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import OrderRefusingStandingRule
+from agent_comms.standing_rules import OrderRefusingStandingRule, StuckMerge
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview, NoHeadOrder,
-    PullRequestLink, UnquotedHeadReview,
-    RecordPullRequest, RejectedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview,
+    FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview,
+    NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
+    ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
@@ -196,3 +196,17 @@ def test_judge_ok_keeps_every_repeated_growth_reason():
     with pytest.raises(ToolRefusedError, match="12\\+ words"):
         judge.JudgeVerb.parse(["ok", "--pr", "8", "--head", "abc123def", "--why", ACCEPTED.text,
                          "--growth", reasons[0], "--growth", "short.py grows"]).head_operation()
+
+
+def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(head_bus):
+    comms, github, green = head_bus
+    source_repo = green.repo
+    stamp = datetime.fromtimestamp(time.time() - 3600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    github.put(source_repo, UnmergedListedPullRequest(
+        8, "fix/head-8", green.head, stamp, "main", reviewable_times=(stamp,),
+        armed_times=(stamp,), merge_blocks=(FailedCheckMergeBlock(stamp, "debt-src"),),
+    ))
+    found = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
+    assert [(rule.request.pr, rule.block.what()) for rule in found] == [
+        (8, "required check debt-src failed")]
+    assert "60 min ago" in found[0].line() and found[0].broke_after(0)
