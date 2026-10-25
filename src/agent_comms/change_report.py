@@ -69,26 +69,19 @@ class WorkingTree(SourceText):
 
 @dataclass(frozen=True)
 class SourceRevision(SourceText):
-    """One validation call captures each repository's successfully fetched commit once."""
+    """One validation call captures each repository's resolved commit once."""
 
     _commits: dict[Path, str] = field(
         default_factory=dict, init=False, repr=False, compare=False
     )
 
-    @property
     @abstractmethod
-    def reference(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def fetch_refspec(self) -> str: ...
+    def resolve(self, repository: Path) -> str:
+        """The commit this revision names in ``repository``."""
 
     def lines(self, repository: Path, file: str) -> tuple[str, ...]:
         if repository not in self._commits:
-            Repo.git(repository, 'fetch', 'origin', self.fetch_refspec)
-            self._commits[repository] = Repo.git(
-                repository, 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
-            ).strip()
+            self._commits[repository] = self.resolve(repository)
         commit = self._commits[repository]
         root = repository.absolute()
         path = (root / file).relative_to(root).as_posix()
@@ -107,19 +100,50 @@ class SourceRevision(SourceText):
 
 
 @dataclass(frozen=True)
+class FetchedRevision(SourceRevision):
+    """A revision fetched from origin before it is read."""
+
+    @property
+    @abstractmethod
+    def reference(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def fetch_refspec(self) -> str: ...
+
+    def resolve(self, repository: Path) -> str:
+        Repo.git(repository, 'fetch', 'origin', self.fetch_refspec)
+        return Repo.git(
+            repository, 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
+        ).strip()
+
+
+@dataclass(frozen=True)
+class BranchHeadRevision(SourceRevision):
+    """A branch head in the reader's own checkout, where a unit's unpushed report stands."""
+
+    branch: str
+
+    def resolve(self, repository: Path) -> str:
+        try:
+            return Repo.git(repository, 'rev-parse', '--verify', '--quiet',
+                            f'{self.branch}^{{commit}}').strip()
+        except GitCommandError as error:
+            if error.no_such_revision():
+                raise MissingSourceLine(
+                    f'Branch {self.branch!r} does not resolve in {repository}.') from None
+            raise
+
+
+@dataclass(frozen=True)
 class CitedRevisions(SourceRevision):
     """A cite stands when any of these revisions holds it: an order on a problem with an open
     pull request cites that head's lines and main's alike. The first revision reads the rest."""
 
     revisions: tuple[SourceRevision, ...]
 
-    @property
-    def reference(self) -> str:
-        return self.revisions[0].reference
-
-    @property
-    def fetch_refspec(self) -> str:
-        return self.revisions[0].fetch_refspec
+    def resolve(self, repository: Path) -> str:
+        return self.revisions[0].resolve(repository)
 
     def lines(self, repository: Path, file: str) -> tuple[str, ...]:
         return self.revisions[0].lines(repository, file)
@@ -128,7 +152,7 @@ class CitedRevisions(SourceRevision):
         return self.revisions
 
 
-class MainRevision(SourceRevision):
+class MainRevision(FetchedRevision):
     @property
     def reference(self) -> str:
         return 'origin/main'
@@ -139,7 +163,7 @@ class MainRevision(SourceRevision):
 
 
 @dataclass(frozen=True)
-class CommitRevision(SourceRevision):
+class CommitRevision(FetchedRevision):
     """The commit a delivery's checks ran on."""
 
     commit: str
@@ -154,7 +178,7 @@ class CommitRevision(SourceRevision):
 
 
 @dataclass(frozen=True)
-class PullRequestHeadRevision(SourceRevision):
+class PullRequestHeadRevision(FetchedRevision):
     link: PullRequestLink
 
     @property
@@ -180,7 +204,8 @@ class SourceRoots(ABC):
 
 @dataclass(frozen=True)
 class OrderRoots(SourceRoots):
-    """An order's citations: unqualified ones are in the order's check directory."""
+    """Citations from one checkout, an order's check directory or a unit's worktree:
+    unqualified ones are read there."""
 
     checkout: Path
     project: CommanderProject
@@ -429,7 +454,7 @@ class ReportEvidence(SubclassUnion, affix=""):
     """A message's change report, or none; only the change-report kind requires one."""
 
     @abstractmethod
-    def require_references_exist(self, worktree: Path) -> None: ...
+    def require_references_exist(self, roots: SourceRoots) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -445,44 +470,20 @@ class ChangeReport(RecordMember, ReportEvidence):
         if not self.facts:
             raise ValueError("A change report requires the facts its change touches.")
 
-    def require_references_exist(self, worktree: Path) -> None:
-        """Every owner and consumer reference exists at this declared branch head."""
-        try:
-            revision = Repo.git(worktree, "rev-parse", "--verify", "--quiet",
-                                f"{self.branch}^{{commit}}").strip()
-        except GitCommandError as error:
-            if error.no_such_revision():
-                raise ValueError(f"Change report branch {self.branch!r} does not resolve "
-                                 f"in {worktree}") from None
-            raise
-        sources: dict[str, str] = {}
+    def require_references_exist(self, roots: SourceRoots) -> None:
+        """Every owner and consumer reference exists at this declared branch head, or at the
+        main of the registered repository a reference names."""
+        revision = BranchHeadRevision(self.branch)
         for fact in self.facts:
             for reference in (fact.owner, *fact.consumers):
-                content = sources.get(reference.file)
-                if content is None:
-                    try:
-                        content = Repo.git(worktree, "show", f"{revision}:{reference.file}")
-                    except GitCommandError as error:
-                        if not error.source_path_absent(revision, reference.file):
-                            raise
-                        raise ValueError(
-                            f"Change report references {reference.file}, absent at "
-                            f"branch head {self.branch} ({revision[:12]}) in {worktree}"
-                        ) from None
-                    sources[reference.file] = content
-                if reference.line > len(content.splitlines()):
-                    raise ValueError(
-                        f"Change report references {reference.file}:{reference.line}, "
-                        f"past the {len(content.splitlines())} lines present at branch "
-                        f"head {self.branch} ({revision[:12]}) in {worktree}"
-                    )
+                reference.require_exists(roots, revision)
 
 
 @dataclass(frozen=True, slots=True)
 class NoChangeReport(NullMember, ReportEvidence):
     """The message carries no change report; only the change-report kind requires one."""
 
-    def require_references_exist(self, worktree: Path) -> None:
+    def require_references_exist(self, roots: SourceRoots) -> None:
         raise ValueError(
             "A change report requires its report: the branch, each touched fact, "
             "its one owner and every consumer as file:line, the search command "

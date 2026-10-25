@@ -18,7 +18,6 @@ from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
 from itertools import accumulate
-from pathlib import Path
 from typing import (
     TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform,
     get_origin, get_type_hints,
@@ -30,7 +29,7 @@ from agent_comms.typed_table import (
     ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
 )
 
-from .change_report import FileLine, NoChangeReport, ReportEvidence
+from .change_report import FileLine, NoChangeReport, ReportEvidence, SourceRoots
 from .channel_targets import CommandTarget
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
@@ -459,7 +458,7 @@ class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
             raise ValueError(f"Message kind {cls.declared_name!r} is not generically sendable")
 
     @classmethod
-    def require_publishable(cls, message: Message, worktree: Path) -> None:
+    def require_publishable(cls, message: Message, roots: SourceRoots) -> None:
         """Checks a send must pass before publication; base kinds declare none."""
 
 
@@ -522,7 +521,7 @@ class HandoffKind(NeedsAnswerKind):
     COMMANDS = re.compile(r"`[^`]*\b(grep|rg|git|sed|awk|find|python|ast)\b[^`]*`")
 
     @classmethod
-    def require_publishable(cls, message: Message, worktree: Path) -> None:
+    def require_publishable(cls, message: Message, roots: SourceRoots) -> None:
         claims = [
             claim for claim in cls.CLAIMS
             if re.search(rf"\b{re.escape(claim)}\b", message.body, re.IGNORECASE)
@@ -543,8 +542,8 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
     """A review request declares each touched fact with its single owner."""
 
     @classmethod
-    def require_publishable(cls, message: Message, worktree: Path) -> None:
-        message.report.require_references_exist(worktree)
+    def require_publishable(cls, message: Message, roots: SourceRoots) -> None:
+        message.report.require_references_exist(roots)
 
 
 class RoleActivitySource(ProjectionSource):
