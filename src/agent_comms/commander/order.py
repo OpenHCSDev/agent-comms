@@ -542,7 +542,7 @@ class ListedProblems(OrderedProblems):
                 listed: Mapping[str, Todo]) -> PendingProblemOrder:
         """A replacement order keeps the problem's pull requests: a restore cites their heads."""
         return order.carrying(link for pid in group if pid in listed
-                              for link in listed[pid].order.linked_requests)
+                              for link in listed[pid].order.pull_requests)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
@@ -1158,7 +1158,7 @@ class DoneVerb(OrderVerb):
         ctx.call(CommsOrderDoneTool(
             problem=todo.id, order_id=order.id, delivery=delivery,
             claims=delivery.done_claims(order)))
-        print(f'{todo.held().owner}: order {order.id} delivered as {delivery.work}')
+        print(f'{todo.holder_state.previous_assignment().owner}: order {order.id} delivered as {delivery.work}')
 
 
 @dataclass(frozen=True)

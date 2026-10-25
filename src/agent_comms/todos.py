@@ -875,7 +875,7 @@ class PullRequests:
         linked: dict[int, list[Todo]] = {}
         for candidate in todos:
             for number in {link.number for order in candidate.order.declarations
-                           for link in order.linked_requests
+                           for link in order.pull_requests
                            if link.repo == repo}:
                 linked.setdefault(number, []).append(candidate)
         return linked
@@ -907,7 +907,7 @@ class PullRequests:
             tuple(candidate.id for candidate in linked[picked.number]),
             tuple(dict.fromkeys(order.id for candidate in linked[picked.number]
                                 for order in candidate.order.declarations
-                                if PullRequestLink(repo, picked.number) in order.linked_requests)))
+                                if PullRequestLink(repo, picked.number) in order.pull_requests)))
             for row in self.rows(repo, tuple(linked)) for picked in kind.picked(row))
         return tuple(sorted((request for request in requests if request.belongs_to(todo)),
                             key=lambda request: request.updated_at, reverse=True))
@@ -1914,9 +1914,12 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         return ()
 
     @property
-    def linked_requests(self) -> tuple[PullRequestLink, ...]:
+    def pull_requests(self) -> tuple[PullRequestLink, ...]:
         """The pull requests this order's work holds; an unchecked order holds none."""
         return ()
+
+    def holds_head(self, request: PullRequestHead) -> bool:
+        return False
 
     def closed_by_merge(
         self, todo: Todo, pulls: ProgressRead, checkout_base: Path
@@ -2155,10 +2158,6 @@ class FixScope(OrderScope[CheckedDelivery]):
 class CheckedProblemOrder(ProblemOrder, declared_name=None):
     """A checked order keeps its actual body, check and source location."""
 
-    @property
-    def linked_requests(self) -> tuple[PullRequestLink, ...]:
-        return (*self.pull_requests, *(claim.pull_request for claim in self.commander_claims()))
-
     def require_linkable(self) -> None:
         """An order still taking work accepts another pull request."""
 
@@ -2185,8 +2184,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
         raise TodoError("Only a pending order can be claimed by its holder.")
 
-    def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
-        raise TodoError("Only a claimed order goes under review.")
+    def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
+        return (ReviewedHeadVerdict, RejectedHeadVerdict)
 
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
@@ -2207,7 +2206,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     @cached_property
     def cited_revision(self) -> SourceRevision:
-        return CitedRevisions((*map(PullRequestHeadRevision, self.linked_requests), MainRevision()))
+        return CitedRevisions((*map(PullRequestHeadRevision, self.pull_requests), MainRevision()))
 
     def source_roots(self, project: CommanderProject) -> SourceRoots:
         return OrderRoots(self.check.directory, project)
@@ -2302,7 +2301,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     created: Annotated[tuple[FileLine, ...], WireOmitDefault()] = ()
 
     def holds_head(self, request: PullRequestHead) -> bool:
-        return PullRequestLink(request.repo, request.pr) in self.linked_requests
+        return PullRequestLink(request.repo, request.pr) in self.pull_requests
 
     @property
     def phase(self) -> type[OrderPhase]:
@@ -2700,7 +2699,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         return self.fresh_order(at, self.edits)
 
     def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
-        return self.copy_as(ClaimedProblemOrder, claim=claim)
+        return self.carrying((claim.pull_request,)).copy_as(ClaimedProblemOrder, claim=claim)
 
     line: ClassVar[str] = "Open"
 
@@ -2797,10 +2796,8 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
     def owed_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
-    def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
-        """The reviewed head is GitHub's current head (HeadVerdict.reviewed); the claim's head
-        is what the unit said at claim time and never gates a later push."""
-        return self.copy_as(ReviewingProblemOrder, review=record)
+    def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
+        return (*super().review_verdicts(), UnderReviewHeadVerdict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -3065,6 +3062,10 @@ class NotOrderCommander(TodoError):  # noqa: N818 - domain-specific refusal outc
 class TodoHolder(ABC):
     """Current, released and absent holders own their assignment behaviour."""
 
+    def record_review(self, goals: Goals, current: Todo,
+                      operation: RecordOrderHeadVerdict) -> None:
+        goals.todos.apply(current.id, operation.prepare(goals, current))
+
     def held(self, current: Todo) -> Assignment:
         raise TodoError(f"{current.id} has no open order.")
 
@@ -3202,6 +3203,15 @@ class Assignment(TodoHolder):
     def previous_assignment(self) -> Assignment:
         """The current holder supplies its own assignment for retirement."""
         return self
+
+    def record_review(self, goals: Goals, current: Todo,
+                      operation: RecordOrderHeadVerdict) -> None:
+        from .goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
+
+        goals.update_goal(self.owner, HeadReviewedOrderGoalAction(
+            expect=GoalPrecondition(goal_id=OneGoal(self.generation)),
+            problem=current.id, operation=operation,
+        ))
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation and self.owner_identity != proposed.owner_identity:
@@ -3820,7 +3830,8 @@ class UnderReviewHeadVerdict(HeadVerdict):
         return f"Under review by {reviewer} on {subject}"
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
-        return replace(current, order=current.order.checked().under_review(record))
+        return replace(current, order=current.order.checked().copy_as(
+            ReviewingProblemOrder, review=record))
 
 
 class HeadReviewRelation(DeclaredFamily):
@@ -3854,9 +3865,9 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
 
     @staticmethod
     def holding(todos: Sequence[Todo], request: PullRequestHead) -> tuple[Todo, ...]:
-        """The held orders whose checked order holds this head."""
+        """The open orders whose current declaration holds this head, held or released."""
         return tuple(todo for todo in todos if todo.repo == request.repo
-                     and todo.order.checked().holds_head(request))
+                     and todo.order.holds_head(request))
 
     @abstractmethod
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
@@ -3872,6 +3883,9 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
 
 @dataclass(frozen=True)
 class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
+    def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
+        return tuple(HeadVerdict.members())
+
     def rejected(self, goals: Goals, record: HeadReviewRecord) -> None:
         """There is no holder to strike or wake."""
 
@@ -3913,8 +3927,8 @@ class OrderLink(ProblemLink, declared_name=None):
 
     def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
         current.require_commander(actor)
-        current.require_assignment(self.previous)
-        if current.id != self.problem or current.order.checked().id != self.order_id:
+        if (current.holder_state.previous_assignment() != self.previous
+                or current.id != self.problem or current.order.checked().id != self.order_id):
             raise TodoConflict(current)
 
 
@@ -3925,7 +3939,7 @@ class UnquotedHeadReview(OrderLink):
     @classmethod
     def of(cls, todo: Todo, evidence: tuple[FileLine, ...] = ()) -> Self:
         return cls(problem=todo.id, order_id=todo.order.checked().id,
-                   previous=todo.held(), evidence=evidence)
+                   previous=todo.holder_state.previous_assignment(), evidence=evidence)
 
 
 @dataclass(frozen=True)
@@ -3935,7 +3949,7 @@ class LinkedHeadReview(OrderQuote, OrderLink):
     @classmethod
     def of(cls, todo: Todo, quote: str, evidence: tuple[FileLine, ...] = ()) -> Self:
         return cls(quote=quote, problem=todo.id, order_id=todo.order.checked().id,
-                   previous=todo.held(), evidence=evidence)
+                   previous=todo.holder_state.previous_assignment(), evidence=evidence)
 
     def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
         super().require_current(current, actor)
@@ -3956,14 +3970,10 @@ class OrderHeadReview(HeadReviewOrder):
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> OrderHeadReviewRecord:
-        from .goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
-
         record = OrderHeadReviewRecord(request, actor, RecordedEventTime(time.time()), verdict, self.link)
         operation = RecordOrderHeadVerdict(self.expected_revision, record)
-        goals.update_goal(self.link.previous.owner, HeadReviewedOrderGoalAction(
-            expect=GoalPrecondition(goal_id=OneGoal(self.link.previous.generation)),
-            problem=self.link.problem, operation=operation,
-        ))
+        current = goals.todos.get(self.link.problem)
+        current.holder_state.record_review(goals, current, operation)
         return record
 
 
@@ -4007,6 +4017,10 @@ class RecordOrderHeadVerdict(TodoCommand):
         self.review.order.require_current(current, self.review.actor)
         if not current.order.checked().holds_head(self.review.request):
             raise TodoError("The reviewed pull request is not linked to this order.")
+        allowed = current.order.checked().review_verdicts()
+        if not any(member in type(self.review.verdict).__mro__ for member in allowed):
+            raise TodoError("This order takes head verdicts: " + ", ".join(
+                member.declared_name for member in allowed))
         self.review.verdict.prepare_order(goals, current, self.review.order)
         return self
 
@@ -5269,7 +5283,8 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         authority = commander.commanding_identity
         found = self._select('id=? AND creator=? AND creator_created=?',
                              (problem, authority.name, authority.wire_birth), reader=self._open)
-        if len(found) != 1 or found[0].holder != unit:
+        if (len(found) != 1
+                or found[0].holder_state.previous_assignment().owner != unit):
             raise TodoError(f'{unit} holds no order on {problem}')
         return found[0]
 
