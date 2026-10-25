@@ -13,6 +13,7 @@ from .activity import ObservedActivity
 from .channel_targets import CommandTarget
 from .child_process import ProcessIdentity, ProcessState
 from .coordination_session import NativeBoundary
+from .bus_tables import MessageIdentitySource
 from .errors import RelationViolationError
 from .field_codec import (
     NullMember,
@@ -398,7 +399,8 @@ class NoTurnLease(NullMember, TurnLease):
                 owner.incarnation.require_recorded(), conversation.scope(snapshot),
                 cursor, snapshot,
             )
-            return source.answering(references, route, snapshot)
+            with source.observing() as db:
+                return MessageIdentitySource.answering(db, references, route, snapshot)
 
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return False

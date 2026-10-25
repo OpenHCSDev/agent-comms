@@ -36,11 +36,6 @@ class ReferenceMatch(TypedRow):
     matched: bool
 
 
-@dataclass(frozen=True)
-class AnswerMatch(ReferenceMatch):
-    answers: bool
-
-
 class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables,
                 declared_name=None):
     """One file reconciles its declared families using each family's carry policy."""
@@ -160,24 +155,26 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
         query = (
             "WITH supplied AS (SELECT key AS position, "
             "json_extract(value,'$[0]') AS seq, json_extract(value,'$[1]') AS message_id "
-            "FROM json_each(?)) "
-            "SELECT supplied.seq, supplied.message_id, "
+            "FROM json_each(?)), selected AS ("
+            "SELECT supplied.position, supplied.seq, supplied.message_id, "
             "identity.seq IS NOT NULL AND addressed.seq IS NOT NULL AS matched, "
             f"COALESCE(({predicate}),0) AS answers FROM supplied "
             f'LEFT JOIN "{cls.declared_name}" AS identity ON identity.seq=supplied.seq '
             "AND identity.message_id=supplied.message_id "
             f'LEFT JOIN "{messages.Addressed.table.declared_name}" AS addressed '
-            "ON addressed.seq=identity.seq ORDER BY supplied.position"
+            "ON addressed.seq=identity.seq) "
+            "SELECT seq, message_id, matched FROM selected "
+            "WHERE NOT matched OR answers ORDER BY position"
         )
         selected = MessageReference.joined(db.execute(query, (
             json.dumps(tuple((reference.seq, reference.message_id) for reference in references)),
             *parameters,
-        )), AnswerMatch)
+        )), ReferenceMatch)
         cls.require_matched(
             (match for _, match in selected),
             RelationViolationError("Message reference does not match its bus record"),
         )
-        return tuple(reference for reference, match in selected if match.answers)
+        return tuple(reference for reference, _ in selected)
 
 
 @dataclass(frozen=True)

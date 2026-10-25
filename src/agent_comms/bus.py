@@ -62,7 +62,6 @@ from agent_comms.typed_table import (
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
-    from agent_comms.channel_targets import NamedTarget
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -390,13 +389,6 @@ class BusReader(RouteCounts, ABC):
             descending=descending, sequences=sequences, limit=limit,
         )) as positions:
             return tuple(source.delivery(seq) for seq in positions)
-
-    def answering(
-        self, references: tuple[MessageReference, ...], route: NamedTarget,
-        snapshot: RegistryProvenance,
-    ) -> tuple[MessageReference, ...]:
-        with self.observing() as db:
-            return MessageIdentitySource.answering(db, references, route, snapshot)
 
     def unanswered_references(
         self, sequences: tuple[int, ...], responders: frozenset[str],
