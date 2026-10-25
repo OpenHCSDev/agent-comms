@@ -14,7 +14,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
-    AcceptedVerdict, DoneTodoState, OrderMessage, ReleaseTodo, SendBackVerdict, StrikeReason,
+    AcceptedVerdict, DoneTodoState, OrderMessage, OrderVerdict, ReleaseTodo, SendBackVerdict, StrikeReason,
     StrikeTodo, TodoConflict, TodoError, UnorderedProblemOrder, WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
@@ -90,7 +90,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert story.line.count("Ordered resent-order:") == story.line.count("Accepted") == 1
     assert story.line.count("bad-call") == story.line.count("accepted-call") == 1
     assert "strike recorded" in story.line
-    assert len(saved.strikes) == len(saved.verdicts) == 2
+    assert len(saved.history.events(saved.id, StrikeTodo)) == len(saved.history.events(saved.id, OrderVerdict)) == 2
     assert CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=caller) == result
     fleet = FieldCodec.decode(FleetStory, board_read(CommsFleetStoryTool, copied, NoThreadCaller()))
     assert fleet.lines == (f"P1 worker: {saved.order.line}",)

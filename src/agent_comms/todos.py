@@ -2370,7 +2370,8 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         problems.extend(reassign.refusals(holders))
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-        fired = tuple(listed[pid] for pid in group if pid in listed and listed[pid].struck_out(context.comms.registry.require(unit).incarnation))
+        holder = context.comms.registry.require(unit).incarnation
+        fired = tuple(listed[pid] for pid in group if pid in listed and listed[pid].struck_out(holder))
         self.run.require_assignment(context.comms.registry.require(unit).incarnation,
                                     fired, ProblemGoalOrder.StrikeLimit)
 
@@ -2405,7 +2406,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         replacing = target.replacing(holder, group, listed)
         self.require_send(context, document, unit, group, listed, target,
                           reassign, holders, clean, traced)
-        struck_already = replacing and listed[group[0]].struck_on_order(context.comms.registry.require(unit).incarnation)
+        struck_already = replacing and listed[group[0]].struck_on_order(holder)
         measured = MeasuredReview.read(context.comms.goals.todos)
         review_at = measured.review_at(self)
         message = self.message(context, document, unit, group, replacing, reassign)
@@ -3180,10 +3181,14 @@ class StrikeTodo(CitedStrike, StoryEvent):
             db, struck, store)
 
     @classmethod
+    def for_send_back(cls, revision: int, actor: ThreadIncarnation, previous: Assignment,
+                      reason: StrikeReason, at: EventTime, evidence: tuple[FileLine, ...]) -> Self:
+        return cls(revision, actor, previous, reason.text, at, evidence=evidence)
+
+    @classmethod
     def send_back(cls, current: Todo, actor: ThreadIncarnation, previous: Assignment,
                   reason: StrikeReason, at: EventTime, evidence: tuple[FileLine, ...]) -> Todo:
-        struck = cls(current.revision, actor, previous, reason.text, at,
-                     evidence=evidence).apply(current)
+        struck = cls.for_send_back(current.revision, actor, previous, reason, at, evidence).apply(current)
         order = current.order.checked().sent_back(reason)
         return replace(struck, order=order)
 
@@ -3446,9 +3451,8 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
                                     self.reason, record.at, record.order.evidence)
 
     def order_events(self, record: OrderHeadReviewRecord, revision: int) -> tuple[StrikeTodo, ...]:
-        return (StrikeTodo(revision, record.actor,
-                          record.order.previous, self.reason.text, record.at,
-                          evidence=record.order.evidence),)
+        return (StrikeTodo.for_send_back(revision, record.actor, record.order.previous,
+                                        self.reason, record.at, record.order.evidence),)
 
 
 @dataclass(frozen=True)
@@ -3736,8 +3740,8 @@ class SendBackVerdict(ToolCallVerdict, CitedStrike, StoryEvent):
         return f"Sent back: {self.reason.text}"
 
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
-        return (StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
-                           self.at, evidence=self.evidence),)
+        return (StrikeTodo.for_send_back(self.expected_revision, self.actor, self.previous, self.reason,
+                                        self.at, self.evidence),)
 
     def story_text(self) -> str:
         return f"{super().story_text()} (strike recorded)"
@@ -4145,34 +4149,6 @@ class Todo(TodoStoreRows, TypedTable):
         default_factory=lambda: TodoHistory(), compare=False, repr=False,
     )
 
-    @property
-    def strikes(self) -> tuple[StrikeTodo, ...]:
-        return self.history.events(self.id, StrikeTodo)
-
-    @property
-    def voided(self) -> tuple[VoidStrikeTodo, ...]:
-        return self.history.events(self.id, VoidStrikeTodo)
-
-    @property
-    def released(self) -> tuple[ReleaseTodo, ...]:
-        return self.history.events(self.id, ReleaseTodo)
-
-    @property
-    def verdicts(self) -> tuple[OrderVerdict, ...]:
-        return self.history.events(self.id, OrderVerdict)
-
-    @property
-    def corrections(self) -> tuple[WordingCorrection, ...]:
-        return self.history.events(self.id, WordingCorrection)
-
-    @property
-    def messages(self) -> tuple[OrderMessage, ...]:
-        return self.history.events(self.id, OrderMessage)
-
-    @property
-    def prior_orders(self) -> tuple[CheckedProblemOrder, ...]:
-        return self.history.events(self.id, CheckedProblemOrder)
-
     @classmethod
     def rows(cls, db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
         return tuple(replace(todo, history=TransactionTodoHistory(db)) for todo in cls.read(db.execute(
@@ -4187,9 +4163,13 @@ class Todo(TodoStoreRows, TypedTable):
     def judged_calls(self) -> tuple[str, ...]:
         return self.history.facts_for(self.id).judged_calls
 
+    def latest_verdict_lines(self) -> tuple[str, ...]:
+        return tuple(verdict.line for verdict in self.history.events(
+            self.id, OrderVerdict, limit=1, descending=True))
+
     @property
     def order_history(self) -> tuple[CheckedProblemOrder, ...]:
-        return (*self.prior_orders, *self.order.declarations)
+        return (*self.history.events(self.id, CheckedProblemOrder), *self.order.declarations)
 
     def orders_before(
         self, following: ProblemOrder, additional: tuple[CheckedProblemOrder, ...] = (),
@@ -4475,6 +4455,7 @@ class StoryFacts(TypedRow):
     judged_calls: tuple[str, ...] = ()
     send_backs: tuple[float, ...] = ()
     release_actors: tuple[ThreadIncarnation, ...] = ()
+    previous_holders: tuple[Assignment, ...] = ()
 
     def strike_count(self, unit: ThreadIncarnation) -> int:
         return sum(count.total for count in self.strike_totals if count.owner_identity == unit)
@@ -4554,6 +4535,13 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
             order_by=("seq",), descending=True))
 
     @classmethod
+    def bound_for(cls, db: sqlite3.Connection, problem: str) -> int:
+        (bound,) = db.execute(cls._sql(
+            f"SELECT COALESCE(max({{seq}}),0) FROM {cls.declared_name} WHERE {{problem}}=?"),
+            (problem,)).fetchone()
+        return bound
+
+    @classmethod
     def facts_for(cls, db: sqlite3.Connection, problems: tuple[str, ...]) -> dict[str, StoryFacts]:
         """One statement per listing. No event payload reaches a Python decoder."""
         if not problems:
@@ -4576,7 +4564,8 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
                     '{total}', total, '{latest}', latest))) strike_totals
                 FROM live GROUP BY problem
             ), releases AS (
-                SELECT problem, actor, max(seq) FROM selected
+                SELECT problem, actor, max(seq),
+                    json_group_array(DISTINCT json(strike_assignment)) previous_holders FROM selected
                 WHERE kind IN {ReleaseTodo.sql_choices()} GROUP BY problem
             ), facts AS (
                 SELECT problem, max(seq) last_seq,
@@ -4590,6 +4579,7 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
             )
             SELECT f.problem, f.last_seq, COALESCE(c.strike_totals, '[]') strike_totals,
                 f.order_ids, f.ordered_at, f.judged_calls, f.send_backs,
+                COALESCE(r.previous_holders, '[]') previous_holders,
                 json_group_array(json(r.actor)) FILTER (WHERE r.actor IS NOT NULL) release_actors
             FROM facts f LEFT JOIN counts c ON c.problem=f.problem
             LEFT JOIN releases r ON r.problem=f.problem GROUP BY f.problem
@@ -4610,22 +4600,26 @@ class TodoHistory:
         with self.snapshot() as db:
             return StoredOrderStory.facts_for(db, (problem,))[problem]
 
+    def bound_for(self, problem: str) -> int:
+        with self.snapshot() as db:
+            return StoredOrderStory.bound_for(db, problem)
+
     def events[Event: TodoCommand | CheckedProblemOrder](
         self, problem: str, member: type[Event], *, limit: int = -1, descending: bool = False,
     ) -> tuple[Event, ...]:
         with self.snapshot() as db:
-            return StoredOrderStory.events_as(db, problem, member, before=self.facts_for(problem).last_seq,
+            return StoredOrderStory.events_as(db, problem, member, before=self.bound_for(problem),
                                               limit=limit, descending=descending)
 
     def sources(self, problem: str) -> tuple[TodoCommand | CheckedProblemOrder, ...]:
         with self.snapshot() as db:
             return tuple(row.event for row in StoredOrderStory.select(
-                db, problem=problem, where="{seq}<=?", parameters=(self.facts_for(problem).last_seq,),
+                db, problem=problem, where="{seq}<=?", parameters=(self.bound_for(problem),),
                 order_by=("seq",), descending=True))
 
     def live_strikes(self, problem: str) -> tuple[StrikeTodo, ...]:
         with self.snapshot() as db:
-            return StoredOrderStory.live_strikes(db, problem, before=self.facts_for(problem).last_seq)
+            return StoredOrderStory.live_strikes(db, problem, before=self.bound_for(problem))
 
 
 @dataclass(frozen=True)
@@ -4834,9 +4828,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 raise TodoError(f'{problem} is already held by {target.holder}')
             linked = target.order.linked(source.order)
             StoredOrderStory.archive(db, target, linked)
-            for declaration in source.prior_orders:
+            for declaration in source.history.events(source.id, CheckedProblemOrder):
                 StoredOrderStory.insert_values(db, problem=target.id, event=declaration)
-            for message in source.messages:
+            for message in source.history.events(source.id, OrderMessage):
                 StoredOrderStory.insert_values(db, problem=target.id, event=message)
             replace(target, order=linked,
                     assignment=source.held(), request=source.request, review_at=source.review_at,
@@ -4975,7 +4969,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return frozenset(
             assignment.owner_identity for todo in self.history_for_commander(commander)
             for assignment in (*todo.current_holder.current_assignments(),
-                               *(release.previous for release in todo.released)))
+                               *todo.history.facts_for(todo.id).previous_holders))
 
     def create(
         self,
@@ -5090,3 +5084,6 @@ class BoardTodoHistory(TodoStore):
 
     def facts_for(self, problem: str) -> StoryFacts:
         return self.facts[problem]
+
+    def bound_for(self, problem: str) -> int:
+        return self.facts[problem].last_seq

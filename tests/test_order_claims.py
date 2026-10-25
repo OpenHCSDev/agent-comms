@@ -17,6 +17,8 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     ClaimOrder,
     ClaimedProblemOrder,
+    CheckedProblemOrder,
+    ReleaseTodo,
     CorrectCheckTodo,
     DoneTodoState,
     FailedCheckStrike,
@@ -101,7 +103,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     assert isinstance(pending.order, PendingProblemOrder)
     assert pending.order.id != claimed.order.id
     assert why.text in pending.order.edits
-    assert claimed.order in pending.prior_orders
+    assert claimed.order in pending.history.events(pending.id, CheckedProblemOrder)
     assert pending.strike_count == claimed.strike_count + 1
     response = CommsOrderDeliverTool.invoke(comms, request.arguments, caller=ThreadCaller("worker"))
     assert isinstance(FieldCodec.decode(TodoChanged, response).todo.order, ClaimedProblemOrder)
@@ -161,8 +163,11 @@ def test_failed_check_strike_releases_at_the_updated_revision(held_commander):
     released = store.apply(first.id, failure)
     assert released.assignment is None
     assert released.revision == first.revision + 2
-    assert released.strikes == (*first.strikes, failure)
-    assert released.released[-1].expected_revision == first.revision + 1
+    assert released.strike_count == first.strike_count + 1
+    latest_failure, = released.history.events(released.id, FailedCheckStrike, limit=1, descending=True)
+    latest_release, = released.history.events(released.id, ReleaseTodo, limit=1, descending=True)
+    assert latest_failure == failure
+    assert latest_release.expected_revision == first.revision + 1
     with pytest.raises(TodoConflict):
         store.apply(first.id, failure)
     assert store.get(first.id) == released
@@ -179,8 +184,10 @@ def test_second_commander_strike_takes_the_task_away(held_commander):
             evidence=(todo.order.checked().owner,),
         ))
     assert todo.holder is None
-    assert len(todo.strikes) == 2
-    assert todo.released[-1].previous == todo.strikes[-1].previous
+    assert todo.strike_count == 2
+    latest_release, = todo.history.events(todo.id, ReleaseTodo, limit=1, descending=True)
+    latest_strike, = todo.history.events(todo.id, StrikeTodo, limit=1, descending=True)
+    assert latest_release.previous == latest_strike.previous
 
 
 def claimed_by_worker(ctx) -> Todo:
@@ -224,7 +231,7 @@ def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cite
     corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
     assert corrected.order.id != claimed.order.id
-    assert claimed.order in corrected.prior_orders
+    assert claimed.order in corrected.history.events(corrected.id, CheckedProblemOrder)
     assert corrected.holder == "worker"
     assert corrected.strike_count == claimed.strike_count
 
@@ -284,7 +291,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     corrected = store.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
     assert corrected.order.commander_claims() == ()
-    assert claims[0].order in corrected.prior_orders
+    assert claims[0].order in corrected.history.events(corrected.id, CheckedProblemOrder)
     assert store.get("P2") == claims[1]
 
 

@@ -16,7 +16,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AcceptedVerdict, Assignment, DroppedVerdict, FailedCheckStrike, OrderMessage,
+    AcceptedVerdict, Assignment, CheckedProblemOrder, DroppedVerdict, FailedCheckStrike, OrderMessage,
     PeerAcceptedVerdict, ReleaseTodo, SendBackVerdict, StoredOrderStory,
     StrikeReason, StrikeTodo, SupersededVerdict, Todo, TodoCommand, VoidStrikeTodo, WordingCorrection,
 )
@@ -103,7 +103,7 @@ def test_voided_strike_uses_its_stored_sequence_and_count_returns_to_zero(record
     assert struck.strike_count == 1
     assert len(struck.live_strikes()) == 1
     assert original.strike_count == 0
-    assert original.strikes == ()
+    assert original.history.events(original.id, StrikeTodo) == ()
     with store.snapshot() as db:
         first, void = tuple(StoredOrderStory.select(db, problem=original.id, order_by=("seq",)))
         assert void.voids == first.seq
@@ -140,7 +140,7 @@ def test_wording_writer_records_its_actual_time(recorded_problem):
     (corrected,) = comms.goals.todos.correct(comms.registry.require("worker").incarnation,
         MessageId.mint("wording correction"), "The custody is ready.")
     after = time.time()
-    assert before <= corrected.corrections[0].at.recorded_at("A wording correction") <= after
+    assert before <= corrected.history.events(corrected.id, WordingCorrection, limit=1, descending=True)[0].at.recorded_at("A wording correction") <= after
 
 
 def test_board_of_forty_orders_and_two_thousand_verdicts_decodes_no_story_rows(recorded_problem):
@@ -208,9 +208,9 @@ def test_inline_history_is_carried_once_without_losing_void_links(recorded_probl
         maintenance.clear(hold)
     saved = store.get("P1")
     assert saved.strike_count == 0
-    assert saved.prior_orders == (prior,)
+    assert saved.history.events(saved.id, CheckedProblemOrder) == (prior,)
     assert saved.latest_message == replace(message, at=UnrecordedEventTime())
-    assert saved.corrections == (replace(correction, at=UnrecordedEventTime()),)
+    assert saved.history.events(saved.id, WordingCorrection) == (replace(correction, at=UnrecordedEventTime()),)
     with store.snapshot() as db:
         assert not set(INLINE_FIELDS).intersection(Todo.stored_columns(db))
         assert StoredOrderStory.count(db, problem="P1") == 7

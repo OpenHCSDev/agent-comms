@@ -30,6 +30,7 @@ from agent_comms.todos import (
     FixScope,
     FixShape,
     PendingProblemOrder,
+    ReleaseTodo,
     StrikeReason,
     StrikeTodo,
     VoidStrikeTodo,
@@ -187,16 +188,18 @@ def record(session: Path) -> None:
             operation=VoidStrikeTodo(
                 todo.revision,
                 comms.registry.require("record-lead").incarnation,
-                todo.strikes[-1],
+                todo.history.events(todo.id, StrikeTodo, limit=1, descending=True)[0],
                 "The second strike repeated the first finding "
                 "rather than describing another failed change",
             ),
         ),
     )
     todo = comms.goals.todos.get("P1")
-    assert len(todo.strikes) == 2 and len(todo.voided) == 1
-    assert len(todo.live_strikes(worker.name)) == 1 and len(todo.released) == 1
-    released = todo.released[-1].previous
+    assert len(todo.history.events(todo.id, StrikeTodo)) == 2
+    assert len(todo.history.events(todo.id, VoidStrikeTodo)) == 1
+    assert todo.history.facts_for(todo.id).strike_count(worker.incarnation) == 1
+    (release,) = todo.history.events(todo.id, ReleaseTodo)
+    released = release.previous
     assert released.owner_identity == worker.incarnation
     todo.require_released_order(worker.incarnation, released.generation)
 

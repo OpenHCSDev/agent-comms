@@ -62,7 +62,8 @@ def test_edit_only_on_a_deleted_branch_settles_as_dropped(discarded_and_kept):
     edits = unjudged(ctx)
     judge_dropped(ctx, edits["dropped-call"], DROPPED)
     assert "dropped-call" not in unjudged(ctx)
-    verdict = ctx.comms.goals.todos.get("P1").verdicts[-1]
+    todo = ctx.comms.goals.todos.get("P1")
+    verdict, = todo.history.events(todo.id, DroppedVerdict, limit=1, descending=True)
     assert isinstance(verdict, DroppedVerdict) and verdict.tool_call_id == "dropped-call"
 
 

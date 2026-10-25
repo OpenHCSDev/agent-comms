@@ -528,7 +528,7 @@ class ProblemGoalOrder(GoalOrder):
     def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         """Each problem's order state and latest verdict, as Core records them on its Todo."""
         return "\n".join(" · ".join((f"{todo.id}: {todo.order.line}",
-                                     *(verdict.line for verdict in todo.verdicts[-1:])))
+                                     *todo.latest_verdict_lines()))
                          for todo in todos)
 
     def require_model_block(self) -> None:

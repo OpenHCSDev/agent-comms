@@ -205,7 +205,8 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
     assert store.for_commander(lead.incarnation) == ()
     assert withdrawn.state is DoneTodoState and not withdrawn.pending
     assert withdrawn.order.previous == todo.held()
-    assert withdrawn.released == released.released and withdrawn.strikes == ()
+    assert withdrawn.history.events(withdrawn.id, ReleaseTodo) == released.history.events(released.id, ReleaseTodo)
+    assert withdrawn.strike_count == 0
     assert "withdrawn from worker, no strike" in withdrawn.order.withdrawals(withdrawn)[0]
     assert FieldCodec.decode(Todo, FieldCodec.encode(withdrawn)) == withdrawn
 

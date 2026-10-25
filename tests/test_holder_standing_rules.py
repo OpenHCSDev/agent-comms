@@ -681,7 +681,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
         'The original count also included comments rather than only declarations')
     current = held_bus.goals.todos.get('P3')
     assert current.order.id == sent.order.id
-    assert current.review_at == sent.review_at and current.strikes == sent.strikes
+    assert current.review_at == sent.review_at and current.strike_count == sent.strike_count
     assert current.order.check.command == corrected
     assert current.order.check.result == CountCheckResult(0)
     # Done's result rule remains the inverse: the delivered commit must meet the target.
