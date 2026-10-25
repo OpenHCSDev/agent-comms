@@ -21,3 +21,4 @@ type: hard-rule
 - Structural cleanup in the touched code goes in the current change; a platform gap is fixed at its owner. Tristan, 2026-10-19: "fuck narrow fixes have you not been listening to me?"
 - A scratch script calling a method never keeps it: "just because a script calls shit to be deleted doesn't mean u put it back, u fix the scripts."
 - Expose an external tool's whole surface: "there's no reason why we aren't exposing the same amount of functions. remember there's no real limits."
+- No exemption for a metaclass reading its bases in `__new__`: the OwnTypeChecksPhase FamilyMeta sites (declared_family.py) get a structural fix. Tristan decided it on 2026-10-23.
