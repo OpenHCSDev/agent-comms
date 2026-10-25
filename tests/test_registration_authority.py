@@ -1,6 +1,8 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
 
 import os
+import threading
+import time
 from dataclasses import replace
 
 import pytest
@@ -126,3 +128,30 @@ def test_a_phase_change_completes_while_another_process_reads_the_registry(tmp_p
         finally:
             release.set()
 
+
+
+def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tmp_path):
+    registry = registered(tmp_path)
+    registry.live_owner_with_claim('owner')
+    first, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
+    record = first.turn_record
+    started, failures = threading.Event(), []
+
+    def drop_claim():
+        started.set()
+        try:
+            record.without_claim()
+        except Exception as error:
+            failures.append(error)
+
+    with record.writers.locked():
+        waiter = threading.Thread(target=drop_claim)
+        waiter.start()
+        assert started.wait(5)
+        time.sleep(0.2)  # The waiter is parked on the writer lock this thread holds.
+        assert registry.release_turn(first.turn_lease)[0]
+        second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
+        assert not record.path.exists()
+    waiter.join(5)
+    assert not waiter.is_alive() and failures == []
+    assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
