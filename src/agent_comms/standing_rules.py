@@ -624,13 +624,9 @@ class ReviewTimerUp(HeldOrderDue):
                                       todo.order.checked().id, due),))
         )
 
-    def review_allowed(self, verb: type[CommanderVerb]) -> bool:
-        """A timer without a PR head owes a read, not an unresolvable head verdict."""
-        return verb.review_allowed(())
-
     def line(self) -> str:
         return (f"READ {self.holder.name} {self.problem}: review timer up at {self.since.clock()},"
-                f" order {self.order}")
+                f" order {self.order} -> read its diff and judge it")
 
 
 @dataclass(frozen=True)

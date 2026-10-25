@@ -3503,8 +3503,7 @@ class StrikeTodo(CitedStrike, StoryEvent):
 
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
-        if current.holder_state.previous_assignment() != self.previous:
-            raise TodoConflict(current)
+        current.require_previous_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
         if not self.history_events(current):
@@ -3724,7 +3723,7 @@ class HeadVerdict(HeadReview, declared_name=None):
     @classmethod
     def permitted_by(cls, allowed: tuple[type[HeadVerdict], ...]) -> bool:
         """A specialized verdict inherits its parent's applicability, including grown heads."""
-        return any(member in cls.__mro__ for member in allowed)
+        return issubclass(cls, allowed)
 
     def reviewed(self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation,
                  order: HeadReviewOrder) -> HeadReviewRecord:
@@ -3852,9 +3851,6 @@ class HeadOrderLink(HeadReviewRelation, declared_name=None):
 
 @dataclass(frozen=True)
 class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
-    def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return tuple(HeadVerdict.members())
-
     def rejected(self, goals: Goals, record: HeadReviewRecord) -> None:
         """There is no holder to strike or wake."""
 
@@ -3896,8 +3892,8 @@ class OrderLink(ProblemLink, declared_name=None):
 
     def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
         current.require_commander(actor)
-        if (current.holder_state.previous_assignment() != self.previous
-                or current.id != self.problem or current.order.checked().id != self.order_id):
+        current.require_previous_assignment(self.previous)
+        if current.id != self.problem or current.order.checked().id != self.order_id:
             raise TodoConflict(current)
 
 
@@ -4295,8 +4291,7 @@ class RestoreHolderTodo(TodoCommand):
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
         current.state.require_open(current)
-        if current.holder_state.previous_assignment() != self.previous:
-            raise TodoConflict(current)
+        current.require_previous_assignment(self.previous)
         restored = current.holder_state.restored(current)
         return (replace(restored, revision=current.revision + 1)
                 if restored != current else current)
@@ -4543,8 +4538,7 @@ class WithdrawTodo(CloseOrderTodo):
 
     def closed(self, current: Todo) -> ProblemOrder:
         order = current.order.withdrawn(self.previous, self.why, self.superseded_by)
-        if current.holder_state.previous_assignment() != self.previous:
-            raise TodoConflict(current)
+        current.require_previous_assignment(self.previous)
         _text(self.why, "Withdrawal reason", 2000)
         return order
 
@@ -4801,6 +4795,10 @@ class Todo(TodoStoreRows, TypedTable):
 
     def require_assignment(self, expected: Assignment | None) -> None:
         if self.assignment != expected:
+            raise TodoConflict(self)
+
+    def require_previous_assignment(self, expected: Assignment) -> None:
+        if self.holder_state.previous_assignment() != expected:
             raise TodoConflict(self)
 
     @boundary_decoder
