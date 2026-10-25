@@ -1,6 +1,7 @@
 """Exercise the command against real Git commits, without mocking Git or ASTs."""
 
 import ast
+import asyncio
 import json
 import os
 import subprocess
@@ -15,7 +16,7 @@ import pytest
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from fixture_git import IDENTITY
-from process_tree_fixture import TREE, identities
+from process_tree_fixture import TREE, identities, ready
 
 from debt_ratchet import (
     AUDIT_SCRIPTS,
@@ -231,10 +232,7 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
     observed = ()
     try:
         with repo.comparing(base, head) as child:
-            # The probe announces itself or its ratchet dies; pytest-timeout owns the budget.
-            while not announcement.exists():
-                assert child.alive(), child.process.communicate()
-                time.sleep(.01)
+            asyncio.run(ready(announcement, child.alive))
             observed = identities(announcement)
             assert all(member.alive() for member in observed)
             pool = child.platform.group_members(child.identity)
