@@ -74,6 +74,7 @@ from .revision_views import (
     BusSourceView,
     CommanderFramesView,
     ExternalTranscriptsView,
+    NotificationEvidenceView,
     NotificationsView,
     RegistrationsView,
     RevisionView,
@@ -858,7 +859,8 @@ class WireRevision(ReadState):
     reads: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: (views.bus.reads.path,), *StatusSourced.views(), NotificationsView
+            lambda views: (views.bus.reads.path,), *StatusSourced.views(),
+            NotificationsView, NotificationEvidenceView,
         ),
     ]
     native_unread: Annotated[
@@ -877,7 +879,8 @@ class WireRevision(ReadState):
     ]
     notifications: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(notification_paths, *StatusSourced.views(), NotificationsView),
+        *revision_source(notification_paths, *StatusSourced.views(), NotificationsView,
+                         NotificationEvidenceView),
     ]
     external_transcripts: Annotated[
         tuple[FileRevision, ...],

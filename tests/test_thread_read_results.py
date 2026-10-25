@@ -1,10 +1,13 @@
 """Thread read answers own comparison, retry and status projection."""
+from dataclasses import replace
 from itertools import product
 import sys
 
 import pytest
 
+from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import WireRevision
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_presentation import NoThreadPresentation
 from agent_comms.ui_model.observation import (
     NotObserved, ObserveThreads, ThreadBusy, ThreadPresented, ThreadUnavailable, ThreadsObserved,
@@ -61,6 +64,7 @@ def test_changed_interest_retains_one_results_mapping_and_starts_empty():
 
 @pytest.mark.parametrize('changed_name, expected', [
     ('beta', {'beta'}), ('outside', set()), ('read', {'beta'}), ('unrelated_read', set()),
+    ('expiry', set()),
 ])
 def test_assignment_row_changes_attribute_only_their_view_without_projection(
     private_directory, changed_name, expected,
@@ -102,7 +106,7 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
         basis = ledger.capture(human.name, (read_source,), comms.registry.snapshot(),
                                comms.bus.bus, document=ledger.read())
         ledger.mark_displayed(human.name, basis)
-    else:
+    elif changed_name != 'expiry':
         with Coordination(str(root / 'coordination.sqlite3')) as store:
             assignment, = sealed_cohort_assignments(
                 store, comms.registry.require(changed_name).incarnation.lookup,
@@ -111,14 +115,22 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
                 assignment.assignment_id, DeferredAssignment, expected_revision=assignment.revision,
             )
     later = comms.views.revision()
+    if changed_name == 'expiry':
+        later = replace(later, expiry_tick=revision.expiry_tick + 60)
     assert later != revision
     calls = 0
+    evidence_calls = 0
+    evidence_codes = {NotificationAssignment.changed.__func__.__code__,
+                      ReadLedger.changed_notifications.__code__}
     projection_code = MessageNotification.delivery_window.__func__.__code__
 
     def count_projection(frame, event, argument):
-        nonlocal calls
-        if event == 'call' and frame.f_code is projection_code:
-            calls += 1
+        nonlocal calls, evidence_calls
+        if event == 'call':
+            if frame.f_code is projection_code:
+                calls += 1
+            if frame.f_code in evidence_codes:
+                evidence_calls += 1
 
     profiling = sys.getprofile()
     sys.setprofile(count_projection)
@@ -130,3 +142,5 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     assert changed == expected
     assert notification_changed == bool(expected)
     assert calls == 0
+    if changed_name == 'expiry':
+        assert evidence_calls == 0

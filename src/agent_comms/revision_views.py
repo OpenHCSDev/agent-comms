@@ -52,6 +52,10 @@ class NotificationsView(RevisionView):
     """Whole-window changes; activity is attributed to its message participants."""
 
 
+class NotificationEvidenceView(RevisionView):
+    """Assignment and human read evidence, independent of timed status refreshes."""
+
+
 class CommanderFramesView(RevisionView):
     """The heartbeat's newest frame per commander; nothing else feeds the commander page."""
 
