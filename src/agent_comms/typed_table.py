@@ -1731,10 +1731,14 @@ class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
 
 
+class WithoutRowId(NullMember):
+    """SQLite reports no rowid for a relation in a WITHOUT ROWID table."""
+
+
 @dataclass(frozen=True)
 class SQLiteForeignKeyViolation(TypedRow):
     table: str
-    rowid: int | None
+    rowid: int | WithoutRowId
     parent: str
     fkid: int
 
