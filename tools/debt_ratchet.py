@@ -30,7 +30,6 @@ import tokenize
 import tomllib
 import types
 import typing
-import typing_extensions
 from typing import Annotated
 from abc import abstractmethod
 from collections import Counter
@@ -55,6 +54,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.carry import STEPS
 from module_layers import PACKAGE, StackClient
 from stored_formats import StoredForm
+from typing_names import TypingImports, TypingReference
 from agent_comms.field_codec import FieldCodec, ViewExclusion, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.phase_evidence import MainTree, PlanReading
@@ -2314,125 +2314,6 @@ class StoreLockCalls(PerFileOccurrenceMeasure):
         return 0
 
 
-class TypingImports(MroDispatch):
-    """Resolve unshadowed module imports from the actual stdlib declarations.
-
-    This bounded syntactic measure never executes inspected source. Nested
-    bindings conservatively disqualify a name rather than inferring its flow.
-    """
-
-    typing_modules: typing.ClassVar[dict[str, types.ModuleType]] = {
-        module.__name__: module for module in (typing, typing_extensions)
-    }
-
-    def __init__(self, declarations: set[ast.AST]) -> None:
-        self.declarations = declarations
-        self.values: dict[str, object] = {}
-        self.shadowed: set[str] = set()
-
-    def bind(self, node: ast.AST, name: str, value: object) -> None:
-        if node not in self.declarations or name in self.values:
-            self.shadowed.add(name)
-        self.values[name] = value
-
-    @handles(ast.Import)
-    def modules(self, node: ast.Import) -> None:
-        for item in node.names:
-            self.bind(node, item.asname or item.name.split(".")[0],
-                      self.typing_modules.get(item.name))
-
-    @handles(ast.ImportFrom)
-    def members(self, node: ast.ImportFrom) -> None:
-        for item in node.names:
-            declaration = None
-            module = self.typing_modules.get(node.module) if node.level == 0 else None
-            if module is not None:
-                declaration = vars(module).get(item.name)
-            self.bind(node, item.asname or item.name, declaration)
-
-    @handles(ast.Name)
-    def assignment(self, node: ast.Name) -> None:
-        if isinstance(node.ctx, (ast.Store, ast.Del)):
-            self.shadowed.add(node.id)
-
-    @handles(ast.Attribute)
-    def mutation(self, node: ast.Attribute) -> None:
-        if isinstance(node.ctx, (ast.Store, ast.Del)):
-            for descendant in ast.walk(node.value):
-                if isinstance(descendant, ast.Name):
-                    self.shadowed.add(descendant.id)
-
-    @handles(ast.arg)
-    def parameter(self, node: ast.arg) -> None:
-        self.shadowed.add(node.arg)
-
-    @handles(ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-    def named_binding(self, node) -> None:
-        self.shadowed.add(node.name)
-
-    @handles(ast.ExceptHandler)
-    def exception_binding(self, node: ast.ExceptHandler) -> None:
-        name = node.name
-        if name is not None:
-            self.shadowed.add(name)
-
-    # Honor the package's Python 3.11 contract without inventing parser nodes.
-    if hasattr(ast, "type_param"):
-        @handles(ast.type_param)
-        def type_parameter(self, node) -> None:
-            self.shadowed.add(node.name)
-
-    @classmethod
-    def of(cls, tree: ast.Module) -> dict[str, object]:
-        imports = cls(set(tree.body))
-        for node in ast.walk(tree):
-            imports.dispatch_sync(node)
-        if "*" in imports.values:
-            return {}  # A star import can replace any otherwise known binding.
-        return {name: value for name, value in imports.values.items()
-                if name not in imports.shadowed}
-
-    @classmethod
-    def at_any_depth(cls, tree: ast.Module) -> dict[str, object]:
-        """Every name an import binds to ``typing``, wherever the import is written.
-
-        For a measure that counts uses of a typing name: skipping an import inside
-        ``if TYPE_CHECKING:`` or a function body would hide the uses it enables.
-        """
-        imports = cls(set(ast.walk(tree)))
-        for node in ast.walk(tree):
-            imports.dispatch_sync(node)
-        return {name: value for name, value in imports.values.items() if value is not None}
-
-
-class TypingReference(MroDispatch):
-    """One AST expression's resolved imported declaration, never evaluated code."""
-
-    def __init__(self, imports: dict[str, object]) -> None:
-        self.imports = imports
-        self.value: object = None
-
-    @property
-    def is_any(self) -> bool:
-        return self.value is typing.Any
-
-    @handles(ast.Name)
-    def name(self, node: ast.Name) -> None:
-        self.value = self.imports.get(node.id)
-
-    @handles(ast.Attribute)
-    def member(self, node: ast.Attribute) -> None:
-        parent = TypingReference(self.imports)
-        parent.dispatch_sync(node.value)
-        for module in TypingImports.typing_modules.values():
-            if parent.value is module:
-                self.value = vars(module).get(node.attr)
-
-    def raw_access_count(self) -> int:
-        """Typing declarations contribute no raw-record operation; unknowns do."""
-        return int(getattr(self.value, "__module__", None) != typing.__name__)
-
-
 class StringSubscript(OccurrenceMeasure):
     @classmethod
     def lines(cls, source: bytes, filename: str) -> list[int]:
@@ -2453,6 +2334,14 @@ class StringSubscript(OccurrenceMeasure):
             and isinstance(node.slice, ast.Constant)
             and isinstance(node.slice.value, str)
         )
+
+
+class AnyReference(TypingReference):
+    """A reference AnyName asks one question of: does it resolve to ``typing.Any``."""
+
+    @property
+    def is_any(self) -> bool:
+        return self.value is typing.Any
 
 
 class AnyInTypeExpression(MroDispatch):
@@ -2479,7 +2368,7 @@ class AnyInTypeExpression(MroDispatch):
 
     @handles(ast.Name, ast.Attribute)
     def reference(self, node: ast.expr) -> None:
-        reference = TypingReference(self.imports)
+        reference = AnyReference(self.imports)
         reference.dispatch_sync(node)
         if reference.is_any:
             self.references.append(node)
@@ -2556,7 +2445,7 @@ class DeclaredTypeSites(MroDispatch):
     def reference(self, node: ast.Name | ast.Attribute, scope: tuple[ast.AST, ...]) -> None:
         if not isinstance(node.ctx, ast.Load) or node in self.counted:
             return
-        reference = TypingReference(self.imports)
+        reference = AnyReference(self.imports)
         reference.dispatch_sync(node)
         if reference.is_any:
             self.counted.add(node)

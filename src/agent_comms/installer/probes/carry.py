@@ -19,6 +19,7 @@ from agent_comms.installer.interpreter_operation import (
     InterpreterOperation,
     RuntimeProbe,
     SubjectPhase,
+    TargetProbe,
 )
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import is_store_lock
@@ -192,7 +193,7 @@ class RetireInputsOperation(CarryOperation[Carried]):
 
 
 @dataclass(frozen=True)
-class CarryProbe[Answer](RuntimeProbe[tuple[Answer, ...]]):
+class CarryProbe[Answer](TargetProbe, RuntimeProbe[tuple[Answer, ...]]):
     """A typed carry pass; the common worker exchange owns its measurements."""
 
     operation: CarryOperation

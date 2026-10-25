@@ -11,8 +11,9 @@ permissions:
   contents: read
 
 # A superseded push to a pull request stops its old run; queue groups never share a group.
-# The draft state is part of the key: a draft run skips every job, so one that starts in the
-# same second as ready_for_review must not cancel the ready run (#3164 and #3154 lost every check).
+# The draft state is part of the key: a draft run skips every job but the ratchets, so one that
+# starts in the same second as ready_for_review must not cancel the ready run (#3164 and #3154 lost
+# every check).
 concurrency:
   group: merge-queue-${{ github.event.pull_request.number && format('{0}-{1}', github.event.pull_request.number, github.event.pull_request.draft && 'draft' || 'ready') || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -22,12 +23,21 @@ defaults:
     shell: bash .github/run-step.sh {0}
 
 jobs:
-  # Drafts cannot merge, so they hold no runner; every job needs this one. It also names the
-  # base every job measures from. A pull request checks out its merge into current main, so the
-  # base is that merge's first parent; pull_request.base.sha is main when the PR was opened, and
-  # measuring from it charges the PR with everything main merged since.
+  # Drafts cannot merge, so they hold no runner for the slow jobs, which need this one. The
+  # ratchets run on drafts too: units hold drafts for hours, and a merge from main that left a
+  # name undefined (#3107, partial at cli_protocol.py:177) went unseen until someone ran one.
   ready:
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: true
+        shell: bash
+
+  # The base every job measures from, drafts included. A pull request checks out its merge into
+  # current main, so the base is that merge's first parent; pull_request.base.sha is main when the
+  # PR was opened, and measuring from it charges the PR with everything main merged since.
+  base:
     runs-on: ubuntu-latest
     timeout-minutes: 1
     outputs:
@@ -43,7 +53,7 @@ jobs:
         run: echo "base=${QUEUE_BASE:-$(git rev-parse HEAD^1)}" >> "$GITHUB_OUTPUT"
 
   smoke:
-    needs: ready
+    needs: [ready, base]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -74,12 +84,12 @@ jobs:
         run: pytest --collect-only -q -p no:cacheprovider
       - name: The native pin matches the tree
         run: pytest tests/test_native_pin.py --noconftest --no-cov -q -p no:cacheprovider
-      # install ships installer/** in installer.zip and runs it on the runtime it upgrades
-      # from, so every name it imports must exist in the tree this change merges onto.
-      - name: Stack clients and the installer zip import only names Core has
+      # The installed runtime answers every probe but a TargetProbe with its own installer, so the tree
+      # this change merges onto must declare every one of them with the same fields.
+      - name: Stack clients import only names Core has; the outgoing wire matches the base
         env:
-          BASE: ${{ needs.ready.outputs.base }}
-        run: python tools/module_layers.py --check --previous "$BASE"
+          BASE: ${{ needs.base.outputs.base }}
+        run: python tools/module_layers.py --check --base "$BASE"
 
   native-scripts:
     name: native-scripts
@@ -107,7 +117,7 @@ jobs:
 
   install-rehearsal:
     name: install-rehearsal
-    needs: ready
+    needs: [ready, base]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -125,7 +135,7 @@ jobs:
       - name: Whether the change reaches the installed package or the rehearsals
         id: reach
         env:
-          BASE: ${{ needs.ready.outputs.base }}
+          BASE: ${{ needs.base.outputs.base }}
         run: |
           read -ra rehearsals <<< "$REHEARSALS"
           git diff --quiet "$BASE" HEAD -- src pyproject.toml uv.lock "${rehearsals[@]%%::*}" \
@@ -173,7 +183,7 @@ jobs:
 
   ratchet:
     name: debt-${{ matrix.kind }}
-    needs: ready
+    needs: base
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -205,12 +215,12 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/agent-comms
-          key: debt-ratchet-${{ matrix.kind }}-${{ needs.ready.outputs.base }}
+          key: debt-ratchet-${{ matrix.kind }}-${{ needs.base.outputs.base }}
           restore-keys: debt-ratchet-${{ matrix.kind }}-
 
       - name: No new structural debt against the base
         env:
-          BASE: ${{ needs.ready.outputs.base }}
+          BASE: ${{ needs.base.outputs.base }}
         run: |
           set -o pipefail
           PYTHONPATH=src:tools python tools/debt_ratchet.py \
