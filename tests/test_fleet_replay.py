@@ -347,9 +347,9 @@ class SpinningUnitSeed(IncidentSeed):
     @classmethod
     def seed(cls, fleet: Fleet) -> StandingRule:
         spinning_turn_id = NativeTurnId('spinning')
-        moved = time.time() - (SpinningUnit.minutes + 10) * 60
+        moved = time.time() - 30 * 60
         worktree = fleet.worktree("spinning", base=fleet.main, at=moved)
-        head = fleet.commit(worktree, "spinning.py", "spinning = 1\n", at=moved)
+        fleet.commit(worktree, "spinning.py", "spinning = 1\n", at=moved)
         fleet.push(worktree)
         todo = fleet.unit("spinning", worktree, at=moved - 60)
         transcript = ExternalTranscript(fleet.comms.root, todo.held().owner_identity)
@@ -366,9 +366,7 @@ class SpinningUnitSeed(IncidentSeed):
                     ),
                 ),
             )
-        return SpinningUnit(
-            todo.id, todo.held().owner_identity, SpinningUnit.calls, SpinningUnit.minutes, head
-        )
+        return SpinningUnit(todo.id, todo.held().owner_identity, SpinningUnit.calls)
 
 
 class LostToolsSeed(IncidentSeed):
@@ -522,6 +520,18 @@ def test_an_empty_draft_is_the_first_commit_not_an_empty_pr(fleet):
     built.claim(todo, 21, built.main, at=time.time())
     assert not any(isinstance(rule, EmptyPullRequest) and rule.problem == todo.id
                    for rule in built.observe().rules)
+
+
+def test_an_empty_commit_does_not_reset_spinning_and_a_src_change_ends_it(fleet):
+    """2026-10-25: unit-signal made 92 calls on P681 behind its empty draft commit, unflagged.
+    A non-Python file under src is a source change too."""
+    built, _ = fleet
+    storage = built.comms.registry.storage_rule
+    worktree = storage.order_checkout(storage.initial_roots("spinning"), built.problems["spinning"])
+    built.commit(worktree, "notes.txt", "moved HEAD, changed nothing\n")
+    assert any(type(rule) is SpinningUnit for rule in built.observe().rules)
+    built.commit(worktree, "src/stack/owner.mjs", "export const owner = 1;\n")
+    assert not any(type(rule) is SpinningUnit for rule in built.observe().rules)
 
 
 def test_a_stopped_unit_is_not_spinning(fleet):

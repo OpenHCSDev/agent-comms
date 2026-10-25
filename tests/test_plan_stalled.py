@@ -42,3 +42,12 @@ def test_an_unheld_order_does_not_count(recorded_problem, source_repository):
         StrikeReason("The commander releases this order so another worker can repair the owner.")))
     reading = PlanReading((released,), MainTree.of(source_repository))
     assert not BusWriterPhase.ordered(reading)
+
+
+def test_an_unplanned_reason_answers_without_reading_main(source_repository):
+    from agent_comms.plan_phases import UnplannedPhase
+
+    reading = PlanReading((), MainTree.of(source_repository))
+    reason = "This repair keeps the order tool usable before the planned work resumes."
+    assert UnplannedPhase.order_refusals(reading, reason) == ()
+    assert not reading.reads

@@ -453,9 +453,11 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
 
-    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
-        """An unanswered question must be answered before unrelated work."""
-        return True
+    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+               named: tuple[Message, ...]) -> bool:
+        """An owed message refuses only an action that answers nothing: an answer to any open
+        message is progress and is never refused, so the others it leaves owed only warn."""
+        return not named
 
     def asked_by(self, reached: frozenset[str]) -> bool:
         """Whether one of these threads asked it, so a reply reaching them answers it unnamed."""

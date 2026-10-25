@@ -274,3 +274,17 @@ def test_process_crash_before_or_after_replacement_leaves_unreplayable_intent(pa
         if child.poll() is None:
             child.kill()
         child.wait(timeout=10)
+
+
+def test_a_verified_snapshot_is_checked_again_the_moment_its_bytes_change(path):
+    """Workers re-verified an unchanged snapshot on every open (10.8% of a bus worker);
+    a pass is remembered per content, never per file name or inode."""
+    import hashlib
+    _create(path)
+    with _connection(path):
+        pass
+    assert sidecar.VerifiedSnapshots.passed[path, PromptBinding] == hashlib.sha256(path.read_bytes()).digest()
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE unrelated_table (x)")
+    with pytest.raises(IdentityConflict), _connection(path):
+        pytest.fail("a changed snapshot reached the caller on a remembered pass")

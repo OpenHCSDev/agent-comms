@@ -84,6 +84,7 @@ class SourceGrowth:
 
     files: tuple[tuple[str, int], ...]
     limit: ClassVar[int] = 40
+    tree: ClassVar[str] = "src/"
 
     @property
     def total(self) -> int:
@@ -112,6 +113,11 @@ class BranchDifference:
     behind: int
     files: frozenset[str]
     growth: SourceGrowth
+
+    @property
+    def changes_source(self) -> bool:
+        """Any file under the source tree, not only the Python modules growth counts."""
+        return any(path.startswith(SourceGrowth.tree) for path in self.files)
 
 
 class ForgeAnswer(WireModel):
@@ -411,7 +417,7 @@ query($owner: String!, $name: String!, $after: String) {
         """
         sources = tuple(
             (path, f"{commit}:{path}", weight)
-            for path in sorted(files) if path.startswith("src/") and path.endswith(".py")
+            for path in sorted(files) if path.startswith(SourceGrowth.tree) and path.endswith(".py")
             for commit, weight in ((base, -1), (head, 1))
         )
         batch = Repo.git_bytes(

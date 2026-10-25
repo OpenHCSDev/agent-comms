@@ -333,7 +333,8 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False
 
-    def blocks(self, reached: frozenset[str], action: CommanderVerb) -> bool:
+    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+               named: tuple[Message, ...]) -> bool:
         return self.unit in reached and not action.resolves_claim(self.unit, self.problem)
 
     def line(self) -> str:
