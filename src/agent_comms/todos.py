@@ -3721,6 +3721,11 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
 class HeadVerdict(HeadReview, declared_name=None):
     """One decision on a PR head, independent of whether an order holds it."""
 
+    @classmethod
+    def permitted_by(cls, allowed: tuple[type[HeadVerdict], ...]) -> bool:
+        """A specialized verdict inherits its parent's applicability, including grown heads."""
+        return any(member in cls.__mro__ for member in allowed)
+
     def reviewed(self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation,
                  order: HeadReviewOrder) -> HeadReviewRecord:
         current = request.current()
@@ -3997,7 +4002,7 @@ class RecordOrderHeadVerdict(TodoCommand):
         if not current.order.checked().holds_head(self.review.request):
             raise TodoError("The reviewed pull request is not linked to this order.")
         allowed = current.order.checked().review_verdicts()
-        if not any(member in type(self.review.verdict).__mro__ for member in allowed):
+        if not self.review.verdict.permitted_by(allowed):
             raise TodoError("This order takes head verdicts: " + ", ".join(
                 member.declared_name for member in allowed))
         self.review.verdict.prepare_order(goals, current, self.review.order)

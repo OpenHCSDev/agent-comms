@@ -3,6 +3,7 @@
 import re
 import shlex
 import time
+from contextlib import chdir
 from dataclasses import replace
 
 import pytest
@@ -17,12 +18,14 @@ from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp
 from agent_comms.todos import (
-    Assignment, ClaimOrder, OrderHeadReview, OrderClaim,
+    Assignment, ClaimOrder, DeliveredProblemOrder, OrderHeadReview, OrderClaim,
     OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
     PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StrikeReason, UnderReviewHeadVerdict, VerdictReason,
 )
 
-pytest_plugins = ("test_head_review",)
+from test_held_problem_orders import merge_two_commit_fix
+
+pytest_plugins = ("test_head_review", "test_held_problem_orders")
 
 REASON = VerdictReason("The existing class owns this behavior without another copy")
 ROAST = "This is stupid because the same decision is written twice instead of belonging to its existing class."
@@ -153,3 +156,32 @@ def test_claim_link_survives_two_sendbacks_and_released_review_changes_no_goal(b
     proposed = Assignment.of(previous.owner_identity, previous.parent_identity, GoalId.mint())
     reassigned = accepted.assigned(proposed, accepted.order.owner)
     assert reassigned.order.pull_requests == accepted.order.pull_requests
+
+
+def test_released_work_can_be_judged_and_delivered_without_a_holder(
+        held_commander, cited_source, tmp_path):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    todo = store.get("P1")
+    previous = todo.held()
+    RecordPullRequest(todo.revision, todo.creator_identity,
+                      PullRequestLink(todo.repo, 42), previous.generation).record(ctx.comms.goals, todo.id)
+    for _ in range(2):
+        current = store.get(todo.id)
+        SendBackStrike(current.revision, current.creator_identity, current.held(), ROAST,
+                       RecordedEventTime(time.time()), evidence=(current.order.owner,)).record(
+                           ctx.comms.goals, todo.id)
+    _, first, _ = merge_two_commit_fix(cited_source, tmp_path / "bin", 42)
+    current = store.get(todo.id)
+    request = ctx.comms.goals.todos.resolve_order(ctx.incarnation, previous.owner, todo.id)
+    assert request == current
+    head = cited_source.git(cited_source.checkout, "rev-parse", "refs/heads/fix/42").strip()
+    quote = " ".join(current.order.instructions(current).split()[:4])
+    with chdir(cited_source.checkout):
+        judge.main(["ok", "--repo", todo.repo.to_wire(), "--problem", todo.id,
+                    "--pr", "42", "--head", head, "--why", REASON.text, "--serves", quote], ctx)
+        order.main(["done", previous.owner, todo.id], ctx)
+    delivered = store.get(todo.id)
+    assert type(delivered.order) is DeliveredProblemOrder
+    assert delivered.order.delivery.delivered == first
+    assert delivered.current_holder.current_assignments() == ()

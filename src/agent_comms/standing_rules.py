@@ -139,8 +139,10 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def clearing_commands(self) -> str:
         """The applicable verbs, with arguments supplied by this line's observed owners."""
         values = self.command_values()
-        return " or ".join(f"`{verb.command(values)}`" for verb in self.clearing_verbs
-                           if self.review_allowed(verb))
+        verbs = dict.fromkeys(member for family in self.clearing_verbs
+                              for member in family.members_with(family))
+        return " or ".join(f"`{command}`" for verb in verbs if self.review_allowed(verb)
+                           for command in verb.commands(values))
 
     def attention(self) -> bool:
         return True

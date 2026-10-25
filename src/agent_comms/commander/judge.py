@@ -443,11 +443,12 @@ class VerdictVerb(JudgeVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
+    clears = (DeliveryAwaitingJudgement, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp)
     verdict: ClassVar[type[HeadVerdict]]
 
     @classmethod
     def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
-        return any(member in cls.verdict.__mro__ for member in verdicts)
+        return cls.verdict.permitted_by(verdicts)
 
     pr: Annotated[int, Argument(options={"help": "review this PR instead of individual edits"})] = 0
     head: Annotated[str, Argument(options={"help": "the exact reviewed SHA; required with --pr"})] = ""
@@ -501,7 +502,6 @@ class QuotingVerb(HeadVerdictVerb, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(ReasonedVerb, QuotingVerb):
     verdict = ReviewedHeadVerdict
-    clears = (DeliveryAwaitingJudgement, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp)
     help = "the edit or exact PR head is accepted"
 
     def head_operation(self) -> HeadVerdict:
@@ -556,7 +556,6 @@ class OkVerb(ReasonedVerb, QuotingVerb):
 class ReviewingVerb(HeadVerdictVerb):
     help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
     verdict = UnderReviewHeadVerdict
-    clears = (DeliveryAwaitingJudgement, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp)
 
     def head_operation(self) -> HeadVerdict:
         return self.verdict()
@@ -608,7 +607,6 @@ class DroppedVerb(VerdictVerb):
 class BackVerb(ReasonedVerb, HeadVerdictVerb):
     """A correctness send-back: the head is broken at a line, whether or not it restates a fact."""
     verdict = RejectedHeadVerdict
-    clears = (DeliveryAwaitingJudgement, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp)
     help = ("reject the edit or exact PR head; Core records its reason once. With --slop and its "
             "statement it is a slop send-back, without them a correctness one")
     roast: Annotated[
