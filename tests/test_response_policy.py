@@ -3,6 +3,7 @@ from agent_comms.messages import ConversationRole, Message, InfoKind
 from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.routing import ScheduledTurn
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 def test_golden_policy_names():
@@ -48,7 +49,7 @@ def test_autonomous_turns_keep_message_batches_and_delivery_keys_separate(tmp_pa
     goal_id = GoalId.mint()
     from agent_comms.input_disposition import InputDispositions
 
-    goal = ScheduledTurn("Continue the goal", goal_id=goal_id)
+    goal = ScheduledTurn("Continue the goal", goal_id=OneGoal(goal_id))
     resume = ScheduledTurn.resuming_in_project(str(tmp_path))
     first = ScheduledTurn.incoming(Message("peer", "#team", "first", InfoKind, seq=1))
     second = ScheduledTurn.incoming(Message("peer", "#team", "second", InfoKind, seq=2))

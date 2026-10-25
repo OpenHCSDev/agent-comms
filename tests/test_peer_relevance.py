@@ -23,6 +23,7 @@ from agent_comms.relationships import RelationshipEdit
 from agent_comms.thread_text import ForkedParent
 from agent_comms.threads import Thread
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
+from agent_comms.goal_scope import OneGoal
 
 
 def _wire(tmp_path, *threads):
@@ -139,7 +140,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     (change,) = segment.changes
     assert (change.peer, change.goal, change.state) == ("partner", goal.revision_key, ActiveGoal)
     comms.goals.update_goal(
-        "partner", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Done.")
+        "partner", CompletedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), progress="Done.")
     )
     (settled,) = _partner_activity(comms, "owner")[0].changes
     assert (settled.state, settled.progress) == (CompletedGoal, "Done.")
