@@ -438,11 +438,12 @@ query($owner: String!, $name: String!, $after: String) {
             growth[path] += weight * CodeLines.of(source)
         return SourceGrowth(tuple(growth.items()))
 
-    def reviewed_growth(self, pr: int, head: str) -> SourceGrowth:
-        """A pull request head against current main, fetched without touching FETCH_HEAD."""
+    def reviewed_growth(self, pr: int, head: str, branch: str) -> SourceGrowth:
+        """A pull request head against its declared base branch, so a request stacked on
+        another is charged only its own lines; fetched without touching FETCH_HEAD."""
         self._git("fetch", "-q", "--no-write-fetch-head", "origin",
-                  self.main, f"refs/pull/{pr}/head")
-        base = self._git("merge-base", f"refs/remotes/origin/{self.main}", head).strip()
+                  branch, f"refs/pull/{pr}/head")
+        base = self._git("merge-base", f"refs/remotes/origin/{branch}", head).strip()
         return self.source_growth(base, head, self.changed(base, head))
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
