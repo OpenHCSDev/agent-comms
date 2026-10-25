@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from agent_comms.coordination_response import PublicationAppendDispatches
+
 
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.child_process import ProcessIdentity
+
+from .native_entries import NativeEntry
 from .native_failures import NativePiUnavailable
 
 import os
@@ -16,7 +20,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
-from uuid import uuid4
 
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
@@ -43,10 +46,20 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
 from .native_input_record import FullNativeExecution, TriageNativeExecution
+from .native_pi import NativeContextProof
+from .native_prompt_binding import (
+    expected_prompt_bindings,
+    expected_prompt_matches_journal,
+)
+from .pi_vocabulary import PendingStopReason
+from .private_path import (
+    FileRevision,
+    MissingFile,
+)
 from .private_send_stage import TriageNativeSend
 from .lifecycle_capability import Deferred
 from agent_comms.typed_table import RowNotFoundError
-from .field_codec import MalformedRecord, ThreadLookup
+from .field_codec import MalformedRecord, ScratchName, ThreadLookup
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
 from .registration import Registration
@@ -291,8 +304,6 @@ class DispatchedOwnerLoss(VerifiedAttemptOwnerLoss):
         return self.native_input
 
     def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None:
-        from agent_comms.coordination_response import PublicationAppendDispatches
-
         self.require_native_exit()
         PublicationAppendDispatches.resolve_retained(
             store, self.boundary.bus, self.boundary,
@@ -372,7 +383,7 @@ class RecoveryMonitorCapability:
             names = frozenset(Registration(RegistryFile.path_in(root)).snapshot().threads)
             uncertain = uncertain or bool(inputs.unresolved(names).rows)
         if uncertain:
-            destination = root.with_name(f"{root.name}.unknown-{uuid4().hex}")
+            destination = root.with_name(f"{root.name}.unknown-{ScratchName.mint()}")
             root.rename(destination)
             raise RecoveryBlocked(
                 f"Check directory removed; uncertain work kept at {destination}; do not replay"
@@ -447,12 +458,6 @@ class RecoveryMonitorCapability:
         cls, store: Coordination, execution_id: str, acquired: VerifiedOwnerLoss,
     ):
         """Settle the old input without re-running it or fabricating delivery."""
-        from .native_entries import NativeEntry
-        from .native_pi import NativeContextProof
-        from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
-        from .pi_vocabulary import PendingStopReason
-        from .private_path import FileRevision, MissingFile
-
         snapshot = store.get(execution_id)
         attempt = snapshot.require_current_attempt()
         source = NativeRuntimeInput.one(
@@ -463,8 +468,7 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("native attempt has no original input")
         terminal = PendingStopReason
         revision = MissingFile()
-        session = source.selected_session
-        if session is not None:
+        for session in source.selected_session.present():
             with expected_prompt_bindings(store, (source.input_id,)) as bindings:
                 binding = bindings.get(source.input_id)
                 if binding is None or binding.identity != source.identity:

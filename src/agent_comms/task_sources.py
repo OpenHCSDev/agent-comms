@@ -21,12 +21,15 @@ from .thread_identity import (
     UserThreadRole,
 )
 from .turn_context import Provenance, WireProvenance
+from .working_memory_requests import AnnotationBudgetExhausted
 
 if TYPE_CHECKING:
     from typing import Self
 
     from .bus import BusReader
-    from .commander_pings import CommanderUpdate
+    from .cli_bridges.shared import CliBridge
+    from .cli_protocol import Outcome
+    from .task_attachments.commander_pings import CommanderUpdate
     from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
@@ -186,8 +189,15 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
             raise RelationViolationError("Retained correction lacks its original source") from error
 
 
-class TaskAttachment(DeclaredFamily, ProjectionSource, affix="TaskAttachment"):
-    """Absent attachments have no publication, fact or author effects."""
+class TaskAttachment(
+    DeclaredFamily, ProjectionSource, affix="TaskAttachment",
+    discovery_package="agent_comms.task_attachments",
+):
+    """Absent attachments have no publication, fact or author effects.
+
+    Members declared outside this module live in ``agent_comms.task_attachments``, which
+    the registry acquires before any name is decoded.
+    """
 
     retains_authored_task = False
     permits_agent_revision = False
@@ -217,6 +227,10 @@ class TaskAttachment(DeclaredFamily, ProjectionSource, affix="TaskAttachment"):
     def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
         """The commander observations this attachment carries for that commander."""
         return None
+
+    async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
+        """How a harness bridge hands the message carrying this attachment to its session."""
+        return await bridge.deliver(message)
 
     def annotation_rules(self, message: Message, facts: RetainedTaskFacts) -> tuple[str, ...]:
         return ()
@@ -699,7 +713,5 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
         return now - 3_600_000
 
     def require_budget(self, submitted: int) -> None:
-        from .working_memory_requests import AnnotationBudgetExhausted
-
         if submitted >= self.per_hour:
             raise AnnotationBudgetExhausted("Original disclosure grant's hourly request budget is exhausted")

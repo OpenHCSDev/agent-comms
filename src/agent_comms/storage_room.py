@@ -14,11 +14,11 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
-from uuid import uuid4
 
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
+from .field_codec import RoomTicket
 from .repo import Checkout
 from .thread_identity import ThreadIncarnation
 from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
@@ -97,7 +97,7 @@ class WorkPeak(RoomLedgerRows, TypedTable):
 
 @dataclass(frozen=True)
 class RoomClaim(RoomLedgerRows, TypedTable):
-    ticket: Annotated[str, Column(primary_key=True)]
+    ticket: Annotated[RoomTicket, Column(primary_key=True)]
     root: str
     unit: Annotated[ThreadIncarnation, Column(storage=JsonStorage)]
     process: Annotated[ProcessIdentity, Column(storage=JsonStorage)]
@@ -211,7 +211,7 @@ class NoRoomNeeded(RoomReservation):
 @dataclass
 class MeasuredRoomReservation(RoomReservation):
     rule: RoomAllocation
-    ticket: str
+    ticket: RoomTicket
     measurement: WorkMeasurement
 
     def finish(self, *, completed=True):
@@ -282,7 +282,7 @@ class RoomAllocation:
         process = process or ProcessIdentity.capture(os.getpid())
         ledger = self.room_ledger
         await asyncio.to_thread(ledger.root.mkdir, parents=True, exist_ok=True)
-        ticket = uuid4().hex
+        ticket = RoomTicket.mint()
         claim = RoomClaim(ticket, str(root), thread.incarnation,
                           process, work, WaitingRoomPhase(), time.time())
         admitted = False

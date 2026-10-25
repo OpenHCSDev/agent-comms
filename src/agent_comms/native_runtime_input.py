@@ -16,10 +16,14 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from .coordination_tables.participants import OwnerGenerations
+from .coordination_tables.responses import ResponseObligation
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec, InputId, MalformedRecord, NativeContext, RootId, SlotId, ThreadLookup,
 )
+from .native_pi import NativeContextRecord
+from .native_session_reopen import NativeSessionIdentity, NoPiSessionId, NoSessionRetention, PiSessionId
 from .native_tool_call import ToolCallId
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .tool_denial import SelectedToolDenied
@@ -126,17 +130,13 @@ class NativeRuntimeInput(
         self.execution
         # The selected identity and the later context acknowledgement are separate
         # acquisition phases of this ORIGINAL row, never two source selectors.
-        session = self.selected_session
-        if session is None:
-            from .field_codec import FieldCodec
-
-            FieldCodec.decode(type(None), self.session_file)
+        self.session_id.selected_session(self)
         self.reference
 
     @property
-    def selected_session(self) -> NativeSessionIdentity | None:
-        """Decode the optional original SQL session group at its owner."""
-        return None if self.session_id is None else self.require_session_identity()
+    def selected_session(self) -> NativeSessionIdentity | NoSessionRetention:
+        """The original SQL session group owns its selected and absent cases."""
+        return self.session_id.selected_session(self)
 
     @property
     def context_anchor(self) -> NativeColumn:
@@ -144,8 +144,6 @@ class NativeRuntimeInput(
 
     def require_session_identity(self) -> NativeSessionIdentity:
         """Recover the source originally attested before this row's raw writer."""
-        from .native_session_reopen import NativeSessionIdentity
-
         try:
             return FieldCodec.decode(
                 NativeSessionIdentity,
@@ -156,8 +154,6 @@ class NativeRuntimeInput(
 
     def require_context_proof(self) -> NativeContextProof:
         """Recover the original committed acknowledgement, never manufacture it from a path."""
-        from .native_pi import NativeContextRecord
-
         self.reference.require_recorded()
         values = {item.name: self.context_value(item.name)
                   for item, _wire in FieldCodec.record_fields(NativeContextRecord)}
@@ -220,7 +216,6 @@ class NativeRuntimeInput(
         projection is persisted, and the read closes before presentation work.
         """
         from .coordination_tables.executions import ExecutionRecord
-        from .coordination_tables.responses import ResponseObligation
         from .transcripts import TranscriptRead
 
         with TranscriptRead.publication_source(root) as db:
@@ -277,7 +272,7 @@ class NativeRuntimeInput(
             nullable=True,
         ),
     ] = field(default_factory=UnrecordedNativeClaim)
-    session_id: str | None = None
+    session_id: PiSessionId | NoPiSessionId = NoPiSessionId()
     session_file: str | None = None
     session_entry_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
     session_entry_start: Annotated[
@@ -405,7 +400,7 @@ class CurrentNativeCursor(
     NativeRuntimeTable,
     WithoutRowid,
 ):
-    column_orders = (NonDecreasing(("covered_seq", "injected_seq")),)
+    column_orders = (NonDecreasing(("covered_seq", "injected_seq", "owner_generation", "owner_claimed_generation")),)
     reference_column = 'injected_seq'
     stable_reference_columns = ('input_id',)
 
@@ -426,16 +421,15 @@ class CurrentNativeCursor(
             primary_key=True, references=TableReference(Participants, ("participant_lookup",))
         ),
     ]
-    owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
+    # One cursor per thread; the generations fence its last writer, they do not key it.
+    owner_generation: Annotated[int, Column(check="owner_generation>0")]
     owner_claimed_generation: Annotated[
         int,
-        FrozenColumn(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
+        Column(record_key=True, check="{owner_claimed_generation}>0"),
     ]
 
     @property
     def owner_identity(self):
-        from .coordination_tables.participants import OwnerGenerations
-
         return OwnerGenerations(owner_lookup=self.recipient_lookup,  generation=self.owner_generation)
 
     covered_seq: Annotated[int, Column(check="covered_seq>=0")]
@@ -454,7 +448,9 @@ class CurrentNativeCursor(
         ),
         NativeContext(type[NativeInputExecution]),
     ]
-    session_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)]
+    session_id: Annotated[
+        NativeColumn, NativeContext(PiSessionId), Column(storage=TextStorage, nullable=True)
+    ]
     request_generation: Annotated[NativeColumn, NativeContext(int), Column(storage=IntegerStorage, nullable=True)]
 
     checks = (

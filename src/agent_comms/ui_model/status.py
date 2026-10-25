@@ -8,7 +8,7 @@ model flushes the rows that changed once per frame.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from agent_comms.thread_presentation import (
@@ -19,6 +19,7 @@ from agent_comms.thread_presentation import (
     ThreadRetired,
     ThreadPresentation,
     ThreadPresentationStatus,
+    ThreadStatusDisplay,
 )
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.delivery import DeliveryView
@@ -36,9 +37,14 @@ class ThreadStatusModel:
     name: str
     shown: bool
     lines: tuple[str, ...]
-    presentation: ThreadPresentation
+    presentation: ThreadPresentation = field(compare=False)
     summary: tuple[str, ...] = ()
     """Overview parts for a collapsed status: first summary line, latest inbound, recent count."""
+
+    _display: ThreadStatusDisplay = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_display", self.presentation.status_display())
 
     @property
     def status(self) -> ThreadPresentationStatus:

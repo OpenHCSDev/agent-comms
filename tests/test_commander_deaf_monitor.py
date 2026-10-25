@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms.channel_targets import CommsTag
 from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.task_attachments.commander_pings import CommanderNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.monitor import AttachMonitor, MonitorService, SessionReady
 from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve, StoredBinding
@@ -101,7 +102,7 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 update, = held_bus.bus.bus.latest_addressed(
                     frozenset({heartbeat.sender}), frozenset({"lead"}),
                 )
-                assert f"NO LONGER CURRENT: {alarm.body.removeprefix('lead: ')}" in update.body
+                assert isinstance(update.task, CommanderNotice)
             finally:
                 writer.close()
                 await writer.wait_closed()

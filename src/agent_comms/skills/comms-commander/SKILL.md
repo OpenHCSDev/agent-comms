@@ -29,6 +29,8 @@ Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `c
 
 Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `comms_turns` reads a selected unit's recorded turns; `comms_order_work` reads its tool calls since an order. Neither replaces the heartbeat, and no other poll is kept beside it.
 
+A silent heartbeat is a dead board, not a quiet one: ten minutes without one is investigated that tick. On 2026-10-25 it crashed every ~70 s from 09:34 while `comms_hud` kept working, and seven units sat idle behind 17 owed closes. Tristan: "Shouldn't comms HUD be shown on heartbeat ur supposed too help itself".
+
 ## Why a dictator
 
 The failure this breaks is the mega-corp equilibrium: nobody changes anyone else's code, workarounds pile on workarounds, nothing gets deleted. **Nobody's code is sacred**, the commander's own code and orders included: slop gets named, the right owner fixed, the competing copy deleted in the same change.
@@ -90,12 +92,13 @@ One line per unit touched, then the next unit.
 
 rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md the default verdicts. Slop is a property of the program, not of its author.
 
-- **Every slop claim cites the pinned catalog and carries its formal statement.** Send-backs: `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`. Orders: a `slop` array of `{"pattern":"IDEN-5","fact":"the fields of each order","at":"src/example.py:1","derive":"declaration","by":"src/owner.py:1"}`; when the order's edits create the owner, `"by":{"created":"src/new_owner.py:1"}`, and done refuses until that line exists on the delivered tree. The tools refuse unknown IDs and malformed fields.
+- **Every slop claim cites the pinned catalog and carries its formal statement.** Slop send-backs: `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; a correctness send-back (a bug, not a restated fact) gives only `--at` the failing PATH:LINE, and the options given choose which. Orders: a `slop` array of `{"pattern":"IDEN-5","fact":"the fields of each order","at":"src/example.py:1","derive":"declaration","by":"src/owner.py:1"}`; when the order's edits create the owner, `"by":{"created":"src/new_owner.py:1"}`, and done refuses until that line exists on the delivered tree. The tools refuse unknown IDs and malformed fields.
 
 ## Forks, strikes and the record
 
 - **"Fork" means a Claude subagent of the commander.** Codex units named `fork-*` are units, never forks. Fork reviews to parallelize them: each fork takes a slice of the unjudged edits or open PRs and records every judgment in Core with `judge ok`, `judge back` or `judge superseded` before it ends. A review that exists only as prose clears nothing, and the load keeps rising. Its #comms post (`order say '#comms' FILE --fork NAME`) announces what it recorded and its open items, so closing it loses nothing. `comms_commander_load` measures the work those forks clear, never divides the debt by their count.
 - **Compliance is not evidence, and neither is the unit's proof.** Judge the diff, then rerun the proof or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target hit by the cheapest route; pair it with a behaviour check and read how the number moved.
+- **An edit already judged is marked, not re-reviewed.** An unjudged edit whose PR head already carries your verdict, or that a later judged commit supersedes, is marked in one call the tick the head verdict lands. Tristan, 2026-10-24: "let's not turn it into ceremony the heart beat is your friend. its there to say 'you did do this right?' if you didn't you do it and mark judged and its already done, u just mark judged too."
 - **Undisclosed assumptions are false claims.** An assumption found in the diff that the report's `Assumed:` list left out is a strike.
 - **Strikes** (rules/send-backs-and-strikes.md owns when): `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT PROBLEM` only after reading the diff that meets the order.
 - **Work lives on main or on a branch with a linked PR.** `comms_work_branches` lists unlinked work (no standing rule reports it yet); each branch goes to its owner.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import GitCommitText
@@ -15,6 +15,7 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
+    from agent_comms.order_runs import OrderRun
     from agent_comms.todos import MergedProblemOrder, Todo
 
 
@@ -33,26 +34,45 @@ class UninstalledRepositoryError(ValueError):
 class CommitInstallation(DeclaredFamily, affix="CommitInstallation"):
     """Whether the installed build contains a set of delivered commits."""
 
+    merged_state: ClassVar[str]
+
     @abstractmethod
     def require(self) -> None: ...
 
     @abstractmethod
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
 
+    def awaits_holder(self, run: OrderRun) -> bool:
+        """Whether the merged order now waits on its holder rather than the commander's install."""
+        return False
+
 
 @dataclass(frozen=True)
 class InstalledCommitInstallation(CommitInstallation):
+    merged_state = "installed"
+
     def require(self) -> None:
         pass
+
+    def awaits_holder(self, run: OrderRun) -> bool:
+        return run.holder_runs()
 
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
         return merged.closed_in(todo)
 
 
 @dataclass(frozen=True)
+class UninstalledRepositoryCommitInstallation(InstalledCommitInstallation):
+    """A repository the runtime never carries: its merge owes no install."""
+    repository: RepositoryName
+    merged_state = "no runtime install"
+
+
+@dataclass(frozen=True)
 class MissingCommitInstallation(CommitInstallation):
     commit: str
     installed: RecordedBuildIdentity
+    merged_state = "waiting on install"
 
     def require(self) -> None:
         raise DeliveredCommitNotInstalledError(
@@ -123,6 +143,17 @@ class RecordedBuildIdentity(BuildIdentity):
                 f"Repository {repository.github.to_wire()} at {repository.checkout} is not in installed {self}."
             ) from error
 
+    def containing(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation:
+        """The first commit this build lacks, read against the checkout's installed revision."""
+        repository = Repo.of(directory).github
+        return next(
+            (next((MissingCommitInstallation(commit, self) for commit in commits
+                   if not Repo.descends(directory, commit, record.commit)),
+                  InstalledCommitInstallation())
+             for record in self.commits if record.repository == repository),
+            UninstalledRepositoryCommitInstallation(repository),
+        )
+
     def contains(self, commit: str, directory: Path) -> bool:
         """Prove ancestry against this checkout's installed repository, not its current head."""
         recorded = self.for_repository(Repo.of(directory))
@@ -134,11 +165,4 @@ class RecordedBuildIdentity(BuildIdentity):
             raise ProofBuildMismatchError(
                 f"Proof build {self} differs from installed {installed}; run the proof again."
             )
-        return next(
-            (
-                MissingCommitInstallation(commit, installed)
-                for commit in commits
-                if not installed.contains(commit, directory)
-            ),
-            InstalledCommitInstallation(),
-        )
+        return installed.containing(commits, directory)

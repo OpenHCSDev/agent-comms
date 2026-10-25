@@ -21,6 +21,7 @@ from agent_comms.active_route import (
     route_directory,
 )
 from agent_comms.bus import Bus
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import Comms, wire
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused
@@ -64,7 +65,7 @@ def test_route_publication_and_rollback_with_no_sql_changes(tmp_path, route_bus,
     backup.rebind_route(route_bus, selected)
     assert read_active_route(path) == route_bus
     assert not backup.original()
-    backup.restore()
+    backup.restore(lambda: None)
     assert backup.original()
     if had_route:
         assert path.read_bytes() == original
@@ -94,7 +95,7 @@ def test_concurrent_publication_before_rebind_is_preserved_on_rollback(tmp_path,
     concurrent = path.read_bytes()
     with pytest.raises(UpgradeRefused, match="route changed"):
         backup.rebind_route(route_bus, PublishedRouteSelection(route_bus.root))
-    backup.restore()
+    backup.restore(lambda: None)
     assert path.read_bytes() == concurrent
     assert read_active_route(path) == route_bus
 
@@ -115,7 +116,7 @@ def test_concurrent_publication_after_rebind_is_preserved_on_rollback(tmp_path, 
     other = ActiveRoute(other_root, RecordedBusIdentity.capture(Bus.path_in(other_root)))
     route_new_bus(other, path)
     concurrent = path.read_bytes()
-    backup.restore()
+    backup.restore(lambda: None)
     assert path.read_bytes() == concurrent
     assert read_active_route(path) == other
 
@@ -143,7 +144,7 @@ def test_unknown_publication_is_still_owned_by_rollback(tmp_path, route_bus, had
         backup.rebind_route(route_bus, selected)
     assert failed
     assert read_active_route(path) == route_bus
-    backup.restore()
+    backup.restore(lambda: None)
     assert backup.original()
     if had_route:
         assert path.read_bytes() == original
@@ -156,7 +157,7 @@ def test_staged_probe_reads_the_published_route(tmp_path, route_bus):
     home = tmp_path / "outgoing-home"
     root = route_bus.root
     environment = {
-        **runtime.child_environment(runtime.environment(os.environ)), "HOME": str(home),
+        **runtime.environment(os.environ), "HOME": str(home),
     }
     path = home / ".local/state/agent-comms/active-route.json"
     old_route(path, route_bus)
@@ -201,7 +202,7 @@ def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, rou
     assert path.read_bytes() == original
     assert path.stat().st_nlink == 2
     assert not backup.original()
-    backup.restore()
+    backup.restore(lambda: None)
     assert backup.original()
     assert path.read_bytes() == original
     assert path.stat().st_nlink == 1
@@ -262,24 +263,15 @@ time.sleep(60)
 """
 
 
-def route_holder(directory, program):
-    directory.mkdir(mode=0o700)
-    holder = subprocess.Popen(
-        (sys.executable, "-c", ROUTE_HOLDER, str(directory), program),
-        stdout=subprocess.PIPE, text=True)
-    assert holder.stdout.readline() == "held\n"
-    return holder
-
-
 def test_route_publication_neither_waits_for_nor_ends_an_old_toad_holding_the_directory(
     tmp_path,
 ):
     """An old runtime's Toad still flocks the route directory; publishers no longer do."""
-    holder = route_holder(tmp_path / "state", "toad")
-    try:
-        with route_directory(tmp_path / "state" / "active-route.json"):
+    directory = tmp_path / "state"
+    directory.mkdir(mode=0o700)
+    with SpawnedProcess.launch((sys.executable, "-c", ROUTE_HOLDER, str(directory), "toad"),
+                               output=subprocess.PIPE) as holder:
+        assert holder.process.stdout.readline() == b"held\n"
+        with route_directory(directory / "active-route.json"):
             pass
-        assert holder.poll() is None
-    finally:
-        holder.kill()
-        holder.wait()
+        assert holder.process.poll() is None

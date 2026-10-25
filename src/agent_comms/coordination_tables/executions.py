@@ -13,8 +13,14 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError, StaleRevision
+from agent_comms.coordination_errors import (
+    IdentityConflict,
+    IntegrityViolationError,
+    StaleFence,
+    StaleRevision,
+)
 from agent_comms.coordination_schema import CoordinatorRow
+from agent_comms.coordination_tables.participants import Participants
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
@@ -54,6 +60,7 @@ from agent_comms.typed_table import (
     OrdinalTransitions,
     TextStorage,
 )
+from agent_comms.wake_candidate_index import ProjectionUnavailableError
 
 
 if TYPE_CHECKING:
@@ -103,8 +110,6 @@ class ClaimlessOrigin(ExecutionProvenance, declared_name=None):
 
     @classmethod
     def require_obligation(cls) -> None:
-        from agent_comms.wake_candidate_index import ProjectionUnavailableError
-
         raise ProjectionUnavailableError("open obligation has no wire origin")
 
 
@@ -218,8 +223,6 @@ class CurrentExecutions(
         return self.execution_id.pointed
 
     def require_idle(self) -> None:
-        from agent_comms.coordination_errors import StaleFence
-
         if self.unresolved:
             raise StaleFence(
                 "selected owner has an unresolved execution; new claims remain pending"
@@ -249,8 +252,6 @@ class CurrentExecutions(
 
     @classmethod
     def references(cls):
-        from agent_comms.coordination_tables.participants import Participants
-
         return (
             ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
@@ -482,7 +483,6 @@ class ExecutionRecord(
     @classmethod
     def references(cls):
         from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-        from agent_comms.coordination_tables.participants import Participants
 
         return (
             ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),

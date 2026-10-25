@@ -25,7 +25,7 @@ from .acp_extension import (
     TextRouteUpdate,
     encode_updates,
 )
-from .context_reading import ContextUsage, UnmeasuredContext
+from .context_reading import ContextUsage, UnsizedContext
 from .coordinator import Coordination
 from .field_codec import TurnId
 from .mro_dispatch import MroDispatch, handles
@@ -42,7 +42,7 @@ from .transcript_updates import TranscriptUpdate
 
 if TYPE_CHECKING:
     from .controller import SessionUpdateSink
-    from .routing import MessageRoute
+    from .routing import MessageRoute, NoMessageRoute
     from .turn_effects import TurnEffects
 
 
@@ -184,8 +184,8 @@ class AcpEventConsumer(MroDispatch):
             update=UsageUpdate(session_update="usage_update", used=usage.used, size=usage.size),
         )
 
-    @handles(UnmeasuredContext)
-    async def on_unmeasured_context(self, _reading: UnmeasuredContext) -> None:
+    @handles(UnsizedContext)
+    async def on_unsized_context(self, _reading: UnsizedContext) -> None:
         await self.agent.sessions.publish_metadata(self.session_id)
 
     @handles(events.CompactionEvent)
@@ -241,7 +241,7 @@ class TurnEventConsumer(AcpEventConsumer):
 
 @dataclass(eq=False, repr=False)
 class Routed(AcpEventConsumer):
-    route: MessageRoute
+    route: MessageRoute | NoMessageRoute
 
     def text_update(self, text: str) -> AgentMessageChunk:
         update = super().text_update(text)

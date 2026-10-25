@@ -11,6 +11,7 @@ from typing import Annotated, Self
 
 from ..active_route import ActiveRoute
 from ..bus import Bus
+from ..child_process import ResidentManager
 from ..connector import (
     LOOPBACK,
     PORT,
@@ -125,7 +126,8 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
             store=ctx,
             port=self.port,
         )
-        service.install(service.exec_arguments(self.issuer), home=Path.home())
+        ResidentManager.current().install(
+            type(service), service.exec_arguments(self.issuer), home=Path.home())
         service.enable()
         print(service.unit_file(Path.home()))
         return 0

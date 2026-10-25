@@ -29,9 +29,12 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     def retexted(self, text: str) -> OrderRun:
         raise ToolRefusedError("A mechanical run has no text; its check alone closes the order.")
 
-    @property
-    def merged_line(self) -> str:
-        return "Merged, waiting on install"
+    def merged_line(self, state: str) -> str:
+        return f"Merged, {state}"
+
+    def holder_runs(self) -> bool:
+        """Whether, once installed, the next action is the holder's run, not the commander's."""
+        return False
 
     @abstractmethod
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
@@ -74,9 +77,11 @@ class ApplicationOrderRun(OrderRun):
                 f"Reassign them; only a mechanical run reaches {unit.name}."
             )
 
-    @property
-    def merged_line(self) -> str:
-        return f"{super().merged_line}, waiting on the run"
+    def merged_line(self, state: str) -> str:
+        return f"{super().merged_line(state)}, waiting on the run"
+
+    def holder_runs(self) -> bool:
+        return True
 
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
         return merged.waiting_in(todo)

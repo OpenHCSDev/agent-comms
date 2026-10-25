@@ -8,6 +8,7 @@ the declared columns and field types without upgrading existing storage.
 from __future__ import annotations
 
 import annotationlib
+import builtins
 import hashlib
 import json
 import os
@@ -51,6 +52,9 @@ from .field_codec import (
     MalformedRecord,
     NominalText,
     NullMember,
+    PathText,
+    SingleFieldValue,
+    SubclassUnion,
     TextRepresentation,
     ValueDecoder,
     WireName,
@@ -59,21 +63,24 @@ from .field_codec import (
 )
 from .lifecycle import LifecycleState
 from .locked_store import (
+    DeclaredFile,
     DurableFile,
-    FileStore,
+    FilesRequest,
+    LiveFilesRequest,
     PublishedSQLiteFile,
     RegistryFile,
     RootFile,
     RuntimeFile,
     SQLiteFile,
-    StoreBusy,
+    SQLiteStorage,
     StoreCommittedError,
+    WrittenFile,
 )
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
+from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
-from .projection_source import ProducedRow, ProjectionSource
+from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
-    UNBOUNDED_CONTENTION, StoreLockContention, StoreLockFile, _store_lock,
+    UNBOUNDED_CONTENTION, StoreBusy, StoreLockContention, StoreLockFile,
 )
 
 if TYPE_CHECKING:
@@ -92,19 +99,15 @@ def _identifier(name: str) -> str:
     return f'"{name}"'
 
 
-def _absent(member: object) -> bool:
-    """SQL NULL stores this union member: None, or a declared null member."""
-    return member is types.NoneType or (isinstance(member, type) and issubclass(member, NullMember))
-
-
 def _base_type(annotation: object) -> tuple[object, bool]:
     if get_origin(annotation) is Annotated:
         annotation = get_args(annotation)[0]
     if get_origin(annotation) in (Union, types.UnionType):
         members = get_args(annotation)
-        if len(members) == 2 and sum(map(_absent, members)) == 1:
-            return next(member for member in members if not _absent(member)), True
-    return annotation, False
+        present = tuple(member for member in members if not compile_decoder(member).accepts_null)
+        if len(members) == 2 and len(present) == 1:
+            return present[0], True
+    return annotation, compile_decoder(annotation).accepts_null
 
 
 class SqlStorage(DeclaredFamily, affix="Storage"):
@@ -549,7 +552,7 @@ class TypedRow(SqlProjection):
     def _fields(cls: type[TypedRow]) -> tuple[_Field, ...]:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
-        return tuple(_Field.for_field(plan) for plan in FieldCodec.field_plans(cls))
+        return tuple(_Field.for_field(plan) for plan in FieldCodec.field_plans(cls) if plan.records)
 
     @classmethod
     def column_projection(cls) -> dict[str, str]:
@@ -677,6 +680,45 @@ class SQLiteColumnNullability(TypedRow):
 
 
 @dataclass(frozen=True)
+class SQLiteColumnShape(TypedRow):
+    """Every stored column as SQLite reads it back, generated ones included, without parsing
+    DDL: two tables with equal shapes hold the same rows."""
+
+    name: str
+    sql_type: str
+    notnull: bool
+    pk: int
+    hidden: int
+
+    @classmethod
+    def of(cls, db: sqlite3.Connection, row: type[TypedTable]) -> list[SQLiteColumnShape]:
+        return cls.read(db.execute(
+            'SELECT name, type AS sql_type, "notnull", pk, hidden FROM pragma_table_xinfo(?)',
+            (row.declared_name,)))
+
+    @classmethod
+    def key_differs(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
+        """Whether the stored table keys its rows by other columns than the row declares."""
+        stored = tuple(item.name for item in sorted(cls.of(db, row), key=lambda item: item.pk)
+                       if item.pk)
+        return stored != tuple(item.wire_name for item in row._columns if item.column.primary_key)
+
+    @classmethod
+    def only_constraints_differ(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
+        """Whether the stored table holds the declared columns under other constraints, such
+        as a family CHECK that gained a member: rebuilding it carries every row, and SQLite
+        checks each against the declared constraints, so a row the declaration refuses fails
+        the carry."""
+        stored = {item.name: item.sql for item in row.stored_objects(db)}.get(row.declared_name)
+        declared = row.schema_objects()[row.declared_name]
+        if stored in (None, declared):
+            return False
+        with closing(SQLiteFile.writer(":memory:")) as scratch:
+            scratch.execute(declared)
+            return cls.of(db, row) == cls.of(scratch, row)
+
+
+@dataclass(frozen=True)
 class SQLiteTableName(TypedRow):
     """One table SQLite's catalog holds, whether or not a row declaration names it."""
 
@@ -709,6 +751,10 @@ class CatalogKind(DeclaredFamily, affix="Kind"):
         if declared.get(item.name) != item.sql:
             cls.drop(db, item.name)
 
+    @classmethod
+    def release(cls, db: sqlite3.Connection, item: SQLiteCatalogObject) -> None:
+        """An object that guards no row changes stays while a carry rewrites rows."""
+
 
 class TableKind(CatalogKind):
     @classmethod
@@ -723,7 +769,11 @@ class IndexKind(CatalogKind):
 
 
 class TriggerKind(CatalogKind):
-    pass
+    @classmethod
+    def release(cls, db: sqlite3.Connection, item: SQLiteCatalogObject) -> None:
+        """A stored trigger may refuse the rows a carry deletes; the carry's rebuild
+        recreates the declared ones."""
+        cls.drop(db, item.name)
 
 
 class ViewKind(CatalogKind):
@@ -749,6 +799,14 @@ class SQLiteCatalogObject(TypedRow):
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
 
     @classmethod
+    def release_guards(cls, db: sqlite3.Connection, row: builtins.type[TypedTable]) -> None:
+        """Lift guards on this table and related-table guards owned by its declaration."""
+        declared = row.schema_objects()
+        for item in cls.stored(db):
+            if item.tbl_name == row.declared_name or item.name in declared:
+                item.type.release(db, item)
+
+    @classmethod
     def carry(cls, db: sqlite3.Connection, declared: Mapping[str, str],
               compared: frozenset[str]) -> None:
         """Inside the caller's write transaction, the compared objects onto the declaration:
@@ -763,21 +821,134 @@ class SQLiteCatalogObject(TypedRow):
                 db.execute(sql)
 
 
+@dataclass(frozen=True)
+class StoreRewrite(DeclaredFamily, affix="StoreRewrite"):
+    """One planned rewrite, with the original rows its rollback must retain."""
+
+    path: Annotated[Path, PathText]
+
+    def backup_files(self) -> tuple[Path, ...]:
+        return (self.path,)
+
+
+class DurableStoreRewrite(StoreRewrite):
+    """At least one changing family owns original rows."""
+
+
+class DerivedStoreRewrite(StoreRewrite):
+    """Every changing family can regenerate its rows from retained originals."""
+
+    def backup_files(self) -> tuple[Path, ...]:
+        return ()
+
+
+class SchemaRebuild:
+    """A full rebuild creates derived rows through their schema's normal history pass."""
+
+    @contextmanager
+    def attached(self, db: sqlite3.Connection) -> Iterator[SchemaRebuild]:
+        yield self
+
+    def rebuild(
+        self, schema: type[DerivedTables], db: sqlite3.Connection,
+        rows: tuple[type[TypedTable], ...],
+    ) -> None:
+        schema.drop_rows(db, rows)
+        schema.create_tables(db, rows)
+        schema.rebuild_rows(db, rows)
+
+
+FULL_SCHEMA_REBUILD = SchemaRebuild()
+
+
+@dataclass(frozen=True)
+class PracticeRebuild(SchemaRebuild):
+    """The practice file stays read-only through the live reconcile's transaction."""
+
+    path: Path
+    database: ClassVar[str] = __qualname__
+
+    @contextmanager
+    def attached(self, db: sqlite3.Connection) -> Iterator[SchemaRebuild]:
+        with closing(SQLiteFile.read_snapshot(self.path)) as source:
+            db.execute(f'ATTACH DATABASE ? AS "{self.database}"',
+                       (self.path.resolve().as_uri() + "?mode=ro",))
+            try:
+                yield AttachedPracticeRebuild(source)
+            finally:
+                db.execute(f'DETACH DATABASE "{self.database}"')
+
+
+@dataclass(frozen=True)
+class AttachedPracticeRebuild(SchemaRebuild):
+    source: sqlite3.Connection
+
+    def rebuild(
+        self, schema: type[DerivedTables], db: sqlite3.Connection,
+        rows: tuple[type[TypedTable], ...],
+    ) -> None:
+        projections = tuple(row for row in schema.projection_rows() if row in rows)
+        if not ProjectionProducer.matches(self.source, projections):
+            raise RelationViolationError("Practice projection producers differ from this runtime")
+        through = max((row.practice_sequence(db, self.source)
+                       for row in schema.projection_rows()), default=0)
+        schema.drop_rows(db, rows)
+        schema.create_tables(db, rows)
+        for row in projections:
+            db.execute(f'INSERT INTO "{row.declared_name}" '
+                       f'SELECT * FROM "{PracticeRebuild.database}"."{row.declared_name}"')
+        schema.replay(db, rows, after=through)
+
+
+class Practice(SubclassUnion, affix=""):
+    """The CLI's decoded choice of a practice root for this reconciliation."""
+
+    def rebuild_for(self, owner: type[ReconciledFile], path: Path) -> SchemaRebuild:
+        return FULL_SCHEMA_REBUILD
+
+
+@dataclass(frozen=True)
+class NoPractice(NullMember, Practice):
+    """Rebuild from this file's own history."""
+
+
+@dataclass(frozen=True)
+class PracticeRoot(SingleFieldValue, Practice):
+    root: Annotated[Path, PathText]
+
+    def rebuild_for(self, owner: type[ReconciledFile], path: Path) -> SchemaRebuild:
+        return owner.practice_rebuild(path, self.root)
+
+
 class SchemaChange(ABC):
-    """Who may change a stored schema: the reconcile asks before it writes."""
+    """Who may change a stored schema: the reconcile asks before it writes, and an opening
+    asks what to do with a stored schema that differs."""
 
     @abstractmethod
     def require(self) -> None: ...
 
+    @abstractmethod
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        """An opening of a file that has a stored schema."""
+
 
 @dataclass(frozen=True)
 class HeldBusFile(SchemaChange):
-    """A bus file every runtime on the root opens: its schema changes only in the process
-    holding the root's maintenance, so a newer runtime opening the live bus outside an
-    install refuses instead of moving it under the running owners (install 53, 2026-10-22)."""
+    """A bus file every runtime on the root opens: only the installer's carry changes its
+    schema, in the process holding the root's maintenance, so a newer runtime opening the
+    live bus refuses instead of moving it under the running owners (install 53, 2026-10-22),
+    and no opening rewrites a file outside the carry's backup."""
+
+    carry_verb: ClassVar[str] = "reconcile-stores"
 
     owner: type[RootFile]
     path: Path
+
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        if schema.schema_differs(db):
+            raise schema.schema_error(
+                f"{self.path} differs from {schema.__name__}; "
+                f"agent-comms {self.carry_verb} carries it")
 
     def require(self) -> None:
         barrier = MaintenanceBarrier(RegistryFile.path_in(self.owner.bus_root(self.path)))
@@ -796,6 +967,10 @@ class WriterOwnedFile(SchemaChange):
 
     def require(self) -> None:
         """The owning writer may rebuild this schema."""
+
+    def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
+        """The writer is this file's carry."""
+        schema.reconcile_schema(db, self)
 
 
 class TableSchema(ABC):
@@ -858,10 +1033,25 @@ class TableSchema(ABC):
             cls.stored_schema(db, sharing), cls.declared_schema()))
 
     @classmethod
-    def reconcile_writes(cls, db: sqlite3.Connection) -> bool:
-        """Whether ``reconcile_schema`` would write this file: the installer plans with
-        this answer, so it names every file the reconcile then rewrites."""
-        return cls.schema_differs(db)
+    def changed_families(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> Iterator[type[TableSchema]]:
+        if cls.schema_differs(db, sharing):
+            yield cls
+
+    @classmethod
+    def backup_rewrite(cls, rewrite: StoreRewrite) -> StoreRewrite:
+        return DurableStoreRewrite(rewrite.path)
+
+    @classmethod
+    def reconcile_plan(cls, db: sqlite3.Connection, path: Path) -> tuple[StoreRewrite, ...]:
+        families = tuple(cls.changed_families(db))
+        if not families:
+            return ()
+        rewrite: StoreRewrite = DerivedStoreRewrite(path)
+        for family in families:
+            rewrite = family.backup_rewrite(rewrite)
+        return (rewrite,)
 
     @classmethod
     def require_schema(
@@ -879,8 +1069,18 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} foreign-key enforcement is disabled")
 
     @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
+    def require_readable(cls, db: sqlite3.Connection) -> None:
+        """Every stored row must decode through its target declaration before cutover."""
         for row in cls.schema_rows():
+            row.require_decodable_rows(db)
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        cls.create_tables(db, cls.schema_rows())
+
+    @classmethod
+    def create_tables(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        for row in rows:
             row.create(db)
 
     @classmethod
@@ -895,37 +1095,52 @@ class TableSchema(ABC):
             row.take_previous_name(db)
             row.derive_nullable_fields(db)
             row.derive_relaxed_fields(db)
+            if SQLiteColumnShape.only_constraints_differ(db, row):
+                row.rebuild(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
                                   frozenset(item.name for item in cls.stored_schema(db, sharing)))
         cls.require_schema(db, sharing)
 
     @classmethod
-    def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
-        """The writer's answer to a stored schema that differs from the declaration, in a
-        write transaction of its own and only where ``change`` allows; whether it changed
-        the file."""
+    def reconcile_schema(
+        cls, db: sqlite3.Connection, change: SchemaChange,
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
+    ) -> bool:
+        """The carry of a stored schema that differs from the declaration, in a write
+        transaction of its own and only where ``change`` allows; whether it changed the
+        file."""
         if not cls.schema_differs(db):
             return False
         change.require()
-        with SQLiteFile.write_transaction(db):
-            cls.carry_schema(db)
+        with SQLiteForeignKeys.relations_suspended(db):
+            with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
+                cls.carry_schema(db, rebuild=attached)
+                with closing(SQLiteForeignKeyViolation.iterate(
+                    db.execute('SELECT "table", parent, fkid FROM pragma_foreign_key_check()'),
+                )) as violations:
+                    for violation in violations:
+                        raise cls.schema_error(
+                            f"{cls.__name__} foreign-key violation: table={violation.table}, "
+                            f"parent={violation.parent}, fkid={violation.fkid}"
+                        )
         return True
 
     @classmethod
     def install_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> None:
         """Every writer's opening: a file with no stored schema gets its declaration, and
-        one that has a schema is reconciled onto it. The first read also attaches an existing
+        ``change`` answers one that has a schema. The first read also attaches an existing
         WAL, and an opening that finds its schema takes no write lock."""
         if not cls.stored_schema(db):
             with SQLiteFile.write_transaction(db):
                 if not cls.stored_schema(db):
                     cls.create_schema(db)
-        cls.reconcile_schema(db, change)
+        change.opened(cls, db)
 
     @classmethod
     @abstractmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
         """Inside the reconcile's transaction: this kind of file's way onto its declaration."""
 
@@ -950,22 +1165,29 @@ class ComposedSchemas:
     def schema_differs(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
-        rows = (*cls.schema_rows(), *sharing)
-        return any(family.schema_differs(db, rows) for family in cls.schema_families())
+        return any(cls.changed_families(db, sharing))
 
     @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
+    def changed_families(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> Iterator[type[TableSchema]]:
+        rows = (*cls.schema_rows(), *sharing)
         for family in cls.schema_families():
-            family.create_schema(db)
+            yield from family.changed_families(db, rows)
+
+    @classmethod
+    def create_tables(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        for family in cls.schema_families():
+            family.create_tables(db, tuple(row for row in family.schema_rows() if row in rows))
 
     @classmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
         rows = (*cls.schema_rows(), *sharing)
-        for family in cls.schema_families():
-            if family.schema_differs(db, rows):
-                family.carry_schema(db, rows)
+        for family in cls.changed_families(db, sharing):
+            family.carry_schema(db, rows, rebuild=rebuild)
 
 
 class RowMutation(Enum):
@@ -1427,6 +1649,10 @@ class DerivedTables(TableSchema):
     __slots__ = ()
 
     @classmethod
+    def backup_rewrite(cls, rewrite: StoreRewrite) -> StoreRewrite:
+        return rewrite
+
+    @classmethod
     def projection_rows(cls) -> tuple[type[ProducedTable], ...]:
         return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedTable))
 
@@ -1448,37 +1674,49 @@ class DerivedTables(TableSchema):
         ) or row in changed_producers)
 
     @classmethod
-    def create_schema(
-        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
-    ) -> None:
-        selected = cls.schema_rows() if rows is None else rows
-        for row in selected:
-            row.create(db)
-        projections = tuple(row for row in cls.projection_rows() if row in selected)
+    def create_tables(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        super().create_tables(db, rows)
+        projections = tuple(row for row in cls.projection_rows() if row in rows)
         for producer in ProjectionProducer.records_for(projections):
             producer.upsert(db)
 
     @classmethod
-    def reset_schema(cls, db: sqlite3.Connection) -> None:
+    def reset_schema(
+        cls, db: sqlite3.Connection, *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
+    ) -> None:
         """Inside the caller's transaction: rebuild only this schema's derived tables."""
         changed = cls.changed_rows(db)
         if not changed:
             return
+        rebuild.rebuild(cls, db, changed)
+
+    @classmethod
+    def drop_rows(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
         # Unchanged children may reference a rebuilt parent: check after its rows return.
         db.execute("PRAGMA defer_foreign_keys=ON")
-        for row in changed:
+        for row in rows:
             row.take_previous_name(db)
-        names = frozenset(row.declared_name for row in changed)
+        names = frozenset(row.declared_name for row in rows)
         for stored in cls.stored_tables(db):
             if stored.name in names:
                 stored.drop(db)
-        cls.create_schema(db, changed)
+
+    @classmethod
+    def rebuild_rows(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> None:
+        """Projection metadata has no original rows to rebuild."""
+
+    @classmethod
+    def replay(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...], *, after: int,
+    ) -> None:
+        """Projection metadata has no history of its own to replay."""
 
     @classmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
-        cls.reset_schema(db)
+        cls.reset_schema(db, rebuild=rebuild)
 
 
 class DurableTables(TableSchema):
@@ -1491,6 +1729,7 @@ class DurableTables(TableSchema):
     @classmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
         cls.derive_schema(db, sharing)
 
@@ -1504,6 +1743,26 @@ class ProjectionProducerTables(SharedFileTables, DerivedTables):
 @dataclass(frozen=True)
 class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
+
+    @classmethod
+    @contextmanager
+    def relations_suspended(cls, connection: sqlite3.Connection) -> Iterator[None]:
+        """Suspend relations around a transaction owner, restoring this typed setting."""
+        if connection.in_transaction:
+            raise sqlite3.ProgrammingError("Relations can only be suspended between transactions")
+        current, = cls.read(connection.execute("PRAGMA foreign_keys"))
+        connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            yield
+        finally:
+            connection.execute(f"PRAGMA foreign_keys = {int(current.foreign_keys)}")
+
+
+@dataclass(frozen=True)
+class SQLiteForeignKeyViolation(TypedRow):
+    table: str
+    parent: str
+    fkid: int
 
 
 @dataclass(frozen=True)
@@ -1553,8 +1812,42 @@ class DeclaredSchemaFacts:
         return frozenset(cls.schema_objects())
 
 
+class StoredRowDecoding(TypedRow):
+    """Stream a table's stored records through its decoder with diagnostic identities."""
+
+    declared_name: ClassVar[str]
+    row_reference_label: ClassVar[str] = "rowid"
+
+    @classmethod
+    def row_reference(cls) -> str:
+        """The stored row's diagnostic identity, independent of its decoded value."""
+        return cls.row_reference_label
+
+    @classmethod
+    @abstractmethod
+    def _select_list(cls, table: type[StoredRowDecoding]) -> str:
+        """Each stored-row declaration supplies its SQL projection."""
+
+    @classmethod
+    def require_decodable_rows(cls, db: sqlite3.Connection) -> None:
+        """Decode every row without keeping history-sized results in memory."""
+        with closing(db.execute(
+            f'SELECT {cls.row_reference()} AS "__stored_reference", '
+            f'{cls._select_list(cls)} FROM {_identifier(cls.declared_name)}'
+        )) as cursor:
+            positions = cls._positions(cursor, {"stored_reference": "__stored_reference"})
+            for stored in cursor:
+                try:
+                    cls._decode_row(stored, positions)
+                except (ValueError, TypeError) as error:
+                    raise RelationViolationError(
+                        f"{cls.declared_name} {cls.row_reference_label} {stored[0]} "
+                        f"cannot decode: {error}"
+                    ) from error
+
+
 class TypedTable(
-    FrozenColumns, TypedRow, DeclaredFamily, DeclaredSchemaFacts,
+    FrozenColumns, StoredRowDecoding, DeclaredFamily, DeclaredSchemaFacts,
     affix="Row", discovery_package="agent_comms",
 ):
     """The row declaration owns its table; no separate table/schema registry.
@@ -1609,7 +1902,7 @@ class TypedTable(
         return ", ".join(_identifier(item.wire_name) for item in cls._fields_named(names))
 
     @classmethod
-    def _select_list(cls, table: type[TypedTable]) -> str:
+    def _select_list(cls, table: type[StoredRowDecoding]) -> str:
         return cls._column_list(tuple(cls.column_projection()))
 
     @classmethod
@@ -1715,19 +2008,19 @@ class TypedTable(
         cls._writable_fields(tuple(changed))
         fields = cls._writable_fields()
         stored = cls.stored_columns(db)
-        expressions = (
-            changed[item.name] if item.name in changed else item.rebuild_expression(stored)
+        selected = ", ".join(
+            f'{changed[item.name] if item.name in changed else item.rebuild_expression(stored)} AS {_identifier(item.wire_name)}'
             for item in fields
         )
-        selected = ", ".join(f'{expression} AS {_identifier(item.wire_name)}'
-                             for item, expression in zip(fields, expressions, strict=True))
         table = _identifier(cls.declared_name)
         temporary = _identifier(f"rebuild_{cls.declared_name}")
         db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {selected} FROM {table}")
+        SQLiteCatalogObject.release_guards(db, cls)
         cls.drop(db)
-        cls.create(db)
+        db.execute(cls._table_sql())
         columns = cls._column_list(tuple(item.name for item in fields))
         db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
+        cls.create(db, if_not_exists=True)
         db.execute(f"DROP TABLE {temporary}")
 
     @classmethod
@@ -2061,13 +2354,29 @@ class TypedTable(
         )
 
 
+@dataclass(frozen=True)
+class WriterOwnedResource(DeclaredFile):
+    """An external writer's declared live path, retaining the shared copy behavior."""
+
+    owner: type[WriterOwnedStore]
+
+    def live(self, root: Path) -> Path:
+        return self.owner.live(root) / self.path.relative_to(self.owner.retained_filename())
+
+
 class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=None):
     """A table derives its producers from the writers that declare it as an output."""
 
     @classmethod
-    def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
-        """A row contributes itself; extra writes belong to the class declaring them."""
-        return (cls,) if "writes" in vars(cls) else ()
+    def writer_declarations(cls) -> tuple[type[ProjectionOutputs], ...]:
+        """Share output capabilities, not another writer's outputs inherited with its fields."""
+        return tuple(owner for owner in super().writer_declarations()
+                     if owner.shares_outputs_with(cls))
+
+    @classmethod
+    def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
+        """Only the identity-owning row contributes a verified history prefix."""
+        return 0
 
     @classmethod
     def producer_digest(cls) -> str:
@@ -2093,15 +2402,15 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         # Complete the same declared family for direct source reads and wheel builds.
         import_module("agent_comms.producer_stamp")
         owners: set[type] = {
-            parent for parent in cls.__mro__ if issubclass(parent, ProjectionSource)
+            parent for parent in cls.__mro__ if issubclass(parent, ProjectionOutputs)
         }
         writers = ProjectionSource.writers_for(cls)
         owners.update(writers)
         for writer in writers:
             owners.update(
                 parent for parent in writer.__mro__
-                if issubclass(parent, ProjectionSource)
-                and ("writes" not in vars(parent) or parent in writers)
+                if issubclass(parent, ProjectionOutputs)
+                and ("writes" not in vars(parent) or cls in parent.writes)
             )
         annotations: list[object] = (
             [column.annotation for column in cls._columns] if is_dataclass(cls) else []
@@ -2146,38 +2455,31 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         return all(stored.get(name) == digest for name, digest in digests.items())
 
 
-class StoreWriter(PublishedSQLiteFile, FileStore):
+class StoreWriter(PublishedSQLiteFile):
     """A transaction capability shared by stores and their turn-owned writers.
 
-    Whether the file outlives an installation belongs to each store: it inherits
-    CarriedWriter or RuntimeWriter, and a TypedStore inherits DurableStore or DerivedStore.
+    Whether the file outlives an installation belongs to each store: it inherits a
+    CarriedFile kind or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
     """
 
-    def __init__(self, path: Path) -> None:
-        self._path = path
-
     @property
-    def path(self) -> Path:
-        return self._path
-
-    @property
-    def store(self) -> StoreWriter:
-        """The store whose committed row changes this writer publishes."""
-        return self
+    @abstractmethod
+    def store(self) -> WrittenFile:
+        """The file whose kind permits writes and whose committed row changes are published."""
 
     @contextmanager
-    def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """Publish through the physical store after its row transaction commits. Maintenance
-        is asked under the write lock, so a hold taken before this transaction refuses it and
-        an installer's drain of the write lock waits out every transaction that passed."""
+    def transaction(
+        self, connection: sqlite3.Connection, committed: Callable[[], None] = lambda: None,
+    ) -> Iterator[sqlite3.Connection]:
+        """Publish through the physical store after its row transaction commits and
+        ``committed`` returns; a raise there announces nothing. Maintenance is asked under
+        the write lock, so a hold taken before this transaction refuses it and an
+        installer's drain of the write lock waits out every transaction that passed."""
         with self.publishing_changes(connection, self.store.path):
             with self.write_transaction(connection):
-                self.require_maintenance_open()
+                self.store.require_maintenance_open()
                 yield connection
-
-    @abstractmethod
-    def require_maintenance_open(self) -> None:
-        """Whether maintenance refuses this writer, which the file's kind declares."""
+            committed()
 
     @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:
@@ -2206,14 +2508,20 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         return HeldBusFile(cls, path)
 
     @classmethod
-    def reconcile_at(cls, path: Path) -> bool:
-        """Whether reconciling the file at ``path`` changed it."""
+    def practice_rebuild(cls, path: Path, practice_root: Path) -> SchemaRebuild:
+        """Files without a declared practice replay retain their normal rebuild."""
+        return FULL_SCHEMA_REBUILD
+
+    @classmethod
+    def reconcile_at(cls, path: Path, practice: Practice = NoPractice()) -> bool:
+        """Whether reconciling the file changed it using the decoded practice choice."""
         schema = cls.schema_at(path)
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
-            return schema.reconcile_schema(db, cls.schema_change(path))
+        rebuild = practice.rebuild_for(cls, path)
+        with cls.exclusive_writer(path, uri=True) as db:
+            return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
 
 
-class WriterOwnedStore(DeclaredFamily, affix="Store"):
+class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"):
     """A durable file outside the bus that its own writer reconciles when it opens it
     (``WriterOwnedFile``). An installed package declares each one through the
     ``agent_comms.writer_owned_stores`` entry point. Before cutover the installer opens a
@@ -2222,11 +2530,72 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
     launch."""
 
     entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
+    retained_directory: ClassVar[Path] = Path("writer-owned")
 
     @classmethod
-    @abstractmethod
-    def paths(cls) -> tuple[Path, ...]:
-        """Every file this store's writer owns, one per binding where a writer keeps several."""
+    def retained_filename(cls) -> Path:
+        return cls.retained_directory / cls.declared_name
+
+    @classmethod
+    def content_members(cls, path: Path) -> frozenset[Path]:
+        """Retain the original primary and committed WAL bytes without checkpointing."""
+        observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
+        return cls.snapshot_members(path, observed)
+
+    @classmethod
+    def retained_name(cls, root: Path, path: Path) -> Path:
+        return cls.retained_filename() / path.relative_to(cls.live(root))
+
+    @classmethod
+    def live(cls, root: Path) -> Path:
+        return cls.path()
+
+    @classmethod
+    def resource(cls, name: Path) -> WriterOwnedResource:
+        return WriterOwnedResource(cls, name)
+
+    @classmethod
+    def resources(cls, files: FilesRequest) -> tuple[WriterOwnedResource, ...]:
+        """Every declared file, resolved by the caller's live or retained selection."""
+        return (cls.resource(cls.retained_filename()),)
+
+    @classmethod
+    def external_members(cls, files: FilesRequest) -> Mapping[Path, type[RootFile]]:
+        cls.load_declarations()
+        return {files.location(resource): store for store in cls.members_with(cls)
+                for resource in store.resources(files)}
+
+    @classmethod
+    def require_retained_name(cls, name: Path) -> None:
+        names = {store.retained_filename() for store in WriterOwnedStore.members_with(WriterOwnedStore)}
+        if name.is_relative_to(cls.retained_directory) and not any(
+                name.is_relative_to(directory) for directory in names):
+            raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
+
+    @classmethod
+    def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
+        for resource in cls.resources(files):
+            path = files.location(resource)
+            if not path.is_file():
+                continue
+            copied = directory / resource.path
+            copied.parent.mkdir(parents=True, exist_ok=True)
+            cls.copy_group(path, copied)
+            try:
+                with closing(cls.writer(copied)) as db, db:
+                    cls.table_schema().install_schema(db, WriterOwnedFile())
+                    cls.table_schema().require_readable(db)
+            except RelationViolationError as error:
+                raise RelationViolationError(
+                    f"{path} cannot open on this runtime: {error}") from error
+
+    @staticmethod
+    def practice_openings(root: Path, excluding: tuple[type[WriterOwnedStore], ...] = ()) -> None:
+        WriterOwnedStore.load_declarations()
+        stores = set(WriterOwnedStore.members_with(WriterOwnedStore)) - set(excluding)
+        with TemporaryDirectory() as directory:
+            for store in stores:
+                store.practice_opening(LiveFilesRequest(root), Path(directory))
 
     @classmethod
     @abstractmethod
@@ -2240,43 +2609,19 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
             entry.load()
 
     @classmethod
-    def practice_opening(cls, path: Path) -> None:
-        """The writer's own opening, run on a copy, so the stored file is never written."""
-        if not path.is_file():
-            return
-        with TemporaryDirectory() as directory:
-            copy = Path(directory) / path.name
-            with closing(sqlite3.connect(path)) as stored, closing(sqlite3.connect(copy)) as practice:
-                stored.backup(practice)
-            try:
-                with closing(SQLiteFile.writer(copy)) as db, db:
-                    cls.table_schema().install_schema(db, WriterOwnedFile())
-            except RelationViolationError as error:
-                raise RelationViolationError(
-                    f"{path} cannot open on this runtime: {error}") from error
-
-    @staticmethod
-    def practice_openings() -> None:
-        WriterOwnedStore.load_declarations()
-        for store in WriterOwnedStore.members_with(WriterOwnedStore):
-            for path in store.paths():
-                store.practice_opening(path)
+    def member_named(cls, name: object) -> type[Self]:
+        cls.load_declarations()
+        return super().member_named(name)
 
 
-class CarriedWriter(StoreWriter, DurableFile):
-    """A writer of a file every installation carries: while maintenance runs, only its
-    holder writes it, so the install's carry check sees no other change."""
-
-    def require_maintenance_open(self) -> None:
-        MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+class CarriedWriter(HolderWrittenFile, StoreWriter):
+    """A writer of a file every installation carries, which only the maintenance holder
+    writes while maintenance runs."""
 
 
-class RuntimeWriter(StoreWriter, RuntimeFile):
+class RuntimeWriter(RuntimeFile, StoreWriter):
     """A writer of a file no carry writes: running owners rewrite it at any time,
     maintenance included."""
-
-    def require_maintenance_open(self) -> None:
-        """No installation reads this file, so maintenance never refuses its writers."""
 
 
 class WalStore(StoreWriter, StoreLockFile):
@@ -2284,33 +2629,10 @@ class WalStore(StoreWriter, StoreLockFile):
 
     synchronous: ClassVar[str] = "FULL"
 
-    @contextmanager
-    def _attached(
-        self, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention = UNBOUNDED_CONTENTION,
-    ) -> Iterator[sqlite3.Connection]:
-        """Serialize WAL attachment and retirement, not authorized SQL work.
-
-        Even a read-only cold attachment initializes the WAL index. Another
-        attachment or last-connection cleanup can make that initialization
-        return BUSY before any query competes with a data writer. The same
-        physical owner serializes these connection boundaries; readers and
-        writers retain SQLite's parallel WAL transactions between them.
-
-        Attachment spends the caller's lock budget, so a read that may defer raises
-        BlockingIOError when it runs out instead of waiting; retirement always runs.
-        """
-        with ExitStack() as lifetime:
-            with _store_lock(self.path, contention=contention):
-                resource = opening()
-                connection = resource.__enter__()
-
-            def retire(*error):
-                with _store_lock(self.path):
-                    return resource.__exit__(*error)
-
-            lifetime.push(retire)
-            yield connection
+    @property
+    @abstractmethod
+    def path(self) -> Path:
+        """The physical file, supplied by a root declaration or file constructor."""
 
     @contextmanager
     def committed_or_empty(
@@ -2324,7 +2646,7 @@ class WalStore(StoreWriter, StoreLockFile):
         An absent file is established absence: a reader sees every declared table empty
         and creates no storage."""
         if self.path.exists():
-            with self._attached(opening, contention) as connection:
+            with self.attached(self.path, opening, contention) as connection:
                 yield connection
             return
         with closing(self.writer(":memory:", isolation_level=None)) as connection:
@@ -2361,7 +2683,7 @@ class WalStore(StoreWriter, StoreLockFile):
     def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Own attachment; joined workers may borrow one serialized connection."""
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with self._attached(lambda: self._open_writer(
+        with self.attached(self.path, lambda: self._open_writer(
                 check_same_thread=check_same_thread)) as connection:
             yield connection
 
@@ -2466,10 +2788,31 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
         )
 
 
+class RowidSequenced(TypedTable, declared_name=None):
+    """The table's rows are numbered by SQLite's rowid, and an insert answers its number."""
+
+    @classmethod
+    def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:
+        """Insert one row and answer the rowid SQLite assigned it."""
+        writable = cls._writable_fields(tuple(values) or None)
+        (sequence,) = db.execute(
+            cls.insertion_statement(tuple(item.name for item in writable)) + " RETURNING rowid",
+            tuple(item.encode(values[item.name]) for item in writable),
+        ).fetchone()
+        return int(sequence)
+
+
 class WithoutRowid(TypedTable, declared_name=None):
     """The table is stored directly by its declared primary key."""
 
     without_rowid = True
+    row_reference_label = "key"
+
+    @classmethod
+    def row_reference(cls) -> str:
+        return "json_array(" + cls._column_list(tuple(
+            item.name for item in cls._fields if item.column.primary_key
+        )) + ")"
 
 
 @dataclass(frozen=True)

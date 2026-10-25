@@ -2,6 +2,7 @@
 
 import ast
 import asyncio
+import inspect
 import threading
 from pathlib import Path
 
@@ -11,11 +12,11 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_session import CoordinationSession, system_clock
 from agent_comms.coordinator import Coordination
-from agent_comms.locked_store import StoreBusy
+from agent_comms.store_files import StoreBusy, StoreContention
 from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
 PACKAGE = Path(__file__).parents[1] / "src" / "agent_comms"
-CONNECTION_OWNER = PACKAGE / "locked_store.py"
+CONNECTION_OWNER = Path(inspect.getfile(StoreContention))
 
 
 def test_sqlite_connections_and_busy_policy_have_one_owner():

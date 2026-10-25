@@ -14,7 +14,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinator import Coordination
 from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
 from agent_comms.runtime import SocketClient
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import ExclusiveLock, UNBOUNDED_CONTENTION, _store_lock
 from agent_comms.threads import Thread
 
 
@@ -68,21 +68,21 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path, priva
         # A periodic observation deferred by a real writer did not invalidate
         # the last trusted owner snapshot. After release, no duplicate should
         # reach the socket and schedule idle reader preparation.
-        with _store_lock(comms.bus.bus.path):
+        with _store_lock(comms.bus.bus.path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             await agent.cursors.publish(owner.name, owner.name)
         await agent.cursors.publish(owner.name, owner.name)
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(receive(), 0.05)
         # A settled turn cannot lose its cursor update to the same lock. The
         # idle observer must revisit the durable row once contention clears.
-        with _store_lock(comms.bus.bus.path):
+        with _store_lock(comms.bus.bus.path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             await agent.cursors.publish(owner.name, owner.name, selected_status="unavailable")
         await agent.cursors.refresh(owner.name, owner.name)
         before = await receive(before.revision)
         assert before.observation.status == "none"
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(receive(), 0.05)
-        with _store_lock(comms.bus.bus.path):
+        with _store_lock(comms.bus.bus.path, ExclusiveLock(), UNBOUNDED_CONTENTION):
             loaded = next(
                 update.envelope
                 for update in (await agent.cursors.trusted_metadata(owner.name, owner.name))

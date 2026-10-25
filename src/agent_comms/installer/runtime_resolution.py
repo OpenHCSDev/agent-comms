@@ -7,7 +7,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from packaging.markers import Marker
 from packaging.utils import canonicalize_name
@@ -55,15 +55,33 @@ class TextualPackage(RuntimePackage):
     repository = RepositoryName("OpenHCSDev", "textual")
 
 
-class RegistrySource(BaseModel):
+class LockSource(BaseModel):
+    """One lock package's recorded source; only a branch-tracking Git source is relocked."""
+
+    def tracked(self, name: str) -> tuple[str, ...]:
+        return ()
+
+
+class RegistrySource(LockSource):
     registry: str
 
     def pin(self, version: str, core: str) -> PackagePin:
         return PackagePin(version)
 
 
-class GitSource(BaseModel):
+class GitSource(LockSource):
+    """Our sibling packages track main, the ref InstallDue measures them against; a unit
+    branch here pins the stack to a head main already merged, and every install relocks it
+    unchanged (f39412d88 held Toad on work/unit-toad--P694 after #1239 merged, 2026-10-25).
+    A ``?rev=`` source is pinned and never relocked."""
+
     git: str
+
+    def tracked(self, name: str) -> tuple[str, ...]:
+        branches = parse_qs(urlsplit(self.git).query).get("branch", [])
+        if branches not in ([], ["main"]):
+            raise ValueError(f"{name} tracks {branches}, not main: {self.git}")
+        return (name,) if branches else ()
 
     def pin(self, version: str, core: str) -> PackagePin:
         commit = urlsplit(self.git).fragment
@@ -72,7 +90,7 @@ class GitSource(BaseModel):
         return GitPin(version, commit)
 
 
-class EditableSource(BaseModel):
+class EditableSource(LockSource):
     editable: Path
 
     def pin(self, version: str, core: str) -> PackagePin:
@@ -81,7 +99,7 @@ class EditableSource(BaseModel):
         return GitPin(version, core)
 
 
-class VirtualSource(BaseModel):
+class VirtualSource(LockSource):
     virtual: str
 
     def pin(self, version: str, core: str) -> PackagePin:
@@ -110,30 +128,17 @@ class LocalPackage(LockedPackage):
     source: EditableSource | VirtualSource
 
 
-class ProjectGitSource(BaseModel):
-    git: str
-    branch: str
-
-
-class ProjectPathSource(BaseModel):
-    path: Path
-    editable: bool
-
-
-class UvProject(BaseModel):
-    sources: dict[str, ProjectGitSource | ProjectPathSource]
-
-
-class ProjectTools(BaseModel):
-    uv: UvProject
-
-
-class StackProject(BaseModel):
-    tool: ProjectTools
-
-
 class ResolvedLock(BaseModel):
     package: list[VersionedPackage | LocalPackage]
+
+    @classmethod
+    def read(cls, lock: Path) -> ResolvedLock:
+        return cls.model_validate(tomllib.loads(lock.read_text()))
+
+    def tracked(self) -> tuple[str, ...]:
+        """Every package whose recorded source follows a branch, each named once."""
+        return tuple(dict.fromkeys(
+            name for entry in self.package for name in entry.source.tracked(entry.name)))
 
     def pins(self, selected: dict[str, str], core: str) -> dict[str, PackagePin]:
         result: dict[str, PackagePin] = {}
@@ -195,7 +200,7 @@ class RuntimeResolution(BaseModel):
         return result
 
     def matches(self, lock: Path, stack: Stack, core: str) -> bool:
-        resolved = ResolvedLock.model_validate(tomllib.loads(lock.read_text()))
+        resolved = ResolvedLock.read(lock)
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its
         # selected names/versions, then obtain every source identity from the lock itself.

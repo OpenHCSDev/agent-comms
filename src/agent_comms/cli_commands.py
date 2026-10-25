@@ -25,10 +25,11 @@ from pathlib import Path
 from types import get_original_bases
 from typing import Annotated, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
+from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
@@ -85,6 +86,7 @@ from .config_options import (
 )
 from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .declared_verb import DeclaredCommand
 from .exporting import (
@@ -123,6 +125,7 @@ from agent_comms.installer.probes.harnesses import HarnessInstallation, InstallR
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .input_disposition import InputDispositions
 from .input_origin import InputProvenance
 from .input_key import InputKey, InputKeyText
 from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
@@ -161,6 +164,10 @@ from .owner_connection import OwnerConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .send_result import SendResult
 from .shared_ledger import LedgerDocument
+from .task_sources import (
+    CorrectionTaskChange,
+    UserTaskSupersession,
+)
 from .thread_execution import (
     ArchiveOwnerControl,
     ExternalThreadExecution,
@@ -196,7 +203,8 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import ReconciledFile, WriterOwnedStore
+from .typed_table import HeldBusFile, NoPractice, Practice, ReconciledFile, StoreRewrite, WriterOwnedStore
+from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 
@@ -300,15 +308,15 @@ class TargetOutcome(LifecycleCapability, ABC):
 
 @dataclass(frozen=True)
 class TargetCompleted(Successful, TargetOutcome, RecordMember):
-    target: str
+    target: CommandTarget
     command: CliCommand
     result: Annotated[CliResult, WireValue]
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:
-        shower.show_done(f"{label}: {self.target}", title)
+        shower.show_done(f"{label}: {self.target.display_name()}", title)
 
     def owner_start(self) -> OwnerStart:
-        return StartedOwner(self.target)
+        return StartedOwner(self.target.display_name())
 
     @classmethod
     def from_wire(cls, data: JsonValue) -> Self:
@@ -325,18 +333,18 @@ class TargetCompleted(Successful, TargetOutcome, RecordMember):
 
 @dataclass(frozen=True)
 class TargetFailed(TargetOutcome):
-    target: str
+    target: CommandTarget
     error_type: str
     error: str
 
     def __str__(self) -> str:
-        return f"{self.target}: {self.error_type}: {self.error}"
+        return f"{self.target.display_name()}: {self.error_type}: {self.error}"
 
     def show(self, shower: ResultShower, label: str, title: str) -> None:
         shower.show_error(str(self), title)
 
     def owner_start(self) -> OwnerStart:
-        return RefusedOwner(self.target, str(self))
+        return RefusedOwner(self.target.display_name(), str(self))
 
 
 @dataclass(frozen=True)
@@ -456,7 +464,7 @@ class TargetBatch(TargetSelection):
                 resolved = name.resolve(snapshot, comms.bus.require_channel)
             except ToolRefusedError as error:
                 outcomes.append((len(planned) + len(outcomes),
-                                 TargetFailed(name.name, type(error).__name__, str(error))))
+                                 TargetFailed(name, type(error).__name__, str(error))))
                 continue
             for context in name.contexts(declaration, channel):
                 try:
@@ -468,7 +476,7 @@ class TargetBatch(TargetSelection):
                         raise CommandSelectionChanged(f'This action is no longer available for {name}{scope}')
                 except ToolRefusedError as error:
                     outcomes.append((len(planned) + len(outcomes),
-                                     TargetFailed(name.name, type(error).__name__, str(error))))
+                                     TargetFailed(name, type(error).__name__, str(error))))
                     continue
                 for command in bindings:
                     planned.setdefault(command, (len(planned) + len(outcomes), name, context))
@@ -487,11 +495,11 @@ class TargetBatch(TargetSelection):
                     raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
                 command.schedule(TargetBatchSchedule(position, name, outcomes, together), comms)
             except CLI_FAILURES as error:
-                result = TargetFailed(name.name, type(error).__name__, str(error))
+                result = TargetFailed(name, type(error).__name__, str(error))
                 outcomes.append((position, result))
         for together_declaration, members in together.items():
             results = together_declaration.apply_together(comms, tuple(command for _, _, command in members))
-            outcomes.extend((position, TargetCompleted(name.name, command, result))
+            outcomes.extend((position, TargetCompleted(name, command, result))
                             for (position, name, command), result in zip(members, results, strict=True))
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
@@ -855,7 +863,7 @@ class CliCommand[Answer: CliResult = CliResult](
     discovery_package="agent_comms.tools",
 ):
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
-        result = TargetCompleted(batch.target.name, self, self.apply(comms))
+        result = TargetCompleted(batch.target, self, self.apply(comms))
         batch.outcomes.append((batch.position, result))
 
     @classmethod
@@ -951,7 +959,7 @@ class CliCommand[Answer: CliResult = CliResult](
                         declaration = target.listed_declaration(member)
                         grouped.setdefault(declaration, {}).update(dict.fromkeys(
                             command.for_editor(comms, name.name, project) for command in available))
-        names = tuple(name for item in selected for name in item.names)
+        names = tuple(name for item in selected for name in item.destination_names)
         return tuple(TargetAction(tuple(commands), names, declaration,
                                   channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
@@ -976,7 +984,7 @@ class CliCommand[Answer: CliResult = CliResult](
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
-        return TargetAction((bound,), target.names, type(bound), channels)
+        return TargetAction((bound,), target.destination_names, type(bound), channels)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
@@ -1124,7 +1132,7 @@ class ImportingCliCommand(ConversationLimitsCliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread"):
-    help = "Import a stored Claude Code, Codex or OpenCode session as a stopped thread"
+    help = "Import a stored session of the --harness as a stopped thread"
     harness: Annotated[
         type[Harness],
         Editor(ChoiceTargetField),
@@ -1136,7 +1144,7 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
         Argument(
             flags=("--source",),
             options={
-                "help": "Claude Code or Codex session JSONL, OpenCode export JSON or opencode.db"
+                "help": "The harness's stored session: session JSONL, OpenCode export or opencode.db"
             },
         ),
     ]
@@ -1316,8 +1324,6 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
     ]
 
     def original_source(self, ctx: Comms):
-        from .input_disposition import InputDispositions
-
         return InputDispositions(ctx.root).lookup(self.source).context_provenance().require_human_input()
 
     def pin_original(self, ctx: Comms, source: MessageReference) -> Message:
@@ -1363,8 +1369,6 @@ class CorrectAnnotationCliCommand(WorktreeArgument, CliCommand, declared_name="c
     ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .coordinator import Coordination
-
         author = ctx.messaging.user_identity(self.worktree).incarnation
         snapshot = ctx.registry.snapshot()
         with Coordination(str(CoordinationStore.path_in(ctx.root))) as store:
@@ -1403,8 +1407,6 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
     ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .working_memory_annotations import WorkingMemoryAnnotations
-
         return WorkingMemoryAnnotations.calibration(
             CoordinationStore.path_in(ctx.root), self.question, self.classifier)
 
@@ -1423,8 +1425,6 @@ class SupersedeConstraintCliCommand(
     body: Annotated[str, Argument(flags=("--body",))]
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .task_sources import CorrectionTaskChange, UserTaskSupersession
-
         message = ctx.messaging.send_user_message(CommandTarget.named(self.thread), self.body, worktree=self.worktree,
             task=UserTaskSupersession(CorrectionTaskChange(self.source)))
         return ConstraintSupersededResult(message.reference)
@@ -1823,7 +1823,8 @@ class InstallCliCommand(HarnessInstallation, CliCommand):
         from agent_comms.installer.launch import InstallLogs, InstallRun
 
         with InstallLogs(route.root).launching():
-            return InstallRun.start(self, route.root).launch(output)
+            run = InstallRun.start(self, route.root, ProcessLauncherPhase())
+            return run.launch(output)
 
 
 
@@ -1874,6 +1875,21 @@ class ReconciledStoresResult(CliResult):
 
 
 @dataclass(frozen=True)
+class PlannedStoresResult(CliResult):
+    """Target-only rewrite plans; outgoing reconcile replies remain unchanged."""
+
+    rewrites: tuple[StoreRewrite, ...]
+
+    @property
+    def rewritten(self) -> tuple[Path, ...]:
+        return tuple(rewrite.path for rewrite in self.rewrites)
+
+    @property
+    def backup_files(self) -> tuple[Path, ...]:
+        return tuple(path for rewrite in self.rewrites for path in rewrite.backup_files())
+
+
+@dataclass(frozen=True)
 class BusReadBack(CliResult):
     """What a bus's registry holds that a carry must keep: its threads."""
 
@@ -1904,22 +1920,15 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
+class StoreReconcileCliCommand[Answer: CliResult](CliCommand[Answer]):
     """Every declared store whose schema differs from this runtime's declarations; each
     member says what it does with one."""
 
-    @staticmethod
     @abstractmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        """Whether this member changes, or would change, the store at ``path``."""
+    def answer(self, root: Path) -> Answer:
+        """This operation's result from the files declared under the root."""
 
-    def answer(self, root: Path) -> ReconciledStoresResult:
-        return ReconciledStoresResult(tuple(
-            path.relative_to(root)
-            for path, owner in sorted(ReconciledFile.existing_in(root).items())
-            if self.changes(owner, path)))
-
-    def apply(self, ctx: Comms) -> ReconciledStoresResult:
+    def apply(self, ctx: Comms) -> Answer:
         return self.answer(ctx.root)
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
@@ -1928,30 +1937,39 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReconcileStoresCliCommand(StoreReconcileCliCommand, declared_name="reconcile-stores"):
+class ReconcileStoresCliCommand(
+    StoreReconcileCliCommand[ReconciledStoresResult], declared_name=HeldBusFile.carry_verb,
+):
     help = ("Reconcile every declared store's schema onto this runtime's declarations; "
             "the installer runs it under maintenance after the outgoing owners stop")
 
-    @staticmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        return owner.reconcile_at(path)
+    practice: Annotated[Practice, Argument(flags=("--practice-root",))] = NoPractice()
+
+    def answer(self, root: Path) -> ReconciledStoresResult:
+        return ReconciledStoresResult(tuple(
+            path.relative_to(root)
+            for path, owner in sorted(ReconciledFile.existing_in(root).items())
+            if owner.reconcile_at(path, self.practice)))
 
 
 @dataclass(frozen=True, kw_only=True)
-class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planned-reconcile"):
+class PlannedReconcileCliCommand(
+    StoreReconcileCliCommand[PlannedStoresResult], declared_name="planned-reconcile",
+):
+    carrying: Annotated[tuple[type[WriterOwnedStore], ...], Argument(options={"nargs": "*"})] = ()
+    """These declarations are validated after their pending carries, not before them."""
     help = ("Name every store reconcile-stores would rewrite, reading each without writing; "
             "the installer backs them up and checks them against its rehearsal first")
 
-    @staticmethod
-    def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        schema = owner.schema_at(path)
-        with closing(owner.read_snapshot(path)) as db:
-            return schema.reconcile_writes(db)
-
-    def answer(self, root: Path) -> ReconciledStoresResult:
+    def answer(self, root: Path) -> PlannedStoresResult:
         """A store outside the bus that the target's writer could not open refuses the plan."""
-        WriterOwnedStore.practice_openings()
-        return super().answer(root)
+        WriterOwnedStore.practice_openings(root, excluding=self.carrying)
+        rewrites: list[StoreRewrite] = []
+        for path, owner in sorted(ReconciledFile.existing_in(root).items()):
+            schema = owner.schema_at(path)
+            with closing(owner.read_snapshot(path)) as db:
+                rewrites.extend(schema.reconcile_plan(db, path.relative_to(root)))
+        return PlannedStoresResult(tuple(rewrites))
 
 @dataclass(frozen=True)
 class CheckoutResult(CliResult):
@@ -2385,7 +2403,7 @@ class ContextCliCommand(CliCommand):
                     payload = await connection.request("context")
                     native = FieldCodec.decode(NativeContextData, payload).require_session_file(
                         owner.runtime.path)
-                except RequestError as error:
+                except Refused as error:
                     return context, None, str(error)
                 return context, native, None
             finally:

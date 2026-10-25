@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import AsyncExitStack
 from functools import partial
 from typing import TYPE_CHECKING
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
@@ -40,9 +39,9 @@ class CompactionReply(MroDispatch):
         return handler(outcome)
 
     @staticmethod
-    def refused(reason: str, message: str) -> RequestError:
-        """The SDK's internal-error code, carrying the sentence the client shows."""
-        return RequestError(RequestError.internal_error().code, message, {"reason": reason})
+    def refused(reason: str, message: str) -> Refused:
+        """Preserve the backend refusal until ACP renders its code and sentence."""
+        return Refused(Refused.INTERNAL_ERROR, message, {"reason": reason})
 
     @handles(PlacedCompaction)
     def placed(self, outcome: PlacedCompaction) -> PromptResponse:
@@ -71,7 +70,7 @@ async def compact_context(
     if instructions is not None and not isinstance(instructions, str):
         return FailedCompaction("Compaction instructions are invalid.")
     thread_name = await runner.sessions.sync_identity(session_id)
-    lock = runner.turn_locks.setdefault(session_id, asyncio.Lock())
+    lock = runner.inputs.state(session_id).turn_lock
     if lock.locked() or await Coordination.run_worker(partial(runner.session_busy, session_id)):
         return FailedCompaction("Wait for the current response before compacting.")
     async with lock:
@@ -84,14 +83,12 @@ async def compact_context(
 
 
 async def _compact_started(runner, session_id, thread_name, instructions):
-    task = asyncio.current_task()
-    assert task is not None
     async with AsyncExitStack() as resources:
+        await resources.enter_async_context(runner.inputs.state(session_id).own_turn_task())
         owner = await Coordination.run_worker(partial(
             runner.acquire_turn, resources, session_id, thread_name,
-            TurnId.mint(), "Compacting context", task=task,
+            TurnId.mint(), "Compacting context",
         ))
-        runner.turn_tasks[session_id] = task
         await runner.transition_turn(
             session_id, owner.turn_lease, CompactionPhase(resume=PublishingPhase())
         )

@@ -12,7 +12,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_backend import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import InputId, TurnId
+from agent_comms.field_codec import InputId, OrderId, TurnId
 from agent_comms.goal_actions import (
     BlockedGoalAction,
     CreateProblemGoalAction,
@@ -82,7 +82,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                     problem='P1', expected_revision=todo.revision,
                     assigner=comms.registry.require('lead').incarnation,
                     commander='lead', request=request, review_at=RecordedEventTime(2000),
-                    order=replace(order(source), id='replacement'),
+                    order=replace(order(source), id=OrderId.mint()),
                 ))
                 # A replaced order keeps the running turn's authority; only following input waits.
                 sender.goal_permission.require_current(replaced)
@@ -144,7 +144,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         replaced = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
             commander='lead', request=request, review_at=RecordedEventTime(2000),
-            order=replace(order(source), id='replacement'),
+            order=replace(order(source), id=OrderId.mint()),
         ))
         old.original.goal_permission.require_current(replaced)
 
@@ -166,7 +166,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         latest = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
             commander='lead', request=request, review_at=RecordedEventTime(3000),
-            order=replace(order(source), id='replacement-during-preparation'),
+            order=replace(order(source), id=OrderId.mint()),
         ))
         assert current.thread.goal == replaced != latest
         current.reserve_input(batch)
@@ -213,7 +213,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
         retried = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
             commander='lead', request=request, review_at=RecordedEventTime(2000),
-            order=replace(order(source), id='retry'),
+            order=replace(order(source), id=OrderId.mint()),
         ))
         assert retried.state == ActiveGoal()
         # The same check CodingToolOwner.allow runs before each of the turn's tool calls.

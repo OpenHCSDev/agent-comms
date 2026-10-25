@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sqlite3
 import time
 from abc import ABC, abstractmethod
@@ -339,6 +340,25 @@ class ObservedActivity(ActivityData):
         return self.readiness.presentation(self.ordinary_presentation(title))
 
 
+@dataclass(frozen=True, slots=True)
+class ActivityCapture[A]:
+    """Activity read at one moment, and the moment the clock alone would change it."""
+
+    activity: dict[str, A]
+    expires_at: float
+
+    @classmethod
+    def empty(cls) -> ActivityCapture[A]:
+        return cls({}, math.inf)
+
+    def expired(self) -> bool:
+        return time.time() > self.expires_at
+
+    def joined(self, other: ActivityCapture[A]) -> ActivityCapture[A]:
+        return ActivityCapture({**self.activity, **other.activity},
+                               min(self.expires_at, other.expires_at))
+
+
 class ActivityStoreRows(StoreRows):
     """The tables of ActivityStore; each row declares itself one."""
 
@@ -359,8 +379,8 @@ class ActivityStore(ThreadOwnedState, DerivedStore):
 
     tables = ActivityStoreRows
 
-    def __init__(self, store_path: Path, stale_after: float = 120.0):
-        self.root = store_path.parent
+    def __init__(self, root: Path, stale_after: float = 120.0):
+        self.root = root
         self._stale_after = stale_after
 
     @staticmethod
@@ -394,36 +414,35 @@ class ActivityStore(ThreadOwnedState, DerivedStore):
             # Reading an absent event must never mint an actual-event timestamp.
             return Activity.absent(thread)
         latest = events[thread]
-        if (
-            not latest.diagnostic.holds_event_current
-            and not active
-            and now - latest.timestamp > self._stale_after
-        ):
+        if now > self.stale_at(latest, active=active):
             return Activity(thread=thread, state=ActivityState.IDLE, timestamp=latest.timestamp)
         return latest
 
-    def all_current(self, *, active: frozenset[str] = frozenset()) -> dict[str, Activity]:
-        """Latest activity for every observed thread."""
-        with self.snapshot() as db:
-            latest = {row.thread: row for row in ActivityRow.stream(db)}
-        return self._current_for(latest, latest, active)
+    def stale_at(self, event: Activity, *, active: bool) -> float:
+        """When the clock alone turns this event idle; never for a held or executing one."""
+        if event.diagnostic.holds_event_current or active:
+            return math.inf
+        return event.timestamp + self._stale_after
 
     def current_for(self, threads: Iterable[str], *,
                     active: frozenset[str] = frozenset()) -> dict[str, Activity]:
         """Read only the requested threads, including absent ones."""
+        return self.captured_for(threads, active=active).activity
+
+    def captured_for(self, threads: Iterable[str], *,
+                     active: frozenset[str] = frozenset()) -> ActivityCapture[Activity]:
         threads = tuple(dict.fromkeys(threads))
         with self.snapshot() as db:
             latest = {row.thread: row for thread in threads
                       for row in ActivityRow.stream(db, thread=thread)}
-        return self._current_for(threads, latest, active)
-
-    def _current_for(self, threads: Iterable[str], events: Mapping[str, Activity],
-                     active: frozenset[str]) -> dict[str, Activity]:
         now = time.time()
-        return {
-            thread: self._observed(thread, events, active=thread in active, now=now)
-            for thread in dict.fromkeys(threads)
-        }
+        return ActivityCapture(
+            {thread: self._observed(thread, latest, active=thread in active, now=now)
+             for thread in threads},
+            min((at for thread, event in latest.items()
+                 if (at := self.stale_at(event, active=thread in active)) >= now),
+                default=math.inf),
+        )
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         with self.writing() as db:

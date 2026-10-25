@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .catalog_document import CatalogDocument
 from .maintenance_barrier import CarriedDocument
 from .private_path import FileObservation, FileRevision
-from .store_files import CatalogTier
+from .store_files import CatalogTier, SingleFileStore
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelCatalog(ThreadOwnedState, CarriedDocument[CatalogDocument], CatalogTier):
+class ChannelCatalog(SingleFileStore, ThreadOwnedState, CarriedDocument[CatalogDocument], CatalogTier):
     filename: ClassVar[str] = "catalog.json"
     json_indent = 2
 
@@ -34,7 +34,7 @@ class ChannelCatalog(ThreadOwnedState, CarriedDocument[CatalogDocument], Catalog
     @contextmanager
     def editing(self) -> Iterator[CatalogDocument]:
         """Caller holds wire; publish all declarations/preferences in one replace."""
-        with self.locked():
+        with self.guarded_write():
             original = self._read_unlocked()
             document = deepcopy(original)
             yield document

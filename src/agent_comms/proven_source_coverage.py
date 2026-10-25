@@ -120,10 +120,12 @@ class InjectedInput(CoverageInput):
 
     def input_fields(self) -> dict:
         original = self.original
+        input_id, session_id = original.input_id, original.context.session_id
         return dict(
-            injected_seq=original.source_seq, input_id=TextNativeColumn(original.input_id),
+            injected_seq=original.source_seq,
+            input_id=TextNativeColumn(input_id.spelled_by.encode(input_id)),
             stage=TextNativeColumn(FieldCodec.encode(type(original.execution))),
-            session_id=TextNativeColumn(original.context.session_id),
+            session_id=TextNativeColumn(session_id.spelled_by.encode(session_id)),
             request_generation=NumberNativeColumn(original.context.request_generation),
         )
     def injected_for(self, state: CursorState) -> int:
@@ -135,20 +137,20 @@ class InjectedInput(CoverageInput):
         return self.build(owner, coverage.covered_seq)
 
     def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool:
-        if self.original.owner_identity != owner.participant_identity:
+        if not self.original.owner_identity.within(owner.participant_identity):
             raise IdentityConflict('current cursor native proof belongs to another owner')
         state.require_input_progress(self.original)
         if not owner.permits_input(self.original.input_id):
             return False
         row = NativeRuntimeInput.one(db, input_id=self.original.input_id)
-        if row is not None and not row.sent_owner_claimed_generation.matches(owner.claimed_generation):
+        if row is not None and not row.sent_owner_claimed_generation.sent_by_lineage(owner.claimed_generation):
             return state.claim_mismatch(self.original.source_seq)
         owner.require_recorded_reference(db, self.original.reference)
         return True
 
     def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None:
         if cursor.injected_seq == self.original.source_seq and (
-            cursor.reference != self.original.reference or self.original.owner_identity != owner.participant_identity
+            cursor.reference != self.original.reference or not self.original.owner_identity.within(owner.participant_identity)
         ):
             raise IdentityConflict('current native cursor proof differs from journal')
 

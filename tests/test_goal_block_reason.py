@@ -5,9 +5,9 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -16,12 +16,15 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_states import UnrecordedBlockGoal
+from agent_comms.goal_scope import OneGoal
 from agent_comms.goal_presentation import PausedExecution, UnrecordedBlockExecution
+from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
-from agent_comms.tool_request import ToolRequest
-from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_request import ToolRequest
+from agent_comms.turn_failure import BackendFailed
+from conftest import installed_comms
 
 
 def _owner(tmp_path):
@@ -38,7 +41,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
         "worker", ActiveGoalAction(progress="Verified 2 of 3 items")
     )
     assert progressed is not None
-    before_history = comms.goals.goal_history("worker", goal_id=original.id)
+    before_history = comms.goals.goal_history("worker", OneGoal(original.id))
     before_registry = (tmp_path / "registry.json").read_bytes()
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
@@ -53,11 +56,11 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
     ):
         with pytest.raises(ValueError):
             comms.goals.update_goal(
-                "worker", BlockedGoalAction(expect=GoalPrecondition(goal_id=original.id), **kwargs)
+                "worker", BlockedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(original.id)), **kwargs)
             )
         assert comms.registry.require("worker").goal == progressed
         assert (tmp_path / "registry.json").read_bytes() == before_registry
-        assert comms.goals.goal_history("worker", goal_id=original.id) == before_history
+        assert comms.goals.goal_history("worker", OneGoal(original.id)) == before_history
 
     with pytest.raises(ValueError):
         tool.invoke(
@@ -94,13 +97,13 @@ def test_owner_resume_refusal_preserves_pause_and_prior_progress(tmp_path):
     assert progressed is not None
     store = comms.goals.open_goal_store()
     reservation = store.reserve(original.id, 1)
-    reservation.fail(store, "Previous goal attempt failed")
+    reservation.fail(store, FailedTurnResolution(BackendFailed))
 
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "worker",
             ActiveGoalAction(
-                expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=original.id)
+                expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=OneGoal(original.id))
             ),
             actor=OwnerInvocable,
         )
@@ -110,4 +113,4 @@ def test_owner_resume_refusal_preserves_pause_and_prior_progress(tmp_path):
     execution = comms.goals.goal_execution("worker")
     assert isinstance(execution, PausedExecution)
     assert execution.source == progressed.state.source
-    assert comms.goals.goal_history("worker", goal_id=original.id)[-1].after == reloaded
+    assert comms.goals.goal_history("worker", OneGoal(original.id))[-1].after == reloaded

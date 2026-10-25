@@ -11,7 +11,6 @@ import os
 import shutil
 import subprocess
 import sys
-import uuid
 from abc import abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
@@ -20,9 +19,10 @@ from typing import ClassVar, Self
 
 from agent_comms_hooks import ClaudeHookProgram
 
-from .child_process import Platform
+from .child_process import Platform, ResidentManager
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import ScratchName
 from .host_services import SystemdUserService
 from .host_services.codex_inbox import CodexInboxService
 
@@ -32,7 +32,7 @@ def replace_link(link: Path, target: Path) -> None:
     if link.exists() and not link.is_symlink():
         raise FileExistsError(f"Install cannot replace a regular file: {link}")
     link.parent.mkdir(parents=True, exist_ok=True)
-    temporary = link.with_name(f".{link.name}.{uuid.uuid4().hex}")
+    temporary = link.with_name(f".{link.name}.{ScratchName.mint()}")
     try:
         temporary.symlink_to(target)
         os.replace(temporary, link)
@@ -51,18 +51,22 @@ def merge_json(path: Path, merge) -> None:
 
 @dataclass(frozen=True)
 class Harness(DeclaredFamily, affix="Harness"):
+    """A coding agent whose stored sessions a thread can be imported from; install finds, links
+    and configures the ones present on this machine."""
+
     home: Path
 
-    executable: ClassVar[str]
-    skills_dir: ClassVar[str]
     # External threads install registers for this harness; a harness that registers itself has none.
     bus_threads: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
+    def found(cls) -> bool:
+        """Whether install finds this harness on this machine."""
+        return False
+
+    @classmethod
     def present(cls, home: Path) -> tuple[Self, ...]:
-        return tuple(
-            member(home) for member in cls.members_with(cls) if shutil.which(member.executable)
-        )
+        return tuple(member(home) for member in cls.members_with(cls) if member.found())
 
     @classmethod
     def retire_session(cls, session: str) -> SystemdUserService:
@@ -70,22 +74,13 @@ class Harness(DeclaredFamily, affix="Harness"):
         raise RelationViolationError(
             f"{cls.declared_name} sessions have no declared bridge to retire; re-home refused.")
 
-    @staticmethod
-    def bin(name: str) -> Path:
-        return Path(sys.executable).parent / name
-
     def links(self) -> dict[Path, Path]:
         """Every packaged skill, linked where this harness looks for skills."""
-        skills = Path(str(files("agent_comms") / "skills"))
-        return {
-            self.home / self.skills_dir / skill.name: skill
-            for skill in skills.iterdir()
-            if skill.is_dir()
-        }
+        return {}
 
-    @abstractmethod
     def configure(self) -> tuple[Path, ...]:
         """Write this harness's own config in its own format; returns the files written."""
+        return ()
 
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:
@@ -99,7 +94,41 @@ class Harness(DeclaredFamily, affix="Harness"):
         }
 
 
-class ConnectorClientHarness(Harness):
+@dataclass(frozen=True)
+class PiHarness(Harness, declared_name="pi"):
+    """agent-comms' own native Pi: its sessions are already the format every thread runs, so an
+    import keeps one byte for byte. Install builds Pi as the native package and never finds,
+    links or configures it as a harness."""
+
+
+@dataclass(frozen=True)
+class InstalledHarness(Harness):
+    """A harness CLI install finds on PATH, links skills into and configures."""
+
+    executable: ClassVar[str]
+    skills_dir: ClassVar[str]
+
+    @classmethod
+    def found(cls) -> bool:
+        return bool(shutil.which(cls.executable))
+
+    @staticmethod
+    def bin(name: str) -> Path:
+        return Path(sys.executable).parent / name
+
+    def links(self) -> dict[Path, Path]:
+        skills = Path(str(files("agent_comms") / "skills"))
+        return {
+            self.home / self.skills_dir / skill.name: skill
+            for skill in skills.iterdir()
+            if skill.is_dir()
+        }
+
+    @abstractmethod
+    def configure(self) -> tuple[Path, ...]: ...
+
+
+class ConnectorClientHarness(InstalledHarness):
     """A harness whose MCP client can reach the connector as its bus threads."""
 
     @abstractmethod
@@ -154,14 +183,14 @@ class ClaudeCodeHarness(ConnectorClientHarness):
 
 
 @dataclass(frozen=True)
-class CodexHarness(Harness):
+class CodexHarness(InstalledHarness):
     """Codex is pushed to by a user service; the user starts it after binding a conversation."""
 
     executable: ClassVar[str] = "codex"
     skills_dir: ClassVar[str] = ".codex/skills"
 
     def configure(self) -> tuple[Path, ...]:
-        CodexInboxService.install(home=self.home)
+        ResidentManager.current().install(CodexInboxService, home=self.home)
         return (CodexInboxService.unit_file(self.home),)
 
     @classmethod
@@ -174,7 +203,7 @@ class CodexHarness(Harness):
 
 
 @dataclass(frozen=True)
-class OpenCodeHarness(Harness, declared_name="opencode"):
+class OpenCodeHarness(InstalledHarness, declared_name="opencode"):
     """OpenCode loads the TUI plugin, which attaches its session to the bus itself;
     run `opencode-comms`."""
 

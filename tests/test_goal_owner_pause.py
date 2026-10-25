@@ -15,6 +15,7 @@ from agent_comms.goal_actions import (
 from agent_comms.tool_request import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
+from agent_comms.goal_scope import OneGoal
 
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
@@ -22,7 +23,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     comms.goals.update_goal(
-        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
+        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
     )
     reopened = wire(tmp_path)
     paused = reopened.registry.require("worker").goal
@@ -45,7 +46,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
         resume.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"}, caller=ThreadCaller("worker"))
     assert reopened.registry.require("worker").goal == paused
     active = reopened.goals.update_goal(
-        "worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
+        "worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
     )
     active.require_active()
     assert reopened.registry.require('worker').goal.state.pause_source is None
@@ -59,6 +60,6 @@ def test_model_cannot_pause(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "worker",
-            PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+            PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))),
             actor=ModelInvocable,
         )

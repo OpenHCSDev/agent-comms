@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .activity_clocks import ChannelActivity
+from .agent_activity import (
+    AgentActivity,
+    RecordedRecipientActivity,
+)
 from .audience_manifest import FrozenRecipient
+from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
@@ -84,6 +89,7 @@ from .thread_presentation import (
 from .thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
+from .transcript_sources import AssignedTranscriptSource
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
 
 if TYPE_CHECKING:
@@ -243,8 +249,6 @@ class MessageNotification:
         assignment_read: NotificationAssignmentRead, *, viewer: OutcomeViewer,
     ):
         """Project the original frozen audience even before handling is recorded."""
-        from .agent_activity import AgentActivity
-
         if not sources:
             return {}
         snapshot = registry.snapshot()
@@ -261,7 +265,6 @@ class MessageNotification:
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
                                  sources: Sequence[Delivered]):
-        from .agent_activity import RecordedRecipientActivity
         from .notification_assignment import NotificationAssignment
 
         observations = {
@@ -351,7 +354,6 @@ class MessageNotification:
         if not 1 <= limit <= cls.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
-        from .transcript_sources import AssignedTranscriptSource
 
         captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
             limit=0, sent_limit=limit
@@ -435,6 +437,7 @@ class BusPresentation:
         self.agents = agents
         self.goals = goals
         self._path = bus.bus.path
+        self._display_unread = DisplayUnread()
 
     @contextmanager
     def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
@@ -492,10 +495,11 @@ class BusPresentation:
         membership. None is supplied independently by the metrics caller.
         Derived maxima are committed by the append, never prepared by this reader.
         """
-        seen = basis.seen(source)
-        activity = {scope.channel: scope.activity(source) for scope in basis.scopes}
-        unread = source.display_unread(basis.scopes, basis.viewer_names, seen, basis.registry)
-        return activity, unread
+        selection = basis.unread_selection(source)
+        activity = {scope.channel: scope.activity(source) for scope in selection.scopes}
+        counted = self._display_unread.advanced(source, selection)
+        self._display_unread = counted
+        return activity, counted.counts
 
 
 @dataclass(frozen=True, slots=True)
@@ -989,6 +993,11 @@ class WireRevision(ReadState):
 
     def changed_since(self, view: RevisionView, earlier: ReadState) -> bool:
         return earlier.changed_before(view, self)
+
+    def changed_since_any(self, earlier: ReadState) -> bool:
+        """All declared views, using their source comparisons, including timed expiry."""
+        return any(self.changed_since(view(), earlier)
+                   for view in RevisionView.members_with(RevisionView))
 
     def changed_before(self, view: RevisionView, later: WireRevision) -> bool:
         """Whether any source feeding `view` differs, by the view's comparison."""

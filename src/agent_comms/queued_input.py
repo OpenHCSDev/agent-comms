@@ -14,16 +14,25 @@ from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 
-from .agent_backend import InputRequest
+from .acp_extension import QueueItem
+
+from .agent_backend import (
+    InputContent,
+    InputRequest,
+)
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
+from .context_segments.wake import DeliveredMessageSegment
 from .controller import Controller
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
-from .coordination_session import ReadNativeCoordinationSession
+from .coordination_session import (
+    NativeBoundary,
+    ReadNativeCoordinationSession,
+)
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import InputId, GoalId, RootId
@@ -33,8 +42,10 @@ from .input_attempt import InputAttempt, ReservedInput
 from .input_key import AcpInputKey, InputKey
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
+from .routing import ScheduledTurn
 from .thread_identity import ClaimedIdentity, ClaimScoped
 from .threads import Thread
+from .turn_context import TurnContext
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
 from .turn_input_source import AcceptedFollowingInput, AcceptedTurn, DeliveredFollowingInput
 
@@ -98,8 +109,6 @@ class QueuedInput:
 
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
         """Show the item only when its recorded input generation matches the queue."""
-        from .acp_extension import QueueItem
-
         return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claimed_identity) else ()
 
     def source(self) -> AcceptedFollowingInput:
@@ -159,7 +168,7 @@ class QueuedInput:
     def require_capacity(cls, inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
         if cls.remaining_capacity(inputs, sources) <= 0:
-            raise RequestError.invalid_params(
+            raise Refused.invalid_params(
                 {"reason": "Too many follow-up inputs awaiting their own user start."}
             )
 
@@ -179,7 +188,7 @@ class QueuedInput:
                 sources = tuple(inputs.state(session_id).following.values())
 
                 def capture():
-                    with inputs.comms.registry.store.locked():
+                    with inputs.comms.registry.store.guarded_write():
                         cls.require_capacity(inputs, sources)
                         return cls.capture(
                             inputs, name, text=text, prompt=prompt, echo=echo,
@@ -336,12 +345,7 @@ class DeliveredInput(QueuedInput):
         so cancellation cannot lose a successfully paused but unplaced input.
         The worker opens/closes SQLite and never reads or mutates live queues.
         """
-        from .agent_backend import InputContent
-        from .context_segments.wake import DeliveredMessageSegment
-        from .routing import ScheduledTurn
-        from .turn_context import TurnContext
-
-        with inputs.comms.registry.store.locked():
+        with inputs.comms.registry.store.guarded_write():
             accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
             if not accepted:
                 return
@@ -431,7 +435,7 @@ class DeliveredInput(QueuedInput):
         if not any(row.key not in live_keys
                    for row in document.unbound_wire_inputs(root_id).values()):
             return 0
-        with comms.registry.store.locked():
+        with comms.registry.store.guarded_write():
             entry = comms.registry.entry(name).entry
             owner = entry.thread
             document = dispositions.unresolved(entry.names)
@@ -479,14 +483,8 @@ class DeliveredInput(QueuedInput):
         lookup = owner.incarnation.lookup
 
         def read(store: Coordination):
-            from .coordination_session import NativeBoundary
-
             with store.session.read():
-                assignments = tuple(
-                    assignment for assignment in pending_sealed_assignments(
-                        store, lookup, after_seq=after_seq
-                    ) if assignment.audience.joins_active_turn()
-                )
+                assignments = pending_sealed_assignments(store, lookup, after_seq=after_seq)
             with NativeBoundary(bus) as boundary, bus.bus.reading() as source:
                 boundary.privacy.require_root(root_id, IdentityConflict("delivered native namespace changed"))
                 originals = source.deliveries_for_references(tuple(

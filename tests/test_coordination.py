@@ -11,7 +11,6 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from agent_comms.child_process import SpawnedProcess
-from agent_comms.maintenance_barrier import MaintenanceNotHeldError
 from bus_record_fixture import (
     OWNER_LOOKUP, RECIPIENT_LOOKUP, RENAMED_OWNER_LOOKUP, UNRELATED_LOOKUP,
 )
@@ -34,7 +33,7 @@ from agent_comms.attempt_states import (
     SucceededAttempt,
 )
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.locked_store import StoreBusy
+from agent_comms.store_files import StoreBusy
 from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION, CoordinatorTable
 from agent_comms.coordination_snapshot import RecoverySnapshot
@@ -69,8 +68,8 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.attempt_states import AttemptState, LiveAttempt
-from agent_comms.field_codec import FieldCodec, MessageId
-from agent_comms.typed_table import JsonStorage
+from agent_comms.field_codec import AssignmentId, FieldCodec, MessageId
+from agent_comms.typed_table import HeldBusFile, JsonStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (
     PendingResponse,
@@ -112,7 +111,7 @@ def attempt(*, ordinal=1, phase=PromptStartingAttempt, generation=1, done=False,
 
 def assignment():
     return WakeAssignment(
-        assignment_id="claim-1",
+        assignment_id=AssignmentId("claim-1"),
         recipient="worker",
         recipient_lookup=OWNER_LOOKUP,
         wire_seq=2,
@@ -153,7 +152,7 @@ def snapshot(
         execution=record,
         attempt=attempt_record,
         links=(
-            (ExecutionAssignmentLink(record.execution_id, "claim-1", 0),)
+            (ExecutionAssignmentLink(record.execution_id, AssignmentId("claim-1"), 0),)
             if record.origin is WireOrigin
             else ()
         ),
@@ -207,12 +206,12 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     db.execute("BEGIN IMMEDIATE")
     sql_execution(db, name=name, status="queued", origin="wire")
     WakeAssignment(
-        assignment_id="a", recipient="worker", recipient_lookup=OWNER_LOOKUP,
+        assignment_id=AssignmentId("a"), recipient="worker", recipient_lookup=OWNER_LOOKUP,
         wire_seq=2, message_id=MessageId.mint("m"), audience=MessageAudience.DIRECT,
         lifecycle=EngagedAssignment.build(FullWake(), name, target),
         accepted_at_ms=0, updated_at_ms=0, revision=1,
     ).insert(db)
-    ExecutionAssignmentLink(name, "a", 0).insert(db)
+    ExecutionAssignmentLink(name, AssignmentId("a"), 0).insert(db)
     ResponseObligation(name, target, PendingResponse(), None, 0, 0, 1).insert(db)
     if pending:
         db.execute(
@@ -378,9 +377,9 @@ def test_wire_claim_obligation_and_publication_contract():
         item["claim_id"] for item in primitive["execution_claims"]
     ]
     with pytest.raises(IntegrityViolationError):
-        replace(valid, links=(ExecutionAssignmentLink(record.execution_id, "claim-1", 1),))
+        replace(valid, links=(ExecutionAssignmentLink(record.execution_id, AssignmentId("claim-1"), 1),))
     with pytest.raises(IntegrityViolationError):
-        replace(valid, links=(ExecutionAssignmentLink("other", "claim-1", 0),))
+        replace(valid, links=(ExecutionAssignmentLink("other", AssignmentId("claim-1"), 0),))
     with pytest.raises(IntegrityViolationError):
         replace(valid, assignments=(replace(assignment(), recipient_lookup=RECIPIENT_LOOKUP),))
     with pytest.raises(IntegrityViolationError):
@@ -1152,7 +1151,7 @@ def test_membership_ordinals_contiguous_and_frozen_after_activation(db):
     assert original is not None
 
     def bind(identifier, seq):
-        replace(original, assignment_id=identifier, wire_seq=seq).insert(c)
+        replace(original, assignment_id=AssignmentId(identifier), wire_seq=seq).insert(c)
 
     c.execute("BEGIN IMMEDIATE")
     bind("b", 3)
@@ -1239,7 +1238,7 @@ def test_claim_target_and_recipient_lineage_is_immutable(db):
     original = WakeAssignment.one(c, assignment_id="a")
     assert original is not None
     c.execute("BEGIN IMMEDIATE")
-    replace(original, assignment_id="b", recipient="other-worker",
+    replace(original, assignment_id=AssignmentId("b"), recipient="other-worker",
             recipient_lookup=RECIPIENT_LOOKUP, wire_seq=3).insert(c)
     with pytest.raises(sqlite3.IntegrityError):
         c.execute("INSERT INTO execution_claims VALUES ('e','b',1)")
@@ -1423,10 +1422,10 @@ def test_unexplained_columns_and_symlinks_rejected(tmp_path):
         pass
     with sqlite3.connect(path) as c:
         c.execute("ALTER TABLE participants ADD COLUMN unexplained TEXT")
-    with pytest.raises(MaintenanceNotHeldError):
+    with pytest.raises(SchemaVersionError, match=HeldBusFile.carry_verb):
         CoordinationStore(path)
     with maintenance_held(tmp_path), pytest.raises(SchemaVersionError):
-        CoordinationStore(path)
+        CoordinationStore.reconcile_at(path)
     link = tmp_path / "link"
     link.symlink_to(path)
     with pytest.raises(IntegrityViolationError):

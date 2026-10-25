@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 from .class_fact import ClassFact
 from .coordination_errors import IdentityConflict
 from .field_codec import (
+    AssignmentId,
     BoundedText,
     ClaimId,
     EnvelopeSequence,
@@ -24,7 +25,6 @@ from .field_codec import (
     RecordMember,
     ResourcePathText,
     RootId,
-    Sha256Text,
     SubclassUnion,
     ThreadLookup,
     TurnId,
@@ -33,7 +33,7 @@ from .field_codec import (
     WireRequired,
 )
 from .message_reference import MessageReference
-from .projection_source import ProducedRow, ProjectionSource
+from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
 if TYPE_CHECKING:
@@ -124,7 +124,7 @@ class WritableFileClaim(FileClaimPath):
 class AssignmentBinding(ProjectionSource):
     """The selected claim's revision and source, used for permission checks and its SQL row."""
 
-    assignment_id: Annotated[str, BoundedText]
+    assignment_id: AssignmentId
     revision: int
     recipient_lookup: ThreadLookup
     source: MessageReference
@@ -212,7 +212,7 @@ class WakeClaim(RecordMember, RecordedScope):
     wire_root_id: RootId
     source_seq: int
     source_message_id: MessageId
-    wake_assignment_id: Annotated[str, BoundedText, WireName("wake_claim_id")]
+    wake_assignment_id: Annotated[AssignmentId, WireName("wake_claim_id")]
     wake_revision: int
     recipient_lookup: ThreadLookup
     execution_id: Annotated[str, BoundedText]
@@ -253,10 +253,7 @@ class WakeClaim(RecordMember, RecordedScope):
                 "Wake claim_scope version or revision is invalid."
             ) from error
         try:
-            assignment = FieldCodec.decode(str, self.wake_assignment_id)
-            if not assignment.startswith("cohort-v1:"):
-                raise ValueError("Unknown wake claim codec")
-            Sha256Text.from_text(assignment.removeprefix("cohort-v1:"))
+            self.wake_assignment_id.require_cohort()
         except ValueError as error:
             raise ClaimTransitionError("Wake claim ID is invalid.") from error
 
@@ -281,15 +278,19 @@ class AcquiringClaim(ClaimIdentity):
     resource_scope: ClaimScope
 
 
-@dataclass(frozen=True)
-class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ProjectionSource, affix=""):
-    """One original resource transition; its member declares what it changes."""
+class ClaimProducer(ProjectionOutputs):
+    """Transitions, their envelopes and their holder rows produce the same claim tables."""
 
     @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
+    @staticmethod
+    def writes(cls: type[ClaimProducer]) -> tuple[type[ProducedRow], ...]:
         from .messages import HeldResources, ClaimOperations
         return (HeldResources, ClaimOperations)
 
+
+@dataclass(frozen=True)
+class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ClaimProducer, ProjectionSource, affix=""):
+    """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
     expired: Annotated[

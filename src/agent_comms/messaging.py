@@ -13,6 +13,7 @@ from .errors import (
     CommittedMessageError,
     MessageAcknowledgmentError,
     RelationViolationError,
+    UnreceivedAnswerError,
     UnregisteredThreadError,
 )
 from .message_bus import MessageBus
@@ -32,10 +33,12 @@ from .task_sources import (
 )
 from .thread_identity import UserThreadRole
 from .threads import Thread
+from .working_memory_policy import AnnotationDisclosureGrant
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-from .todos import TodoError, TodoStore
+from .errors import TodoError
+from .todos import TodoStore
 
 
 class Messaging:
@@ -81,6 +84,11 @@ class Messaging:
         with todos.snapshot():
             pass  # The store validates its schema before any envelope is committed.
         self.bus.bus.messages_for_references(answers)
+        unreceived = self.bus.bus.unreceived(owner.incarnation.require_recorded().lookup, answers)
+        if unreceived:
+            raise UnreceivedAnswerError(
+                f"{owner.name} never received {', '.join(r.message_id for r in unreceived)}"
+                " and cannot answer it")
         message = Message(
             sender=owner.name,
             target=target,
@@ -117,7 +125,7 @@ class Messaging:
             return thread
         # The registry owns namespace allocation. Recheck under its canonical
         # writer lock; an existing sender needs only the ordinary registry read.
-        with self.registry.store.locked():
+        with self.registry.store.guarded_write():
             return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
     def send_user_message(self, target: NamedTarget, body: str, *, worktree: str,
@@ -141,8 +149,6 @@ class Messaging:
                                     worktree=worktree, scope=scope, change=change)
 
     def approve_annotations(self, recipient, subject, *, worktree, per_hour, segments):
-        from .working_memory_policy import AnnotationDisclosureGrant
-
         return self._pin_constraint(recipient, subject, AnnotationDisclosureGrant,
             worktree=worktree, scope=CurrentTaskScopeSelection(), change=OriginalTaskChange(),
             per_hour=per_hour, segments=segments)

@@ -8,9 +8,11 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .attempt_resolution import RecordedResolution
 from .declared_family import DeclaredFamily
 from .errors import StaleAttemptError
 from .native_arguments import SelectedModel
+from .native_failures import NativePiUnavailable
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -45,8 +47,6 @@ class TurnFailure(DeclaredFamily):
 
     def raise_native(self, proof, model: SelectedModel) -> None:
         """A runtime failure does not prove a completed provider request."""
-        from .native_failures import NativePiUnavailable
-
         raise NativePiUnavailable(self.text)
 
     def retry_delay(self, attempt_ordinal: int) -> float:
@@ -61,7 +61,12 @@ class TurnFailure(DeclaredFamily):
     ) -> None:
         """A failed attempt blocks its goal until someone retries it."""
         with suppress(StaleAttemptError):
-            permit.reservation.fail(store, cls.declared_name, observation=observation)
+            permit.reservation.fail(store, FailedTurnResolution(cls), observation=observation)
+
+
+@dataclass(frozen=True)
+class FailedTurnResolution(RecordedResolution):
+    failure: type[TurnFailure]
 
 
 class InputIdUnavailable(TurnFailure):
@@ -202,14 +207,8 @@ class NativeLaunchInvalid(BackendFailed):
     """The configured native launch could not be acquired."""
 
 
-class NativeChildSignaled(TurnFailure):
-    """A signal ended the native child: the stop an operator gives, never a backend failure.
-
-    Declared last, so any failure the turn already recorded keeps precedence.
-    """
-
-    # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP (rpc-mode.js:296).
-    stop_exits: ClassVar[frozenset[int]] = frozenset({128 + signal.SIGTERM, 128 + signal.SIGHUP})
+class ResumableFailure:
+    """Capability: the turn ended without its goal failing; the next turn resumes the goal."""
 
     @classmethod
     def settle_attempt(
@@ -219,3 +218,18 @@ class NativeChildSignaled(TurnFailure):
         observation: FailedTurnObservation,
     ) -> None:
         permit.stop(store)
+
+
+class CoordinationRefused(ResumableFailure, TurnFailure):
+    """The bus refused the turn's own read or write (a stale fence, a coverage deadline,
+    a busy store): the refusal protects the bus and says nothing about the backend."""
+
+
+class NativeChildSignaled(ResumableFailure, TurnFailure):
+    """A signal ended the native child: the stop an operator gives, never a backend failure.
+
+    Declared last, so any failure the turn already recorded keeps precedence.
+    """
+
+    # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP (rpc-mode.js:296).
+    stop_exits: ClassVar[frozenset[int]] = frozenset({128 + signal.SIGTERM, 128 + signal.SIGHUP})

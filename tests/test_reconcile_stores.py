@@ -6,54 +6,176 @@ differs is refused, naming the store, and the file stays as it was."""
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Annotated
 
 import pytest
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.activity import ActivityStore
 from agent_comms.bus import Bus
+from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.cli_commands import (
     CliCommand,
     PlannedReconcileCliCommand,
+    PlannedStoresResult,
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
 )
 from agent_comms.cli_bridges.codex import CodexBridge
+from agent_comms.cli_bridges.shared import BridgeDeliveryStore, BridgeStateTable
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import ClaimId, FieldCodec, MessageId
+from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
-from agent_comms.installer.backup import bus_files
-from agent_comms.locked_store import SQLiteFile
-from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
+from agent_comms.installer.backup import StoreBackup, bus_files
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.probes.carry import WriterOwnedOpeningProbe
+from agent_comms.installer.upgrade import Stack
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.locked_store import RegistryFile, RetainedCopyRequest, SQLiteFile
+from agent_comms.maintenance_barrier import (
+    MaintenanceBarrier, MaintenanceHolder, MaintenanceOperator, NoMaintenanceHolder,
+)
+from agent_comms.messages import BusProjectionTables, BusRow, ClaimOperations, HeldResources
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_runtime_schema import PrivateCoordinatorSchema
-from agent_comms.triage_native_sources import TriageNativeSources
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.triage_native_sources import TriageNativeSource
 from agent_comms.typed_table import (
-    Column, DurableTables, ReconciledFile, SharedFileTables, TableSchema, TypedTable,
-    WriterOwnedStore,
+    Column, DurableTables, HeldBusFile, PracticeRoot, ProjectionProducer, ReconciledFile,
+    SharedFileTables, TableSchema, TypedTable, WriterOwnedFile, WriterOwnedStore,
 )
 from bus_record_fixture import OWNER_LOOKUP
-from conftest import maintenance_held
+from cli_command import core
+from conftest import ledger_one_failure_short, maintenance_held
+from test_bus_resource_claims import ClaimBus, claims
 
 NO_MAINTENANCE_HOLDER = NoMaintenanceHolder()
 
 
 def reconcile(root: Path, holder: MaintenanceHolder = NO_MAINTENANCE_HOLDER,
-              command: type[CliCommand] = ReconcileStoresCliCommand) -> subprocess.CompletedProcess:
-    environment = MaintenanceHolder.outside(os.environ)
-    holder.exported(environment)
-    return subprocess.run(
-        [sys.executable, "-m", "agent_comms.cli", "--root", str(root),
-         *command.invocation()], capture_output=True, text=True, timeout=120,
-        env=environment)
+              command: type[CliCommand] = ReconcileStoresCliCommand,
+              *arguments: str) -> subprocess.CompletedProcess:
+    with holder.acting():
+        return core("--root", str(root), *command.invocation(*arguments))
+
+
+def planned_reconcile(
+    root: Path, holder: MaintenanceHolder = NO_MAINTENANCE_HOLDER,
+) -> PlannedStoresResult:
+    completed = reconcile(root, holder, PlannedReconcileCliCommand)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    return FieldCodec.decode(PlannedStoresResult, FieldCodec.parse(completed.stdout))
+
+
+@pytest.fixture
+def practice_projections(claims: ClaimBus, tmp_path: Path) -> Path:
+    resource = str(tmp_path / "owned.py")
+    owner = claims.acquire("alice", resource, claims.scope("alice", ClaimId.mint()))
+    seed = tmp_path / "seed"
+    claims.bus.backup(Bus.path_in(seed))
+    claims.release(owner)
+    claims.acquire("bob", resource, claims.scope("bob", ClaimId.mint()))
+    return seed
+
+
+def missing_claim_producer(db: sqlite3.Connection) -> None:
+    ProjectionProducer.delete(db, projection=ClaimOperations.declared_name)
+
+
+def different_seed_identity(db: sqlite3.Connection) -> None:
+    MessageIdentitySource.update(
+        db, where="{seq}=?", parameters=(BusRow.last_seq(db),),
+        message_id=MessageId.mint("different practice bus"))
+
+
+def test_practice_projections_seed_matches_full_after_claim_transition(
+    claims: ClaimBus, practice_projections: Path, tmp_path: Path,
+) -> None:
+    full = tmp_path / "full"
+    claims.bus.backup(Bus.path_in(full))
+    for database in (claims.bus.path, Bus.path_in(full)):
+        with closing(sqlite3.connect(database)) as db:
+            missing_claim_producer(db)
+            db.commit()
+    with maintenance_held(claims.bus.path.parent) as holder:
+        seeded = reconcile(claims.bus.path.parent, holder, ReconcileStoresCliCommand,
+                           "--practice-root", str(practice_projections))
+    assert seeded.returncode == 0, seeded.stdout + seeded.stderr
+    with maintenance_held(full) as holder:
+        rebuilt = reconcile(full, holder)
+    assert rebuilt.returncode == 0, rebuilt.stdout + rebuilt.stderr
+    with closing(SQLiteFile.read_snapshot(claims.bus.path)) as live_db, closing(
+        SQLiteFile.read_snapshot(Bus.path_in(full))
+    ) as full_db:
+        for row in BusProjectionTables.schema_rows():
+            actual = tuple(row.select(live_db))
+            expected = tuple(row.select(full_db))
+            assert len(actual) == len(expected), row
+            assert all(value in expected for value in actual), row
+
+
+@pytest.mark.parametrize("damage", (missing_claim_producer, different_seed_identity))
+def test_practice_projections_refuse_mismatch_before_writing(
+    claims: ClaimBus, practice_projections: Path,
+    damage: Callable[[sqlite3.Connection], None],
+) -> None:
+    with closing(sqlite3.connect(Bus.path_in(practice_projections))) as db:
+        damage(db)
+        db.commit()
+    with closing(sqlite3.connect(claims.bus.path)) as db:
+        missing_claim_producer(db)
+        db.commit()
+    before = claims.bus.path.read_bytes()
+    with maintenance_held(claims.bus.path.parent), pytest.raises(RelationViolationError):
+        Bus.reconcile_at(claims.bus.path, PracticeRoot(practice_projections))
+    assert claims.bus.path.read_bytes() == before
+
+
+def test_practice_projections_rollback_rebuilds_the_omitted_bus(
+    claims: ClaimBus, practice_projections: Path, source_programs, tmp_path: Path,
+) -> None:
+    root = claims.bus.path.parent
+    source_programs.bind(tmp_path)
+    RootRuntime.publish(root, source_programs.runtime)
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
+    hold = barrier.begin(MaintenanceOperator.current())
+    with InstallCommands() as commands:
+        outgoing = Stack(Path(__file__).resolve().parents[1], commands, home=tmp_path,
+                         runtime=source_programs.runtime)
+        with hold.holding():
+            with closing(sqlite3.connect(claims.bus.path)) as db:
+                missing_claim_producer(db)
+                db.commit()
+            backup = StoreBackup.take(root, tmp_path / "route", (), tmp_path / "spill")
+            assert claims.bus.path.relative_to(root) not in backup.selected_files()
+            carried = reconcile(root, MaintenanceHolder.current(), ReconcileStoresCliCommand,
+                                "--practice-root", str(practice_projections))
+            assert carried.returncode == 0, carried.stdout + carried.stderr
+            RootRuntime.publish(root, LaunchRuntime.running())
+            with closing(sqlite3.connect(claims.bus.path)) as db:
+                db.execute(f'DROP TABLE "{HeldResources.declared_name}"')
+                db.commit()
+            hold = backup.restore(partial(outgoing.restore_stores, hold))
+            with hold.holding():
+                assert outgoing.verify(root).threads == len(claims.registry.snapshot().threads)
+            assert RootRuntimeStore.at(root).read().runtime() == source_programs.runtime
+            with claims.bus.observing() as db:
+                assert HeldResources.count(db) == 1
+            assert not backup.restoring.exists()
+    barrier.clear(hold)
 
 
 def drop_one_index_each(root: Path) -> dict[str, str]:
@@ -102,15 +224,14 @@ def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comm
     dropped = drop_one_index_each(root)
     # A schema-named runtime projection is rebuilt by its runtime, never carried
     # or included in the installer's backup/reconcile set.
-    projection = ActivityStore(ActivityStore.path_in(root))
+    projection = ActivityStore(root)
     with projection.writing() as db:
         db.execute('CREATE TABLE retired_derived_shape (unused INTEGER)')
     with maintenance_held(root) as holder:
-        before = bus_files(root)
-        completed = reconcile(root, holder, PlannedReconcileCliCommand)
-        assert completed.returncode == 0, completed.stdout + completed.stderr
-        assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
-        assert bus_files(root) == before
+        before = bus_files(LiveFilesRequest(root))
+        planned = planned_reconcile(root, holder)
+        assert planned.rewritten == tuple(Path(name) for name in sorted(dropped))
+        assert bus_files(LiveFilesRequest(root)) == before
         completed = reconcile(root, holder)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
@@ -125,10 +246,10 @@ def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms)
     root = private_comms.root
     drop_one_index_each(root)
     with maintenance_held(root) as holder:
-        before = bus_files(root)
+        before = bus_files(LiveFilesRequest(root))
         completed = reconcile(root, holder, ReadBackCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
-        assert bus_files(root) == before
+        assert bus_files(LiveFilesRequest(root)) == before
 
 
 def test_a_settled_bus_reconciles_without_moving_committed_wal_frames(private_comms):
@@ -161,11 +282,11 @@ def test_a_settled_bus_reconciles_without_moving_committed_wal_frames(private_co
     assert SQLiteFile.wal_path(database).stat().st_size
     with maintenance_held(root) as holder:
         SQLiteFile.settle(database)
-        before = bus_files(root)
+        before = bus_files(LiveFilesRequest(root))
         completed = reconcile(root, holder)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert json.loads(completed.stdout)["rewritten"] == []
-        assert bus_files(root) == before
+        assert bus_files(LiveFilesRequest(root)) == before
 
 
 def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
@@ -174,19 +295,17 @@ def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
     with Coordination(database) as store:
         store.participants.register(OWNER_LOOKUP, committed=True)
         retained = store.participants.get(OWNER_LOOKUP)
-        store.session._connection.execute(f"DROP TABLE {TriageNativeSources.declared_name}")
+        store.session._connection.execute(f"DROP TABLE {TriageNativeSource.declared_name}")
 
     with maintenance_held(root) as holder:
-        before = bus_files(root)
-        planned = reconcile(root, holder, PlannedReconcileCliCommand)
-        assert planned.returncode == 0, planned.stdout + planned.stderr
-        assert json.loads(planned.stdout)["rewritten"] == [database.name]
-        assert bus_files(root) == before
+        before = bus_files(LiveFilesRequest(root))
+        planned = planned_reconcile(root, holder)
+        assert planned.rewritten == (Path(database.name),)
+        assert bus_files(LiveFilesRequest(root)) == before
         carried = reconcile(root, holder)
         assert carried.returncode == 0, carried.stdout + carried.stderr
         assert json.loads(carried.stdout)["rewritten"] == [database.name]
-        assert json.loads(reconcile(
-            root, holder, PlannedReconcileCliCommand).stdout)["rewritten"] == []
+        assert planned_reconcile(root, holder).rewritten == ()
 
     with Coordination(database) as store:
         assert store.participants.get(OWNER_LOOKUP) == retained
@@ -199,14 +318,12 @@ def test_public_reconcile_does_not_install_native_state(tmp_path):
     database = CoordinationStore.path_in(root)
     with CoordinationSession(database):
         pass
-    before = bus_files(root)
-    planned = reconcile(root, command=PlannedReconcileCliCommand)
-    assert planned.returncode == 0, planned.stdout + planned.stderr
-    assert json.loads(planned.stdout)["rewritten"] == []
+    before = bus_files(LiveFilesRequest(root))
+    assert planned_reconcile(root).rewritten == ()
     carried = reconcile(root)
     assert carried.returncode == 0, carried.stdout + carried.stderr
     assert json.loads(carried.stdout)["rewritten"] == []
-    assert bus_files(root) == before
+    assert bus_files(LiveFilesRequest(root)) == before
     with closing(sqlite3.connect(database)) as db:
         assert not db.execute(
             "SELECT name FROM sqlite_master WHERE name=?", (NativeRuntimeInput.declared_name,)
@@ -229,8 +346,8 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
 
     class LaunchStore(WriterOwnedStore):
         @classmethod
-        def paths(cls) -> tuple[Path, ...]:
-            return (stored,)
+        def path(cls) -> Path:
+            return stored
 
         @classmethod
         def table_schema(cls) -> type[TableSchema]:
@@ -253,8 +370,9 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
     assert PlannedReconcileCliCommand().answer(root).rewritten == ()
 
 
+@pytest.mark.parametrize("readable", (False, True))
 def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_cannot_open(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, readable):
     """Each binding keeps its own delivery.sqlite3 under its bridge's state directory; one in
     a shape the bridge cannot open fails the install's plan, naming that binding's file."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -266,9 +384,53 @@ def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_canno
                    'timestamp REAL NOT NULL, PRIMARY KEY (id, number))')
         db.execute("INSERT INTO observed_part VALUES ('m', 'first', 'a', 'b', 'r', 0)")
         db.commit()
-    before = stored.read_bytes()
+    if readable:
+        stored.unlink()
+        with closing(SQLiteFile.writer(stored)) as db, db:
+            BridgeStateTable.install_schema(db, WriterOwnedFile())
+    sibling = stored.parent.with_name("unit-second") / BridgeStateTable.filename
+    sibling.parent.mkdir()
+    with closing(SQLiteFile.writer(sibling)) as db, db:
+        BridgeStateTable.install_schema(db, WriterOwnedFile())
+    originals = {path: path.read_bytes() for path in (stored, sibling)}
     root = tmp_path / "bus"
     root.mkdir()
-    with pytest.raises(RelationViolationError, match=str(stored)):
-        PlannedReconcileCliCommand().answer(root)
-    assert stored.read_bytes() == before
+    files = LiveFilesRequest(root)
+    resources = BridgeDeliveryStore.resources(files)
+    assert {files.location(resource) for resource in resources} == set(originals)
+    assert len({resource.path for resource in resources}) == 2
+    practice = PracticeCopy(root, tmp_path / "practice")
+    practice.include(tuple(originals))
+    copied = RetainedCopyRequest(practice.path)
+    probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,))
+    copied_paths = tuple(copied.location(resource) for resource in resources)
+    if readable:
+        assert PlannedReconcileCliCommand().answer(root).rewritten == ()
+        assert probe.run() == copied_paths
+    else:
+        with pytest.raises(RelationViolationError, match=str(stored)):
+            PlannedReconcileCliCommand().answer(root)
+        with pytest.raises(RelationViolationError, match=str(copied_paths[0])):
+            probe.run()
+    assert {path: path.read_bytes() for path in originals} == originals
+
+
+def test_an_opening_refuses_a_drifted_store_and_reconcile_stores_carries_it(private_comms):
+    """Install 13: the ledger kept a failure CHECK one member short. Opening it refuses,
+    naming the carry, even under the hold, and rewrites nothing; reconcile-stores is the
+    one carry, keeping every row, and the next opening reads it."""
+    root = private_comms.root
+    path = ledger_one_failure_short(root)
+    schema = "SELECT sql FROM sqlite_master WHERE name=?"
+    with closing(sqlite3.connect(path)) as db:
+        drifted = db.execute(schema, (FailedTurnEvidence.declared_name,)).fetchone()
+    with maintenance_held(root), pytest.raises(RelationViolationError,
+                                               match=HeldBusFile.carry_verb):
+        GoalAttemptStore.at(path.parent)
+    with closing(sqlite3.connect(path)) as db:
+        assert db.execute(schema, (FailedTurnEvidence.declared_name,)).fetchone() == drifted
+    with maintenance_held(root) as holder:
+        completed = reconcile(root, holder)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert str(path.relative_to(root)) in json.loads(completed.stdout)["rewritten"]
+    GoalAttemptStore.at(path.parent)

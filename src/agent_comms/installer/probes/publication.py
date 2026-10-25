@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from agent_comms.active_route import RouteFile, RouteFileSelection, active_route_path
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 
 
 class PublicationProbe(RuntimeProbe[None]):
@@ -15,7 +15,7 @@ class PublicationProbe(RuntimeProbe[None]):
         RuntimePublication.installed().publish_links()
 
 
-class SelectedRouteProbe(RuntimeProbe[RouteFileSelection]):
+class SelectedRouteProbe(TargetProbe, RuntimeProbe[RouteFileSelection]):
     """The staged runtime reads the published route before source changes."""
 
     def run(self) -> RouteFileSelection:

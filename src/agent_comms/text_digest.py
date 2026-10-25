@@ -2,6 +2,7 @@
 
 import hashlib
 from dataclasses import dataclass
+from typing import Self
 
 from .field_codec import Sha256Text
 
@@ -14,7 +15,7 @@ class TextDigest:
         Sha256Text.decode(self.value)
 
     @classmethod
-    def of(cls, text: str) -> "TextDigest":
+    def of(cls, text: str) -> Self:
         return cls(hashlib.sha256(text.encode("utf-8")).hexdigest())
 
     def matches(self, text: str) -> bool:

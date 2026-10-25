@@ -2,27 +2,34 @@
 
 from __future__ import annotations
 
+from .errors import RelationViolationError
+
 from .input_key import InputKey
 
 from . import turn_origin
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
-from .field_codec import ThreadLookup, FieldCodec, NullMember, WireOmitDefault, GoalId
+from .field_codec import (
+    ThreadLookup, FieldCodec, NullMember, PresentMember, RecordMember, SubclassUnion, WireOmitDefault,
+)
+from .goal_scope import AllGoals, GoalScope
 from .message_reference import MessageReference
 from .messages import PublicSender
 from .read_basis import DMDisplayScope, MessageDisplayScope
 
 if TYPE_CHECKING:
+    from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
     from .input_disposition import InputDispositions
     from .messages import Message
     from .threads import Thread
+    from .transcript_routes import NoSentInputText, SentInputText
 
 
 class NoTurnOrigin(NullMember, turn_origin.TurnOrigin):
@@ -46,7 +53,7 @@ NO_TURN_ORIGIN = NoTurnOrigin()
 
 
 @dataclass(frozen=True, slots=True)
-class MessageRoute:
+class MessageRoute(PresentMember):
     sender: str
     targets: tuple[str, ...]
 
@@ -63,21 +70,78 @@ class MessageRoute:
     def from_wire(cls, data: Mapping) -> MessageRoute:
         return FieldCodec.decode(cls, data)
 
+    def require_publications(self, originals: tuple[Delivered, ...], owner_lookup: ThreadLookup) -> None:
+        if len(originals) > len(self.targets):
+            raise RelationViolationError("Publication exceeds this turn's reply intent")
+        for original in originals:
+            if original.sender_lookup != owner_lookup:
+                raise RelationViolationError("Publication belongs to another original sender")
+            if original.message.target not in self.targets:
+                raise RelationViolationError("Publication is outside this turn's reply targets")
+
 
 @dataclass(frozen=True, slots=True)
-class TurnRouting:
+class NoMessageRoute(NullMember):
+    """The turn has no outgoing reply intent."""
+
+    def require_publications(self, originals: tuple[Delivered, ...], owner_lookup: ThreadLookup) -> None:
+        if originals:
+            raise RelationViolationError("Publication exceeds this turn's reply intent")
+
+
+class Routing(SubclassUnion, affix="Routing"):
+    """A recorded route or its declared absence; readers ask the same owner."""
+
+    @property
+    def requests(self) -> tuple[MessageReference, ...]:
+        return ()
+
+    @property
+    def publications(self) -> tuple[MessageReference, ...]:
+        return ()
+
+    @property
+    def incoming(self) -> bool:
+        return False
+
+    @property
+    def outgoing(self) -> bool:
+        return False
+
+    def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
+        pass
+
+    def with_requests(self, requests: tuple[MessageReference, ...]) -> Routing:
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class NoTurnRouting(NullMember, Routing):
+    """No route was recorded for this native item."""
+
+
+@dataclass(frozen=True, slots=True)
+class TurnRouting(RecordMember, Routing):
     requests: tuple[MessageReference, ...] = ()
-    reply: MessageRoute | None = None
+    reply: MessageRoute | NoMessageRoute = NoMessageRoute()
     publications: Annotated[
         tuple[MessageReference, ...], WireOmitDefault()
     ] = ()
 
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
+    @property
+    def incoming(self) -> bool:
+        return bool(self.requests)
 
-    @classmethod
-    def from_wire(cls, data: Mapping) -> TurnRouting:
-        return FieldCodec.decode(cls, data)
+    @property
+    def outgoing(self) -> bool:
+        return bool(self.reply.present())
+
+    def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
+        sent_text.require_present()
+        self.reply.require_absent("Input routing requires exact sent text and no outgoing reply claim.")
+
+    def with_requests(self, requests: tuple[MessageReference, ...]) -> TurnRouting:
+        return replace(self, requests=requests, publications=())
 
     def requires_annotation(self, published: tuple[MessageReference, ...]) -> bool:
         return bool(self.requests or published)
@@ -86,33 +150,22 @@ class TurnRouting:
         return (reader.annotation_ids(checkpoint.offset, through)
                 if self.requests and runtime.read_key == checkpoint.session_file else ())
 
-    def require_publications(self, originals, owner_lookup: str) -> None:
+    def require_publications(self, originals: tuple[Delivered, ...], owner_lookup: ThreadLookup) -> None:
         """Only committed originals addressed by this reply intent can be joined."""
-        from .errors import RelationViolationError
-
         if self.publications:
             raise RelationViolationError("Turn intent cannot preclaim a publication")
-        if not originals:
-            return
-        if self.reply is None or len(originals) > len(self.reply.targets):
-            raise RelationViolationError("Publication exceeds this turn's reply intent")
-        for original in originals:
-            if original.sender_lookup != owner_lookup:
-                raise RelationViolationError("Publication belongs to another original sender")
-            if original.message.target not in self.reply.targets:
-                raise RelationViolationError("Publication is outside this turn's reply targets")
+        self.reply.require_publications(originals, owner_lookup)
 
 
 @dataclass(frozen=True, slots=True)
 class ScheduledTurn:
     prompt: str
     origin: turn_origin.TurnOrigin = NO_TURN_ORIGIN
-    goal_id: GoalId | None = None
-    goal_wait_id: str | None = None
+    goal_id: GoalScope = AllGoals()
 
     @property
     def autonomous_goal(self) -> bool:
-        return self.goal_id is not None and self.origin.autonomous
+        return self.goal_id.schedules_goal() and self.origin.autonomous
 
     @classmethod
     def resuming_in_project(cls, project: str) -> ScheduledTurn:
@@ -122,11 +175,6 @@ class ScheduledTurn:
             "If the request was only to switch projects, report that you are ready; "
             "do not invent extra work."
         )
-
-    def require_dependency_wake(self, error: Exception) -> None:
-        """Only dependency launches use standby refusal settlement."""
-        if self.goal_wait_id is None:
-            raise error
 
     @classmethod
     def incoming(

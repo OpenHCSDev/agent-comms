@@ -1,5 +1,6 @@
 """Socket and delivery owners exercised by the real Claude probe."""
 import asyncio
+import io
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -34,7 +35,7 @@ async def reader(claim):
     request = AttachMonitor()
     writer.write((FieldCodec.compact(FieldCodec.encode(request)) + '\n').encode())
     await writer.drain()
-    request.decode_reply(await stream.readline())
+    request.read_reply(io.BytesIO(await stream.readline()))
     probe = MONITOR_FRAME.validate_json(await stream.readline())
     try:
         yield stream, writer, probe

@@ -25,7 +25,7 @@ from .field_codec import PathText
 from .launch_runtime import CallingThreadUnavailable, LaunchRuntime, ThreadLaunch
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
-from .store_files import DependentStateTier
+from .store_files import DependentStateTier, SingleFileStore
 
 
 class ChildInitiator(DeclaredFamily, affix="ChildInitiator"):
@@ -142,7 +142,7 @@ class RuntimeChildReservation:
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren], DependentStateTier):
+class RuntimeChildrenStore(SingleFileStore, ChildRegistration, CarriedDocument[RuntimeChildren], DependentStateTier):
     """One file at the selected prefix covers children from every bus root."""
 
     filename: ClassVar[str] = "runtime_children.json"
@@ -156,7 +156,7 @@ class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren], 
     @contextmanager
     def launching(cls, runtime: LaunchRuntime) -> Iterator[RuntimeChildReservation]:
         store = cls.at(runtime.prefix)
-        with store.locked():
+        with store.guarded_write():
             yield RuntimeChildReservation.capture(store)
 
     @classmethod
@@ -165,7 +165,7 @@ class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren], 
         cls, runtime: LaunchRuntime
     ) -> AsyncIterator[RuntimeChildReservation]:
         store = cls.at(runtime.prefix)
-        async with store.locked_async():
+        async with store.guarded_write_async():
             yield RuntimeChildReservation.capture(store)
 
     def finished(self, identity: ProcessIdentity) -> None:

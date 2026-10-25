@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, ClassVar, Never
 
 from .field_codec import FieldCodec, InputId, MalformedRecord, NominalSpelling, NominalText, SlotId
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
+from .storage_room import NoRoomNeeded
 from .storage_rules import StorageProjection, StorageRule
 from .tool_denial import SelectedToolDenied
 
@@ -185,11 +186,9 @@ class CallProgress:
 
     def __post_init__(self):
         # The reservation is mutable call state, not part of its frozen payload.
-        from .storage_room import NoRoomNeeded
         self.room = NoRoomNeeded()
 
     async def finish_room(self):
-        from .storage_room import NoRoomNeeded
         await asyncio.to_thread(self.room.finish)
         self.room = NoRoomNeeded()
 

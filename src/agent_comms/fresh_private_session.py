@@ -5,16 +5,17 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 
 from agent_comms.child_process import Platform
 from .field_codec import FieldCodec, RecordedTimestamp
 from .native_entries import SessionEntry
+from .pi_payloads import ReportedText
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_session_files import PrivateSession, BusTranscriptFile
 from .native_session_reopen import NativeSessionIdentity
 from .private_path import PrivateFileRole
+from .native_session_reopen import PiSessionId
 
 
 def create_fresh_private_session(
@@ -24,12 +25,12 @@ def create_fresh_private_session(
     worktree = Path(worktree).absolute()
     if not worktree.is_dir():
         raise NativePiUnavailable("Fresh-session worktree is unavailable")
-    session_id = uuid4().hex
+    session_id = PiSessionId.fresh()
     path = location.path_in(Path(root).absolute(), session_id=session_id, **parts)
     session_dir = path.parent
     NativeSessionFiles.prepare_private_directory(session_dir)
     header = SessionEntry(
-        id=session_id, version=3, cwd=str(worktree),
+        id=session_id, version=3, cwd=ReportedText(str(worktree)),
         timestamp=RecordedTimestamp.written(datetime.now(UTC)),
     )
     encoded = FieldCodec.compact(header.to_wire(), allow_nan=False).encode() + b"\n"

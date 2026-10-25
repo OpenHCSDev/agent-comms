@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
@@ -63,6 +64,11 @@ def declare_storage(root: Path, scratch: Path) -> None:
     """
     StorageRule.path_in(root).write_text(json.dumps(FieldCodec.encode(
         StorageRule(scratch_base=scratch, floor_gib=0))))
+
+
+# Every test here pays installed_home's private runtime build, so the first one a worker
+# runs would spend the 60 s default building it.
+pytestmark = pytest.mark.timeout(280)
 
 
 @pytest.fixture(scope="module")
@@ -165,7 +171,6 @@ def drop_one_index(root: Path) -> Path:
     raise AssertionError("No declared store has an index to drop")
 
 
-@pytest.mark.timeout(280)
 @pytest.mark.parametrize("repos, drifted", (
     ((), False), (("--repos",), True),
 ), ids=("kept-repos-current-stores", "given-repos-drifted-store"))
@@ -180,7 +185,7 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     publish_initial(comms, "worker", "#all", "One message before the install")
     rewritten = (drop_one_index(comms.root),) if drifted else ()
     checkout = install_checkout
-    before = bus_files(comms.root)
+    before = bus_files(LiveFilesRequest(comms.root))
     given = (*repos, str(checkout)) if repos else ()
     installed = subprocess.run(
         [Path(sys.executable).with_name("agent-comms"), "--root", comms.root, "install",
@@ -198,10 +203,9 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
         assert isinstance(result.rehearsal, UncopiedRehearsal)
         assert result.rehearsal.copy.bytes == 0
         assert result.rehearsal.inputs == ()
-    assert bus_files(comms.root) == before
+    assert bus_files(LiveFilesRequest(comms.root)) == before
 
 
-@pytest.mark.timeout(280)
 def test_rehearsal_refuses_changed_native_inputs(installed_comms, installed_home, install_checkout):
     """The target's own installer refuses a stale pin before rehearsing the bus."""
     checkout = install_checkout
@@ -225,7 +229,6 @@ def test_rehearsal_refuses_changed_native_inputs(installed_comms, installed_home
     assert "Native build inputs changed; rebuild with --update-pins" in installed.stderr
 
 
-@pytest.mark.timeout(280)
 def test_failed_live_migration_restores_data_checkout_and_runtime(
         installed_comms, installed_home, install_checkout, tmp_path):
     comms, checkout = installed_comms, install_checkout
@@ -279,7 +282,6 @@ class Fault(Carry):
     assert comms.registry.require("worker").name == "worker"
 
 
-@pytest.mark.timeout(280)
 def test_failed_publication_restores_absent_route_without_store_changes(
         installed_comms, installed_home, install_checkout, tmp_path):
     checkout = install_checkout
@@ -329,7 +331,6 @@ def test_failed_publication_restores_absent_route_without_store_changes(
     MaintenanceBarrier(RegistryStore.at(installed_comms.root).path).read().phase.new_sends.require_open()
 
 
-@pytest.mark.timeout(280)
 @pytest.mark.parametrize("fresh, live_kind", ((False, CarriedRun), (True, CreatedRun)),
                          ids=("retained-bus", "fresh-bus"))
 def test_installed_entry_reports_completion_after_target_source_retirement(

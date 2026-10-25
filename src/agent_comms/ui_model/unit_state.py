@@ -18,8 +18,10 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot
+from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.repo import GitCommandError
 from agent_comms.standing_rules import StandingRule, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
@@ -115,7 +117,7 @@ class UnitObservation:
 
     @cached_property
     def calls(self) -> tuple[OrderCall, ...]:
-        calls: dict[str, OrderCall] = {}
+        calls: dict[ToolCallId, OrderCall] = {}
         for turn in reversed(self.turns):
             for event in turn.events:
                 event.record_call(calls, self.since)
@@ -163,11 +165,17 @@ class UnitObservation:
     def orders(self) -> tuple[str, ...]:
         return tuple(todo.id for todo in self.todos)
 
+    def merges(self) -> dict[str, OrderProgress]:
+        """Each held order's merge as its progress reads it; unmerged orders read no commit."""
+        return {origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
+                for origin in self.sources}
+
 
 class NeedsCommanderAttention:
     """Urgent siblings share their ping behavior without claiming each other's state."""
 
-    def attention(self) -> bool:
+    @classmethod
+    def attention(cls) -> bool:
         return True
 
 
@@ -177,7 +185,9 @@ class UnitState(UndatedStandingRule, declared_name=None):
     orders: tuple[str, ...]
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
+    verb: ClassVar[str]
     action: ClassVar[str]
+    commander_disposes: ClassVar[bool] = True
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:
@@ -244,11 +254,6 @@ class UnitState(UndatedStandingRule, declared_name=None):
         eligible.update(
             reading.thread.incarnation
             for reading in candidates
-            if reading.thread.parent.named(commander)
-        )
-        eligible.update(
-            reading.thread.incarnation
-            for reading in candidates
             if reading.thread.role.executor(reading.thread) and reading.presence.receiving
         )
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
@@ -272,18 +277,22 @@ class UnitState(UndatedStandingRule, declared_name=None):
     def clock(self) -> UnitClock:
         return self.source.clock
 
-    def attention(self) -> bool:
+    @classmethod
+    def attention(cls) -> bool:
         return False
 
     @property
     def default_action(self) -> str:
         return self.action
 
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (UnitSubject(self.unit),)
+
     def detail(self) -> str:
-        return f"orders {', '.join(self.orders)}"
+        return " ".join(self.orders)
 
     def line(self) -> str:
-        return f"{type(self).__name__} {self.unit.name}: {self.detail()} -> {self.default_action}"
+        return f"{self.verb} {self.unit.name} {self.detail()} -> {self.default_action}"
 
 
 class ConditionalState(UnitState, declared_name=None):
@@ -311,6 +320,7 @@ class PendingWorkState(ConditionalState, declared_name=None):
 @dataclass(frozen=True)
 class Unreadable(NeedsCommanderAttention, UnitState):
     reason: str
+    verb = "REPAIR"
     action = "repair the unreadable source; do not infer that the unit is idle"
 
     @classmethod
@@ -332,6 +342,7 @@ class Unreadable(NeedsCommanderAttention, UnitState):
 @dataclass(frozen=True)
 class Blocked(NeedsCommanderAttention, UnitState):
     goal: GoalSnapshot
+    verb = "UNBLOCK"
     action = "follow the blocked goal's declared response"
 
     @classmethod
@@ -357,6 +368,7 @@ class Blocked(NeedsCommanderAttention, UnitState):
 @dataclass(frozen=True)
 class Detached(NeedsCommanderAttention, UnitState):
     unread: int = field(compare=False)
+    verb = "WAKE"
     action = "wake it or reassign the order"
 
     @classmethod
@@ -377,6 +389,7 @@ class Detached(NeedsCommanderAttention, UnitState):
 @dataclass(frozen=True)
 class AwaitingCommander(NeedsCommanderAttention, UnitState):
     seconds: ClassVar[int] = 5 * 60
+    verb = "ANSWER"
     action = "answer the original message"
 
     @classmethod
@@ -392,6 +405,7 @@ class AwaitingCommander(NeedsCommanderAttention, UnitState):
 
 class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
     seconds: ClassVar[int] = 20 * 60
+    verb = "READ"
     action = "inspect its last turn and restart only known-safe work"
 
     @classmethod
@@ -409,6 +423,7 @@ class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
+    verb = "RESHAPE"
     action = "read the failed approach and change it before another rerun"
 
     @classmethod
@@ -416,8 +431,7 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
         sends = sorted(
             at
             for todo in source.pending
-            for verdict in todo.verdicts
-            for at in verdict.send_back_times()
+            for at in todo.history.facts_for(todo.id).send_backs[:2]
         )
         calls = source.calls
         repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest
@@ -433,6 +447,7 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
+    verb = "RESUME"
     action = "resume its work or give it the missing next step"
 
     @classmethod
@@ -445,21 +460,34 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
+    verb = "CLOSE"
     action = "install the merge or close with the working application evidence"
 
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
-        progress: dict[str, OrderProgress] = {
-            origin.todo.id: next(MergedProgress.found(origin), NoCommitProgress())
-            for origin in source.sources
-        }
+        progress = source.merges()
         return any(
-            todo.order.accepted or todo.order.waiting_on_install(todo, progress)
+            todo.order.accepted
+            or (todo.order.waiting_on_install(todo, progress) and not todo.order.awaits_holder_run())
             for todo in source.todos
         )
 
 
+class AwaitingApplicationRun(NeedsCommanderAttention, ConditionalState, UnitState):
+    """Every merged order is installed and waits on its holder's application run, so no
+    commander verb disposes of the line and it locks none."""
+
+    verb = "AWAIT RUN"
+    action = "its holder runs the application proof on the installed build; close it on its evidence"
+    commander_disposes = False
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        return any(todo.order.awaits_holder_run() for todo in source.todos)
+
+
 class Moving(ConditionalState, UnitState):
+    verb = "WATCH"
     action = "let it continue"
 
     @classmethod
@@ -468,6 +496,7 @@ class Moving(ConditionalState, UnitState):
 
 
 class Idle(ConditionalState, UnitState):
+    verb = "ORDER"
     action = "give it the next useful order"
 
     @classmethod

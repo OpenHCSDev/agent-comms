@@ -12,9 +12,9 @@ from .bus import Bus
 from .errors import RelationViolationError
 from .field_codec import PathText
 from .launch_runtime import LaunchRuntime
-from .locked_store import DurableFile, LockedStore, RegistryFile
+from .locked_store import LockedStore, RegistryFile, RollbackRetained
 from .maintenance_barrier import MaintenanceBarrier
-from .store_files import DependentStateTier
+from .store_files import DependentStateTier, SingleFileStore
 
 
 class ForeignRuntimeError(RelationViolationError):
@@ -63,6 +63,9 @@ class Succession(Attachment):
 class RootRuntime:
     prefix: Annotated[Path, PathText]
 
+    def runtime(self) -> LaunchRuntime:
+        return LaunchRuntime.at_prefix(self.prefix)
+
     @classmethod
     def attachment(cls, root: Path, caller: LaunchRuntime) -> Attachment:
         store = RootRuntimeStore.at(root)
@@ -71,9 +74,7 @@ class RootRuntime:
             return Attached()
         if MaintenanceBarrier(RegistryFile.path_in(root)).read().allows_runtime(caller):
             return Attached()
-        return Succession(
-            LaunchRuntime(owner.prefix / "bin/python"), root=root, caller=caller,
-        )
+        return Succession(owner.runtime(), root=root, caller=caller)
 
     @classmethod
     def require_attachable(cls, root: Path, caller: LaunchRuntime) -> None:
@@ -85,7 +86,7 @@ class RootRuntime:
 
 
 @dataclass(frozen=True)
-class RootRuntimeStore(LockedStore[RootRuntime], DurableFile, DependentStateTier):
+class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetained, DependentStateTier):
     filename = ".root-runtime.json"
     record_type = RootRuntime
 
@@ -107,7 +108,7 @@ class RootRuntimeStore(LockedStore[RootRuntime], DurableFile, DependentStateTier
 
         Adoption is where a directory becomes a root, so its bus is created here, empty:
         from then on an absent bus file means a deleted bus, never one not yet written."""
-        with self.locked():
+        with self.guarded_write():
             if not self.path.exists():
                 Bus.install(Bus.path_in(self.path.parent))
                 self._publish_unlocked(RootRuntime(runtime.prefix))

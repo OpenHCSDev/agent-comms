@@ -20,6 +20,10 @@ from .thread_presentation import (
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
+from .turn_lease import (
+    FinishedTurnFence,
+    NoFinishedTurn,
+)
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -77,6 +81,11 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def paused_since(self, last_seen: float) -> tuple[float, ...]:
         return ()
 
+    @property
+    def answers_later(self) -> bool:
+        """Whether a wait on this thread is answered once it reads; a running thread does."""
+        return self.running
+
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         raise RelationViolationError(message)
 
@@ -127,8 +136,6 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
         return False
 
     def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
-        from .turn_lease import NoFinishedTurn
-
         return NoFinishedTurn()
 
     def restored(self) -> ThreadStatus:
@@ -215,8 +222,6 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
                 and owner.owns(entry.thread, entry.owner_generation, process))
 
     def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
-        from .turn_lease import FinishedTurnFence
-
         return FinishedTurnFence(
             identity=lease.identity, turn_id=lease.turn_id,
             claimed_generation=lease.claimed_generation,
@@ -332,6 +337,12 @@ class PausedBridgeThreadStatus(SelfRenaming, DeclaredReaderPresence, StoppedThre
 
     def paused_since(self, last_seen: float) -> tuple[float, ...]:
         return (last_seen,)
+
+    @property
+    def answers_later(self) -> bool:
+        """Its live bridge keeps every delivery until a Monitor confirms the probe, so a
+        wait on it is answered; only a dead bridge (NoBridgeThreadStatus) is not."""
+        return True
 
 
 class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):

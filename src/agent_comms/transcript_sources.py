@@ -14,6 +14,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
+from .native_entries import TranscriptProjection
+
 if TYPE_CHECKING:
     from .context_store import ContextStore
     from .external_transcript import ExternalPageRow
@@ -40,6 +42,8 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
     IncomingTranscript,
     SentTranscript,
+    ToolEndTranscript,
+    ToolStartTranscript,
     TurnDigest,
 )
 from .turn_item import NativeTurnId
@@ -183,8 +187,6 @@ class TranscriptTraversal(ABC):
         A saved tool round is its call record together with its result record;
         a page window never stops between them.
         """
-        from .transcript_events import ToolEndTranscript, ToolStartTranscript
-
         opening = ToolEndTranscript if self.descending_rounds else ToolStartTranscript
         closing = ToolStartTranscript if self.descending_rounds else ToolEndTranscript
         return (
@@ -485,11 +487,9 @@ class TranscriptSource:
         project_events: Callable[[TranscriptProjection], Iterable[TranscriptEvent]],
         references: tuple[MessageReference, ...],
     ) -> tuple[TranscriptEvent, ...]:
-        from .native_entries import TranscriptProjection
-
         entry = record.entry
         return tuple(project_events(TranscriptProjection(
-            routes.get(entry.id), routes.input_display(entry.input_id), position=record.start,
+            entry.routing_in(routes), routes.input_display(entry.input_id), position=record.start,
         )))
 
 
@@ -599,11 +599,11 @@ class AssignedTranscriptSource(TranscriptSource):
         references: tuple[MessageReference, ...],
     ) -> tuple[TranscriptEvent, ...]:
         entry = record.entry
-        routing = routes.get(entry.id)
+        routing = entry.routing_in(routes)
         events = super().native_events(record, routes, project_events, references)
         published = entry.final_reply and any(
             refs and self.sent_messages(refs).keys() >= set(refs)
-            for refs in (routing.publications if routing is not None else (), references)
+            for refs in (routing.publications, references)
         )
 
         return tuple(retained for event in events

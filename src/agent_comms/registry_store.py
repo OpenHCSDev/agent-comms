@@ -22,6 +22,7 @@ from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
+from .private_runtime_schema import PrivateCoordinatorTable
 from .registration_change import InitialRegistration, NativeSourcePublication
 from .registry_document import (
     HistoricalRootPurpose,
@@ -29,9 +30,9 @@ from .registry_document import (
     RegistryEntry,
     RegistrySnapshot,
 )
-from .routing import TurnRouting
+from .routing import Routing
 from .session_file import RegistrySessionLocation
-from .store_files import RegistryTier, SharedLock
+from .store_files import RegistryLocking
 from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
@@ -167,7 +168,7 @@ class RegistryEdit:
         self,
         current: Thread,
         turn_id: TurnId,
-        routing: TurnRouting | None,
+        routing: Routing,
     ) -> tuple[Thread, int]:
         """Allocate the original record under this bound registry transaction."""
         if current.turn_generation >= (1 << 63) - 1:
@@ -197,12 +198,12 @@ class RegistryEdit:
             self.store.save_unlocked(self.document)
             self.original = self.store.read_revision_unlocked()
         for record in self.superseded:
-            record.path.unlink()
+            record.retire()
         self.superseded.clear()
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTier):
+class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument]):
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
@@ -211,8 +212,6 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
         return type(self), (self.path,)
 
     def __post_init__(self) -> None:
-        from .private_runtime_schema import PrivateCoordinatorTable
-
         # Guard-loss checks must know every private declaration before taking this store's lock.
         PrivateCoordinatorTable.declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
@@ -252,7 +251,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
 
     @contextmanager
     def reading_snapshot(self) -> Iterator[RegistrySnapshot]:
-        with self.locked(mode=SharedLock()):
+        with self.guarded_read():
             yield self.read_snapshot_unlocked()
 
     @property
@@ -282,7 +281,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
         was read from, not an earlier stat taken while a write was in flight.
         A decoded revision already in this process's cache answers directly.
         """
-        with self.locked(mode=SharedLock()):
+        with self.guarded_read():
             self.private_guard_unlocked()
             revision = self.revision_unlocked()
             return RegistryEntryRevision(revision, revision[0].either(
@@ -312,14 +311,21 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
 
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
-        with self.locked():
+        with self.guarded_write():
+            # Refuse before an editor can prepare participants or journal a registration.
+            self.require_maintenance_open()
             original = self.read_revision_unlocked()
             original.document.purpose.require_write()
             yield RegistryEdit(self, original.document.copy(), original)
 
+    def retire_processes(self) -> None:
+        with self.editing() as edit:
+            edit.document.retire_processes()
+            edit.commit()
+
     def mark_historical(self) -> None:
         """Explicit archive creation/carry seals this declaration, idempotently."""
-        with self.locked():
+        with self.guarded_write():
             original = self.read_revision_unlocked()
             document = replace(original.document, purpose=HistoricalRootPurpose())
             RegistryEdit(self, document, original).commit()

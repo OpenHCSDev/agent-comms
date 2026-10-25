@@ -20,21 +20,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.bus import Bus, BusSnapshot
+from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.channels import AnyChannel
+from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
-from agent_comms.message_page import InboxPage, MessagePage, MessagePageRequest, PageBounds
+from agent_comms.message_page import InboxPage, MessagePageRequest, PageBounds
 from agent_comms.message_reference import (
     FirstUnreadStart,
     NewestUnreadStart,
     InboxStart,
     MessageReference,
 )
-from agent_comms.messages import Message
-from agent_comms.page_traversal import LiveCursor
+from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import (
     AnonymousViewer,
@@ -44,8 +45,12 @@ from agent_comms.read_basis import (
     ListedDeliveries,
     NamedViewer,
 )
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import DeliveryScope
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
+
+from .watched import FileSource
+
 
 if TYPE_CHECKING:
     from agent_comms.assignment_states import AssignmentState
@@ -57,20 +62,29 @@ if TYPE_CHECKING:
 
 
 class HeldBusWrite:
-    """Maintenance delays an unattempted publication, never retries a write."""
+    """A CLI process's publication waits out maintenance on its own loop, never retrying a
+    write; a service's worker thread refuses instead (MessageBus.write_open)."""
 
     def write_when_open[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
         return asyncio.run(comms.bus.when_open(operation))
 
 
-class WatchPass[Observed](HeldBusWrite, ABC):
-    """Observe before entering maintenance to apply the result."""
+class WatchPass[Observed](ABC):
+    """Observe, then apply the result while the bus is open.
 
+    A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
+    in the pass's worker thread kept the connector alive after SIGTERM: the install holding
+    maintenance waits for that stop, so systemd killed it at 90 s (installs 17 and 18).
+    """
+
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        with opened_wire() as comms:
+            await comms.bus.when_open(partial(self.watch_pass, opened_wire))
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
             observed = self.observe(comms)
-            self.write_when_open(comms, partial(self.pass_body, comms, observed))
+            comms.bus.write_open(partial(self.pass_body, comms, observed))
 
     @abstractmethod
     def observe(self, comms: Comms) -> Observed: ...
@@ -83,9 +97,6 @@ class MessageBus[Writes: Publisher]:
     def __init__(
         self, root: Path, registry: Registration, publisher: type[Writes],
     ):
-        from agent_comms.catalog_store import ChannelCatalog
-        from agent_comms.read_ledger import ReadLedger
-
         self.bus = Bus(Bus.path_in(root))
         self.reads = ReadLedger.at(root)
         self.history = HistoryArchive(self.bus.path)
@@ -148,23 +159,20 @@ class MessageBus[Writes: Publisher]:
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
+    def write_open[Result](self, operation: Callable[[], Result]) -> Result:
+        """Refuse while maintenance holds the bus; the caller's loop owns any wait."""
+        MaintenanceBarrier(self._registry.store.path).assert_open_unlocked()
+        return operation()
+
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
-        maintenance = MaintenanceBarrier(self._registry.store.path)
-
-        def execute():
-            maintenance.assert_open_unlocked()
-            return operation()
-
         while True:
             try:
-                result = await Coordination.run_worker(execute)
+                result = await Coordination.run_worker(partial(self.write_open, operation))
                 return await result if inspect.isawaitable(result) else result
             except MaintenanceHeldError:
                 await self.resumed()
 
     async def resumed(self) -> None:
-        from .watched import FileSource
-
         maintenance = MaintenanceBarrier(self._registry.store.path)
         async with aclosing(Bus.watch_sources(FileSource(maintenance.state_path))) as changes:
             async for _ in changes:
@@ -256,9 +264,6 @@ class MessageBus[Writes: Publisher]:
         The window is the newest received rows, shown in sequence order. Peer relevance
         orders the selected rows, never changes their window.
         """
-        from agent_comms.context_segments.awareness import AwarenessSegment
-        from agent_comms.peer_relevance import Prioritized
-
         first = {relation.peer.require_recorded().lookup for relation in relations
                  if relation.relevance.grants(Prioritized)}
         rows = tuple(
@@ -269,11 +274,6 @@ class MessageBus[Writes: Publisher]:
         rows = tuple(sorted(
             rows, key=lambda row: (row.sender_lookup not in first, row.seq)))
         return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
-
-    def incoming_page(self, name: str, *, after: int) -> MessagePage:
-        snapshot = self._registry.snapshot()
-        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        return MessagePageRequest(delivery, PageBounds(LiveCursor(after).newer())).read_opened(self.bus)
 
     def channels(self) -> Sequence[str]:
         return list(self.channel_declarations())

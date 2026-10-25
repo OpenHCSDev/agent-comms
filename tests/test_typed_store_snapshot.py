@@ -14,6 +14,7 @@ from agent_comms.input_key import BusInputKey
 from agent_comms.maintenance_barrier import MaintenanceNotHeldError
 from agent_comms.owner_lifecycle import OwnerReleaseStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.typed_table import HeldBusFile
 
 
 @pytest.mark.parametrize("make_store", (
@@ -84,9 +85,10 @@ def test_existing_undeclared_schema_is_not_treated_as_missing(tmp_path):
     assert store.path.stat().st_size == 0
 
 
-def test_a_durable_writer_derives_declared_objects_and_refuses_an_undeclared_column(tmp_path):
-    """Under maintenance, a writer restores declared indexes while preserving rows;
-    an undeclared column remains a refusal because its meaning is unknown."""
+def test_the_carry_derives_declared_objects_and_refuses_an_undeclared_column(tmp_path):
+    """A writer refuses a store missing a declared index, even under maintenance; the
+    carry restores it while preserving rows, and an undeclared column remains a refusal
+    because its meaning is unknown."""
     store = InputDispositions(tmp_path)
     assert store.record(
         BusInputKey(1), seq=1, owner="kid", claim_scope=1, target="kid", text="first")
@@ -95,14 +97,17 @@ def test_a_durable_writer_derives_declared_objects_and_refuses_an_undeclared_col
         for name, sql in declared.items():
             if not sql.lstrip().upper().startswith("CREATE TABLE"):
                 connection.execute(f'DROP INDEX IF EXISTS "{name}"')
-    with pytest.raises(MaintenanceNotHeldError), store.writing():
-        pytest.fail("Only a maintenance holder may restore a declared index")
-    with maintenance_held(tmp_path), store.writing() as connection:
-        assert not store.schema_differs(connection)
+    with maintenance_held(tmp_path), pytest.raises(RelationViolationError,
+                                                   match=HeldBusFile.carry_verb):
+        with store.writing():
+            pytest.fail("Opening a store never restores its index")
+    with pytest.raises(MaintenanceNotHeldError):
+        InputDispositions.reconcile_at(store.path)
+    with maintenance_held(tmp_path):
+        assert InputDispositions.reconcile_at(store.path)
     assert store.lookup(BusInputKey(1)).source_text == "first"
     with store.writing() as connection:
         connection.execute(
             f'ALTER TABLE "{InputDispositionRow.declared_name}" ADD COLUMN extra TEXT DEFAULT "kept"')
     with maintenance_held(tmp_path), pytest.raises(RelationViolationError):
-        with store.writing():
-            pytest.fail("A table whose columns differ from the declaration must be refused")
+        InputDispositions.reconcile_at(store.path)

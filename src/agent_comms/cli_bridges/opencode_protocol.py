@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 from pydantic import Field, JsonValue
 
-from agent_comms.cli_protocol import TaggedWire
+from agent_comms.cli_protocol import Declared, TaggedWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_updates import (
@@ -18,7 +18,7 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 
 from ..wire_models import DeclaredWireFamily, WireModel
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
@@ -64,13 +64,13 @@ class SavedInput(WireModel):
 
 class PartUpdate(WireModel):
     sessionID: str
-    part: Part.declared_union()
+    part: Declared[Part]
 
 
 class PartDelta(WireModel):
     sessionID: str
     messageID: str
-    partID: str
+    part_id: NativeItemId = Field(alias='partID')
     field: Literal['text']
     delta: str
 
@@ -124,17 +124,17 @@ class RetryStatus(SessionStatus, declared_name='retry'):
         return TurnStarted(f'Retry {self.attempt}: {self.message}')
 
 
-SESSION_STATUSES = WireModel.adapter(dict[str, SessionStatus.declared_union()])
+SESSION_STATUSES = WireModel.adapter(dict[str, Declared[SessionStatus]])
 MESSAGES = WireModel.adapter(list[SavedMessage])
 
 
 class StatusUpdate(WireModel):
     sessionID: str
-    status: SessionStatus.declared_union()
+    status: Declared[SessionStatus]
 
 
 class MessageUpdate(WireModel):
-    info: MessageInfo.declared_union()
+    info: Declared[MessageInfo]
 
 
 class EventHeader(WireModel):
@@ -186,7 +186,7 @@ class PartChanged(OpenCodeEvent, declared_name='message.part.delta'):
         delta = self.properties
         if delta.sessionID != stream.connection.session:
             return ()
-        return (AppendDraftItem(delta.turn, delta.partID, delta.delta),)
+        return (AppendDraftItem(delta.turn, delta.part_id, delta.delta),)
 
 
 class MessageUpdated(OpenCodeEvent, declared_name='message.updated'):

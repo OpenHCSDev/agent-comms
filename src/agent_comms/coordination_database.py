@@ -14,6 +14,7 @@ from typing import Self
 
 from agent_comms.coordination_errors import CoordinationReadUnavailable, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.locked_store import FileStore
 from agent_comms.typed_table import (
     CarriedWriter,
     ReconciledFile,
@@ -23,7 +24,7 @@ from agent_comms.typed_table import (
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
-from .locked_store import DEFAULT_STORE_CONTENTION, StoreContention
+from .store_files import DEFAULT_STORE_CONTENTION, StoreContention
 
 
 class StoreFile(DeclaredFamily):
@@ -65,7 +66,7 @@ class ReadableStore(StoreFile):
             yield consumer.capture(connection, *arguments)
 
 
-class CoordinationStore(CarriedWriter, ReconciledFile):
+class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
     """The private coordinator database and its declared schema."""
 
     filename = "coordination.sqlite3"

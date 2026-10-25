@@ -8,17 +8,22 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
+from agent_comms.commander_hud import CommanderFrame, CommanderHud, CodexUsage, UnreadableUsage
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
+from agent_comms.field_codec import MessageId
+from agent_comms.head_review import PullRequestHead
+from agent_comms.heartbeat_subjects import AnswerSubject, HeadSubject
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
+from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
-from agent_comms.standing_rules import ServicePassFailing
+from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
+from agent_comms.text_digest import TextDigest
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
@@ -53,6 +58,42 @@ def beat(comms, rules=(), *, states=()):
     CommanderHeartbeat().pass_body(comms, (frame,))
 
 
+def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
+    """Ready and done-but-held phases lead; finished phases are one count per plan."""
+    from agent_comms.commander.vibe_check import OverloadDegradation
+    from agent_comms.commander_hud import CommanderPhase
+    from agent_comms.plan_phases import (
+        DesignReconciledPhase, OneOrderOwnerPhase, RecordPlanePhase, RetainedStorePhase,
+        ReviewQueuePhase,
+    )
+
+    comms = notification_bus
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    hud = CommanderHud(lead, (), (
+        CommanderPhase(RetainedStorePhase, True, False, ()),
+        CommanderPhase(OneOrderOwnerPhase, True, False, ()),
+        CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
+        CommanderPhase(RecordPlanePhase, False, True, ()),
+        CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
+    ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage(reason='not requested')))
+    assert hud.frame == (
+        str(hud.load),
+        "commander_native/record_plane done=False ready=True holders=",
+        "commander_native/review_queue done=True ready=False holders=worker",
+        "commander_native/design_reconciled done=False ready=False holders=worker",
+        "usage unreadable: not requested",
+        "forks: worker",
+        "commander_native: 2 phases done",
+    )
+
+
+def test_a_registered_commander_fork_is_on_the_hud(notification_bus):
+    comms = notification_bus
+    fork = comms.registry.register_commander_child("judge-fork", "lead", comms.goals)
+    assert fork.incarnation in lead_hud(comms).forks
+
+
 def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(notification_bus):
     comms = notification_bus
     lead = comms.registry.require("lead")
@@ -84,24 +125,29 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     beat(comms, states=states)
     first, = notifications(comms)
     assert all(state.line() in first.body for state in states)
+    header = replace(lead_hud(comms, states), units=()).frame
+    assert first.body.splitlines()[:len(header)] == list(header)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
     beat(comms, states=state_cards(comms, UnitState))
     unchanged, = notifications(comms)
     assert unchanged.reference == first.reference
 
 
-def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notification_bus, monkeypatch):
+def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notification_bus):
     comms = notification_bus
     enforced = []
 
-    def enforce(rule, _comms, _commander):
-        enforced.append(rule.watch)
-        if rule.watch == "overdue-head":
+    class FollowingRule(ServicePassFailing, declared_name=None):
+        def enforce(self, _comms, _commander):
+            enforced.append(self.watch)
+
+    class OverdueRule(FollowingRule, declared_name=None):
+        def enforce(self, _comms, _commander):
+            super().enforce(_comms, _commander)
             raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
 
-    monkeypatch.setattr(ServicePassFailing, "enforce", enforce)
-    rules = (ServicePassFailing("overdue-head", 1.0, "review pending"),
-             ServicePassFailing("following-rule", 1.0, "another rule"))
+    rules = (OverdueRule("overdue-head", 1.0, "review pending"),
+             FollowingRule("following-rule", 1.0, "another rule"))
     beat(comms, rules)
 
     assert enforced == ["overdue-head", "following-rule"]
@@ -114,16 +160,17 @@ def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notificatio
         ServicePassStore.at(comms.root).read().commander_completed)
 
 
-def test_rule_packets_lead_with_five_and_publish_all_current_occurrences(notification_bus):
+def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus):
     comms = notification_bus
     rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
                   for index in range(7))
     beat(comms, rules)
     first, = notifications(comms)
     assert isinstance(first.task, CommanderDecisions)
-    assert len(first.task.decisions) == 5
-    assert set(first.task.handled) == (
-        {RulePing.capture(rule) for rule in rules} | set(lead_hud(comms).pings()))
+    assert set(first.task.decisions) == set(first.task.handled) == {
+        RulePing.capture(rule) for rule in rules}
+    assert first.body.splitlines() == [*lead_hud(comms).frame,
+                                       *(f"{rule.line()} (0 min)" for rule in rules)]
     beat(comms, rules)
     assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
@@ -142,7 +189,11 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
+    assert quiet.body.splitlines()[:len(lead_hud(comms).frame)] == list(lead_hud(comms).frame)
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
+    # Nothing new and nothing cleared sends nothing.
+    beat(comms, ServicePassFailing.violations(comms, "lead"))
+    assert len(notifications(comms)) == 2
     # Use the same source occurrence to prove it was retired, not merely hidden.
     beat(comms, rules)
     _, _, repeated = notifications(comms)
@@ -151,7 +202,7 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
 
 def test_latest_observation_follows_commander_and_service_rename_aliases(notification_bus):
     comms = notification_bus
-    beat(comms)
+    beat(comms, (ServicePassFailing("watch", 1.0, "failed source read"),))
     first, = notifications(comms)
     comms.threads._rename_thread("lead", "renamed-lead")
     comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
@@ -171,8 +222,24 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
     assert RulePing.capture(first) == RulePing.capture(moved)
     beat(comms, (first,))
     beat(comms, (moved,))
-    announced, = notifications(comms)
-    assert "NO LONGER CURRENT" not in announced.body
+    assert len(notifications(comms)) == 1
+
+
+def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
+    comms = notification_bus
+    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+    states = UnitState.current(comms, "lead", frame)
+    class FailedScan(UndatedStandingRule):
+        @classmethod
+        def scan_observed(cls, comms, commander, observed, frame):
+            raise IndexError("P729 isolated scan failure")
+
+        def line(self):
+            return "unreachable scan result"
+
+    request.addfinalizer(lambda: StandingRule.__registry__.pop(FailedScan.declared_name))
+    with pytest.raises(IndexError):
+        StandingRule.broken(comms, "lead", observed=states, frame=frame)
 
 
 def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_bus):
@@ -186,3 +253,41 @@ def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_
     assert not list(reading.read(comms, comms.views.revision()))
     beat(comms, states=states)
     assert isinstance(next(reading.read(comms, comms.views.revision())), CommanderHudObserved)
+
+
+def test_a_verdict_on_the_full_head_or_an_answer_acts_on_its_board_line():
+    """A delivery claims an abbreviated head and the verdict names the full one; a burst
+    answer names its owed message. Either is board work the stale-line gate lets through."""
+    repo = RepositoryName("OpenHCSDev", "agent-comms")
+    owed = MessageId("cb055200351e")
+    delivery = RulePing(TextDigest.of("JUDGE"), text="JUDGE",
+                        subjects=(HeadSubject(PullRequestHead(repo, 3306, "89c687691")),))
+    chokehold = RulePing(TextDigest.of("ANSWER"), text="ANSWER", subjects=(AnswerSubject(owed),))
+    verdict = frozenset((HeadSubject(PullRequestHead(repo, 3306, "89c6876910086167ca82653bcedac84d78fa4de9")),))
+
+    assert delivery.acted_on(verdict)
+    assert not delivery.acted_on(frozenset((HeadSubject(PullRequestHead(repo, 3307, "89c687691")),)))
+    assert chokehold.acted_on(frozenset((AnswerSubject(owed),)))
+    assert not chokehold.acted_on(verdict)
+
+
+def test_codex_usage_decodes_window_and_keeps_refusal_visible():
+    import json
+    from datetime import datetime
+    from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
+    from agent_comms.field_codec import FieldCodec
+
+    reply = FieldCodec.decode(RateLimitsResponse, json.loads('''{
+        "rateLimits": {"primary": {
+            "usedPercent": 37, "windowDurationMins": 10080, "resetsAt": 1793513456
+        }}
+    }'''))
+    usage = CodexUsage(reply.rate_limits)
+    reset = datetime.fromtimestamp(1793513456).strftime('%a %b %d %H:%M')
+    assert usage.line() == f'usage 37% weekly, resets {reset}'
+    assert not usage.needs_hand()
+    assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
+    refused = CodexUsage(UnreadableUsage(reason='Codex: account unavailable'))
+    assert refused.line() == 'usage unreadable: Codex: account unavailable'
+    assert refused.needs_hand()
+    assert FieldCodec.decode(CodexUsage, FieldCodec.encode(refused)) == refused

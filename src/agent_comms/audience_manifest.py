@@ -8,6 +8,11 @@ and bind the value to the original committed envelope before runtime use.
 
 from __future__ import annotations
 
+from .bus_tables import (
+    AwaitingAnswerSource,
+    ReceivedSource,
+)
+
 from .class_fact import ClassFact
 import hashlib
 import math
@@ -65,7 +70,6 @@ class FrozenRecipient(ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_tables import ReceivedSource, AwaitingAnswerSource
         return (ReceivedSource, AwaitingAnswerSource)
 
 

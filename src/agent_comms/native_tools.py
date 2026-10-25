@@ -193,7 +193,7 @@ class MutatingPathTool(EditAction, PathTool):
     def storage_effects(self, cwd):
         return (WriteStorageEffect(physical_path(self.path, cwd)),)
 
-    def edit_calls(self, call_id: str, at: EventTime, thread: str,
+    def edit_calls(self, call_id: ToolCallId, at: EventTime, thread: str,
                    problem: str) -> tuple[EditCall, ...]:
         return (EditCall(call_id, at, thread, self.path, self.replacements(), problem),)
 

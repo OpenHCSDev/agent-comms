@@ -1,13 +1,13 @@
 """When the fleet's signals degrade, the heartbeat stops the commander with its indictment.
 
-A degraded signal is a fact Core already reads: answers owed past their window, a held plan
-phase main still lacks, a load past the ceiling. The heartbeat names them, the vibe-check
-sender puts the indictment in front of the commander, and every answering verb is refused
-until the commander answers that message (the OwedAnswer gate)."""
+A degraded signal is a fact Core already reads that no heartbeat line states: a load past the
+ceiling. An owed answer or a stalled plan phase is a heartbeat line already, on the board the
+commander's tool calls print, so it never stops the commander a second time here. The
+vibe-check sender puts the indictment in front of the commander, and every verb that answers
+nothing is refused until the commander answers that message (the OwedAnswer gate)."""
 
 from __future__ import annotations
 
-import math
 import time
 from collections.abc import Mapping, Sequence
 from abc import abstractmethod
@@ -17,7 +17,7 @@ from typing import ClassVar, Self
 from agent_comms.bus import BusReader
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.questions import SenderMessages, UnansweredBurst
-from agent_comms.commander.standing import AnswersTo, PlanStalled
+from agent_comms.commander.standing import AnswersTo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -104,17 +104,13 @@ class ChokeholdSender(EscalationSender):
 
 
 class Escalation:
-    """An answer owed to an escalation itself. Ignoring one is the chokehold's signal, never a
-    new vibe check, or the check would feed on its own messages."""
+    """An answer owed to an escalation itself. Ignoring one is the chokehold's signal."""
 
     message: Message
 
     def clearing_action(self) -> str:
         return (f"Answer the {self.message.sender} burst by its protocol, naming it with "
                 f"--answers {self.message.message_id}.")
-
-    def degradation_signs(self) -> tuple[Sign, ...]:
-        return ()
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
@@ -123,28 +119,13 @@ class Escalation:
         return any(message.sender == self.message.sender for message in named)
 
 
-class PlanStalledDegradation(Degradation):
-    """Held plan work that main still lacks. A stall of hours does not clear in one round, so a
-    phase stops the commander when it crosses the window and again each time its age doubles."""
-
-    @classmethod
-    def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
-        now = time.time()
-        return tuple(
-            Sign(cls, (rule.phase, rule.since, cls.doublings(now - rule.since)), rule.line())
-            for rule in PlanStalled.found(frame.plan)
-        )
-
-    @staticmethod
-    def doublings(held: float) -> int:
-        return int(math.log2(max(held, PlanStalled.window) / PlanStalled.window))
-
-
 @dataclass(frozen=True)
 class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     """More owed orders, expired timers and unjudged edits than one commander keeps up with.
-    Forks relieve it by judging and ordering, which lowers the debt; load moves every beat, so
-    it stops the commander once per round while it stays over."""
+    Every edit a verdict can still clear is a point, so one unit running unwatched trips it
+    alone; edits under a merged order are nobody's review and count nothing. Forks relieve it
+    by judging and ordering, which lowers the debt; load moves every beat, so it stops the
+    commander once per round while it stays over."""
 
     ceiling: ClassVar[float] = 100.0
     round_seconds: ClassVar[int] = 30 * 60
@@ -162,7 +143,8 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         return cls.from_orders(
             frame.todos,
             len(tuple(ReviewTimerUp.conditions(comms, frame))),
-            OrderEditCountRead.count(comms, commander),
+            sum(read.read() for read in OrderEditCountRead.judgeable(
+                comms.root, frame.live, frame.pulls.progress(frame.todos, comms.registry))),
         )
 
     @classmethod
@@ -172,7 +154,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @projected(view="wire")
     def total(self) -> float:
-        return self.owed + 2 * self.timers_up + self.unjudged / 10
+        return self.owed + 2 * self.timers_up + self.unjudged
 
     @projected(view="wire")
     def overloaded(self) -> bool:
@@ -222,13 +204,13 @@ class VibeCheck(UndatedStandingRule):
             " describes, this hour.",
             "Answer this burst once, naming any one of its messages with --answers: which failure"
             " in the indictment is you right now, why, and the one structural change you make"
-            " this turn. Every answering verb is refused until you do. Ignore this and the fleet"
-            " stops.",
+            " this turn. Every verb that answers nothing is refused until you do. Ignore this and"
+            " the fleet stops.",
         )
 
     def line(self) -> str:
-        return (f"VIBE CHECK ({self.sign.signal.declared_name}) "
-                f"-> answer the {VibeCheckSender.sender} messages now")
+        return (f"ANSWER the {VibeCheckSender.sender} messages now"
+                f" (vibe check: {self.sign.signal.declared_name})")
 
 
 @dataclass(frozen=True)
@@ -249,7 +231,7 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return f"VIBE CHECK UNANSWERED: message {self.cited}, {age} min old -> answer it"
+        return f"ANSWER vibe check {self.cited} ({age} min old)"
 
 
 class Indictment:
@@ -344,7 +326,7 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
                      ChokeholdSender.unanswered(source, snapshot, commander, time.time()))
 
     def line(self) -> str:
-        return f"CHOKEHOLD UNANSWERED: message {self.cited} -> answer it by the protocol"
+        return f"ANSWER chokehold {self.cited} by the protocol"
 
 
 @dataclass(frozen=True)
@@ -431,7 +413,7 @@ class ChokeholdReleased(ChokeholdAnswer):
 
 @dataclass(frozen=True)
 class ChokeholdHeld(ChokeholdAnswer):
-    """The answer quotes the indictment while load or owed answers stay degraded: the units stay
+    """The answer quotes the indictment while load stays degraded: the units stay
     paused until those clear, and the commander is told which."""
 
     @classmethod
@@ -454,7 +436,7 @@ class ChokeholdHeld(ChokeholdAnswer):
 
     def line(self) -> str:
         return (f"CHOKEHOLD HOLDS: answer {self.answer.seq}:{self.answer.message_id} quoted, but"
-                " load or owed answers are still degraded")
+                " load is still degraded")
 
 
 @dataclass(frozen=True)

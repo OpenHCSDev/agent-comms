@@ -25,6 +25,7 @@ from .context_reading import ContextReading
 from .declared_family import DeclaredFamily
 from .external_transcript import DraftRow
 from .field_codec import (
+    AssignmentId,
     ClaimId,
     AcceptsNull,
     ExternalJsonShape,
@@ -45,7 +46,7 @@ from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement
 from .reported_turn import ReportedTurn, ReportedTurnState
-from .routing import MessageRoute
+from .routing import MessageRoute, NoMessageRoute
 from .thread_identity import ClaimScoped, ThreadIncarnation
 from .tool_result import DeclaredReply
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
@@ -92,7 +93,7 @@ class TurnChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class TextRouteUpdate(AgentCommsUpdate):
-    route: MessageRoute | None
+    route: MessageRoute | NoMessageRoute = NoMessageRoute()
 
 
 @dataclass(frozen=True)
@@ -771,7 +772,7 @@ class SelectedWriteRequest(CommsRequest):
 class SelectedWriteAcceptedUpdate(AgentCommsUpdate):
     operation_id: ClaimId
     source_seq: int
-    claim_id: str
+    claim_id: AssignmentId
 
 
 def encode_request(request: CommsRequest) -> dict:
