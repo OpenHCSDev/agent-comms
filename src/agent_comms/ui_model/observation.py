@@ -166,6 +166,7 @@ class LiveObservationInterest(ObservationInterest):
     def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
         if self.observations.get(type(observation)) is observation:
             observation.sent = NoSidebarSent()
+            observation.invalidate()
             service.observe_again()
 
     async def observe(self, service: ObservationService, revision: WireRevision,
@@ -235,23 +236,28 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
     def __init__(self, request: InterestT):
         super().__init__(request)
         self.steps: Generator[ObservationStep] = (_ for _ in ())
+        self.read_revision: ReadState = NoRevision()
 
     def close(self) -> None:
         self.steps.close()
 
+    def invalidate(self) -> None:
+        """A changed read stage or completed preparation needs a new read, not a new file."""
+        self.read_revision = NoRevision()
+
     def step(self, service: ObservationService, revision: WireRevision) -> None:
-        """Advance one yielded step, never drain an interest before its siblings."""
+        """Advance one yield; a completed current revision has no work to schedule."""
         try:
             result = next(self.steps)
         except StopIteration:
             self.after_read(service)
-            self.steps = self.read(service.comms, revision)
-            try:
-                result = next(self.steps)
-            except StopIteration:
-                return
-        result.publish(service)
-        service.observe_again()
+            if revision.changed_since_any(self.read_revision):
+                self.read_revision = revision
+                self.steps = self.read(service.comms, revision)
+                self.step(service, revision)
+        else:
+            result.publish(service)
+            service.observe_again()
 
     @abstractmethod
     def read(
@@ -702,6 +708,7 @@ class RosterSidebarRead(SidebarReadStage):
 
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
         reading.stage = SidebarReadStage()
+        reading.invalidate()
         if snapshot.has_indexing_unread():
             reading.sent = NoSidebarSent()
 
