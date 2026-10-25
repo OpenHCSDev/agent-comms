@@ -27,12 +27,13 @@ from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
+from typing import Annotated, TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
 
 from .child_process import LockHolder, Platform
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import PathText
 from .private_path import FileIdentity, PrivateFileRole
 
 if TYPE_CHECKING:
@@ -424,9 +425,6 @@ class SingleFileStore(StoreLockOwner, declared_name=None):
 class MultiFileStore(StoreLockOwner, declared_name=None):
     """State spanning several files replaced together: one lock covers the set, and readers share it."""
 
-    read_guard = classmethod(StoreLockOwner.read_guard.__func__)
-    read_guard_async = classmethod(StoreLockOwner.read_guard_async.__func__)
-
 
 class StoreLockTier(StoreLockOwner, declared_name=None):
     """Rank capabilities in the existing owner family, without a file of their own."""
@@ -546,12 +544,19 @@ class SqliteStore(ABC):
 
     @classmethod
     @contextmanager
+    def retaining(cls, path: Path) -> Iterator[BorrowedStoreLock]:
+        """Retain the existing store lock while a child borrows its open description."""
+        with StoreLockOwner.write_guard(path) as held:
+            yield BorrowedStoreLock(held.descriptor, path)
+
+    @classmethod
+    @contextmanager
     def exclusive_writer(
-        cls, path: Path, *, uri: bool = False,
+        cls, path: Path, *, isolation_level: _IsolationLevel = None, uri: bool = False,
     ) -> Iterator[sqlite3.Connection]:
-        """A schema reconcile or WAL truncation keeps other connection boundaries out."""
+        """Keep other connections out, with transaction semantics declared by the caller."""
         with (_store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION),
-              closing(cls.writer(path, isolation_level=None, uri=uri)) as db):
+              closing(cls.writer(path, isolation_level=isolation_level, uri=uri)) as db):
             yield db
 
 
@@ -790,6 +795,25 @@ class StoreLockAcquisition:
                 yield lock
         finally:
             self._held.reset(token)
+
+
+@dataclass(frozen=True)
+class BorrowedStoreLock(StoreLock):
+    """A child borrows the parent's held descriptor; it never locks or unlocks it."""
+
+    path: Annotated[Path, PathText]
+
+    @contextmanager
+    def joined(self) -> Iterator[StoreLock]:
+        with os.fdopen(os.dup(self.descriptor), "rb") as file:
+            expected = FileIdentity.from_stat(store_lock_path(self.path).stat())
+            if FileIdentity.from_stat(os.fstat(file.fileno())) != expected:
+                raise RelationViolationError(f"Borrowed lock does not belong to {self.path}")
+            with StoreLockAcquisition.holding(
+                self.path, file, Platform.current(), UNBOUNDED_STORE_READ,
+                mode=ExclusiveLock(), lock_type=StoreLock,
+            ) as held:
+                yield held
 
 
 def _store_lock(
