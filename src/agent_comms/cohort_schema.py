@@ -6,7 +6,7 @@ import hashlib
 import logging
 import sqlite3
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.coordination_errors import IdentityConflict, SchemaVersionError
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -89,7 +89,7 @@ class ClaimBatchAcknowledgements(
         WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq)
         != OLD.member_count OR (SELECT COUNT(*) FROM cohort_delivery_receipts d
         WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
-        AND d.kind = 'selected') != OLD.claim_count)
+        AND d.claim_id IS NOT NULL) != OLD.claim_count)
         OR ((SELECT COUNT(*) FROM claim_batch_members m
         WHERE m.wire_root_id = OLD.wire_root_id AND m.wire_seq = OLD.wire_seq)
         != OLD.claim_count) OR (EXISTS (SELECT 1 FROM cohort_delivery_receipts d
@@ -103,11 +103,11 @@ class ClaimBatchAcknowledgements(
         AND (d.claim_id IS NULL OR m.ordinal != (
         SELECT COUNT(*) FROM cohort_delivery_receipts preceding
         WHERE preceding.wire_root_id = OLD.wire_root_id AND preceding.wire_seq = OLD.wire_seq
-        AND preceding.kind = 'selected' AND preceding.ordinal < d.ordinal))))
+        AND preceding.claim_id IS NOT NULL AND preceding.ordinal < d.ordinal))))
         OR (EXISTS (SELECT 1 FROM cohort_delivery_receipts d
         JOIN wake_claims c ON c.recipient_lookup = d.recipient_lookup AND c.wire_seq = d.wire_seq
         WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
-        AND d.kind = 'unmentioned_observer')))"""),
+        AND d.claim_id IS NULL)))"""),
     )
     manifest_format: ClassVar[str] = "audience-v1"
     decision_domain: ClassVar[bytes] = b"agent-comms:cohort-decisions:v1\0"
@@ -241,10 +241,10 @@ class CohortDeliveries(
     related_insert_condition = """EXISTS (SELECT 1 FROM cohort_delivery_receipts d
         JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id AND r.wire_seq=d.wire_seq
         AND r.sealed=1 WHERE d.recipient_lookup=NEW.recipient_lookup AND d.wire_seq=NEW.wire_seq
-        AND d.kind='unmentioned_observer')"""
+        AND d.claim_id IS NULL)"""
     insert_condition = """((SELECT sealed FROM claim_batch_receipts r
         WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq) != 0)
-        OR (NEW.kind = 'selected' AND NOT EXISTS (SELECT 1 FROM claim_batch_members m
+        OR (NEW.claim_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM claim_batch_members m
         JOIN wake_claims c ON c.assignment_id = m.claim_id WHERE m.wire_root_id = NEW.wire_root_id
         AND m.wire_seq = NEW.wire_seq AND m.claim_id = NEW.claim_id
         AND m.recipient_lookup = NEW.recipient_lookup AND c.recipient = NEW.canonical_thread))"""
@@ -256,15 +256,7 @@ class CohortDeliveries(
     canonical_thread: Annotated[
         str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")
     ]
-    kind: Literal["selected", "unmentioned_observer"]
     claim_id: Annotated[DeliveryClaim, Column(storage=TextStorage, nullable=True)]
-    checks = (
-        (
-            "(kind = 'selected' AND claim_id IS NOT NULL)\n"
-            "                OR (kind = 'unmentioned_observer' AND claim_id I"
-            "S NULL)"
-        ),
-    )
     unique = (
         ("wire_root_id", "wire_seq", "recipient_lookup"),
         ("wire_root_id", "wire_seq", "canonical_thread"),
