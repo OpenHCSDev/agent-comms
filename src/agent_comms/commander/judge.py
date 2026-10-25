@@ -14,6 +14,12 @@ whole edit on screen: a show piped into head or /dev/null yields no codes.
 
 A verdict without a reason is refused; a send-back must cite a real message from
 the commander to that unit. Nothing here judges code; it only refuses to let an edit pass unread.
+
+`judge batch FILE` takes a JSON list of those same verbs, one object per verdict with
+"kind" naming the verb, reads the unjudged edits once and records every verdict in one
+call: every refused entry is listed together and nothing is written. `judge rewritten UNIT
+--by COMMIT` settles each unjudged edit of UNIT none of whose added lines survives that
+pushed commit; Core checks git for each, and edits it refuses stay for ok or back.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ from typing import Annotated
 from abc import abstractmethod
 from dataclasses import asdict, dataclass
 from functools import cached_property
+from pathlib import Path
 
 
 from agent_comms.comms import Comms
@@ -35,19 +42,25 @@ from agent_comms.change_report import FileLine
 from agent_comms.field_codec import Argument, FieldCodec, MessageId
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
+from agent_comms.recorded_time import EventTime
+from agent_comms.errors import TodoError
 from agent_comms.repo import Repo
 from agent_comms.todos import (
     AcceptedVerdict,
     BluntText,
     DirectiveText,
     DroppedVerdict,
+    EditSendBackVerdict,
     PeerAcceptedVerdict,
+    RewrittenVerdict,
     GrownHeadVerdict,
     GrowthReason,
     ReviewedHeadVerdict,
     RejectedHeadVerdict,
     HeadVerdict,
     HeadReviewOrder,
+    JudgedCall,
+    OrderQuote,
     SendBackVerdict,
     StrikeReason,
     SupersededVerdict,
@@ -57,12 +70,13 @@ from agent_comms.todos import (
     VerdictReason,
 )
 from agent_comms.slop import Derivation, Slop
-from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
+from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictsTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
 
+EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
 
 
@@ -97,8 +111,11 @@ class Edit(EditCall):
     def text(self) -> str:
         return ''.join(hunk.old_text + hunk.new_text for hunk in self.hunks)
 
+    def added_lines(self) -> tuple[str, ...]:
+        return tuple(line for hunk in self.hunks for line in hunk.new_text.splitlines())
+
     def added(self) -> str:
-        return ''.join('+' + line + '\n' for hunk in self.hunks for line in hunk.new_text.splitlines())
+        return ''.join('+' + line + '\n' for line in self.added_lines())
 
     def rendered(self) -> str:
         return (f'--- {self.id} {self.at.clock()} {self.path}\n'
@@ -180,6 +197,10 @@ class ReviewSubject(DeclaredFamily):
     @abstractmethod
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None: ...
 
+    @abstractmethod
+    def verdicts(self, options: VerdictVerb, ctx: order.Commander,
+                 unjudged: list[Edit]) -> tuple[JudgedCall, ...]: ...
+
 
 @dataclass(frozen=True)
 class EditReview(ReviewSubject):
@@ -196,32 +217,40 @@ class EditReview(ReviewSubject):
         return cls(options.ids)
 
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None:
+        unjudged = Edit.unjudged(ctx.comms, ctx.commander)
+        record(ctx, options, self.verdicts(options, ctx, unjudged), len(unjudged))
+
+    def verdicts(self, options: VerdictVerb, ctx: order.Commander,
+                 unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
+        """The verdicts these IDs carry; a refusal exits before anything is written."""
         if not self.ids:
             sys.exit('Refused: select at least one edit ID:CODE')
-        orders = {todo.id: todo for todo in ctx.held_orders()
-                  if not options.problem or todo.id == options.problem}
-        edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
-                 if edit.problem in orders}
+        orders = {todo.id: todo for todo in ctx.held_orders()}
+        edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
+        if elsewhere := [f'{i} is {edits[i].problem}\'s' for i in ids
+                         if options.problem and edits[i].problem != options.problem]:
+            sys.exit(f'Refused: its checkout files each edit under one order: {elsewhere}')
+        if not options.lines:
+            sys.exit(f'Refused: --line is {EDIT_LINE}')
         if unread := [token for token in self.ids
                       if token != f'{token.split(":")[0]}:{edits[token.split(":")[0]].code()}']:
             sys.exit(f'Refused: wrong or missing read codes {unread}; read each edit to its "=== end" line')
         for i in ids:
             if not any(line in edits[i].text() for line in options.lines):
                 sys.exit(f'Refused: none of your --line quotes is in edit {i}; judge it by its own text')
-        selected = {i: orders[edits[i].problem] for i in ids}
         options.check_edits([edits[i] for i in ids])
-        for i, todo in selected.items():
-            options.operation(ctx, todo, edits[i]).prepare(ctx.comms.goals, todo).apply(todo)
-        current = {todo.id: todo for todo in selected.values()}
-        for i, todo in selected.items():
-            result = ctx.call(CommsVerdictTool(problem=todo.id,
-                              operation=options.operation(ctx, current[todo.id], edits[i])))
-            current[todo.id] = result.todo
-        left = len(Edit.unjudged(ctx.comms, ctx.commander))
-        print(f'{options.declared_name}: {len(ids)} edits; {left} still unjudged')
+        return tuple(JudgedCall(edits[i].problem,
+                                options.operation(ctx, orders[edits[i].problem], edits[i]))
+                     for i in ids)
+
+
+def record(ctx: order.Commander, verb: JudgeVerb, verdicts: tuple[JudgedCall, ...], unjudged: int) -> None:
+    """Core checks every verdict before writing any; the count left derives from the one read."""
+    ctx.call(CommsVerdictsTool(verdicts=verdicts))
+    print(f'{verb.declared_name}: {len(verdicts)} edits; {unjudged - len(verdicts)} still unjudged')
 
 
 @dataclass(frozen=True)
@@ -245,9 +274,27 @@ class PullRequestReview(ReviewSubject):
                                     operation=options.head_operation(), order=linked))
         print(f'PR #{self.request.pr} head {self.request.head}: {options.declared_name}')
 
+    def verdicts(self, options: VerdictVerb, ctx: order.Commander,
+                 unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
+        sys.exit('Refused: a batch judges edit IDs; review a PR head with its own call')
+
 
 @dataclass(frozen=True, kw_only=True)
-class VerdictVerb(JudgeVerb):
+class ReasonedVerb(JudgeVerb, declared_name=None):
+    """A verb whose verdict records why: what the edit serves, violates or was replaced by."""
+    why: str
+
+    def require_why(self) -> None:
+        if refused := VerdictReason.refused(self.why):
+            sys.exit(f'Refused: {refused}')
+
+    def refused(self, number: int, code: object) -> str:
+        """One batch entry's refusal, named by its own verb."""
+        return f'entry {number} ({self.declared_name}): {code}'
+
+
+@dataclass(frozen=True, kw_only=True)
+class VerdictVerb(ReasonedVerb):
     """Every verdict, mine or a fork's, is made after reviewing the OOPSLA paper's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
 
@@ -255,7 +302,6 @@ class VerdictVerb(JudgeVerb):
         tuple[str, ...],
         Argument(flags=("ids",), options={"nargs": "*", "metavar": "ID:CODE"}),
     ] = ()
-    why: str
     problem: Annotated[
         str,
         Argument(options={"metavar": "PROBLEM", "help": "the held problem id from order board"}),
@@ -267,7 +313,7 @@ class VerdictVerb(JudgeVerb):
             options={
                 "action": "append",
                 "metavar": "LINE",
-                "help": "an exact diff line; repeat for each",
+                "help": EDIT_LINE,
             },
         ),
     ] = ()
@@ -282,8 +328,7 @@ class VerdictVerb(JudgeVerb):
         return EditReview(self.ids)
 
     def run(self, ctx: order.Commander) -> None:
-        if len(self.why.split()) < 6:
-            sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
+        self.require_why()
         self.subject(ctx).run(self, ctx)
 
 
@@ -292,7 +337,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
     pr: Annotated[int, Argument(options={"help": "review this PR instead of individual edits"})] = 0
     head: Annotated[str, Argument(options={"help": "the exact reviewed SHA; required with --pr"})] = ""
     repo: Annotated[str, Argument(options={"help": "registered repository name; optional for one repo"})] = ""
-    serves: Annotated[str, Argument(options={"help": "exact words of the linked order"})] = ""
+    serves: Annotated[str, Argument(options={"help": OrderQuote.rule})] = ""
 
     def subject(self, ctx: order.Commander) -> ReviewSubject:
         return ReviewSubject.from_options(self, ctx)
@@ -320,7 +365,7 @@ class OkVerb(HeadVerdictVerb):
     no_owner: Annotated[
         str,
         Argument(
-            flags=("--no-owner",), options={"help": "12+ words with because and absolute file:line"}
+            flags=("--no-owner",), options={"help": AcceptedVerdict.branch_rule}
         ),
     ] = ""
     peer: Annotated[
@@ -387,9 +432,8 @@ class DroppedVerb(VerdictVerb):
     help = "the unit discarded these edits; Core settles them only if git holds them on no ref"
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> DroppedVerdict:
-        added = tuple(line for hunk in edit.hunks for line in hunk.new_text.splitlines())
         return DroppedVerdict(todo.revision, ctx.actor_identity, todo.held(), edit.id,
-                              path=edit.path, added=added)
+                              path=edit.path, added=edit.added_lines())
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass
@@ -445,13 +489,78 @@ class BackVerb(HeadVerdictVerb):
     def head_operation(self) -> HeadVerdict:
         return RejectedHeadVerdict(self.rejection_reason)
 
+    @cached_property
+    def judged_at(self) -> EventTime:
+        """One back call is one send-back: every edit it judges shares this moment, and the
+        strike it records repeats only for verdicts of the same call."""
+        return EventTime.capture(time.time())
+
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, ctx.actor_identity,
-                               todo.held(), edit.id, reason=self.rejection_reason,
-                               evidence=self.head_evidence())
+        return EditSendBackVerdict(todo.revision, ctx.actor_identity,
+                                   todo.held(), edit.id, reason=self.rejection_reason,
+                                   evidence=self.head_evidence(), path=edit.path,
+                                   at=self.judged_at)
 
     def check_edits(self, edits: list[Edit]) -> None:
         _ = self.rejection_reason
+
+@dataclass(frozen=True, kw_only=True)
+class BatchVerb(JudgeVerb):
+    help = ('judge many edits from one JSON file: a list of ok, back, superseded and dropped '
+            'verdicts, each with the fields its verb takes ({"kind": "ok", "ids": ["ID:CODE"], ...})')
+    file: Annotated[Path, Argument(flags=("file",), options={"metavar": "FILE"})]
+
+    def run(self, ctx: order.Commander) -> None:
+        entries = FieldCodec.decode(tuple[VerdictVerb, ...], FieldCodec.parse(self.file.read_bytes()))
+        unjudged = Edit.unjudged(ctx.comms, ctx.commander)
+        verdicts: list[JudgedCall] = []
+        refusals: list[str] = []
+        for number, entry in enumerate(entries, 1):
+            try:
+                entry.require_why()
+                verdicts += entry.subject(ctx).verdicts(entry, ctx, unjudged)
+            except SystemExit as refused:
+                refusals.append(entry.refused(number, refused.code))
+        judged = [call.operation.tool_call_id for call in verdicts]
+        if twice := sorted({i for i in judged if judged.count(i) > 1}):
+            refusals.append(f'edits judged twice in this batch: {twice}')
+        if refusals:
+            sys.exit('\n'.join(refusals))
+        record(ctx, self, tuple(verdicts), len(unjudged))
+
+
+@dataclass(frozen=True, kw_only=True)
+class RewrittenVerb(ReasonedVerb):
+    help = ("settle every unjudged edit of UNIT that a later pushed commit rewrote: Core checks "
+            "each against git, and edits with a surviving line stay for ok or back")
+    unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
+    by: Annotated[
+        str, Argument(flags=("--by",), options={"metavar": "COMMIT", "help": "the later pushed commit"})
+    ]
+
+    def run(self, ctx: order.Commander) -> None:
+        self.require_why()
+        orders = {todo.id: todo for todo in ctx.held_by(self.unit)}
+        unjudged = Edit.unjudged(ctx.comms, ctx.commander)
+        verdicts: list[JudgedCall] = []
+        live: dict[str, str] = {}
+        for edit in (edit for edit in unjudged if edit.problem in orders):
+            todo = orders[edit.problem]
+            verdict = RewrittenVerdict(todo.revision, ctx.actor_identity, todo.held(), edit.id,
+                                       path=edit.path, added=edit.added_lines(), commit=self.by,
+                                       reason=self.why)
+            try:
+                verdict.prepare(ctx.comms.goals, todo)
+            except TodoError as refused:
+                live[edit.id] = str(refused).replace(edit.id, 'the edit')
+                continue
+            verdicts.append(JudgedCall(edit.problem, verdict))
+        if verdicts:
+            record(ctx, self, tuple(verdicts), len(unjudged))
+        for reason in dict.fromkeys(live.values()):
+            print(f'{reason}: ' + ' '.join(i for i, why in live.items() if why == reason))
+        print(f'{len(live)} edits of {self.unit} stay for ok or back: ' + ' '.join(live))
+
 
 def main(args, ctx):
     JudgeVerb.parse(args or ['show']).apply(ctx)

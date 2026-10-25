@@ -273,6 +273,14 @@ class StorageRule(RoomAllocation, DurableFile):
         checkout = self.order_checkout(roots, problem)
         return checkout.with_name(f'{checkout.name}--{repository.name}')
 
+    def checkout_problem(self, roots: StorageRoots, path: Path, other: str) -> str:
+        """The problem whose checkout holds path, read back from order_checkout's own name;
+        other for a path in no problem checkout."""
+        allocated = self.order_checkout(roots, '')
+        names = path.relative_to(allocated.parent).parts[:1] if path.is_relative_to(allocated.parent) else ()
+        return next((name.removeprefix(allocated.name).split('--')[0] for name in names
+                     if name.startswith(allocated.name)), other)
+
     def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""
         checkout = self.order_checkout(roots, problem)
