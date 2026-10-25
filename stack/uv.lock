@@ -65,7 +65,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "agent-comms", editable = "../" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?branch=work%2Funit-toad--P694" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?branch=main" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?branch=main" },
 ]
 
@@ -204,7 +204,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=work%2Funit-toad--P694#e89ba2d7d35b0dfda886eda5daba0b7d0ca3742f" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#49afcd28bd74a110a98b2e693ecd25bca0448e2d" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
@@ -214,6 +214,7 @@ dependencies = [
     { name = "formbridge" },
     { name = "httpx" },
     { name = "jeepney", marker = "sys_platform == 'linux'" },
+    { name = "metaclass-registry" },
     { name = "notify-py" },
     { name = "objectstate" },
     { name = "packaging" },
@@ -555,7 +556,7 @@ wheels = [
 [[package]]
 name = "metaclass-registry"
 version = "0.4.1"
-source = { git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main#fb7c871a78c3087aa65c3a7199a1068cff858f33" }
+source = { git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main#60138d533ef0758c5f093d9110ba9f5656f0934a" }
 
 [[package]]
 name = "multidict"
