@@ -1233,7 +1233,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         print(text, file=sys.stderr, flush=True)
 
     async def prepare_delivery(self) -> None:
-        """API transports already bind the intended harness on each request."""
+        """Resolve the registered reader before a transport waits for its harness."""
+        self.binding.recipient(self.comms)
 
     async def deliver_board(self, update: CommanderUpdate, message: messages.Message) -> type[Outcome]:
         """A harness with no tool-call route takes a heartbeat packet like any message."""
@@ -1501,6 +1502,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
                 'the recorded attempt stays uncertain and will not be replayed.')
 
     async def prepare_delivery(self) -> None:
+        await super().prepare_delivery()
         await self.reader.prepare_delivery(self)
 
     async def confirm_probe(self, probe: MonitorProbe) -> None:
