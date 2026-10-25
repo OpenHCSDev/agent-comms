@@ -6,10 +6,11 @@ Delete this step after the next installation.
 from __future__ import annotations
 
 import json
+import sqlite3
 from abc import abstractmethod
 from contextlib import closing
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from agent_comms.bus import Bus
 from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, Ping
@@ -19,50 +20,33 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.messages import Message
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.typed_table import TypedRow
+
+# The wire names of the deleted HUD ping classes; no class declares them any more.
+RETIRED = ("load", "unit_row", "phase_row", "finished_phases_row", "forks_row")
 
 
 @dataclass(frozen=True)
-class RetiredHudPing(Ping, declared_name=None):
-    """The HUD rows stored packets still carry, decoded only to be dropped."""
+class StoredPacket:
+    """One stored packet with its retired HUD rows removed in SQLite, before any decode."""
 
-    @property
-    def key(self) -> str:
-        return self.text
+    seq: int
+    task: str
+    removed: bool
 
-
-@dataclass(frozen=True)
-class UnitRowPing(RetiredHudPing):
-    unit: ThreadIncarnation
-
-
-@dataclass(frozen=True)
-class PhaseRowPing(RetiredHudPing):
-    phase: str
-
-
-@dataclass(frozen=True)
-class FinishedPhasesRowPing(RetiredHudPing):
-    plan: str
+    @classmethod
+    def read(cls, db: sqlite3.Connection, seq: int, task: str) -> Self:
+        rows = tuple(path for path, in db.execute(
+            "SELECT fullkey FROM json_tree(?) WHERE type = 'object'"
+            f" AND json_extract(value, '$.kind') IN ({', '.join('?' * len(RETIRED))})"
+            " ORDER BY id DESC", (task, *RETIRED)))
+        # Later array elements go first, so each removal leaves the earlier paths valid.
+        kept, = db.execute(f"SELECT json_remove(?{', ?' * len(rows)})", (task, *rows)).fetchone()
+        return cls(seq, kept, bool(rows))
 
 
 @dataclass(frozen=True)
-class ForksRowPing(RetiredHudPing):
-    pass
-
-
-@dataclass(frozen=True)
-class LoadPing(RetiredHudPing):
-    pass
-
-
-def lines(pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
-    return tuple(ping for ping in pings if not isinstance(ping, RetiredHudPing))
-
-
-@dataclass(frozen=True)
-class StoredUpdate(DeclaredFamily, affix="Stored"):
-    """One commander update as its packet was stored before the HUD rows left it."""
+class CommanderUpdateStored(DeclaredFamily, affix="Stored"):
+    """One commander update as its packet was stored before it carried undisposed lines."""
 
     commander: ThreadIncarnation
     handled: tuple[Ping, ...]
@@ -71,33 +55,39 @@ class StoredUpdate(DeclaredFamily, affix="Stored"):
     @abstractmethod
     def carried(self) -> CommanderUpdate: ...
 
-    def stale(self) -> bool:
-        return lines(self.handled) != self.handled
+    def stale(self, packet: StoredPacket) -> bool:
+        return packet.removed
+
+    @classmethod
+    def packets(cls, db: sqlite3.Connection) -> tuple[tuple[StoredPacket, Self], ...]:
+        table = Message.table
+        tail = f"$.{FieldCodec.record_key(CommanderDecisions, 'waiting')}"
+        stored = db.execute(table._sql(
+            f'SELECT {{seq}}, {{task}} FROM "{table.declared_name}"'
+            " WHERE json_extract({task}, '$.kind') = ? AND json_type({task}, ?) IS NULL"),
+            (cls.declared_name, tail)).fetchall()
+        packets = (StoredPacket.read(db, seq, task) for seq, task in stored)
+        return tuple((packet, FieldCodec.decode(cls, json.loads(packet.task)))
+                     for packet in packets)
 
 
 @dataclass(frozen=True)
-class StoredDecisions(StoredUpdate, declared_name=CommanderDecisions.declared_name):
+class CommanderDecisionsStored(CommanderUpdateStored):
     decisions: tuple[Ping, ...]
 
-    def stale(self) -> bool:
+    def carried(self) -> CommanderUpdate:
+        return CommanderDecisions(self.commander, self.handled, self.decisions, (),
+                                  not_applied=self.not_applied)
+
+    def stale(self, packet: StoredPacket) -> bool:
         """Only packets without the undisposed tail are selected, and each lacks it."""
         return True
 
-    def carried(self) -> CommanderUpdate:
-        return CommanderDecisions(self.commander, lines(self.handled), lines(self.decisions), (),
-                                  not_applied=self.not_applied)
-
 
 @dataclass(frozen=True)
-class StoredNotice(StoredUpdate, declared_name=CommanderNotice.declared_name):
+class CommanderNoticeStored(CommanderUpdateStored):
     def carried(self) -> CommanderUpdate:
-        return CommanderNotice(self.commander, lines(self.handled), not_applied=self.not_applied)
-
-
-@dataclass(frozen=True)
-class StoredPacket(TypedRow):
-    seq: int
-    task: StoredUpdate
+        return CommanderNotice(self.commander, self.handled, not_applied=self.not_applied)
 
 
 class CommanderUpdateLines(Carry):
@@ -105,21 +95,16 @@ class CommanderUpdateLines(Carry):
 
     def carry(self, *, apply: bool) -> Carried:
         table = Message.table
-        column, = (item for item in table._fields if item.name == "task")
+        column, = table._fields_named(("task",))
         rewritten = []
         changed = 0
         for path in self.input_files():
             with closing(Bus.read_snapshot(path)) as db:
-                stored = tuple(
-                    packet
-                    for member in StoredUpdate.members_with(StoredUpdate)
-                    for packet in StoredPacket.read(db.execute(table._sql(
-                        f'SELECT {{seq}}, {{task}} FROM "{table.declared_name}"'
-                        " WHERE json_extract({task}, '$.kind') = ? AND json_type({task}, ?) IS NULL"),
-                        (member.declared_name, f"$.{FieldCodec.record_key(CommanderDecisions, 'waiting')}")))
-                )
-            updates = [(json.dumps(FieldCodec.encode(packet.task.carried())), packet.seq)
-                       for packet in stored if packet.task.stale()]
+                updates: list[tuple[object, int]] = [
+                    (json.dumps(FieldCodec.encode(update.carried())), packet.seq)
+                    for member in CommanderUpdateStored.members_with(CommanderUpdateStored)
+                    for packet, update in member.packets(db) if update.stale(packet)
+                ]
             changed += len(updates)
             if apply and updates:
                 with closing(Bus.writer(path)) as db, Bus.write_transaction(db):
