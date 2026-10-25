@@ -59,6 +59,7 @@ from agent_comms.todos import (
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
+from agent_comms_hooks.watch import DeafWatch
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import CommanderVerb
@@ -664,10 +665,7 @@ class CommanderDeaf(InboxUnavailable):
         return tuple(cls(paused + cls.seconds) for paused in pauses)
 
     def line(self) -> str:
-        return (f"RE-ARM the commander watch: its bridge has no confirmed Monitor since "
-                f"{RecordedEventTime(self.since - self.seconds).clock()}, so every Core line"
-                " to it waits unread -> re-arm its watch:"
-                " agent-comms-claude-bridge watch (bare, no pipe)")
+        return DeafWatch(f"since {RecordedEventTime(self.since - self.seconds).clock()}").line()
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """The commander's own inbox is the dead path, so #comms hears it instead."""
