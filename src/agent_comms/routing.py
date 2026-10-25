@@ -137,8 +137,7 @@ class TurnRouting(RecordMember, Routing):
 
     def validate_input(self, sent_text: SentInputText | NoSentInputText) -> None:
         sent_text.require_present()
-        if self.outgoing:
-            raise ValueError("Input routing requires exact sent text and no outgoing reply claim.")
+        self.reply.require_absent("Input routing requires exact sent text and no outgoing reply claim.")
 
     def with_requests(self, requests: tuple[MessageReference, ...]) -> TurnRouting:
         return replace(self, requests=requests, publications=())

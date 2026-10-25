@@ -1372,8 +1372,8 @@ class PresentMember:
     def require_present(self) -> Self:
         return self
 
-    def require_absent(self) -> None:
-        raise ValueError("A value was supplied where absence is required.")
+    def require_absent(self, reason: str = "A value was supplied where absence is required.") -> None:
+        raise ValueError(reason)
 
 
 class NullMember(ExternalField, AcceptsNull, WireValue):
@@ -1385,7 +1385,7 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
     def require_present(self) -> Never:
         raise ValueError("A required value is absent.")
 
-    def require_absent(self) -> None:
+    def require_absent(self, reason: str = "") -> None:
         pass
 
     @classmethod
