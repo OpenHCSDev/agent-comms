@@ -187,7 +187,7 @@ class ReviewSubject(DeclaredFamily):
     def from_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> ReviewSubject:
         matches = tuple(member for member in cls.members_with(cls) if member.selected(options))
         if len(matches) != 1:
-            raise RecordProblems({'subject': 'Refused: select either edit IDs or --pr'})
+            raise RecordProblems({'subject': 'select either edit IDs or --pr'})
         member, = matches
         return member.decode_options(options, ctx)
 
@@ -218,7 +218,7 @@ class EditReview(ReviewSubject):
     @classmethod
     def decode_options(cls, options: HeadVerdictVerb, ctx: order.Commander) -> EditReview:
         if options.head or options.repo:
-            raise RecordProblems({'--pr': 'Refused: --head and --repo belong to --pr, not edit IDs'})
+            raise RecordProblems({'--pr': '--head and --repo belong to --pr, not edit IDs'})
         return cls(options.ids)
 
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None:
@@ -229,7 +229,7 @@ class EditReview(ReviewSubject):
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
         """The verdicts these IDs carry; a refusal exits before anything is written."""
         if not self.ids:
-            raise RecordProblems({'ids': 'Refused: select at least one edit ID:CODE'})
+            raise RecordProblems({'ids': 'select at least one edit ID:CODE'})
         orders = {todo.id: todo for todo in ctx.held_orders()}
         edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
@@ -280,7 +280,7 @@ class PullRequestReview(ReviewSubject):
 
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
-        raise RecordProblems({'--pr': 'Refused: a batch judges edit IDs; review a PR head with its own call'})
+        raise RecordProblems({'--pr': 'a batch judges edit IDs; review a PR head with its own call'})
 
 
 class WordedText(BoundedText):
@@ -441,7 +441,7 @@ class OkVerb(ReasonedVerb, QuotingVerb):
             after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
             if added := order.forwarders_added(edit.added(), after):
                 raise RecordProblems({edit.id: (
-                    f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')})
+                    f'edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')})
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
 @dataclass(frozen=True, kw_only=True)
@@ -451,12 +451,15 @@ class ReviewingVerb(HeadVerdictVerb):
     def head_operation(self) -> HeadVerdict:
         return UnderReviewHeadVerdict()
 
+    def edit_refusal(self) -> RecordProblems:
+        return RecordProblems({'ids': 'judge reviewing takes --pr and --head, never edit ids.'})
+
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict:
-        raise RecordProblems({'ids': 'Refused: judge reviewing takes --pr and --head, never edit ids.'})
+        raise self.edit_refusal()
 
     def check_edits(self, edits: list[Edit]) -> None:
         if edits:
-            raise RecordProblems({'ids': 'Refused: judge reviewing takes --pr and --head, never edit ids.'})
+            raise self.edit_refusal()
 
 
 @dataclass(frozen=True, kw_only=True)
