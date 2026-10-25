@@ -458,6 +458,41 @@ class ServicesStopped:
         return restarted
 
 
+@dataclass
+class OwnersStopped:
+    """The agent owners a live install stopped, from its start message on. Until a
+    published runtime takes them over, every exit starts the same owners again on the
+    installed runtime, and their start outcomes join the install's report."""
+
+    stopped: list[str] = field(default_factory=list)
+    started: tuple[OwnerStart, ...] = ()
+    give_back: ExitStack = field(default_factory=ExitStack)
+
+    def stop(self, stack: Stack, root: Path) -> None:
+        """Each owner is remembered once, before its batch, so a partly refused stop still
+        starts again every owner it stopped, and one restarted since is not started twice."""
+        running = stack.running_owners(root)
+        self.stopped.extend(name for name in running if name not in self.stopped)
+        stack.owners(root, StopCliCommand, running).require_success(UpgradeRefused)
+
+    def start_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
+        self.started = stack.start(root, self.stopped)
+        return self.started
+
+    def published_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
+        """The installed runtime is no longer published, so it never takes these owners
+        back, even when a start on ``stack`` fails."""
+        self.give_back.pop_all()
+        return self.start_on(stack, root)
+
+    def retired(self) -> None:
+        """The owners belong to a bus moved aside; nothing starts them again."""
+        self.give_back.pop_all()
+
+    def lines(self) -> tuple[str, ...]:
+        return tuple(line for owner in self.started for line in owner.lines())
+
+
 @dataclass(frozen=True)
 class Stack:
     """One built installation and the source checkout containing its install tools."""
@@ -813,10 +848,12 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         staged = Stack.build(ScratchCheckout(tree.path), commands)
         with StartingReportPublicationPhase().running(commands.clock):
             report.starting(mode.destination(member.initial_writer(root, installed)), target)
-        with PracticePhase().running(commands.clock):
-            install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
-                                                  installed, staged, tree, installer, spill_dir)
-        result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
+        with mode.owners_stopped(member, root, installed) as report.owners:
+            with PracticePhase().running(commands.clock):
+                install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
+                                                      installed, staged, tree, installer,
+                                                      spill_dir)
+            result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
     bridges.require_resumed()
     return result
 
@@ -877,6 +914,16 @@ class Install[Rehearsed: Rehearsal](ABC):
         return ExistingBusInstall
 
     @classmethod
+    @contextmanager
+    def owners_kept(cls, root: Path, installed: Stack) -> Iterator[OwnersStopped]:
+        """Every owner keeps running: none runs at the root, or the run touches only a copy."""
+        yield OwnersStopped()
+
+    @classmethod
+    def owners_stopped(cls, root: Path, installed: Stack) -> AbstractContextManager[OwnersStopped]:
+        return cls.owners_kept(root, installed)
+
+    @classmethod
     @abstractmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
@@ -915,7 +962,7 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
                 report: InstallReport) -> LiveRun:
-        """Session bridges close their bus resources before units stop, then exec in place.
+        """Session bridges close their bus resources before the bus is held, then exec in place.
 
         Each serve retains its recorded owner's PID and start time after the hook exits.
         Its control connection survives until live() publishes or rolls back; the
@@ -936,7 +983,22 @@ class Install[Rehearsed: Rehearsal](ABC):
     def live(self, rehearsal: Rehearsed, report: InstallReport) -> LiveRun: ...
 
 
-class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
+class StopsOwners:
+    """A bus whose agent owners run: they stop the moment the install announces its start,
+    not after the rehearsal, and start again on the installed runtime on any exit that
+    no published runtime took them over from."""
+
+    @classmethod
+    @contextmanager
+    def owners_stopped(cls, root: Path, installed: Stack) -> Iterator[OwnersStopped]:
+        owners = OwnersStopped()
+        with owners.give_back:
+            owners.give_back.callback(owners.start_on, installed, root)
+            owners.stop(installed, root)
+            yield owners
+
+
+class ExistingBusInstall[Rehearsed: Rehearsal](StopsOwners, Install[Rehearsed]):
     """A bus is already at the root. When a carry step exists or a store's schema differs
     from the target's, one practice copy of it answers what is pending and carries the
     rehearsal; otherwise nothing could change, and no copy is taken."""
@@ -1059,7 +1121,6 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             restore.require()
         with OutgoingRuntimeMaintenancePhase().running(self.staged.commands.clock):
             RootRuntimeStore.at(self.root).adopt(self.installed.runtime)
-        running = self.installed.running_owners(self.root)
         with self.staged.services_stopped(self.installed) as stopped:
             with BeginMaintenancePhase().running(self.staged.commands.clock):
                 maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
@@ -1068,8 +1129,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 holder.enter_context(held.holding())  # this run's CLI calls read under its hold
             try:
                 try:
-                    self.installed.owners(self.root, StopCliCommand, running).require_success(
-                        UpgradeRefused)
+                    # Owners started since the install's start stop under the hold.
+                    report.owners.stop(self.installed, self.root)
                     with RetargetMaintenancePhase().running(self.staged.commands.clock):
                         held = maintenance.retarget(held, self.staged.runtime)
                         holder.close()
@@ -1087,10 +1148,10 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     with AbortMaintenancePhase().running(self.staged.commands.clock):
                         holder.close()
                         maintenance.clear(held)
-                    started = self.installed.start(self.root, running)
                     print(
                         f"install: aborted before the backup ({type(error).__name__}: {error}); "
-                        f"maintenance cleared; owners: {started}", file=sys.stderr)
+                        "maintenance cleared; owners start on the installed runtime",
+                        file=sys.stderr)
                     raise
                 try:
                     self.checkout_target()
@@ -1129,13 +1190,12 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     self.installed.publish(self.root)
                     holder.close()
                     maintenance.clear(restored_hold)
-                    started = self.installed.start(self.root, running)
                     print(f"install: restored after failure ({type(error).__name__}: {error}); "
-                          f"original runtime selected; owners: {started}; "
+                          "original runtime selected; owners start on it; "
                           f"backup: {migration.backup.description}",
                           file=sys.stderr)
                     raise InstallRolledBack(
-                        error, started, migration.backup.description,
+                        error, migration.backup.description,
                         runtime=self.installed.runtime) from error
                 # Owner startup is reported per owner and never rolls the install back.
                 report.writer = RuntimeWriter(self.root, self.staged)
@@ -1145,11 +1205,11 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     ) for step in self.pending)
                     passed = passed.after_acceptance(retirement, self.staged)
                 finally:
-                    started = self.staged.start(self.root, running)
+                    started = report.owners.published_on(self.staged, self.root)
                 with BackupRetirePhase().running(self.staged.commands.clock):
                     retired_backups = migration.backup.retain(self.spill_dir)
                 return passed.extended(
-                    CarriedRun, stopped=tuple(running), services=restarted_services,
+                    CarriedRun, stopped=tuple(report.owners.stopped), services=restarted_services,
                     started=started, restore_space=restore, backup=migration.backup.report(),
                     retired_backups=retired_backups)
             finally:
@@ -1214,7 +1274,7 @@ class FreshInstall(Install[FreshRehearsal]):
             return CreatedRun(services, route)
 
 
-class RetiringInstall(FreshInstall):
+class RetiringInstall(StopsOwners, FreshInstall):
     """The bus at the root is runtime state the target cannot carry: its owners stop, it
     moves aside intact, and a fresh bus takes its place."""
 
@@ -1222,9 +1282,9 @@ class RetiringInstall(FreshInstall):
         return RetiringRehearsal()
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> RetiredRun:
-        running = self.installed.running_owners(self.root)
-        self.installed.owners(self.root, StopCliCommand, running).require_success(UpgradeRefused)
+        report.owners.stop(self.installed, self.root)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
+        report.owners.retired()
         return super().live(rehearsal, report).extended(
-            RetiredRun, stopped=tuple(running), retired=retired)
+            RetiredRun, stopped=tuple(report.owners.stopped), retired=retired)
