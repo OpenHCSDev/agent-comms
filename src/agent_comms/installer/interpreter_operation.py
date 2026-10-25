@@ -79,7 +79,13 @@ class InstallRunPhase(InstallPhase):
 
 
 class LauncherPhase(InstallPhase):
-    """The launcher's real lifetime starts before Python imports its CLI."""
+    """A launch from inside a process that outlives it, such as Core's connector, starts
+    when the launch does."""
+
+
+class ProcessLauncherPhase(LauncherPhase):
+    """A launcher process that exists for this install starts before Python imports its
+    CLI."""
 
     def started_at(self, now: float) -> float:
         platform = Platform.current()

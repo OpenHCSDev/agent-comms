@@ -1820,10 +1820,11 @@ class InstallCliCommand(HarnessInstallation, CliCommand):
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """The bus may be unreadable by this runtime, or absent, until the target's own
         source has carried or created it, so nothing opens it here."""
+        from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
         from agent_comms.installer.launch import InstallLogs, InstallRun
 
         with InstallLogs(route.root).launching():
-            return InstallRun.start(self, route.root).launch(output)
+            return InstallRun.start(self, route.root, ProcessLauncherPhase()).launch(output)
 
 
 
