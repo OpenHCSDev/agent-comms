@@ -198,7 +198,7 @@ class RegistryEdit:
             self.store.save_unlocked(self.document)
             self.original = self.store.read_revision_unlocked()
         for record in self.superseded:
-            record.path.unlink()
+            record.retire()
         self.superseded.clear()
 
 

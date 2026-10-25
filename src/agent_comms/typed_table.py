@@ -2487,6 +2487,20 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
         )
 
 
+class RowidSequenced(TypedTable, declared_name=None):
+    """The table's rows are numbered by SQLite's rowid, and an insert answers its number."""
+
+    @classmethod
+    def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:
+        """Insert one row and answer the rowid SQLite assigned it."""
+        writable = cls._writable_fields(tuple(values) or None)
+        (sequence,) = db.execute(
+            cls.insertion_statement(tuple(item.name for item in writable)) + " RETURNING rowid",
+            tuple(item.encode(values[item.name]) for item in writable),
+        ).fetchone()
+        return int(sequence)
+
+
 class WithoutRowid(TypedTable, declared_name=None):
     """The table is stored directly by its declared primary key."""
 

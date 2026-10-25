@@ -372,14 +372,12 @@ class Registration:
     def goal_history(
         self, name: str, *, goal_id: GoalId | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
-        """Read this owner's recorded transitions, reconciling crash cuts first."""
-
-        with self.store.locked():
-            document = self.store._read_unlocked()
-            thread = document.require(name)
-            return GoalHistoryStore(self.store.path).history(
-                thread.incarnation.wire_birth, thread.goal, goal_id=goal_id
-            )
+        """Read this owner's recorded transitions without waiting on a registry writer;
+        goal history's own transaction settles what the snapshot already shows."""
+        thread = self.store.read_snapshot_unlocked().require(name)
+        return GoalHistoryStore(self.store.path).history(
+            thread.incarnation.wire_birth, thread.goal, goal_id=goal_id
+        )
 
     def session_thread(
         self, project_path: Path, preferred: str | None = None,
