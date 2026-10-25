@@ -60,7 +60,6 @@ from .field_codec import (
 from .lifecycle import LifecycleState
 from .locked_store import (
     DurableFile,
-    FileStore,
     PublishedSQLiteFile,
     RegistryFile,
     RootFile,
@@ -2211,19 +2210,12 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         return all(stored.get(name) == digest for name, digest in digests.items())
 
 
-class StoreWriter(PublishedSQLiteFile, FileStore):
+class StoreWriter(PublishedSQLiteFile):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits a
     CarriedFile kind or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
     """
-
-    def __init__(self, path: Path) -> None:
-        self._path = path
-
-    @property
-    def path(self) -> Path:
-        return self._path
 
     @property
     @abstractmethod
@@ -2374,6 +2366,11 @@ class WalStore(StoreWriter, StoreLockFile):
     """One WAL file owns connection setup, attachment and retirement."""
 
     synchronous: ClassVar[str] = "FULL"
+
+    @property
+    @abstractmethod
+    def path(self) -> Path:
+        """The physical file, supplied by a root declaration or file constructor."""
 
     @contextmanager
     def committed_or_empty(

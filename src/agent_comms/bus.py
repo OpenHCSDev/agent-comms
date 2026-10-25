@@ -48,7 +48,7 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
+from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import (
@@ -453,13 +453,10 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
+class Bus(FileStore, BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     filename = "bus.sqlite3"
-
-    def __init__(self, path: Path):
-        super().__init__(path)
 
     def unreceived(self, lookup: ThreadLookup,
                    references: Iterable[MessageReference]) -> tuple[MessageReference, ...]:

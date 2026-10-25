@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from importlib import import_module
 from pathlib import Path
@@ -517,13 +517,17 @@ class LockedFile(RootFile, StoreLockOwner, declared_name=None):
             yield
 
 
-class FileStore(RootFile, ABC):
-    """Construction belongs only to owners whose initializer takes a file."""
+class FileStore(RootFile):
+    """Own file-path construction, state and the factory for file-constructed members."""
 
-    __slots__ = ()
+    __slots__ = ("_path",)
 
-    @abstractmethod
-    def __init__(self, path: Path, *args, **kwargs) -> None: ...
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    @property
+    def path(self) -> Path:
+        return self._path
 
     @classmethod
     def at(cls, root: Path | str, *args, **kwargs) -> Self:
@@ -882,7 +886,7 @@ class PublishedSQLiteFile(SQLiteFile):
 class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
-    path: Path
+    path: Path = field()
     @contextmanager
     def reading(self, *sources) -> Iterator[T]:
         """Retain dependent source owners before this document's shared lock."""
