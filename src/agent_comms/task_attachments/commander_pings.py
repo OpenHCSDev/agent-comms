@@ -247,7 +247,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(now, replace(hud, units=()).frame),
+            body=self.body(now, replace(hud, units=(), board=()).frame),
             type=InfoKind, role=self.role, task=self,
         )
         return comms.bus.publisher.publish_ordinary(
