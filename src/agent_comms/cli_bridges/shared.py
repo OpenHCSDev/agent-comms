@@ -23,6 +23,8 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
+from agent_comms.registration import Registration
+
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
 from agent_comms import field_codec, messages
@@ -631,8 +633,6 @@ class Inbox(Operation[OperationBridge]):
 
     async def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
-        from agent_comms.registration import Registration
-
         registry = await asyncio.to_thread(
             Registration, RegistryFile.path_in(Path(bridge.binding.root)))
         await bridge.comms.bus.when_open(lambda: endpoint.enter_context(

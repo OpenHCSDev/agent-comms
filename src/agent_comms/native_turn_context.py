@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import field_codec
 
+from .coordinator import Coordination
+
 from .native_session_reopen import NativeSessionIdentity
 from .pi_payloads import PiResponseData, StrictFields
 from .tool_result import DeclaredReply
@@ -17,6 +19,7 @@ from .turn_context import (
     MeasuredNativeSegment,
     PreviewProvenance,
     Provenance,
+    RecordedContextTurn,
     SegmentManifest,
     TurnContext,
     UnobservedDispatchRequest,
@@ -46,9 +49,6 @@ class NativeContextManifestData(StrictFields, PiResponseData):
     async def record(self, contexts, prior, thread, lease) -> CapturedContext:
         """Publish the original SDK observation under its leased owner turn, after the
         prior this turn holds; the result is the turn's next prior."""
-        from .coordinator import Coordination
-        from .turn_context import RecordedContextTurn
-
         turn = RecordedContextTurn(lease.turn_id, lease.identity)
         manifest = self.for_turn(thread.incarnation, turn)
         return await Coordination.run_worker(

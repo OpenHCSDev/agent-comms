@@ -17,6 +17,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from .bus import Bus
+
 from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -117,8 +119,6 @@ class ActiveRoute(CommsRoute):
     def rebound(self) -> ActiveRoute:
         """This route naming the bus its root holds now. A restore that copies the bus
         back gives it a new file identity, so the restored route names that one."""
-        from .bus import Bus
-
         return replace(self, bus_identity=RecordedBusIdentity.capture(Bus.path_in(self.root)))
 
     @classmethod
@@ -142,8 +142,6 @@ class ActiveRoute(CommsRoute):
 
     def selects_its_root(self) -> bool:
         """A route selects the database observed when it was published."""
-        from .bus import Bus
-
         return self.root.is_dir() and self.bus_identity.matches(
             ObservedPath.at(Bus.path_in(self.root)))
 

@@ -21,6 +21,7 @@ from .acp_failure import (
     UnresolvedNativeTurnOutcome,
 )
 from .child_process import ProcessIdentity
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import InputId, NullMember, TurnId
 from .input_attempt import InputAttempt
@@ -365,8 +366,6 @@ class RuntimeInfoObservation(AgentEvent):
         return current
 
     async def record_in(self, consumer: AgentEventConsumer) -> None:
-        from .coordinator import Coordination
-
         await Coordination.run_worker(partial(
             consumer.comms.agents.observe_runtime_info, consumer.thread_name, self,
         ))

@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Literal
 
 from agent_comms.field_codec import BoundedText, SingleFieldValue, SubclassUnion
+from agent_comms.installer.reporting import UnpostedWriter
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
@@ -59,7 +60,6 @@ class RehearsalMode(SingleFieldValue, RunMode):
     value: Literal[True] = True
 
     def destination(self, live: RootWriter) -> RootWriter:
-        from agent_comms.installer.reporting import UnpostedWriter
         return UnpostedWriter()
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,

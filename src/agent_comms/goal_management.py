@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from .agent_events import (
+    GoalChanged,
+    GoalUnchanged,
+)
+
 from .errors import StaleAttemptError
 import logging
 from collections.abc import Iterator, Sequence
@@ -379,8 +384,6 @@ class Goals:
         Existing registry/history and wait persistence are the cross-process
         authority. Each observer supplies its last successfully published view.
         """
-        from .agent_events import GoalChanged, GoalUnchanged
-
         current = self.goal_snapshot(name)
         return GoalChanged(current) if previous.changed_by(current) else GoalUnchanged()
 

@@ -22,6 +22,7 @@ import subprocess
 import sys
 import threading
 import time
+import termios
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
@@ -2035,9 +2036,6 @@ class ControllingTerminalCommand(ChildCommand):
     command: tuple[str, ...]
 
     def run(self) -> None:
-        import fcntl
-        import termios
-
         fcntl.ioctl(0, termios.TIOCSCTTY, 0)
         os.execvpe(self.command[0], self.command, os.environ)
 

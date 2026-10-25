@@ -33,6 +33,7 @@ from .goals import (
     NoGoal,
 )
 from .launch_root import LaunchRoot
+from .launch_runtime import ThreadLaunch
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
@@ -418,8 +419,6 @@ class Thread(ThreadProvenance):
 
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""
-        from .launch_runtime import ThreadLaunch
-
         return ThreadLaunch.from_thread(self)
 
     def catalog_path(self, root: Path) -> Path:
@@ -631,8 +630,6 @@ class Thread(ThreadProvenance):
 
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import ThreadLaunch
-
     launch = ThreadLaunch.current()
     return Thread(
         name=launch.name,

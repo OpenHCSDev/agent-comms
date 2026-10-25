@@ -20,6 +20,11 @@ from .thread_presentation import (
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
+from .turn_lease import (
+    FinishedTurnFence,
+    NoFinishedTurn,
+)
+
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -127,8 +132,6 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
         return False
 
     def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
-        from .turn_lease import NoFinishedTurn
-
         return NoFinishedTurn()
 
     def restored(self) -> ThreadStatus:
@@ -215,8 +218,6 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
                 and owner.owns(entry.thread, entry.owner_generation, process))
 
     def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
-        from .turn_lease import FinishedTurnFence
-
         return FinishedTurnFence(
             identity=lease.identity, turn_id=lease.turn_id,
             claimed_generation=lease.claimed_generation,

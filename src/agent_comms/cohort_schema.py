@@ -34,6 +34,8 @@ from .typed_table import (
     TypedTable,
     WithoutRowid,
 )
+from .wake_candidate_index import ProjectionUnavailableError
+
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
@@ -170,8 +172,6 @@ class ClaimBatchAcknowledgements(
 
     def require_selected_claim(self, assignment: WakeAssignment) -> None:
         """An awareness contribution borrows this original sealed acknowledgement."""
-        from .wake_candidate_index import ProjectionUnavailableError
-
         if not self.sealed or self.message_id != assignment.message_id:
             raise ProjectionUnavailableError("selected source acknowledgement is unsealed or changed")
 
@@ -351,16 +351,12 @@ class AwarenessClaimGenerations(
 
     def current(self, expected: OwnerGenerations) -> bool:
         """Old owner generations are historical; renaming preserves their identity."""
-        from .wake_candidate_index import ProjectionUnavailableError
-
         if self.owner_lookup != expected.owner_lookup or self.owner_generation > expected.generation:
             raise ProjectionUnavailableError("captured participant owner changed")
         return self.owner_identity == expected
 
     def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements) -> None:
         """Verify this immutable acceptance capture against its original claim."""
-        from .wake_candidate_index import ProjectionUnavailableError
-
         expected = type(self)(
             claim_id=assignment.assignment_id, wire_root_id=acknowledgement.wire_root_id,
             wire_seq=assignment.wire_seq, owner_lookup=assignment.recipient_lookup,
@@ -371,8 +367,6 @@ class AwarenessClaimGenerations(
 
     def require_obligation(self, execution, link, assignment, obligation) -> None:
         """Captured ownership and the reply's original relational key agree."""
-        from .wake_candidate_index import ProjectionUnavailableError
-
         execution.origin.require_obligation()
         original_owner = OwnerGenerations(
             owner_lookup=execution.owner_lookup,

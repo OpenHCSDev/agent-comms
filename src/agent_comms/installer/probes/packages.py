@@ -9,6 +9,8 @@ from importlib.metadata import distributions
 from pathlib import Path
 from typing import Self
 
+from agent_comms.package_stamp import STAMP
+
 from pydantic import BaseModel, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 
@@ -103,7 +105,6 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
     def run(self) -> dict[str, PackageRecord]:
         from packaging.utils import canonicalize_name
 
-        from agent_comms.package_stamp import STAMP
 
         if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
             raise ValueError("Core is editable, not a built runtime package")

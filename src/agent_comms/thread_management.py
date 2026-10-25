@@ -18,10 +18,14 @@ from agent_comms.coordination_errors import CoordinationError
 
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
+from .goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
 from .registration import Registration
+from .relationships import RelationshipStore
 from .thread_execution import NativeThreadExecution
 from .thread_status import StoppedThreadStatus
+from .view_unread import transcript_read_state
+
 
 if TYPE_CHECKING:
     from .cli_bridges.history import History
@@ -482,10 +486,6 @@ class ThreadManagement:
     @property
     def thread_owned_states(self) -> tuple[ThreadOwnedState, ...]:
         """Every store whose rows end with a thread declaration."""
-        from .goal_waits import GoalWaits
-        from .relationships import RelationshipStore
-        from .view_unread import transcript_read_state
-
         states = (
             self.agents.activity,
             self.agents.runtime_info,
