@@ -441,6 +441,10 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
     recent: ClassVar[int] = 10 * 60
 
     @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return __class__
+
+    @classmethod
     def idle(cls, comms: Comms, commander: str, scan: HeldOrders) -> list[Thread]:
         """Units whose registered status is running, parked threads aside."""
         held = {todo.holder for todo in scan.todos}
@@ -517,7 +521,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True, eq=False)
-class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin, declared_name=None):
+class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     dispatch: WorkDispatch
 
     @property
@@ -535,7 +539,7 @@ class ReassignedWheelSpin(CoreActsStandingRule, UnownedWheelSpin, declared_name=
 
 
 @dataclass(frozen=True, eq=False)
-class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin, declared_name=None):
+class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
     previous: Assignment
 
     def comparison_values(self) -> tuple[object, ...]:
@@ -582,7 +586,7 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
                 logging.info("%s", rule.rejected_line(error))
 
 
-class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
+class WaitingUnownedWheelSpin(UnownedWheelSpin):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
 
 

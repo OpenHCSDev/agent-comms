@@ -145,11 +145,11 @@ def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notificatio
     comms = notification_bus
     enforced = []
 
-    class FollowingRule(ServicePassFailing, declared_name=None):
+    class FollowingRule(ServicePassFailing):
         def enforce(self, _comms, _commander):
             enforced.append(self.watch)
 
-    class OverdueRule(FollowingRule, declared_name=None):
+    class OverdueRule(FollowingRule):
         def enforce(self, _comms, _commander):
             super().enforce(_comms, _commander)
             raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")

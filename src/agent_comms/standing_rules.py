@@ -782,8 +782,14 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
 
 @dataclass(frozen=True)
 class HuntDue(ReasonedStandingRule, DatedStandingRule):
+    """Its scan picks the located member when a hot file is known; the members share it."""
+
     since: float
     seconds: ClassVar[int] = 900
+
+    @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return __class__
 
     @classmethod
     def hunted(cls, comms: Comms, commander: str) -> float:
@@ -835,7 +841,9 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class LocatedHuntDue(HuntDue, declared_name=None):
+class LocatedHuntDue(HuntDue):
+    """The hunt line naming its hot file, selected by HuntDue's scan rather than a second one."""
+
     where: str
 
     def line(self) -> str:
@@ -887,6 +895,10 @@ class ServicePassFailing(IndependentStandingRule, DatedStandingRule):
     watch: str
     since: float
     error: str = field(compare=False)
+
+    @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return __class__
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
@@ -963,6 +975,10 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule):
     free_gib: float = field(compare=False)
 
     @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return __class__
+
+    @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[DiskLow, ...]:
         rule = comms.registry.storage_rule
         free = rule.free_gib()
@@ -981,7 +997,7 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DiskFloorLow(DiskLow, declared_name=None):
+class DiskFloorLow(DiskLow):
     """The allocation-floor warning, selected by DiskLow rather than a second rule scan."""
 
     def floor_warning(self) -> str:
