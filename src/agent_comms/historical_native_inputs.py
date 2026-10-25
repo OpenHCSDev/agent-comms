@@ -132,7 +132,7 @@ def first_foreign_claim_source(
                           "c.wire_seq>? AND n.sent_owner_claimed_generation IS NOT ?"),
         (sys.maxsize, wire_root_id, recipient_lookup, after_seq, claimed_generation),
     ).fetchone()
-    return seq
+    return int(seq)
 
 
 def read_historical_native_inputs(
