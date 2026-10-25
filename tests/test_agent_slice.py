@@ -8,12 +8,11 @@ from agent_comms.child_process import SystemdUserManager
 from agent_comms.systemd_unit import AgentsSlice
 
 
-@pytest.mark.parametrize(("cores", "allowed"), [(12, "2-11"), (8, "2-7")])
-def test_agent_slice_cpu_reservation(monkeypatch: pytest.MonkeyPatch, cores: int, allowed: str) -> None:
+@pytest.mark.parametrize(("cores", "quota"), [(12, 1000), (8, 600)])
+def test_agent_slice_cpu_reservation(monkeypatch: pytest.MonkeyPatch, cores: int, quota: int) -> None:
     monkeypatch.setattr(os, "cpu_count", lambda: cores)
     definition = AgentsSlice.unit_text()
-    assert definition == f"[Slice]\nAllowedCPUs={allowed}\nCPUWeight=50\n"
-    assert "CPUQuota=" not in definition
+    assert definition == f"[Slice]\nCPUQuota={quota}%\nCPUWeight=50\n"
 
 
 def test_agent_slice_unknown_cpu_count(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -31,7 +30,7 @@ def test_agent_slice_launch_and_unchanged_install(tmp_path: Path) -> None:
             reloads.append(AgentsSlice.unit_file(tmp_path).read_text(encoding="utf-8"))
 
     definition = AgentsSlice.unit_text()
-    assert "CPUQuota=" not in definition
+    assert "CPUQuota=" in definition
     command = SystemdUserManager.command(("/usr/bin/true",))
     assert f"--slice={AgentsSlice.unit}" in command
     assert command[:len(AgentsSlice.run_prefix())] == AgentsSlice.run_prefix()
