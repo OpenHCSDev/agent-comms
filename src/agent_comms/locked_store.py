@@ -426,12 +426,6 @@ class RollbackRetained(DurableFile):
     """Files every rollback retains, even when no rewrite selected them."""
 
     __slots__ = ()
-    _owners: ClassVar[set[type[RollbackRetained]]] = set()
-
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        if "filename" in vars(cls):
-            RollbackRetained._owners.add(cls)
 
     @classmethod
     def rollback_files(cls, root: Path) -> tuple[Path, ...]:
@@ -440,9 +434,8 @@ class RollbackRetained(DurableFile):
 
     @classmethod
     def retained_in(cls, root: Path) -> frozenset[Path]:
-        RootFile.load_declarations()
-        return frozenset(path for owner in cls._owners
-                         for path in owner.rollback_files(owner.directory_in(root)))
+        return frozenset(path for owner, directory in cls.declarations_in(root)
+                         for path in owner.rollback_files(directory))
 
 
 class WrittenFile(RootFile, ABC):
