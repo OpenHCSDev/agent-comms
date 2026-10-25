@@ -380,6 +380,9 @@ def step(comms: Comms) -> None:
             if current != (initial,):
                 continue
             record = initial
+            if not Platform.current().matches(record.selection.process):
+                queue.save(record.transition(StaleRestart(reason="Owner process exited")))
+                continue
             snapshot = comms.registry.snapshot()
             try:
                 owner = record.selection.require_current(snapshot)
@@ -390,16 +393,13 @@ def step(comms: Comms) -> None:
                 # Idle is checked before persisting an attempt or signalling.
                 continue
             else:
-                if not owner.process_alive:
-                    record = record.transition(StaleRestart(reason="Owner process exited"))
+                try:
+                    record.target.require_watcher(comms)
+                except ValueError as error:
+                    record = record.transition(BlockedRestart(reason=str(error)))
                 else:
-                    try:
-                        record.target.require_watcher(comms)
-                    except ValueError as error:
-                        record = record.transition(BlockedRestart(reason=str(error)))
-                    else:
-                        # Persist before any side effect; crashes cannot authorize replay.
-                        record = record.transition(AttemptingRestart())
+                    # Persist before any side effect; crashes cannot authorize replay.
+                    record = record.transition(AttemptingRestart())
             queue.save(record)
         for result in record.state.restart(comms, record, owner):
             with queue.guarded_write():
