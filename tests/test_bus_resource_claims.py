@@ -18,6 +18,7 @@ from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
     ClaimRelease,
+    ClaimTransition,
     NativeClaim,
     ReleasedClaims,
     UnclaimedResource,
@@ -34,7 +35,6 @@ from agent_comms.messages import (
     Claimed,
     ClaimNoticeKind,
     ClaimOperations,
-    ClaimHolders,
     HeldResources,
     InfoKind,
     Message,
@@ -252,7 +252,7 @@ def test_practice_projections_one_stale_claim_table_rebuilds_its_declared_pair(
             ProjectionProducer.delete(
                 db, where="{projection}=?", parameters=(stale.declared_name,),
             )
-            assert set(BusProjectionTables.changed_rows(db)) == set(ClaimHolders.writes)
+            assert set(BusProjectionTables.changed_rows(db)) == set(ClaimTransition.writes)
             BusProjectionTables.carry_schema(db)
             assert not BusProjectionTables.changed_rows(db)
     assert claims.counts() == counts

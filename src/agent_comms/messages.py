@@ -80,7 +80,7 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> tuple[type[TypedTable], ...]:
         changed = set(super().changed_rows(db, sharing))
-        coupled = frozenset(row for row in cls.projection_rows() if row in ClaimHolders.writes)
+        coupled = frozenset(row for row in cls.projection_rows() if row in ClaimTransition.writes)
         if changed.intersection(coupled):
             changed.update(coupled)
         return tuple(row for row in cls.schema_rows() if row in changed)
@@ -138,9 +138,8 @@ class HeldResources(BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
 
     @ClassFact
-    @staticmethod
-    def writes(cls: type[ProjectionSource]) -> tuple[type[ProducedRow], ...]:
-        return ClaimHolders.writes
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        return ClaimTransition.writes
 
 
     resource: Annotated[str, Column(primary_key=True)]
@@ -208,8 +207,7 @@ class ProjectionPass(ABC, ProjectionSource):
         default_factory=lambda: frozenset(BusProjectionTables.schema_rows()))
 
     @ClassFact
-    @staticmethod
-    def writes(cls: type[ProjectionSource]) -> tuple[type[ProducedRow], ...]:
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
         return BusProjectionTables.projection_rows()
 
     def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
@@ -226,11 +224,6 @@ class ProjectionPass(ABC, ProjectionSource):
 class ClaimHolders(ProjectionPass):
     """The current holders a claim transition projects from, before it is applied."""
 
-    @ClassFact
-    @staticmethod
-    def writes(cls: type[ProjectionSource]) -> tuple[type[ProducedRow], ...]:
-        return (HeldResources, ClaimOperations)
-
     def replay(self, db: sqlite3.Connection, *, after: int = 0) -> None:
         projections = tuple(row for row in BusProjectionTables.projection_rows()
                             if row in self.tables)
@@ -241,7 +234,7 @@ class ClaimHolders(ProjectionPass):
         self.flush(db)
 
     def project(self, db: sqlite3.Connection, transition: ClaimTransition) -> None:
-        if self.tables.intersection(self.writes):
+        if self.tables.intersection(ClaimTransition.writes):
             projected = HeldResources.project(db, transition, self)
             self.apply(db, transition, projected)
 
@@ -1093,9 +1086,8 @@ class Claimed(BusCapability):
     """The transition attesting this row, stored in its append transaction."""
 
     @ClassFact
-    @staticmethod
-    def writes(cls: type[ProjectionSource]) -> tuple[type[ProducedRow], ...]:
-        return ClaimHolders.writes
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        return ClaimTransition.writes
 
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
