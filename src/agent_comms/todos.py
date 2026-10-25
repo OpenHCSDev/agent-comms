@@ -1043,15 +1043,17 @@ class PresentCheckout(ProgressCheckout):
 
     @cached_property
     def origin_pushes(self) -> tuple[tuple[str, float], ...]:
-        """Each push to a retained origin reference, as its commit and push time."""
-        origin = frozenset(self.origin_refs)
+        """Each push to a retained origin reference, as its commit and push time.
+
+        Git walks only the origin references' reflogs; `--all` also walked every
+        worktree HEAD, note and PR fetch to throw them away, ten times the work."""
+        if not self.origin_refs:
+            return ()
         pushes = []
-        for row in self.git("reflog", "show", "--all", "--date=unix",
-                            "--grep-reflog=update by push", "--format=%gD%x09%H").splitlines():
+        for row in self.git("reflog", "show", "--date=unix", "--grep-reflog=update by push",
+                            "--format=%gD%x09%H", *self.origin_refs).splitlines():
             selector, sha = row.split("\t")
-            reference, stamp = selector.rsplit("@{", 1)
-            if reference in origin:
-                pushes.append((sha, float(stamp.removesuffix("}"))))
+            pushes.append((sha, float(selector.rsplit("@{", 1)[1].removesuffix("}"))))
         return tuple(pushes)
 
     @cached_property
