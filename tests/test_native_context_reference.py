@@ -15,10 +15,11 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.cursor_owner import (
     CommittedCursorOwner,
     CursorOwner,
+    InheritedCursor,
     RecordedCursor,
     UnstartedCursor,
 )
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, ThreadLookup
+from agent_comms.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
 from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,
@@ -36,7 +37,8 @@ from agent_comms.native_input_record import (
 )
 from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from agent_comms.proven_source_coverage import InjectedInput
+from agent_comms.private_path import FileIdentity
+from agent_comms.proven_source_coverage import InjectedInput, NoInjectedInput, ProvenSourceCoverage, SourcePrefix
 from agent_comms.selected_triage import (
     AbsentTriageDecisionRecord,
     DecidedTriageRecord,
@@ -200,3 +202,45 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(rec
             )
         with pytest.raises(TypeError):
             TriageHistoricalNativeInput(execution=TriageNativeExecution(), **source)
+
+
+def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
+    tmp_path, recorded, historical_source,
+):
+    """Every install mints a new claim; the thread's cursor and its inputs stay its own."""
+    thread = Thread("owner", frozenset(), str(tmp_path))
+    lookup = thread.incarnation.require_recorded().lookup
+    root = FieldCodec.decode(RootId, "a" * 32)
+    sent = replace(recorded, owner_lookup=lookup, verdict=DecidedTriageRecord(IgnoreSelectedTriage))
+    restarted = CursorOwner(thread=thread, claimed_generation=5, generation=1, wire_root_id=root)
+    with sqlite3.connect(":memory:") as db:
+        NativeRuntimeInput.create(db)
+        CurrentNativeCursor.create(db)
+        sent.insert(db)
+        proof = sent.execution.historical_proof(
+            sent, lifecycle=TriagePendingAssignment(), **{**historical_source, "owner_lookup": lookup},
+        )
+        assert restarted.matches_prefix(db, (proof,))
+        assert InjectedInput(proof).allows(restarted, db, UnstartedCursor())
+        earlier = CursorOwner(thread=thread, claimed_generation=2, generation=1, wire_root_id=root)
+        earlier_row = InjectedInput(proof).build(earlier, 1)
+        earlier_row.insert(db)
+        inherited = restarted.state(db)
+        assert type(inherited) is InheritedCursor and inherited.covered_seq == 1
+        coverage = ProvenSourceCoverage(
+            root, lookup, 3, (), (), None, source_prefix=SourcePrefix(FileIdentity.from_stat(tmp_path.stat()), 3),
+        )
+        published = inherited.publish(db, restarted, coverage, NoInjectedInput())
+        assert restarted.state(db) == published == RecordedCursor(replace(
+            earlier_row, owner_claimed_generation=5, covered_seq=3,
+        ))
+        assert earlier.state(db) == RecordedCursor(earlier_row)
+        newer = replace(sent, input_id=FieldCodec.decode(InputId, "9" * 32), sent_owner_claimed_generation=RecordedNativeClaim(6))
+        newer.insert(db)
+        newer_proof = newer.execution.historical_proof(newer, lifecycle=TriagePendingAssignment(), **{
+            **historical_source, "owner_lookup": lookup, "input_id": newer.input_id,
+            "context": replace(historical_source["context"], input_id=newer.input_id),
+            "native_reference": newer.reference,
+        })
+        assert restarted.matches_prefix(db, (proof,))
+        assert not restarted.matches_prefix(db, (newer_proof,))

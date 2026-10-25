@@ -1,6 +1,5 @@
 """SQLite delivery prefixes preserve native gaps without a file checkpoint."""
 
-import sys
 
 import pytest
 
@@ -13,7 +12,6 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_owner import UnstartedCursor
 from agent_comms.field_codec import ThreadLookup
-from agent_comms.historical_native_inputs import first_foreign_claim_source
 from agent_comms.messages import InfoKind, Message
 from agent_comms.proven_source_coverage import SourceCoverage, SourcePrefix
 from agent_comms.publisher import ResponseWrites
@@ -44,7 +42,7 @@ def test_native_coverage_uses_delivery_membership_and_keeps_unproven_barrier(
 
 
 def test_unstarted_coverage_needs_neither_sender_claim_nor_activation(coverage, source_reads):
-    result = coverage.since(UnstartedCursor(), stop_seq=sys.maxsize, source_reads=source_reads)
+    result = coverage.since(UnstartedCursor(), source_reads=source_reads)
     assert result.covered_seq == 0
     assert result.blocked_seq is None
     assert result.inputs == ()
@@ -100,35 +98,3 @@ def test_slow_page_is_still_read_and_covered(coverage, declaration, source_reads
     assert result.blocked_seq == next((row.seq for row in record.deliveries()), None)
     assert result.covered_seq == (0 if record.deliveries() else record.seq)
     assert result.source_prefix.through_seq == record.seq
-
-
-def test_coverage_stops_before_the_first_source_another_claim_took(coverage, source_reads, monkeypatch):
-    """A source another claim's input took is never scanned, so a cursor parked before it reads nothing."""
-    bus = coverage.bus.bus
-    first, foreign, _later = (bus.append(lambda seq, db, text=text: PublicRecord.from_message(
-        Message("author", "worker", text, InfoKind, seq=seq))) for text in ("first", "foreign", "later"))
-    scanned = []
-    received = type(bus).received
-
-    def spy(self, lookup, *, after, before, **kwargs):
-        rows = received(self, lookup, after=after, before=before, **kwargs)
-        scanned.append((after, before, len(rows)))
-        return rows
-
-    monkeypatch.setattr(type(bus), "received", spy)
-    result = coverage.since(UnstartedCursor(), stop_seq=foreign.seq, source_reads=source_reads)
-    assert result.covered_seq == first.seq
-    assert result.source_prefix.through_seq == first.seq
-    assert scanned == [(0, foreign.seq, 0)]
-    scanned.clear()
-    parked = coverage.since(UnstartedCursor(), stop_seq=first.seq, source_reads=source_reads)
-    assert parked.covered_seq == 0
-    assert scanned == [(0, first.seq, 0)]
-
-
-def test_a_fresh_owner_has_no_foreign_claim_source(coverage):
-    with coverage.store.session.read():
-        assert first_foreign_claim_source(
-            coverage.store.session._connection, wire_root_id=coverage.wire_root_id,
-            recipient_lookup=coverage.recipient_lookup, after_seq=0, claimed_generation=1,
-        ) == sys.maxsize
