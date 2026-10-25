@@ -287,6 +287,19 @@ class PrivateSession(DurableFile, BusTranscriptFile):
     filename = "sessions/enrolled-{session_id}.jsonl"
 
 
+class ForkedSession(DurableFile, BusTranscriptFile):
+    """A fork's copy of its parent's history; the native fork names it in this directory."""
+
+    __slots__ = ()
+    filename = "sessions/{stamp}_{session_id}.jsonl"
+
+    @classmethod
+    def prepared_directory(cls, root: Path) -> Path:
+        directory = (Path(root) / cls.pattern()).parent
+        NativeSessionFiles.prepare_private_directory(directory)
+        return directory
+
+
 class CheckSession(DurableFile, BusTranscriptFile):
     """A check root's copy of one selected worker's history, under its record's slot."""
 
