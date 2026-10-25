@@ -491,7 +491,7 @@ class ThreadManagement:
             self.owners.releases,
             self.bus.reads,
             transcript_read_state(self.bus.reads.path),
-            GoalWaits.at(self.root),
+            GoalWaits(self.root),
             RelationshipStore.at(self.root),
         )
         ThreadOwnedState.require_complete(states)

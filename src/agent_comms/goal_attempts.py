@@ -67,7 +67,7 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .lifecycle_capability import Failed
-from .locked_store import WireWakeFile
+from .locked_store import FileStore, WireWakeFile
 from .maintenance_barrier import DrainSettledFile
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
@@ -659,7 +659,7 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptStore(DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFile):
+class GoalAttemptStore(FileStore, DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFile):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a

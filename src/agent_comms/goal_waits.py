@@ -406,7 +406,7 @@ class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
 
 @dataclass(frozen=True, slots=True)
 class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
-    path: Path = field()
+    root: Path
     filename: ClassVar[str] = "goal_waits.sqlite3"
     tables = GoalWaitsRows
 

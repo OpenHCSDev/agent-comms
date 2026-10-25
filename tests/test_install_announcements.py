@@ -191,7 +191,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
                     raise refusal
                 if failure == "cleanup":
                     source.git(source.checkout, "worktree", "lock", str(tree.path))
-                published = replace(stack, program=InstalledProgram())
+                published = stack.extended(Stack, program=InstalledProgram())
                 report.writer = RuntimeWriter(comms.root, published)
                 report.complete(installed)
         except (UpgradeRefused, GitCommandError) as error:

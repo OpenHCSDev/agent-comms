@@ -84,7 +84,7 @@ class Goals:
         self.registry = registry
         self.bus = bus
         self.agents = agents
-        self.waits = GoalWaits.at(root)
+        self.waits = GoalWaits(root)
         self.goal_store: GoalAttemptStore | None = None
 
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:

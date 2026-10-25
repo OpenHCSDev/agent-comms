@@ -176,7 +176,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
         del data[missing]
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(GoalWait, data)
-    assert GoalWaits(tmp_path / "goal_waits.sqlite3").read()[goal.id] == wait
+    assert GoalWaits(tmp_path).read()[goal.id] == wait
 
 
 @pytest.mark.refactor_guard

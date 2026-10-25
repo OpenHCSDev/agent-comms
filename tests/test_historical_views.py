@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
@@ -312,7 +313,7 @@ def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
 def root_bytes(root: Path) -> dict[Path, bytes]:
     """The bytes of every member the backup owner records for this root."""
     return {path: (root / path).read_bytes()
-            for members in bus_files(root).values() for path in members}
+            for members in bus_files(LiveFilesRequest(root)).values() for path in members}
 
 
 def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path):
