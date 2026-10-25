@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from pydantic import JsonValue
 
@@ -226,10 +226,11 @@ class FileLine(WireValue, SourceReference):
         text = (root / self.file).read_text()
         spans = [range(1, text.count("\n") + 2)]
         if self.file.endswith(".py"):
-            spans += (range(node.lineno, node.end_lineno + 1)
+            spans += (range(node.lineno, end + 1)
                       for node in ast.walk(ast.parse(text, filename=self.file))
                       if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-                      and node.lineno <= self.line <= node.end_lineno)
+                      for end in (cast(int, node.end_lineno),)
+                      if node.lineno <= self.line <= end)
         return Declaration(self, min(spans, key=len))
 
     def require_exists(self, repository: Path, revision: SourceText) -> None:
