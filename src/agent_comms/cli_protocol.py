@@ -27,14 +27,13 @@ from pydantic import (
 from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
-from .coordination_errors import CoordinationError, CoordinationReadUnavailable
+from .coordination_errors import CommandFailure, CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .field_codec import FieldCodec, TimestampText
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .recorded_time import UnrecordedTimeError
-from .repo import GitCommandError
 from .turn_item import NativeTurnId, TurnItem
 from .wire_models import DeclaredWireFamily, WireModel
 
@@ -43,7 +42,7 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import BindingThread, CliBridge, DeliveryRow
 
 
-CLI_FAILURES = (ValueError, OSError, CoordinationError, GitCommandError)
+CLI_FAILURES = (ValueError, OSError, CommandFailure)
 
 
 async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
