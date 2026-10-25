@@ -477,13 +477,12 @@ class OwnerLifecycle:
     def stop(self, *names: str) -> None:
         owners = tuple(owner for name in dict.fromkeys(names)
                        if (owner := self._stop_selection(name)) is not None)
-        # A process may already be dead. It still needs the exact release
-        # acknowledgement before the execution owner can settle its attempted input.
-        self._stop_processes(tuple(owner for owner in owners if owner[0].process_alive))
-        # Stop is explicit abandonment of this exited local owner, not replay
-        # permission. The existing recovery owner checks its exact release and
-        # native-child absence before terminal settlement.
+        # Move the registry claim and record its release before any signal.
+        # A GRANT that follows this fence must refuse, even while the process lives.
         self._finish_stopped_owners(owners)
+        self._stop_processes(tuple(owner for owner in owners if owner[0].process_alive))
+        # Only process exit and the original release permit terminal settlement;
+        # the fence alone says nothing about whether prompt bytes were written.
         RecoveryMonitorCapability.settle_stopped_owners(
             self, tuple(thread for thread, _ in owners))
 

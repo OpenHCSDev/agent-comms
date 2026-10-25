@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 from abc import abstractmethod
-from contextlib import closing
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, closing
 from functools import partial
 from pathlib import Path
 from typing import NamedTuple
@@ -19,6 +20,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.selected_actions import CodingSelectedAction
 from agent_comms.selected_participant import SelectedParticipant
 from agent_comms.selected_session import SelectedSession
@@ -111,8 +113,11 @@ class FailedHistory(ClaimedHistory):
         })
 
 
-async def release_native_input(directory: Path, history: type[NativeSendHistory] = FailedHistory) -> ReleasedNativeInput:
-    """Reserve through the real owners, record original history, release without settlement."""
+@asynccontextmanager
+async def prepared_native_input(
+    directory: Path, *, max_attempts: int = 1,
+) -> AsyncIterator[PrivateSendClaim]:
+    """Keep the real selected attempt and its bound input open for an owner operation."""
     root, root_id, comms, _initial, _people = _root(directory, direct=True)
     with closing(CursorDelivery()) as cursor_delivery:
         with Coordination(root / "coordination.sqlite3") as store:
@@ -122,7 +127,7 @@ async def release_native_input(directory: Path, history: type[NativeSendHistory]
                 assert participant is not None
                 created = store.create(
                     participant.batch.execution_id, WireOrigin,
-                    participant.lookup, 1,
+                    participant.lookup, max_attempts,
                     sources=participant.batch.sources,
                 ).value
                 attempt = await SelectedAttempt.engage(participant, created)
@@ -135,10 +140,20 @@ async def release_native_input(directory: Path, history: type[NativeSendHistory]
                     owner=participant.owner.thread.incarnation.require_recorded(),
                 )
                 request, _action = await attempt.prepare(session, CodingSelectedAction(), NoSelectedWritePlans())
-                claim = request.claim_scope
-                await Coordination.run_worker(partial(history.write, claim, session, participant))
-                environment = ThreadLaunch.from_thread(participant.owner.thread).apply(dict(os.environ))
-                os.environ.clear()
-                os.environ.update(environment)
-                comms.owners.release("beta")
-                return ReleasedNativeInput(root, root_id, participant.batch.execution_id, claim.input_id, identity.path)
+                yield request.claim_scope
+
+
+async def release_native_input(directory: Path, history: type[NativeSendHistory] = FailedHistory) -> ReleasedNativeInput:
+    """Reserve through the real owners, record original history, release without settlement."""
+    async with prepared_native_input(directory) as claim:
+        participant = claim.selected
+        session = claim.session
+        await Coordination.run_worker(partial(history.write, claim, session, participant))
+        environment = ThreadLaunch.from_thread(participant.owner.thread).apply(dict(os.environ))
+        os.environ.clear()
+        os.environ.update(environment)
+        participant.comms.owners.release("beta")
+        return ReleasedNativeInput(
+            participant.comms.root, participant.root_id, participant.batch.execution_id,
+            claim.input_id, session.identity.path,
+        )
