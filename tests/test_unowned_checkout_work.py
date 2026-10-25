@@ -214,7 +214,7 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
     c = checkout_bus
 
     @dataclass(frozen=True)
-    class ConflictingServicePass(ServicePassFailing, declared_name=None):
+    class ConflictingServicePass(ServicePassFailing):
         current: Todo
 
         def enforce(self, comms: Comms, commander: str) -> None:
@@ -238,7 +238,7 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
     c, strike = struck_unowned_bus
 
     @dataclass(frozen=True, eq=False)
-    class ChangingRow(UnownedWheelSpin, declared_name=None):
+    class ChangingRow(UnownedWheelSpin):
         next_row: Todo
 
         def enforce(self, comms: Comms, commander: str) -> None:

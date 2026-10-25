@@ -288,17 +288,27 @@ def test_a_pr_verdict_acts_on_the_unit_holding_that_head(head_bus):
 
 
 def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
-    """2026-10-25: five open agent-comms PRs, idle for hours or red, raised no line at all."""
+    """2026-10-25: five open agent-comms PRs, idle for hours or red, raised no line at all;
+    then another commander's idle PRs on the same repository locked this one's verbs."""
     comms, github, ready = head_bus
     hour = datetime.fromtimestamp(time.time() - 3600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     fresh = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     github.put(ready.repo, DraftListedPullRequest(
         9, "fix/gone", "c" * 40, hour, "main", reviewable_times=(hour,)))
+    github.put(ready.repo, DraftListedPullRequest(
+        11, "fix/peer", "d" * 40, hour, "main", reviewable_times=(hour,)))
     github.put(ready.repo, UnmergedListedPullRequest(
         7, "fix/head-7", ready.head, fresh, "main", reviewable_times=(fresh,),
         merge_blocks=(ConflictMergeBlock(fresh),)))
+    for number in (9, 7):
+        todo = comms.goals.todos.get("P2")
+        held = todo.held()
+        RecordPullRequest(todo.revision, held.owner_identity,
+                          PullRequestLink(ready.repo, number), held.generation).record(comms.goals, todo.id)
+    ordered = (comms.goals.todos.get("P2"),)
     found = {rule.request.pr: rule.line()
-             for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), ())}
+             for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), (), ordered)}
+    assert 11 not in found
     assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 cccccccc")
     assert "(no live holder): head unmoved, idle 60 min -> land or supersede it" in found[9]
     assert "conflicts with its base, idle 0 min -> merge main into it" in found[7]
