@@ -43,6 +43,7 @@ from agent_comms.field_codec import Argument, FieldCodec, MessageId
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime
+from agent_comms.errors import TodoError
 from agent_comms.repo import Repo
 from agent_comms.todos import (
     AcceptedVerdict,
@@ -63,7 +64,6 @@ from agent_comms.todos import (
     StrikeReason,
     SupersededVerdict,
     Todo,
-    TodoError,
     ToolCallVerdict,
     UnderReviewHeadVerdict,
     VerdictReason,

@@ -9,6 +9,7 @@ from agent_comms.message_reference import MessageReference
 
 if TYPE_CHECKING:
     from agent_comms.messages import BusRecord
+    from agent_comms.todos import Todo
 
 
 class RejectedEnforcementError(ValueError):
@@ -16,9 +17,25 @@ class RejectedEnforcementError(ValueError):
 
     reason: ClassVar[str]
 
+    def explanation(self) -> str:
+        return self.reason
+
 
 class ToolRefusedError(ValueError):
     """An intentional refusal safe to return as a tool answer, not a transport failure."""
+
+
+class TodoError(ToolRefusedError):
+    """A todo request is invalid or its persisted state cannot be trusted."""
+
+
+class TodoConflict(TodoError):
+    """The expected revision, assignee or generation is no longer current."""
+
+    def __init__(self, current: Todo) -> None:
+        self.current = current
+        owner = current.assignment.owner if current.assignment else "unassigned"
+        super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
 
 
 class MissingSourceLine(ToolRefusedError):  # noqa: N818 - existing source refusal name

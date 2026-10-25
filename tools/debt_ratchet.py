@@ -1356,6 +1356,21 @@ class FunctionLocalImport(PerFileMeasure, LocatedSource):
         return collector.found
 
 
+class EnumDeclaration(PerFileMeasure, LocatedSource):
+    """Classes built on the standard enum types: a family whose members cannot own their
+    behaviour, so every case is decided by a switch outside it."""
+
+    bases: typing.ClassVar[frozenset[str]] = frozenset(
+        name for name, value in vars(enum).items()
+        if isinstance(value, type) and issubclass(value, enum.Enum))
+
+    @classmethod
+    def lines(cls, source: bytes, filename: str) -> list[int]:
+        return [node.lineno for node in ast.walk(cls.tree(source, filename))
+                if isinstance(node, ast.ClassDef)
+                and any(ast.unparse(base).rpartition(".")[2] in cls.bases for base in node.bases)]
+
+
 class IdentityReading:
     """How one literal string stands for an identity instead of a typed reference."""
 
