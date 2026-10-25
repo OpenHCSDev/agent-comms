@@ -319,7 +319,7 @@ class GroupMember(ProcessIdentity, declared_name=None):
 
 
 class LockHolder(DeclaredFamily, affix="LockHolder"):
-    """An observed flock owner; diagnosis, and authority to signal it only where a member says so."""
+    """An observed flock owner; diagnosis, and authority to signal it where a member says so."""
 
     @abstractmethod
     def describe(self) -> str: ...
@@ -343,11 +343,6 @@ class IdentifiedLockHolder(LockHolder):
 class RunningLockHolder(IdentifiedLockHolder):
     process: ProcessIdentity
     command: str
-    program: ClassVar[str | None] = None
-
-    @classmethod
-    def selection_key(cls) -> Hashable:
-        return cls.program
 
     @classmethod
     def observed(cls, platform: Platform, process: ProcessIdentity, command: str) -> LockHolder:
@@ -366,7 +361,9 @@ class ToadLockHolder(RunningLockHolder):
     """Toad is a view of the bus: it holds nothing the bus cannot serve again, so a waiter
     ends it instead of waiting out its lifetime."""
 
-    program = "toad"
+    @classmethod
+    def selection_key(cls) -> Hashable:
+        return "toad"
 
     def evict(self) -> None:
         """A Toad that outlives its forced stop fails the waiter loudly, never holds it."""
