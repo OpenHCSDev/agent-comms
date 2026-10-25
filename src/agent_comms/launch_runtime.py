@@ -119,7 +119,7 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
-        return LaunchRoot.environment(self._environment(source))
+        return LaunchRoot.environment(self.child_environment(self._environment(source)))
 
     def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(

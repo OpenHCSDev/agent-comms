@@ -157,7 +157,7 @@ def test_staged_probe_reads_the_published_route(tmp_path, route_bus):
     home = tmp_path / "outgoing-home"
     root = route_bus.root
     environment = {
-        **runtime.child_environment(runtime.environment(os.environ)), "HOME": str(home),
+        **runtime.environment(os.environ), "HOME": str(home),
     }
     path = home / ".local/state/agent-comms/active-route.json"
     old_route(path, route_bus)
