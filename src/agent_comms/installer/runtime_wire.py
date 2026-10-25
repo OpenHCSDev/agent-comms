@@ -27,7 +27,7 @@ class ClientImport:
     def __str__(self) -> str:
         return f"{self.client}:{self.path}:{self.line} imports {self.module}"
 
-    def drift(self, root: Path) -> tuple[str, ...]:
+    def drift_source(self, source: str) -> tuple[str, ...]:
         """Ordinary imports require names, not a wire field contract."""
         return ()
 
@@ -56,12 +56,6 @@ class WireClass(ClientImport):
                 return cls("outgoing wire", str(Path("src") / source.relative_to(Path(__file__).parents[2])),
                            line, member.__module__, (member.__name__,), cls.declared(node))
         raise ValueError(f"{source}:{line} does not declare {member.__qualname__}")
-
-    def drift(self, root: Path) -> tuple[str, ...]:
-        path = root / self.path
-        if not path.is_file():
-            return (f"{self.module}.{self.names[0]} is missing; sent fields ({', '.join(self.fields)})",)
-        return self.drift_source(path.read_text())
 
     def drift_source(self, source: str) -> tuple[str, ...]:
         """Compare either a checkout file or the installed commit's file, identically."""

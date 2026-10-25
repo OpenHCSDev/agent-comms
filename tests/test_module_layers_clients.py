@@ -111,6 +111,28 @@ def test_crosses_runtimes_fails_on_a_renamed_session_field(tmp_path: Path) -> No
     ]
 
 
+def test_crosses_runtimes_missing_file_and_class_share_one_verdict(tmp_path: Path) -> None:
+    from agent_comms.cli_bridges.monitor import PauseSession
+
+    wire = OutgoingWire.at()
+    base = wire_base(tmp_path, wire)
+    session, = (entry for entry in wire.imports if entry.names == (PauseSession.__name__,))
+    path = base / session.path
+    tree = ast.parse(path.read_text())
+    tree.body = [node for node in tree.body
+                 if not (isinstance(node, ast.ClassDef) and node.name == PauseSession.__name__)]
+    path.write_text(ast.unparse(tree))
+    missing_class = tuple(problem for entry, problem in Package(base, (wire,)).drifted
+                          if entry.names == session.names)
+    path.unlink()
+    missing_file = tuple(problem for entry, problem in Package(base, (wire,)).drifted
+                         if entry.names == session.names)
+
+    assert missing_file == missing_class == (
+        "PauseSession is missing; sent fields (process: ProcessIdentity)",
+    )
+
+
 def test_crosses_runtimes_discovers_sessions_without_importing_monitor(tmp_path: Path) -> None:
     subprocess.run(
         (sys.executable, "-c",

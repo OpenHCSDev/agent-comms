@@ -544,11 +544,15 @@ class Package:
     @cached_property
     def drifted(self) -> tuple[tuple[ClientImport, str], ...]:
         """Names a client needs that this tree declares differently."""
+        sources = {
+            module: self.modules[module].read_text()
+            for module in dict.fromkeys(entry.module for entry in self.client_imports)
+            if self.provides(module)
+        }
         return tuple(
             (entry, drift)
             for entry in self.client_imports
-            if self.provides(entry.module)
-            for drift in entry.drift(self.src.parent)
+            for drift in entry.drift_source(sources.get(entry.module, ""))
         )
 
     @cached_property
