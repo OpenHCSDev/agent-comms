@@ -8,7 +8,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from heapq import nlargest
 from itertools import islice, product
 from pathlib import Path
@@ -112,36 +112,51 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
 
 
 @dataclass(frozen=True)
-class DisplayUnread:
-    """Unread totals at one bus boundary, with the read basis that owns them."""
+class DisplayUnreadSelection:
+    """The complete captured inputs that determine an unread count."""
 
-    through: int = -1
-    seen: ReadCursor = field(default_factory=ReadCursor)
-    scopes: tuple[ChannelDisplayScope, ...] = ()
-    viewer_names: tuple[str, ...] = ()
-    counts: Mapping[str, int] = field(default_factory=dict)
-    registry: RegistryProvenance | None = None
+    seen: ReadCursor
+    scopes: tuple[ChannelDisplayScope, ...]
+    viewer_names: tuple[str, ...]
+    registry: RegistryProvenance
+
+
+class DisplayUnread:
+    """Before the first count, acquire the complete unread selection."""
 
     def advanced(
         self, source: BusReader, scopes: tuple[ChannelDisplayScope, ...],
         viewer_names: tuple[str, ...], seen: ReadCursor, snapshot: RegistryProvenance,
-    ) -> DisplayUnread:
+    ) -> CountedDisplayUnread:
+        return source.display_unread(
+            scopes, viewer_names, seen, snapshot, through=source.revision(),
+        )
+
+
+@dataclass(frozen=True)
+class CountedDisplayUnread(DisplayUnread):
+    """A counted selection advances only the newly appended interval."""
+
+    through: int
+    selection: DisplayUnreadSelection
+    counts: Mapping[str, int]
+
+    def advanced(
+        self, source: BusReader, scopes: tuple[ChannelDisplayScope, ...],
+        viewer_names: tuple[str, ...], seen: ReadCursor, snapshot: RegistryProvenance,
+    ) -> CountedDisplayUnread:
+        if self.selection != DisplayUnreadSelection(seen, scopes, viewer_names, snapshot):
+            return super().advanced(source, scopes, viewer_names, seen, snapshot)
         through = source.revision()
-        unchanged = (self.through >= 0 and self.seen == seen
-                     and self.scopes == scopes and self.viewer_names == viewer_names
-                     and self.registry == snapshot)
-        if unchanged and through == self.through:
+        if through == self.through:
             return self
         counted = source.display_unread(
-            scopes, viewer_names, seen, snapshot, through=through,
-            after=self.through if unchanged else -1,
+            scopes, viewer_names, seen, snapshot, through=through, after=self.through,
         )
-        if unchanged:
-            return replace(counted, counts={
-                channel: self.counts[channel] + count
-                for channel, count in counted.counts.items()
-            })
-        return counted
+        return replace(counted, counts={
+            channel: self.counts[channel] + count
+            for channel, count in counted.counts.items()
+        })
 
 
 class BusReader(RouteCounts, ABC):
@@ -435,7 +450,7 @@ class BusReader(RouteCounts, ABC):
     def display_unread(
         self, scopes: Iterable[ChannelDisplayScope], viewer_names: Iterable[str],
         seen: ReadCursor, snapshot: RegistryProvenance, *, through: int, after: int = -1,
-    ) -> DisplayUnread:
+    ) -> CountedDisplayUnread:
         """Count one explicit sequence interval with the captured cursor predicate."""
         scopes, viewer_names = tuple(scopes), tuple(viewer_names)
         counts = {}
@@ -452,7 +467,9 @@ class BusReader(RouteCounts, ABC):
                     (*bindings.values(), max(after, seen.lower_bound(scope, snapshot)), through,
                      *parameters, json.dumps(viewer_names)),
                 ).fetchone()[0])
-        return DisplayUnread(through, seen, scopes, viewer_names, counts, snapshot)
+        return CountedDisplayUnread(
+            through, DisplayUnreadSelection(seen, scopes, viewer_names, snapshot), counts,
+        )
 
     def delivered_unanswered(
         self, recipient: RecordedThreadIncarnation, scope: MessageDisplayScope,

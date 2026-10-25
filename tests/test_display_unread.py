@@ -52,7 +52,6 @@ def test_unread_advances_over_new_rows_and_recounts_after_a_read_mark(bus):
         assert second.counts == {"#team": 503, "#other": 0}
         full = source.display_unread(scopes, viewer, seen, namespace, through=source.revision())
         assert second == full
-        print("500-row sidebar: full=2 COUNT queries; advance=2 bounded COUNT queries; unchanged=0")
 
     seen = seen.add((DisplayedConversation(ChannelConversation("#team"), (), prefix_through=250),))
     with bus.reading() as source:

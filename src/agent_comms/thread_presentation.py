@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.coordination_errors import StaleRevision
@@ -186,16 +186,30 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadPresentation:
-    """A thread's acquired presentation, or its declared absence."""
+class ThreadStatusDisplay:
+    """The displayed status, independent of acquired notification history."""
 
     title: str
     marker: str
     summary: str
     status: ThreadPresentationStatus = IdleThreadPresentationStatus()
+    binding: ThreadOwnerBinding = field(default=UnavailableThreadOwnerBinding(), kw_only=True)
+
+    def status_display(self) -> ThreadStatusDisplay:
+        return ThreadStatusDisplay(self.title, self.marker, self.summary, self.status,
+                                   binding=self.binding)
+
+    def same_status(self, other: ThreadStatusDisplay) -> bool:
+        """Status equality never traverses acquired source history."""
+        return self.status_display() == other.status_display()
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadPresentation(ThreadStatusDisplay):
+    """A thread's acquired presentation, or its declared absence."""
+
     notifications: tuple[MessageNotification, ...] = ()
     sent_notifications: tuple[MessageNotification, ...] = ()
-    binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
@@ -228,12 +242,6 @@ class ThreadPresentation:
         if not captured.read.identity.thread.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
         return self.with_sources(captured)
-
-    def same_status(self, other: ThreadPresentation) -> bool:
-        """Status changes do not require reacquiring an unchanged source window."""
-        return (self.title, self.marker, self.summary, self.status, self.binding) == (
-            other.title, other.marker, other.summary, other.status, other.binding,
-        )
 
     def same_observation(self, other: ThreadPresentation) -> bool:
         """Equal view and turn evidence, not merely equal global store revisions.

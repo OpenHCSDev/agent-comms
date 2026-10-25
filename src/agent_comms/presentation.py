@@ -497,10 +497,11 @@ class BusPresentation:
         """
         seen = basis.seen(source)
         activity = {scope.channel: scope.activity(source) for scope in basis.scopes}
-        self._display_unread = self._display_unread.advanced(
+        counted = self._display_unread.advanced(
             source, basis.scopes, tuple(sorted(basis.viewer_names)), seen, basis.registry,
         )
-        return activity, self._display_unread.counts
+        self._display_unread = counted
+        return activity, counted.counts
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,8 +8,8 @@ model flushes the rows that changed once per frame.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, cast
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING
 
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus,
@@ -19,6 +19,7 @@ from agent_comms.thread_presentation import (
     ThreadRetired,
     ThreadPresentation,
     ThreadPresentationStatus,
+    ThreadStatusDisplay,
 )
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.delivery import DeliveryView
@@ -29,22 +30,21 @@ if TYPE_CHECKING:
 NOTIFICATION_EXCERPT = 110
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True)
 class ThreadStatusModel:
     """What an open thread's status line shows, and its one-line overview."""
 
     name: str
     shown: bool
     lines: tuple[str, ...]
-    presentation: ThreadPresentation
+    presentation: ThreadPresentation = field(compare=False)
     summary: tuple[str, ...] = ()
     """Overview parts for a collapsed status: first summary line, latest inbound, recent count."""
 
-    def __eq__(self, other: object) -> bool:
-        row = cast(ThreadStatusModel, other)
-        return ((self.name, self.shown, self.lines, self.summary)
-                == (row.name, row.shown, row.lines, row.summary)
-                and self.presentation.same_status(row.presentation))
+    _display: ThreadStatusDisplay = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_display", self.presentation.status_display())
 
     @property
     def status(self) -> ThreadPresentationStatus:
