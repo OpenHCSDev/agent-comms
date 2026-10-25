@@ -19,6 +19,8 @@ def test_runtime_family_shares_interpreter_identity():
                (LaunchRuntime, RunningRuntime, RestoredRuntime, TargetRuntime)]
     assert all(left == right for left in members for right in members)
     assert len(set(members)) == 1
+    assert members[0].__eq__(object()) is NotImplemented
+    assert members[0] != object()
     assert members[0] != LaunchRuntime(interpreter.with_name("another-python"))
 
 

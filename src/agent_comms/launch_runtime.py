@@ -71,7 +71,9 @@ class LaunchRuntime:
 
     interpreter: Annotated[Path, PathText]
 
-    def __eq__(self, other: LaunchRuntime) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, LaunchRuntime):
+            return NotImplemented
         return self.interpreter == other.interpreter
 
     def __hash__(self) -> int:
