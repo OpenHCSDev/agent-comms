@@ -6,7 +6,6 @@ Delete this step after the next installation.
 
 from __future__ import annotations
 
-import sqlite3
 from contextlib import closing
 from typing import ClassVar
 
@@ -15,40 +14,35 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.messages import Message
-from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing
+from agent_comms.task_attachments.commander_pings import RulePing
+
+# The paths of the stored rule pings without a rule in one task document.
+UNTYPED = ("SELECT fullkey FROM json_tree({task}) WHERE type = 'object'"
+           " AND json_extract(value, '$.kind') = :kind AND json_type(value, :rule) IS NULL")
 
 
 class RulePingTypes(Carry):
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (Bus,)
 
-    @staticmethod
-    def untyped(db: sqlite3.Connection, task: str) -> tuple[str, ...]:
-        """Paths of the stored rule pings without a rule, later elements first so each removal
-        leaves the earlier paths valid."""
-        return tuple(path for path, in db.execute(
-            "SELECT fullkey FROM json_tree(?) WHERE type = 'object'"
-            " AND json_extract(value, '$.kind') = ? AND json_type(value, ?) IS NULL"
-            " ORDER BY id DESC",
-            (task, RulePing.declared_name, f"$.{FieldCodec.record_key(RulePing, 'rule')}")))
-
     def carry(self, *, apply: bool) -> Carried:
         table = Message.table
         column, = table._fields_named(("task",))
-        kinds = tuple(member.declared_name for member in CommanderUpdate.members_with(CommanderUpdate))
+        names = {"kind": RulePing.declared_name, "rule": f"$.{FieldCodec.record_key(RulePing, 'rule')}"}
         rewritten = []
         changed = 0
         for path in self.input_files():
             with closing(Bus.read_snapshot(path)) as db:
                 stored = db.execute(table._sql(
                     f'SELECT {{seq}}, {{task}} FROM "{table.declared_name}"'
-                    f" WHERE json_extract({{task}}, '$.kind') IN ({', '.join('?' * len(kinds))})"),
-                    kinds).fetchall()
+                    f" WHERE EXISTS ({UNTYPED.format(task='{task}')})"), names).fetchall()
                 updates: list[tuple[object, int]] = []
                 for seq, task in stored:
-                    if paths := self.untyped(db, task):
-                        kept, = db.execute(f"SELECT json_remove(?{', ?' * len(paths)})",
-                                           (task, *paths)).fetchone()
-                        updates.append((kept, seq))
+                    # Later array elements go first, so each removal leaves the earlier paths valid.
+                    paths = [found for found, in db.execute(
+                        UNTYPED.format(task=":task") + " ORDER BY id DESC", {**names, "task": task})]
+                    kept, = db.execute(f"SELECT json_remove(?{', ?' * len(paths)})",
+                                       (task, *paths)).fetchone()
+                    updates.append((kept, seq))
             changed += len(updates)
             if apply and updates:
                 with closing(Bus.writer(path)) as db, Bus.write_transaction(db):
