@@ -52,7 +52,7 @@ class Layer(DeclaredFamily):
     """A package of the target structure. Its bases are the layers it may import, and
     its prefixes the module names it owns besides its own name."""
 
-    prefixes: typing.ClassVar[tuple[str, ...]] = ()
+    prefixes: typing.ClassVar[frozenset[str]] = frozenset()
 
     @classmethod
     def claim(cls, unit: str) -> int:
@@ -76,27 +76,27 @@ class Layer(DeclaredFamily):
 
 
 class Wire(Layer):
-    prefixes = ("bus_", "wire_", "message_", "delivery_", "private_")
+    prefixes = frozenset({"bus_", "wire_", "message_", "delivery_", "private_"})
 
 
 class Registry(Wire):
-    prefixes = ("registry_", "registration_", "owner_", "thread_", "channel_")
+    prefixes = frozenset({"registry_", "registration_", "owner_", "thread_", "channel_"})
 
 
 class Coordination(Registry):
-    prefixes = ("goal_", "attempt_", "coordination_", "wake_")
+    prefixes = frozenset({"goal_", "attempt_", "coordination_", "wake_"})
 
 
 class Context(Coordination):
-    prefixes = ("working_", "context_segments", "instructions")
+    prefixes = frozenset({"working_", "context_segments", "instructions"})
 
 
 class Turns(Context):
-    prefixes = ("turn_", "input_", "session_", "selected_")
+    prefixes = frozenset({"turn_", "input_", "session_", "selected_"})
 
 
 class Runtime(Turns):
-    prefixes = ("native_", "pi_", "acp_", "agent_", "runtime_", "_pi_helpers", "cli_bridges")
+    prefixes = frozenset({"native_", "pi_", "acp_", "agent_", "runtime_", "_pi_helpers", "cli_bridges"})
 
 
 class UiModel(Runtime):
@@ -104,7 +104,7 @@ class UiModel(Runtime):
 
 
 class Cli(Runtime):
-    prefixes = ("cli_", "tool_", "tools")
+    prefixes = frozenset({"cli_", "tool_", "tools"})
 
 
 class Commander(Runtime):
