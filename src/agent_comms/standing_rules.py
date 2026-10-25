@@ -562,10 +562,9 @@ class DeliveredHeadReview(DatedStandingRule):
         request: PullRequest, now: float,
     ) -> tuple[Self, ...]:
         due_at = claim.message.timestamp + cls.minutes * 60
-        if request.draft or request.has_head_review or now < due_at:
-            return ()
-        return (cls(problem, holder, order, claim.pull_request.repo,
-                    request.number, request.head, due_at),)
+        return tuple(cls(problem, holder, order, claim.pull_request.repo,
+                         request.number, request.head, due)
+                     for due in request.head_review_due(now, due_at))
 
     @classmethod
     def scan_observed(
@@ -700,8 +699,8 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         )
 
     def clearing_action(self) -> str:
-        return (f"Reply to {self.message.sender} in the session or on the bus, "
-                f"or mark request {self.request.value} done.")
+        return (f"Order its next step with --answers {self.message.message_id}, reply to "
+                f"{self.message.sender} on the bus with it, or mark request {self.request.value} done.")
 
     def due(self, now: float) -> bool:
         return self.directive.deadline < now

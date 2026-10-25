@@ -8,6 +8,7 @@ the declared columns and field types without upgrading existing storage.
 from __future__ import annotations
 
 import annotationlib
+import builtins
 import hashlib
 import json
 import os
@@ -688,10 +689,17 @@ class SQLiteColumnShape(TypedRow):
     hidden: int
 
     @classmethod
-    def of(cls, db: sqlite3.Connection, table: str) -> list[SQLiteColumnShape]:
+    def of(cls, db: sqlite3.Connection, row: type[TypedTable]) -> list[SQLiteColumnShape]:
         return cls.read(db.execute(
             'SELECT name, type AS sql_type, "notnull", pk, hidden FROM pragma_table_xinfo(?)',
-            (table,)))
+            (row.declared_name,)))
+
+    @classmethod
+    def key_differs(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
+        """Whether the stored table keys its rows by other columns than the row declares."""
+        stored = tuple(item.name for item in sorted(cls.of(db, row), key=lambda item: item.pk)
+                       if item.pk)
+        return stored != tuple(item.wire_name for item in row._columns if item.column.primary_key)
 
     @classmethod
     def only_constraints_differ(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
@@ -705,7 +713,7 @@ class SQLiteColumnShape(TypedRow):
             return False
         with closing(SQLiteFile.writer(":memory:")) as scratch:
             scratch.execute(declared)
-            return cls.of(db, row.declared_name) == cls.of(scratch, row.declared_name)
+            return cls.of(db, row) == cls.of(scratch, row)
 
 
 @dataclass(frozen=True)
@@ -741,6 +749,10 @@ class CatalogKind(DeclaredFamily, affix="Kind"):
         if declared.get(item.name) != item.sql:
             cls.drop(db, item.name)
 
+    @classmethod
+    def release(cls, db: sqlite3.Connection, item: SQLiteCatalogObject) -> None:
+        """An object that guards no row changes stays while a carry rewrites rows."""
+
 
 class TableKind(CatalogKind):
     @classmethod
@@ -755,7 +767,11 @@ class IndexKind(CatalogKind):
 
 
 class TriggerKind(CatalogKind):
-    pass
+    @classmethod
+    def release(cls, db: sqlite3.Connection, item: SQLiteCatalogObject) -> None:
+        """A stored trigger may refuse the rows a carry deletes; the carry's rebuild
+        recreates the declared ones."""
+        cls.drop(db, item.name)
 
 
 class ViewKind(CatalogKind):
@@ -779,6 +795,14 @@ class SQLiteCatalogObject(TypedRow):
         return tuple(cls.read(db.execute(
             "SELECT type,name,tbl_name,sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
+
+    @classmethod
+    def release_guards(cls, db: sqlite3.Connection, row: builtins.type[TypedTable]) -> None:
+        """Inside the caller's write transaction, lift every stored guard on the row's table,
+        declared or not, so a carry can rewrite rows an older schema refused to change."""
+        for item in cls.stored(db):
+            if item.tbl_name == row.declared_name:
+                item.type.release(db, item)
 
     @classmethod
     def carry(cls, db: sqlite3.Connection, declared: Mapping[str, str],

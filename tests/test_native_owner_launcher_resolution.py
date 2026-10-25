@@ -9,6 +9,7 @@ from pathlib import Path
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.native_session_files import ForkedSession
 from agent_comms.threads import Thread
 
 
@@ -42,8 +43,9 @@ async def test_fork_runs_selected_python_before_copying_saved_history(
     original = parent.path.read_bytes()
     copied = await PiNativeBackend.fork(
         Thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(parent.session_file, comms.root)),
-        str(package.cli), LaunchRuntime(interpreter),
+        str(package.cli), LaunchRuntime(interpreter), comms.root,
     )
     assert marker.read_text() == str(selected)
     assert Path(copied.path).is_file() and copied.path != parent.session_file
+    assert Path(copied.path).parent == ForkedSession.prepared_directory(comms.root).resolve()
     assert parent.path.read_bytes() == original
