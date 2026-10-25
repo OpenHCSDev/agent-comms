@@ -196,11 +196,16 @@ class BashRefusal(ClaudeToolHookProgram, ABC):
         return True
 
     @classmethod
+    def reasons_for(cls, hook: ClaudeToolHook) -> tuple[str, ...]:
+        """A session-aware refusal receives the original hook, not a global context copy."""
+        return cls.reasons(Bash.decode(hook.tool_input).command)
+
+    @classmethod
     def main(cls) -> None:
         hook = ClaudeToolHook.read()
         if not cls.binds(hook):
             return
-        reasons = cls.reasons(Bash.decode(hook.tool_input).command)
+        reasons = cls.reasons_for(hook)
         if reasons:
             hook.respond(
                 permissionDecision="deny",

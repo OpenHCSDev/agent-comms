@@ -223,12 +223,14 @@ class RecordPlanePhase(CommanderNativePhase):
 class ReviewQueuePhase(CommanderNativePhase):
     """A verdict per PR head gates merging through main's required review status.
 
-    No GitHub merge queue is required. A bypass actor defeats the review gate.
+    The owner's admin bypass stays; its hook demands a recorded verdict on that head.
+    No GitHub merge queue is required.
     """
 
     after = (RecordPlanePhase,)
     evidence = AllEvidence((
         ClassDeclared("HeadReviewRecord", ("src/agent_comms/todos.py",)),
+        ClassDeclared("QueueBypassGuard", ("src/agent_comms_hooks/queue_bypass.py",)),
         RulesetGates(),
     ))
 
