@@ -9,7 +9,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_hud import CommanderFrame, CommanderHud, CodexUsage, UnreadableUsage
-from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
 from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
