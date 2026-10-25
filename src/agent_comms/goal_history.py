@@ -34,7 +34,7 @@ from .typed_table import (
     Index,
     JsonStorage,
     ReconciledFile,
-    TypedTable,
+    RowidSequenced,
 )
 
 
@@ -167,7 +167,7 @@ class RegistryWriterObserver(JournalObserver):
 
 
 @dataclass(frozen=True)
-class GoalHistoryEntry(RecordedGoalRevision, TypedTable, DurableTables):
+class GoalHistoryEntry(RecordedGoalRevision, RowidSequenced, DurableTables):
     # The durable kind field is a journal fact, not the TypedTable family tag.
     schema_error = GoalHistoryError
 

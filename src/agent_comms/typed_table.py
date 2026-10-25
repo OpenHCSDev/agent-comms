@@ -2033,16 +2033,6 @@ class TypedTable(
                           tuple(item.encode(values[item.name]) for item in writable))
 
     @classmethod
-    def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:
-        """Insert one row and answer the rowid SQLite assigned it."""
-        writable = cls._writable_fields(tuple(values) or None)
-        (sequence,) = db.execute(
-            cls.insertion_statement(tuple(item.name for item in writable)) + " RETURNING rowid",
-            tuple(item.encode(values[item.name]) for item in writable),
-        ).fetchone()
-        return int(sequence)
-
-    @classmethod
     def delete(
         cls, db: sqlite3.Connection, *, where: str = "1",
         parameters: tuple = (), **key: object,
@@ -2505,6 +2495,20 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
         cls.filename = (
             f"{declared_words(cls.__name__)}.{hashlib.sha256(schema).hexdigest()[:12]}.sqlite3"
         )
+
+
+class RowidSequenced(TypedTable, declared_name=None):
+    """The table's rows are numbered by SQLite's rowid, and an insert answers its number."""
+
+    @classmethod
+    def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:
+        """Insert one row and answer the rowid SQLite assigned it."""
+        writable = cls._writable_fields(tuple(values) or None)
+        (sequence,) = db.execute(
+            cls.insertion_statement(tuple(item.name for item in writable)) + " RETURNING rowid",
+            tuple(item.encode(values[item.name]) for item in writable),
+        ).fetchone()
+        return int(sequence)
 
 
 class WithoutRowid(TypedTable, declared_name=None):
