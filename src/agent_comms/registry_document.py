@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Literal, Annotated, Self
 from pydantic import JsonValue
 
 
+from .activity import ActivityCapture
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -1135,18 +1136,18 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def observed_activity(
         self, agents: AgentActivity, names: Iterable[str],
-    ) -> dict[str, ObservedActivity | DeletedThread]:
+    ) -> ActivityCapture[ObservedActivity | DeletedThread]:
         """Observe retained view names; absent declarations have no execution authority."""
         selected = {name: self.canonical_name(name) for name in names}
-        captured = agents.all_activity(
+        captured = agents.captured(
             self.visible_threads(DEFAULT_ROSTER, names=selected), snapshot=self)
         observed: dict[str, ObservedActivity | DeletedThread] = {}
         for name, canonical in selected.items():
-            if canonical in captured:
-                observed[name] = captured[canonical]
+            if canonical in captured.activity:
+                observed[name] = captured.activity[canonical]
             elif canonical not in self.threads:
                 observed[name] = DeletedThread(canonical)
-        return observed
+        return ActivityCapture(observed, captured.expires_at)
 
     def unread_since(
         self, actor: str, since: float | None, recorded_delivery: bool,

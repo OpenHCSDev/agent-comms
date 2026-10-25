@@ -65,7 +65,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.field_codec import AssignmentId, FieldCodec, MessageId
 from agent_comms.messages import InfoKind, Message
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
@@ -92,7 +92,7 @@ def store(path: Path) -> StandaloneCoordination:
     return StandaloneCoordination(str(path), clock_ms=lambda: 1_000)
 
 
-def wire_source(db: StandaloneCoordination, assignment_id: str, original: Message, mode: WakePolicy) -> SelectedSource:
+def wire_source(db: StandaloneCoordination, assignment_id: AssignmentId, original: Message, mode: WakePolicy) -> SelectedSource:
     from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
     from agent_comms.bus import PrivateRecord
     from agent_comms.selected_source_batch import SelectedSource
@@ -117,7 +117,7 @@ def ready(
         original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
             WakeAssignment(
-                assignment_id="claim",
+                assignment_id=AssignmentId("claim"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,
@@ -128,7 +128,7 @@ def ready(
                 lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
             )
         )
-        sources = (wire_source(db, "claim", original, FullWake()),)
+        sources = (wire_source(db, AssignmentId("claim"), original, FullWake()),)
     db.create(
         "exec",
         origin,
@@ -247,7 +247,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
         WireOrigin,
         SENDER_LOOKUP,
         2,
-        sources=(wire_source(db, "claim", original, FullWake()),),
+        sources=(wire_source(db, AssignmentId("claim"), original, FullWake()),),
     )
     assert isinstance(replay, AlreadyApplied)
     different = Message("different", "Owner", "Original request", InfoKind,
@@ -258,7 +258,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
             WireOrigin,
             SENDER_LOOKUP,
             2,
-            sources=(wire_source(db, "claim", different, FullWake()),),
+            sources=(wire_source(db, AssignmentId("claim"), different, FullWake()),),
         )
     db.close()
     with store(db_path) as reopened:
@@ -276,7 +276,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             verdict: str | None = None,
         ) -> WakeAssignment:
             return WakeAssignment(
-                assignment_id=f"claim-{index}",
+                assignment_id=AssignmentId(f"claim-{index}"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=index,
@@ -341,7 +341,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                                timestamp=float(index), seq=index)
             db.assignments.accept(
                 WakeAssignment(
-                    assignment_id=str(index),
+                    assignment_id=AssignmentId(str(index)),
                     recipient="Owner",
                     recipient_lookup=SENDER_LOOKUP,
                     wire_seq=index,
@@ -352,7 +352,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                     lifecycle=disposition.load(mode, None, None, None),
                 )
             )
-            sources.append(wire_source(db, str(index), original, mode))
+            sources.append(wire_source(db, AssignmentId(str(index)), original, mode))
         deferred = db.assignments.transition_preengagement(
             "1", DeferredAssignment, expected_revision=1
         )
@@ -872,7 +872,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         db.participants.register(SENDER_LOOKUP, committed=True)
         db.assignments.accept(
             WakeAssignment(
-                assignment_id="claim",
+                assignment_id=AssignmentId("claim"),
                 recipient="Owner",
                 recipient_lookup=SENDER_LOOKUP,
                 wire_seq=1,

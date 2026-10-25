@@ -628,16 +628,14 @@ class NotificationsRead:
            ) -> NotificationsRead:
         names = {name for items in outcomes.values()
                  for item in items for name in item.activity_names()}
-        known = {**comms.registry.snapshot().observed_activity(comms.agents, names - known.keys()),
-                 **known}
+        known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
         return cls(revision, {name: known.get(name) for name in names})
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
         """The whole window changed, or one of its participants' activity did."""
         if revision.changed_since(NotificationsView(), self.revision):
             return True
-        current = (comms.registry.snapshot().observed_activity(comms.agents, self.activity)
-                   if self.activity else {})
+        current = comms.views.observed_activity(revision, self.activity) if self.activity else {}
         return any(current.get(name) != seen for name, seen in self.activity.items())
 
 
@@ -849,8 +847,7 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
 
     def notifications(self, request: ReadNotifications, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead | None) -> ObservationStep:
-        known = comms.registry.snapshot().observed_activity(
-            comms.agents, () if previous is None else previous.activity)
+        known = comms.views.observed_activity(revision, () if previous is None else previous.activity)
 
         def read() -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
             request.require_root(comms)
@@ -913,7 +910,7 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         names = self.located_threads.names
         watched = names | frozenset(actor for view in readable.values()
                                     for actor in view.notification_activity_names())
-        activity = comms.registry.snapshot().observed_activity(comms.agents, watched)
+        activity = comms.views.observed_activity(revision, watched)
         self.located_threads = replace(self.located_threads, activity=activity)
         names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
         self.located_threads = replace(self.located_threads, names=names)
