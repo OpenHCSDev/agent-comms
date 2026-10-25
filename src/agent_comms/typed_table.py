@@ -2274,7 +2274,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     def writer_declarations(cls) -> tuple[type[ProjectionOutputs], ...]:
         """Share output capabilities, not another writer's outputs inherited with its fields."""
         return tuple(owner for owner in super().writer_declarations()
-                     if owner is cls or not issubclass(owner, ProjectionSource))
+                     if owner.shares_outputs_with(cls))
 
     @classmethod
     def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:

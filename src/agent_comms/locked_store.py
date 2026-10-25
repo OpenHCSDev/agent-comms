@@ -502,13 +502,6 @@ class RegistryFile(RollbackRetained, WireWakeFile):
     filename = "registry.json"
 
     @classmethod
-    def rollback_files(cls, root: Path) -> tuple[Path, ...]:
-        """Registry writes replace its document and privacy guard together."""
-        from .registry_store import RegistryStore
-
-        return RegistryStore.at(root).written
-
-    @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         """The copy names no live process: a signal, stop or wake aimed through it would reach
         the source root's units."""

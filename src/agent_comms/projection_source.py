@@ -20,6 +20,10 @@ class ProjectionOutputs:
     writes: ClassVar[tuple[type[ProducedRow], ...]]
 
     @classmethod
+    def shares_outputs_with(cls, writer: type[ProjectionOutputs]) -> bool:
+        return True
+
+    @classmethod
     def writer_declarations(cls) -> tuple[type[ProjectionOutputs], ...]:
         """Derive output owners from the class hierarchy, including shared capabilities."""
         return tuple(parent for parent in cls.__mro__ if "writes" in vars(parent))
@@ -34,6 +38,10 @@ class ProjectionSource(ProjectionOutputs):
 
     __slots__ = ()
     _declarations: ClassVar[dict[type[ProjectionOutputs], set[type[ProjectionSource]]]] = {}
+
+    @classmethod
+    def shares_outputs_with(cls, writer: type[ProjectionOutputs]) -> bool:
+        return cls is writer
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
