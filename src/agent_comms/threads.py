@@ -533,6 +533,10 @@ class Thread(ThreadProvenance):
         """Drop the reference; the registry transaction owns revoking the record."""
         return replace(self, turn_record=self.turn_record.released())
 
+    def without_process(self) -> Thread:
+        """This record in another root: its turn and process stay with the root it came from."""
+        return replace(self.without_turn(), process_identity=NoProcess())
+
     def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
         scope = previous.channel_scope_generation
