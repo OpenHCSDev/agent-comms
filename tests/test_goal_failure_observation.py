@@ -58,7 +58,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
     store, owner, _, observation = bound
     observation.reservation.fail(store, "private diagnostic", observation=observation)
     before = store.path.read_bytes()
-    for current in (store, GoalAttemptStore(store.root)):
+    for current in (store, GoalAttemptStore.at(store.root)):
         with pytest.raises(StaleAttemptError):
             observation.reservation.fail(current, "duplicate", observation=observation)
         with pytest.raises(UnresolvedAttemptError):

@@ -23,7 +23,7 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
     attempt = store.reserve(goal_id, 1)
     store.claim_launch(attempt)
     attempt.fail(store, "provider outcome UNKNOWN")
-    reopened = GoalAttemptStore(store.root)
+    reopened = GoalAttemptStore.at(store.root)
     assert reopened.snapshot(goal_id).lifecycle == BlockedGeneration()
     with pytest.raises(UnresolvedAttemptError):
         reopened.resume(goal_id, 1)
@@ -35,7 +35,7 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
     )
     assert successor.lifecycle == ReadyGeneration()
     reopened.retire_goal(goal_id, expected_generation=2, attempt_id=None)
-    final = GoalAttemptStore(store.root)
+    final = GoalAttemptStore.at(store.root)
     assert final.snapshot(goal_id).lifecycle == CancelledGeneration()
     with sqlite3.connect(store.path) as conn:
         attempts = AttemptRecord.select(conn)

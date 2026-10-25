@@ -337,3 +337,26 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     unknown = claim(taken)
     assert unknown == DeferredAssignment.build(unknown.mode, None, None)
     assert type(claim(confirmed)) is DeliveredAssignment
+
+
+def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
+    """The commander answers its owner in its own transcript: a unit that messaged it
+    mid-turn never receives that turn's answer as a direct message."""
+    from agent_comms.registry_document import RegisteredCommanderProject
+    from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.transcript_events import AssistantTranscript
+    from agent_comms.turn_item import NativeTurnId
+
+    lead, unit = (comms.registry.declare(Thread(
+        name, frozenset(), "/tmp", execution=ExternalThreadExecution)) for name in ("lead", "unit"))
+    comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
+    for speaker, sender in ((lead, unit), (unit, lead)):
+        output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
+        output.delivered_targets((sender.name,))
+        turn = NativeTurnId(f"{speaker.name}-turn")
+        output.publish_item(FinishedItem(turn, "a", (AssistantTranscript(
+            f"{speaker.name} answers", timestamp=1.0, position="a"),)))
+        output.end_turn(turn)
+    assert comms.bus.pending_count("unit") == 0
+    assert comms.bus.pending_count("lead") == 1
