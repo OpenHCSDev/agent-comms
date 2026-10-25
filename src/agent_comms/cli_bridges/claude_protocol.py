@@ -525,7 +525,7 @@ class TaskNotification(PromptOrigin, declared_name='task-notification'):
 
     def absorbed(self, record: TimedRecord, text: str,
                  session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return TaskContent.model_validate({'text': text}).updates(record)
+        return TaskEnvelope.from_text(text).updates(record)
 
 
 class PeerMessage(AgentPrompt, declared_name='peer'):
