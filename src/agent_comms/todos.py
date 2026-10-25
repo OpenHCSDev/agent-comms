@@ -1080,6 +1080,18 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def require_read(self) -> None:
         """A retired checkout needs no local read; present and unread ones decide."""
 
+    def read_commits(self, todo: Todo, storage: StorageRule, owner: Thread,
+                     *excluded: str) -> tuple[ProgressPoint, ...]:
+        """Select current owned refs and consume their log in this checkout read."""
+        self.require_read()
+        refs = self.references(storage, owner)
+        points = (
+            *self.checked_commits(todo.order.checked(), refs, *excluded),
+            *self.commits(todo.reference_pattern, refs, *excluded),
+        )
+        return tuple(sorted({point.sha: point for point in points}.values(),
+                            key=lambda point: point.at, reverse=True)[:1])
+
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
         return iter(())
@@ -1133,22 +1145,18 @@ class PresentCheckout(ProgressCheckout):
 
     @property
     def default_refs(self) -> tuple[str, ...]:
-        return (self.default_reference,) if self.default_reference in self.git_refs else ()
+        return (self.default_reference,) if self.default_reference in self.origin_refs else ()
 
     def git(self, *args: str) -> str:
         return Repo.git(self.path, *args)
 
     def require_read(self) -> None:
-        self.git("rev-parse", "--git-dir")
+        self.git("rev-parse", "--verify", "HEAD^{commit}")
 
-    @cached_property
-    def git_refs(self) -> tuple[str, ...]:
-        return tuple(self.git("for-each-ref", "--format=%(refname)",
-                              "refs/heads/", "refs/remotes/origin/").splitlines())
-
-    @cached_property
+    @property
     def origin_refs(self) -> tuple[str, ...]:
-        return tuple(ref for ref in self.git_refs if ref.startswith("refs/remotes/origin/"))
+        return tuple(self.git("for-each-ref", "--format=%(refname)",
+                              "refs/remotes/origin/").splitlines())
 
     @cached_property
     def origin_pushes(self) -> tuple[tuple[str, float], ...]:
@@ -1171,11 +1179,6 @@ class PresentCheckout(ProgressCheckout):
         return WorkBranches(self.path)
 
     @cached_property
-    def checked_out(self) -> dict[str, tuple[str, ...]]:
-        """Branch name -> the worktree paths that have it checked out."""
-        return self.branches.worktrees()
-
-    @cached_property
     def check_notes(self) -> dict[str, tuple[CheckedCommit, ...]]:
         """The stored check results read so far, by commit."""
         return {}
@@ -1186,11 +1189,11 @@ class PresentCheckout(ProgressCheckout):
         return self.check_notes[sha]
 
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
-        owned = {f"refs/heads/{branch}"
-                 for branch, paths in self.checked_out.items()
-                 if any(storage.owns_present_checkout(owner, checkout)
-                        for checkout in (Path(path).resolve() for path in paths))}
-        return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
+        owned = tuple(f"refs/heads/{branch}"
+                      for branch, paths in self.branches.worktrees().items()
+                      if any(storage.owns_present_checkout(owner, checkout)
+                             for checkout in (Path(path).resolve() for path in paths)))
+        return (*owned, *self.origin_refs)
 
     def commits(self, pattern: str, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
@@ -1247,8 +1250,8 @@ class PresentCheckout(ProgressCheckout):
 
 
 class CheckoutReads:
-    """Each checkout's Git facts within one read: orders sharing a checkout ask Git its
-    refs and push reflog once, and nothing outlives the read to go stale."""
+    """Share checkout readers within one frame; ref selection is fresh for each log,
+    while retained commit points and push reflogs belong to that frame alone."""
 
     def __init__(self) -> None:
         self._checkouts: dict[Path, PresentCheckout] = {}
@@ -1318,7 +1321,9 @@ class ProgressSource(PullRequestSource):
     """Problem progress across owned worktrees, shared Git history and retained PR identities."""
 
     checkout: ProgressCheckout
-    references: tuple[str, ...] = ()
+    storage: StorageRule
+    owner: Thread
+    committed: tuple[ProgressPoint, ...] = ()
     worktrees: tuple[PresentCheckout, ...] = ()
 
     @classmethod
@@ -1330,21 +1335,19 @@ class ProgressSource(PullRequestSource):
         path = next(iter(Checkout.present(*candidates)), next(iter(owned), candidates[0]))
         checkout = pulls.progress_checkout(path)
         try:
-            references = checkout.references(storage, owner)
+            committed = checkout.read_commits(todo, storage, owner)
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
-            checkout, references = UnreadCheckout(path, str(failure)), ()
+            checkout, committed = UnreadCheckout(path, str(failure)), ()
         return cls(
-            todo=todo, pulls=pulls, checkout=checkout, references=references,
+            todo=todo, pulls=pulls, checkout=checkout, storage=storage, owner=owner,
+            committed=committed,
             worktrees=tuple(pulls.checkout(path) for path in Checkout.present(*owned)),
         )
 
     def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
-        points = (
-            *self.checkout.checked_commits(self.todo.order.checked(), self.references, *excluded),
-            *self.checkout.commits(self.todo.reference_pattern, self.references, *excluded),
-        )
-        return iter(sorted({point.sha: point for point in points}.values(),
-                           key=lambda point: point.at, reverse=True)[:1])
+        """The captured commit clock needs no later Git read during card rendering."""
+        return iter(self.checkout.read_commits(self.todo, self.storage, self.owner, *excluded)
+                    if excluded else self.committed)
 
     def published(self) -> Iterator[ProgressPoint]:
         return self.checkout.published(self.todo.reference_pattern)
