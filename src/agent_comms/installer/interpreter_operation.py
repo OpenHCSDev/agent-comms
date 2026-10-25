@@ -444,11 +444,21 @@ class RuntimeProbe[Answer](
     def install_phase(self) -> InstallPhase:
         return ProbePhase(probe=type(self))
 
+    @classmethod
+    def outgoing_wire(cls) -> tuple[type[RuntimeProbe], ...]:
+        """Any probe may reach the outgoing runtime, whose own installer decodes what the
+        target encodes, so its name and fields never change
+        (``tools/module_layers.py --check --base`` holds them to the base)."""
+        return (cls,)
 
-class OutgoingProbe:
-    """A probe the outgoing runtime answers with its own installer: the target encodes it
-    and every older runtime decodes it, so its name and fields never change
-    (``tools/module_layers.py --check --base`` holds them to the base)."""
+
+class TargetProbe:
+    """A probe only a runtime built from the target tree answers; no older runtime
+    decodes it."""
+
+    @classmethod
+    def outgoing_wire(cls) -> tuple[type[RuntimeProbe], ...]:
+        return ()
 
 
 @dataclass(frozen=True)

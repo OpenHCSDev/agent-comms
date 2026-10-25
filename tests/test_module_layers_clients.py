@@ -70,7 +70,7 @@ def wire_base(tmp_path: Path, wire: OutgoingWire) -> Path:
     return base
 
 
-def test_outgoing_wire_matches_the_tree_that_declares_it(tmp_path):
+def test_outgoing_wire_matches_the_tree_that_declares_it(tmp_path: Path) -> None:
     wire = OutgoingWire.at()
 
     package = Package(wire_base(tmp_path, wire), (wire,))
@@ -78,13 +78,13 @@ def test_outgoing_wire_matches_the_tree_that_declares_it(tmp_path):
     assert (package.missing, package.missing_names, package.drifted) == ((), (), ())
 
 
-def test_outgoing_wire_fails_on_a_renamed_field_or_a_missing_probe(tmp_path):
+def test_outgoing_wire_fails_on_a_renamed_field_or_a_missing_probe(tmp_path: Path) -> None:
     wire = OutgoingWire.at()
     base = wire_base(tmp_path, wire)
     owners = base / "src/agent_comms/installer/probes/owners.py"
     owners.write_text(owners.read_text().replace(
-        "class RunningOwnersProbe(RuntimeProbe[list[str]], OutgoingProbe):\n    root:",
-        "class RunningOwnersProbe(RuntimeProbe[list[str]], OutgoingProbe):\n    bus_root:",
+        "class RunningOwnersProbe(RuntimeProbe[list[str]]):\n    root:",
+        "class RunningOwnersProbe(RuntimeProbe[list[str]]):\n    bus_root:",
     ))
     publication = base / "src/agent_comms/installer/probes/publication.py"
     publication.write_text(publication.read_text().replace("class PublicationProbe", "class Gone"))

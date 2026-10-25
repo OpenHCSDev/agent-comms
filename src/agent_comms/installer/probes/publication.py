@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from agent_comms.active_route import RouteFile, RouteFileSelection, active_route_path
-from agent_comms.installer.interpreter_operation import OutgoingProbe, RuntimeProbe
+from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 
 
-class PublicationProbe(RuntimeProbe[None], OutgoingProbe):
+class PublicationProbe(RuntimeProbe[None]):
     """The selected interpreter publishes itself: console launchers and harness links move
     to it, then ``current`` does."""
 
@@ -15,7 +15,7 @@ class PublicationProbe(RuntimeProbe[None], OutgoingProbe):
         RuntimePublication.installed().publish_links()
 
 
-class SelectedRouteProbe(RuntimeProbe[RouteFileSelection]):
+class SelectedRouteProbe(TargetProbe, RuntimeProbe[RouteFileSelection]):
     """The staged runtime reads the published route before source changes."""
 
     def run(self) -> RouteFileSelection:

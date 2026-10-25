@@ -7,7 +7,7 @@ from typing import Annotated
 
 from agent_comms.comms import wire
 from agent_comms.field_codec import PathText
-from agent_comms.installer.interpreter_operation import OutgoingProbe, RuntimeProbe
+from agent_comms.installer.interpreter_operation import RuntimeProbe
 from agent_comms.installer.probes.commands import CliCommandProbe
 from agent_comms.owner_restart import OwnerRestartRequest
 
@@ -26,7 +26,7 @@ class OwnerActionsProbe(CliCommandProbe):
 
 
 @dataclass(frozen=True)
-class RunningOwnersProbe(RuntimeProbe[list[str]], OutgoingProbe):
+class RunningOwnersProbe(RuntimeProbe[list[str]]):
     root: Annotated[Path, PathText]
 
     def run(self) -> list[str]:

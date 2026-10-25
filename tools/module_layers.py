@@ -12,8 +12,9 @@ neither reaches are listed as deletion candidates, and a client import naming a 
 Core no longer has fails --check, the step the merge queue runs.
 
 The outgoing wire is a client too, of the Core an install upgrades from: the installed
-runtime answers each OutgoingProbe with its own installer, so --base REV reads Core at REV
-and --check fails when it lacks one of those probes or declares its fields differently.
+runtime answers every RuntimeProbe but a TargetProbe with its own installer, so --base REV
+reads Core at REV and --check fails when it lacks one of those probes or declares its
+fields differently.
 
     python tools/module_layers.py > docs/layout/MODULE_LAYERS.md
     python tools/module_layers.py --check [--base REV]
@@ -32,6 +33,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
+
+from agent_comms.installer import probes
+from agent_comms.installer.interpreter_operation import RuntimeProbe
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"
@@ -141,7 +145,7 @@ class WireClass(ClientImport):
 
     @staticmethod
     def declared(node: ast.ClassDef) -> tuple[str, ...]:
-        fields = []
+        fields: list[str] = []
         for statement in node.body:
             match statement:
                 case ast.AnnAssign(target=target, annotation=annotation):
@@ -150,7 +154,7 @@ class WireClass(ClientImport):
 
     def drift(self, package: Package) -> tuple[str, ...]:
         path = package.modules[self.module]
-        drifted = []
+        drifted: list[str] = []
         for node in ast.parse(path.read_text(), str(path)).body:
             match node:
                 case ast.ClassDef(name=name) if name in self.names:
@@ -274,28 +278,29 @@ class StackClient:
 
 
 class OutgoingWire(StackClient):
-    """The probes an installed runtime answers with its own installer (``OutgoingProbe`` in
-    installer/interpreter_operation.py), read from the family as this tree declares it."""
+    """The probes an installed runtime answers with its own installer: every RuntimeProbe
+    but a TargetProbe (installer/interpreter_operation.py), read from the family as this
+    tree declares it."""
 
     @classmethod
     def at(cls) -> OutgoingWire:
-        from agent_comms.installer import probes
-
         return cls("outgoing wire", Path(inspect.getfile(probes)).parents[3])
 
     @cached_property
     def imports(self) -> tuple[ClientImport, ...]:
-        from agent_comms.installer import probes
-        from agent_comms.installer.interpreter_operation import OutgoingProbe, RuntimeProbe
-
         found: list[ClientImport] = []
-        for probe in RuntimeProbe.discover_members(probes, OutgoingProbe):
-            lines, line = inspect.getsourcelines(probe)
-            (node,) = ast.parse("".join(lines)).body
-            found.append(WireClass(
-                self.name, str(Path(inspect.getfile(probe)).relative_to(self.checkout)), line,
-                probe.__module__, (probe.__name__,), WireClass.declared(node),
-            ))
+        members: tuple[type[RuntimeProbe], ...] = RuntimeProbe.discover_members(probes, RuntimeProbe)
+        for member in members:
+            for probe in member.outgoing_wire():
+                lines, line = inspect.getsourcelines(probe)
+                match ast.parse("".join(lines)).body:
+                    case [ast.ClassDef() as node]:
+                        found.append(WireClass(
+                            self.name, str(Path(inspect.getfile(probe)).relative_to(self.checkout)),
+                            line, probe.__module__, (probe.__name__,), WireClass.declared(node),
+                        ))
+                    case body:
+                        raise ValueError(f"{probe.__qualname__}'s source is not one class: {body}")
         return tuple(found)
 
 
