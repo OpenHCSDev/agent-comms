@@ -502,7 +502,7 @@ class OwnersStopped:
 
 @dataclass
 class HeldOwnersStopped(OwnersStopped):
-    """Owners the target stopped under the install's one maintenance hold, which lasts
+    """Owners the outgoing runtime stopped under the install's one maintenance hold, which lasts
     to its release, before anything starts on the root again, or to the install's exit."""
 
     hold: ExitStack = field(default_factory=ExitStack)
@@ -1051,12 +1051,13 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     @contextmanager
     def owners_stopped(cls, root: Path, installed: Stack,
                        staged: Stack) -> Iterator[OwnersStopped]:
-        """One hold, one retarget and one stop per install, all at its start. The target
-        stops the owners: stopping settles their turns in stores this install carries,
-        which the outgoing runtime may be unable to open (install 14, 2026-10-24: a ledger
-        install 13 left uncarried refused f23ca8968's every opening, so its stop answered
-        nothing). The hold refuses every other writer and every owner start from here to
-        its release, so nothing writes the root between this stop and the backup."""
+        """One hold, one stop and one retarget per install, all at its start. The outgoing
+        runtime stops the owners: their stores still hold its declarations until this
+        install carries them, and the target refuses every store whose shape it has not
+        carried yet (install of 7dbd43736, 2026-10-25: #3193 rekeyed CurrentNativeCursor,
+        so the target's stop refused the coordinator file before any carry ran). Only then
+        does the hold move to the target, and from there to its release it refuses every
+        other writer and every owner start, so nothing writes the root before the backup."""
         clock = staged.commands.clock
         with OutgoingRuntimeMaintenancePhase().running(clock):
             RootRuntimeStore.at(root).adopt(installed.runtime)
@@ -1069,10 +1070,11 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
                     held = maintenance.begin(MaintenanceOperator.current())
                 owners.hold.callback(
                     lambda: maintenance.clear(maintenance.held_by(MaintenanceOperator.current())))
+                with held.holding():
+                    owners.stop(installed, root)
                 with RetargetMaintenancePhase().running(clock):
                     held = maintenance.retarget(held, staged.runtime)
                 owners.hold.enter_context(held.holding())
-                owners.stop(staged, root)
                 yield owners
 
     @classmethod
