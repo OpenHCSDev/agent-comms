@@ -69,7 +69,7 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.commander_pings import CommanderUpdate
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
 from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingRule
 from agent_comms.ui_model.unit_state import AwaitingCommander

@@ -20,7 +20,7 @@ from agent_comms.commander_heartbeat import (
     CommanderHeartbeat,
     CommanderObservation,
 )
-from agent_comms.commander_pings import CommanderUpdate, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing
 from agent_comms.commander_hud import CommanderHud, CodexUsage, UnreadableUsage
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.comms import Comms, wire
