@@ -16,7 +16,7 @@ from .errors import ToolRefusedError
 from .field_codec import FieldCodec
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
-from .store_files import DependentStateTier
+from .store_files import DependentStateTier, SingleFileStore
 
 ACCESS_SECONDS = 3600
 CODE_SECONDS = 300
@@ -207,7 +207,7 @@ class ConnectorGrants:
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectorStore(CarriedDocument[ConnectorGrants], DependentStateTier):
+class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], DependentStateTier):
     filename: ClassVar[str] = "grants.json"
 
     @classmethod

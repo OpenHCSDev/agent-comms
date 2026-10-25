@@ -37,7 +37,7 @@ from .peer_relevance import (
 )
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
-from .store_files import DependentStateTier
+from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
@@ -651,7 +651,7 @@ class RemoveRelationshipEdit(RelationshipEdit[None]):
         )
 
 
-class RelationshipStore(ThreadOwnedState, CarriedDocument[RelationshipDocument], DependentStateTier):
+class RelationshipStore(SingleFileStore, ThreadOwnedState, CarriedDocument[RelationshipDocument], DependentStateTier):
     """One current durable typed schema; retired formats are rejected."""
 
     filename = "relationships.json"

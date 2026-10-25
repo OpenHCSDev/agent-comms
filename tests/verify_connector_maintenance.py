@@ -23,7 +23,7 @@ from agent_comms.connector_store import ConnectorStore
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
 )
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import ExclusiveLock, UNBOUNDED_CONTENTION, _store_lock
 from connector_readiness import ConnectorReadiness
 from verify_connector_live import curl_call
 from agent_comms.threads import Thread
@@ -72,7 +72,7 @@ def prove(scratch: Path) -> None:
                 held = barrier.advance(held, PausedPhase)
                 held = barrier.advance(held, InstallingPhase)
                 with store.granted("private maintenance proof") as token:
-                    with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path):
+                    with _store_lock(barrier.wire_path, ExclusiveLock(), UNBOUNDED_CONTENTION), _store_lock(barrier.registry_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
                         started = time.monotonic()
                         output = curl_call(port, token, "Please read this message")
                         wall = time.monotonic() - started

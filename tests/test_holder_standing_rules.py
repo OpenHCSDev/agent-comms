@@ -57,7 +57,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import StandingRule
-from agent_comms.store_files import StoreLockContention
+from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
@@ -203,7 +203,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
     if change in ("rename", "rename_holder"):
         def registry_cut_held():
             try:
-                with comms.registry.store.locked(contention=StoreLockContention(0)):
+                with _store_lock(comms.registry.store.path, ExclusiveLock(), StoreLockContention(0)):
                     return False
             except BlockingIOError:
                 return True

@@ -7,17 +7,23 @@ import multiprocessing
 import os
 import stat
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr
 from dataclasses import dataclass, replace
 
 import pytest
 
 from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.pi_counts import PiCount
+from agent_comms.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
 from agent_comms.child_process import Platform
 from agent_comms.store_files import (
-    ExclusiveLock, HolderNamingContention, SharedLock, StoreLockContention, _store_lock,
+    ExclusiveLock,
+    HolderNamingContention,
+    StoreLockBusyError,
+    StoreLockContention,
+    UNBOUNDED_CONTENTION,
+    _store_lock,
 )
 
 
@@ -44,16 +50,31 @@ def clear(store, thread, *, timestamp=None):
 
 
 def _hold_lock(path, mode, ready, release):
-    with _store_lock(path, mode=mode):
+    with _store_lock(path, mode, UNBOUNDED_CONTENTION):
         ready.set()
         if not release.wait(10):
             raise TimeoutError("lock holder was not released")
 
 
-def _read(path, started, done):
+def _hold_store_write(owner, path, ready, release):
+    with owner.write_guard(path):
+        ready.set()
+        if not release.wait(15):
+            raise TimeoutError("store writer was not released")
+
+
+def _competing_write(owner, path, started, entered):
     started.set()
-    RuntimeInfoStore(path).read()
-    done.set()
+    with owner.write_guard(path):
+        entered.set()
+
+
+def _guarded_read(owner, path, started, done, diagnostics):
+    with diagnostics.open("w") as report, redirect_stderr(report):
+        store = owner(path)
+        started.set()
+        with store.guarded_read():
+            done.set()
 
 
 def _record(path, start, prefix):
@@ -64,7 +85,7 @@ def _record(path, start, prefix):
 
 
 def _record_under_wire(path, ready):
-    with _store_lock(path.parent / "wire"):
+    with _store_lock(path.parent / 'wire', ExclusiveLock(), UNBOUNDED_CONTENTION):
         store = RuntimeInfoStore(path)
         record(store, observation())
         assert store.read().observations == {"goal": observation()}
@@ -96,7 +117,7 @@ def event():
 
 
 def _writer_refused(path):
-    with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
+    with pytest.raises(BlockingIOError), _store_lock(path, ExclusiveLock(), StoreLockContention(0)):
         pytest.fail("writer entered during reader")
 
 
@@ -231,39 +252,40 @@ def test_invalid_boundary_is_not_overwritten(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
-def test_shared_readers_overlap_and_exclude_writer(tmp_path):
+def test_store_family_read_guards(tmp_path):
+    """Atomic documents stay readable; a registry cut waits and names its writer."""
     path = tmp_path / "runtime_info.json"
-    record(RuntimeInfoStore(path), observation())
-    ready1, ready2, release = event(), event(), event()
-    with (
-        process(_hold_lock, path, SharedLock(), ready1, release),
-        process(_hold_lock, path, SharedLock(), ready2, release),
-    ):
+    ready, release, started, done = event(), event(), event(), event()
+    with process(_hold_store_write, RuntimeInfoStore, path, ready, release):
         try:
-            assert ready1.wait(5) and ready2.wait(5)
-            started, done = event(), event()
-            with process(_read, path, started, done):
-                assert done.wait(5), "snapshot did not share the held read locks"
-            with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
-                pass
+            assert ready.wait(5)
+            with process(_guarded_read, RuntimeInfoStore, path, started, done,
+                         tmp_path / "single-file-wait.log"):
+                assert done.wait(5), "an atomic document read waited on its writer"
+            write_started, write_entered = event(), event()
+            with process(_competing_write, RuntimeInfoStore, path, write_started, write_entered):
+                assert write_started.wait(5)
+                assert not write_entered.wait(0.2), "a competing writer crossed the held write guard"
+                release.set()
+                assert write_entered.wait(5), "a competing writer did not resume after release"
         finally:
             release.set()
 
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
-def test_exclusive_writer_blocks_snapshot_and_other_writer(tmp_path):
-    path = tmp_path / "runtime_info.json"
+    registry = RegistryStore(tmp_path / "registry.json")
     ready, release, started, done = event(), event(), event(), event()
-    with process(_hold_lock, path, ExclusiveLock(), ready, release):
+    diagnostics = tmp_path / "registry-wait.log"
+    with process(_hold_store_write, RegistryStore, registry.path, ready, release) as writer:
         try:
             assert ready.wait(5)
-            with process(_read, path, started, done):
+            with pytest.raises(StoreLockBusyError), registry.read_now():
+                pytest.fail("a registry try-read entered during a write")
+            with process(_guarded_read, RegistryStore, registry.path, started, done, diagnostics):
                 assert started.wait(5)
-                assert not done.wait(0.2)
-                with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
-                    pass
+                assert not done.wait(5.2), "a registry read crossed its held write lock"
+                assert "store lock still waiting after 5 s, " in diagnostics.read_text()
+                assert f"PID {writer.pid}: " in diagnostics.read_text()
                 release.set()
-                assert done.wait(5)
+                assert done.wait(5), "a registry read did not resume after its writer"
         finally:
             release.set()
 

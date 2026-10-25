@@ -144,7 +144,7 @@ def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tm
         except Exception as error:
             failures.append(error)
 
-    with record.writers.locked():
+    with record.writers.guarded_write():
         waiter = threading.Thread(target=drop_claim)
         waiter.start()
         assert started.wait(5)

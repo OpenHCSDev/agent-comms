@@ -9,16 +9,14 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import DocumentChange
 from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
-from test_locked_store import assert_writer_excluded
 from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("store_type", [RuntimeInfoStore, SharedLedger])
-def test_document_readers_share_lock_and_exclude_updates(tmp_path, store_type):
+def test_document_readers_keep_independent_snapshots(tmp_path, store_type):
     store = store_type(tmp_path / store_type.filename)
     with store.reading() as first:
         assert first == store_type(store.path).read() == store.empty()
-        assert_writer_excluded(store.path)
     store.update(DocumentChange.to)
     assert store.read() == store.empty()
 
