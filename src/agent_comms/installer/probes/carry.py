@@ -16,7 +16,7 @@ from typing_extensions import TypeForm
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import PathText
+from agent_comms.field_codec import FieldPlan, PathText
 from agent_comms.installer.interpreter_operation import (
     InstallClock,
     InterpreterOperation,
@@ -26,7 +26,7 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.locked_store import FilesRequest, RootFile
 from agent_comms.store_files import BorrowedStoreLock, is_store_lock
-from agent_comms.typed_table import TriggerKind, TypedTable, WriterOwnedStore, _Field
+from agent_comms.typed_table import TriggerKind, TypedTable, WriterOwnedStore
 
 
 @dataclass(frozen=True)
@@ -116,7 +116,7 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     def rewrite_stored(
         db: sqlite3.Connection,
         row: type[TypedTable],
-        column: _Field,
+        column: FieldPlan,
         updates: Iterable[tuple[object, object]],
     ) -> None:
         """Inside the caller's write transaction, carry stored values of a guarded row:
