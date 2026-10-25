@@ -196,7 +196,6 @@ class WakeAssignment(
             raise ValueError("wire_seq and revision must be positive")
         if self.accepted_at_ms < 0 or self.updated_at_ms < self.accepted_at_ms:
             raise ValueError("claim timestamps are inconsistent")
-        object.__setattr__(self, "audience", MessageAudience(self.audience))
 
     exact_target: ClassVar[Generated] = Generated(
         str,
