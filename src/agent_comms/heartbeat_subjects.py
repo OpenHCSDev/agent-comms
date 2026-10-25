@@ -52,7 +52,8 @@ class HeadSubject(HeartbeatSubject):
     request: PullRequestHead
 
     def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
-        return any(review.at.since(since) for review in comms.goals.todos.head_reviews(self.request))
+        return any(review.at.since(since) and review.verdict.decides()
+                   for review in comms.goals.todos.head_reviews(self.request))
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         """A delivery claims an abbreviated head; the verdict names the full one."""
