@@ -266,7 +266,11 @@ class VerifiedSnapshots:
         identity = SnapshotIdentity.of(info)
         if cls.passed.get((path, row_type)) != identity:
             _verify_schema(connection, row_type)
-            cls.passed[path, row_type] = identity
+            cls.published(path, row_type, info)
+
+    @classmethod
+    def published(cls, path: Path, row_type: type[TypedTable], info: os.stat_result) -> None:
+        cls.passed[path, row_type] = SnapshotIdentity.of(info)
 
 
 _DENIED_SIDECAR_ACTIONS = frozenset({
@@ -409,7 +413,7 @@ def sidecar_connection(
             directory.unchanged(path.name, identity)
             if connection.total_changes != changes:
                 published = _publish(directory, path.name, identity, connection.serialize())
-                VerifiedSnapshots.passed[path, row_type] = SnapshotIdentity.of(published)
+                VerifiedSnapshots.published(path, row_type, published)
         finally:
             connection.close()
 
