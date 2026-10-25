@@ -366,6 +366,36 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
+async def test_watch_held_by_install_stops_when_cancelled(copied_connector):
+    """The install holds maintenance until the connector has stopped, so a watch waiting out
+    the hold must still stop when the connector does; systemd killed it at 90 s before."""
+    connector = await copied_connector()
+    barrier = MaintenanceBarrier(wire(connector.root).registry.store.path)
+    held = barrier.advance(barrier.advance(
+        barrier.begin(MaintenanceOperator.current()), PausedPhase), InstallingPhase)
+    watch = PublishingWatch()
+    opened = threading.Event()
+
+    @contextmanager
+    def opened_wire():
+        with connector.service_wire() as service:
+            opened.set()
+            yield service
+
+    pending = asyncio.create_task(Coordination.watch_worker(
+        watch, opened_wire, ServicePassStore.at(connector.root)))
+    try:
+        assert await asyncio.to_thread(opened.wait, 3)
+        await asyncio.sleep(.1)
+        pending.cancel()
+        with suppress(asyncio.CancelledError):
+            await asyncio.wait_for(pending, 3)
+        assert pending.cancelled()
+        assert watch.calls == 0
+    finally:
+        barrier.advance(held, ReadyPhase)
+
+
 class FailingWatch(WatchPass[None]):
     def observe(self, comms: Comms) -> None:
         pass
