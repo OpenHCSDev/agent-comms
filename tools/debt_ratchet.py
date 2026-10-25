@@ -2503,12 +2503,14 @@ class DonePhaseBroken(Measure):
     a phase not yet done at the base is plan work in progress and blocks nothing. Evidence
     that cannot be read here (GitHub's rules, with no token) holds at neither revision. Each
     revision is read in one process, so its modules are parsed once for every phase, and kept
-    by the commit and the ratchet's code, which holds the phases' declarations."""
+    by the commit and the ratchet's code, which holds the phases' declarations. It runs for
+    the source root that declares the phases, read from where they are imported."""
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
-        if root != f"{Repo.of(repo).source}/":
+        declared = Path(sys.modules[PlanPhase.__module__].__file__ or "").resolve()
+        if root != f"{declared.relative_to(REPOSITORY).parts[0]}/":
             return ()
         return tuple(partial(cls.failing, repo, revision(repo, ref)) for ref in (base, head))
 
