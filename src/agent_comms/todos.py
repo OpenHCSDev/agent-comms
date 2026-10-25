@@ -3062,11 +3062,6 @@ class TodoHolder(ABC):
                       operation: RecordOrderHeadVerdict) -> None:
         goals.todos.apply(current.id, operation.prepare(goals, current))
 
-    def after_strike(self, db: sqlite3.Connection, struck: Todo,
-                     store: TodoStore, strike: StrikeTodo) -> Todo:
-        """A released or absent holder has no work left to take away."""
-        return struck
-
     def held(self, current: Todo) -> Assignment:
         raise TodoError(f"{current.id} has no open order.")
 
@@ -3213,15 +3208,6 @@ class Assignment(TodoHolder):
             expect=GoalPrecondition(goal_id=OneGoal(self.generation)),
             problem=current.id, operation=operation,
         ))
-
-    def after_strike(self, db: sqlite3.Connection, struck: Todo,
-                     store: TodoStore, strike: StrikeTodo) -> Todo:
-        if not struck.struck_out(self.owner_identity):
-            return struck
-        limit = StrikeReason(f"{self.owner} took {ProblemGoalOrder.StrikeLimit} strikes "
-                             f"on {struck.id}, so the task goes to another unit.")
-        return LimitReleaseTodo(struck.revision, strike.actor, self, limit, strike.at).write(
-            db, struck, store)
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation and self.owner_identity != proposed.owner_identity:
