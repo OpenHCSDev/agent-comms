@@ -64,9 +64,6 @@ class GoalWait(ABC):
     ) -> int:
         return goal.published_seq
 
-    def consume_dependency(self, comms, canonical: str) -> bool:
-        return True
-
     def clear(self, waits: GoalWaits) -> bool:
         return False
 
@@ -151,9 +148,6 @@ class RecordedGoalWait(GoalWait):
 
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
         return self.owner == owner
-
-    def consume_dependency(self, comms, canonical: str) -> bool:
-        return comms.goals.consume_goal_wait(canonical, self.wait_id)
 
     def clear(self, waits: GoalWaits) -> bool:
         return waits.consume(self.goal_id, self.wait_id)

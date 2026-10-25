@@ -178,7 +178,7 @@ class _SessionRoutes:
         self._connection = self._lifetime.enter_context(store.snapshot())
         self._session_file = session_file
         self._cache: dict[FreshNativeId, Routing] = {}
-        self._input_cache: dict[str, InputPresentation] = {}
+        self._input_cache: dict[InputId, InputPresentation] = {}
 
     def get(self, entry_id: FreshNativeId | None) -> Routing:
         if entry_id is None:

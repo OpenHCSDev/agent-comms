@@ -39,8 +39,16 @@ class NativeItemId(FreshNativeId):
     """One item within a harness's turn."""
 
 
-class ProviderResponseId(FreshNativeId):
-    """One provider usage response charged to a goal attempt."""
+class UsageChargeId(FreshNativeId):
+    """A billing entry within a goal attempt."""
+
+
+class ProviderResponseId(UsageChargeId):
+    """The provider's original response identity, decoded from Pi."""
+
+
+class CompactionChargeId(UsageChargeId):
+    """A locally minted billing entry for a compaction without a response id."""
 
 
 @dataclass(frozen=True)

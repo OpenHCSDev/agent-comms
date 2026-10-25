@@ -289,13 +289,17 @@ def test_answer_given_before_a_later_input_stands_when_that_input_ends_without_t
 
 
 def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
+    from agent_comms.turn_item import ProviderResponseId
+
+    response_id = ProviderResponseId.fresh()
     for usage in (None, {"totalTokens": 0}, {"totalTokens": 7}):
-        message = {"role": "assistant", "content": [], **({} if usage is None else {"usage": usage})}
+        message = {"role": "assistant", "content": [], "responseId": response_id,
+                   **({} if usage is None else {"usage": usage})}
         event = decode({"type": "message_update", "message": message, "usage": None})
         assert isinstance(event, MessageUpdate) and isinstance(event.usage, UnreportedUsage)
         account = UsageAccount()
         event.message.measured_tokens.confirm(account)
-        charged = event.message.usage.charges(account)
+        charged = event.message.usage.charges(event.message.response_id)
         if usage is None:
             assert isinstance(event.message.usage, UnreportedUsage) and charged == ()
         else:

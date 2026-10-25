@@ -28,7 +28,7 @@ from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
 from .native_tool_call import ToolCallId
-from .turn_item import ProviderResponseId
+from .turn_item import UsageChargeId
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
 from .pi_vocabulary import (
@@ -436,7 +436,7 @@ class AgentInfo(NativeMetadataObservation, ContextSizeObservation):
 
 @dataclass(frozen=True)
 class ProviderUsage(AgentEvent):
-    response_id: ProviderResponseId
+    response_id: UsageChargeId
     usage: PiUsage
 
 

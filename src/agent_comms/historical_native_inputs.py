@@ -19,7 +19,7 @@ from agent_comms.coordinator import Coordination
 from .cohort_schema import CohortTable
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .declared_family import DeclaredFamily
-from .field_codec import InputId, MessageId, WireName, RootId, ThreadLookup
+from .field_codec import AssignmentId, InputId, MessageId, WireName, RootId, ThreadLookup
 from .native_input_record import (
     FullNativeExecution,
     NativeInputExecution,
@@ -42,7 +42,7 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
     wire_root_id: RootId
     source_seq: int
     source_message_id: MessageId
-    assignment_id: Annotated[str, WireName("claim_id")]
+    assignment_id: Annotated[AssignmentId, WireName("claim_id")]
     execution: NativeInputExecution
     input_id: InputId
     owner_lookup: ThreadLookup
@@ -92,7 +92,7 @@ class FullHistoricalNativeInput(HistoricalNativeInput):
 @dataclass(frozen=True)
 class _HistoricalSource(TypedRow):
     input_id: InputId
-    assignment_id: str
+    assignment_id: AssignmentId
     wire_seq: int
     message_id: MessageId
 

@@ -79,7 +79,7 @@ from .turn_failure import (
     ModelRequestFailed,
     ProviderTransportFailed,
 )
-from .turn_item import PiRequestKey
+from .turn_item import CompactionChargeId, PiRequestKey, ProviderResponseId, UsageChargeId
 from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
@@ -93,7 +93,6 @@ if TYPE_CHECKING:
     from .transcript_routes import SentTextDigest
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
-    from .turn_usage import UsageAccount
 
 
 PiValue = typing.TypeVar("PiValue")
@@ -463,15 +462,19 @@ class PiUsage(PiPayload):
         PiField[NonnegativePiCount], WireName("cacheWrite1h")
     ] = UnreportedCount()
 
-    def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
-        return (account.charge(self),)
+    def charges(self, identity: UsageChargeId | PiOmitted) -> tuple[ProviderUsage, ...]:
+        from .agent_events import ProviderUsage
+
+        # A failed terminal may have usage counters but no provider response.
+        # Only an observed identity can name a provider billing entry.
+        return tuple(ProviderUsage(response_id=key, usage=self) for key in identity.present())
 
 
 @dataclass(frozen=True)
 class UnreportedUsage(PiUsage):
     """Pi sent no usage object: nothing is charged and no token total is known."""
 
-    def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
+    def charges(self, identity: UsageChargeId | PiOmitted) -> tuple[ProviderUsage, ...]:
         return ()
 
 
@@ -902,7 +905,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     response_model: Annotated[
         PiField[str | PiOmitted], WireName("responseModel")
     ] = PiOmitted()
-    response_id: Annotated[PiField[str | PiOmitted], WireName("responseId")] = PiOmitted()
+    response_id: Annotated[PiField[ProviderResponseId | PiOmitted], WireName("responseId")] = PiOmitted()
     provider_thinking_level: Annotated[
         PiField[str | PiOmitted], WireName("providerThinkingLevel")
     ] = PiOmitted()
@@ -932,7 +935,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
             updates.append(CommittedProgress(text=self.text))
         session.output.start_message()
         if session.accepts_output:
-            updates.extend(self.usage.charges(session.usage))
+            updates.extend(self.usage.charges(self.response_id))
         session.output.final_assistant_stop = (
             bool(reason.items_with(Successful, reason)) and session.started_input
         )
@@ -1322,8 +1325,8 @@ class CompactionData(PiResponseData):
 
         return compaction_summary(self.summary) if self.summary is not None else None
 
-    def charge(self, session):
-        yield from self.usage.charges(session.usage)
+    def charge(self):
+        yield from self.usage.charges(CompactionChargeId.fresh())
 
 
 @dataclass(frozen=True)

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 
 from .field_codec import GoalId, TurnId
-from .turn_item import ProviderResponseId
+from .turn_item import UsageChargeId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
@@ -93,7 +93,7 @@ class TurnGoalAccount:
     pending_origins: dict[str, GoalId]
     claims: ExitStack
     originated: dict[GoalId, GoalTurnPermit] = field(default_factory=dict, init=False)
-    unattributed_usage: list[tuple[ProviderResponseId, PiUsage]] = field(default_factory=list, init=False)
+    unattributed_usage: list[tuple[UsageChargeId, PiUsage]] = field(default_factory=list, init=False)
     has_productive_tool: bool = field(default=False, init=False)
 
     @staticmethod

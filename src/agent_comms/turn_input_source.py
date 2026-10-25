@@ -14,7 +14,7 @@ from . import input_attempt
 from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
-from .field_codec import GoalWaitId, InputId, TurnId
+from .field_codec import InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message
@@ -222,7 +222,7 @@ class InputDependency(ABC):
         return self.current(wait)
 
     def original_type(self) -> type[OriginalTurnInput]:
-        return DependencyOriginalInput
+        return RoutedOriginalInput
 
     @abstractmethod
     def current(self, wait: GoalWait) -> bool: ...
@@ -239,9 +239,6 @@ class NoInputDependency(InputDependency):
     def authorizes(self, wait: GoalWait, owner_input: bool) -> bool:
         return owner_input or wait.allows_routed_input()
 
-    def original_type(self) -> type[OriginalTurnInput]:
-        return RoutedOriginalInput
-
     def current(self, wait: GoalWait) -> bool:
         return True
 
@@ -251,30 +248,6 @@ class NoInputDependency(InputDependency):
 
     def consume(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return True
-
-
-@dataclass(frozen=True)
-class CapturedInputDependency(InputDependency):
-    wait_id: GoalWaitId
-
-    def current(self, wait: GoalWait) -> bool:
-        return wait.matches_id(self.wait_id)
-
-    def allows(self, wait: GoalWait, comms: Comms, origins: tuple[Message, ...],
-               owner: RecordedThreadIncarnation) -> bool:
-        if wait.allows_routed_input():
-            return True
-        if not self.current(wait):
-            return False
-        with comms.bus.bus.reading() as source:
-            for origin in origins:
-                original = source.delivery(origin.seq)
-                if original.message.reference == origin.reference and wait.matches(original, owner):
-                    return True
-        return False
-
-    def consume(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
-        return wait.consume_dependency(comms, canonical)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -374,18 +347,15 @@ class SelectedOriginalInput(RoutedOriginalInput):
         )
 
 
-class DependencyOriginalInput(OriginalTurnInput, DirectInput):
+class ScheduledOriginalInput(OriginalTurnInput, DirectInput):
+    """Captured goal permission and a launch permit authorize an internal input.
+
+    Having a durable input key cannot turn it into an unsolicited routed message.
+    """
+
     def allows_wait(self, wait: GoalWait, comms: Comms,
                     owner: RecordedThreadIncarnation) -> bool:
         return self.dependency.allows(wait, comms, self.origins, owner)
-
-
-class ScheduledOriginalInput(DependencyOriginalInput):
-    """An internal scheduled original inherits reservation and dependency checks.
-
-    Captured goal permission and an applicable launch permit authorize this input;
-    having a durable input key cannot turn it into an unsolicited routed message.
-    """
 
 
 @dataclass(frozen=True, kw_only=True)
