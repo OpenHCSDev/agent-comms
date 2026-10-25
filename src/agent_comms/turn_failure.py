@@ -201,14 +201,8 @@ class NativeLaunchInvalid(BackendFailed):
     """The configured native launch could not be acquired."""
 
 
-class NativeChildSignaled(TurnFailure):
-    """A signal ended the native child: the stop an operator gives, never a backend failure.
-
-    Declared last, so any failure the turn already recorded keeps precedence.
-    """
-
-    # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP (rpc-mode.js:296).
-    stop_exits: ClassVar[frozenset[int]] = frozenset({128 + signal.SIGTERM, 128 + signal.SIGHUP})
+class ResumableFailure:
+    """Capability: the turn ended without its goal failing; the next turn resumes the goal."""
 
     @classmethod
     def settle_attempt(
@@ -218,3 +212,18 @@ class NativeChildSignaled(TurnFailure):
         observation: FailedTurnObservation,
     ) -> None:
         permit.stop(store)
+
+
+class CoordinationRefused(ResumableFailure, TurnFailure):
+    """The bus refused the turn's own read or write (a stale fence, a coverage deadline,
+    a busy store): the refusal protects the bus and says nothing about the backend."""
+
+
+class NativeChildSignaled(ResumableFailure, TurnFailure):
+    """A signal ended the native child: the stop an operator gives, never a backend failure.
+
+    Declared last, so any failure the turn already recorded keeps precedence.
+    """
+
+    # Pi's rpc-mode shutdown exits 128 + SIGTERM or 128 + SIGHUP (rpc-mode.js:296).
+    stop_exits: ClassVar[frozenset[int]] = frozenset({128 + signal.SIGTERM, 128 + signal.SIGHUP})
