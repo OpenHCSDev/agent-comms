@@ -65,7 +65,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "agent-comms", editable = "../" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?branch=main" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?branch=work%2Funit-toad--P694" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?branch=main" },
 ]
 
@@ -204,7 +204,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#f241a8dcaa732c9b46d3e7139ca0332c58a28d56" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=work%2Funit-toad--P694#e89ba2d7d35b0dfda886eda5daba0b7d0ca3742f" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
