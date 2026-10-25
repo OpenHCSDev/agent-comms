@@ -2416,11 +2416,6 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
             for writer in ProjectionSource.writers_for(cls)
         )
 
-    @staticmethod
-    def produces_whole(owner: type[ProjectionOutputs]) -> bool:
-        """Output declarations and output capabilities are production code throughout."""
-        return "writes" in vars(owner) or not issubclass(owner, ProjectionSource)
-
     @classmethod
     def producer_members(cls) -> tuple[tuple[type, tuple[str, ...]], ...]:
         """A writer's own statements redefining production members, not its other mechanisms.
@@ -2428,14 +2423,14 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         A send-time check on a message kind produces no route row, so editing it
         must not rebuild every routed history row.
         """
-        members = []
+        members: list[tuple[type, tuple[str, ...]]] = []
         for lineage in cls.producer_lineage():
             production = {
-                name for owner in lineage if cls.produces_whole(owner) for name in vars(owner)
+                name for owner in lineage if owner.produces_whole() for name in vars(owner)
             }
             for owner in lineage:
-                if not cls.produces_whole(owner):
-                    (declaration,) = ast.parse(dedent(getsource(owner))).body
+                if not owner.produces_whole():
+                    declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(owner))).body[0])
                     members.append((owner, tuple(
                         ast.unparse(statement) for statement in declaration.body
                         if production & cls.bound_names(ast.unparse(statement))
@@ -2462,7 +2457,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         }
         owners.update(
             owner for lineage in cls.producer_lineage() for owner in lineage
-            if cls.produces_whole(owner)
+            if owner.produces_whole()
         )
         annotations: list[object] = (
             [column.annotation for column in cls._columns] if is_dataclass(cls) else []
