@@ -10,6 +10,7 @@ import pytest
 import agent_comms.agent_events as events
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.pending_requests import PendingRequests
+from agent_comms.turn_item import PiRequestKey
 
 
 async def test_mro_specific_before_shared_and_consumer_override():
@@ -191,19 +192,23 @@ async def test_request_correlation_separates_families_and_ignores_late_results()
     with pytest.raises(ValueError):
         pending.add(SetModel, "same", request=model_command)
     refused = Response(
-        id=RequestId("same"), command=SetModel, success=ReportedFlag(False),
+        id=RequestId(PiRequestKey("same")), command=SetModel, success=ReportedFlag(False),
         error=ReportedText("unavailable"),
     )
     assert pending.take(SetModel, "same", refused) is model_command
     assert await model is refused
     assert not thinking.done()
-    accepted = Response(id=RequestId("same"), command=SetThinkingLevel, success=ReportedFlag(True))
+    accepted = Response(
+        id=RequestId(PiRequestKey("same")), command=SetThinkingLevel, success=ReportedFlag(True)
+    )
     assert pending.take(SetThinkingLevel, "same", accepted) is thinking_command
     assert await thinking is accepted
     assert pending.take(SetThinkingLevel, "same", refused) is None
-    cancelled = pending.add(SetModel, "cancelled", request=SetModel(id=RequestId("cancelled")))
+    cancelled = pending.add(
+        SetModel, "cancelled", request=SetModel(id=RequestId(PiRequestKey("cancelled")))
+    )
     cancelled.cancel()
-    assert pending.take(SetModel, "cancelled", refused).id == RequestId("cancelled")
+    assert pending.take(SetModel, "cancelled", refused).id == RequestId(PiRequestKey("cancelled"))
 
 
 def test_internal_event_consumers_do_not_recover_string_tags():

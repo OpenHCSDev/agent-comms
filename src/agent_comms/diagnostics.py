@@ -12,11 +12,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from traceback import TracebackException
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 
 from .child_process import Platform
-from .field_codec import FieldCodec, InputId, TurnId
+from .field_codec import FieldCodec, InputId, ScratchName, TurnId
 from .locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
 from .mro_dispatch import MroDispatch, handles
@@ -43,7 +42,7 @@ class OwnerProcessOutput(RuntimeFile, PatternFile):
         capture. Each launch gets its own private file, without changing thread or
         input disposition state.
         """
-        path = cls.path_in(root, lookup=thread.incarnation.lookup, id=uuid4().hex)
+        path = cls.path_in(root, lookup=thread.incarnation.lookup, id=ScratchName.mint())
         path.parent.mkdir(mode=0o700, exist_ok=True)
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "w") as output:

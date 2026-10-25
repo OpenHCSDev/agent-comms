@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.field_codec import AssignmentId, ThreadLookup
 
 from collections.abc import Callable, Sequence
 from dataclasses import replace
@@ -23,7 +23,7 @@ class AssignmentStore:
     def __init__(self, session: CoordinationSession) -> None:
         self.session = session
 
-    def get(self, assignment_id: str) -> WakeAssignment:
+    def get(self, assignment_id: AssignmentId) -> WakeAssignment:
         row = WakeAssignment.one(self.session._connection, assignment_id=assignment_id)
         if row is None:
             raise IdentityConflict("unknown claim")
@@ -114,7 +114,7 @@ class AssignmentStore:
 
     def transition_preengagement(
         self,
-        assignment_id: str,
+        assignment_id: AssignmentId,
         disposition: type[AssignmentState],
         *,
         expected_revision: int,

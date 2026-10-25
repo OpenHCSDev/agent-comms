@@ -35,7 +35,8 @@ from .field_codec import (
     NativeContext,
     WireName,
 )
-from .transcript_routes import InputDisplay
+from .native_session_reopen import PiSessionId
+from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
 
 if TYPE_CHECKING:
@@ -62,7 +63,7 @@ class NativeInputCommit:
         WireName("inputId"),
         Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"),
     ]
-    session_id: Annotated[str, WireName("sessionId")]
+    session_id: Annotated[PiSessionId, WireName("sessionId")]
     session_entry_id: Annotated[str, WireName("sessionEntryId")]
 
     @property
@@ -191,7 +192,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         """
 
         return entry.events(replace(
-            projection, input_display=InputDisplay(user.input_id, None)
+            projection, input_display=InputDisplay(user.input_id, NoDisplayText())
         ))
 
     def require_attempt(self) -> FullNativeExecution:
@@ -412,7 +413,7 @@ class NativeInputReference(NativeContextReference):
 
     input_id: InputId
     stage: type[NativeInputExecution]
-    session_id: str
+    session_id: PiSessionId
     request_generation: int
 
     recorded = True
@@ -465,7 +466,7 @@ class NativeInputContext:
 
     input_id: InputId | NativeColumn
     stage: type[NativeInputExecution] | NativeColumn
-    session_id: str | NativeColumn
+    session_id: PiSessionId | NativeColumn
     request_generation: NativeColumn
 
     @property

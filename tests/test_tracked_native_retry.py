@@ -1,7 +1,11 @@
+from dataclasses import replace
+
 import pytest
 
 from agent_comms.agent_backend import SteerInputPolicy
-from agent_comms.field_codec import InputId
+from agent_comms.field_codec import InputId, TurnId
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import TurnInputKey
 from agent_comms.native_arguments import SelectedModel
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure
@@ -97,6 +101,21 @@ def following(kind):
     values = dict(keys=(), acceptance=AcceptedTurn(InputId.mint()),
                   goal_permission=TurnGoalPermission(InactiveGoalPermission()))
     return kind(**values, origins=()) if kind is DeliveredFollowingInput else kind(**values)
+
+
+@pytest.mark.parametrize("kind", [AcceptedFollowingInput, DeliveredFollowingInput])
+def test_following_display_uses_the_first_record_or_the_supplied_text(tmp_path, kind):
+    dispositions = InputDispositions(tmp_path)
+    source = following(kind)
+    assert source.display(dispositions, "fallback") == "fallback"
+    key = TurnInputKey(TurnId.mint())
+    source = replace(source, keys=(key,))
+    assert source.display(dispositions, "fallback") == "fallback"
+    dispositions.record(key, seq=None, owner="worker", claim_scope=1,
+                        target="worker", text="saved source")
+    assert source.display(dispositions, "wrapped input") == "saved source"
+    missing = TurnInputKey(TurnId.mint())
+    assert replace(source, keys=(missing, key)).display(dispositions, "fallback") == "fallback"
 
 
 @pytest.mark.parametrize("text", ["", '{"decision":"IGNORE"}', "Background answer"])

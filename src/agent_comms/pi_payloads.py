@@ -20,7 +20,6 @@ from typing import (
     Literal,
     Self,
 )
-from uuid import uuid4
 
 from pydantic import JsonValue
 
@@ -52,6 +51,7 @@ from .lifecycle_capability import Successful
 from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
+from .native_tool_call import ToolCallId
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
 from .pi_vocabulary import (
     NoThinkingOverride,
@@ -67,28 +67,32 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import (
     AssistantTranscript,
-    ContextTranscript,
     NoticeTranscript,
     SentTranscript,
     ThinkingTranscript,
     ToolEndTranscript,
     ToolStartTranscript,
+    TranscriptEvent,
     UserTranscript,
 )
 from .turn_failure import (
     ModelRequestFailed,
     ProviderTransportFailed,
 )
+from .turn_item import CompactionChargeId, PiRequestKey, ProviderResponseId, UsageChargeId
+from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent, ProviderUsage
+    from .agent_events import AgentEvent
     from .backend import TurnSession
+    from .native_entries import TranscriptProjection
     from .pending_requests import PendingRequests
     from .pi_commands import PiCommand
     from .pi_events import AutoRetryEnd, Response
+    from .routing import Routing
+    from .transcript_routes import SentTextDigest
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
-    from .turn_usage import UsageAccount
 
 
 PiValue = typing.TypeVar("PiValue")
@@ -121,12 +125,25 @@ class PiReported[T](SingleFieldValue):
     def require(self) -> T:
         return self.value
 
+    def preserve_evidence(self, raw: object) -> Self:
+        return self
+
 
 @dataclass(frozen=True, slots=True)
 class PiOmitted(NullMember):
     """Pi left an optional field out or sent null; it goes back out the same way."""
 
     reported: ClassVar[bool] = False
+
+    @property
+    def message_parts(self) -> tuple[PiContent, ...]:
+        return ()
+
+    def rendered_text(self, separator: str) -> str:
+        return ""
+
+    def preserve_evidence(self, raw: object) -> Self:
+        return self
 
     def value_or[D](self, default: D) -> D:
         return default
@@ -148,6 +165,13 @@ class PiOmitted(NullMember):
 class ReportedText(PiReported[str]):
     value: str
 
+    @property
+    def message_parts(self) -> tuple[PiContent, ...]:
+        return (TextContent(self.value),)
+
+    def rendered_text(self, separator: str) -> str:
+        return self.value
+
     def text_or[D](self, default: D) -> str | D:
         """Pi's empty text falls back exactly as its omitted text does."""
         return self.value or default
@@ -166,10 +190,10 @@ class ReportedFlag(PiReported[bool]):
 
 
 @dataclass(frozen=True)
-class RequestId(PiReported[str]):
+class RequestId(PiReported[PiRequestKey]):
     """The id a command carries and Pi echoes on the response that answers it."""
 
-    value: str
+    value: PiRequestKey
 
     def track_in(
         self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
@@ -192,7 +216,7 @@ class AnonymousRequest(PiOmitted):
     def track_in(
         self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
     ) -> Future[Response]:
-        return pending.add(owner, uuid4().hex, request=command)
+        return pending.add(owner, PiRequestKey.fresh(), request=command)
 
     def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
         """The anonymous entry is keyed by a private token nobody else holds."""
@@ -202,7 +226,7 @@ class AnonymousRequest(PiOmitted):
     ) -> PiCommand | None:
         return pending.take_anonymous(owner, response)
 
-    def require(self) -> str:
+    def require(self) -> PiRequestKey:
         raise ValueError("A correlated native input requires its command ID")
 
 
@@ -438,15 +462,17 @@ class PiUsage(PiPayload):
         PiField[NonnegativePiCount], WireName("cacheWrite1h")
     ] = UnreportedCount()
 
-    def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
-        return (account.charge(self),)
+    def charges(self, identity: UsageChargeId | PiOmitted) -> tuple[events.ProviderUsage, ...]:
+        # A failed terminal may have usage counters but no provider response.
+        # Only an observed identity can name a provider billing entry.
+        return tuple(events.ProviderUsage(response_id=key, usage=self) for key in identity.present())
 
 
 @dataclass(frozen=True)
 class UnreportedUsage(PiUsage):
     """Pi sent no usage object: nothing is charged and no token total is known."""
 
-    def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
+    def charges(self, identity: UsageChargeId | PiOmitted) -> tuple[events.ProviderUsage, ...]:
         return ()
 
 
@@ -533,7 +559,7 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
                                 tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id))
         ]
 
-    id: str
+    id: ToolCallId
     name: str
     arguments: object
     tool_round_allowed = True
@@ -551,6 +577,29 @@ class ImageContent(PiContent):
 @dataclass(frozen=True)
 class UnknownContent(UnknownPayload, PiContent):
     pass
+
+
+@dataclass(frozen=True)
+class ReportedParts(PiReported[tuple[PiContent, ...]]):
+    """Pi supplied an array; an empty array remains reported, not omitted."""
+
+    value: tuple[PiContent, ...]
+
+    @property
+    def message_parts(self) -> tuple[PiContent, ...]:
+        return self.value
+
+    def rendered_text(self, separator: str) -> str:
+        return separator.join(part.text for part in self.value if part.text)
+
+    def preserve_evidence(self, raw: object) -> Self:
+        # The field decoder established the array shape. Preserve extension
+        # fields from that same input without decoding or type-switching again.
+        raw_parts = typing.cast(list[dict[str, JsonValue]], raw)
+        return replace(self, value=tuple(
+            part.preserve_evidence(raw_part)
+            for part, raw_part in zip(self.value, raw_parts, strict=True)
+        ))
 
 
 class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
@@ -763,7 +812,7 @@ class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
 class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message"):
     @property
     def parts(self) -> tuple[PiContent, ...]:
-        return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
+        return self.content.message_parts
 
     @property
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
@@ -784,7 +833,8 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     assistant: ClassVar[bool] = False
     user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
-    content: tuple[PiContent, ...] | str | None = None
+    part_separator: ClassVar[str] = ""
+    content: ReportedText | ReportedParts | PiOmitted = PiOmitted()
     usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
     input_id: Annotated[PiField[ReportedInputId | PiOmitted], WireName("inputId")] = PiOmitted()
     input_digest: Annotated[
@@ -827,13 +877,12 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     def update_context(self):
         return self.assistant
 
+    def preserve_evidence(self, raw: Mapping[str, object]) -> Self:
+        return self
+
     @property
     def text(self) -> str:
-        if self.content is None:
-            return ""
-        if isinstance(self.content, str):
-            return self.content
-        return ("\n" if self.user else "").join(p.text for p in self.content if p.text)
+        return self.content.rendered_text(self.part_separator)
 
 
 class AbsentMessage(ExternalNullMember, PiMessage):
@@ -845,7 +894,7 @@ class AbsentMessage(ExternalNullMember, PiMessage):
 @dataclass(frozen=True)
 class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     # Pi's assistant record always carries an array, including failed terminals.
-    content: Annotated[tuple[PiContent, ...], WireRequired()] = ()
+    content: Annotated[ReportedParts, WireRequired()] = ReportedParts(())
     # Original Pi completion metadata. These are observations, not registry
     # configuration or permission to select a model for a later request.
     api: PiField[str | PiOmitted] = PiOmitted()
@@ -854,7 +903,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     response_model: Annotated[
         PiField[str | PiOmitted], WireName("responseModel")
     ] = PiOmitted()
-    response_id: Annotated[PiField[str | PiOmitted], WireName("responseId")] = PiOmitted()
+    response_id: Annotated[PiField[ProviderResponseId | PiOmitted], WireName("responseId")] = PiOmitted()
     provider_thinking_level: Annotated[
         PiField[str | PiOmitted], WireName("providerThinkingLevel")
     ] = PiOmitted()
@@ -862,7 +911,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
 
     @property
     def authoritative_text(self) -> str:
-        return "".join(part.final_text for part in self.content)
+        return "".join(part.final_text for part in self.parts)
 
     @property
     def final_reply(self):
@@ -884,7 +933,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
             updates.append(CommittedProgress(text=self.text))
         session.output.start_message()
         if session.accepts_output:
-            updates.extend(self.usage.charges(session.usage))
+            updates.extend(self.usage.charges(self.response_id))
         session.output.final_assistant_stop = (
             bool(reason.items_with(Successful, reason)) and session.started_input
         )
@@ -907,11 +956,15 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
         for part in self.parts:
             for event in part.assistant_transcript(context.position, timestamp):
                 event.append_to(events)
-        return [replace(event, routing=context.routing if context else None) for event in events]
+        return [replace(event, routing=context.routing) for event in events]
 
 
 class UserMessage(PiMessage):
     user = True
+    part_separator = "\n"
+
+    def preserve_evidence(self, raw: Mapping[str, object]) -> Self:
+        return replace(self, content=self.content.preserve_evidence(raw.get("content")))
 
     def matches_input(self, text, native_id):
         # An omitted input id matches an omitted prompt id, as it always has.
@@ -923,29 +976,29 @@ class UserMessage(PiMessage):
     def observe_start_abort(self, session, event):
         session.observe_input_during_abort(event)
 
-    def transcript_events(self, context, timestamp: float):
-        routing, display = context.routing, context.input_display
+    @property
+    def original_text(self) -> str:
         # Preserve exact separators, including empty text blocks, for provenance.
-        raw_text = "\n".join(text for part in self.parts for text in part.text_parts())
-        if display is not None and display.sent_text_digest is not None:
-            if self.content is not None and display.matches(raw_text):
-                routing = display.routing
-            else:
-                routing = display = None
-        parts = self.parts
-        events = []
-        if display is not None:
-            if raw_text and raw_text != display.text:
-                events.append(ContextTranscript(raw_text, position=context.position, timestamp=timestamp))
-            if display.text is None:
-                return events
-            parts = (
-                TextContent(display.text),
-                *(retained for part in parts
-                  for retained in part.with_display_text(display.text).present()),
-            )
-        for part in parts:
-            events.extend(part.user_transcript(context.position, timestamp))
+        return "\n".join(text for part in self.parts for text in part.text_parts())
+
+    def matches_display(self, digest: SentTextDigest) -> bool:
+        return self.content.reported and digest.matches(self.original_text)
+
+    def display_parts(self, text: str) -> tuple[PiContent, ...]:
+        return (
+            TextContent(text),
+            *(retained for part in self.parts
+              for retained in part.with_display_text(text).present()),
+        )
+
+    def transcript_events(self, context, timestamp: float):
+        return context.input_display.project_message(self, context, timestamp)
+
+    def project_parts(
+        self, parts: tuple[PiContent, ...], context: TranscriptProjection,
+        timestamp: float, routing: Routing,
+    ) -> list[TranscriptEvent]:
+        events = [event for part in parts for event in part.user_transcript(context.position, timestamp)]
         events = [replace(event, routing=routing) for event in events]
         for input_id in self.input_id.present():
             events = [event.with_native_input(input_id) for event in events]
@@ -954,7 +1007,7 @@ class UserMessage(PiMessage):
 
 @dataclass(frozen=True)
 class ToolResultMessage(PiMessage, declared_name="toolResult"):
-    tool_call_id: Annotated[PiField[str], WireName("toolCallId")] = ""
+    tool_call_id: Annotated[PiField[ToolCallId], WireName("toolCallId")] = field(kw_only=True)
     tool_name: Annotated[PiField[str], WireName("toolName")] = "tool"
     is_error: Annotated[PiField[bool], WireName("isError")] = False
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
@@ -1173,7 +1226,10 @@ class NativeSessionSnapshot(PiPayload):
         known = self._known_identity()
         if len(known) != len(fields(NativeSessionIdentity)):
             return None
-        return NativeSessionIdentity(**known)
+        return NativeSessionIdentity(
+            FieldCodec.decode(PiSessionId, self.session_id.text_or("")),
+            self.session_file.text_or(""),
+        )
 
     def conflicts(self, other: NativeSessionSnapshot) -> bool:
         known, observed = self._known_identity(), other._known_identity()
@@ -1267,8 +1323,8 @@ class CompactionData(PiResponseData):
 
         return compaction_summary(self.summary) if self.summary is not None else None
 
-    def charge(self, session):
-        yield from self.usage.charges(session.usage)
+    def charge(self):
+        yield from self.usage.charges(CompactionChargeId.fresh())
 
 
 @dataclass(frozen=True)

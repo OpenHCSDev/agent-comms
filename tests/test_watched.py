@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
@@ -42,7 +42,7 @@ def recorded_wait(watched_bus):
     watched_goal_id = GoalId.mint()
     _, comms = watched_bus
     return RecordedGoalWait(
-        goal_id=watched_goal_id, wait_id="watched-wait", revision=0, after_seq=0,
+        goal_id=watched_goal_id, wait_id=GoalWaitId.mint(), revision=0, after_seq=0,
         targets=(GoalWaitTarget(comms.registry.require("peer").incarnation.require_recorded()),),
         owner=comms.registry.require("owner").incarnation.require_recorded(),
         target_turn_generations=(None,), report_turn_id=None, report_turn_generation=None,

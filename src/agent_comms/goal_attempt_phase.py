@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from .attempt_resolution import AttemptResolution
 from .declared_family import DeclaredFamily
 from .errors import UnresolvedAttemptError
 from .lifecycle import LifecycleState
@@ -13,14 +14,17 @@ from .lifecycle_capability import Failed, Terminal
 
 if TYPE_CHECKING:
     import sqlite3
+
     from .goal_attempts import AttemptRecord
 
 
-class ReadyAttempt(ABC):
+class ReadyAttempt[Evidence](ABC):
     """Attempt outcomes that record their own evidence before a fresh grant."""
 
     @abstractmethod
-    def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None: ...
+    def record_ready(
+        self, attempt: AttemptRecord, db: sqlite3.Connection, evidence: Evidence
+    ) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -47,25 +51,29 @@ class ClaimedAttempt(GoalAttemptPhase):
         return FailedAttempt, SucceededAttempt, ResolvedAttempt
 
 
-class FailedAttempt(Failed, ReadyAttempt, GoalAttemptPhase):
+class FailedAttempt(Failed, ReadyAttempt[AttemptResolution], GoalAttemptPhase):
     permits_retirement: ClassVar[bool] = True
 
     def require_retryable(self) -> None:
         pass
 
-    def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None:
-        attempt.advance(db, self, resolution=note)
+    def record_ready(
+        self, attempt: AttemptRecord, db: sqlite3.Connection, resolution: AttemptResolution
+    ) -> None:
+        attempt.advance(db, self, resolution=resolution)
 
     @classmethod
     def successors(cls):
         return (ResolvedAttempt,)
 
 
-class SucceededAttempt(Terminal, ReadyAttempt, GoalAttemptPhase):
+class SucceededAttempt(Terminal, ReadyAttempt[str], GoalAttemptPhase):
     verified_progress = True
 
-    def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None:
-        attempt.advance(db, self, progress_witness=note)
+    def record_ready(
+        self, attempt: AttemptRecord, db: sqlite3.Connection, progress_witness: str
+    ) -> None:
+        attempt.advance(db, self, progress_witness=progress_witness)
 
 
 class ResolvedAttempt(Terminal, GoalAttemptPhase):

@@ -29,7 +29,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.connector_caller import CALLER
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.field_codec import FieldCodec, TurnId, GoalId
+from agent_comms.field_codec import FieldCodec, TurnId, GoalId, OrderId
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.owner_requests import NewestOpenRequest
@@ -43,6 +43,9 @@ from agent_comms.order_tools import CommsOrderDoneTool, CommsTodoCreateTool
 from connector_readiness import ConnectorReadiness
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.threads import Thread
+
+
+PROBE_ORDER_ID = OrderId.mint()
 
 
 def seed(root: Path, project: Path) -> None:
@@ -74,7 +77,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     goal_id = comms.registry.require("claude-ai").goal.require().id
     actor = FieldCodec.encode(comms.registry.require("claude-ai").incarnation)
     pending = PendingProblemOrder(
-        id="probe-order", scope=FIX_SCOPE,
+        id=PROBE_ORDER_ID, scope=FIX_SCOPE,
         owner=FileLine(__file__, 1),
         run=MechanicalOrderRun(),
         check=OrderCheck(project, "printf 1", CountCheckResult(1)),
@@ -132,7 +135,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     if name == "comms_problem_close":
         CommsOrderDoneTool(
             problem="P1",
-            order_id="probe-order",
+            order_id=PROBE_ORDER_ID,
             delivery=OperationDelivery(),
             claims=(WorkingClaim(str(screenshot)),),
         ).apply(comms, ThreadCaller("claude-ai"))
@@ -213,7 +216,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_todo_create": {"owner": "worker", "order": FieldCodec.encode(order)},
         "comms_order_done": {
             "problem": "P1",
-            "order_id": "probe-order",
+            "order_id": str(PROBE_ORDER_ID),
             "delivery": {"kind": "operation"},
             "claims": [{"kind": "working", "screenshot": str(screenshot)}],
         },

@@ -30,7 +30,7 @@ from agent_comms.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, RecordProblems, TurnId
+from agent_comms.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -111,7 +111,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
-                id=f"order-{problem}", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
+                owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
                 check=OrderCheck(source.checkout, "printf 0", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),
@@ -288,7 +288,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
         problem="P3", commander="lead", request=original.request,
         assigner=comms.registry.require("lead").incarnation, repo=original.repo,
         text="Repair P3", review_at=original.review_at,
-        order=replace(original.order, id="order-P3"),
+        order=replace(original.order, id=OrderId.mint()),
     ))
     merged = comms.goals.todos.get("P2")
     with comms.goals.todos.writing() as db:
@@ -656,7 +656,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     worktrees = held_bus.registry.storage_rule.checkout_base
     original = held_bus.goals.todos.get('P1')
     check = OrderCheck(source.checkout, 'grep -c obsolete owner.py', CountCheckResult(0))
-    order = replace(original.order.checked(), id='delete-obsolete', check=check,
+    order = replace(original.order.checked(), id=OrderId.mint(), check=check,
                     banned=('optional guards', 'maybe.py'), report='Report optional examples')
     document = OrderFile(order, 'Four obsolete declarations remain after their reader was deleted.',
                          'This is stupid because dead declarations still occupy the source.',
@@ -677,7 +677,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     first = held_bus.goals.todos.get('P3')
     assert first.messages
     document = replace(document, problems=('P3',),
-                       order=replace(document.order, id='replacement-deletion'))
+                       order=replace(document.order, id=OrderId.mint()))
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
     cli('send', 'outsider', str(order_file), '--clean')
     sent = held_bus.goals.todos.get('P3')
@@ -861,7 +861,7 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(he
     with pytest.raises(ValueError, match="unresolved"):
         held_bus.goals.update_goal("worker", ActiveGoalAction(), actor=OwnerInvocable)
     held_bus.goals.update_goal(
-        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+        "worker", CompliedGoalAction(witness=MessageId("c0ffee000001")), actor=OwnerInvocable)
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
 
 
@@ -887,7 +887,7 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_problems_closed_during_the
             "The requested repair already merged into main through another problem."))
     assert todos.for_goal(worker.incarnation, worker.goal.require().id) == ()
     held_bus.goals.update_goal(
-        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+        "worker", CompliedGoalAction(witness=MessageId("c0ffee000001")), actor=OwnerInvocable)
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
 
 
