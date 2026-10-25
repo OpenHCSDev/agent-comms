@@ -9,7 +9,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.native_runtime_input import CurrentNativeCursor
-from agent_comms.typed_table import SQLiteColumnShape
+from agent_comms.typed_table import SQLiteCatalogObject, SQLiteColumnShape
 
 
 class NativeCursorThreadKey(Carry):
@@ -25,7 +25,7 @@ class NativeCursorThreadKey(Carry):
         if apply:
             for path, retired in folded.items():
                 with closing(CoordinationStore.writer(path)) as db, CoordinationStore.write_transaction(db):
-                    CurrentNativeCursor.release_guards(db)
+                    SQLiteCatalogObject.release_guards(db, CurrentNativeCursor)
                     for row in retired:
                         CurrentNativeCursor.delete(
                             db, wire_root_id=row.wire_root_id, recipient_lookup=row.recipient_lookup,
