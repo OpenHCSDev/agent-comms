@@ -3346,8 +3346,6 @@ class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, StorySo
         return result
 
     def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
-        for strike in self.implied_strikes():
-            result = result.current_holder.after_strike(db, result, store, strike)
         return result
 
     def apply(self, current: Todo) -> Todo:

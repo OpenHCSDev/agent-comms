@@ -22,6 +22,7 @@ from agent_comms.todos import (
 )
 from agent_comms.work_branches import WorkBranches
 from agent_comms.owner_requests import NewestOpenRequest
+from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
 
@@ -121,6 +122,7 @@ def test_clean_resend_keeps_three_strikes_and_the_existing_holder(held_commander
         order(cited_source), id=OrderId.mint(),
         check=OrderCheck(ctx.repos[0].checkout, f"test ! -e {shlex.quote(str(marker))}"),
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120),
+        run=ApplicationOrderRun("The same holder receives corrected work despite three recorded live strikes"),
     )
     document = OrderFile(
         replacement,

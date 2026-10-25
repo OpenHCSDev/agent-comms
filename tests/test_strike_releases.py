@@ -1,9 +1,10 @@
 """The install carry preserves release facts while retiring their automatic meaning."""
 import json
+from contextlib import closing
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LiveFilesRequest
-from agent_comms.todos import ReleaseTodo, StoredOrderStory, StrikeReason
+from agent_comms.todos import ReleaseTodo, StoredOrderStory, StrikeReason, TodoStore
 from cutover.carry_strike_releases import StrikeReleases
 from conftest import maintenance_held
 
@@ -26,7 +27,7 @@ def test_strike_release_carry_preserves_every_fact_and_runs_once(recorded_proble
     with maintenance_held(comms.root):
         assert step.carry(apply=True).changed == 1
     assert step.carry(apply=False).changed == 0
-    with store.reading() as db:
+    with closing(TodoStore.read_snapshot(TodoStore.path_in(comms.root))) as db:
         (row,) = StoredOrderStory.select(db, problem=original.id)
     assert row.event == released
     assert store.get(original.id).held() == original.held()
