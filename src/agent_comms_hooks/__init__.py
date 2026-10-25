@@ -38,10 +38,11 @@ class HookRecord:
 
     @staticmethod
     def field(declared: type, value: object) -> object:
-        """A nested record is decoded by its own fields; a JSON scalar is kept as written."""
+        """A nested record is decoded by its own fields; any other JSON value is built by its
+        declared type, so a nominal identity such as `SubagentId` is one from decode on."""
         if isinstance(value, Mapping) and issubclass(declared, HookRecord):
             return declared.decode(value)
-        return value
+        return declared(value)
 
 
 @dataclass(frozen=True)
