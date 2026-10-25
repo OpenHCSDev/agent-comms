@@ -133,7 +133,7 @@ class RouteCounts:
 
     def _route_rows(self, row_type, registry, deliveries, seen, after: int, query: str, parameters=()):
         with self.observing() as db:
-            senders = registry.sender_bindings
+            namespace = registry.sender_bindings
             bindings = (
                 *ReadCursor.sql_bindings(registry,
                     {actor: seen[actor].counted(delivery, registry)
@@ -142,8 +142,8 @@ class RouteCounts:
                             for actor, delivery in deliveries.items()}),
                 json.dumps({actor: registry.require(actor).incarnation.require_recorded().lookup
                             for actor in deliveries}),
-                senders["senders"], senders["unrecorded"], BusRow.last_seq(db), after,
-                senders["births"], json.dumps(dict(registry.aliases)),
+                namespace.senders, namespace.unrecorded, BusRow.last_seq(db), after,
+                namespace.births, json.dumps(dict(registry.aliases)),
                 json.dumps({actor: registry.unread_since(
                     actor, registry.require(actor).incarnation.wire_birth, False,
                 ) for actor in deliveries}),

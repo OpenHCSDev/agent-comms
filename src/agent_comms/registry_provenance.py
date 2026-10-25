@@ -163,6 +163,15 @@ class RegistryNames(Generic[Member]):
             raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
 
 
+@dataclass(frozen=True, slots=True)
+class SenderBindings:
+    """The namespace's SQL inputs, built together from its original members."""
+
+    senders: str
+    unrecorded: str
+    births: str
+
+
 @dataclass(frozen=True, kw_only=True)
 class RegistryProvenance(RegistryNames[ThreadProvenance]):
     threads: dict[str, ThreadProvenance]
@@ -188,7 +197,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         return replace(self, threads=threads)
 
     @cached_property
-    def sender_bindings(self) -> Mapping[str, str]:
+    def sender_bindings(self) -> SenderBindings:
         """Current sender identities and births for one SQL read, including aliases."""
         senders = {}
         births = {}
@@ -198,13 +207,13 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
             senders[name] = tuple(DeliveryScope.sender_lookups(
                 source.incarnation, partial(unrecorded.append, name)
             ))
-        return MappingProxyType({
-            "senders": FieldCodec.compact(FieldCodec.encode(
+        return SenderBindings(
+            senders=FieldCodec.compact(FieldCodec.encode(
                 senders, dict[str, tuple[ThreadLookup | PublicSender, ...]]
             )),
-            "unrecorded": json.dumps(unrecorded),
-            "births": json.dumps(births),
-        })
+            unrecorded=json.dumps(unrecorded),
+            births=json.dumps(births),
+        )
 
     def retired(self, name: str) -> bool:
         """A recorded namespace keeps no removal ledger. A name its own bus
