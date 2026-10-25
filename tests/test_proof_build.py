@@ -404,9 +404,8 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
 
     (due,) = InstallDue.due(bus, ProgressRead())
     assert due.main == merge
-    assert "INSTALL DUE" in due.line() and "1 merges, oldest 1 min" in due.line()
-    assert "#41 Install what merged" in due.line() and "landing: #42 fix/next" in due.line()
-    assert "order install" in due.line()
+    assert "#41 Install what merged" in due.line() and "#42 fix/next" in due.line()
+    assert "order install" in due.line().rsplit(" -> ", 1)[1]
     due.enforce(bus, "lead")
     assert InstallLogs(bus.root).units() == ()
 

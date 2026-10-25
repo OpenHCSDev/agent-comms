@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import socket
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -39,10 +40,21 @@ class SessionBoard(SessionWire):
             peer.connect(str(endpoint))
             peer.sendall(json.dumps({cls.family_discriminator: cls.request}).encode() + b"\n")
             with peer.makefile("rb") as stream:
-                reply = json.loads(stream.readline())
-        return cls(tuple(reply["lines"]))
+                return cls.replied(**json.loads(stream.readline()))
 
     @classmethod
-    def unreadable(cls, error: OSError) -> SessionBoard:
-        """A bridge that cannot answer says so on the board instead of printing it empty."""
-        return cls((f"BOARD UNREADABLE: the session bridge did not answer ({error!r})",))
+    def replied(cls, lines: Sequence[str], **family: str) -> SessionBoard:
+        """The reply's discriminator names this member; its one field is the lines. A reply of
+        any other shape, an older bridge's refusal included, raises TypeError here."""
+        return cls(tuple(lines))
+
+
+@dataclass(frozen=True)
+class UnreadableBoard:
+    """A bridge that cannot answer says so on the board instead of printing it empty."""
+
+    error: Exception
+
+    @property
+    def lines(self) -> tuple[str, ...]:
+        return (f"BOARD UNREADABLE: the session bridge did not answer ({self.error!r})",)

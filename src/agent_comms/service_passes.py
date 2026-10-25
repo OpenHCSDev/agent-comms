@@ -26,6 +26,10 @@ class ServicePasses:
     commander_completed: dict[RecordedThreadIncarnation, float] = field(default_factory=dict)
     """Last observation completed for each commander, including quiet observations."""
 
+    def completed_since(self, commander: ThreadIncarnation, since: float) -> bool:
+        """A pass for this commander completed at or after ``since``."""
+        return any(at >= since for owner, at in self.commander_completed.items() if owner == commander)
+
 
 @dataclass(frozen=True, slots=True)
 class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses], DependentStateTier):

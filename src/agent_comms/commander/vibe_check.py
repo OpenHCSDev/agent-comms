@@ -209,8 +209,8 @@ class VibeCheck(UndatedStandingRule):
         )
 
     def line(self) -> str:
-        return (f"ANSWER the {VibeCheckSender.sender} messages now"
-                f" (vibe check: {self.sign.signal.declared_name})")
+        return (f"vibe check: {self.sign.signal.declared_name}. you seeing this?"
+                f" -> answer the {VibeCheckSender.sender} messages now")
 
 
 @dataclass(frozen=True)
@@ -231,7 +231,7 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return f"ANSWER vibe check {self.cited} ({age} min old)"
+        return f"vibe check {self.cited} is {age} min old. still ignoring it? -> answer it"
 
 
 class Indictment:
@@ -309,8 +309,8 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"CHOKEHOLD: vibe check {self.check.seq}:{self.check.message_id} ignored; units"
-            f" paused -> answer the {ChokeholdSender.sender} burst by its protocol"
+            f"vibe check {self.check.seq}:{self.check.message_id} ignored, so the units are"
+            f" paused. happy now? -> answer the {ChokeholdSender.sender} burst by its protocol"
         )
 
 
@@ -326,7 +326,7 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
                      ChokeholdSender.unanswered(source, snapshot, commander, time.time()))
 
     def line(self) -> str:
-        return f"ANSWER chokehold {self.cited} by the protocol"
+        return f"chokehold {self.cited} is still unanswered. why? -> answer it by the protocol"
 
 
 @dataclass(frozen=True)
@@ -435,8 +435,8 @@ class ChokeholdHeld(ChokeholdAnswer):
         )
 
     def line(self) -> str:
-        return (f"CHOKEHOLD HOLDS: answer {self.answer.seq}:{self.answer.message_id} quoted, but"
-                " load is still degraded")
+        return (f"answer {self.answer.seq}:{self.answer.message_id} quoted the indictment, but load"
+                " is still degraded, so the chokehold holds. what's still broken?")
 
 
 @dataclass(frozen=True)
@@ -462,4 +462,5 @@ class ChokeholdRefused(ChokeholdAnswer):
         )
 
     def line(self) -> str:
-        return f"CHOKEHOLD HOLDS: answer {self.answer.seq}:{self.answer.message_id} quotes nothing"
+        return (f"answer {self.answer.seq}:{self.answer.message_id} quotes nothing, so the"
+                " chokehold holds. did you even read it?")

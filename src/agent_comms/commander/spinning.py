@@ -37,5 +37,5 @@ class SpinningUnit(HeldBranchRule):
         return tuple(found)
 
     def line(self) -> str:
-        return (f"RESHAPE {self.holder.name} {self.problem}: {self.call_count} calls, 0 src lines"
-                " -> send the exact shape")
+        return (f"{self.holder.name} made {self.call_count} calls on {self.problem} and changed 0 src"
+                " lines. is it working, or just burning tokens? -> send the exact shape")

@@ -549,9 +549,9 @@ class StorageOverQuota(StorageViolation):
         return storage.over_checkouts
 
     def line(self) -> str:
-        return (f'VIOLATION storage quota: {self.storage.unit.name} holds '
-                f'{len(self.storage.extra_checkouts)} checkouts besides home, '
-                f'limit {self.storage.rule.max_checkouts} -> order the cleanup')
+        return (f'{self.storage.unit.name} holds {len(self.storage.extra_checkouts)} checkouts'
+                f' besides home, limit {self.storage.rule.max_checkouts}. hoarding them for'
+                f' what? -> order the cleanup')
 
 
 class StorageHomeMissing(StorageViolation):
@@ -560,8 +560,8 @@ class StorageHomeMissing(StorageViolation):
         return storage.missing_home
 
     def line(self) -> str:
-        return (f'VIOLATION storage home: {self.storage.unit.name} declared home '
-                f'{self.storage.home} is missing -> restore the home checkout')
+        return (f'{self.storage.unit.name} declared home {self.storage.home} is missing.'
+                f' who deleted it? -> restore the home checkout')
 
 
 @dataclass

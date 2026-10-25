@@ -253,7 +253,7 @@ class LostTools(UndatedStandingRule):
         return tuple(found)
 
     def line(self) -> str:
-        return f"{self.thread.name}: {'; '.join(self.changes)}"
+        return f"{self.thread.name} lost tools: {'; '.join(self.changes)}. who took them, and why?"
 
 
 @dataclass(frozen=True)
@@ -349,9 +349,9 @@ class BranchBehindMain(HeldBranchRule):
                      for held in branches if held.difference.behind > cls.limit)
 
     def line(self) -> str:
-        return (f"MERGE MAIN into {self.repository.to_wire()}:{self.branch} "
-                f"({self.holder.name} {self.problem}): {self.behind} commits behind, "
-                f"limit {self.limit}")
+        return (f"{self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) is"
+                f" {self.behind} commits behind main, limit {self.limit}. building on a stale tree"
+                " for fun? -> merge main into it")
 
 
 @dataclass(frozen=True)
@@ -374,9 +374,10 @@ class BranchGrowth(HeldBranchRule):
 
     def line(self) -> str:
         return (
-            f"SHRINK {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}):"
-            f" src grows {self.growth.total} code lines, limit {self.growth.limit} -> the verdict"
-            " states why the growth is necessary, or the slop is deleted"
+            f"{self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) grows"
+            f" src by {self.growth.total} code lines, limit {self.growth.limit}. is all of it"
+            " necessary, or is it slop? -> the verdict states why the growth is necessary, or the"
+            " slop is deleted"
         )
 
 
@@ -407,8 +408,9 @@ class SharedFileBranches(HeldBranchRule):
         return tuple(found)
 
     def line(self) -> str:
-        return (f"SEQUENCE {self.holder.name} {self.problem} and {self.other_holder.name} "
-                f"{self.other_problem}: both touch {self.repository.to_wire()}:{self.path}")
+        return (f"{self.holder.name} {self.problem} and {self.other_holder.name} {self.other_problem}"
+                f" both touch {self.repository.to_wire()}:{self.path}. who goes first? -> sequence"
+                " them")
 
 
 class DatedStandingRule(StandingRule, declared_name=None):
@@ -571,8 +573,8 @@ class ReviewTimerUp(HeldOrderDue):
         )
 
     def line(self) -> str:
-        return (f"READ {self.holder.name} {self.problem}: review timer up at {self.since.clock()},"
-                f" order {self.order} -> read its diff and judge it")
+        return (f"{self.holder.name}'s timer on {self.problem} is up ({self.since.clock()}, order"
+                f" {self.order}). what did it actually do? -> read its diff and judge it")
 
 
 @dataclass(frozen=True)
@@ -620,8 +622,9 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
         return (*super().subjects(), HeadSubject(PullRequestHead(self.repo, self.pr, self.head)))
 
     def line(self) -> str:
-        return (f"JUDGE {self.repo.to_wire()}#{self.pr} {self.head[:9]} delivered by "
-                f"{self.holder.name} ({self.problem}, order {self.order})")
+        return (f"{self.holder.name} delivered {self.repo.to_wire()}#{self.pr} {self.head[:9]}"
+                f" ({self.problem}, order {self.order}). you read it yet?"
+                f" -> judge ok/back --pr {self.pr} --head {self.head}")
 
 
 @dataclass(frozen=True)
@@ -657,7 +660,8 @@ class UnreviewedHead(HeadLine, DatedStandingRule, declared_name=None):
         return self.due_at
 
     def line(self) -> str:
-        return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
+        return (f"{self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} is sitting"
+                f" there unjudged. you read it yet?"
                 f" -> judge ok/back --pr {self.request.pr} --head {self.request.head}")
 
 
@@ -708,8 +712,8 @@ class StuckMerge(HeadLine, DatedStandingRule):
         return self.block.since
 
     def line(self) -> str:
-        return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}:"
-                f" auto-merge armed but {self.block.what()}"
+        return (f"{self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} has"
+                f" auto-merge armed and {self.block.what()}. who's fixing it?"
                 " -> fix the check at its owner or give it an owner now")
 
 
@@ -760,9 +764,9 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
         actions = ((*(block.remedy() for block in self.blocks),
                     *(f"order {holder.name}" for holder in self.holders))
                    or ("land or supersede it",))
-        return (f"IDLE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
-                f" ({held}): {why}, idle {int((time.time() - self.moved) // 60)} min"
-                f" -> {'; '.join(actions)}")
+        return (f"{self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
+                f" {why}, idle {int((time.time() - self.moved) // 60)} min. who owns it, or are we"
+                f" pretending it doesn't exist? -> {'; '.join(actions)}")
 
 
 @dataclass(frozen=True)
@@ -813,7 +817,8 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
         return tuple(sorted(set(candidates), key=lambda path: (hunted.get(path, 0), path)))[:1]
 
     def line(self) -> str:
-        return "HUNT a held order's production source (no hot file found); order the fix this wake"
+        return ("nothing hot found in any held order's production source. so what's slow?"
+                " -> hunt it and order the fix this wake")
 
     def began(self) -> float:
         return self.since
@@ -824,7 +829,7 @@ class LocatedHuntDue(HuntDue, declared_name=None):
     where: str
 
     def line(self) -> str:
-        return f"HUNT {self.where}; order the fix this wake"
+        return f"{self.where} is hot and nobody's on it. why? -> order the fix this wake"
 
 
 @dataclass(frozen=True)
@@ -859,9 +864,9 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"ACT ON owner directive {self.cited}"
-            f" on request {self.request.value},"
-            f" due {self.directive.due_time} -> order its next step or mark the request done"
+            f"owner directive {self.cited} on request {self.request.value} was due"
+            f" {self.directive.due_time}. didn't we already have a plan due then?"
+            " -> order its next step or mark the request done"
         )
 
 
@@ -883,8 +888,8 @@ class ServicePassFailing(IndependentStandingRule, DatedStandingRule):
         return self.since
 
     def line(self) -> str:
-        return (f"FIX service pass {self.watch}: failing since "
-                f"{RecordedEventTime(self.since).clock()}: {self.error}"
+        return (f"service pass {self.watch} failing since {RecordedEventTime(self.since).clock()}:"
+                f" {self.error}. is anyone fixing it, or letting it pile up?"
                 " -> fix the owner of the failing read this wake")
 
 @dataclass(frozen=True)
@@ -911,8 +916,9 @@ class BoardDisagrees(UndatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"REPAIR the board for {self.problem} order {self.order}: it reads no commit, "
-            f"but its linked PR merged as {self.merge[:9]} -> repair the progress read this wake"
+            f"the board reads no commit for {self.problem} order {self.order}, but its linked PR"
+            f" merged as {self.merge[:9]}. why guess when git has the answer?"
+            " -> repair the progress read this wake"
         )
 
 
@@ -933,10 +939,10 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
         dirs = ", ".join(map(str, self.memory.idle_dirs)) or "none"
         processes = ", ".join(map(str, self.memory.processes)) or "none"
         return (
-            f"FREE MEMORY: {self.memory.available_gib:.1f} GiB available (cleanup due under"
+            f"{self.memory.available_gib:.1f} GiB of memory available (cleanup due under"
             f" {self.rule.memory_gib:g} GiB); pytest temp dirs idle over"
             f" {self.rule.idle_minutes:g} min: {dirs}; test processes: {processes}"
-            " -> put a cleanup owner on it now"
+            ". who's cleaning up? -> put a cleanup owner on it now"
         )
 
 
@@ -959,8 +965,8 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"FREE DISK on {self.rule.volume}: {self.free_gib:.1f} GiB free (cleanup due under"
-            f" {self.rule.cleanup_gib:g} GiB{self.floor_warning()})"
+            f"{self.free_gib:.1f} GiB free on {self.rule.volume} (cleanup due under"
+            f" {self.rule.cleanup_gib:g} GiB{self.floor_warning()}). who's cleaning up?"
             " -> put a cleanup owner on it now"
         )
 

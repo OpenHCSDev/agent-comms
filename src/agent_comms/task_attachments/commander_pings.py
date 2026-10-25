@@ -82,15 +82,23 @@ class Ping(DeclaredFamily, affix="Ping"):
         """The commander's to dispose of, and no recorded action has yet."""
         return self.commander_disposes and not self.acted(comms, actors)
 
+    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
+        return any(subject.acted_on(acted) for subject in self.subjects)
+
+    @property
+    def commander_disposes(self) -> bool:
+        """Whether a commander verb disposes of this line; only such a line locks the verbs."""
+        return True
+
     def board_line(self, now: float, cut: float) -> str:
         """This line as the commander's tool calls print it: locked as the gate refuses on it,
-        once a line a verb can dispose of is past the answer window."""
-        locked = " -> LOCKS your writing verbs until a recorded action disposes of it"
-        return f"BOARD: {self.render(now)}{locked if self.waits_on_commander(cut) else ''}"
+        once a line a verb can dispose of is past the answer window. The verb stays last."""
+        locked = " LOCKED, your writing verbs refuse until you act" if self.waits_on_commander(cut) else ""
+        return f"BOARD{locked}: {self.render(now)}"
 
     def render(self, now: float) -> str:
         since = self.since.recorded_at("A heartbeat line")
-        return f"{self.text} ({int((now - since) // 60)} min)"
+        return f"[{int((now - since) // 60)} min] {self.text}"
 
 
 @dataclass(frozen=True)

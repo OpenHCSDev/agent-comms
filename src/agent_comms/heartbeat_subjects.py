@@ -72,8 +72,7 @@ class PassSubject(HeartbeatSubject):
     commander: ThreadIncarnation
 
     def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
-        completed = ServicePassStore.at(comms.root).read().commander_completed.get(self.commander)
-        return completed is not None and completed >= since
+        return ServicePassStore.at(comms.root).read().completed_since(self.commander, since)
 
 
 @dataclass(frozen=True)

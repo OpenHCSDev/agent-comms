@@ -3,37 +3,38 @@
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_bridges.claude import BoardLineRow
-from agent_comms.cli_bridges.shared import Binding
+from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRequest
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.pattern_sources import PostmortemFailure
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
-from agent_comms.task_attachments.commander_pings import (
-    CommanderDecisions,
-    CommanderNotice,
-    RulePing,
-    UnitPing,
-)
-from agent_comms.text_digest import TextDigest
+from agent_comms.commander.spinning import SpinningUnit
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.standing_rules import OrderlessUnreviewedHead, ReviewTimerUp
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
-from agent_comms.ui_model.unit_state import AwaitingApplicationRun, AwaitingCommander
-from agent_comms_hooks.board import BoardLine
+from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.skill import CommanderStart
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
+from test_commander_notifications import beat
+from test_head_review import ACCEPTED, invoke
+
+pytest_plugins = ("test_head_review", "test_commander_notifications")
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
@@ -113,27 +114,52 @@ def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(tmp_p
             assert hook.take() == ()
 
 
-def test_the_board_rides_every_tool_call_until_a_packet_clears_it(tmp_path, monkeypatch):
-    """The bridge records the packet in its delivery store; the hook prints the lines the
-    commander disposes of on every call, and a packet without them clears the board."""
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+def tool_call(hook, server, comms):
+    """One tool call's board: the hook asks over the session socket while this thread answers
+    as the bridge does, deriving the board from Core at the moment of asking."""
+    with ThreadPoolExecutor(1) as pool:
+        taken = pool.submit(hook.take)
+        peer, _ = server.accept()
+        with peer, peer.makefile("rwb") as stream:
+            assert FieldCodec.decode(SessionRequest, FieldCodec.parse(stream.readline())) == ReadBoard()
+            reply = BoardReply(CommanderUpdate.current_board(comms, "lead", time.time()))
+            stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
+        return taken.result(timeout=5)
+
+
+def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
+        head_bus, notification_bus, tmp_path, monkeypatch):
+    """2026-10-25: JUDGE #3311 and #3331 kept printing after `judge ok` until the next packet,
+    because the hook reprinted the lines the last packet stored. The board is now derived from
+    Core when the hook asks: the verdict drops the line on the next tool call, and a line two
+    packets carry prints once."""
+    comms, _, request = head_bus
+    # A relative HOME keeps the real AF_UNIX endpoint below its path-length limit.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
     hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
-    record = WatchRecord("lead", str(tmp_path / "bus"), ("watch",), tmp_path / "inbox")
-    lead = RecordedThreadIncarnation("lead", 1.0)
-    # Past the answer window, and 30 s clear of the next minute so both calls render alike.
-    began = RecordedEventTime(time.time() - AwaitingCommander.seconds - 30)
-    stale = RulePing(TextDigest.of("CLOSE"), text="CLOSE unit-a P1 -> close it", since=began)
-    waiting = UnitPing(RecordedThreadIncarnation("worker", 1.0), AwaitingApplicationRun, (), (),
-                       TextDigest.of("AWAIT"), text="AWAIT RUN worker", since=began)
-    with claim.held(record), claim.reader_held(), Binding.open(record.store.parent) as db:
-        assert hook.take() == ()  # the bridge has recorded no packet
-        BoardLineRow.record(db, CommanderDecisions(lead, (stale, waiting), (stale, waiting), ()))
-        line, = stale.board(BoardLine)
-        assert line.locks_at <= time.time()
-        assert hook.take() == hook.take() == (line.line(time.time()),)
-        BoardLineRow.record(db, CommanderNotice(lead, (waiting,)))
-        assert hook.take() == ()
+    claim.path.parent.mkdir(parents=True)
+    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
+    worker = RecordedThreadIncarnation("worker", 1.0)
+    rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(())),
+             ReviewTimerUp("P1", worker, "order-P1", RecordedEventTime(1000.0)),
+             SpinningUnit("P2", worker, 92))
+    beat(comms, rules)
+    beat(comms, rules)
+    with (claim.held(record), claim.reader_held(),
+          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
+        server.bind(str(claim.socket_path))
+        server.listen()
+        server.settimeout(5)
+        board = tool_call(hook, server, comms)
+        # Each kind prints once, as the owner's question, with its owner's verb last.
+        assert sorted(line.rsplit(" -> ", 1)[1] for line in board) == sorted(
+            rule.line().rsplit(" -> ", 1)[1] for rule in rules)
+        assert all("?" in line.rsplit(" -> ", 1)[0] for line in board)
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+        assert [line for line in tool_call(hook, server, comms)
+                if f"--pr {request.pr} --head {request.head}" in line] == []
 
 
 def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():

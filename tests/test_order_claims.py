@@ -325,11 +325,11 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     capsys.readouterr()
     main(["say", "third", str(reply)], ctx)
     warning = capsys.readouterr().out
-    assert "WARNING: JUDGE worker P1 delivery" in warning
-    assert "WARNING: JUDGE other P2 delivery" in warning
+    assert "WARNING: worker delivered P1" in warning
+    assert "WARNING: other delivered P2" in warning
     assert store.get("P1") == claims[0]
     assert store.get("P2") == claims[1]
-    with pytest.raises(RecordProblems, match="JUDGE worker P1 delivery"):
+    with pytest.raises(RecordProblems, match="worker delivered P1"):
         main(["say", "worker", str(reply), "--answers",
               claims[0].order.claim.message.message_id], ctx)
     assert store.get("P1") == claims[0]

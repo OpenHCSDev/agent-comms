@@ -171,7 +171,7 @@ def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
     assert first.body.splitlines() == [CommanderUpdate.header,
-                                       *(f"{rule.line()} (0 min)" for rule in rules),
+                                       *(f"[0 min] {rule.line()}" for rule in rules),
                                        *lead_hud(comms).frame]
     beat(comms, rules)
     assert len(notifications(comms)) == 1
