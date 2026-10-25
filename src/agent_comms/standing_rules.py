@@ -286,7 +286,8 @@ class HeadLine(StandingRule, declared_name=None):
 
 
 class HeldBranchRule(HolderLine, UndatedStandingRule, declared_name=None):
-    """Branch rules share the heartbeat's existing progress frame and one scan."""
+    """Branch rules share the heartbeat's existing progress frame and one scan. Only an order
+    that still occupies its holder has branch work; a merged or delivered one is finished."""
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
@@ -301,7 +302,8 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, declared_name=None):
         for state in observed:
             for unit in state.readable_units():
                 for thread in snapshot.threads_for(unit.require_recorded()):
-                    for todo in state.source.todos:
+                    for todo in (todo for todo in state.source.todos
+                                 if todo.order.occupies_holder()):
                         path = storage.order_checkout(storage.roots_of(thread), todo.id)
                         if path.is_dir():
                             branches.append(HeldBranch(
