@@ -396,8 +396,44 @@ class LocatedSource(CountedSource):
         return found
 
 
+class SourcePosition(MroDispatch):
+    """The lines a counted node spans, chosen by the node's own syntax class. The parser
+    positions every node a pass counts except a comprehension clause."""
+
+    @handles(ast.stmt, ast.expr, ast.arg, ast.keyword, ast.excepthandler, ast.alias, ast.pattern)
+    def positioned(self, node: ast.stmt | ast.expr | ast.arg | ast.keyword | ast.excepthandler
+                   | ast.alias | ast.pattern) -> range:
+        return range(node.lineno, typing.cast(int, node.end_lineno) + 1)
+
+    def lines(self, node: ast.AST) -> range:
+        return type(self).handler_for(type(node))(self, node)
+
+
+class RosterPosition(SourcePosition):
+    """A loop's roster is the literal it runs over, which also places a comprehension."""
+
+    @handles(ast.For, ast.AsyncFor, ast.comprehension)
+    def loop(self, node: ast.For | ast.AsyncFor | ast.comprehension) -> range:
+        return self.lines(node.iter)
+
+
+class NamePosition(SourcePosition):
+    """A name occupies one line: an attribute's is where the attribute ends."""
+
+    @handles(ast.Attribute)
+    def attribute(self, node: ast.Attribute) -> range:
+        line = typing.cast(int, node.end_lineno)
+        return range(line, line + 1)
+
+    def lines(self, node: ast.AST) -> range:
+        line = super().lines(node).start
+        return range(line, line + 1)
+
+
 class OccurrenceMeasure(LocatedSource):
     """Shared additive counting for syntactic occurrence measures."""
+
+    position: typing.ClassVar[SourcePosition] = SourcePosition()
 
     @staticmethod
     @abstractmethod
@@ -410,19 +446,9 @@ class OccurrenceMeasure(LocatedSource):
         return ast.walk(tree)
 
     @classmethod
-    def site_lines(cls, node: ast.AST) -> range:
-        """The lines a counted node spans. The parser positions every node a pass counts
-        except a comprehension clause, which the pass counting one places itself."""
-        match node:
-            case (ast.stmt() | ast.expr() | ast.arg() | ast.keyword() | ast.excepthandler()
-                  | ast.alias() | ast.pattern()):
-                return range(node.lineno, typing.cast(int, node.end_lineno) + 1)
-        raise TypeError(f"{cls.__name__} counted a {type(node).__name__}, which has no position")
-
-    @classmethod
     def lines(cls, source: bytes, filename: str) -> list[int]:
         tree = cls.tree(source, filename)
-        return [cls.site_lines(node).start for node in cls.sites(tree, filename)
+        return [cls.position.lines(node).start for node in cls.sites(tree, filename)
                 for _ in range(cls.occurrences(node))]
 
     @classmethod
@@ -870,7 +896,7 @@ class CleanChangedLines(OccurrenceMeasure):
         sites = []
         for node in cls.sites(source.tree, source.path):
             if ((count := cls.occurrences(node))
-                    and (touched := source.lines.intersection(cls.site_lines(node)))):
+                    and (touched := source.lines.intersection(cls.position.lines(node)))):
                 identity = scopes[node], ast.unparse(node)
                 arrived = max(0, min(count, unwritten[identity]))
                 unwritten[identity] -= arrived
@@ -951,14 +977,7 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
                 return int(any(word in name.casefold() for word in cls.words))
         return 0
 
-    @classmethod
-    def site_lines(cls, node: ast.AST) -> range:
-        """The line holding the banned name: an attribute's is where the attribute ends."""
-        match node:
-            case ast.Attribute(end_lineno=int(line)):
-                return range(line, line + 1)
-        line = super().site_lines(node).start
-        return range(line, line + 1)
+    position = NamePosition()
 
     @classmethod
     def prose_lines(cls, source: ChangedSource) -> frozenset[int]:
@@ -1494,13 +1513,7 @@ class ForeignFieldSpellings(PerFileOccurrenceMeasure):
                 ))
         return 0
 
-    @classmethod
-    def site_lines(cls, node: ast.AST) -> range:
-        """A roster is the literal the loop runs over."""
-        match node:
-            case ast.For(iter=roster) | ast.AsyncFor(iter=roster) | ast.comprehension(iter=roster):
-                return super().site_lines(roster)
-        return super().site_lines(node)
+    position = RosterPosition()
 
 
 class BroadExceptDefault(PerFileOccurrenceMeasure):
@@ -2171,7 +2184,7 @@ class StringSubscript(OccurrenceMeasure):
             if cls.occurrences(node):
                 reference = TypingReference(imports)
                 reference.dispatch_sync(node.value)
-                found.extend([cls.site_lines(node).start] * reference.raw_access_count())
+                found.extend([cls.position.lines(node).start] * reference.raw_access_count())
         return found
 
     @staticmethod
