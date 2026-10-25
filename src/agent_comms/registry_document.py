@@ -95,8 +95,12 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
 
     __slots__ = ()
 
+    threads: ThreadRows
     statuses: StatusMap
     last_seen: Mapping[str, float]
+
+    def children(self, name: str) -> tuple[Thread, ...]:
+        return self.threads.children(self.canonical_name(name))
 
     def active_candidates(self) -> Iterator[Thread]:
         return (self.threads[name] for name, status in self.statuses.items()
@@ -304,6 +308,16 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
             (name in self._raw and name in other._raw and self._raw[name] == other._raw[name])
             or self[name] == other[name]
             for name in self)
+
+    def children(self, parent: str) -> tuple[Thread, ...]:
+        """Select the declared parent before decoding any complete thread row."""
+        key = FieldCodec.field_plan(Thread, "parent").key
+        expected = FieldCodec.encode(ForkedParent(parent))
+        return tuple(
+            self[name] for name in self
+            if (self._decoded[name].parent.named(parent) if name in self._decoded
+                else self._raw[name].get(key) == expected)
+        )
 
     def __getitem__(self, name: str) -> Thread:
         if name not in self._decoded:
@@ -873,9 +887,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.threads[new_name] = replacement
         self.set_status(new_name, status)
         self.last_seen[new_name] = last_seen
-        for child_name, child in tuple(self.threads.items()):
-            if child.parent.named(canonical):
-                self.threads[child_name] = replace(child, parent=ForkedParent(new_name))
+        for child in self.children(canonical):
+            self.threads[child.name] = replace(child, parent=ForkedParent(new_name))
         for alias, target in tuple(self.aliases.items()):
             if target == canonical:
                 self.aliases[alias] = new_name
@@ -960,7 +973,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         """Remove a declaration and atomically detach its surviving children."""
         name = self.require(name).name
         detached = tuple(
-            sorted(child.name for child in self.threads.values() if child.parent.named(name))
+            sorted(child.name for child in self.children(name))
         )
         for child_name in detached:
             self.threads[child_name] = replace(self.threads[child_name], parent=NoParent())

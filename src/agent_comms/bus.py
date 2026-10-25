@@ -63,7 +63,6 @@ from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
     from agent_comms.channel_targets import NamedTarget
-    from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.thread_identity import RecordedThreadIncarnation
