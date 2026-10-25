@@ -15,7 +15,7 @@ from pydantic import (
     ValidateAs,
 )
 
-from agent_comms.cli_protocol import TaggedWire, TextWire
+from agent_comms.cli_protocol import Declared, TaggedWire, TextWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.field_codec import FieldCodec, MessageId
@@ -123,7 +123,6 @@ class MentionInput(UserInput, declared_name='mention'):
         return f'@{self.name}'
 
 
-CodexUserInput = UserInput.declared_union()
 
 
 class RequestParams(WireModel):
@@ -218,7 +217,7 @@ class ActiveStatus(ThreadStatus, declared_name='active'):
 
 
 class ResumedThreadState(WireModel):
-    status: ThreadStatus.declared_union()
+    status: Declared[ThreadStatus]
     cwd: str = ''
 
 
@@ -349,7 +348,7 @@ class ReasoningItem(AccumulatedItem):
 
 class UserItem(Item):
     wire_tag = 'userMessage'
-    content: list[CodexUserInput]
+    content: list[Declared[UserInput]]
     clientId: str | None = None
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
@@ -448,7 +447,6 @@ class ToolAudio(ToolContentPart, declared_name='inputAudio'):
         return '[Audio output]'
 
 
-ToolContent = ToolContentPart.declared_union()
 
 
 class ToolInput(WireModel):
@@ -462,7 +460,7 @@ class ToolInput(WireModel):
 class DynamicToolItem(ToolInput, ToolItem):
     wire_tag = 'dynamicToolCall'
     tool: str
-    contentItems: list[ToolContent] | None = None
+    contentItems: list[Declared[ToolContentPart]] | None = None
     success: bool | None = None
 
     @property
@@ -647,7 +645,7 @@ class UpdatedFile(PatchChange, declared_name='update'):
 class FileChange(WireModel):
     path: str
     diff: str
-    kind: PatchChange.declared_union()
+    kind: Declared[PatchChange]
 
     def call(self, call_id: str) -> DecodedToolCall:
         return ToolCall(call_id, 'edit', {'path': self.path}).recorded(
@@ -708,7 +706,6 @@ class AgentActivityItem(Item):
 
 # The existing registration owner derives this wire grammar from declarations.
 # A new item supplies its tag and behavior once, without a second decoder edit.
-CodexItem = Item.declared_union()
 
 
 class ItemsList(RequestParams):
@@ -721,7 +718,7 @@ class ItemsList(RequestParams):
 
 class ItemEntry(WireModel):
     turnId: str
-    item: CodexItem
+    item: Declared[Item]
     completedAtMs: int | None = None
 
     @staticmethod
@@ -804,7 +801,7 @@ class ItemNotification(TranscriptNotification, ABC):
 
 
 class Started(ItemNotification, declared_name='item/started'):
-    item: CodexItem
+    item: Declared[Item]
     startedAtMs: int
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
@@ -813,7 +810,7 @@ class Started(ItemNotification, declared_name='item/started'):
 
 
 class Completed(ItemNotification, declared_name='item/completed'):
-    item: CodexItem
+    item: Declared[Item]
     completedAtMs: int
 
     def apply(self, stream: ItemStream) -> RuntimeUpdate:
