@@ -43,7 +43,7 @@ from .field_codec import (
     SingleFieldValue,
     SubclassUnion,
 )
-from .importing import ImportLimits, ImportSnapshot, ThreadImported
+from .importing import ImportLimits, ImportedConversation, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import ConfiguredBinary
@@ -115,7 +115,7 @@ class ImportDirectory(SubclassUnion, affix="Directory"):
     """Where an imported thread works: a given directory, or its source's project."""
 
     @abstractmethod
-    def project(self, snapshot: ImportSnapshot) -> str: ...
+    def project(self, snapshot: ImportedConversation) -> str: ...
 
     @abstractmethod
     def local_directory(self) -> Path:
@@ -126,7 +126,7 @@ class ImportDirectory(SubclassUnion, affix="Directory"):
 class GivenDirectory(SingleFieldValue, ImportDirectory):
     path: str
 
-    def project(self, snapshot: ImportSnapshot) -> str:
+    def project(self, snapshot: ImportedConversation) -> str:
         return self.path
 
     def local_directory(self) -> Path:
@@ -135,7 +135,7 @@ class GivenDirectory(SingleFieldValue, ImportDirectory):
 
 @dataclass(frozen=True, slots=True)
 class SourceDirectory(NullMember, ImportDirectory):
-    def project(self, snapshot: ImportSnapshot) -> str:
+    def project(self, snapshot: ImportedConversation) -> str:
         return snapshot.project
 
     def local_directory(self) -> Path:
@@ -241,8 +241,8 @@ class ThreadManagement:
         tags: frozenset[str] = frozenset(),
         limits: ImportLimits = ImportLimits(),
     ) -> ThreadImported:
-        """Import a stopped, resumable snapshot of any harness session, without adopting its executor."""
-        snapshot = ImportSnapshot.read(history, limits)
+        """Import a stopped, resumable thread from any harness session, not its executor."""
+        snapshot = history.imported(limits)
         directory = worktree.project(snapshot)
         if not directory:
             raise ValueError("The source has no project directory; supply --worktree.")
@@ -281,7 +281,7 @@ class ThreadManagement:
         only the execution and the session change. The harness's own bridge is retired
         first, so one inbox never has two deliverers.
         """
-        snapshot = ImportSnapshot.read(history, limits)
+        snapshot = history.imported(limits)
         session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
         with self.registry.store.locked():
             current = self.registry.snapshot().require(name)
@@ -302,7 +302,7 @@ class ThreadManagement:
         return ThreadImported.of(name, session_path, snapshot)
 
     def _write_imported_session(
-        self, session_path: Path, snapshot: ImportSnapshot, project: Path,
+        self, session_path: Path, snapshot: ImportedConversation, project: Path,
     ) -> None:
         session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         # Session output must remain in an owner-controlled directory.
@@ -313,7 +313,7 @@ class ThreadManagement:
             or stat.S_IMODE(info.st_mode) != 0o700
         ):
             raise ValueError("Imported session directory is not owner-controlled.")
-        AtomicFile(session_path).write_text(snapshot.pi_session(project))
+        AtomicFile(session_path).write_bytes(snapshot.session_bytes(project))
 
     def claim_thread(
         self,

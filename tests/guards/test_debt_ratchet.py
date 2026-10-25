@@ -23,6 +23,7 @@ from tools.debt_ratchet import (
     BroadExceptDefault,
     BroadSwallow,
     ContentCache,
+    DonePhaseBroken,
     ForeignFieldSpellings,
     FrozenFieldWrite,
     FunctionLocalImport,
@@ -326,6 +327,31 @@ def test_added_type_check_fails(repo: Repository) -> None:
         "LongBooleanChain": 0,
         "StringSubscript": -1,
     }
+
+
+def test_a_done_phase_fails_the_change_that_breaks_it(tmp_path: Path) -> None:
+    """OwnTypeChecksPhase holds at the base, so re-adding an isinstance on our own class
+    fails at its line; the phases not done at the base (every merged-commit one, here)
+    block nothing."""
+    repo = Repository(tmp_path, "src")
+    # The merged-commit phases name this repository's commits; borrowing its objects lets
+    # them read "not an ancestor" of the fixture instead of fetching.
+    objects = subprocess.check_output(["git", "-C", str(SOURCE), "rev-parse", "--path-format=absolute",
+                                       "--git-common-dir"], text=True).strip()
+    (tmp_path / ".git/objects/info/alternates").write_text(f"{objects}/objects\n")
+    repo.git("remote", "add", "origin", str(SOURCE))
+    owned = "class Owned:\n    pass\n"
+    base = repo.commit({"agent_comms/owned.py": owned})
+    head = repo.commit({"agent_comms/owned.py": owned + "\n\ndef owns(value):\n"
+                        "    return isinstance(value, Owned)\n"})
+    status, report = repo.compare(base, head, DonePhaseBroken)
+    assert status == 1
+    assert report["delta"] == {
+        "DonePhaseBroken:OwnTypeChecksPhase::src/agent_comms/owned.py:6": 1,
+    }
+    clean = repo.commit({"agent_comms/owned.py": owned + "\n\ndef owns(value):\n"
+                         "    return value.owned()\n"})
+    assert repo.compare(base, clean, DonePhaseBroken)[0] == 0
 
 
 def test_moves_between_files_pass(repo: Repository) -> None:
