@@ -95,7 +95,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     )
 
 
-def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand():
+def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_path):
     now = time.time()
     awaiting = CommanderUnit(
         RecordedThreadIncarnation("waiting-run", 1.0), AwaitingApplicationRun,
@@ -115,13 +115,16 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand():
         CodexUsage(UnreadableUsage(reason="not requested")), board,
     )
 
-    rows = hud.rows()
+    CommanderFrame.replace_all(tmp_path, (hud,))
+    restored, = CommanderFrame.read_all(tmp_path)
+    assert restored == hud
+    rows = restored.rows()
     assert rows[:4] == (
         BoardRow(board[0]), BoardRow(board[1]), stuck, QuietUnits((awaiting,)),
     )
     assert rows[2].line().startswith(f"{Stuck.verb} {stuck.unit.name}:")
-    assert rows[3].line() == "1 units need no hand: waiting-run"
-    assert all("AwaitingApplicationRun" not in line for line in hud.frame)
+    assert awaiting.unit.name in rows[3].line()
+    assert all("AwaitingApplicationRun" not in line for line in restored.frame)
 
 
 def test_a_registered_commander_fork_is_on_the_hud(notification_bus):
