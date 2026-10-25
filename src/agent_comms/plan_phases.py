@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.locked_store import SQLiteFile
+from agent_comms.store_files import ProcessSingleton
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.pi_events import PiEvent
 from agent_comms.private_registry_guard import RegistryPrivacy
@@ -939,8 +941,8 @@ class StoreGuardFamiliesPhase(StoreGuardsPhase):
 
     evidence = AllEvidence(
         (
-            FunctionDeclared("at_boundary", ("src/agent_comms/locked_store.py",)),
-            ClassDeclared("ProcessSingleton", ("src/agent_comms/store_files.py",)),
+            FunctionDeclared(SQLiteFile.exclusive_writer.__name__, ("src/agent_comms/locked_store.py",)),
+            ClassDeclared(ProcessSingleton.__name__, ("src/agent_comms/store_files.py",)),
             PatternAbsent(r"fcntl\.flock\(",
                           ("src", ":!src/agent_comms/store_files.py", ":!src/agent_comms/skills/")),
             PatternAbsent(r"_store_lock\(", ("src/agent_comms/typed_table.py",)),

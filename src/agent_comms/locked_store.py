@@ -17,6 +17,7 @@ from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
+from types import TracebackType
 from typing import ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
@@ -637,38 +638,40 @@ class SQLiteFile(RootFile):
                 held.execute("ROLLBACK")
 
     @classmethod
-    def at_boundary(
-        cls, path: Path, contention: StoreLockContention = UNBOUNDED_CONTENTION,
-    ) -> AbstractContextManager[StoreLock]:
-        """One connection boundary of the file: an attachment, a retirement or a WAL
-        truncation. Even a read-only cold attachment initializes the WAL index, and another
-        attachment or last-connection cleanup can make that initialization return BUSY before
-        any query competes with a data writer, which no SQLite transaction covers; the file's
-        physical owner serializes the boundaries, and readers and writers keep SQLite's
-        parallel WAL transactions between them."""
-        return _store_lock(path, contention=contention)
-
-    @classmethod
     @contextmanager
     def attached(
         cls, path: Path, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
         contention: StoreLockContention = UNBOUNDED_CONTENTION,
     ) -> Iterator[sqlite3.Connection]:
-        """A connection whose attachment and retirement are boundaries, and whose SQL is not.
+        """A connection whose attachment and retirement hold the file's boundary lock, and
+        whose SQL does not. Even a read-only cold attachment initializes the WAL index, and
+        another attachment or last-connection cleanup can make that initialization return BUSY
+        before any query competes with a data writer, which no SQLite transaction covers; the
+        file's physical owner serializes those boundaries, and readers and writers keep
+        SQLite's parallel WAL transactions between them.
 
         Attachment spends the caller's lock budget, so a read that may defer raises
         BlockingIOError when it runs out instead of waiting; retirement always runs."""
         with ExitStack() as lifetime:
-            with cls.at_boundary(path, contention):
+            with _store_lock(path, contention=contention):
                 resource = opening()
                 connection = resource.__enter__()
 
-            def retire(*error):
-                with cls.at_boundary(path):
-                    return resource.__exit__(*error)
+            def retire(kind: type[BaseException] | None, error: BaseException | None,
+                       trace: TracebackType | None) -> bool | None:
+                with _store_lock(path):
+                    return resource.__exit__(kind, error, trace)
 
             lifetime.push(retire)
             yield connection
+
+    @classmethod
+    @contextmanager
+    def exclusive_writer(cls, path: Path) -> Iterator[sqlite3.Connection]:
+        """An autocommit writer whose whole life is one boundary: no other connection attaches
+        or retires while it runs, so a schema reconcile or a WAL truncation sees only itself."""
+        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+            yield db
 
     @classmethod
     def settle(cls, path: Path) -> None:
@@ -677,7 +680,7 @@ class SQLiteFile(RootFile):
         wal = cls.wal_path(path)
         if not (wal.is_file() and wal.stat().st_size):
             return
-        with cls.at_boundary(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with cls.exclusive_writer(path) as db:
             busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
         if busy:
             raise sqlite3.OperationalError(f"Another connection holds the WAL of {path}")

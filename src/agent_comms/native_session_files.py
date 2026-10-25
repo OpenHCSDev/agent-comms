@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from abc import abstractmethod
 import hashlib
 import os
 from collections.abc import AsyncIterator
@@ -31,7 +32,10 @@ class SessionFiles:
     __slots__ = ()
     session: Path
     members: tuple[Path, ...]
-    writer_lock: Path
+
+    @property
+    @abstractmethod
+    def writer_lock(self) -> Path: ...
 
     @property
     def writer_claim(self) -> ProcessSingleton:

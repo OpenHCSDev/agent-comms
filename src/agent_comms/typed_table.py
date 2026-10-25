@@ -2243,7 +2243,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
     def reconcile_at(cls, path: Path) -> bool:
         """Whether reconciling the file at ``path`` changed it."""
         schema = cls.schema_at(path)
-        with cls.at_boundary(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with cls.exclusive_writer(path) as db:
             return schema.reconcile_schema(db, cls.schema_change(path))
 
 

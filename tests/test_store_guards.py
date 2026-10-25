@@ -20,7 +20,7 @@ def _hold_claim(path, ready, release):
 
 
 def _hold_boundary(path, ready, release):
-    with SQLiteFile.at_boundary(path):
+    with SQLiteFile.exclusive_writer(path):
         ready.set()
         if not release.wait(10):
             raise TimeoutError("boundary holder was not released")
@@ -40,7 +40,7 @@ def test_process_singleton_refuses_a_second_holder_until_the_first_exits(tmp_pat
         assert held.writable()
 
 
-def test_sqlite_attachment_waits_for_another_process_boundary(tmp_path):
+def test_sqlite_attachment_waits_for_another_process_exclusive_writer(tmp_path):
     path = tmp_path / "store.sqlite3"
     opened = []
 
@@ -52,7 +52,7 @@ def test_sqlite_attachment_waits_for_another_process_boundary(tmp_path):
     with process(_hold_boundary, path, ready, release):
         assert ready.wait(10)
         with pytest.raises(BlockingIOError), SQLiteFile.attached(path, opening, StoreLockContention(0)):
-            pytest.fail("attached while another process held the boundary")
+            pytest.fail("attached while another process held an exclusive writer")
         assert opened == []
         release.set()
     with SQLiteFile.attached(path, opening) as connection:
