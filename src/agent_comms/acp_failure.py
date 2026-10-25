@@ -71,7 +71,7 @@ class NativeMessageFailureSource(FailureSource):
             return self
         # Retain native provenance without exporting private response content.
         return replace(
-            self, message=replace(self.message, content=(), diagnostics=(), error_message=text)
+            self, message=replace(self.message, content=ReportedParts(()), diagnostics=(), error_message=text)
         )
 
 
@@ -617,4 +617,4 @@ class PublishedErrorValue(ErrorValue):
 # Payload conversions import Core observations, which refer to these failure
 # declarations. Both sides are eager; complete the declarations before binding
 # the payload types used by their annotations and conversion methods.
-from .pi_payloads import AssistantMessage, PiDiagnostic  # noqa: E402
+from .pi_payloads import AssistantMessage, PiDiagnostic, ReportedParts  # noqa: E402
