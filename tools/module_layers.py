@@ -1,18 +1,19 @@
 """The layer each agent_comms module belongs to, derived from its name and its imports.
 
-The layer table in this module names each layer's module prefixes; a module no
-prefix claims takes the highest layer among the modules it
-imports, so it adds no violation of its own. Every import that still runs downward
-in the order, or into a top layer from outside it, is a violation.
+Each layer is a class built on the layers it may import, and names its module
+prefixes; a module no prefix claims takes the highest layer among the modules it
+imports, so it adds no violation of its own. Every import into a layer the
+importing layer is not built on is a violation.
 
 The stack (stack/pyproject.toml) declares the client packages installed with Core from
 git sources: Toad and Textual import agent_comms modules. Each client is read at its
 branch head, so its imports root the reachability like a console script does. Modules
 neither reaches are listed as deletion candidates, and a client import naming a module
-Core no longer has fails --check, the step the merge queue runs.
+Core no longer has fails --check, the step the merge queue runs. That step writes this
+report to its job summary, so the report always describes the tree it was run on.
 
-    python tools/module_layers.py > docs/layout/MODULE_LAYERS.md
-    python tools/module_layers.py --check
+    python tools/module_layers.py
+    python tools/module_layers.py --check --report "$GITHUB_STEP_SUMMARY"
 """
 
 from __future__ import annotations
@@ -32,36 +33,73 @@ from pathlib import Path
 
 from typing_names import TypingImports, TypingReference
 
+from agent_comms.declared_family import DeclaredFamily
+
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"
 
 
-@dataclass(frozen=True)
-class Layer:
-    """A package of the target structure and the module name prefixes it owns."""
+class Layer(DeclaredFamily):
+    """A package of the target structure. Its bases are the layers it may import, and
+    its prefixes the module names it owns besides its own name."""
 
-    name: str
-    prefixes: tuple[str, ...]
-    top: bool = False
+    prefixes: typing.ClassVar[tuple[str, ...]] = ()
 
-    def claims(self, module: str) -> bool:
-        head = module.split(".")[1]
-        return head == self.name or any(head.startswith(prefix) for prefix in self.prefixes)
+    @classmethod
+    def claim(cls, unit: str) -> int:
+        """How much of the unit's name this layer claims; the longest claim owns it."""
+        head = unit.split(".")[1]
+        claims = [len(prefix) for prefix in cls.prefixes if head.startswith(prefix)]
+        if head == cls.declared_name:
+            claims.append(len(head))
+        return max(claims, default=0)
+
+    @classmethod
+    def may_import(cls, target: type[Layer]) -> bool:
+        return issubclass(cls, target)
+
+    @classmethod
+    def on_top(cls) -> bool:
+        """Nothing is built on a top layer, so nothing outside it may import it."""
+        return not any(
+            member is not cls and member.may_import(cls) for member in Layer.members_with(Layer)
+        )
 
 
-LAYERS = (
-    Layer("wire", ("bus_", "wire_", "message_", "delivery_", "private_")),
-    Layer("registry", ("registry_", "registration_", "owner_", "thread_", "channel_")),
-    Layer("coordination", ("goal_", "attempt_", "coordination_", "wake_")),
-    Layer("context", ("working_", "context_segments", "instructions")),
-    Layer("turns", ("turn_", "input_", "session_", "selected_")),
-    Layer(
-        "runtime", ("native_", "pi_", "acp_", "agent_", "runtime_", "_pi_helpers", "cli_bridges")
-    ),
-    Layer("ui_model", (), top=True),
-    Layer("cli", ("cli_", "tool_", "tools"), top=True),
-    Layer("commander", (), top=True),
-)
+class Wire(Layer):
+    prefixes = ("bus_", "wire_", "message_", "delivery_", "private_")
+
+
+class Registry(Wire):
+    prefixes = ("registry_", "registration_", "owner_", "thread_", "channel_")
+
+
+class Coordination(Registry):
+    prefixes = ("goal_", "attempt_", "coordination_", "wake_")
+
+
+class Context(Coordination):
+    prefixes = ("working_", "context_segments", "instructions")
+
+
+class Turns(Context):
+    prefixes = ("turn_", "input_", "session_", "selected_")
+
+
+class Runtime(Turns):
+    prefixes = ("native_", "pi_", "acp_", "agent_", "runtime_", "_pi_helpers", "cli_bridges")
+
+
+class UiModel(Runtime):
+    pass
+
+
+class Cli(Runtime):
+    prefixes = ("cli_", "tool_", "tools")
+
+
+class Commander(Runtime):
+    pass
 
 
 @dataclass(frozen=True)
@@ -390,23 +428,28 @@ class Package:
         return tuple(sorted(set(found), key=lambda edge: (edge.source, edge.line, edge.target)))
 
     @cached_property
-    def layers(self) -> dict[str, Layer]:
-        """Each unit's layer: its claiming prefix, else the highest layer it imports."""
-        claimed = {
-            unit: next(layer for layer in LAYERS if layer.claims(unit))
-            for unit in self.top_level
-            if any(layer.claims(unit) for layer in LAYERS)
-        }
-        rank = {unit: LAYERS.index(layer) for unit, layer in claimed.items()}
-        rank |= {unit: 0 for unit in self.top_level if unit not in claimed}
+    def layers(self) -> dict[str, type[Layer]]:
+        """Each unit's layer: its longest claim, else the highest layer it imports.
+
+        Highest is by declaration: on the chain that is the inheritance order, and between
+        top layers, which import nothing of each other, the later declared one."""
+        members = Layer.members_with(Layer)
+        position = {layer: index for index, layer in enumerate(members)}
+        claimed: dict[str, type[Layer]] = {}
+        for unit in self.top_level:
+            layer = max(members, key=lambda layer: layer.claim(unit))
+            if layer.claim(unit):
+                claimed[unit] = layer
+        layers = {unit: claimed.get(unit, Wire) for unit in self.top_level}
         changed = True
         while changed:
             changed = False
             for edge in self.unit_imports:
                 source, target = self.unit(edge.source), self.unit(edge.target)
-                if source not in claimed and source != target and rank[target] > rank[source]:
-                    rank[source], changed = rank[target], True
-        return {unit: LAYERS[rank[unit]] for unit in self.top_level}
+                higher = position[layers[target]] > position[layers[source]]
+                if source not in claimed and higher:
+                    layers[source], changed = layers[target], True
+        return layers
 
     @cached_property
     def unit_imports(self) -> tuple[Import, ...]:
@@ -415,17 +458,14 @@ class Package:
 
     @cached_property
     def violations(self) -> tuple[Import, ...]:
-        """Imports into a later layer, or into a top layer from outside it."""
-        order = {layer: index for index, layer in enumerate(LAYERS)}
-        found = []
-        for edge in self.unit_imports:
-            source, target = (
-                self.layers[self.unit(edge.source)],
-                self.layers[self.unit(edge.target)],
+        """Imports into a layer the importing layer is not built on."""
+        return tuple(
+            edge
+            for edge in self.unit_imports
+            if not self.layers[self.unit(edge.source)].may_import(
+                self.layers[self.unit(edge.target)]
             )
-            if source is not target and (target.top or order[target] > order[source]):
-                found.append(edge)
-        return tuple(found)
+        )
 
     @cached_property
     def entry_points(self) -> tuple[str, ...]:
@@ -501,27 +541,35 @@ class Package:
         """The imports that run while modules load: a cycle through them deadlocks an import."""
         return ImportGraph(edge for edge in self.imports if edge.loads)
 
+    @staticmethod
+    def joined(words: Iterable[str]) -> str:
+        """Words as an English list: ``a``, ``a and b``, ``a, b and c``."""
+        *rest, last = words
+        return f"{', '.join(rest)} and {last}" if rest else last
+
     def markdown(self) -> str:
         lines = [
             "# Module layers",
             "",
-            "Generated by `python tools/module_layers.py > docs/layout/MODULE_LAYERS.md`;"
-            " do not edit by hand.",
+            "Generated by `python tools/module_layers.py` for the tree it ran on.",
             "",
-            "Layers in order: " + ", ".join(f"`{layer.name}`" for layer in LAYERS) + ". "
-            "Each layer imports only the layers before it; "
-            "`ui_model`, `cli` and `commander` sit on top, "
-            "and nothing outside a top layer imports it. The layer table in "
-            "`tools/module_layers.py` declares the claiming prefixes; a module no prefix "
+            "Layers in order: "
+            + ", ".join(f"`{layer.declared_name}`" for layer in Layer.members_with(Layer))
+            + ". Each layer imports only the layers before it; "
+            + self.joined(
+                f"`{layer.declared_name}`" for layer in Layer.members_with(Layer) if layer.on_top()
+            )
+            + " sit on top, and nothing outside a top layer imports it. The layer classes in "
+            "`tools/module_layers.py` declare the claiming prefixes; a module no prefix "
             "claims takes the highest layer it imports.",
             "",
             f"{len(self.top_level)} top-level units ({len(self.subpackages)} of them subpackages); "
             f"{len(self.violations)} violating imports; {len(self.unreached)} deletion candidates.",
             "",
         ]
-        for layer in LAYERS:
+        for layer in Layer.members_with(Layer):
             units = [unit for unit in self.top_level if self.layers[unit] is layer]
-            lines += [f"## {layer.name} ({len(units)})", ""]
+            lines += [f"## {layer.declared_name} ({len(units)})", ""]
             lines += [f"- `{unit.removeprefix(PACKAGE + '.')}`" for unit in units]
             lines.append("")
         lines += [
@@ -537,7 +585,8 @@ class Package:
                 self.layers[self.unit(edge.target)],
             )
             lines.append(
-                f"| `{path}:{edge.line}` | `{edge.target}` | {source.name} | {target.name} |"
+                f"| `{path}:{edge.line}` | `{edge.target}` "
+                f"| {source.declared_name} | {target.declared_name} |"
             )
         lines += [
             "",
@@ -573,12 +622,17 @@ def main() -> int:
         action="store_true",
         help="fail when a stack client imports an agent_comms module this tree lacks",
     )
+    parser.add_argument(
+        "--report", type=Path, help="with --check, also write the layer report to this file"
+    )
     arguments = parser.parse_args()
     with tempfile.TemporaryDirectory() as clones:
         package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones)))
         if not arguments.check:
             sys.stdout.write(package.markdown())
             return 0
+        if arguments.report:
+            arguments.report.write_text(package.markdown())
         for entry in package.missing:
             print(f"missing module: {entry}", file=sys.stderr)
         for entry, name in package.missing_names:
