@@ -256,7 +256,7 @@ class RecordedWatch(WatchState):
 class LiveWatch(RecordedWatch):
     def board(self) -> tuple[BoardLine, ...]:
         """The heartbeat lines this session's bridge recorded from its newest packet."""
-        return BoardLine.read(self.record.store)
+        return BoardLine.recorded(self.record.store)
 
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         raise RuntimeError(
