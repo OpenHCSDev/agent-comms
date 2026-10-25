@@ -17,7 +17,7 @@ from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceOperator
-from agent_comms.store_files import StoreLockContention, _store_lock
+from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from test_locked_store import event, process
 from agent_comms.threads import Thread
 
@@ -38,7 +38,7 @@ def test_refusal_writer_keeps_registry_permission_until_its_sql_write_finishes(p
                 deadline = time.monotonic() + 5
                 while time.monotonic() < deadline:
                     try:
-                        with _store_lock(private_comms.registry.store.path, contention=StoreLockContention(0)):
+                        with _store_lock(private_comms.registry.store.path, ExclusiveLock(), StoreLockContention(0)):
                             pass
                     except BlockingIOError:
                         break

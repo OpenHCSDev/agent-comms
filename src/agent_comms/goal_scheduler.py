@@ -105,7 +105,7 @@ class GoalScheduler:
 
     def prepare_goal(self, session_id: str) -> ScheduledTurn | None:
         """Read/recover the original READY grant in its joined storage worker."""
-        with self.comms.registry.store.locked():
+        with self.comms.registry.store.guarded_write():
             snapshot = self.comms.registry.snapshot()
             thread = snapshot.require(self.sessions.require(session_id))
             try:

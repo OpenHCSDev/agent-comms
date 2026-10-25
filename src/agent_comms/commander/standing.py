@@ -147,21 +147,28 @@ class PendingInstallDue(InstallDue):
         self.logs.record(run.unit.logs, self.repo, self.main)
 
 
-class LaunchedInstallDue(InstallDue):
+@dataclass(frozen=True)
+class RunInstallDue(InstallDue, declared_name=None):
+    """A merge whose launched run selected this member; the run rides along so its
+    rendering reads the unit that selected it, not a second look at the logs."""
+
+    unit: installer_launch.InstallUnit = field(compare=False, kw_only=True)
+
+
+class LaunchedInstallDue(RunInstallDue):
     @property
     def action(self) -> str:
         return "an install for this merge was already launched"
 
 
-class DiedInstallDue(InstallDue):
+class DiedInstallDue(RunInstallDue):
     """Its unit ended without a result; nothing relaunches it until main moves."""
 
     headline = "INSTALL DIED"
 
     @property
     def action(self) -> str:
-        run = self.logs.launched(self.repo, self.main)[0]
-        return f"target {self.target[:12]}; {run.errors}: {run.last_error()}"
+        return f"target {self.target[:12]}; {self.unit.errors}: {self.unit.last_error()}"
 
 
 @dataclass(frozen=True)

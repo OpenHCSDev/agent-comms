@@ -19,7 +19,6 @@ from .goals import Goal, GoalDeclaration
 from .input_key import InputKey, InputKeyText
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
-from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .turn_lease import TurnLease
@@ -255,7 +254,7 @@ class GoalWaitReview:
 
     @staticmethod
     def capture(goals: Goals, incarnation: RecordedThreadIncarnation) -> GoalWaitReview:
-        with goals.registry.store.locked(mode=SharedLock()):
+        with goals.registry.store.guarded_read():
             snapshot = goals.registry.store.read_snapshot_unlocked()
             for owner in snapshot.threads_for(incarnation):
                 return GoalWaitReview(
@@ -307,7 +306,7 @@ class GoalWaitReview:
             if replied:
                 yield False
                 return
-            with goals.registry.store.locked():
+            with goals.registry.store.guarded_write():
                 if not review.current_for(goals):
                     try:
                         review = GoalWaitReview.capture(goals, owner)

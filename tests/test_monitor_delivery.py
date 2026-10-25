@@ -28,10 +28,11 @@ from agent_comms.cli_bridges.shared import (
     GivenBinding, MONITOR_FRAME,
 )
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.message_reference import BridgeStart, MessageReference
 from agent_comms.runtime_updates import HiddenItem
 from agent_comms.turn_item import NativeTurnId
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messages import InfoKind, Message, TaskAttachment
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.threads import Thread
 
@@ -125,6 +126,16 @@ def emitted_delivery(bridge):
         return delivery
     return emit
 
+
+def test_resume_cursor_reads_seq_and_id_without_decoding_an_old_payload(bridge):
+    message = bridge.comms.messaging.send('claude-code', 'viewer', 'older wire shape').message
+    retired = {**message.to_wire(), 'task': {TaskAttachment.family_discriminator: 'RetiredTask'}}
+    with pytest.raises(MalformedRecord):
+        Message.from_wire(retired)
+    with bridge.db:
+        DeliveryRow(message.message_id, json.dumps(retired), DeliveredOutcome).insert(bridge.db)
+    assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(
+        MessageReference(message.seq, message.message_id))
 
 def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)

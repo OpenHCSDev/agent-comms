@@ -122,12 +122,12 @@ def test_plain_str_id_annotations_block_growth_per_file(source, expected):
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
-        ("with store.locked(mode=SharedLock()):\n    pass", 1),
-        ("async with store.locked_async():\n    pass", 1),
-        ("with _store_lock(path), StoreLock.ordered(owners):\n    pass", 2),
+        ("with store.guarded_read():\n    pass", 0),
+        ("async with store.guarded_write_async():\n    pass", 0),
+        ("with _store_lock(path, mode, contention), StoreLock.ordered(guards):\n    pass", 1),
         ("fcntl.flock(descriptor, fcntl.LOCK_EX)", 1),
         ("def try_store_lock(descriptor):\n    is_store_lock(path)", 0),
-        ('"""with store.locked():"""\nnote = "fcntl.flock("', 0),
+        ('"""with store.guarded_write():"""\nnote = "fcntl.flock("', 0),
         ("ordered(owners)\nlocked = True", 0),
     ],
 )
@@ -143,11 +143,11 @@ def test_store_lock_calls_skip_the_store_owners():
 
 
 def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):
-    base = repo.commit({"turns.py": "def save(store):\n    with store.locked():\n        pass\n",
-                        "other.py": "def read(store):\n    with store.locked():\n        pass\n"})
+    base = repo.commit({"turns.py": "def save(store):\n    with _store_lock(store.path, mode, contention):\n        pass\n",
+                        "other.py": "def read(store):\n    with _store_lock(store.path, mode, contention):\n        pass\n"})
     head = repo.commit({"turns.py": "def save(store):\n    pass\n",
-                        "other.py": "def read(store):\n    with store.locked():\n        pass\n"
-                                    "    with store.locked():\n        pass\n"})
+                        "other.py": "def read(store):\n    with _store_lock(store.path, mode, contention):\n        pass\n"
+                                    "    with _store_lock(store.path, mode, contention):\n        pass\n"})
     status, report = repo.compare(base, head, StoreLockCalls)
     assert status == 1
     grown = StoreLockCalls.at(f"{repo.root}/other.py").text

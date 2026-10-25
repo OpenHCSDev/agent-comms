@@ -36,10 +36,7 @@ from .locked_store import DurableFile, LockedStore, RegistryFile, WrittenFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     AtomicFile,
-    HolderNamingContention,
-    SharedLock,
-    _async_store_lock,
-    _store_lock,
+    RegistryLocking,
 )
 
 
@@ -528,11 +525,11 @@ class MaintenanceBarrier(MaintenanceIngress):
     def release_dead(self, expected: MaintenanceState) -> MaintenanceStatus:
         # Registry acquisition serializes maintenance writes. Observation releases
         # a dead holder before borrowing a shared registry input scope.
-        with _store_lock(self.registry_path):
+        with RegistryLocking.write_guard(self.registry_path):
             return self._release_dead_unlocked(expected)
 
     async def release_dead_async(self, expected: MaintenanceState) -> MaintenanceStatus:
-        async with _async_store_lock(self.registry_path):
+        async with RegistryLocking.write_guard_async(self.registry_path):
             return self._release_dead_unlocked(expected)
 
     def assert_open_unlocked(self) -> MaintenanceStatus:
@@ -572,7 +569,7 @@ class MaintenanceBarrier(MaintenanceIngress):
     def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
         """Hold new turns before fleet drain; an uncertain write stays closed. A wait past
         5 s names the registry's holders in the install's log."""
-        with _store_lock(self.registry_path, contention=HolderNamingContention(5)):
+        with RegistryLocking.write_guard(self.registry_path):
             current = self._current_unlocked()
             # A successor takes an abandoned hold without briefly reopening
             # ingress or making the owner repeat its install command.
@@ -586,7 +583,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def retarget(self, expected: MaintenanceState, runtime: LaunchRuntime) -> MaintenanceState:
         """Transfer a drained hold to the runtime that stops its outgoing readers."""
-        with _store_lock(self.registry_path):
+        with RegistryLocking.write_guard(self.registry_path):
             self.require_draining_unlocked(expected)
             hold = expected.advanced(ClaimId.mint(), target=TargetRuntime(runtime.interpreter))
             self._write_unlocked(hold)
@@ -602,7 +599,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def advance(self, expected: MaintenanceState,
                 phase: type[MaintenancePhase]) -> MaintenanceState:
-        with _store_lock(self.registry_path):
+        with RegistryLocking.write_guard(self.registry_path):
             return self._advance_unlocked(expected, phase)
 
     def clear(self, expected: MaintenanceState) -> MaintenanceState:
@@ -622,7 +619,7 @@ class MaintenanceBarrier(MaintenanceIngress):
     def allow_input(self) -> Iterator[MaintenanceStatus]:
         """Check input permission under its registry authority, never around a Bus write."""
         self.current_unlocked()
-        with _store_lock(self.registry_path, mode=SharedLock()):
+        with RegistryLocking.read_guard(self.registry_path):
             status = self._current_unlocked()
             status.require_open_to(MaintenanceHolder.current())
             yield status
@@ -635,7 +632,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         pipe drain or a native response.
         """
         await self._current_unlocked().observed_async(self)
-        async with _async_store_lock(self.registry_path, mode=SharedLock()):
+        async with RegistryLocking.read_guard_async(self.registry_path):
             yield self._current_unlocked()
 
 

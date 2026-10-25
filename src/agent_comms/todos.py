@@ -111,7 +111,6 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.storage_rules import StorageRule, UnitStorage
-from agent_comms.store_files import SharedLock
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,
@@ -5111,7 +5110,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
         try:
-            with (RegistryStore.at(self.root).locked(mode=SharedLock()),
+            with (RegistryStore.at(self.root).guarded_read(),
                   super(TodoStore, self).writing() as connection):
                 yield connection
         except sqlite3.Error as error:

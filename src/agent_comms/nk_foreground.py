@@ -105,7 +105,7 @@ def reserve_foreground_owner(
     )
     # Foreground attempts must reserve a fresh name, never replace an owner
     # that may retain uncertain input. The registry owns that namespace check.
-    with comms.registry.store.locked():
+    with comms.registry.store.guarded_write():
         comms.registry.store.private_guard_unlocked().require_root(
             wire_root_id, RelationViolationError("Native namespace changed before owner reservation"),
         )

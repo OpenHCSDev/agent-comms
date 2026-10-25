@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
 from .locked_store import DocumentChange, DurableFile, LockedStore
-from .store_files import DependentStateTier
+from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
@@ -28,7 +28,7 @@ class ServicePasses:
 
 
 @dataclass(frozen=True, slots=True)
-class ServicePassStore(DurableFile, LockedStore[ServicePasses], DependentStateTier):
+class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses], DependentStateTier):
     """The connector's log reaches nobody; the commander's standing rules read this file."""
 
     filename: ClassVar[str] = "service_passes.json"
