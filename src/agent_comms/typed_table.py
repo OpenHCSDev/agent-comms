@@ -2223,7 +2223,8 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
 
     @classmethod
     @abstractmethod
-    def path(cls) -> Path: ...
+    def paths(cls) -> tuple[Path, ...]:
+        """Every file this store's writer owns, one per binding where a writer keeps several."""
 
     @classmethod
     @abstractmethod
@@ -2237,27 +2238,27 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
             entry.load()
 
     @classmethod
-    def practice_opening(cls, directory: Path) -> None:
+    def practice_opening(cls, path: Path) -> None:
         """The writer's own opening, run on a copy, so the stored file is never written."""
-        path = cls.path()
         if not path.is_file():
             return
-        copy = directory / path.name
-        with closing(sqlite3.connect(path)) as stored, closing(sqlite3.connect(copy)) as practice:
-            stored.backup(practice)
-        try:
-            with closing(SQLiteFile.writer(copy)) as db, db:
-                cls.table_schema().install_schema(db, WriterOwnedFile())
-        except RelationViolationError as error:
-            raise RelationViolationError(
-                f"{path} cannot open on this runtime: {error}") from error
+        with TemporaryDirectory() as directory:
+            copy = Path(directory) / path.name
+            with closing(sqlite3.connect(path)) as stored, closing(sqlite3.connect(copy)) as practice:
+                stored.backup(practice)
+            try:
+                with closing(SQLiteFile.writer(copy)) as db, db:
+                    cls.table_schema().install_schema(db, WriterOwnedFile())
+            except RelationViolationError as error:
+                raise RelationViolationError(
+                    f"{path} cannot open on this runtime: {error}") from error
 
     @staticmethod
     def practice_openings() -> None:
         WriterOwnedStore.load_declarations()
-        with TemporaryDirectory() as directory:
-            for store in WriterOwnedStore.members_with(WriterOwnedStore):
-                store.practice_opening(Path(directory))
+        for store in WriterOwnedStore.members_with(WriterOwnedStore):
+            for path in store.paths():
+                store.practice_opening(path)
 
 
 class CarriedWriter(StoreWriter, DurableFile):

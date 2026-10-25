@@ -25,6 +25,7 @@ from agent_comms.cli_commands import (
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
 )
+from agent_comms.cli_bridges.codex import CodexBridge
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.coordination_session import CoordinationSession
@@ -228,8 +229,8 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
 
     class LaunchStore(WriterOwnedStore):
         @classmethod
-        def path(cls) -> Path:
-            return stored
+        def paths(cls) -> tuple[Path, ...]:
+            return (stored,)
 
         @classmethod
         def table_schema(cls) -> type[TableSchema]:
@@ -250,3 +251,24 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
     finally:
         stored.unlink()
     assert PlannedReconcileCliCommand().answer(root).rewritten == ()
+
+
+def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_cannot_open(
+        tmp_path, monkeypatch):
+    """Each binding keeps its own delivery.sqlite3 under its bridge's state directory; one in
+    a shape the bridge cannot open fails the install's plan, naming that binding's file."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    stored = tmp_path / "home" / CodexBridge.state_directory / "unit-old" / "delivery.sqlite3"
+    stored.parent.mkdir(parents=True)
+    with closing(sqlite3.connect(stored)) as db:
+        db.execute('CREATE TABLE observed_part (id TEXT NOT NULL, number TEXT NOT NULL, '
+                   'sender TEXT NOT NULL, body TEXT NOT NULL, record_id TEXT NOT NULL, '
+                   'timestamp REAL NOT NULL, PRIMARY KEY (id, number))')
+        db.execute("INSERT INTO observed_part VALUES ('m', 'first', 'a', 'b', 'r', 0)")
+        db.commit()
+    before = stored.read_bytes()
+    root = tmp_path / "bus"
+    root.mkdir()
+    with pytest.raises(RelationViolationError, match=str(stored)):
+        PlannedReconcileCliCommand().answer(root)
+    assert stored.read_bytes() == before

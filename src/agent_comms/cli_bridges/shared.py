@@ -79,9 +79,11 @@ from agent_comms.typed_table import (
     Column,
     DurableTables,
     ExpressionIndex,
+    TableSchema,
     TypedRow,
     TypedTable,
     WriterOwnedFile,
+    WriterOwnedStore,
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
@@ -1092,6 +1094,15 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     state_directory: ClassVar[Path]
 
     @classmethod
+    def state_directories(cls) -> tuple[Path, ...]:
+        """Each declared bridge's default state directory present on this machine."""
+        bridges: list[type[CliBridge]] = [cls]
+        for bridge in bridges:
+            bridges.extend(bridge.__subclasses__())
+        return tuple(directory for bridge in bridges if 'state_directory' in vars(bridge)
+                     if (directory := Path.home() / bridge.state_directory).is_dir())
+
+    @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Declare the options this harness's transport needs."""
 
@@ -1211,6 +1222,22 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
             self.log(failure)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
+
+
+class BridgeDeliveryStore(WriterOwnedStore):
+    """Every binding's delivery.sqlite3. A binding's state directory is its bridge's state
+    directory joined with its bus thread (``GivenBinding.from_arguments``), so the children of
+    each bridge's directory are its bindings."""
+
+    @classmethod
+    def paths(cls) -> tuple[Path, ...]:
+        return tuple(binding / BridgeStateTable.filename
+                     for directory in CliBridge.state_directories()
+                     for binding in sorted(directory.iterdir()))
+
+    @classmethod
+    def table_schema(cls) -> type[TableSchema]:
+        return BridgeStateTable
 
 
 class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
