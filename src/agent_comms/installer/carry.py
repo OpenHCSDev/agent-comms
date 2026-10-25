@@ -9,8 +9,10 @@ from typing import ClassVar
 
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.locked_store import DocumentChange, DurableFile, LockedStore
 from agent_comms.repo import Repo
+from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.store_files import DependentStateTier
 
 STEPS = Path("tools/cutover")
@@ -68,11 +70,13 @@ class CarryChain:
         return cls(tuple(emitted))
 
     @staticmethod
-    def require_crossed(checkout: Path, current: str, target: str) -> None:
-        """Refuse a bus whose last install, ``current``, never held a step that a commit
-        on the way to ``target`` deleted: that step's work exists on no revision this
-        install can run. Every step present at ``current`` ran when ``current`` was
-        installed, so Git alone knows which steps the bus crossed."""
+    def require_crossed(checkout: Path, root: Path, target: str) -> None:
+        """Refuse a bus whose last install never held a step that a commit on the way to
+        ``target`` deleted: that step's work exists on no revision this install can run.
+        The bus's runtime records the revision it was built from, and every step present
+        there ran when it was installed. The checkout's HEAD is not that revision: a
+        ``git pull`` moves it past steps the bus never ran."""
+        current = RuntimeResolution.at(RootRuntimeStore.at(root).read().prefix).core_commit
         held = set(Repo.git(checkout, "ls-tree", "-r", "--name-only", current, "--",
                             str(STEPS)).split())
         deleted = Repo.git(

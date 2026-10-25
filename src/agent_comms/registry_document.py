@@ -295,9 +295,10 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def __eq__(self, other: object) -> bool:
         """Rows still stored on both sides compare as their JSON; only rows that differ there,
-        or that either side wrote, are decoded, so a one-row edit never decodes the registry."""
+        or that either side wrote, are decoded, so a one-row edit never decodes the registry.
+        Rows equal only rows: a plain mapping is a different value."""
         if not isinstance(other, ThreadRows):
-            return super().__eq__(other)
+            return NotImplemented
         return self.keys() == other.keys() and all(
             (name in self._raw and name in other._raw and self._raw[name] == other._raw[name])
             or self[name] == other[name]
@@ -541,6 +542,12 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
 
+    def session_output[Output](self, incarnation: ThreadIncarnation, *,
+                               commander: Output, commanded: Output) -> Output:
+        """A commanded session's last item replies to the senders delivered in its turn; the
+        commander answers its owner in its own transcript and messages units only by tool."""
+        return commanded
+
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
@@ -584,6 +591,10 @@ class RegisteredCommanderProject(CommanderProject):
 
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
         return replace(self, repos=repositories.applied(self.repos))
+
+    def session_output[Output](self, incarnation: ThreadIncarnation, *,
+                               commander: Output, commanded: Output) -> Output:
+        return commander if incarnation == self.commander else commanded
 
 
 @ThreadSlice.required
