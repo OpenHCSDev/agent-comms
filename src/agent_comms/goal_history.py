@@ -309,8 +309,7 @@ class GoalHistoryTransaction:
         before: GoalDeclaration,
         after: GoalDeclaration,
     ) -> int:
-        # SQLite assigns the sequence; a stored entry always has one.
-        cursor = GoalHistoryEntry.insert_values(
+        return GoalHistoryEntry.insert_sequence(
             self.connection,
             kind=kind,
             observed_at=time.time(),
@@ -319,10 +318,6 @@ class GoalHistoryTransaction:
             owner_created_at=owner_created_at,
             state=state,
         )
-        sequence = cursor.lastrowid
-        if sequence is None:
-            raise GoalHistoryError("Goal history insert returned no sequence.")
-        return sequence
 
     def set_state(self, sequence: int, state: type[JournalState]) -> None:
         GoalHistoryEntry.update(

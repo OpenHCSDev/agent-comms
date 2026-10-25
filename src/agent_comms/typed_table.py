@@ -2033,6 +2033,16 @@ class TypedTable(
                           tuple(item.encode(values[item.name]) for item in writable))
 
     @classmethod
+    def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:
+        """Insert one row and answer the rowid SQLite assigned it."""
+        writable = cls._writable_fields(tuple(values) or None)
+        (sequence,) = db.execute(
+            cls.insertion_statement(tuple(item.name for item in writable)) + " RETURNING rowid",
+            tuple(item.encode(values[item.name]) for item in writable),
+        ).fetchone()
+        return int(sequence)
+
+    @classmethod
     def delete(
         cls, db: sqlite3.Connection, *, where: str = "1",
         parameters: tuple = (), **key: object,
