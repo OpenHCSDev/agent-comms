@@ -2659,15 +2659,8 @@ class OrderClaim:
     def original(self, source: BusReader) -> Message:
         return Message.from_message(source.lookup_message(self.message.message_id).message)
 
-    @staticmethod
-    def originals[K](
-        source: BusReader, claims: Mapping[K, tuple[OrderClaim, ...]]
-    ) -> dict[K, tuple[Message, ...]]:
-        """Every claim's original from the caller's acquired bus snapshot."""
-        if not any(claims.values()):
-            return {}
-        return {key: tuple(claim.original(source) for claim in held)
-                for key, held in claims.items()}
+    def request(self) -> PullRequestHead:
+        return PullRequestHead(self.pull_request.repo, self.pull_request.number, self.head)
 
     @classmethod
     def for_order(
