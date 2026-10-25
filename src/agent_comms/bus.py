@@ -120,6 +120,7 @@ class DisplayUnread:
     scopes: tuple[ChannelDisplayScope, ...] = ()
     viewer_names: tuple[str, ...] = ()
     counts: Mapping[str, int] = field(default_factory=dict)
+    registry: RegistryProvenance | None = None
 
     def advanced(
         self, source: BusReader, scopes: tuple[ChannelDisplayScope, ...],
@@ -127,7 +128,8 @@ class DisplayUnread:
     ) -> DisplayUnread:
         through = source.revision()
         unchanged = (self.through >= 0 and self.seen == seen
-                     and self.scopes == scopes and self.viewer_names == viewer_names)
+                     and self.scopes == scopes and self.viewer_names == viewer_names
+                     and self.registry == snapshot)
         if unchanged and through == self.through:
             return self
         counted = source.display_unread(
@@ -450,7 +452,7 @@ class BusReader(RouteCounts, ABC):
                     (*bindings.values(), max(after, seen.lower_bound(scope, snapshot)), through,
                      *parameters, json.dumps(viewer_names)),
                 ).fetchone()[0])
-        return DisplayUnread(through, seen, scopes, viewer_names, counts)
+        return DisplayUnread(through, seen, scopes, viewer_names, counts, snapshot)
 
     def delivered_unanswered(
         self, recipient: RecordedThreadIncarnation, scope: MessageDisplayScope,
