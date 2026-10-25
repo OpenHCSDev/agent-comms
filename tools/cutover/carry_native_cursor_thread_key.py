@@ -1,5 +1,6 @@
 """Fold each thread's per-claim native cursor rows into its newest, keyed by the thread alone."""
 
+import sqlite3
 from contextlib import closing
 from pathlib import Path
 from typing import ClassVar
@@ -26,7 +27,7 @@ class NativeCursorThreadKey(Carry):
         if apply:
             for path, retired in folded.items():
                 with closing(CoordinationStore.writer(path)) as db, CoordinationStore.write_transaction(db):
-                    SQLiteCatalogObject.release_guards(db, CurrentNativeCursor.declared_name)
+                    SQLiteCatalogObject.release_guards(db, CurrentNativeCursor)
                     for row in retired:
                         CurrentNativeCursor.delete(
                             db, wire_root_id=row.wire_root_id, recipient_lookup=row.recipient_lookup,
@@ -40,9 +41,9 @@ class NativeCursorThreadKey(Carry):
         )
 
     @classmethod
-    def keyed_by_claim(cls, db) -> bool:
+    def keyed_by_claim(cls, db: sqlite3.Connection) -> bool:
         return any(column.name == cls.retired_key and column.pk
-                   for column in SQLiteColumnShape.of(db, CurrentNativeCursor.declared_name))
+                   for column in SQLiteColumnShape.of(db, CurrentNativeCursor))
 
     @staticmethod
     def retired(rows: list[CurrentNativeCursor]) -> list[CurrentNativeCursor]:

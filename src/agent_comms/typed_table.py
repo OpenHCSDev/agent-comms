@@ -688,10 +688,10 @@ class SQLiteColumnShape(TypedRow):
     hidden: int
 
     @classmethod
-    def of(cls, db: sqlite3.Connection, table: str) -> list[SQLiteColumnShape]:
+    def of(cls, db: sqlite3.Connection, row: type[TypedTable]) -> list[SQLiteColumnShape]:
         return cls.read(db.execute(
             'SELECT name, type AS sql_type, "notnull", pk, hidden FROM pragma_table_xinfo(?)',
-            (table,)))
+            (row.declared_name,)))
 
     @classmethod
     def only_constraints_differ(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
@@ -705,7 +705,7 @@ class SQLiteColumnShape(TypedRow):
             return False
         with closing(SQLiteFile.writer(":memory:")) as scratch:
             scratch.execute(declared)
-            return cls.of(db, row.declared_name) == cls.of(scratch, row.declared_name)
+            return cls.of(db, row) == cls.of(scratch, row)
 
 
 @dataclass(frozen=True)
@@ -789,11 +789,11 @@ class SQLiteCatalogObject(TypedRow):
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
 
     @classmethod
-    def release_guards(cls, db: sqlite3.Connection, table: str) -> None:
-        """Inside the caller's write transaction, lift every stored guard on ``table``,
+    def release_guards(cls, db: sqlite3.Connection, row: type[TypedTable]) -> None:
+        """Inside the caller's write transaction, lift every stored guard on the row's table,
         declared or not, so a carry can rewrite rows an older schema refused to change."""
         for item in cls.stored(db):
-            if item.tbl_name == table:
+            if item.tbl_name == row.declared_name:
                 item.type.release(db, item)
 
     @classmethod
