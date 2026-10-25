@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Annotated
 
 import agent_comms
+from agent_comms.child_process import AgentsSlice, ResidentManager
 from agent_comms.connector import LOOPBACK, PORT
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.field_codec import PathText
@@ -60,6 +61,7 @@ class RuntimePublication:
         current = LaunchRuntime.current_pointer()
         selected = self.runtime.resolve(strict=True)
         RuntimeResolution.at(selected)
+        ResidentManager.current().install(AgentsSlice, home=Path.home())
         for link, target in self.links.items():
             replace_link(link, self.published_target(current, target))
         replace_link(current, selected)
