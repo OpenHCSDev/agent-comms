@@ -207,8 +207,7 @@ class CommanderDecisions(CommanderUpdate):
 
     def body(self, now: float) -> str:
         waiting = sorted(self.waiting, key=lambda ping: ping.since.chronology())
-        # Two occurrences that read the same are one item to do.
-        return "\n".join(dict.fromkeys((
+        return "\n".join((
             *(ping.render(now) for ping in self.decisions), *self.not_applied,
             *(("UNDISPOSED:", *(ping.render(now) for ping in waiting)) if waiting else ()),
-        )))
+        ))
