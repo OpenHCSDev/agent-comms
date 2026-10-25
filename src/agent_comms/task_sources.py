@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from typing import Self
 
     from .bus import BusReader
-    from .commander_pings import CommanderUpdate
+    from .task_attachments.commander_pings import CommanderUpdate
     from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
@@ -188,12 +188,13 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
 
 
 class TaskAttachment(
-    DeclaredFamily, ProjectionSource, affix="TaskAttachment", discovery_package="agent_comms",
+    DeclaredFamily, ProjectionSource, affix="TaskAttachment",
+    discovery_package="agent_comms.task_attachments",
 ):
     """Absent attachments have no publication, fact or author effects.
 
-    Members live outside this module (commander_pings declares the commander
-    updates), so the registry acquires the package before any name is decoded.
+    Members declared outside this module live in ``agent_comms.task_attachments``, which
+    the registry acquires before any name is decoded.
     """
 
     retains_authored_task = False

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from agent_comms.commander_pings import CommanderUpdate, RulePing, UnitPing
+from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
@@ -92,7 +92,7 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 )
                 if update is not None:
-                    update.send(comms, now)
+                    update.send(comms, now, item.hud)
                 completed.append(item.thread.incarnation)
         finally:
             # A later commander's failure does not erase passes already completed.

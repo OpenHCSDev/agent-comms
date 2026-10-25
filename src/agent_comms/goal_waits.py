@@ -89,7 +89,7 @@ class NoGoalWait(GoalWait):
         self, peer: Thread, snapshot: RegistrySnapshot, agents: AgentActivity,
         pending: list[str],
     ) -> bool:
-        return agents.is_live(peer.incarnation, snapshot)
+        return agents.answers_later(peer.incarnation, snapshot)
 
     def allows_routed_input(self) -> bool:
         return True

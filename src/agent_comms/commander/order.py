@@ -65,7 +65,7 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.commander_pings import CommanderUpdate
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
 from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.ui_model.unit_state import AwaitingCommander
@@ -845,7 +845,7 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
         now = time.time()
         board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
         acted = frozenset(self.acts_on(ctx))
-        if (any(ping.since.before(now - AwaitingCommander.seconds) for ping in board)
+        if (any(ping.locks(now - AwaitingCommander.seconds) for ping in board)
                 and not any(ping.acted_on(acted) for ping in board)):
             sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
                      f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'

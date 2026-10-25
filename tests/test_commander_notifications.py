@@ -9,7 +9,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_hud import CommanderFrame, CommanderHud, CodexUsage, UnreadableUsage
-from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
 from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
@@ -22,7 +22,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
-from agent_comms.standing_rules import ServicePassFailing
+from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.text_digest import TextDigest
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.wake_policy import PassiveWake
@@ -125,24 +125,29 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     beat(comms, states=states)
     first, = notifications(comms)
     assert all(state.line() in first.body for state in states)
+    header = replace(lead_hud(comms, states), units=()).frame
+    assert first.body.splitlines()[:len(header)] == list(header)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
     beat(comms, states=state_cards(comms, UnitState))
     unchanged, = notifications(comms)
     assert unchanged.reference == first.reference
 
 
-def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notification_bus, monkeypatch):
+def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notification_bus):
     comms = notification_bus
     enforced = []
 
-    def enforce(rule, _comms, _commander):
-        enforced.append(rule.watch)
-        if rule.watch == "overdue-head":
+    class FollowingRule(ServicePassFailing, declared_name=None):
+        def enforce(self, _comms, _commander):
+            enforced.append(self.watch)
+
+    class OverdueRule(FollowingRule, declared_name=None):
+        def enforce(self, _comms, _commander):
+            super().enforce(_comms, _commander)
             raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
 
-    monkeypatch.setattr(ServicePassFailing, "enforce", enforce)
-    rules = (ServicePassFailing("overdue-head", 1.0, "review pending"),
-             ServicePassFailing("following-rule", 1.0, "another rule"))
+    rules = (OverdueRule("overdue-head", 1.0, "review pending"),
+             FollowingRule("following-rule", 1.0, "another rule"))
     beat(comms, rules)
 
     assert enforced == ["overdue-head", "following-rule"]
@@ -164,7 +169,8 @@ def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus
     assert isinstance(first.task, CommanderDecisions)
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
-    assert first.body.splitlines() == [f"{rule.line()} (0 min)" for rule in rules]
+    assert first.body.splitlines() == [*lead_hud(comms).frame,
+                                       *(f"{rule.line()} (0 min)" for rule in rules)]
     beat(comms, rules)
     assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
@@ -183,6 +189,7 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
+    assert quiet.body.splitlines()[:len(lead_hud(comms).frame)] == list(lead_hud(comms).frame)
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
     # Nothing new and nothing cleared sends nothing.
     beat(comms, ServicePassFailing.violations(comms, "lead"))
@@ -216,6 +223,23 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
     beat(comms, (first,))
     beat(comms, (moved,))
     assert len(notifications(comms)) == 1
+
+
+def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
+    comms = notification_bus
+    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+    states = UnitState.current(comms, "lead", frame)
+    class FailedScan(UndatedStandingRule):
+        @classmethod
+        def scan_observed(cls, comms, commander, observed, frame):
+            raise IndexError("P729 isolated scan failure")
+
+        def line(self):
+            return "unreachable scan result"
+
+    request.addfinalizer(lambda: StandingRule.__registry__.pop(FailedScan.declared_name))
+    with pytest.raises(IndexError):
+        StandingRule.broken(comms, "lead", observed=states, frame=frame)
 
 
 def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_bus):
