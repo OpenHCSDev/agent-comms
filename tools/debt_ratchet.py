@@ -1665,6 +1665,26 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
         return AuditFamilyFlattened.count(tree) + projection.round_trips
 
 
+class MatchArms:
+    """The patterns each arm of a ``match`` tests: ``case A() | B() as x:`` tests two."""
+
+    @classmethod
+    def alternatives(cls, pattern: ast.pattern) -> Iterator[ast.pattern]:
+        match pattern:
+            case ast.MatchOr(patterns=patterns):
+                for alternative in patterns:
+                    yield from cls.alternatives(alternative)
+            case ast.MatchAs(pattern=ast.pattern() as inner):
+                yield from cls.alternatives(inner)
+            case _:
+                yield pattern
+
+    @classmethod
+    def arms(cls, node: ast.Match) -> Iterator[ast.pattern]:
+        for case in node.cases:
+            yield from cls.alternatives(case.pattern)
+
+
 class DispatchCases(MroDispatch):
     """Collect cases of one external Python AST without executing its source."""
 
@@ -1691,7 +1711,7 @@ class DispatchCases(MroDispatch):
             pending.extend(ast.iter_child_nodes(node))
 
 
-class LiteralDispatchCases(DispatchCases):
+class LiteralDispatchCases(MatchArms, DispatchCases):
     @staticmethod
     def literal(node: ast.AST) -> bool:
         return (isinstance(node, ast.Constant)
@@ -1713,12 +1733,13 @@ class LiteralDispatchCases(DispatchCases):
 
     @handles(ast.Match)
     def match_cases(self, node: ast.Match) -> None:
-        for case in node.cases:
-            if isinstance(case.pattern, ast.MatchValue) and self.literal(case.pattern.value):
-                self.add(node.subject, repr(case.pattern.value.value))
+        for arm in self.arms(node):
+            match arm:
+                case ast.MatchValue(value=value) if self.literal(value):
+                    self.add(node.subject, repr(value.value))
 
 
-class TypeTests(MroDispatch):
+class TypeTests(MatchArms, MroDispatch):
     """Every test of a value's type in Python syntax: isinstance, issubclass, ``type(x) is``,
     ``x is C``, ``x in (A, B)`` and class patterns. A reader decides what a test means."""
 
@@ -1753,16 +1774,10 @@ class TypeTests(MroDispatch):
 
     @handles(ast.Match)
     def match_cases(self, node: ast.Match) -> None:
-        for case in node.cases:
-            match case.pattern:
-                case ast.MatchOr(patterns=alternatives):
-                    pass
-                case pattern:
-                    alternatives = [pattern]
-            for alternative in alternatives:
-                match alternative:
-                    case ast.MatchClass(cls=kind):
-                        self.tested(node.subject, kind, alternative)
+        for arm in self.arms(node):
+            match arm:
+                case ast.MatchClass(cls=kind):
+                    self.tested(node.subject, kind, arm)
 
 
 class TypeDispatchCases(TypeTests, DispatchCases):
