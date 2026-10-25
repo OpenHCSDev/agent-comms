@@ -189,7 +189,6 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     action: ClassVar[str]
     # What the owner would ask on reading this card; the action answers it.
     question: ClassVar[str]
-    commander_disposes: ClassVar[bool] = True
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:

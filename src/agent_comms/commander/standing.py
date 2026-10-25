@@ -615,10 +615,6 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
     since: float
     commander: ThreadIncarnation
 
-    @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return HeartbeatSilent
-
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         return (PassSubject(self.commander),)
 

@@ -36,8 +36,11 @@ class BoardEntry:
     since: float
     alarm_at: float
 
+    def minutes(self, now: float) -> int:
+        return int((now - self.since) // 60)
+
     def aged(self, now: float) -> str:
-        return f"{self.text} (seen for {int((now - self.since) // 60)} min)"
+        return f"{self.text} (seen for {self.minutes(now)} min)"
 
     def line(self, now: float) -> str:
         return f"BOARD: {self.aged(now)}"
@@ -66,7 +69,7 @@ class SessionBoard(SessionWire):
         """One count/oldest presentation; callers supply their reason for showing it."""
         oldest = min(entries, key=lambda entry: entry.since)
         return (f"BOARD: {len(entries)} {description} (oldest: {oldest.text[:60]}, "
-                f"seen {int((now - oldest.since) // 60)} min)")
+                f"seen {oldest.minutes(now)} min)")
 
     @classmethod
     def asked(cls, endpoint: Path) -> SessionBoard:
@@ -83,7 +86,12 @@ class SessionBoard(SessionWire):
         member = reply.pop(cls.family_discriminator)
         if member != cls.request:
             raise UnexpectedBoardReply(f"{member}: {reply!r}")
-        return cls(tuple(reply["lines"]))
+        return cls.decoded(**reply)
+
+    @classmethod
+    def decoded(cls, lines: Sequence[str]) -> SessionBoard:
+        """Decode this member's field only after its discriminator matched."""
+        return cls(tuple(lines))
 
 
 @dataclass(frozen=True)

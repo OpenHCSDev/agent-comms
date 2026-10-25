@@ -105,8 +105,7 @@ class Ping(DeclaredFamily, affix="Ping"):
         return BoardEntry(content.value, self.text, since, since + AwaitingCommander.seconds)
 
     def render(self, now: float) -> str:
-        since = self.since.recorded_at("A heartbeat line")
-        return f"[{int((now - since) // 60)} min] {self.text}"
+        return self.board_entry().aged(now)
 
 
 @dataclass(frozen=True)
