@@ -67,11 +67,9 @@ class OrderStory(ToolResult):
     problems: tuple[ProblemStory, ...]
 
     @classmethod
-    def collect(cls, todos: Iterable[Todo]) -> tuple[Self, ...]:
-        grouped: dict[str, list[ProblemStory]] = {}
-        for todo in todos:
-            grouped.setdefault(todo.order.checked().id, []).append(todo.story())
-        return tuple(cls(order_id, tuple(problems)) for order_id, problems in grouped.items())
+    def collect(cls, order_id: str, todos: Iterable[Todo]) -> Self:
+        """The requested declaration keeps its identity after its problems are reissued."""
+        return cls(order_id, tuple(todo.story() for todo in todos))
 
     @property
     def line(self) -> str:

@@ -4864,14 +4864,17 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     def for_order(self, order_id: str) -> tuple[Todo, ...]:
         """A sent order can cover several linked problems; its ID is not a Todo key."""
-        rows = self._select("json_extract(\"order\",'$.id')=?", (order_id,))
+        rows = self._for_orders((order_id,))
         if not rows:
             raise TodoError(f"Unknown saved order: {order_id!r}")
         return rows
 
     def related_problems(self, problem: Todo) -> tuple[Todo, ...]:
         """Reissued orders retain the earlier declaration that linked their problem rows."""
-        identities = problem.held_order_ids
+        return self._for_orders(problem.held_order_ids)
+
+    def _for_orders(self, identities: tuple[str, ...]) -> tuple[Todo, ...]:
+        """Find declarations in current orders and their stored history without decoding events."""
         slots = ','.join('?' for _ in identities)
         return self._select(
             f'EXISTS (SELECT 1 FROM json_tree("order") AS declaration '

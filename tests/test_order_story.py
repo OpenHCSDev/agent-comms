@@ -46,6 +46,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         commander="lead", assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
+    first_order_id = todo.order.checked().id
     actor = comms.registry.require("lead").incarnation
     reason = "The worker changed the wrong owner and left the decision duplicated."
     standalone = "The worker omitted the requested application check during the final review."
@@ -87,6 +88,10 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     stored_at = copied.goals.todos.path.stat().st_mtime_ns
     result = CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=NoThreadCaller())
     story = FieldCodec.decode(OrderStory, result)
+    archived = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
+        copied, {"order_id": first_order_id}, caller=NoThreadCaller()))
+    assert archived.order_id == first_order_id
+    assert archived.problems == story.problems
     assert story.line.count(reason) == story.line.count(standalone) == 1
     assert story.line.count("Ordered resent-order:") == story.line.count("Accepted") == 1
     assert story.line.count("bad-call") == story.line.count("accepted-call") == 1
