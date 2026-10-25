@@ -55,9 +55,13 @@ from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
+    ActivityView,
     CommanderFramesView,
+    NotificationsView,
     RegistrationsView,
+    RevisionView,
     SidebarView,
+    StatusView,
     StoresView,
 )
 from agent_comms.ui_model.delivery import ReadDeliveryView
@@ -154,7 +158,6 @@ class LiveObservationInterest(ObservationInterest):
 
     def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
         if self.observations.get(type(observation)) is observation:
-            observation.sent = NoSidebarSent()
             observation.invalidate()
             service.observe_again()
 
@@ -222,6 +225,15 @@ class Observation[InterestT: InterestRequest](ObservationLifetime):
 class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
     """A requested reader yields between store operations in the presentation phase."""
 
+    view: ClassVar[RevisionView]
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        try:
+            cls.view
+        except AttributeError as error:
+            raise TypeError(f"{cls.__name__} must declare its revision view") from error
+
     def __init__(self, request: InterestT):
         super().__init__(request)
         self.steps: Generator[ObservationStep] = (_ for _ in ())
@@ -240,7 +252,7 @@ class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
             result = next(self.steps)
         except StopIteration:
             self.after_read(service)
-            if revision.changed_since_any(self.read_revision):
+            if revision.changed_since(self.view, self.read_revision):
                 self.read_revision = revision
                 self.steps = self.read(service.comms, revision)
                 self.step(service, revision)
@@ -624,7 +636,9 @@ class NotificationsRead:
         """Read marks, participant activity or retained assignment evidence changed."""
         if revision.registry != self.revision.registry:
             return True
-        current = comms.views.observed_activity(revision, self.activity) if self.activity else {}
+        current = (comms.views.observed_activity(revision, self.activity)
+                   if revision.changed_since(ActivityView(), self.revision)
+                   else self.activity)
         return (any(current.get(name) != seen for name, seen in self.activity.items())
                 or self.notification_window.changed(comms, revision, self.revision))
 
@@ -697,15 +711,14 @@ class RosterSidebarRead(SidebarReadStage):
     def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
         reading.stage = SidebarReadStage()
         reading.invalidate()
-        if snapshot.has_indexing_unread():
-            reading.sent = NoSidebarSent()
 
 
 class SidebarReading(ReadingObservation[ObserveSidebar]):
+    view = SidebarView()
+
     def __init__(self, request: ObserveSidebar):
         super().__init__(request)
         self.stage: SidebarReadStage = RosterSidebarRead()
-        self.sent: SendState = NoSidebarSent()
         self.published: PublishState = NoSidebarResult()
         self.reply_completion: frozenset[Future[ReplyIndexResult]] = frozenset()
 
@@ -720,36 +733,13 @@ class SidebarReading(ReadingObservation[ObserveSidebar]):
         service.interest.prepared(self, service)
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        key = SidebarSent(revision.expiry_period, type(self.stage), revision)
-        if not self.sent.changed_since(key):
-            return
-        yield from self.stage.read(self.request, comms, revision).finish_read(self, key)
+        yield from self.publish(self.stage.read(self.request, comms, revision))
 
-    def publish(self, result: SidebarResult, key: SidebarSent) -> Iterator[SidebarResult]:
-        self.sent = result.send_state(key)
+    def publish(self, result: SidebarResult) -> Iterator[SidebarResult]:
         result.advance(self)
         if result.accepted_by(self.published):
             self.published = result
             yield result
-
-
-class SendState:
-    def changed_since(self, current: SidebarSent) -> bool:
-        return True
-
-
-class NoSidebarSent(SendState):
-    pass
-
-
-@dataclass(frozen=True)
-class SidebarSent(SendState):
-    expiry_period: int
-    stage: type[SidebarReadStage]
-    revision: WireRevision = field(compare=False)
-
-    def changed_since(self, current: SidebarSent) -> bool:
-        return self.revision.changed_since(SidebarView(), current.revision) or self != current
 
 
 @dataclass(frozen=True)
@@ -791,14 +781,9 @@ class StopCommanderHud(ObservationRequest):
 class CommanderHudReading(ReadingObservation[ObserveCommanderHud]):
     """Reads the frame files only when the heartbeat replaced one of them."""
 
-    def __init__(self, request: ObserveCommanderHud):
-        super().__init__(request)
-        self.revision: ReadState = NoRevision()
+    view = CommanderFramesView()
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        if not self.revision.changed_since(CommanderFramesView(), revision):
-            return
-        self.revision = revision
         yield UnreadableHistory.outcome(
             lambda: CommanderHudObserved(revision, CommanderFrame.read_all(comms.root)),
         ).answer(
@@ -830,6 +815,8 @@ class ObserveNotifications(InterestRequest):
 
 
 class NotificationReading(ReadingObservation[ObserveNotifications]):
+    view = NotificationsView()
+
     def __init__(self, request: ObserveNotifications):
         super().__init__(request)
         self.read_states: dict[ReadNotifications, NotificationsRead] = {}
@@ -868,6 +855,8 @@ class LocatedThreads:
 
 
 class ThreadReading(ReadingObservation[ObserveThreads]):
+    view = StatusView()
+
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
         self.observed = ThreadsObserved(WireRevision.empty(), {}, frozenset(), {})
@@ -1041,14 +1030,8 @@ class SidebarResult(PublishState, Observed):
     revision: WireRevision = field(compare=False)
     request: ObserveSidebar
 
-    def finish_read(self, reading: SidebarReading, key: SidebarSent) -> Iterator[SidebarResult]:
-        return reading.publish(self, key)
-
     def advance(self, reading: SidebarReading) -> None:
         """Keep this stage until its source revision changes."""
-
-    def send_state(self, key: SidebarSent) -> SendState:
-        return key
 
     def accepted_by(self, previous: PublishState) -> bool:
         return not previous.same_observation(self)
@@ -1059,9 +1042,6 @@ class SidebarPreparing(SidebarResult, WaitingSidebar):
     """The first answer explains the unfinished read without replacing real rows."""
 
     cause: DeferredRead
-
-    def send_state(self, key: SidebarSent) -> SendState:
-        return NoSidebarSent()
 
     def accepted_by(self, previous: PublishState) -> bool:
         return previous.accepts_preparing()
