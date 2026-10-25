@@ -16,7 +16,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.todos import (
     AcceptedVerdict, DoneTodoState, EditSendBackVerdict, JudgedCall, OrderMessage, ReleaseTodo,
     SendBackVerdict, StrikeReason,
-    StrikeTodo, TodoConflict, TodoError, UnorderedProblemOrder, WithdrawTodo,
+    StrikeTodo, TodoError, UnorderedProblemOrder, WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.change_report import FileLine
@@ -67,7 +67,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     published = comms.bus.bus.lookup(before_send_back + 1)
     assert published.target == "#comms" and published.body.count(reason) == 1
     assert published.includes_lookup(comms.registry.require("worker").incarnation.lookup)
-    with pytest.raises(TodoConflict):
+    with pytest.raises(TodoError, match="bad-call: Todo P1 changed"):
         caller.invoke(CommsVerdictTool(problem="P1", operation=sent_back), comms)
     assert comms.bus.bus.revision() == before_send_back + 1
     todo = comms.goals.todos.get("P1")

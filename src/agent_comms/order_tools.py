@@ -149,16 +149,24 @@ class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsVerdictTool(CommsChangeProblemTool):
+class CommsVerdictTool(ThreadToolRequest):
+    """One verdict is a batch of one: Goals.judge_calls owns checking and recording."""
     label = "Judge order tool call"
     description = (
         "Record the commander's verdict on one tool call the holder made for its "
         "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
         "the holder and revises its Goal in the same write."
     )
+    problem: Annotated[str, *tool_field("Problem ID")]
     operation: Annotated[
         ToolCallVerdict, *tool_field("Accepted or send-back verdict on the judged tool call ID")
     ]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        changed, = comms.goals.judge_calls(
+            (JudgedCall(self.problem, self.operation.authored_by(caller.identity(comms))),),
+            caller.commander(comms).name)
+        return TodoChanged(changed, changed.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)
