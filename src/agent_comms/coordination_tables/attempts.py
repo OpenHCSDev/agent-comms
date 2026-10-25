@@ -16,7 +16,11 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
 from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord
+from agent_comms.coordination_tables.participants import (
+    OwnerGenerations,
+    OwnerRecord,
+    Participants,
+)
 from agent_comms.field_codec import SnapshotExclude, ThreadLookup, projected
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
@@ -284,7 +288,6 @@ class AttemptRecord(
     @classmethod
     def references(cls):
         from agent_comms.coordination_tables.executions import ExecutionRecord
-        from agent_comms.coordination_tables.participants import Participants
 
         return (
             ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",)),

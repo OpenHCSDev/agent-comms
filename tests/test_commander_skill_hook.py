@@ -5,21 +5,21 @@ import json
 import os
 import subprocess
 import sys
-
-import pytest
 from pathlib import Path
 
-from agent_comms.behaviour_patterns import PostmortemFailure
-from agent_comms.comms import wire
-from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.thread_model import DeclaredModel
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+import pytest
+
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
+from agent_comms.comms import wire
+from agent_comms.pattern_sources import PostmortemFailure
+from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
+from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 from agent_comms_hooks.reread import SliceReminder
 from agent_comms_hooks.skill import CommanderStart
-from agent_comms.threads import Thread
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])

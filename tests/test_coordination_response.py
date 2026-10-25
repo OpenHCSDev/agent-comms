@@ -12,7 +12,7 @@ from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_cohort import accept_delivery_cohort
+from conftest import accept_initial
 from agent_comms.coordination_errors import (
     IdentityConflict,
     StaleFence,
@@ -83,15 +83,12 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         recipient.recipient_lookup,
         committed=True,
     )
-    accepted = accept_delivery_cohort(comms.bus, root_id, original.seq, store)
-    assert accepted.value.member_count == accepted.value.assignment_count == 1
-    assignment = accepted.value.assignments[0]
+    (assignment,) = accept_initial(comms.bus, root_id, original.seq, store)
     sources = [SelectedSource(assignment.assignment_id, store.assignments, original_record)]
     for extra_target in extra_targets:
         message = publish_initial(comms, "sender", extra_target, "Another original question")
         delivery = comms.bus.bus.delivery(message.seq)
-        acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-        (extra_assignment,) = acknowledgement.assignments
+        (extra_assignment,) = accept_initial(comms.bus, root_id, message.seq, store)
         sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
     reply_target = original.exact_reply_target
     assert reply_target is not None

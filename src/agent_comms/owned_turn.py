@@ -15,11 +15,14 @@ from acp.exceptions import RequestError
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
+from .channel_coding_tools import CodingToolMode
+
 from .input_key import InputKey
 
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
+from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .field_codec import TurnId, GoalId
 from .goals import Goal
@@ -47,6 +50,7 @@ from .turn_input_source import (
 )
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 from .turn_progress import TurnProgress
+from .turn_failure import BackendFailed, CoordinationRefused, TurnFailure
 from .turn_terminal import EndedWithoutResult, TurnTerminal
 
 if TYPE_CHECKING:
@@ -351,7 +355,6 @@ class OwnedTurn:
             goal_permit=self.goal_permit,
             original_source=replace(self.original, prompt=rendered.text),
         )
-        from .channel_coding_tools import CodingToolMode
 
         delivery = TurnDelivery(
             tool_mode=CodingToolMode(sender),
@@ -406,10 +409,10 @@ class OwnedTurn:
         document = self.runner.inputs.dispositions.settle_unbound(self.original_keys)
         return document.shared_state(self.original_keys)
 
-    async def fail(self, failure: Exception, cause: Exception) -> NoReturn:
+    async def fail(self, failure: Exception, cause: Exception, kind: type[TurnFailure]) -> NoReturn:
         """Settle and report once, retaining the exception that actually failed the turn."""
         await Coordination.run_worker(self.settle_unbound)
-        outcome = await self.progress.report_failure(failure)
+        outcome = await self.progress.report_failure(failure, kind)
         outcome.raise_fault(cause)
 
     async def run_native(self) -> None:
@@ -423,7 +426,9 @@ class OwnedTurn:
             await self.progress.consumer.dispatch(events.PromptCancelled(state))
             raise
         except (NativeRequestFailure, RequestError) as error:
-            await self.fail(error, error)
+            await self.fail(error, error, BackendFailed)
+        except CoordinationError as error:
+            await self.fail(error, error, CoordinationRefused)
         # The completed outcome owns notification delivery and request failure;
         # it is outside stream-fault reporting, so no failure is published twice.
         await self.progress.publish_result()

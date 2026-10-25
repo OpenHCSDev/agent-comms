@@ -22,6 +22,8 @@ from agent_comms.goals import (
     UnobservedGoalCheckpoint,
     UnorderedGoalOrder,
 )
+
+from .field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.todos import (
@@ -50,6 +52,7 @@ from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
+from .standing_rules import OrderRefusingStandingRule
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
@@ -145,7 +148,6 @@ class GoalAction[Result: GoalDeclaration](
 
     @classmethod
     async def submit_checkpoint(cls, invoke: Callable[..., Awaitable[dict]], goal: Goal) -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import UpdateGoalRuntimeRequest
 
         return await invoke(
@@ -501,7 +503,6 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
     @classmethod
     async def submit_control(cls, observe, invoke, text: str = "") -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import SetGoalRuntimeRequest
 
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
@@ -567,8 +568,6 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def require_reviewed(self, goals: Goals) -> None:
         """Read remote review facts before the registry lock or child allocation."""
-        from .standing_rules import OrderRefusingStandingRule
-
         if refused := OrderRefusingStandingRule.refusals(goals, self.commander):
             raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\n" + "\n".join(refused))
 
@@ -698,7 +697,6 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
     @classmethod
     async def submit_checkpoint(cls, invoke, goal: Goal) -> dict:
-        from .field_codec import FieldCodec
         from .runtime_requests import RetryGoalRuntimeRequest
 
         return await invoke(

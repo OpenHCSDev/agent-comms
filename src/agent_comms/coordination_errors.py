@@ -1,32 +1,25 @@
 """Shared durable coordination errors, independent of record store_files."""
 
-import copyreg
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from copyreg import __newobj__
 from typing import Never
 
-from acp.exceptions import RequestError
-
-
-def reduce_request_error(error: RequestError) -> tuple[type[RequestError], tuple[object, ...]]:
-    """The SDK error hands Exception only its message; the observation pipe carries it whole."""
-    return RequestError, (error.code, str(error), error.data)
-
-
-copyreg.pickle(RequestError, reduce_request_error)
-
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
     """A failure an inbox drain records and retries later instead of stopping on."""
+
+
+class CommandFailure(Exception):  # noqa: N818 - capability, not an outcome
+    """A failure a command reports to its caller as a failed result instead of crashing."""
 
 
 class DrainUnavailable(DrainDeferred):
     """A failure meaning the drain's store or coordinator is unavailable right now."""
 
 
-class CoordinationError(RuntimeError, DrainUnavailable):
+class CoordinationError(RuntimeError, DrainUnavailable, CommandFailure):
     """Base class for fail-loud coordinator errors."""
 
     def __reduce__(self):

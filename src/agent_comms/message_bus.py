@@ -20,21 +20,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.bus import Bus, BusSnapshot
+from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.channels import AnyChannel
+from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
-from agent_comms.message_page import InboxPage, MessagePage, MessagePageRequest, PageBounds
+from agent_comms.message_page import InboxPage, MessagePageRequest, PageBounds
 from agent_comms.message_reference import (
     FirstUnreadStart,
     NewestUnreadStart,
     InboxStart,
     MessageReference,
 )
-from agent_comms.messages import Message
-from agent_comms.page_traversal import LiveCursor
+from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import (
     AnonymousViewer,
@@ -44,8 +45,12 @@ from agent_comms.read_basis import (
     ListedDeliveries,
     NamedViewer,
 )
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import DeliveryScope
 from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
+
+from .watched import FileSource
+
 
 if TYPE_CHECKING:
     from agent_comms.assignment_states import AssignmentState
@@ -83,9 +88,6 @@ class MessageBus[Writes: Publisher]:
     def __init__(
         self, root: Path, registry: Registration, publisher: type[Writes],
     ):
-        from agent_comms.catalog_store import ChannelCatalog
-        from agent_comms.read_ledger import ReadLedger
-
         self.bus = Bus(Bus.path_in(root))
         self.reads = ReadLedger.at(root)
         self.history = HistoryArchive(self.bus.path)
@@ -163,8 +165,6 @@ class MessageBus[Writes: Publisher]:
                 await self.resumed()
 
     async def resumed(self) -> None:
-        from .watched import FileSource
-
         maintenance = MaintenanceBarrier(self._registry.store.path)
         async with aclosing(Bus.watch_sources(FileSource(maintenance.state_path))) as changes:
             async for _ in changes:
@@ -256,9 +256,6 @@ class MessageBus[Writes: Publisher]:
         The window is the newest received rows, shown in sequence order. Peer relevance
         orders the selected rows, never changes their window.
         """
-        from agent_comms.context_segments.awareness import AwarenessSegment
-        from agent_comms.peer_relevance import Prioritized
-
         first = {relation.peer.require_recorded().lookup for relation in relations
                  if relation.relevance.grants(Prioritized)}
         rows = tuple(
@@ -269,11 +266,6 @@ class MessageBus[Writes: Publisher]:
         rows = tuple(sorted(
             rows, key=lambda row: (row.sender_lookup not in first, row.seq)))
         return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
-
-    def incoming_page(self, name: str, *, after: int) -> MessagePage:
-        snapshot = self._registry.snapshot()
-        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        return MessagePageRequest(delivery, PageBounds(LiveCursor(after).newer())).read_opened(self.bus)
 
     def channels(self) -> Sequence[str]:
         return list(self.channel_declarations())

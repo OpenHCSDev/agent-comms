@@ -102,17 +102,32 @@ class MaintenanceTarget(SubclassUnion):
     @abstractmethod
     def allows_runtime(self, runtime: LaunchRuntime) -> bool: ...
 
+    @abstractmethod
+    def require_drained_writes_open_to(self, state: MaintenanceState,
+                                       holder: MaintenanceHolder) -> None:
+        """Whether a writer the outgoing owners settle while they drain may still commit."""
+
 
 @dataclass(frozen=True)
 class NoMaintenanceTarget(NullMember, MaintenanceTarget):
     def allows_runtime(self, runtime: LaunchRuntime) -> bool:
         return False
 
+    def require_drained_writes_open_to(self, state: MaintenanceState,
+                                       holder: MaintenanceHolder) -> None:
+        """Draining owners still settle their own turns."""
+
 
 @dataclass(frozen=True)
 class TargetRuntime(LaunchRuntime, RecordMember, MaintenanceTarget):
     def allows_runtime(self, runtime: LaunchRuntime) -> bool:
         return self.prefix == runtime.prefix
+
+    def require_drained_writes_open_to(self, state: MaintenanceState,
+                                       holder: MaintenanceHolder) -> None:
+        """Retargeted so the target stops the outgoing owners: from then on only the
+        install's holder writes, the target's stop settling their turns among them."""
+        state.require_open_to(holder)
 
 
 class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
@@ -307,6 +322,9 @@ class MaintenanceStatus:
         """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""
         self.require_open()
 
+    def require_drained_writes_open_to(self, holder: MaintenanceHolder) -> None:
+        self.require_open_to(holder)
+
     def require_held_by(self, holder: MaintenanceHolder, change: str) -> None:
         """``change`` runs only in the process holding this root's maintenance: a root that
         never enabled maintenance has no holder."""
@@ -392,6 +410,9 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     def require_open_to(self, holder: MaintenanceHolder) -> None:
         if not holder.holds(self.nonce):
             self.require_open()
+
+    def require_drained_writes_open_to(self, holder: MaintenanceHolder) -> None:
+        self.target.require_drained_writes_open_to(self, holder)
 
     def require_held_by(self, holder: MaintenanceHolder, change: str) -> None:
         self.phase.require_held_by(self, holder, change)
@@ -518,8 +539,17 @@ class MaintenanceBarrier(MaintenanceIngress):
         hold.require_open_to(MaintenanceHolder.current())
         return hold
 
+    def assert_drained_writes_open_unlocked(self) -> None:
+        """A carried file its draining owners settle refuses every other writer once retargeted."""
+        self.current_unlocked().require_drained_writes_open_to(MaintenanceHolder.current())
+
     def read(self) -> MaintenanceStatus:
         return self.current_unlocked()
+
+    def held_by(self, operator: MaintenanceOperator) -> MaintenanceState:
+        """``operator``'s hold as the root records it now, in whatever phase it is in."""
+        state = self.read()
+        return state.phase.hold_for(self, state, operator)
 
     def _write_unlocked(self, hold: MaintenanceState) -> None:
         marker = MaintenanceMarker(version=hold.version, root=hold.root,
@@ -553,7 +583,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             return hold
 
     def retarget(self, expected: MaintenanceState, runtime: LaunchRuntime) -> MaintenanceState:
-        """Transfer a drained hold after its outgoing readers have stopped."""
+        """Transfer a drained hold to the runtime that stops its outgoing readers."""
         with _store_lock(self.registry_path):
             self.require_draining_unlocked(expected)
             hold = expected.advanced(ClaimId.mint(), target=TargetRuntime(runtime.interpreter))

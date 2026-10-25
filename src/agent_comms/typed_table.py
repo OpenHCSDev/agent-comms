@@ -21,8 +21,10 @@ from dataclasses import dataclass, field, is_dataclass
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
 from importlib import import_module
+from importlib.metadata import entry_points
 from inspect import getsource
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -675,6 +677,38 @@ class SQLiteColumnNullability(TypedRow):
 
 
 @dataclass(frozen=True)
+class SQLiteColumnShape(TypedRow):
+    """Every stored column as SQLite reads it back, generated ones included, without parsing
+    DDL: two tables with equal shapes hold the same rows."""
+
+    name: str
+    sql_type: str
+    notnull: bool
+    pk: int
+    hidden: int
+
+    @classmethod
+    def of(cls, db: sqlite3.Connection, table: str) -> list[SQLiteColumnShape]:
+        return cls.read(db.execute(
+            'SELECT name, type AS sql_type, "notnull", pk, hidden FROM pragma_table_xinfo(?)',
+            (table,)))
+
+    @classmethod
+    def only_constraints_differ(cls, db: sqlite3.Connection, row: type[TypedTable]) -> bool:
+        """Whether the stored table holds the declared columns under other constraints, such
+        as a family CHECK that gained a member: rebuilding it carries every row, and SQLite
+        checks each against the declared constraints, so a row the declaration refuses fails
+        the carry."""
+        stored = {item.name: item.sql for item in row.stored_objects(db)}.get(row.declared_name)
+        declared = row.schema_objects()[row.declared_name]
+        if stored in (None, declared):
+            return False
+        with closing(SQLiteFile.writer(":memory:")) as scratch:
+            scratch.execute(declared)
+            return cls.of(db, row.declared_name) == cls.of(scratch, row.declared_name)
+
+
+@dataclass(frozen=True)
 class SQLiteTableName(TypedRow):
     """One table SQLite's catalog holds, whether or not a row declaration names it."""
 
@@ -893,6 +927,8 @@ class TableSchema(ABC):
             row.take_previous_name(db)
             row.derive_nullable_fields(db)
             row.derive_relaxed_fields(db)
+            if SQLiteColumnShape.only_constraints_differ(db, row):
+                row.rebuild(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
                                   frozenset(item.name for item in cls.stored_schema(db, sharing)))
         cls.require_schema(db, sharing)
@@ -2165,10 +2201,12 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
 
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """Publish through the physical store after its row transaction commits."""
-        self.require_maintenance_open()
+        """Publish through the physical store after its row transaction commits. Maintenance
+        is asked under the write lock, so a hold taken before this transaction refuses it and
+        an installer's drain of the write lock waits out every transaction that passed."""
         with self.publishing_changes(connection, self.store.path):
             with self.write_transaction(connection):
+                self.require_maintenance_open()
                 yield connection
 
     @abstractmethod
@@ -2207,6 +2245,53 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         schema = cls.schema_at(path)
         with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
             return schema.reconcile_schema(db, cls.schema_change(path))
+
+
+class WriterOwnedStore(DeclaredFamily, affix="Store"):
+    """A durable file outside the bus that its own writer reconciles when it opens it
+    (``WriterOwnedFile``). An installed package declares each one through the
+    ``agent_comms.writer_owned_stores`` entry point. Before cutover the installer opens a
+    copy of each with the target's declaration, so a stored schema the declaration cannot
+    carry refuses the install and names the file, instead of failing the writer's next
+    launch."""
+
+    entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
+
+    @classmethod
+    @abstractmethod
+    def path(cls) -> Path: ...
+
+    @classmethod
+    @abstractmethod
+    def table_schema(cls) -> type[TableSchema]: ...
+
+    @staticmethod
+    @cache
+    def load_declarations() -> None:
+        """Import each module the installed distributions declare, once per process."""
+        for entry in entry_points(group=WriterOwnedStore.entry_point_group):
+            entry.load()
+
+    @classmethod
+    def practice_opening(cls, directory: Path) -> None:
+        """The writer's own opening, run on a copy, so the stored file is never written."""
+        path = cls.path()
+        if not path.is_file():
+            return
+        copy = SQLiteFile.copy_file(path, directory / path.name)
+        try:
+            with closing(SQLiteFile.writer(copy)) as db, db:
+                cls.table_schema().install_schema(db, WriterOwnedFile())
+        except RelationViolationError as error:
+            raise RelationViolationError(
+                f"{path} cannot open on this runtime: {error}") from error
+
+    @staticmethod
+    def practice_openings() -> None:
+        WriterOwnedStore.load_declarations()
+        with TemporaryDirectory() as directory:
+            for store in WriterOwnedStore.members_with(WriterOwnedStore):
+                store.practice_opening(Path(directory))
 
 
 class CarriedWriter(StoreWriter, DurableFile):

@@ -54,6 +54,7 @@ from agent_comms.installer.reporting import (
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
     LiveRun,
+    OwnersStopped,
     RehearsedUpgrade,
     Stack,
     TargetTree,
@@ -73,6 +74,7 @@ class InstallReport(MroDispatch):
     writer: RootWriter = field(default_factory=UnpostedWriter)
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
     bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
+    owners: OwnersStopped = field(default_factory=OwnersStopped, init=False)
     inherited_phases: list[PhaseTiming] = field(default_factory=list)
     source: Repo = field(init=False, repr=False)
 
@@ -125,7 +127,8 @@ class InstallReport(MroDispatch):
             self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
                 with FailureReportPublicationPhase().running(clock):
-                    self.writer.post((*self.outcome.lines(), *self.bridges.lines()))
+                    self.writer.post((*self.outcome.lines(), *self.owners.lines(),
+                                      *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
@@ -185,9 +188,6 @@ class InstallUnit(SystemdUnit):
              f"--working-directory={tree}", f"--property=StandardInput=file:{self.request}",
              f"--property=StandardOutput=file:{self.result}",
              f"--property=StandardError=file:{self.errors}",
-             # The owners an install restarts are started from inside this unit; ending it
-             # must not take its cgroup's restarted fleet down with it.
-             "--property=KillMode=process",
              *(f"--setenv={name}" for name in self.inherited),
              f"--setenv=PYTHONPATH={pythonpath}", *command),
             check=True,
@@ -199,6 +199,10 @@ class InstallUnit(SystemdUnit):
 
     def running(self) -> bool:
         return not self.activity(self.unit).ended()
+
+    def stop(self) -> None:
+        """Systemd signals the install, which runs its abort, and returns once the unit ends."""
+        subprocess.run(("systemctl", "--user", "stop", self.unit), check=True)
 
     def due(self) -> type[standing.InstallDue]:
         """A run whose unit is gone without printing a result died; any other was launched."""
@@ -257,6 +261,12 @@ class InstallLogs:
     def running(self) -> tuple[InstallUnit, ...]:
         return tuple(unit for unit in self.units() if unit.running())
 
+    def stop_running(self) -> None:
+        """Systemd, not their caller, owns the root's installs, so whoever removes the root
+        stops them first; a caller killed mid-install leaves its unit writing otherwise."""
+        for unit in self.running():
+            unit.stop()
+
     def launched(self, repo: RepositoryName, main: str) -> tuple[InstallUnit, ...]:
         """The runs launched for this merge, decoded once from their launch records."""
         cause = InstallCause(repo, main)
@@ -311,9 +321,10 @@ class InstallRun:
     phases: list[LaunchedPhaseTiming] = field(default_factory=list)
 
     @classmethod
-    def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
+    def start(cls, command: InstallCliCommand, root: Path,
+              launcher: LauncherPhase) -> InstallRun:
         checkout = command.checkout
-        with InstallCommands() as commands, LauncherPhase().running(commands.clock):
+        with InstallCommands() as commands, launcher.running(commands.clock):
             commands.git(checkout, "fetch", "-q", "origin")
             target = commands.git(checkout, "rev-parse", "--verify",
                                   f"{command.to}^{{commit}}").strip()

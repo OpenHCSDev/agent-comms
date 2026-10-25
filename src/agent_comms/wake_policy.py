@@ -27,10 +27,6 @@ class MessageAudience(StrEnum):
     MENTIONED = "mentioned"
     COLLECTIVE = "collective"
 
-    def joins_active_turn(self) -> bool:
-        """Only deliveries addressed to this unit interrupt its current work."""
-        return self is not MessageAudience.COLLECTIVE
-
 
 class NoWakeReason(StrEnum):
     UNMENTIONED_OBSERVER = "unmentioned_observer"

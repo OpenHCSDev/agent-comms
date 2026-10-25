@@ -484,7 +484,7 @@ class TestActivityLayer:
         store.emit(Activity(thread="a", state=ActivityState.THINKING))
         store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
         store.emit(Activity(thread="b", state=ActivityState.THINKING))
-        current = store.all_current()
+        current = store.current_for(("a", "b"))
         assert current["a"].state is ActivityState.WORKING
         assert current["b"].state is ActivityState.THINKING
 

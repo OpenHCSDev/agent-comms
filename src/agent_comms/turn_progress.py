@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from .owned_turn import OwnedTurn
     from .session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
+    from .turn_failure import TurnFailure
     from .turn_goal_account import TurnGoalAccount
 
 
@@ -129,13 +130,13 @@ class TurnProgress(events.AgentEventConsumer):
     def thread_name(self) -> str:
         return self.sessions.bindings[self.session_id]
 
-    async def record_failure(self, detail: str) -> events.Done:
-        await self.consume(events.Done(text=detail, ok=False))
+    async def record_failure(self, failure: TurnFailure) -> events.Done:
+        await self.consume(events.Done(text=failure.text, ok=False, failure=failure))
         return self.turn.terminal.require_reported()
 
-    async def report_failure(self, error: Exception) -> NativeTurnOutcome:
+    async def report_failure(self, error: Exception, kind: type[TurnFailure]) -> NativeTurnOutcome:
         """Attempt existing ACP error publication once without hiding the original fault."""
-        return await self.turn.terminal.report_failure(self, error)
+        return await self.turn.terminal.report_failure(self, error, kind)
 
 
     @handles(events.SteeringInterrupted)

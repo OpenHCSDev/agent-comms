@@ -28,6 +28,7 @@ from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 from .turn_item import NativeTurnId, TurnItem
 
 if TYPE_CHECKING:
+    from .agent_events import RuntimeInfoObservation
     from .cli_bridges.shared import TranscriptBridge
     from .importing import ImportBuffer
     from .comms import Comms
@@ -163,7 +164,7 @@ class ThreadOutput(activity.ThreadOutput):
     drafts: dict[TurnItem, DraftAccumulator] = field(default_factory=dict)
 
     @classmethod
-    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> Self:
+    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
         return cls(transcript, comms.agents)
 
     def delivered_targets(self, targets: tuple[str, ...]) -> None:
@@ -228,8 +229,12 @@ class ReplyingThreadOutput(ThreadOutput):
     pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
 
     @classmethod
-    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> Self:
-        return cls(transcript, comms.agents, messaging=comms.messaging)
+    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
+        return comms.registry.snapshot().commander_project.session_output(
+            transcript.incarnation,
+            commander=ThreadOutput(transcript, comms.agents),
+            commanded=cls(transcript, comms.agents, messaging=comms.messaging),
+        )
 
     def delivered_targets(self, targets: tuple[str, ...]) -> None:
         self.reply_targets.update(targets)
@@ -284,6 +289,9 @@ class ReadingPhase(ABC):
         """Current activity now, or held until the reader has caught up."""
 
     def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
+        return (update,)
+
+    def runtime_info(self, update: RuntimeInfoObserved) -> tuple[RuntimeUpdate, ...]:
         return (update,)
 
 
@@ -344,6 +352,19 @@ class OfferedToolsObserved(RuntimeUpdate):
 
     def publish(self, output: ThreadOutput) -> None:
         output.agents.registry.observe_offered_tools(output.transcript.incarnation, self.offered)
+
+
+@dataclass(frozen=True)
+class RuntimeInfoObserved(RuntimeUpdate):
+    """A CLI runtime's observation, recorded by the same runtime-info owner native threads use."""
+
+    observation: RuntimeInfoObservation
+
+    def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
+        return phase.runtime_info(self)
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.agents.observe_runtime_info(output.activity_thread, self.observation)
 
 
 @dataclass(frozen=True)

@@ -38,7 +38,7 @@ def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_regi
     document.unregister("renamed")
     document.begin_delete("renamed")
     assert document.remove("renamed") == ()
-    assert document.threads == {}
+    assert not document.threads
     assert not list(tmp_path.iterdir())
 
 

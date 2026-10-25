@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .errors import RelationViolationError
+
 from .input_key import InputKey
 
 from . import turn_origin
@@ -88,8 +90,6 @@ class TurnRouting:
 
     def require_publications(self, originals, owner_lookup: str) -> None:
         """Only committed originals addressed by this reply intent can be joined."""
-        from .errors import RelationViolationError
-
         if self.publications:
             raise RelationViolationError("Turn intent cannot preclaim a publication")
         if not originals:

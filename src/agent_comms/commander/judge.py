@@ -310,12 +310,13 @@ class OkVerb(HeadVerdictVerb):
 
     def head_operation(self) -> HeadVerdict:
         reason = VerdictReason(self.why)
-        return (GrownHeadVerdict(reason, GrowthReason(self.growth)) if self.growth
+        return (GrownHeadVerdict(reason, GrowthReason.every(self.growth)) if self.growth
                 else ReviewedHeadVerdict(reason))
     growth: Annotated[
-        str,
-        Argument(options={"help": "12+ words naming each growing src file and its need"}),
-    ] = ""
+        tuple[str, ...],
+        Argument(options={"action": "append", "metavar": "REASON",
+                          "help": "12+ words naming a growing src file and its need; repeat for each"}),
+    ] = ()
     no_owner: Annotated[
         str,
         Argument(
