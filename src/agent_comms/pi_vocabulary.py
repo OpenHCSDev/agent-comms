@@ -43,10 +43,10 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
     @classmethod
     def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
         from .attempt_states import UnknownOutcomeAttempt
-        from .coordination_tables.executions import ReplayAssessments
+        from .coordination_tables import executions
 
         outcome = UnknownOutcomeAttempt()
-        ReplayAssessments.accumulate(db, execution.execution_id, outcome.replay_contribution)
+        executions.ReplayAssessments.accumulate(db, execution.execution_id, outcome.replay_contribution)
         return outcome
 
     @classmethod
@@ -102,12 +102,13 @@ class FailedUnpublishedPiStop:
 class FinishedPiStop(FailedUnpublishedPiStop):
     @classmethod
     def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
-        from .coordination_tables.attempts import ReplayFact
-        from .coordination_tables.executions import ReplayAssessments
+        from .coordination_tables import attempts, executions
 
         outcome = super().record_recovery(db, execution)
         # The native turn finished, but recovery cannot invent a delivered reply.
-        ReplayAssessments.accumulate(db, execution.execution_id, ReplayFact.ASSISTANT_OUTPUT)
+        executions.ReplayAssessments.accumulate(
+            db, execution.execution_id, attempts.ReplayFact.ASSISTANT_OUTPUT,
+        )
         return outcome
 
 

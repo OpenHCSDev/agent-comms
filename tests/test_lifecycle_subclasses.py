@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution
-from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
+from agent_comms.reason_codes import NoReasonCode
 from agent_comms.attempt_states import (
     AbortingAttempt,
     AttemptFailedAttempt,
@@ -25,7 +25,6 @@ from agent_comms.attempt_states import (
     UnknownOutcomeAttempt,
     UnsuccessfulTerminal,
 )
-from agent_comms.attempt_recovery import MonitorEvidence
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionRecord, AcpOrigin, ReplayAssessments
 from agent_comms.execution_states import DeferredExecution, FailedExecution
@@ -91,17 +90,13 @@ def test_unknown_settles_failed_in_current_store(tmp_path, authorized):
     (StoppedBeforeGrantStopReason, AttemptFailedAttempt, ReplayFact.NONE, ReplayFact.TOOL_EXECUTED, False),
     (PendingStopReason, UnknownOutcomeAttempt, ReplayFact.UNKNOWN_EFFECTS, ReplayFact.NONE, False),
 ])
-def test_monitor_evidence_records_its_owned_replay_proof(
+def test_stop_reason_records_its_owned_recovery(
     tmp_path, terminal, outcome, contribution, prior, retryable,
 ):
-    evidence = MonitorEvidence(
-        subprocess_dead=True, backend_done=True, reason_code=GivenReasonCode("observed_exit"),
-        observed_at_ms=1000, terminal=terminal,
-    )
     with ready(tmp_path / "coordination.sqlite3", origin=AcpOrigin) as store:
         with store.session.writing() as db:
             ReplayAssessments.accumulate(db, "exec", prior)
-            observed = evidence.terminal.record_recovery(db, store.get("exec").execution)
+            observed = terminal.record_recovery(db, store.get("exec").execution)
             assessment = ReplayAssessments.for_execution(db, "exec")
             assert type(observed) is outcome
             assert observed.replay_contribution == contribution
