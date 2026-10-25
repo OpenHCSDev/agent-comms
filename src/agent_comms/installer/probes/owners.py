@@ -15,8 +15,7 @@ from agent_comms.owner_restart import OwnerRestartRequest
 class OwnerActionsProbe(CliCommandProbe):
     """Execute and decode the batch in one isolated, selected-runtime process.
 
-    The entry source ships with the installer snapshot. Its imports belong to
-    the selected runtime alone, never the worker's mixed installer namespace.
+    The entry source ships with the selected runtime's own installer.
     """
 
     def entry(self) -> tuple[str, ...]:
