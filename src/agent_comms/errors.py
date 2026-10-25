@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination_errors import DrainUnavailable
-from agent_comms.message_reference import MessageReference
 
 if TYPE_CHECKING:
+    from agent_comms.message_reference import MessageReference
     from agent_comms.messages import BusRecord
     from agent_comms.todos import Todo
 
