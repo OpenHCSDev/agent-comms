@@ -254,15 +254,24 @@ class StackClient:
             clients.append(cls(name, checkout))
         return tuple(clients)
 
+    @property
+    def root(self) -> Path:
+        """The directory whose Python files are this client's."""
+        return self.checkout
+
+    def reader(self, relative: Path, found: list[ClientImport]) -> ClientImportNames:
+        return ClientImportNames(self.name, str(relative), found)
+
+    def keeps(self, entry: ClientImport) -> bool:
+        return True
+
     @cached_property
     def imports(self) -> tuple[ClientImport, ...]:
         found: list[ClientImport] = []
-        for path in sorted(self.checkout.rglob("*.py")):
-            relative = str(path.relative_to(self.checkout))
-            ClientImportNames(self.name, relative, found).visit(
-                ast.parse(path.read_text(), relative)
-            )
-        return tuple(found)
+        for path in sorted(self.root.rglob("*.py")):
+            relative = path.relative_to(self.checkout)
+            self.reader(relative, found).visit(ast.parse(path.read_text(), str(relative)))
+        return tuple(entry for entry in found if self.keeps(entry))
 
 
 @dataclass(frozen=True)
@@ -277,19 +286,16 @@ class InstallerZip(StackClient):
     def at(cls, root: Path) -> InstallerZip:
         return cls("installer.zip", root / "src")
 
-    @cached_property
-    def imports(self) -> tuple[ClientImport, ...]:
-        found: list[ClientImport] = []
-        for path in sorted(self.checkout.joinpath(*self.PACKAGE.split(".")).rglob("*.py")):
-            relative = path.relative_to(self.checkout)
-            InstallerImportNames(
-                self.name, str(relative), ".".join(relative.parent.parts), found
-            ).visit(ast.parse(path.read_text(), str(relative)))
-        return tuple(
-            entry
-            for entry in found
-            if entry.module != self.PACKAGE and not entry.module.startswith(self.PACKAGE + ".")
-        )
+    @property
+    def root(self) -> Path:
+        return self.checkout.joinpath(*self.PACKAGE.split("."))
+
+    def reader(self, relative: Path, found: list[ClientImport]) -> ClientImportNames:
+        return InstallerImportNames(self.name, str(relative), ".".join(relative.parent.parts), found)
+
+    def keeps(self, entry: ClientImport) -> bool:
+        """The zip carries the installer's own modules; only the rest resolve in the runtime."""
+        return entry.module != self.PACKAGE and not entry.module.startswith(self.PACKAGE + ".")
 
 
 class Package:
