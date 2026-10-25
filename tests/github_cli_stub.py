@@ -27,7 +27,9 @@ def main():
                 if entry["listed"]["kind"] in data["open_kinds"]:
                     print(entry["listed"]["number"])
         elif parts[:1] == ["pulls"] and len(parts) == 2:
-            print(data["requests"][parts[1]]["listed"]["head"])
+            assert arguments[arguments.index("--jq") + 1] == '.head.sha + " " + .base.ref'
+            listed = data["requests"][parts[1]]["listed"]
+            print(listed["head"], listed["base"])
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
             print("{}")
