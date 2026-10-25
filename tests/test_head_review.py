@@ -17,7 +17,8 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    GrownHeadVerdict, GrowthReason, HeadReviewOrder, NoHeadOrder, PullRequestLink,
+    GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview, NoHeadOrder,
+    PullRequestLink, UnquotedHeadReview,
     RecordPullRequest, RejectedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview,
     StrikeReason, UnmergedListedPullRequest, VerdictReason,
 )
@@ -141,12 +142,14 @@ def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus)
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     todo = comms.goals.todos.get(todo.id)
     scope = HeadReviewOrder.for_request(
-        (todo,), request, lambda _: "Repair the existing owner", (todo.order.checked().owner,),
+        (todo,), request, lambda linked: LinkedHeadReview.of(
+            linked, "Repair the existing owner", (linked.order.checked().owner,)),
     )
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
     todo = comms.goals.todos.get(todo.id)
     scope = HeadReviewOrder.for_request(
-        (todo,), request, lambda _: "Repair the existing owner", (todo.order.checked().owner,),
+        (todo,), request, lambda linked: UnquotedHeadReview.of(
+            linked, (linked.order.checked().owner,)),
     )
     before = comms.registry.require("worker").goal.require()
     invoke(comms, request, RejectedHeadVerdict(REASON), scope)

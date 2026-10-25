@@ -90,7 +90,7 @@ One line per unit touched, then the next unit.
 
 rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md the default verdicts. Slop is a property of the program, not of its author.
 
-- **Every slop claim cites the pinned catalog and carries its formal statement.** Send-backs: `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`. Orders: a `slop` array of `{"pattern":"IDEN-5","fact":"the fields of each order","at":"src/example.py:1","derive":"declaration","by":"src/owner.py:1"}`; when the order's edits create the owner, `"by":{"created":"src/new_owner.py:1"}`, and done refuses until that line exists on the delivered tree. The tools refuse unknown IDs and malformed fields.
+- **Every slop claim cites the pinned catalog and carries its formal statement.** Slop send-backs: `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; a correctness send-back (a bug, not a restated fact) gives only `--at` the failing PATH:LINE, and the options given choose which. Orders: a `slop` array of `{"pattern":"IDEN-5","fact":"the fields of each order","at":"src/example.py:1","derive":"declaration","by":"src/owner.py:1"}`; when the order's edits create the owner, `"by":{"created":"src/new_owner.py:1"}`, and done refuses until that line exists on the delivered tree. The tools refuse unknown IDs and malformed fields.
 
 ## Forks, strikes and the record
 

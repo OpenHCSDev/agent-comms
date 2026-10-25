@@ -24,6 +24,7 @@ pushed commit; Core checks git for each, and edits it refuses stay for ok or bac
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -41,6 +42,7 @@ from agent_comms.comms import Comms
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import (
     Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems,
+    SelectingArgumentDefault,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
@@ -62,12 +64,15 @@ from agent_comms.todos import (
     HeadVerdict,
     HeadReviewOrder,
     JudgedCall,
+    LinkedHeadReview,
+    OrderLink,
     SendBackVerdict,
     StrikeReason,
     SupersededVerdict,
     Todo,
     ToolCallVerdict,
     UnderReviewHeadVerdict,
+    UnquotedHeadReview,
     VerdictReason,
 )
 from agent_comms.slop import Derivation, Slop
@@ -265,8 +270,8 @@ class PullRequestReview(ReviewSubject):
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
         options.check_edits([])
-        linked = HeadReviewOrder.for_request(ctx.held_orders(), self.request, options.quote,
-                                            options.head_evidence(), options.problem)
+        linked = HeadReviewOrder.for_request(ctx.held_orders(), self.request, options.order_link,
+                                            options.problem)
         ctx.call(CommsHeadVerdictTool(request=self.request,
                                     operation=options.head_operation(), order=linked))
         print(f'PR #{self.request.pr} head {self.request.head}: {options.declared_name}')
@@ -317,13 +322,6 @@ class ReasonedVerb(JudgeVerb, declared_name=None):
     why: Annotated[str, ReasonText]
 
 
-@dataclass(frozen=True, kw_only=True)
-class QuotingVerb(JudgeVerb, declared_name=None):
-    """A verb whose verdict stores the words of the order it carries out."""
-    serves: Annotated[str, Argument(options={"help": "exact words of the linked order"})] = ""
-
-    def quote(self, todo: Todo) -> str:
-        return self.serves
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -378,10 +376,9 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
     def subject(self, ctx: order.Commander) -> ReviewSubject:
         return ReviewSubject.from_options(self, ctx)
 
-    def quote(self, todo: Todo) -> str:
-        """The linked order's words this verdict stores. Reading or rejecting a head carries
-        out nothing, so the link names the order by its own problem; only ok quotes a clause."""
-        return todo.text
+    def order_link(self, todo: Todo) -> OrderLink:
+        """Reading or rejecting a head carries out no clause of the order it is linked to."""
+        return UnquotedHeadReview.of(todo, self.head_evidence())
 
     def head_evidence(self) -> tuple[FileLine, ...]:
         return ()
@@ -391,7 +388,16 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OkVerb(ReasonedVerb, QuotingVerb, HeadVerdictVerb):
+class QuotingVerb(HeadVerdictVerb, declared_name=None):
+    """A verb whose verdict stores the words of the order it carries out."""
+    serves: Annotated[str, Argument(options={"help": "exact words of the linked order"})] = ""
+
+    def order_link(self, todo: Todo) -> OrderLink:
+        return LinkedHeadReview.of(todo, self.serves, self.head_evidence())
+
+
+@dataclass(frozen=True, kw_only=True)
+class OkVerb(ReasonedVerb, QuotingVerb):
     help = "the edit or exact PR head is accepted"
 
     def head_operation(self) -> HeadVerdict:
@@ -481,34 +487,41 @@ class DroppedVerb(VerdictVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(ReasonedVerb, HeadVerdictVerb):
-    help = "reject the edit or exact PR head; Core records its reason once"
+    """A correctness send-back: the head is broken at a line, whether or not it restates a fact."""
+    help = ("reject the edit or exact PR head; Core records its reason once. With --slop and its "
+            "statement it is a slop send-back, without them a correctness one")
     roast: Annotated[
         str, RoastText, Argument(options={"help": "blunt, why it is stupid, with because"})
     ]
     fix: Annotated[str, FixText, Argument(options={"help": "owner and replacing shape"})]
-    pattern: Annotated[
-        str,
-        Argument(
-            flags=("--slop",), options={"help": "pattern ID from the pinned refactor-audit catalog"}
-        ),
-    ]
-    fact: Annotated[
-        str, Argument(options={"help": "the required fact, 4+ words"})
-    ]
     at: Annotated[
-        str, Argument(options={"help": "PATH:LINE where it is restated"})
-    ]
-    derive: Annotated[
-        str, Argument(options={"help": "|".join(Derivation.names())})
-    ]
-    by: Annotated[
-        str, Argument(options={"help": "PATH:LINE of the declaration that owns it"})
+        str, Argument(options={"help": "PATH:LINE of the failing path, or where the slop restates its fact"})
     ]
 
-    @cached_property
-    def slop(self) -> Slop:
-        return FieldCodec.decode(Slop, dict(pattern=self.pattern, fact=self.fact,
-                                           at=self.at, derive=self.derive, by=self.by))
+    @classmethod
+    def add_parser(cls, subparsers: argparse._SubParsersAction) -> None:
+        """One `back` takes every member's options; the options given choose the member."""
+        FieldCodec.add_arguments(cls.widest(), subparsers.add_parser(cls.declared_name, help=cls.help))
+
+    @classmethod
+    def from_arguments(cls, args: argparse.Namespace) -> BackVerb:
+        """The narrowest member holding every option given decodes them, and lists every
+        option of its own still missing."""
+        given = vars(args).keys() & cls.options_of(cls.widest())
+        return FieldCodec.decode_arguments(min(
+            (member for member in cls.members_with(cls) if given <= cls.options_of(member)),
+            key=lambda member: len(cls.options_of(member))), args)
+
+    @classmethod
+    def widest(cls) -> type[BackVerb]:
+        return max(cls.members_with(cls), key=lambda member: len(cls.options_of(member)))
+
+    @staticmethod
+    def options_of(member: type) -> set[str]:
+        return {entry.key for entry in FieldCodec.argument_fields(member)}
+
+    def defect(self) -> str:
+        return f"The failing path is {self.at}."
 
     @cached_property
     def rejection_reason(self) -> StrikeReason:
@@ -517,7 +530,7 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
         return StrikeReason("\n".join((
             self.why, self.roast,
             *(f"    {line.strip()}" for line in self.lines),
-            self.slop.render(), f"What replaces it: {self.fix}",
+            self.defect(), f"What replaces it: {self.fix}",
         )))
 
     def head_evidence(self) -> tuple[FileLine, ...]:
@@ -540,6 +553,32 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
 
     def check_edits(self, edits: list[Edit]) -> None:
         _ = self.rejection_reason
+
+@dataclass(frozen=True, kw_only=True)
+class SlopBackVerb(BackVerb):
+    """A slop send-back: the defect is a fact restated outside its declaration, so it carries
+    the formal statement. `back` parses its options; it has no subcommand of its own."""
+    pattern: Annotated[str, Argument(flags=("--slop",), default=SelectingArgumentDefault(), options={
+        "help": "slop only: pattern ID from the pinned refactor-audit catalog"})]
+    fact: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+        "help": "slop only: the required fact, 4+ words"})]
+    derive: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+        "help": "slop only: " + "|".join(Derivation.names())})]
+    by: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+        "help": "slop only: PATH:LINE of the declaration that owns it"})]
+
+    @classmethod
+    def add_parser(cls, subparsers: argparse._SubParsersAction) -> None:
+        """`back` already takes these options."""
+
+    @cached_property
+    def slop(self) -> Slop:
+        return FieldCodec.decode(Slop, dict(pattern=self.pattern, fact=self.fact,
+                                           at=self.at, derive=self.derive, by=self.by))
+
+    def defect(self) -> str:
+        return self.slop.render()
+
 
 @dataclass(frozen=True, kw_only=True)
 class BatchVerb(JudgeVerb):
