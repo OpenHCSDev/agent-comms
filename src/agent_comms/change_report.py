@@ -11,7 +11,7 @@ import ast
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, cast
 
@@ -166,13 +166,44 @@ class PullRequestHeadRevision(SourceRevision):
         return f'+pull/{self.link.number}/head:{self.reference}'
 
 
-@dataclass(frozen=True)
-class SourceRoots:
-    """Where citations are read: the order's own checkout, and the commander project whose
-    registered repositories a citation may name instead."""
+class SourceRoots(ABC):
+    """Where citations are read: the checkout an unqualified citation names, and the commander
+    project whose registered repositories a qualified citation names instead."""
 
-    order: Path
     project: CommanderProject
+
+    @property
+    @abstractmethod
+    def order(self) -> Path:
+        """The checkout an unqualified ``file.py:line`` is read in."""
+
+
+@dataclass(frozen=True)
+class OrderRoots(SourceRoots):
+    """An order's citations: unqualified ones are in the order's check directory."""
+
+    checkout: Path
+    project: CommanderProject
+
+    @property
+    def order(self) -> Path:
+        return self.checkout
+
+
+@dataclass(frozen=True)
+class RegisteredRoots(SourceRoots):
+    """Citations with no order behind them: unqualified ones need exactly one registered
+    repository to name."""
+
+    project: CommanderProject
+
+    @property
+    def order(self) -> Path:
+        repositories = self.project.require().repos
+        if len(repositories) != 1:
+            raise ValueError("An unqualified FILE:LINE names no repository when several are "
+                             "registered; cite it as owner/name:FILE:LINE.")
+        return repositories[0].checkout
 
 
 class CitedRepository(ABC):
@@ -254,8 +285,9 @@ class FileLine(WireValue, SourceReference):
     line: int
     repository: CitedRepository = OrderRepository()
 
+    # A prose token: an optional revision or repository prefix, then file.py:line.
     _line_token: ClassVar[re.Pattern[str]] = re.compile(
-        r"(?<![\w./:-])(?:[\w.-]+(?:/[\w.-]+)?:)?[\w./-]*\.[\w-]+:\d+\b")
+        r"(?<![\w./:~^@{}-])(?:([\w./~^@{}-]+):)?([\w./-]*\.[\w-]+:\d+)\b")
 
     def __post_init__(self) -> None:
         if not self.file or not self.file.strip() or "\n" in self.file:
@@ -346,10 +378,20 @@ class FileLine(WireValue, SourceReference):
                 "registered repository"}
 
     @classmethod
-    def scan(cls, text: str) -> tuple[FileLine, ...]:
-        """Every file:line reference a message body already declares."""
+    def cites(cls, text: str) -> bool:
+        """Whether a message body names any file:line, whichever repository it is in."""
+        return cls._line_token.search(text) is not None
+
+    @classmethod
+    def scan(cls, text: str, project: CommanderProject) -> tuple[FileLine, ...]:
+        """Every file:line reference a message body already declares. A prefix is the
+        citation's repository only when it names a registered one; any other prefix
+        (``origin/main:``, ``HEAD~1:``) is a revision spelling and the line is the order's."""
+        named = {name.to_wire(): NamedRepository(name) for name in project.repository_names()}
         return tuple(dict.fromkeys(
-            cls.from_wire(token) for token in cls._line_token.findall(text)
+            replace(cls.from_wire(location),
+                    repository=named.get(prefix.casefold(), OrderRepository()))
+            for prefix, location in cls._line_token.findall(text)
         ))
 
 

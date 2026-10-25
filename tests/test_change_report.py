@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.registry_document import NoCommanderProject
 from agent_comms.change_report import ChangedFact, ChangeReport, FileLine
 from agent_comms.read_basis import NamedViewer
 from agent_comms.messages import (
@@ -165,5 +166,6 @@ class TestKindDeclarations:
         assert MessageKind.field_value(AlertKind) is AlertKind
 
     def test_file_line_scans_references_from_text(self):
-        references = FileLine.scan("see src/a.py:12, org.py:3, `/home/ts/a.py:9` and plain seq:7")
+        references = FileLine.scan("see src/a.py:12, org.py:3, `/home/ts/a.py:9` and plain seq:7",
+                                   NoCommanderProject())
         assert [r.to_wire() for r in references] == ["src/a.py:12", "org.py:3", "/home/ts/a.py:9"]

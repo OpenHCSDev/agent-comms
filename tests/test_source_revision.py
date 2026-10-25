@@ -7,7 +7,7 @@ import pytest
 from source_revision_fixture import SourceRepository
 from test_todos import order
 from agent_comms.change_report import (
-    CitedRevisions, FileLine, MainRevision, PullRequestHeadRevision, SourceRoots,
+    CitedRevisions, FileLine, MainRevision, OrderRoots, PullRequestHeadRevision, RegisteredRoots,
 )
 from agent_comms.repository_name import RepositoryName
 from agent_comms.errors import MissingSourceLine
@@ -97,19 +97,27 @@ def test_a_replacement_order_carries_the_problem_pull_requests_once(tmp_path):
     assert isinstance(carried.cited_revision, CitedRevisions)
 
 
-def test_a_citation_naming_another_registered_repository_is_read_at_its_main(tmp_path):
+def test_a_citation_names_its_repository_only_when_it_is_registered(tmp_path):
     source = SourceRepository.create(tmp_path / 'order')
     other = SourceRepository.create(tmp_path / 'other', RepositoryName.from_wire('example/other'))
+    both = OrderRoots(source.checkout, replace(source.project, repos=(source, other)))
     cited = FileLine.from_wire('example/other:owner.py:2')
     assert cited.to_wire() == 'example/other:owner.py:2'
-    assert FileLine.scan(f'owner at {cited.to_wire()}, beside branch.py:2') == (
-        cited, FileLine('branch.py', 2))
+    # In prose a registered prefix is the repository; a revision prefix is not part of the citation.
+    assert FileLine.scan('owner at Example/Other:owner.py:2, shown by origin/main:branch.py:2 '
+                         'and HEAD~1:branch.py:3', both.project) == (
+        cited, FileLine('branch.py', 2), FileLine('branch.py', 3))
     # The order's pull request belongs to the order's repository; the other repository's
     # main still answers the citation.
     revision = CitedRevisions((PullRequestHeadRevision(source.link), MainRevision()))
-    cited.require_class(SourceRoots(source.checkout, replace(source.project, repos=(source, other))), revision)
+    cited.require_class(both, revision)
     with pytest.raises(MissingSourceLine, match='does not exist'):
-        FileLine.from_wire('example/other:branch.py:2').require_exists(
-            SourceRoots(source.checkout, replace(source.project, repos=(source, other))), revision)
+        FileLine.from_wire('example/other:branch.py:2').require_exists(both, revision)
+    # A declared field stays strict: an unregistered repository is refused with its install step.
     with pytest.raises(ValueError, match='agent-comms install --repos'):
         cited.require_exists(source.roots, revision)
+    # With no order behind it, an unqualified citation needs a single registered repository.
+    FileLine('owner.py', 2).require_exists(RegisteredRoots(source.project), MainRevision())
+    with pytest.raises(ValueError, match='cite it as owner/name:FILE:LINE'):
+        FileLine('owner.py', 2).require_exists(RegisteredRoots(both.project), MainRevision())
+    cited.require_exists(RegisteredRoots(both.project), MainRevision())

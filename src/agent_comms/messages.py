@@ -527,7 +527,7 @@ class HandoffKind(NeedsAnswerKind):
             claim for claim in cls.CLAIMS
             if re.search(rf"\b{re.escape(claim)}\b", message.body, re.IGNORECASE)
         ]
-        if not claims or FileLine.scan(message.body) or cls.COMMANDS.search(message.body):
+        if not claims or FileLine.cites(message.body) or cls.COMMANDS.search(message.body):
             return
         raise ValueError(
             "Handoff message claims " + ", ".join(claims)

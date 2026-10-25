@@ -43,6 +43,7 @@ from agent_comms.change_report import (
     PullRequestHeadRevision,
     SourceReference,
     SourceRevision,
+    OrderRoots,
     SourceRoots,
     SourceText,
     WorkingTree,
@@ -2153,7 +2154,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return CitedRevisions((*map(PullRequestHeadRevision, self.linked_requests), MainRevision()))
 
     def source_roots(self, project: CommanderProject) -> SourceRoots:
-        return SourceRoots(self.check.directory, project)
+        return OrderRoots(self.check.directory, project)
 
     def require_references(self, project: CommanderProject) -> None:
         roots, revision = self.source_roots(project), self.cited_revision
@@ -2191,7 +2192,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                 problems.append(f'{label}: {error}; fix: name an existing source location or directory')
         references = tuple(dict.fromkeys(
             reference for reference in (
-                *FileLine.scan('\n'.join((document.prose, *self.edits))),
+                *FileLine.scan('\n'.join((document.prose, *self.edits)), context.project),
                 *(reference for slop in document.slop for reference in (slop.at, *slop.by.cited())),
                 *traced.located(),
             ) if reference not in self.created
@@ -4106,7 +4107,7 @@ class EditSendBackVerdict(SendBackVerdict, EditVerdict):
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
         self.require_cited(
-            SourceRoots(self.edited(goals, current)[1], goals.registry.snapshot().commander_project),
+            OrderRoots(self.edited(goals, current)[1], goals.registry.snapshot().commander_project),
             WorkingTree())
         return self
 

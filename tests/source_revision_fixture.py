@@ -9,7 +9,7 @@ from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.repository_name import RepositoryName
-from agent_comms.change_report import FileLine, SourceRoots
+from agent_comms.change_report import FileLine, OrderRoots
 from agent_comms.todos import FixScope, FixShape, PullRequestLink
 from fixture_git import IDENTITY
 
@@ -35,8 +35,8 @@ class SourceRepository(Repo):
         return RegisteredCommanderProject(RecordedThreadIncarnation('lead', 1.0), (self,))
 
     @property
-    def roots(self) -> SourceRoots:
-        return SourceRoots(self.checkout, self.project)
+    def roots(self) -> OrderRoots:
+        return OrderRoots(self.checkout, self.project)
 
     @property
     def link(self) -> PullRequestLink:
