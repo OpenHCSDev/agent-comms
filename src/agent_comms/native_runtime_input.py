@@ -130,6 +130,7 @@ class NativeRuntimeInput(
         self.execution
         # The selected identity and the later context acknowledgement are separate
         # acquisition phases of this ORIGINAL row, never two source selectors.
+        self.session_id.selected_session(self)
         self.reference
 
     @property
