@@ -20,6 +20,7 @@ from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer import launch as installer_launch
+from agent_comms.installer.interpreter_operation import LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest
@@ -129,7 +130,7 @@ class PendingInstallDue(InstallDue):
                                     project=self.core.checkout)
         try:
             with self.logs.launching():
-                run = installer_launch.InstallRun.start(command, comms.root)
+                run = installer_launch.InstallRun.start(command, comms.root, LauncherPhase())
                 run.spawn()
         except installer_launch.InstallRunning as running:
             for unit in running.installing(self.target):
