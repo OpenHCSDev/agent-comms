@@ -2155,6 +2155,8 @@ class FixScope(OrderScope[CheckedDelivery]):
 class CheckedProblemOrder(ProblemOrder, declared_name=None):
     """A checked order keeps its actual body, check and source location."""
 
+    counts_for_recurrence: ClassVar[bool] = True
+
     @property
     def linked_requests(self) -> tuple[PullRequestLink, ...]:
         return (*self.pull_requests, *(claim.pull_request for claim in self.commander_claims()))
@@ -2967,6 +2969,7 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
     why: str
     superseded_by: Annotated[Successor, WireOmitDefault()] = NoSuccessor()
     line: ClassVar[str] = "Withdrawn"
+    counts_for_recurrence: ClassVar[bool] = False
 
     def require_close(self) -> None:
         """Retiring an erroneous order does not claim installed work."""
@@ -4658,7 +4661,8 @@ class Todo(TodoStoreRows, TypedTable):
         self, declarations: tuple[Declaration, ...], root: Path, now: float,
     ) -> tuple[str, ...]:
         recent = tuple(order for order in self.order_history
-                       if order.at.since(now - 7 * 86400)
+                       if order.counts_for_recurrence
+                       and order.at.since(now - 7 * 86400)
                        and order.at.recorded_at("An earlier order") <= now
                        and order.in_declarations(declarations, root))
         if not recent:
