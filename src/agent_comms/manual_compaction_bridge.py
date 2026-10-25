@@ -7,7 +7,7 @@ from contextlib import AsyncExitStack
 from functools import partial
 from typing import TYPE_CHECKING
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
@@ -40,9 +40,9 @@ class CompactionReply(MroDispatch):
         return handler(outcome)
 
     @staticmethod
-    def refused(reason: str, message: str) -> RequestError:
-        """The SDK's internal-error code, carrying the sentence the client shows."""
-        return RequestError(RequestError.internal_error().code, message, {"reason": reason})
+    def refused(reason: str, message: str) -> Refused:
+        """Preserve the backend refusal until ACP renders its code and sentence."""
+        return Refused(Refused.INTERNAL_ERROR, message, {"reason": reason})
 
     @handles(PlacedCompaction)
     def placed(self, outcome: PlacedCompaction) -> PromptResponse:

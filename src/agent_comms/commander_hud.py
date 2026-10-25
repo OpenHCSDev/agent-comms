@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
-from agent_comms.commander_pings import LoadPing, PhaseRowPing, Ping, UnitRowPing
+from agent_comms.commander_pings import (
+    ForksRowPing, FinishedPhasesRowPing, HudPing, LoadPing, PhaseRowPing, Ping, UnitRowPing,
+)
 from agent_comms.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
-from agent_comms.plan_phases import PlanPhase
+from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, UnmergedListedPullRequest
@@ -39,8 +42,22 @@ class CommanderOrder:
     unjudged_edits: int
 
 
+class HudRow(ABC):
+    """One frame row below the load line. Each row says whether it needs the commander's hand,
+    and the frame puts every row that does above every row that does not."""
+
+    def needs_hand(self) -> bool:
+        return False
+
+    @abstractmethod
+    def line(self) -> str: ...
+
+    @abstractmethod
+    def ping(self) -> HudPing: ...
+
+
 @dataclass(frozen=True)
-class CommanderUnit:
+class CommanderUnit(HudRow):
     """One unit's state card: its orders, live strikes and GitHub's open ready/draft requests.
 
     ``state`` and ``clock`` come from the UnitState the heartbeat derived for the unit, so a
@@ -70,15 +87,28 @@ class CommanderUnit:
     def ping(self) -> UnitRowPing:
         return UnitRowPing(self.unit, text=self.line())
 
+    def needs_hand(self) -> bool:
+        """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
+        return self.state.attention() or any(order.review_timers_up for order in self.orders)
+
 
 @dataclass(frozen=True)
-class CommanderPhase:
+class CommanderPhase(HudRow):
     """PlanPhase supplies every answer; no HUD status taxonomy is maintained beside it."""
 
     phase: type[PlanPhase]
     done: bool
     ready: bool
     holders: tuple[ThreadIncarnation, ...]
+
+    @property
+    def finished(self) -> bool:
+        """Done and released: nothing left for anyone, so it folds into its plan's count."""
+        return self.done and not self.holders
+
+    def needs_hand(self) -> bool:
+        """Ready with nobody holding it, or done while an order still holds it open."""
+        return (self.ready and not self.holders) or (self.done and bool(self.holders))
 
     def line(self) -> str:
         return (
@@ -92,18 +122,48 @@ class CommanderPhase:
 
 
 @dataclass(frozen=True)
+class FinishedPhases(HudRow):
+    """One plan's finished phases as one count: a graveyard needs no roll call."""
+
+    plan: type[Plan]
+    phases: tuple[type[PlanPhase], ...]
+
+    def line(self) -> str:
+        return f"{self.plan.declared_name}: {len(self.phases)} phases done"
+
+    def ping(self) -> FinishedPhasesRowPing:
+        return FinishedPhasesRowPing(self.plan, text=self.line())
+
+
+@dataclass(frozen=True)
+class CommanderForks(HudRow):
+    """The commander's forks Core registered and still hears; a fork never registered, such as
+    a Claude subagent spawned without `--fork NAME`, has no record here to show."""
+
+    forks: tuple[ThreadIncarnation, ...]
+
+    def line(self) -> str:
+        return f"forks: {', '.join(fork.name for fork in self.forks) or 'none registered'}"
+
+    def ping(self) -> ForksRowPing:
+        return ForksRowPing(text=self.line())
+
+
+@dataclass(frozen=True)
 class CommanderHud(ToolResult):
     """One disposable view of native records, shared by comms_hud and the commander board.
 
     TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
     PullRequests owns ready/draft facts; PlanPhase owns phase state; OverloadDegradation
-    owns the load formula and decision. Nothing here writes or retains a board.
+    owns the load formula and decision; ThreadExecution owns which threads are forks. Nothing
+    here writes or retains a board.
     """
 
     commander: ThreadIncarnation
     units: tuple[CommanderUnit, ...]
     phases: tuple[CommanderPhase, ...]
     load: OverloadDegradation
+    forks: tuple[ThreadIncarnation, ...]
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -122,9 +182,9 @@ class CommanderHud(ToolResult):
         held = frame.todos
         progress = pulls.progress(held, comms.registry)
         timers = store.timers_up_in(held, now, progress)
-        edits = {
+        edits = dict.fromkeys((todo.id for todo in held), 0) | {
             read.todo.id: read.read()
-            for read in OrderEditCountRead.for_orders(comms.root, frame.live)
+            for read in OrderEditCountRead.judgeable(comms.root, frame.live, progress)
         }
         units = []
         for state in states:
@@ -149,19 +209,38 @@ class CommanderHud(ToolResult):
             phase, phase.done(reading), phase.ready(reading),
             tuple(dict.fromkeys(todo.held().owner_identity for todo in phase.holding(reading))),
         ) for phase in PlanPhase.members_with(PlanPhase))
+        forks = tuple(
+            fork.incarnation for thread in snapshot.threads.values()
+            if thread.parent.named(commander)
+            for fork in thread.execution.commander_forks(thread)
+            if snapshot.status(fork.name).receiving
+        )
         return cls(owner, tuple(units), phases,
-                   OverloadDegradation.from_orders(held, len(timers), sum(edits.values())))
+                   OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
+                   forks)
+
+    def rows(self) -> tuple[HudRow, ...]:
+        """The rows under the load line: every row needing the commander's hand, in the
+        UnitState family's order and then the plans' order, then the work that is moving, the
+        forks, and one count per plan for its finished phases."""
+        live = (*self.units, *(phase for phase in self.phases if not phase.finished))
+        finished: dict[type[Plan], list[type[PlanPhase]]] = {}
+        for phase in self.phases:
+            if phase.finished:
+                finished.setdefault(phase.phase.plan, []).append(phase.phase)
+        return (
+            *(row for row in live if row.needs_hand()),
+            *(row for row in live if not row.needs_hand()),
+            CommanderForks(self.forks),
+            *(FinishedPhases(plan, tuple(phases)) for plan, phases in finished.items()),
+        )
 
     def pings(self) -> tuple[Ping, ...]:
-        return (
-            LoadPing(text=str(self.load)),
-            *(row.ping() for row in self.phases),
-            *(row.ping() for row in self.units),
-        )
+        return (LoadPing(text=str(self.load)), *(row.ping() for row in self.rows()))
 
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
-        """One line per declared phase or holder, with their original order and PR identities."""
+        """The load line, then one line per row in the order rows() declares."""
         return tuple(ping.text for ping in self.pings())
 
 

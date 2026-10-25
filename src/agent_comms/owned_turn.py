@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
@@ -133,7 +133,7 @@ class OwnedTurn:
         if self.original_owner_input and self.original_goal_id != (
             active_goal.reported_id()
         ):
-            raise RequestError.invalid_params({"reason": "input_authority_changed"})
+            raise Refused.invalid_params({"reason": "input_authority_changed"})
         self.goal_permit: GoalTurnPermit = NoLaunchPermit()
         return True
 
@@ -425,7 +425,7 @@ class OwnedTurn:
             state = await Coordination.run_worker(self.settle_unbound)
             await self.progress.consumer.dispatch(events.PromptCancelled(state))
             raise
-        except (NativeRequestFailure, RequestError) as error:
+        except (NativeRequestFailure, Refused) as error:
             await self.fail(error, error, BackendFailed)
         except CoordinationError as error:
             await self.fail(error, error, CoordinationRefused)
