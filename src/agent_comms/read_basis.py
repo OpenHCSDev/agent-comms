@@ -856,26 +856,25 @@ class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayS
                                   descending=descending, limit=limit, kinds=kinds)
 
     def history(self, source: BusReader, *, limit: int) -> tuple[Message, ...]:
-        """A bounded recent selection closed over its answers, without crossing this scope."""
+        """A bounded recent selection closed over its answers, without crossing this scope.
+
+        A copied message keeps only the answers this scope discloses: a reference to a message
+        outside it would name that message, and its original stays on the source bus."""
         selected: dict[int, Message] = {}
         with source.reading() as reader:
             for message in self.records(reader, descending=True, limit=limit):
                 added: dict[int, Message] = {}
                 pending = [message]
                 while pending and len(selected) + len(added) <= limit:
-                    original = pending.pop()
-                    if original.seq in selected or original.seq in added:
+                    answer = pending.pop()
+                    if answer.seq in selected or answer.seq in added:
                         continue
-                    if not self.includes(original):
-                        raise RelationViolationError(
-                            f"History answer {original.seq} is outside the selected scope"
-                        )
-                    added[original.seq] = original
-                    references = tuple(dict.fromkeys(
-                        reference for reference in original.answers
-                        if reference.seq not in selected and reference.seq not in added
-                    ))
-                    pending.extend(reader.messages_for_references(references))
+                    disclosed = tuple(original for original in
+                                      reader.messages_for_references(answer.answers)
+                                      if self.includes(original))
+                    added[answer.seq] = replace(
+                        answer, answers=tuple(original.reference for original in disclosed))
+                    pending.extend(disclosed)
                 if len(selected) + len(added) > limit:
                     if not selected:
                         raise RelationViolationError(
