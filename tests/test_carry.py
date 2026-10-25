@@ -273,11 +273,9 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
     assert all(saved.status(name).stopped for name in names[1:])
 
 
-def test_the_install_start_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_open(
-        comms, stack):
-    """Install 14: f23ca8968 refused this ledger at every opening, so its stop answered
-    nothing. The install's start holds the root, and the target stops the owners under
-    that hold, carrying the ledger, which stays held until the install releases it."""
+def test_the_install_start_stops_owners_under_its_hold(comms, stack):
+    """The install's start holds the root and the outgoing runtime stops the owners under
+    that hold; the hold stays draining until the install releases it."""
     from agent_comms.child_process import SpawnedProcess
 
     path = ledger_one_failure_short(comms.root)
