@@ -7,6 +7,7 @@ import builtins
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
+from functools import partial
 from graphlib import TopologicalSorter
 from itertools import groupby
 from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, Union
