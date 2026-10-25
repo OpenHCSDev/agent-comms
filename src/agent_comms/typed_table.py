@@ -1102,12 +1102,12 @@ class TableSchema(ABC):
             with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
                 cls.carry_schema(db, rebuild=attached)
                 with closing(SQLiteForeignKeyViolation.iterate(
-                    db.execute("PRAGMA foreign_key_check"),
+                    db.execute('SELECT "table", parent, fkid FROM pragma_foreign_key_check()'),
                 )) as violations:
                     for violation in violations:
                         raise cls.schema_error(
                             f"{cls.__name__} foreign-key violation: table={violation.table}, "
-                            f"rowid={violation.rowid}, parent={violation.parent}"
+                            f"parent={violation.parent}, fkid={violation.fkid}"
                         )
         return True
 
@@ -1731,14 +1731,9 @@ class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
 
 
-class WithoutRowId(NullMember):
-    """SQLite reports no rowid for a relation in a WITHOUT ROWID table."""
-
-
 @dataclass(frozen=True)
 class SQLiteForeignKeyViolation(TypedRow):
     table: str
-    rowid: int | WithoutRowId
     parent: str
     fkid: int
 

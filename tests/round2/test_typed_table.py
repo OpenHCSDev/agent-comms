@@ -180,7 +180,7 @@ def test_schema_carry_preserves_foreign_children_and_rolls_back_orphans(tmp_path
         stored = CarrySchema.stored_schema(db)
         outcome = pytest.raises(
             CarrySchema.schema_error,
-            match=f"table={CarryChild.declared_name}, rowid=0, parent={CarryParent.declared_name}",
+            match=f"table={CarryChild.declared_name}, parent={CarryParent.declared_name}, fkid=0",
         ) if changed else nullcontext()
         started = perf_counter()
         with outcome:
