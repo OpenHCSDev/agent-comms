@@ -97,9 +97,12 @@ async def test_failed_turn_writes_ledger_once_and_reads_failed_execution(executi
         turn.finish_goals()
         assert failure_count(comms) == 1
         assert comms.registry.require("worker").goal == goal
-        assert isinstance(comms.goals.goal_execution("worker"), RunningExecution)
+        assert isinstance(comms.goals.goal_execution("worker"), AttemptFailedExecution)
     execution = comms.goals.goal_execution("worker")
     assert isinstance(execution, AttemptFailedExecution)
+    async with turn_on(comms):
+        # A message turn on the blocked goal leaves the block on the heartbeat.
+        assert comms.goals.goal_execution("worker") == execution
     assert execution.toggle is RetryGoalAction
     assert execution.evidence.turn_id == turn.turn_id
     assert failure_count(comms) == 1

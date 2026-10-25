@@ -31,6 +31,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -52,7 +53,6 @@ from agent_comms.cli_commands import (
     StartCliCommand,
     StopCliCommand,
     TargetActionCliCommand,
-    TargetBatchResult,
 )
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
@@ -128,13 +128,14 @@ from agent_comms.installer.probes.carry import (
 )
 from agent_comms.installer.probes.commands import (
     CliCommandProbe,
+    CliOutput,
     CliRefusedError,
     CliUndecodableError,
 )
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
-from agent_comms.installer.probes.owners import RunningOwnersProbe
+from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwnersProbe
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
 from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.refusals import InstallRolledBack, UpgradeRefused
@@ -473,10 +474,11 @@ class OwnersStopped:
         starts again every owner it stopped, and one restarted since is not started twice."""
         running = stack.running_owners(root)
         self.stopped.extend(name for name in running if name not in self.stopped)
-        stack.owners(root, StopCliCommand, running).require_success(UpgradeRefused)
+        for outcome in stack.owners(root, StopCliCommand, running):
+            outcome.require_success(UpgradeRefused)
 
     def start_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
-        self.started = stack.start(root, self.stopped)
+        self.started = stack.owners(root, StartCliCommand, self.stopped)
         return self.started
 
     def published_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
@@ -665,18 +667,17 @@ class Stack:
                                *arguments: str) -> Answer:
         """This bus's answer to ``command``, never the route's, decoded as the result the
         command declares."""
-        return self.answer(root, command.invocation(*arguments), command.result_type())
+        invocation = command.invocation(*arguments)
+        return self.cli_reply(CliCommandProbe(("--root", str(root), *invocation)),
+                              partial(CliOutput.answer, result=command.result_type()))
 
-    def answer[Answer: CliResult](self, root: Path, invocation: tuple[str, ...],
-                                  result: type[Answer]) -> Answer:
-        """One command line's ``result`` on this bus. A declared read-unavailable failure
-        (the route index still rebuilding, its writer busy) is waited out; every other
-        failure refuses."""
-        verb = f"agent-comms {' '.join(invocation)}"
+    def cli_reply[Answer](self, probe: CliCommandProbe,
+                          decode: Callable[[CliOutput], Answer]) -> Answer:
+        """One failure/retry policy; CliOutput owns decoding and exit-code validation."""
+        verb = f"agent-comms {' '.join(probe.arguments)}"
         for _ in range(240):
             try:
-                return self.probe(CliCommandProbe(("--root", str(root), *invocation))).answer(
-                    result)
+                return decode(self.probe(probe))
             except CliUndecodableError as undecodable:
                 raise UpgradeRefused(f"{verb}: undecodable answer: {undecodable}") from undecodable
             except CliRefusedError as refused:
@@ -700,19 +701,16 @@ class Stack:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
 
-    def owners(self, root: Path, command: type[CliCommand], names: list[str]) -> TargetBatchResult:
-        """Run the whole owner selection through the operation's existing CLI batch."""
+    def owners(self, root: Path, command: type[CliCommand],
+               names: list[str]) -> tuple[OwnerStart, ...]:
+        """Run and decode the owner selection in the runtime that owns its CLI."""
         if not names:
-            return TargetBatchResult(())
+            return ()
         with OwnersPhase(command=command).running(self.commands.clock):
-            # A batch command answers every selection with its batch (MultipleTargets).
-            return self.answer(root, TargetActionCliCommand.invocation(
-                "--operation", command.declared_name, "--targets", *names), TargetBatchResult)
-
-    def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
-        """One start batch; keep each refusal in the installed or rollback report."""
-        return tuple(outcome.owner_start()
-                     for outcome in self.owners(root, StartCliCommand, names).outcomes)
+            invocation = TargetActionCliCommand.invocation(
+                "--operation", command.declared_name, "--targets", *names)
+            return self.cli_reply(OwnerActionsProbe(("--root", str(root), *invocation)),
+                                  partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))
 
     @contextmanager
     def services_stopped(self, restore_on: Stack) -> Iterator[ServicesStopped]:

@@ -139,7 +139,7 @@ class Coordination(ExecutionStore, AttemptStore):
         name = type(watch).__name__
         while True:
             (outcome,) = await asyncio.gather(
-                cls.run_worker(partial(watch.watch_pass, opened_wire)), return_exceptions=True,
+                watch.run(opened_wire), return_exceptions=True,
             )
             if isinstance(outcome, Exception):
                 logging.error("Service worker pass failed: %s", name, exc_info=outcome)

@@ -117,7 +117,7 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
     head = repo.commit(step)
     changed = {"src/agent_comms/record.py"}
     assert UncarriedRecordFormat.compare(tmp_path, base, head, changed, "src/agent_comms") == (
-        {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
+        {UncarriedRecordFormat.total(): 0}, {UncarriedRecordFormat.total(): uncarried})
 
 
 def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
@@ -267,7 +267,8 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
 
     # A missing target must not prevent the batch from stopping its available owners.
     with pytest.raises(UpgradeRefused, match="failed"):
-        stack.owners(comms.root, StopCliCommand, names).require_success(UpgradeRefused)
+        for outcome in stack.owners(comms.root, StopCliCommand, names):
+            outcome.require_success(UpgradeRefused)
     saved = comms.registry.snapshot()
     assert all(saved.status(name).stopped for name in names[1:])
 
