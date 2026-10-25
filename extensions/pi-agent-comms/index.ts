@@ -23,31 +23,34 @@ interface ToolDeclaration {
 	parameters: Record<string, unknown>;
 }
 
+// Node's default is 1 MiB; a Core reply past this bound is refused whole, never parsed in part.
+const MAX_REPLY_BYTES = 64 * 1024 * 1024;
+
+interface ChildFailure {
+	code?: string;
+	status?: number | null;
+	stdout?: string;
+}
+
 function run(args: string[], launchArguments: string[], timeout = 30_000): Record<string, unknown> {
 	try {
 		const stdout = execFileSync(CLI, [...launchArguments, ...args], {
 			encoding: "utf-8",
 			timeout,
+			maxBuffer: MAX_REPLY_BYTES,
 		});
 		return JSON.parse(stdout) as Record<string, unknown>;
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		if (typeof (error as { stdout?: unknown }).stdout === "string") {
-			try {
-				const parsed = JSON.parse((error as { stdout: string }).stdout);
-				if (parsed && typeof parsed.error === "string") {
-					throw new Error(parsed.error);
-				}
-			} catch (parseError) {
-				if (
-					parseError instanceof Error &&
-					parseError.message !== "Unexpected end of JSON input"
-				) {
-					throw parseError;
-				}
-			}
+		const failure = error as ChildFailure;
+		if (failure.code === "ENOBUFS") {
+			throw new Error(`agent-comms replied with more than ${MAX_REPLY_BYTES} bytes; the reply was refused whole`);
 		}
-		throw new Error(`agent-comms failed: ${message}`);
+		// Only a child that exited wrote a whole reply; its stdout is Core's refusal.
+		if (typeof failure.status === "number" && failure.stdout) {
+			const parsed = JSON.parse(failure.stdout);
+			if (typeof parsed?.error === "string") throw new Error(parsed.error);
+		}
+		throw new Error(`agent-comms failed: ${error instanceof Error ? error.message : String(error)}`);
 	}
 }
 
