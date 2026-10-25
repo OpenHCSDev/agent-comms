@@ -508,6 +508,8 @@ class _Field(SqlValue):
     init: bool
     nullable: bool
     column: Column
+    required: bool = True
+    absent: str = "NULL"
 
     def reference(self, alias: str) -> str:
         return f"{alias}.{_identifier(self.wire_name)}"
@@ -523,22 +525,32 @@ class _Field(SqlValue):
     @classmethod
     def for_field(cls, plan: FieldPlan) -> _Field:
         column = Column.declared(plan.annotation)
+        storage = column.storage or SqlStorage.for_type(plan.annotation)
         return cls(
             name=plan.name,
             wire_name=plan.key if column.record_key else plan.name,
             init=plan.declared.init,
             annotation=plan.annotation,
             nullable=_base_type(plan.annotation)[1] or column.nullable,
-            storage=column.storage or SqlStorage.for_type(plan.annotation),
+            storage=storage,
             column=column,
             value=plan.value,
+            required=plan.constructor_required,
+            absent="NULL" if plan.constructor_required else SQLiteLiteral.of(
+                storage.to_sql(plan.value.encode(plan.default()))),
         )
 
+    @property
+    def fillable(self) -> bool:
+        """A row stored before this column existed gets a valid value: NULL or the declared default."""
+        return self.nullable or not self.required
+
     def rebuild_expression(self, stored: tuple[str, ...]) -> str:
-        """A carried value remains stored; table constraints own whether NULL is valid."""
+        """A carried value remains stored; a column the row predates takes its declared
+        default, else NULL, and the table constraints own whether NULL is valid."""
         if self.wire_name in stored:
             return _identifier(self.wire_name)
-        return "NULL"
+        return self.absent
 
 
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
@@ -719,6 +731,19 @@ class SQLiteColumnShape(TypedRow):
         with closing(SQLiteFile.writer(":memory:")) as scratch:
             scratch.execute(declared)
             return cls.of(db, row) == cls.of(scratch, row)
+
+
+@dataclass(frozen=True)
+class SQLiteLiteral(TypedRow):
+    """SQLite's own literal for a stored value, from its quote() function."""
+
+    literal: str
+
+    @classmethod
+    def of(cls, value: object) -> str:
+        with closing(sqlite3.connect(":memory:")) as db:
+            [quoted] = cls.read(db.execute("SELECT quote(?) AS literal", (value,)))
+            return quoted.literal
 
 
 @dataclass(frozen=True)
@@ -1091,13 +1116,12 @@ class TableSchema(ABC):
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> None:
         """Inside the caller's write transaction, the stored schema onto the declaration
-        wherever the declaration says how: declared earlier table names, missing
-        nullable fields, an index, trigger or view rebuilt from its SQL, or a missing object.
+        wherever the declaration says how: declared earlier table names, dropped
+        fields, missing nullable or defaulted fields, an index, trigger or view rebuilt from its SQL, or a missing object.
         Other table differences are refused with the rows untouched."""
         for row in cls.schema_rows():
             row.take_previous_name(db)
-            row.derive_nullable_fields(db)
-            row.derive_relaxed_fields(db)
+            row.carry_columns(row, db)
             if SQLiteColumnShape.only_constraints_differ(db, row):
                 row.rebuild(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
@@ -1849,8 +1873,79 @@ class StoredRowDecoding(TypedRow):
                     ) from error
 
 
+class StoredColumnCarry:
+    """The steps that carry a stored table's columns onto its row declaration, keeping
+    every row: dropped fields leave, fields the rows can fill arrive, required fields relax."""
+
+    dropped_fields: ClassVar[tuple[str, ...]] = ()
+    """Columns an earlier declaration stored that this row no longer has; the writer drops
+    the ones it finds and keeps every row. A stored column nothing declares is still refused,
+    since only the declaration can say its values are disposable."""
+
+    @classmethod
+    def derive_missing_fields(cls, row: type[TypedTable], db: sqlite3.Connection) -> None:
+        """Only an exact earlier declaration missing fields its rows can fill (nullable, or
+        with a declared default) can grow rows.
+
+        Extra columns or any other table difference still require a data conversion.
+        Compare through the same DDL owner; do not maintain a second column schema.
+        """
+        stored = row.stored_columns(db)
+        fields = row._columns
+        missing = tuple(item for item in fields if item.wire_name not in stored)
+        if not stored or not missing:
+            return
+        if not all(item.fillable and item.column.writable for item in missing):
+            return
+        previous = row._table_sql(
+            columns=tuple(item.name for item in fields if item.wire_name in stored),
+        )
+        actual = {item.name: item.sql for item in row.stored_objects(db)}
+        if actual.get(row.declared_name) == previous:
+            row.rebuild(db)
+
+    @classmethod
+    def derive_relaxed_fields(cls, row: type[TypedTable], db: sqlite3.Connection) -> None:
+        """Only an exact earlier declaration requiring now-nullable fields can relax rows.
+
+        Column additions, removals and other table differences still require a data conversion.
+        Compare through the same DDL owner; only writable non-key fields may widen.
+        """
+        stored = SQLiteColumnNullability.read(db.execute(
+            'SELECT name, "notnull" FROM pragma_table_info(?)', (row.declared_name,),
+        ))
+        if tuple(column.name for column in stored) != tuple(
+            item.wire_name for item in row._columns
+        ):
+            return
+        nonnull = frozenset(column.name for column in stored if column.notnull)
+        required = frozenset(
+            item.name for item in row._columns
+            if item.nullable and item.column.writable and not item.column.primary_key
+            and item.wire_name in nonnull
+        )
+        if not required:
+            return
+        actual = {item.name: item.sql for item in row.stored_objects(db)}
+        if actual.get(row.declared_name) == row._table_sql(required=required):
+            row.rebuild(db)
+
+    @classmethod
+    def drop_declared_fields(cls, row: type[TypedTable], db: sqlite3.Connection) -> None:
+        stored = row.stored_columns(db)
+        for name in row.dropped_fields:
+            if name in stored:
+                db.execute(f"ALTER TABLE {_identifier(row.declared_name)} DROP COLUMN {_identifier(name)}")
+
+    @classmethod
+    def carry_columns(cls, row: type[TypedTable], db: sqlite3.Connection) -> None:
+        cls.drop_declared_fields(row, db)
+        cls.derive_missing_fields(row, db)
+        cls.derive_relaxed_fields(row, db)
+
+
 class TypedTable(
-    FrozenColumns, StoredRowDecoding, DeclaredFamily, DeclaredSchemaFacts,
+    FrozenColumns, StoredColumnCarry, StoredRowDecoding, DeclaredFamily, DeclaredSchemaFacts,
     affix="Row", discovery_package="agent_comms",
 ):
     """The row declaration owns its table; no separate table/schema registry.
@@ -2025,53 +2120,6 @@ class TypedTable(
         db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
         cls.create(db, if_not_exists=True)
         db.execute(f"DROP TABLE {temporary}")
-
-    @classmethod
-    def derive_nullable_fields(cls, db: sqlite3.Connection) -> None:
-        """Only an exact earlier declaration missing nullable fields can grow rows.
-
-        Extra columns or any other table difference still require a data conversion.
-        Compare through the same DDL owner; do not maintain a second column schema.
-        """
-        stored = cls.stored_columns(db)
-        fields = cls._columns
-        missing = tuple(item for item in fields if item.wire_name not in stored)
-        if not stored or not missing:
-            return
-        if not all(item.nullable and item.column.writable for item in missing):
-            return
-        previous = cls._table_sql(
-            columns=tuple(item.name for item in fields if item.wire_name in stored),
-        )
-        actual = {item.name: item.sql for item in cls.stored_objects(db)}
-        if actual.get(cls.declared_name) == previous:
-            cls.rebuild(db)
-
-    @classmethod
-    def derive_relaxed_fields(cls, db: sqlite3.Connection) -> None:
-        """Only an exact earlier declaration requiring now-nullable fields can relax rows.
-
-        Column additions, removals and other table differences still require a data conversion.
-        Compare through the same DDL owner; only writable non-key fields may widen.
-        """
-        stored = SQLiteColumnNullability.read(db.execute(
-            'SELECT name, "notnull" FROM pragma_table_info(?)', (cls.declared_name,),
-        ))
-        if tuple(column.name for column in stored) != tuple(
-            item.wire_name for item in cls._columns
-        ):
-            return
-        nonnull = frozenset(column.name for column in stored if column.notnull)
-        required = frozenset(
-            item.name for item in cls._columns
-            if item.nullable and item.column.writable and not item.column.primary_key
-            and item.wire_name in nonnull
-        )
-        if not required:
-            return
-        actual = {item.name: item.sql for item in cls.stored_objects(db)}
-        if actual.get(cls.declared_name) == cls._table_sql(required=required):
-            cls.rebuild(db)
 
     @classmethod
     def take_previous_name(cls, db: sqlite3.Connection) -> None:

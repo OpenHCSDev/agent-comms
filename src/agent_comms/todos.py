@@ -110,7 +110,7 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Repo
+from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.storage_rules import StorageRule, UnitStorage
@@ -1258,6 +1258,13 @@ class CheckoutReads:
         """This read's one reader of the checkout at path."""
         return self._checkouts.setdefault(path, PresentCheckout(path))
 
+    def progress_checkout(self, path: Path) -> ProgressCheckout:
+        """The checkout at path, or a retired one that holds no history: this read alone
+        turns the filesystem's answer into the progress family."""
+        if Checkout.present(path):
+            return self.checkout(path)
+        return MissingCheckout(path)
+
 
     def branch_difference(self, path: Path) -> BranchDifference:
         """All consumers share each branch read and one main commit per repository."""
@@ -1319,17 +1326,15 @@ class ProgressSource(PullRequestSource):
         storage = registry.storage_rule
         owned = storage.checkout_paths(owner)
         candidates = (todo.order.checked().check.directory, *owned)
-        path = next((path for path in candidates if (path / ".git").exists()),
-                    next(iter(owned), candidates[0]))
-        checkout: ProgressCheckout = (
-            pulls.checkout(path) if (path / ".git").exists() else MissingCheckout(path))
+        path = next(iter(Checkout.present(*candidates)), next(iter(owned), candidates[0]))
+        checkout = pulls.progress_checkout(path)
         try:
             references = checkout.references(storage, owner)
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
             checkout, references = UnreadCheckout(path, str(failure)), ()
         return cls(
             todo=todo, pulls=pulls, checkout=checkout, references=references,
-            worktrees=tuple(pulls.checkout(path) for path in owned if (path / ".git").exists()),
+            worktrees=tuple(pulls.checkout(path) for path in Checkout.present(*owned)),
         )
 
     def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
@@ -3142,15 +3147,15 @@ class Assignment(TodoHolder):
                              assigner: ThreadIncarnation, snapshot: RegistrySnapshot) -> None:
         """Validate this holder against open work using the transaction's registry snapshot."""
         TodoStore.require_unit_in(db, self.owner_identity, assigner)
-        worktrees = {owner.project_path for owner in self.holder_in(snapshot)}
+        worktrees = {path for owner in self.holder_in(snapshot) for path in owner.home_checkouts}
         for held in TodoStore._open(db, "assignment IS NOT NULL", ()):
             previous = held.held()
             if held.id == problem or previous.owner_identity == self.owner_identity:
                 continue
             for other in previous.holder_in(snapshot):
-                if other.project_path in worktrees:
+                for shared in worktrees.intersection(other.home_checkouts):
                     raise SharedWorktreeRefusal(
-                        problem, held.id, self.owner_identity, other.incarnation, other.project_path
+                        problem, held.id, self.owner_identity, other.incarnation, shared
                     )
 
     @property
