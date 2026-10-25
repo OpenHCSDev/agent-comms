@@ -34,8 +34,12 @@ class ContextUsage(ContextReading):
         return self.label
 
 
+class UnsizedContext(ContextReading):
+    """No share of the context window is known, so no usage update can carry it."""
+
+
 @dataclass(frozen=True)
-class UnmeasuredContext(ContextReading):
+class UnmeasuredContext(UnsizedContext):
     def label_parts(self) -> tuple[str, ...]:
         return ()
 
@@ -44,7 +48,7 @@ class UnmeasuredContext(ContextReading):
 
 
 @dataclass(frozen=True)
-class UnsizedContextUsage(UnmeasuredContext):
+class UnsizedContextUsage(UnsizedContext):
     """Usage a runtime reports without its context window, so no share of it is known."""
 
     used: int
