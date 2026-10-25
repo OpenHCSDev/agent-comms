@@ -116,14 +116,14 @@ class Registration:
                     change, thread=replace(change.thread, goal=goal))).thread
 
     def register_commanded_unit(
-        self, name: str, commander: str, worktree: str, process: ProcessIdentity,
+        self, name: str, commander: str, worktree: Checkout, process: ProcessIdentity,
     ) -> Thread:
         """Declare a new commanded endpoint without rewriting an existing declaration."""
         with self.store.editing() as edit:
             if edit.document.taken(name):
                 return self._declare_in(edit, edit.document.require(name), _DEFAULT_PRESENCE)
             child = edit.document.require(commander).commanded_child(Thread(
-                name, frozenset(), Checkout(Path(worktree)),
+                name, frozenset(), worktree,
                 process_identity=process, execution=ExternalThreadExecution,
             ))
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)

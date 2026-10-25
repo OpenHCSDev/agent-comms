@@ -229,7 +229,7 @@ class TestThreadOps:
         claimed = wired.threads.claim_thread(
             "viewer",
             tags=frozenset({"acp"}),
-            worktree="/tmp/project",
+            worktree=Checkout(Path("/tmp/project")),
         )
         assert wired.bus.inbox(claimed.name).page.messages == ()
         wired.messaging.send("PR111", "#all", "after claim").message.message_id

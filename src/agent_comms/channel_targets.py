@@ -13,6 +13,7 @@ from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredT
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
+from .repo import Checkout
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .thread_identity import ThreadIncarnation
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
@@ -130,7 +131,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         return ChannelTarget(name) if ChannelTarget.names_channel(name) else ThreadTarget(name)
 
     @staticmethod
-    def arguments(names: tuple[str, ...], project: str) -> tuple[CommandTarget, ...]:
+    def arguments(names: tuple[str, ...], project: Checkout) -> tuple[CommandTarget, ...]:
         return tuple(CommandTarget.named(name) for name in names) or (ProjectTarget(project),)
 
     @property
@@ -146,7 +147,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
     @abstractmethod
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: str | None, resolved,
-        *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
     ) -> tuple[C, ...]: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
@@ -336,7 +337,7 @@ class ThreadTarget(NamedTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: str | None, resolved: ResolvedThread,
-        *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
     ) -> tuple[C, ...]:
         return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
@@ -487,7 +488,7 @@ class ChannelTarget(NamedTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: str | None, resolved: ResolvedChannel,
-        *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
     ) -> tuple[C, ...]:
         return declaration.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
 
@@ -563,14 +564,14 @@ class ChannelTarget(NamedTarget):
 
 @dataclass(frozen=True)
 class ProjectTarget(CommandTarget):
-    project: str
+    project: Checkout
 
     def display_name(self) -> str:
-        return self.project
+        return str(self.project)
 
     @property
     def name(self) -> str:
-        return self.project
+        return str(self.project)
 
     @property
     def destination_names(self) -> tuple[str, ...]:
@@ -581,7 +582,7 @@ class ProjectTarget(CommandTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: str | None, resolved,
-        *, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
     ) -> tuple[C, ...]:
         return declaration.project_bindings(comms, resolved)
 

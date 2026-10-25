@@ -647,7 +647,7 @@ def current_thread(registry) -> Thread:
     return Thread(
         name=launch.name,
         tags=launch.tags,
-        worktree=Checkout(Path(launch.worktree)),
+        worktree=launch.worktree,
         parent=launch.parent,
         task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),

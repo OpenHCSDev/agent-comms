@@ -27,6 +27,7 @@ from agent_comms.field_codec import (
     WireOmitDefault,
 )
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.repo import Checkout
 from agent_comms.thread_text import (
     AbsentText,
     GivenText,
@@ -403,7 +404,7 @@ class ThreadLaunch(EnvironmentRecord):
     """
 
     name: Annotated[str, WireName("AGENT_COMMS_THREAD")]
-    worktree: Annotated[str, WireName("PI_WORKTREE")]
+    worktree: Annotated[Checkout, WireName("PI_WORKTREE")]
     tags: Annotated[
         frozenset[str],
         TagListText,
@@ -429,7 +430,7 @@ class ThreadLaunch(EnvironmentRecord):
     def from_thread(cls, thread: Thread) -> ThreadLaunch:
         return cls(
             thread.name,
-            str(thread.worktree),
+            thread.worktree,
             frozenset(thread.tags),
             thread.parent,
             thread.task,

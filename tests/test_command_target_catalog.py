@@ -1,5 +1,6 @@
 """Target families never disguise a broken binding as an unavailable command."""
 
+from pathlib import Path
 from agent_comms.repo import Checkout
 from dataclasses import dataclass, field
 
@@ -25,7 +26,7 @@ class RecordingShower(ResultShower):
 
 
 @pytest.mark.parametrize("target", [
-    CommandTarget.named("first"), CommandTarget.named("#team"), ProjectTarget("/project"),
+    CommandTarget.named("first"), CommandTarget.named("#team"), ProjectTarget(Checkout(Path("/project"))),
     IncarnationThreadTarget(RecordedThreadIncarnation("first", 1.0)),
 ])
 def test_batch_completed_result_round_trips_with_its_command_result_type(target):
@@ -68,9 +69,9 @@ def test_each_selection_returns_its_own_result(comms, tmp_path, selection, targe
     comms.registry.declare(Thread("first", frozenset(), Checkout(tmp_path)), RunningThreadStatus())
     if selection is OneTarget and not resolvable:
         with pytest.raises(ValueError):
-            StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
+            StopCliCommand.execute_target(comms, selection(target), {}, project=Checkout(tmp_path))
         return
-    result = StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
+    result = StopCliCommand.execute_target(comms, selection(target), {}, project=Checkout(tmp_path))
     if selection is OneTarget:
         assert result.stopped == "first"
     else:
@@ -91,14 +92,14 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
         comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)),
                                StoppedThreadStatus())
     selected = CliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names))
-    catalog = CliCommand.target_catalog(comms, selected, project=str(tmp_path))
+    catalog = CliCommand.target_catalog(comms, selected, project=Checkout(tmp_path))
     assert any(action.declaration is ArchiveCliCommand for action in catalog)
     assert all(action.declaration is not QueueRestartCliCommand for action in catalog)
     with pytest.raises(ValueError, match="single target"):
-        RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, project=str(tmp_path))
+        RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, project=Checkout(tmp_path))
     assert all(comms.registry.status(name) == StoppedThreadStatus() for name in names)
     result = ArchiveCliCommand.execute_target(
-        comms, ArchiveCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, project=str(tmp_path), confirmed=True)
+        comms, ArchiveCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, project=Checkout(tmp_path), confirmed=True)
     assert len(result.outcomes) == 2 and result.exit_code() == 0
     assert tuple(outcome.target for outcome in result.outcomes) == tuple(
         CommandTarget.named(name) for name in names)

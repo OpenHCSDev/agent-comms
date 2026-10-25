@@ -88,7 +88,7 @@ def test_concurrent_starters_reserve_one_current_owner(tmp_path):
 def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     comms = wire(tmp_path)
     owner = comms.threads.claim_thread(
-        "owner", tags=frozenset(), worktree=str(tmp_path), process=ProcessIdentity.capture(os.getpid())
+        "owner", tags=frozenset(), worktree=Checkout(tmp_path), process=ProcessIdentity.capture(os.getpid())
     )
     identity = ProcessIdentity.capture(os.getpid())
     assert owner.process_identity == identity
@@ -153,7 +153,7 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     comms = wire(tmp_path)
     identity = ProcessIdentity.capture(os.getpid())
     owner = comms.threads.claim_thread(
-        "owner", tags=frozenset(), worktree=str(tmp_path), process=identity
+        "owner", tags=frozenset(), worktree=Checkout(tmp_path), process=identity
     )
     leased, _ = comms.registry.lease_local_turn(
         owner.name, TurnId('e99af36cdfcffbc191cce98c5d771afb')

@@ -75,7 +75,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
         second.mkdir()
         async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
             comms = agent._comms
-            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=Checkout(native.project))
             sent = []
 
             def reply(message):

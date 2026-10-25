@@ -48,7 +48,7 @@ def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
 
 def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
     start.wait()
-    thread = wire(root).threads.claim_thread("project", tags=frozenset({"acp"}), worktree="/tmp/project")
+    thread = wire(root).threads.claim_thread("project", tags=frozenset({"acp"}), worktree=Checkout(Path("/tmp/project")))
     result_queue.put(thread.name)
 
 

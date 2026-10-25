@@ -225,7 +225,7 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
 
     comms = setup_wire(tmp_path)
     selected = CliCommand.selected_targets((CommandTarget.named('#api'),))
-    catalog = CliCommand.target_catalog(comms, selected, project=str(tmp_path))
+    catalog = CliCommand.target_catalog(comms, selected, project=Checkout(tmp_path))
     action = next(action for action in catalog if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
@@ -367,7 +367,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, s
     with pytest.raises(ValueError):
         comms.registry.declare(Thread('registered', frozenset({'reserved'}), Checkout(tmp_path)))
     with pytest.raises(ValueError):
-        comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=str(tmp_path))
+        comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=Checkout(tmp_path))
 
     source = tmp_path / "foreign.json"
     source.write_text(json.dumps({

@@ -153,12 +153,14 @@ class SessionLifecycle:
                 }
             )
 
+    @boundary_decoder
     def declare_thread(self, cwd: str) -> Thread:
-        """Register the participant before choosing which process executes it."""
+        """Decode the ACP directory and register before choosing its executor."""
+        checkout = FieldCodec.decode(Checkout, cwd)
         thread = self.comms.threads.claim_thread(
-            Path(cwd).name,
+            checkout.path.name,
             tags=frozenset({"acp"}),
-            worktree=cwd,
+            worktree=checkout,
             model=ThreadModel.selected_by(self.agent_args),
             thinking_level=self.agent_args.thinking,
             auto_title_pending=True,

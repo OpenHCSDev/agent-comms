@@ -312,7 +312,7 @@ class ThreadManagement:
         wanted: str,
         *,
         tags: frozenset[str],
-        worktree: str,
+        worktree: Checkout,
         process: ProcessState = NO_PROCESS,
         model: ThreadModel = UndeclaredModel(),
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
@@ -323,7 +323,7 @@ class ThreadManagement:
         thread = Thread(
             name=RegistryNames.thread_slug(wanted),
             tags=tags,
-            worktree=Checkout(Path(worktree)),
+            worktree=worktree,
             process_identity=process,
             model=model,
             thinking_level=thinking_level,

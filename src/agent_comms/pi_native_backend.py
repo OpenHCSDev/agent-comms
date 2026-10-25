@@ -336,7 +336,7 @@ class PiNativeBackend(
         directory = await Coordination.run_worker(partial(ForkedSession.prepared_directory, root))
         identity = await RuntimeForkHelper.run(
             RuntimeForkRequest(str(package.path), parent.runtime.path, str(parent.worktree),
-                               str(directory), runtime=runtime), cwd=Path(parent.worktree),
+                               str(directory), runtime=runtime), cwd=parent.worktree.path,
         )
         return PiSessionFile(identity.session_file)
 
