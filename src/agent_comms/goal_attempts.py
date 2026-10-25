@@ -748,12 +748,14 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]
     ) -> _T:
-        """A failed commit, sync, or readback is never a launch authorization."""
-        self.require_maintenance_open(self.path)
+        """A failed commit, sync, or readback is never a launch authorization. Maintenance
+        is asked under the write lock, so an installer's drain of it waits out every write
+        that passed and refuses every later one."""
         with closing(self._connect()) as conn:
             try:
                 with self.publishing_changes(conn, self.path):
                     with self.write_transaction(conn):
+                        self.require_maintenance_open(self.path)
                         result = operation(conn)
                     self._sync()
                     try:
