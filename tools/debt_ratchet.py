@@ -156,6 +156,11 @@ class Measure(DeclaredFamily, affix="Measure"):
         return any(value > 0 for key, value in delta.items() if cls.owns(key))
 
     @classmethod
+    def grew(cls, key: str, grown: int) -> str:
+        """The line reporting one key's growth."""
+        return f"grew {key} +{grown}"
+
+    @classmethod
     def run_by(cls) -> type[Measure]:
         """The measure a comparison runs to take this one's measurements."""
         return cls
@@ -689,7 +694,21 @@ class CheckedRevision(Measure):
         return before, after
 
 
-class Unformatted(CheckedRevision):
+class Advisory(Measure):
+    """Growth that restates no fact, such as a lint convention or layout: the ratchet warns
+    on the file and never fails on it. Only measures of restated facts block a merge."""
+
+    @classmethod
+    def blocks(cls, delta: dict[str, int]) -> bool:
+        return False
+
+    @classmethod
+    def grew(cls, key: str, grown: int) -> str:
+        path = key.partition(":")[2]
+        return f"::warning file={path}::{cls.__name__} +{grown} (warns, never blocks)"
+
+
+class Unformatted(Advisory, CheckedRevision):
     """1 when Black would rewrite the file: a formatted file stays formatted."""
 
     finding = re.compile(r"^would reformat (.+)$", re.MULTILINE)
@@ -733,7 +752,7 @@ class Unformatted(CheckedRevision):
         return side, Counter(found)
 
 
-class LintFindings(CheckedRevision):
+class LintFindings(Advisory, CheckedRevision):
     """Ruff diagnostics under the selected rules."""
 
     finding = re.compile(r"^(.+?\.py):\d+:\d+: ", re.MULTILINE)
@@ -2512,9 +2531,10 @@ def main() -> int:
     print(json.dumps(FieldCodec.project(result, "report"), indent=2), flush=True)
     # The failing step's last lines become check annotations (.github/run-step.sh merges
     # stderr), so what grew goes to stderr last; stdout stays the one JSON report.
-    for name, grown in sorted(result.delta.items()):
-        if grown > 0:
-            print(f"grew {name} +{grown}", file=sys.stderr)
+    for measure in Measure.members_with(Measure):
+        for key, grown in sorted(result.delta.items()):
+            if grown > 0 and measure.owns(key):
+                print(measure.grew(key, grown), file=sys.stderr)
     for name, sites in sorted(result.found.items()):
         print(f"found {name} at {' '.join(f'{site.path}:{site.line}' for site in sites)}",
               file=sys.stderr)

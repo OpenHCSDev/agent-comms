@@ -11,16 +11,18 @@ from pathlib import Path
 import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
-from agent_comms.cli_commands import StopCliCommand
+from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
+from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.carry import STEPS, CarryChain, FinishedCarryStore
 from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
+from agent_comms.installer.probes.commands import CliOutput, CliUndecodableError
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstallClock, TargetProgram
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
-    BackedUpMigration,
+    ExistingBusInstall,
     PracticeBus,
     PreparedMigration,
     RehearsalFiles,
@@ -30,11 +32,17 @@ from agent_comms.installer.upgrade import (
     carried,
 )
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import (
+    DrainingPhase,
+    MaintenanceBarrier,
+    MaintenanceOperator,
+    ReadyPhase,
+)
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
+from conftest import ledger_one_failure_short
 from fixture_git import IDENTITY
 
 REPO = Path(__file__).resolve().parents[1]
@@ -213,7 +221,7 @@ def test_a_bus_dry_runs_only_the_steps_it_has_not_finished(staged, tmp_path, noi
     assert FinishedCarryStore.at(root).read().steps == (step.declared_name,)
 
 
-def test_backed_up_migration_restores_a_real_worker_failure(comms, staged, noisy_step):
+def test_a_backup_undoes_a_real_worker_failure(comms, staged, noisy_step):
     _, step = noisy_step
     saved = comms.root / "saved"
     saved.write_text("original")
@@ -221,13 +229,13 @@ def test_backed_up_migration_restores_a_real_worker_failure(comms, staged, noisy
     maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
     hold = maintenance.begin(MaintenanceOperator.current())
     with hold.holding():
-        migration = PreparedMigration.capture(hold, staged).extended(
-            BackedUpMigration, backup=StoreBackup.take(
-                comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill"))
+        backup = StoreBackup.take(
+            comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill")
+        migration = PreparedMigration.capture(hold, staged)
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
             migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
         assert saved.read_text() == "migrated"
-        migration.restore()
+        backup.undo()
         assert saved.read_text() == "original"
         assert staged.verify(comms.root) == migration.read
     maintenance.clear(hold)
@@ -260,6 +268,40 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
         stack.owners(comms.root, StopCliCommand, names).require_success(UpgradeRefused)
     saved = comms.registry.snapshot()
     assert all(saved.status(name).stopped for name in names[1:])
+
+
+def test_the_install_start_stops_owners_on_a_ledger_the_outgoing_runtime_cannot_open(
+        comms, stack):
+    """Install 14: f23ca8968 refused this ledger at every opening, so its stop answered
+    nothing. The install's start holds the root, and the target stops the owners under
+    that hold, carrying the ledger, which stays held until the install releases it."""
+    from agent_comms.child_process import ProcessIdentity
+
+    path = ledger_one_failure_short(comms.root)
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    with subprocess.Popen(("sleep", "600")) as owner:
+        try:
+            comms.registry.declare(replace(Thread("unit", frozenset(), str(comms.root)),
+                                           process_identity=ProcessIdentity.capture(owner.pid)),
+                                   RunningThreadStatus())
+            with ExistingBusInstall.owners_stopped(comms.root, stack, stack) as owners:
+                assert owners.stopped == ["unit"]
+                assert stack.running_owners(comms.root) == []
+                assert maintenance.read().phase is DrainingPhase
+                owners.retired()
+                owners.release()
+                assert maintenance.read().phase is ReadyPhase
+        finally:
+            owner.kill()
+    GoalAttemptStore(path.parent)
+
+
+def test_a_command_line_that_dies_before_answering_refuses_with_its_own_error():
+    """Install 14: the outgoing runtime's stop crashed opening its ledger and printed nothing;
+    the refusal names the crash instead of an empty document."""
+    died = CliOutput(1, "", "StorageUncertainError: Unsupported goal attempt schema")
+    with pytest.raises(CliUndecodableError, match="StorageUncertainError"):
+        died.answer(TargetBatchResult)
 
 
 def test_upgrade_refuses_at_start_without_its_own_uv(stack):

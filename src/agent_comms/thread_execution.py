@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .thread_presentation import UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
@@ -106,8 +107,6 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
     @classmethod
     def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
-        from .thread_presentation import UnavailableThreadOwnerBinding
-
         return UnavailableThreadOwnerBinding()
 
     @classmethod

@@ -218,6 +218,15 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
     assert queued.updates(ClaudeSession())==()
 
 
+def test_remote_control_session_record_decodes_without_updates():
+    record = decoded_record({'type': 'bridge-session',
+        'sessionId': '00000000-0000-4000-8000-000000000001',
+        'bridgeSessionId': 'cse_000000000000000000000000', 'lastSequenceNum': 0,
+        'ownerAccountUuid': '00000000-0000-4000-8000-000000000002',
+        'ownerOrganizationUuid': '00000000-0000-4000-8000-000000000003'})
+    assert record.updates(ClaudeSession()) == ()
+
+
 @pytest.mark.asyncio
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(bridge, emitted_delivery, capsys):
     delivery = emitted_delivery('original')
@@ -268,7 +277,8 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     from conftest import publish_initial
     from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
     from agent_comms.comms import wire
-    from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
+    from conftest import accept_initial
+    from agent_comms.coordination_cohort import pending_sealed_assignments
     from agent_comms.coordination_database import CoordinationStore
     from agent_comms.coordination_tables.assignments import WakeAssignment
     from agent_comms.coordinator import Coordination
@@ -285,7 +295,7 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
 
         def publish(body):
             message = publish_initial(comms, 'peer', 'viewer', body).message
-            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+            accept_initial(comms.bus, root_id, message.seq, store)
             return message
 
         taken, confirmed, waiting = (publish(body) for body in (

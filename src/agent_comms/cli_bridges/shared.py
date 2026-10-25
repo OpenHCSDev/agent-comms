@@ -69,6 +69,7 @@ from agent_comms.message_reference import (
     MessageReference,
 )
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -631,8 +632,6 @@ class Inbox(Operation[OperationBridge]):
 
     async def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup,
                     endpoint: ExitStack) -> None:
-        from agent_comms.registration import Registration
-
         registry = await asyncio.to_thread(
             Registration, RegistryFile.path_in(Path(bridge.binding.root)))
         await bridge.comms.bus.when_open(lambda: endpoint.enter_context(

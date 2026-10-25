@@ -973,12 +973,12 @@ async def run(arguments):
                     Message(sender.name, '#team',
                         'New isolated retained-source triage: ignore THIS original once.', InfoKind),
                     destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
-            from agent_comms.coordination_cohort import accept_delivery_cohort
+            from conftest import accept_initial
             initial = service.bus.bus.delivery(cutover.originals[0].seq)
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 for audience in initial.recipients:
                     store.participants.register(audience.recipient_lookup, committed=True)
-                accept_delivery_cohort(service.bus, root_id, cutover.originals[0].seq, store)
+                accept_initial(service.bus, root_id, cutover.originals[0].seq, store)
         else:
             result = await asyncio.to_thread(
                 service.owners.restart_owners, OwnersNamed(tuple(names)), cutover=cutover)

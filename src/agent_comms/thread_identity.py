@@ -758,7 +758,7 @@ class UserThreadRole(ThreadRole):
     @classmethod
     def addressed(cls, audience: MessageAudience) -> MessageAudience:
         """The owner addresses every member a channel reaches, so it joins their running turns."""
-        return MessageAudience.MENTIONED
+        return audience.from_owner()
 
     @classmethod
     def reply_target(cls, message: Message) -> str | None:

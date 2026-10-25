@@ -17,6 +17,7 @@ from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordination_cohort import _claim_record, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, ResponseTable
+from .coordination_session import NativeBoundary
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import WireOrigin
@@ -309,8 +310,6 @@ class SelectedParticipant(MroDispatch):
         originals = await Coordination.run_worker(capture)
 
         def verify(resource: Coordination):
-            from .coordination_session import NativeBoundary
-
             with NativeBoundary(bus) as boundary, resource.session.read():
                 boundary.privacy.require_root(root_id, IdentityConflict("Selected source namespace changed"))
                 CohortTable.require_installed(resource.session._connection)

@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Literal
 
 from agent_comms.field_codec import BoundedText, SingleFieldValue, SubclassUnion
+from agent_comms.installer.reporting import UnpostedWriter
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
@@ -56,8 +57,8 @@ class RunMode(SubclassUnion, affix="Mode"):
     def destination(self, live: RootWriter) -> RootWriter: ...
 
     @abstractmethod
-    def owners_stopped(self, member: type[Install], root: Path,
-                       installed: Stack) -> AbstractContextManager[OwnersStopped]: ...
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]: ...
 
     @abstractmethod
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
@@ -70,12 +71,11 @@ class RehearsalMode(SingleFieldValue, RunMode):
     value: Literal[True] = True
 
     def destination(self, live: RootWriter) -> RootWriter:
-        from agent_comms.installer.reporting import UnpostedWriter
         return UnpostedWriter()
 
-    def owners_stopped(self, member: type[Install], root: Path,
-                       installed: Stack) -> AbstractContextManager[OwnersStopped]:
-        return member.owners_kept(root, installed)
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+        return member.owners_kept(root, installed, staged)
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
@@ -90,9 +90,9 @@ class LiveMode(SingleFieldValue, RunMode):
     def destination(self, live: RootWriter) -> RootWriter:
         return live
 
-    def owners_stopped(self, member: type[Install], root: Path,
-                       installed: Stack) -> AbstractContextManager[OwnersStopped]:
-        return member.owners_stopped(root, installed)
+    def owners_stopped(self, member: type[Install], root: Path, installed: Stack,
+                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+        return member.owners_stopped(root, installed, staged)
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
                bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],

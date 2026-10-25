@@ -66,7 +66,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     assert inputs[0].text == second.body and inputs[0].routing.requests == (second.reference,)
     assert inputs[1].text == quote and inputs[1].routing is None
     # The conversation source shows its original wire row, not a second native input.
-    assert [event.text for event in reopened.transcripts.thread_transcript_page("worker").events] == [
+    assert [event.text for event in reopened.transcripts.capture_page_read("worker").read().events] == [
         raw_second, quote, first.body, second.body
     ]
 
@@ -90,5 +90,5 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     append_input(path, FIRST_INPUT_ID, "unrelated input")
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(path), process=attachment_owner.process_identity)
     comms.transcripts.routes.record(str(path), ("aaaaaaaa",), route)
-    event = comms.transcripts.thread_transcript_page("worker").events[0]
+    event = comms.transcripts.capture_page_read("worker").read().events[0]
     assert event.text == "unrelated input" and event.routing is None

@@ -15,6 +15,7 @@ from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 import agent_comms
 from agent_comms.field_codec import WireValue
 from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.package_stamp import STAMP
 
 
 @dataclass(frozen=True)
@@ -102,8 +103,6 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
 
     def run(self) -> dict[str, PackageRecord]:
         from packaging.utils import canonicalize_name
-
-        from agent_comms.package_stamp import STAMP
 
         if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
             raise ValueError("Core is editable, not a built runtime package")

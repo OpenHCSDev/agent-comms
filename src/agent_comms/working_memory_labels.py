@@ -6,6 +6,10 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar, Literal
+from urllib.request import (
+    Request,
+    urlopen,
+)
 
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
@@ -271,7 +275,6 @@ class JevClassifier(Classifier):
 
     @classmethod
     async def classify(cls, request, api_key: str):
-        from urllib.request import Request, urlopen
         from .coordinator import Coordination
 
         def send():

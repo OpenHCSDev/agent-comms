@@ -6,10 +6,14 @@ import hashlib
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from agent_comms.bus import KeyedPrivateRecord
+from agent_comms.delivery_policy import ResponseDeliveryPolicy
+
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
     public_envelope_digest,
 )
+from agent_comms.wake import OrdinaryControl
 
 from .audience_manifest import FrozenRecipient, freeze_audience
 from .bus_publication import Delivered
@@ -101,10 +105,6 @@ class ResponseConversation:
         )
 
     def record(self, seq: int, message: Message, intent) -> KeyedPrivateRecord:
-        from agent_comms.bus import KeyedPrivateRecord
-        from agent_comms.delivery_policy import ResponseDeliveryPolicy
-        from agent_comms.wake import OrdinaryControl
-
         stored = replace(message, seq=seq)
         audience = self.audience(stored)
         decisions = ResponseDeliveryPolicy.resolve(
