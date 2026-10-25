@@ -27,15 +27,6 @@ class MessageAudience(StrEnum):
     MENTIONED = "mentioned"
     COLLECTIVE = "collective"
 
-    def joins_active_turn(self) -> bool:
-        """Only deliveries addressed to this unit interrupt its current work."""
-        return self is not MessageAudience.COLLECTIVE
-
-    def from_owner(self) -> MessageAudience:
-        """The owner addresses every member a channel reaches; a direct or mentioned
-        delivery is already addressed and stays what it is."""
-        return MessageAudience.MENTIONED if self is MessageAudience.COLLECTIVE else self
-
 
 class NoWakeReason(StrEnum):
     UNMENTIONED_OBSERVER = "unmentioned_observer"
