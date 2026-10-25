@@ -911,6 +911,12 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} foreign-key enforcement is disabled")
 
     @classmethod
+    def require_readable(cls, db: sqlite3.Connection) -> None:
+        """Every stored row must decode through its target declaration before cutover."""
+        for row in cls.schema_rows():
+            row.require_decodable_rows(db)
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         for row in cls.schema_rows():
             row.create(db)
@@ -1608,6 +1614,30 @@ class TypedTable(
     """Table names this row's rows were stored under before; the writer renames the one it
     finds, so a renamed declaration needs no hand-written step."""
 
+    row_reference_label: ClassVar[str] = "rowid"
+
+    @classmethod
+    def row_reference(cls) -> str:
+        """The stored row's diagnostic identity, independent of its decoded value."""
+        return cls.row_reference_label
+
+    @classmethod
+    def require_decodable_rows(cls, db: sqlite3.Connection) -> None:
+        """Decode every row without keeping history-sized results in memory."""
+        with closing(db.execute(
+            f'SELECT {cls.row_reference()} AS "__stored_reference", '
+            f'{cls._select_list(cls)} FROM {_identifier(cls.declared_name)}'
+        )) as cursor:
+            positions = cls._positions(cursor, {"stored_reference": "__stored_reference"})
+            for stored in cursor:
+                try:
+                    cls._decode_row(stored, positions)
+                except (ValueError, TypeError) as error:
+                    raise RelationViolationError(
+                        f"{cls.declared_name} {cls.row_reference_label} {stored[0]} "
+                        f"cannot decode: {error}"
+                    ) from error
+
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
         """Enumerate the schema owner's already imported row declarations.
@@ -2278,6 +2308,7 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
         try:
             with closing(SQLiteFile.writer(copy)) as db, db:
                 cls.table_schema().install_schema(db, WriterOwnedFile())
+                cls.table_schema().require_readable(db)
         except RelationViolationError as error:
             raise RelationViolationError(
                 f"{path} cannot open on this runtime: {error}") from error
@@ -2505,6 +2536,13 @@ class WithoutRowid(TypedTable, declared_name=None):
     """The table is stored directly by its declared primary key."""
 
     without_rowid = True
+    row_reference_label = "key"
+
+    @classmethod
+    def row_reference(cls) -> str:
+        return "json_array(" + cls._column_list(tuple(
+            item.name for item in cls._fields if item.column.primary_key
+        )) + ")"
 
 
 @dataclass(frozen=True)
