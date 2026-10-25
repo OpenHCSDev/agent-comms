@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from aiohttp import ClientError
 
 from agent_comms.cli_bridges.codex import CodexAppServer
-from agent_comms.cli_bridges.codex_protocol import RateLimits
+from agent_comms.cli_bridges.codex_protocol import RateLimitReading, RateLimits
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
@@ -127,7 +127,7 @@ class FinishedPhases(HudRow):
 
 
 @dataclass(frozen=True)
-class UnreadableUsage(HudRow):
+class UnreadableUsage(RateLimitReading):
     reason: str
 
     def line(self) -> str:
