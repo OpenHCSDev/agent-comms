@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import shutil
@@ -18,6 +19,8 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
+from agent_comms.activity_clocks import ChannelActivity
+from agent_comms.bus_activity_index import ActivityMaximum
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
 from agent_comms.messages import (
@@ -26,12 +29,15 @@ from agent_comms.messages import (
     BusTables,
     Claimed,
     ClaimHistoryKind,
+    ConversationActivity,
     InfoKind,
     MembershipTransition,
     Message,
+    MessageKind,
     MessageRoleWire,
     NoticeRole,
 )
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.errors import (
     CommittedMessageError,
@@ -167,62 +173,32 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
 
 
 @pytest.mark.parametrize(
-    ("module", "old", "new"),
+    "owner",
     (
-        (
-            "bus_publication.py",
-            "yield SentSource(self.sender_lookup, self.seq)",
-            "yield SentSource(self.sender_lookup, self.seq + 1)",
-        ),
-        ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
-        (
-            "messages.py",
-            "for record in BusCapability.history(db, kinds):",
-            "for record in reversed(tuple(BusCapability.history(db, kinds))):",
-        ),
-        (
-            "messages.py",
-            "yield MessageIdentitySource(self.seq, self.message_id, self.sender)",
-            "yield MessageIdentitySource(self.seq, self.message_id, self.target)",
-        ),
-        (
-            "messages.py",
-            "holders.apply(db, self.claim_transition, projected)",
-            "holders.apply(db, self.claim_transition, projected)\n        del projected",
-        ),
-        (
-            "messages.py",
-            "return (SentActivity(message.sender, message.timestamp),)",
-            "return (SentActivity(message.target, message.timestamp),)",
-        ),
-        (
-            "messages.py",
-            "return (BusRouteCounts.from_message(message),)",
-            "return (BusRouteCounts.from_message(message), BusRouteCounts.from_message(message))",
-        ),
-        (
-            "channel_targets.py",
-            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names\n",
-            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names[:1]\n",
-        ),
-        (
-            "activity_clocks.py",
-            "message.sender_role.last_user_input(0.0, message.timestamp),",
-            "message.sender_role.last_user_input(1.0, message.timestamp),",
-        ),
+        Delivered,
+        ActivityMaximum,
+        BusProjectionTables,
+        BusRecord,
+        Claimed,
+        ConversationActivity,
+        MessageKind,
+        ThreadTarget,
+        ChannelActivity,
     ),
 )
-def test_projection_digest_tracks_producing_source(
-    projection_source: Path,
-    module: str,
-    old: str,
-    new: str,
-) -> None:
+def test_projection_digest_tracks_producing_source(projection_source: Path, owner: type) -> None:
+    """An edit inside a producing class changes the digest; the class names the place, so no
+    test holds a copy of its source to go stale."""
     before = projection_source_digest(projection_source)
-    path = projection_source / module
-    original = path.read_text()
-    assert original.count(old) == 1
-    path.write_text(original.replace(old, new))
+    path = projection_source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
+    lines = path.read_text().splitlines(keepends=True)
+    declaration = next(
+        node for node in ast.walk(ast.parse("".join(lines)))
+        if isinstance(node, ast.ClassDef) and node.name == owner.__name__
+    )
+    first = declaration.body[0]
+    lines.insert(first.lineno - 1, " " * first.col_offset + "# an edit inside the producer\n")
+    path.write_text("".join(lines))
     assert projection_source_digest(projection_source) != before
 
 
