@@ -8,6 +8,7 @@ the declared columns and field types without upgrading existing storage.
 from __future__ import annotations
 
 import annotationlib
+import ast
 import builtins
 import hashlib
 import json
@@ -25,7 +26,9 @@ from importlib import import_module
 from importlib.metadata import entry_points
 from inspect import getsource
 from pathlib import Path
+from symtable import symtable
 from tempfile import TemporaryDirectory
+from textwrap import dedent
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -2389,29 +2392,73 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         source = "\0".join(sorted({
             f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
             for owner in cls.producer_owners()
+        } | {
+            f"{owner.__module__}.{owner.__qualname__}\0{member}"
+            for owner, members in cls.producer_members()
+            for member in members
         }))
         return hashlib.sha256(source.encode()).hexdigest()
 
     @classmethod
-    def producer_owners(cls) -> tuple[type, ...]:
-        """This table's writers, column values and their inherited implementations.
+    def producer_lineage(cls) -> tuple[tuple[type[ProjectionOutputs], ...], ...]:
+        """Each writer's ancestors sharing this table's outputs, the writer included.
 
-        An ancestor declaring other outputs owns those outputs alone. Inherited
-        producer capabilities follow the writer; unrelated mechanisms do not.
+        An ancestor declaring other outputs owns those outputs alone.
         """
         # Complete the same declared family for direct source reads and wheel builds.
         import_module("agent_comms.producer_stamp")
-        owners: set[type] = {
-            parent for parent in cls.__mro__ if issubclass(parent, ProjectionOutputs)
-        }
-        writers = ProjectionSource.writers_for(cls)
-        owners.update(writers)
-        for writer in writers:
-            owners.update(
+        return tuple(
+            tuple(
                 parent for parent in writer.__mro__
                 if issubclass(parent, ProjectionOutputs)
                 and ("writes" not in vars(parent) or cls in parent.writes)
             )
+            for writer in ProjectionSource.writers_for(cls)
+        )
+
+    @classmethod
+    def producer_members(cls) -> tuple[tuple[type, tuple[str, ...]], ...]:
+        """A writer's own statements redefining production members, not its other mechanisms.
+
+        A send-time check on a message kind produces no route row, so editing it
+        must not rebuild every routed history row.
+        """
+        members: list[tuple[type, tuple[str, ...]]] = []
+        for lineage in cls.producer_lineage():
+            production = {
+                name for owner in lineage if owner.produces_whole() for name in vars(owner)
+            }
+            for owner in lineage:
+                if not owner.produces_whole():
+                    declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(owner))).body[0])
+                    members.append((owner, tuple(
+                        ast.unparse(statement) for statement in declaration.body
+                        if production & cls.bound_names(ast.unparse(statement))
+                    )))
+        return tuple(members)
+
+    @staticmethod
+    def bound_names(statement: str) -> set[str]:
+        """Names one class-body statement binds; a method's locals are its own scope."""
+        return {
+            symbol.get_name()
+            for symbol in symtable(statement, "<class body>", "exec").get_symbols()
+            if symbol.is_assigned() or symbol.is_annotated()
+        }
+
+    @classmethod
+    def producer_owners(cls) -> tuple[type, ...]:
+        """This table, its output declarations, column values and their inherited implementations.
+
+        Inherited producer capabilities follow the writer; unrelated mechanisms do not.
+        """
+        owners: set[type] = {
+            parent for parent in cls.__mro__ if issubclass(parent, ProjectionOutputs)
+        }
+        owners.update(
+            owner for lineage in cls.producer_lineage() for owner in lineage
+            if owner.produces_whole()
+        )
         annotations: list[object] = (
             [column.annotation for column in cls._columns] if is_dataclass(cls) else []
         )

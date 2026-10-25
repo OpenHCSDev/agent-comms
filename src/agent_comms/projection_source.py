@@ -24,6 +24,11 @@ class ProjectionOutputs:
         return True
 
     @classmethod
+    def produces_whole(cls) -> bool:
+        """An output capability is production code throughout."""
+        return True
+
+    @classmethod
     def writer_declarations(cls) -> tuple[type[ProjectionOutputs], ...]:
         """Derive output owners from the class hierarchy, including shared capabilities."""
         return tuple(parent for parent in cls.__mro__ if "writes" in vars(parent))
@@ -42,6 +47,11 @@ class ProjectionSource(ProjectionOutputs):
     @classmethod
     def shares_outputs_with(cls, writer: type[ProjectionOutputs]) -> bool:
         return cls is writer
+
+    @classmethod
+    def produces_whole(cls) -> bool:
+        """A writer's other mechanisms produce nothing unless it declares the outputs itself."""
+        return "writes" in vars(cls)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
