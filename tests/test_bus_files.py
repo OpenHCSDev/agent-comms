@@ -40,7 +40,8 @@ def test_published_change_signal_is_not_a_bus_resource(tmp_path: Path) -> None:
     resources = bus_files(tmp_path)
     paths = {resource.path for resource in resources}
     assert path.relative_to(tmp_path) in paths
-    assert Path("coordination.changed") not in paths
+    assert all(marker.relative_to(tmp_path) not in paths
+               for marker in CoordinationStore.source_paths(tmp_path))
 
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
