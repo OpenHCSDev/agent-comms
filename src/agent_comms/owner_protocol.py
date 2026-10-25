@@ -10,7 +10,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self, cast
 
-from acp.exceptions import RequestError
+from .coordination_errors import Refused
 from pydantic import BaseModel
 
 
@@ -142,7 +142,7 @@ class OwnerRpcError(RecordMember, RpcFailure):
     data: object = None
 
     def raised(self, error: str) -> Exception:
-        return RequestError(self.code, self.message, self.data)
+        return Refused(self.code, self.message, self.data)
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,7 +165,7 @@ class OwnerFailure(OwnerLine):
         return cls(error=str(error) or type(error).__name__)
 
     @classmethod
-    def refused(cls, error: RequestError) -> Self:
+    def refused(cls, error: Refused) -> Self:
         data = error.data if isinstance(error.data, dict) else {}
         reason = data.get("details") or data.get("reason")
         # The pi project extension shows the text; Core clients raise the RPC error.
@@ -218,7 +218,7 @@ class IncompatibleOwner(DeclaredFamily, affix="Owner"):
 
     async def request(self, action: str, **_: object) -> dict:
         """The history-only attachment refuses every owner request with this owner's line."""
-        raise RequestError.invalid_params(self.failure_metadata())
+        raise Refused.invalid_params(self.failure_metadata())
 
     async def close(self) -> None:
         pass

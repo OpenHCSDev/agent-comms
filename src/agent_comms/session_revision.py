@@ -36,6 +36,14 @@ class SessionObservation(DeclaredFamily, affix="Observation"):
     def require_available(self) -> SessionRevision: ...
 
 
+@dataclass(frozen=True, slots=True)
+class NoSessionObservation(SessionObservation):
+    """The thread has not saved a session yet; there is no file to observe."""
+
+    def require_available(self) -> SessionRevision:
+        raise SessionRevisionUnavailable("This thread has no saved session")
+
+
 @dataclass(frozen=True)
 class UnavailableSessionObservation(SessionObservation):
     error: Exception
