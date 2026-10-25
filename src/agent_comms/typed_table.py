@@ -74,7 +74,7 @@ from .locked_store import (
 )
 from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
-from .projection_source import ProducedRow, ProjectionSource
+from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
     UNBOUNDED_CONTENTION, StoreBusy, StoreLockContention, StoreLockFile,
 )
@@ -2271,9 +2271,10 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     """A table derives its producers from the writers that declare it as an output."""
 
     @classmethod
-    def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
-        """A row contributes itself; extra writes belong to the class declaring them."""
-        return (cls,) if "writes" in vars(cls) else ()
+    def writer_declarations(cls) -> tuple[type[ProjectionOutputs], ...]:
+        """Share output capabilities, not another writer's outputs inherited with its fields."""
+        return tuple(owner for owner in super().writer_declarations()
+                     if owner is cls or not issubclass(owner, ProjectionSource))
 
     @classmethod
     def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
@@ -2304,15 +2305,15 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         # Complete the same declared family for direct source reads and wheel builds.
         import_module("agent_comms.producer_stamp")
         owners: set[type] = {
-            parent for parent in cls.__mro__ if issubclass(parent, ProjectionSource)
+            parent for parent in cls.__mro__ if issubclass(parent, ProjectionOutputs)
         }
         writers = ProjectionSource.writers_for(cls)
         owners.update(writers)
         for writer in writers:
             owners.update(
                 parent for parent in writer.__mro__
-                if issubclass(parent, ProjectionSource)
-                and ("writes" not in vars(parent) or parent in writers)
+                if issubclass(parent, ProjectionOutputs)
+                and ("writes" not in vars(parent) or cls in parent.writes)
             )
         annotations: list[object] = (
             [column.annotation for column in cls._columns] if is_dataclass(cls) else []

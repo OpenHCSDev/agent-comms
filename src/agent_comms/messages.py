@@ -137,11 +137,6 @@ class ClaimOperations(BusProjectionTables):
 class HeldResources(ClaimProducer, BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
 
-    @ClassFact
-    @staticmethod
-    def writes(cls: type[HeldResources]) -> tuple[type[ProducedRow], ...]:
-        return ClaimProducer.writes
-
     resource: Annotated[str, Column(primary_key=True)]
     claim_seq: int
 

@@ -33,7 +33,7 @@ from .field_codec import (
     WireRequired,
 )
 from .message_reference import MessageReference
-from .projection_source import ProducedRow, ProjectionSource
+from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
 if TYPE_CHECKING:
@@ -281,7 +281,7 @@ class AcquiringClaim(ClaimIdentity):
     resource_scope: ClaimScope
 
 
-class ClaimProducer(ProjectionSource):
+class ClaimProducer(ProjectionOutputs):
     """Transitions, their envelopes and their holder rows produce the same claim tables."""
 
     @ClassFact
@@ -292,7 +292,7 @@ class ClaimProducer(ProjectionSource):
 
 
 @dataclass(frozen=True)
-class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ClaimProducer, affix=""):
+class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ClaimProducer, ProjectionSource, affix=""):
     """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
