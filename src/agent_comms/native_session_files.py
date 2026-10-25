@@ -21,6 +21,7 @@ from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
+from .store_files import ProcessSingleton
 from agent_comms.typed_table import ReconciledFile, TableSchema
 
 
@@ -30,6 +31,12 @@ class SessionFiles:
     __slots__ = ()
     session: Path
     members: tuple[Path, ...]
+    writer_lock: Path
+
+    @property
+    def writer_claim(self) -> ProcessSingleton:
+        """The one writer of this session, across processes."""
+        return ProcessSingleton(self.writer_lock)
 
     @property
     def schema_paths(self) -> tuple[Path, ...]:
@@ -118,12 +125,12 @@ class NativeTranscriptFiles(SessionFiles):
         Acquire before reserving a NativeRuntimeInput. Its original queued wake
         assignments remain unchanged while the kernel waits, across processes.
         """
-        descriptor = os.open(self.writer_lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        descriptor = self.writer_claim.descriptor()
         # Lock waiters must not exhaust the workers the current input needs
         # to finish. This worker retires as soon as its kernel wait completes.
         waiter = ThreadPoolExecutor(max_workers=1, thread_name_prefix="session-input")
         acquisition = asyncio.get_running_loop().run_in_executor(
-            waiter, Platform.current().acquire_session_writer, descriptor)
+            waiter, self.writer_claim.wait, descriptor)
         waiter.shutdown(wait=False)
         try:
             await asyncio.shield(acquisition)

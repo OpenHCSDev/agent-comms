@@ -6,7 +6,6 @@ rehearsal and harness setup are the target's, never the outgoing runtime's.
 """
 from __future__ import annotations
 
-import fcntl
 import glob
 import json
 import os
@@ -15,7 +14,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
@@ -65,6 +64,7 @@ from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import ClaimHeldError, ProcessSingleton
 
 
 @dataclass
@@ -243,10 +243,10 @@ class InstallLogs:
     def launching(self) -> Iterator[None]:
         """Held from the target checkout to the unit's start, and for a waiting launch to the
         unit's end; under it no other unit runs, so minting and retiring never race one."""
-        with self.lock.open("a") as held:
+        with ExitStack() as held:
             try:
-                fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
+                held.enter_context(ProcessSingleton(self.lock).claimed())
+            except ClaimHeldError:
                 raise InstallRunning(self.lock, self.running()) from None
             if running := self.running():
                 raise InstallRunning(self.lock, running)

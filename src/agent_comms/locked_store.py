@@ -11,7 +11,7 @@ import stat
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterator, Mapping
-from contextlib import closing, contextmanager
+from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass
 from functools import cache
 from importlib import import_module
@@ -33,6 +33,7 @@ from .store_files import (
     StoreLockFile,
     StoreLockOwner,
     StoreOwner,
+    UNBOUNDED_CONTENTION,
     _store_lock,
     is_store_lock,
     store_lock_path,
@@ -636,13 +637,47 @@ class SQLiteFile(RootFile):
                 held.execute("ROLLBACK")
 
     @classmethod
+    def at_boundary(
+        cls, path: Path, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> AbstractContextManager[StoreLock]:
+        """One connection boundary of the file: an attachment, a retirement or a WAL
+        truncation. Even a read-only cold attachment initializes the WAL index, and another
+        attachment or last-connection cleanup can make that initialization return BUSY before
+        any query competes with a data writer, which no SQLite transaction covers; the file's
+        physical owner serializes the boundaries, and readers and writers keep SQLite's
+        parallel WAL transactions between them."""
+        return _store_lock(path, contention=contention)
+
+    @classmethod
+    @contextmanager
+    def attached(
+        cls, path: Path, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
+        contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> Iterator[sqlite3.Connection]:
+        """A connection whose attachment and retirement are boundaries, and whose SQL is not.
+
+        Attachment spends the caller's lock budget, so a read that may defer raises
+        BlockingIOError when it runs out instead of waiting; retirement always runs."""
+        with ExitStack() as lifetime:
+            with cls.at_boundary(path, contention):
+                resource = opening()
+                connection = resource.__enter__()
+
+            def retire(*error):
+                with cls.at_boundary(path):
+                    return resource.__exit__(*error)
+
+            lifetime.push(retire)
+            yield connection
+
+    @classmethod
     def settle(cls, path: Path) -> None:
         """Move committed WAL frames into the file. A copy is a backup with no WAL, so a
         settled file has the copy's physical cut, and no later last close rewrites it."""
         wal = cls.wal_path(path)
         if not (wal.is_file() and wal.stat().st_size):
             return
-        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+        with cls.at_boundary(path), closing(cls.writer(path, isolation_level=None)) as db:
             busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
         if busy:
             raise sqlite3.OperationalError(f"Another connection holds the WAL of {path}")

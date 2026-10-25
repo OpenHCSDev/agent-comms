@@ -49,7 +49,6 @@ from .sealed import Sealed
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
     from .runtime_children import RuntimeChildrenStore, RuntimeChildReservation
-    from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .thread_status import ActiveThreadPresence, ThreadStatus
@@ -435,12 +434,6 @@ class Platform(DeclaredFamily, affix="Platform"):
             if not os.path.samestat(os.stat(parent), os.fstat(descriptor)):
                 raise ValueError("Socket directory changed during address acquisition")
             yield parent / path.name
-
-    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
-        fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
-
-    def acquire_session_writer(self, descriptor: int) -> None:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
 
     def launch(
         self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,

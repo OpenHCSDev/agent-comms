@@ -24,7 +24,7 @@ from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import BinaryIO, ClassVar
+from typing import BinaryIO, ClassVar, TextIO
 
 from .child_process import LockHolder, Platform
 from .declared_family import DeclaredFamily
@@ -45,6 +45,14 @@ class LockMode(ABC):
 
     def require_held(self, held: LockMode) -> None:
         pass
+
+    def attempt(self, descriptor: int) -> None:
+        """Hold this mode on the open description now, or raise BlockingIOError."""
+        fcntl.flock(descriptor, self.flock() | fcntl.LOCK_NB)
+
+    def wait(self, descriptor: int) -> None:
+        """Hold this mode on the open description, waiting in the kernel while it is held."""
+        fcntl.flock(descriptor, self.flock())
 
 
 class SharedLock(LockMode):
@@ -94,7 +102,7 @@ class StoreLockContention:
         while True:
             begun = time.monotonic()
             try:
-                platform.try_store_lock(descriptor, mode=mode)
+                mode.attempt(descriptor)
             except BlockingIOError as error:
                 self.remaining -= time.monotonic() - begun
                 if self.remaining <= 0:
@@ -336,6 +344,97 @@ class DependentStateTier(StoreLockTier):
     """Reads follow catalog; rename/delete state follows registry (thread_management.py:397)."""
 
     __slots__ = ()
+
+
+class ClaimHeldError(BlockingIOError):
+    """Another process holds the claim."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(errno.EAGAIN, f"{path} is held by another process")
+        self.path = path
+
+
+@dataclass(frozen=True)
+class ObservedClaim:
+    """A claim file read without taking the claim, and whether a live process holds it."""
+
+    file: TextIO
+    held: bool
+
+
+@dataclass(frozen=True)
+class ProcessSingleton:
+    """A claim file at most one process holds at a time. The holder's open description of the
+    file is the claim: the kernel releases it when the holder closes the file or exits, and a
+    descriptor passed through exec keeps it held. A claim's holder never opens, locks or
+    unlocks the file itself; it claims, waits for, adopts or observes it here."""
+
+    path: Path
+
+    def descriptor(self) -> int:
+        """A private open description of the claim file, created on first use."""
+        return os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW | os.O_CLOEXEC,
+                       0o600)
+
+    def claim(self, descriptor: int) -> None:
+        try:
+            ExclusiveLock().attempt(descriptor)
+        except BlockingIOError:
+            raise ClaimHeldError(self.path) from None
+
+    @staticmethod
+    def wait(descriptor: int) -> None:
+        """Hold the claim on an open description once its current holder lets it go; a caller
+        that must not block its loop runs this on a worker of its own."""
+        ExclusiveLock().wait(descriptor)
+
+    @contextmanager
+    def claimed(self) -> Iterator[TextIO]:
+        """Hold the claim, or raise ClaimHeldError at once."""
+        with open(self.descriptor(), "a+") as held:
+            self.claim(held.fileno())
+            yield held
+
+    @contextmanager
+    def waited(self) -> Iterator[TextIO]:
+        """Hold the claim once its current holder lets it go."""
+        with open(self.descriptor(), "a+") as held:
+            self.wait(held.fileno())
+            yield held
+
+    @contextmanager
+    def adopted(self, descriptor: int) -> Iterator[TextIO]:
+        """Take over the description a replaced holder kept through exec. The kernel already
+        counts that description as holding the claim, so this cannot wait. The replaced holder
+        may have opened it write-only, so it is adopted for appending only."""
+        if not os.path.samestat(os.fstat(descriptor), os.stat(self.path)):
+            raise ValueError(f"Inherited descriptor {descriptor} is not the claim {self.path}")
+        os.set_inheritable(descriptor, False)
+        with os.fdopen(descriptor, "a") as held:
+            self.claim(held.fileno())
+            yield held
+
+    @contextmanager
+    def observed(self) -> Iterator[ObservedClaim]:
+        """Read an existing claim file; ``held`` is whether a live process holds the claim."""
+        with self.path.open() as observed:
+            try:
+                SharedLock().attempt(observed.fileno())
+                held = False
+            except BlockingIOError:
+                held = True
+            yield ObservedClaim(observed, held)
+
+    @staticmethod
+    def release(held: TextIO) -> None:
+        """Let the claim go while its holder still has the file open."""
+        fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+
+    def held_elsewhere(self) -> bool:
+        if not self.path.exists():
+            return False
+        with self.observed() as observed:
+            return observed.held
 
 
 def store_lock_path(store_path: Path) -> Path:
