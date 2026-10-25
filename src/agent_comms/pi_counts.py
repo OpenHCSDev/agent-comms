@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -71,6 +72,10 @@ class PiCount(AcceptsNull, ExternalJsonShape, WireValue):
     @classmethod
     def schema(cls) -> dict[str, object]:
         return PiCountWire.schema()
+
+    @abstractmethod
+    def present(self) -> tuple[ReportedCount, ...]:
+        """The reported count, or nothing: NullMember and PresentMember answer it."""
 
     def matches(self, count: int) -> bool:
         return False
