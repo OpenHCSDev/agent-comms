@@ -480,6 +480,8 @@ class RegistryFile(DurableFile, WireWakeFile):
 
     @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """The copy names no live process: a signal, stop or wake aimed through it would reach
+        the source root's units."""
         from .registry_store import RegistryStore
 
         registry = RegistryStore(source)
@@ -489,6 +491,7 @@ class RegistryFile(DurableFile, WireWakeFile):
                 destination = target.parent / path.relative_to(source.parent)
                 destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
                 cls.copy_file(path, destination)
+        RegistryStore(target).retire_processes()
         return copied
 
 
