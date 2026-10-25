@@ -173,12 +173,19 @@ def test_mutation_of_loaded_inode_refuses_before_publish(path):
 def test_schema_drift_during_scope_cannot_publish(path):
     _create(path)
     before = path.read_bytes()
-    with pytest.raises(IdentityConflict), _connection(path) as db:
+    with pytest.raises(sqlite3.DatabaseError), _connection(path) as db:
         db.execute(
             "CREATE TRIGGER suppress BEFORE INSERT ON prompt_binding "
             "BEGIN SELECT RAISE(IGNORE); END"
         )
-        assert _insert(db).rowcount == 0
+    assert path.read_bytes() == before
+
+
+def test_drop_table_is_refused_before_schema_changes(path):
+    _create(path)
+    before = path.read_bytes()
+    with pytest.raises(sqlite3.DatabaseError), _connection(path) as db:
+        db.execute("DROP TABLE prompt_binding")
     assert path.read_bytes() == before
 
 
@@ -190,7 +197,7 @@ def test_mode_drift_and_connection_attachment_are_not_admitted(path):
         path.chmod(0o644)
     path.chmod(0o600)
     with (
-        pytest.raises(IdentityConflict),
+        pytest.raises(sqlite3.DatabaseError),
         _connection(path) as db,
     ):
         db.execute("ATTACH ':memory:' AS other")
@@ -277,13 +284,11 @@ def test_process_crash_before_or_after_replacement_leaves_unreplayable_intent(pa
 
 
 def test_a_verified_snapshot_is_checked_again_the_moment_its_bytes_change(path):
-    """Workers re-verified an unchanged snapshot on every open (10.8% of a bus worker);
-    a pass is remembered per content, never per file name or inode."""
-    import hashlib
+    """A remembered pass requires the same complete snapshot identity."""
     _create(path)
-    with _connection(path):
-        pass
-    assert sidecar.VerifiedSnapshots.passed[path, PromptBinding] == hashlib.sha256(path.read_bytes()).digest()
+    with _connection(path) as db:
+        _insert(db)
+    assert sidecar.VerifiedSnapshots.passed[path, PromptBinding] == sidecar.SnapshotIdentity.of(path.stat())
     with sqlite3.connect(path) as db:
         db.execute("CREATE TABLE unrelated_table (x)")
     with pytest.raises(IdentityConflict), _connection(path):

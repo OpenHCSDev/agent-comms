@@ -29,6 +29,7 @@ from .field_codec import InputId
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .send_outcome import SendBoundary
+from .session_revision import NoSessionObservation, SessionObservation
 from .tool_result import DeclaredReply
 from .turn_outcome import TurnOutcome
 
@@ -102,6 +103,9 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     @abstractmethod
     def storage_files(self): ...
+
+    def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
+        return NoSessionObservation()
 
     @property
     def model_choice(self):
