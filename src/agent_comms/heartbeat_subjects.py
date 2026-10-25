@@ -56,11 +56,12 @@ class HeadSubject(HeartbeatSubject):
                    for review in comms.goals.todos.head_reviews(self.request))
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
-        """A delivery claims an abbreviated head; the verdict names the full one."""
+        """The line is about the pull request: a verdict on any of its heads acts on it, the
+        head the line began at or one a later push or batch merge moved it to."""
         return any(subject.reviews(self.request) for subject in acted)
 
     def reviews(self, request: PullRequestHead) -> bool:
-        return self.request.same_head(request)
+        return self.request.same_pull_request(request)
 
 
 @dataclass(frozen=True)

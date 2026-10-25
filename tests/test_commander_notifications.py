@@ -270,6 +270,10 @@ def test_a_verdict_on_the_full_head_or_an_answer_acts_on_its_board_line():
 
     assert delivery.acted_on(verdict)
     assert not delivery.acted_on(frozenset((HeadSubject(PullRequestHead(repo, 3307, "89c687691")),)))
+    assert not delivery.acted_on(frozenset((HeadSubject(PullRequestHead(
+        RepositoryName("OpenHCSDev", "toad"), 3306, "89c687691")),)))
+    # A batch merge moved the PR after its line began; the verdict on the new head acts on it.
+    assert delivery.acted_on(frozenset((HeadSubject(PullRequestHead(repo, 3306, "174005bf6")),)))
     assert chokehold.acted_on(frozenset((AnswerSubject(owed),)))
     assert not chokehold.acted_on(verdict)
 

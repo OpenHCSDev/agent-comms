@@ -65,10 +65,18 @@ class Ping(DeclaredFamily, affix="Ping"):
     def key(self) -> object: ...
 
     def undisposed(self, comms: Comms, actors: frozenset[str], cut: float) -> bool:
-        """Began before ``cut`` and no subject has a recorded action since it began."""
-        return (self.since.before(cut) and bool(self.subjects)
-                and not any(subject.disposed(comms, actors, self.since.recorded_at("A line"))
-                            for subject in self.subjects))
+        """The commander's to dispose of, began before ``cut``, and not disposed of since. Only
+        such a line is restated as waiting and locks the verbs."""
+        return self.waits_on_commander(cut) and not self.disposed(comms, actors)
+
+    def waits_on_commander(self, cut: float) -> bool:
+        return self.commander_disposes and self.since.before(cut)
+
+    def disposed(self, comms: Comms, actors: frozenset[str]) -> bool:
+        """A subject has a recorded action since the line began; a line without one never waits."""
+        began = self.since.recorded_at("A line")
+        return not self.subjects or any(subject.disposed(comms, actors, began)
+                                        for subject in self.subjects)
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         return any(subject.acted_on(acted) for subject in self.subjects)
@@ -77,10 +85,6 @@ class Ping(DeclaredFamily, affix="Ping"):
     @abstractmethod
     def commander_disposes(self) -> bool:
         """Whether a commander verb disposes of this line; only such a line locks the verbs."""
-
-    def locks(self, cut: float) -> bool:
-        """Undisposed past ``cut`` and the commander's to dispose of."""
-        return self.commander_disposes and self.since.before(cut)
 
     def board_line[Line: BoardLine](self, kind: type[Line]) -> Line:
         """This line as the commander's board holds it: locked once the answer window passes."""

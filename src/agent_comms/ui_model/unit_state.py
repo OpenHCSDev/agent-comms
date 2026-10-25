@@ -472,17 +472,23 @@ class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
         )
 
 
-class AwaitingApplicationRun(NeedsCommanderAttention, ConditionalState, UnitState):
-    """Every merged order is installed and waits on its holder's application run, so no
-    commander verb disposes of the line and it locks none."""
+class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
+    """Installed merged orders wait on their holder's application run, so no commander verb
+    disposes of the line and it locks none. The line names only those orders; while the unit
+    still writes source for another, that order's state is the unit's."""
 
     verb = "AWAIT RUN"
     action = "its holder runs the application proof on the installed build; close it on its evidence"
     commander_disposes = False
 
     @classmethod
-    def matches(cls, source: UnitObservation) -> bool:
-        return any(todo.order.awaits_holder_run() for todo in source.todos)
+    def derive(cls, source: UnitObservation) -> Iterator[Self]:
+        merges = source.merges()
+        if any(todo.order.writes_source(todo, merges) for todo in source.todos):
+            return
+        awaiting = tuple(todo.id for todo in source.todos if todo.order.awaits_holder_run())
+        if awaiting:
+            yield cls(source.thread.incarnation, awaiting, source.presence, source)
 
 
 class Moving(ConditionalState, UnitState):
