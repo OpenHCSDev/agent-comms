@@ -131,7 +131,7 @@ def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
     comms.goals.update_goal("owner", ClearGoalAction(expect=GoalPrecondition(goal_id=goal_goal_id)))
 
     assert comms.registry.require("owner").goal == NoGoal()
-    assert GoalAttemptStore(private).snapshot(goal_goal_id).lifecycle == CancelledGeneration()
+    assert GoalAttemptStore.at(private).snapshot(goal_goal_id).lifecycle == CancelledGeneration()
     assert store.snapshot(goal_goal_id).attempt_id == reservation.attempt_id
 
 

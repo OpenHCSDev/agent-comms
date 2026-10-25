@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, MutableMapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from .child_process import ProcessIdentity
 from .private_path import PrivateFileRole
@@ -36,6 +36,7 @@ from .locked_store import DurableFile, LockedStore, RegistryFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     AtomicFile,
+    HolderNamingContention,
     SharedLock,
     _async_store_lock,
     _store_lock,
@@ -569,8 +570,9 @@ class MaintenanceBarrier(MaintenanceIngress):
         AtomicFile(self.state_path).write_text(state_text)
 
     def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
-        """Hold new turns before fleet drain; an uncertain write stays closed."""
-        with _store_lock(self.registry_path):
+        """Hold new turns before fleet drain; an uncertain write stays closed. A wait past
+        5 s names the registry's holders in the install's log."""
+        with _store_lock(self.registry_path, contention=HolderNamingContention(5)):
             current = self._current_unlocked()
             # A successor takes an abandoned hold without briefly reopening
             # ingress or making the owner repeat its install command.
@@ -637,15 +639,53 @@ class MaintenanceBarrier(MaintenanceIngress):
             yield self._current_unlocked()
 
 
-class CarriedDocument[T](DurableFile, LockedStore[T], declared_name=None):
-    """A JSON document every installation carries: while maintenance runs, only its holder
-    replaces it, so the install's carry check never charges another writer's change."""
+class CarriedFile(DurableFile):
+    """A file every installation carries; its kind declares which writers maintenance refuses,
+    so the install's carry check never charges another writer's change."""
+
+    __slots__ = ()
+    if TYPE_CHECKING:
+        @property
+        def path(self) -> Path: ...
+
+    @classmethod
+    @abstractmethod
+    def require_maintenance_open_at(cls, path: Path) -> None:
+        """Refuse the writers this kind's maintenance policy holds out of ``path``."""
+
+    @classmethod
+    def maintenance_at(cls, path: Path) -> MaintenanceBarrier:
+        return MaintenanceBarrier(RegistryFile.path_in(cls.bus_root(path)))
+
+    def require_maintenance_open(self) -> None:
+        self.require_maintenance_open_at(self.path)
+
+
+class HolderWrittenFile(CarriedFile):
+    """While maintenance runs, only its holder writes this file."""
 
     __slots__ = ()
 
-    def require_maintenance_open(self) -> None:
-        """Refuse every writer but the maintenance holder."""
-        MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+    @classmethod
+    def require_maintenance_open_at(cls, path: Path) -> None:
+        cls.maintenance_at(path).assert_open_unlocked()
+
+
+class DrainSettledFile(CarriedFile):
+    """Stopping owners settle their turns in this file: past the drain only the install's
+    holder commits."""
+
+    __slots__ = ()
+
+    @classmethod
+    def require_maintenance_open_at(cls, path: Path) -> None:
+        cls.maintenance_at(path).assert_drained_writes_open_unlocked()
+
+
+class CarriedDocument[T](LockedStore[T], HolderWrittenFile, declared_name=None):
+    """A JSON document every installation carries, replaced only through its own write."""
+
+    __slots__ = ()
 
     def _write_unlocked(self, text: str) -> None:
         self.require_maintenance_open()

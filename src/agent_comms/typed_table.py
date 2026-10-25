@@ -59,7 +59,6 @@ from .field_codec import (
 )
 from .lifecycle import LifecycleState
 from .locked_store import (
-    DurableFile,
     FileStore,
     PublishedSQLiteFile,
     RegistryFile,
@@ -69,7 +68,7 @@ from .locked_store import (
     StoreBusy,
     StoreCommittedError,
 )
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
+from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionSource
 from .store_files import (
@@ -2268,8 +2267,8 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
 class StoreWriter(PublishedSQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
-    Whether the file outlives an installation belongs to each store: it inherits
-    CarriedWriter or RuntimeWriter, and a TypedStore inherits DurableStore or DerivedStore.
+    Whether the file outlives an installation belongs to each store: it inherits a
+    CarriedFile kind or RuntimeWriter, and a TypedStore inherits DurableStore or DerivedStore.
     """
 
     def __init__(self, path: Path) -> None:
@@ -2385,12 +2384,9 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
                 store.practice_opening(Path(directory))
 
 
-class CarriedWriter(StoreWriter, DurableFile):
-    """A writer of a file every installation carries: while maintenance runs, only its
-    holder writes it, so the install's carry check sees no other change."""
-
-    def require_maintenance_open(self) -> None:
-        MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+class CarriedWriter(HolderWrittenFile, StoreWriter):
+    """A writer of a file every installation carries, which only the maintenance holder
+    writes while maintenance runs."""
 
 
 class RuntimeWriter(StoreWriter, RuntimeFile):
@@ -2586,6 +2582,20 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
         cls.filename = (
             f"{declared_words(cls.__name__)}.{hashlib.sha256(schema).hexdigest()[:12]}.sqlite3"
         )
+
+
+class RowidSequenced(TypedTable, declared_name=None):
+    """The table's rows are numbered by SQLite's rowid, and an insert answers its number."""
+
+    @classmethod
+    def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:
+        """Insert one row and answer the rowid SQLite assigned it."""
+        writable = cls._writable_fields(tuple(values) or None)
+        (sequence,) = db.execute(
+            cls.insertion_statement(tuple(item.name for item in writable)) + " RETURNING rowid",
+            tuple(item.encode(values[item.name]) for item in writable),
+        ).fetchone()
+        return int(sequence)
 
 
 class WithoutRowid(TypedTable, declared_name=None):
