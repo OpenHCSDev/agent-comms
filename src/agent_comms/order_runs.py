@@ -32,6 +32,10 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     def merged_line(self, state: str) -> str:
         return f"Merged, {state}"
 
+    def holder_runs(self) -> bool:
+        """Whether, once installed, the next action is the holder's run, not the commander's."""
+        return False
+
     @abstractmethod
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
 
@@ -75,6 +79,9 @@ class ApplicationOrderRun(OrderRun):
 
     def merged_line(self, state: str) -> str:
         return f"{super().merged_line(state)}, waiting on the run"
+
+    def holder_runs(self) -> bool:
+        return True
 
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
         return merged.waiting_in(todo)
