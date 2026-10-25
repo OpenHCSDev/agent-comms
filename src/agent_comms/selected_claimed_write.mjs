@@ -30,7 +30,6 @@ export default function registerSelectedClaimedWrite(pi) {
         { request: { call_id: callId, arguments: params } },
         MAX_CONTENT + 8192,
         MAX_RESPONSE,
-        "Selected tool outcome UNKNOWN; no retry",
       );
       if (response?.ok !== true) throw new Error("Selected tool denied or outcome UNKNOWN; no retry");
       return { content: [{ type: "text", text: "Owner committed one selected existing-file replacement." }], details: {} };
