@@ -628,6 +628,10 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     draft: bool = field(default=False, kw_only=True)
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
 
+    def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
+        """Open work and merged work awaiting acceptance stay with their recorded holder."""
+        return (assignment,)
+
     def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
         return ()
 
@@ -673,6 +677,9 @@ class UnmergedListedPullRequest(ListedPullRequest):
 class ClosedListedPullRequest(ListedPullRequest):
     """Closed without merging; never selected as an open request."""
 
+    def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
+        return ()
+
     def as_closed(self) -> tuple[ClosedListedPullRequest, ...]:
         return (self,)
 
@@ -715,6 +722,17 @@ class PullRequests:
         for todo in todos:
             self._todos.setdefault(todo.repo, {})[todo.id] = todo
         return self
+
+    def retained_assignments(self, todo: Todo, assignment: Assignment) -> tuple[Assignment, ...]:
+        """An explicit closure releases work; missing forge links do not retire its author."""
+        self.register((todo,))
+        linked = self.linked(todo.repo)
+        numbers = tuple(number for number, candidates in linked.items() if todo in candidates)
+        if not numbers:
+            return (assignment,)
+        return tuple(dict.fromkeys(
+            retained for row in self.rows(todo.repo, numbers)
+            for retained in row.retained_assignments(assignment)))
 
     def merged_delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
         """The newest merged request linked to the order is what `order done` checks."""
@@ -2840,6 +2858,13 @@ class TodoHolder(ABC):
     def current_assignments(self) -> tuple[Assignment, ...]:
         return ()
 
+    def retained_assignments(self, current: Todo, pulls: PullRequests) -> tuple[Assignment, ...]:
+        return ()
+
+    def restored(self, current: Todo) -> Todo:
+        """A current or absent holder has no released assignment to restore."""
+        return current
+
     def after_void(self, voided: Todo) -> Todo:
         """A void changes no holder unless the holder state was made by the voided strikes."""
         return voided
@@ -2891,6 +2916,10 @@ class Assignment(TodoHolder):
         """The registered thread born as this hold's recorded holder; empty once that thread
         was deleted or registered again under a new birth."""
         return snapshot.threads_for(self.owner_identity.require_recorded())
+
+    def running_holders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """A retained assignment follows its live incarnation, never a reused name."""
+        return tuple(owner for owner in self.holder_in(snapshot) if owner.process_alive)
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
@@ -3759,12 +3788,18 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
         return replace(current, assignment=None, released=(*current.released, self),
                        revision=current.revision + 1)
 
+    def retained_assignments(self, current: Todo, pulls: PullRequests) -> tuple[Assignment, ...]:
+        return pulls.retained_assignments(current, self.previous)
+
+    def restored(self, current: Todo) -> Todo:
+        """Unstrike and the watcher restore this recorded assignment through the same write."""
+        if current.struck_out(self.previous.owner):
+            return current
+        return replace(current, assignment=self.previous)
+
     def after_void(self, voided: Todo) -> Todo:
-        """The strike limit's release stands only while its strikes do: the void that drops
-        the released unit below the limit gives the task back to it in the same write."""
-        if not self.made_by_limit(voided) or voided.struck_out(self.previous.owner):
-            return voided
-        return replace(voided, assignment=self.previous)
+        """Only a release made by the strike limit can be undone by voiding a strike."""
+        return self.restored(voided) if self.made_by_limit(voided) else voided
 
     def made_by_limit(self, current: Todo) -> bool:
         """The released unit stood at the strike limit when this release was recorded."""
@@ -3776,6 +3811,28 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
                          and recorded not in taken_back
                          and recorded.at.recorded_at("A strike") <= released)
         return len(standing) >= ProblemGoalOrder.StrikeLimit
+
+
+@dataclass(frozen=True)
+class RestoreHolderTodo(TodoCommand):
+    """Restore released work without reissuing its order or replacing the unit's goal."""
+    actor: ThreadIncarnation
+    previous: Assignment
+
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        snapshot = RegistryStore.at(store.root).read_snapshot_unlocked()
+        if not self.previous.running_holders(snapshot):
+            raise TodoConflict(current)
+        store.require_assignment_in(db, current.id, self.previous.owner_identity, self.actor)
+
+    def changed(self, current: Todo) -> Todo:
+        self.actor.require_may_change(current)
+        current.state.require_open(current)
+        if current.holder_state.previous_assignment() != self.previous:
+            raise TodoConflict(current)
+        restored = current.holder_state.restored(current)
+        return (replace(restored, revision=current.revision + 1)
+                if restored != current else current)
 
 
 @dataclass(frozen=True)

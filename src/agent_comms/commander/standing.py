@@ -42,10 +42,9 @@ from agent_comms.standing_rules import (
     StandingRule,
     UndatedStandingRule,
 )
-from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import OrderClaim, OwnerRequest, Todo
+from agent_comms.todos import Assignment, OrderClaim, OwnerRequest, PullRequests, RestoreHolderTodo, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
@@ -403,32 +402,36 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        return cls.scan_orders(comms, commander, HeldOrders.read(comms, commander))
+        return cls.scan_orders(comms, commander, HeldOrders.read(comms, commander), PullRequests())
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_orders(comms, commander, frame)
+        return cls.scan_orders(comms, commander, frame, frame.pulls)
 
     @classmethod
     def scan_orders(cls, comms: Comms, commander: str,
-                    scan: HeldOrders) -> tuple[UnownedWheelSpin, ...]:
+                    scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
         actor = comms.registry.require(commander).incarnation
         rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
                      if not todo.holder_state.current_assignments())
-        return cls.paired(comms, commander, rows, scan)
+        return cls.paired(comms, commander, rows, scan, pulls)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str,
-               todos: Iterable[Todo], scan: HeldOrders) -> tuple[UnownedWheelSpin, ...]:
-        """Both the heartbeat and automatic watcher preserve work before any dispatch."""
+               todos: Iterable[Todo], scan: HeldOrders,
+               pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
+        """Restore recorded live holders before proposing any cross-unit dispatch."""
         rows = tuple(todo for todo in todos if todo.pending)
-        retained = tuple(CheckoutHeldWheelSpin(todo, work)
+        snapshot = comms.registry.snapshot()
+        retained = tuple(RetainedHolderWheelSpin(todo, assignment)
                          for todo in rows
-                         for work in comms.registry.storage_rule.work_for_problem(
-                             todo, comms.registry, comms.goals.todos))
+                         for assignment in todo.holder_state.retained_assignments(todo, pulls)
+                         if assignment.running_holders(snapshot))
         protected = {rule.todo.id for rule in retained}
-        idle, found = cls.idle(comms, commander, scan), []
+        owners = {rule.previous.owner_identity for rule in retained}
+        idle = [unit for unit in cls.idle(comms, commander, scan) if unit.incarnation not in owners]
+        found = []
         for todo in (todo for todo in rows if todo.id not in protected):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
@@ -463,15 +466,20 @@ class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
 
 
 @dataclass(frozen=True, eq=False)
-class CheckoutHeldWheelSpin(UnownedWheelSpin, declared_name=None):
-    work: OrderCheckoutWork
+class RetainedHolderWheelSpin(UnownedWheelSpin, declared_name=None):
+    previous: Assignment
 
     def comparison_values(self) -> tuple[object, ...]:
-        return (*super().comparison_values(), self.work.owner.incarnation, self.work.checkout)
+        return (*super().comparison_values(), self.previous.owner_identity)
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        comms.goals.change_problem(self.todo.id, RestoreHolderTodo(
+            self.todo.revision, comms.registry.require(commander).incarnation, self.previous,
+        ), commander)
 
     def line(self) -> str:
-        return (f"WORK HELD: {self.todo.id} {self.work.owner.name} retains work in "
-                f"{self.work.checkout} -> restore its holder; do not hand the row away")
+        return (f"WORK HELD: {self.todo.id} {self.previous.owner} retains its recorded work"
+                " -> preserve its holder; do not hand the row away")
 
 
 @dataclass(frozen=True)
@@ -486,13 +494,14 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
     def observe(self, comms: Comms) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()
         observed: list[UnownedObservation] = []
+        pulls = PullRequests(available)
         for name in {todo.creator_identity.name for todo in available}:
             commander = comms.registry.require(name)
             mine = (todo for todo in available if todo.creator_identity.name == name)
             observed.extend(
                 UnownedObservation(commander, rule)
                 for rule in UnownedWheelSpin.paired(
-                    comms, name, mine, HeldOrders.read(comms, name),
+                    comms, name, mine, HeldOrders.read(comms, name), pulls,
                 )
             )
         return tuple(observed)
