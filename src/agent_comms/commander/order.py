@@ -841,10 +841,10 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
 
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
-    """A writing verb is refused while a heartbeat line sits undisposed past the answer window,
-    unless the verb acts on the subject of a line on the board, fresh or stale: board work is
-    never off-board work, or a stale line no one can act on yet would refuse the verdict a
-    fresh line asks for. Core records that action, and the record is what disposes of the line.
+    """A writing verb run while a heartbeat line sits undisposed past the answer window prints
+    the board beside its result instead of refusing: the board already reaches the commander
+    on every tool call, so a refusal only stopped unit answers, reviews and owner fixes that
+    touched no line. Core records each action, and the record is what disposes of a line.
     Nothing the commander says about a line counts."""
 
     @abstractmethod
@@ -859,9 +859,9 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
         acted = frozenset(subjects)
         if (any(ping.waits_on_commander(now - AwaitingCommander.seconds) for ping in board)
                 and not any(ping.acted_on(acted) for ping in board)):
-            sys.exit(f'REFUSED, nothing recorded: heartbeat lines undisposed past '
-                     f'{AwaitingCommander.seconds // 60} min; act on any line on the board:\n'
-                     + '\n'.join(ping.render(now) for ping in board))
+            print(f'BOARD: heartbeat lines undisposed past '
+                  f'{AwaitingCommander.seconds // 60} min; act on them next:\n'
+                  + '\n'.join(ping.render(now) for ping in board), file=sys.stderr)
 
 
 @dataclass(frozen=True, kw_only=True)
