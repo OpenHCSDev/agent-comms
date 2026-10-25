@@ -303,6 +303,22 @@ def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_
     assert isinstance(next(reading.read(comms, comms.views.revision())), CommanderHudObserved)
 
 
+def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(notification_bus):
+    """An installed newer heartbeat writes a field an older Toad does not declare; the page
+    shows the unreadable frame and the observer process, and Toad, keep running."""
+    comms = notification_bus
+    reading = ObserveCommanderHud().observation()
+    beat(comms, states=state_cards(comms, UnitState))
+    frame, = CommanderFrame.matching_in(comms.root)
+    written = json.loads(frame.read_text())
+    frame.write_text(json.dumps({**written, "field_from_a_newer_build": []}))
+    unreadable, = reading.read(comms, comms.views.revision())
+    # The result crosses the observation process boundary by pickle.
+    unreadable = pickle.loads(pickle.dumps(unreadable))
+    assert isinstance(unreadable, observation.CommanderHudUnreadable)
+    assert "field_from_a_newer_build" in str(unreadable.error)
+
+
 def test_a_verdict_on_the_full_head_or_an_answer_acts_on_its_board_line():
     """A delivery claims an abbreviated head and the verdict names the full one; a burst
     answer names its owed message. Either is board work the stale-line gate lets through."""
