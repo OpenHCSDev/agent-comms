@@ -262,9 +262,17 @@ def guard_default_route_write(
         os.close(directory)
 
 
+ROUTE_PUBLICATION_WAIT_SECONDS = 30.0
+
+
 def acquire_exclusive_route_lock(directory: int) -> None:
-    """Wait for in-flight operations to finish before publishing the route."""
-    UNBOUNDED_CONTENTION.acquire(directory, Platform.current(), mode=ExclusiveLock())
+    """End the holders that are only views of the bus, then wait a bounded time for
+    in-flight writes; a holder still there is refused by its PID, never waited out."""
+    platform = Platform.current()
+    for holder in platform.lock_holders(directory):
+        holder.evict()
+    StoreLockContention(ROUTE_PUBLICATION_WAIT_SECONDS).acquire(
+        directory, platform, mode=ExclusiveLock())
 
 
 def route_new_bus(route: ActiveRoute, path: Path) -> str:
