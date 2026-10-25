@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import select
+
+import agent_comms
 import sqlite3
 import subprocess
 import sys
@@ -13,9 +15,43 @@ import pytest
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.process_claim import ClaimHeldError, ProcessSingleton
-from agent_comms.store_files import StoreBusy, StoreLockContention
+from agent_comms.store_files import SingleFileStore, StoreBusy, StoreLockContention
 
-from test_locked_store import assert_writer_excluded, event, process
+from test_locked_store import (
+    _hold_store_write, assert_writer_excluded, event, process,
+)
+
+
+def _competing_write(owner, path, started, entered):
+    started.set()
+    with owner.write_guard(path):
+        entered.set()
+
+
+def _read_store_guard(owner, path, done):
+    with owner.read_guard(path):
+        done.set()
+
+
+def test_single_file_family_reads_during_writes(tmp_path):
+    owners = SingleFileStore.discover_members(agent_comms, SingleFileStore)
+    assert owners, "the single-file store family was not discovered"
+    for owner in owners:
+        path = tmp_path / owner.__name__
+        ready, release, done = event(), event(), event()
+        with process(_hold_store_write, owner, path, ready, release):
+            try:
+                assert ready.wait(5), owner
+                with process(_read_store_guard, owner, path, done):
+                    assert done.wait(5), f"{owner.__name__} read waited on its writer"
+                started, entered = event(), event()
+                with process(_competing_write, owner, path, started, entered):
+                    assert started.wait(5), owner
+                    assert not entered.wait(0.2), f"{owner.__name__} admitted another writer"
+                    release.set()
+                    assert entered.wait(5), owner
+            finally:
+                release.set()
 
 
 def _hold_claim(path, ready, release):
