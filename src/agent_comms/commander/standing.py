@@ -131,7 +131,7 @@ class PendingInstallDue(InstallDue):
         try:
             with self.logs.launching():
                 run = installer_launch.InstallRun.start(command, comms.root, LauncherPhase())
-                run.spawn()
+                run.spawn(wait=False)
         except installer_launch.InstallRunning as running:
             for unit in running.installing(self.target):
                 self.logs.record(unit.logs, self.repo, self.main)
