@@ -31,7 +31,11 @@ class StoresView(StatusSourced, RevisionView):
     """Every observed store; the activity expiry tick is not a store."""
 
 
-class StatusView(StatusSourced, RevisionView):
+class ActivityView(RevisionView):
+    """Participant activity, including ownership, work and timed expiry."""
+
+
+class StatusView(StatusSourced, ActivityView):
     """Activity, assignments and bus reads supply thread status.
 
     Draft and finished CLI items share one store. Neither changes the
@@ -40,7 +44,7 @@ class StatusView(StatusSourced, RevisionView):
     """
 
 
-class SidebarView(StatusSourced, RevisionView):
+class SidebarView(StatusSourced, ActivityView):
     """Native unread progress updates counts without rebuilding thread presentations."""
 
 
@@ -48,7 +52,7 @@ class ExternalTranscriptsView(RevisionView):
     """CLI drafts and finished items, independently of coordination status."""
 
 
-class NotificationsView(RevisionView):
+class NotificationsView(ActivityView):
     """Whole-window changes; activity is attributed to its message participants."""
 
 
