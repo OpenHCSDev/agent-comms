@@ -2,8 +2,8 @@
 
 A degraded signal is a fact Core already reads: answers owed past their window, a held plan
 phase main still lacks, a load past the ceiling. The heartbeat names them, the vibe-check
-sender puts the indictment in front of the commander, and every answering verb is refused
-until the commander answers that message (the OwedAnswer gate)."""
+sender puts the indictment in front of the commander, and every verb that answers nothing is
+refused until the commander answers that message (the OwedAnswer gate)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import time
 from collections.abc import Mapping, Sequence
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from agent_comms.bus import BusReader
 from agent_comms.commander.package import CommanderPackage
@@ -46,9 +46,6 @@ from agent_comms.todos import OwnerRequest, ProgressRead, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.turn_digests import OrderEditCountRead
-
-if TYPE_CHECKING:
-    from agent_comms.commander.order import CommanderVerb
 
 
 class EscalationSender(ServiceSender):
@@ -118,11 +115,6 @@ class Escalation:
 
     def degradation_signs(self) -> tuple[Sign, ...]:
         return ()
-
-    def blocks(self, reached: frozenset[str], action: CommanderVerb,
-               named: tuple[Message, ...]) -> bool:
-        """An escalation refuses every answering verb until it is answered itself."""
-        return True
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
@@ -231,8 +223,8 @@ class VibeCheck(UndatedStandingRule):
             " describes, this hour.",
             "Answer this burst once, naming any one of its messages with --answers: which failure"
             " in the indictment is you right now, why, and the one structural change you make"
-            " this turn. Every answering verb is refused until you do. Ignore this and the fleet"
-            " stops.",
+            " this turn. Every verb that answers nothing is refused until you do. Ignore this and"
+            " the fleet stops.",
         )
 
     def line(self) -> str:
