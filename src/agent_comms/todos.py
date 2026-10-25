@@ -2840,6 +2840,10 @@ class TodoHolder(ABC):
     def current_assignments(self) -> tuple[Assignment, ...]:
         return ()
 
+    def after_void(self, voided: Todo) -> Todo:
+        """A void changes no holder unless the holder state was made by the voided strikes."""
+        return voided
+
 
 class NoTodoHolder(TodoHolder):
     def previous_assignment(self) -> Assignment:
@@ -3724,7 +3728,8 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
             raise TodoConflict(current)
         _text(self.reason, "Void reason", 2000)
         StrikeReason(self.reason)
-        return replace(current, voided=(*current.voided, self), revision=current.revision + 1)
+        voided = replace(current, voided=(*current.voided, self), revision=current.revision + 1)
+        return voided.holder_state.after_void(voided)
 
 
 @dataclass(frozen=True)
@@ -3753,6 +3758,24 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
         current.require_assignment(self.previous)
         return replace(current, assignment=None, released=(*current.released, self),
                        revision=current.revision + 1)
+
+    def after_void(self, voided: Todo) -> Todo:
+        """The strike limit's release stands only while its strikes do: the void that drops
+        the released unit below the limit gives the task back to it in the same write."""
+        if not self.made_by_limit(voided) or voided.struck_out(self.previous.owner):
+            return voided
+        return replace(voided, assignment=self.previous)
+
+    def made_by_limit(self, current: Todo) -> bool:
+        """The released unit stood at the strike limit when this release was recorded."""
+        released = self.at.recorded_at("A release")
+        taken_back = tuple(void.strike for void in current.voided
+                           if void.at.recorded_at("A void") < released)
+        standing = tuple(recorded for recorded in current.strikes
+                         if recorded.previous.owner == self.previous.owner
+                         and recorded not in taken_back
+                         and recorded.at.recorded_at("A strike") <= released)
+        return len(standing) >= ProblemGoalOrder.StrikeLimit
 
 
 @dataclass(frozen=True)

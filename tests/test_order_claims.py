@@ -183,6 +183,27 @@ def test_second_commander_strike_takes_the_task_away(held_commander):
     assert todo.released[-1].previous == todo.strikes[-1].previous
 
 
+def test_unstrike_below_the_limit_gives_the_task_back(held_commander):
+    """Two strikes take the task away; voiding the one recorded in error restores its holder
+    in the same write."""
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    todo = store.get("P1")
+    holder = todo.held()
+    for reason in ("The first review found the original duplicated decision still present.",
+                   "The same review counted the duplicated decision a second time in error."):
+        todo = store.apply(todo.id, StrikeTodo(
+            todo.revision, ctx.incarnation, todo.held(), reason,
+            evidence=(todo.order.checked().owner,),
+        ))
+    assert todo.holder is None
+    main(["unstrike", "P1", "--why", "The second strike counted the same duplicated decision from the first review twice."], ctx)
+    restored = store.get("P1")
+    assert restored.held() == holder
+    assert len(restored.live_strikes()) == 1
+    assert restored.released == todo.released
+
+
 def claimed_by_worker(ctx) -> Todo:
     ctx.comms.goals.update_goal("worker", SetGoalAction(
         text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
