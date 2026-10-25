@@ -41,11 +41,9 @@ from .restart_scope import OwnersNamed
 from .store_files import (
     AtomicFile,
     ClaimHeldError,
-    ExclusiveLock,
     ProcessSingleton,
     StoreLockFile,
-    UNBOUNDED_CONTENTION,
-    _store_lock,
+    StoreLockOwner,
 )
 from .thread_identity import RecordedThreadIncarnation
 from .tool_result import ToolResult
@@ -220,7 +218,7 @@ class RestartQueueLayoutError(RelationViolationError):
 
 
 @dataclass(frozen=True)
-class RestartQueue:
+class RestartQueue(StoreLockOwner, declared_name=None):
     """One active record per recorded owner; settled records never enter that set."""
 
     directory: Path
@@ -245,7 +243,7 @@ class RestartQueue:
 
     @contextmanager
     def locked(self):
-        with _store_lock(self.lock_path, ExclusiveLock(), UNBOUNDED_CONTENTION):
+        with self.write_guard(self.lock_path):
             if next(self.directory.glob('*.json'), None) is not None:
                 raise RestartQueueLayoutError(
                     'Restart queue uses a retired layout; existing records require explicit conversion'

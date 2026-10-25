@@ -509,7 +509,7 @@ class StoreBusy(StoreContention):
 DEFAULT_STORE_CONTENTION = StoreWait()
 
 
-class SqliteStore(ABC):
+class SqliteStore(StoreLockOwner, ABC, declared_name=None):
     """A SQLite file serializes connection boundaries, not the SQL between them."""
 
     __slots__ = ()
@@ -538,8 +538,7 @@ class SqliteStore(ABC):
             retirement = lifetime.enter_context(ExitStack())
             with _store_lock(path, ExclusiveLock(), contention):
                 connection = lifetime.enter_context(opening())
-            lifetime.callback(retirement.enter_context,
-                              _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION))
+            lifetime.callback(retirement.enter_context, cls.write_guard(path))
             yield connection
 
     @classmethod
@@ -555,7 +554,7 @@ class SqliteStore(ABC):
         cls, path: Path, *, isolation_level: _IsolationLevel = None, uri: bool = False,
     ) -> Iterator[sqlite3.Connection]:
         """Keep other connections out, with transaction semantics declared by the caller."""
-        with (_store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION),
+        with (cls.write_guard(path),
               closing(cls.writer(path, isolation_level=isolation_level, uri=uri)) as db):
             yield db
 

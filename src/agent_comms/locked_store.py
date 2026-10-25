@@ -551,7 +551,7 @@ class LockedFile(RootFile, StoreLockOwner, declared_name=None):
     @contextmanager
     def writers_drained(cls, path: Path) -> Iterator[None]:
         """Its writers ask maintenance under this lock, so holding it waits out the last."""
-        with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
+        with cls.write_guard(path):
             yield
 
 
