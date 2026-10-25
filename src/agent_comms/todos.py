@@ -55,7 +55,7 @@ from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.errors import MissingSourceLine, ToolRefusedError
+from agent_comms.errors import MissingSourceLine, TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import (
     GoalId,
     FieldCodec,
@@ -2546,10 +2546,8 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
         return (self.claim,)
 
     def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
-        if not record.request.head.startswith(self.claim.head):
-            raise TodoError(
-                f"Review head {record.request.head} does not match claimed head {self.claim.head}."
-            )
+        """The reviewed head is GitHub's current head (HeadVerdict.reviewed); the claim's head
+        is what the unit said at claim time and never gates a later push."""
         return self.copy_as(ReviewingProblemOrder, review=record)
 
 
@@ -2563,6 +2561,10 @@ class ReviewingProblemOrder(ClaimedProblemOrder):
     def line(self) -> str:
         return (f"Under review by {self.review.actor.name} on #{self.review.request.pr} "
                 f"at {self.review.request.head[:9]}")
+
+    @property
+    def work_commit(self) -> str:
+        return self.review.request.head
 
     def owed_claims(self) -> tuple[OrderClaim, ...]:
         return ()
@@ -2771,10 +2773,6 @@ class HuntRecord(TodoStoreRows, TypedTable):
     hunt: Hunt
 
 
-class TodoError(ToolRefusedError):
-    """A todo request is invalid or its persisted state cannot be trusted."""
-
-
 class SharedWorktreeRefusal(TodoError):
     """Two different order holders cannot write into the same physical worktree."""
 
@@ -2793,15 +2791,6 @@ class SharedWorktreeRefusal(TodoError):
 
 class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
     """The todo store could not complete its write; its original cause is preserved."""
-
-
-class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
-    """The expected revision, assignee or generation is no longer current."""
-
-    def __init__(self, current: Todo):
-        self.current = current
-        owner = current.assignment.owner if current.assignment else "unassigned"
-        super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
 
 
 class NotOrderCommander(TodoError):  # noqa: N818 - domain-specific refusal outcome

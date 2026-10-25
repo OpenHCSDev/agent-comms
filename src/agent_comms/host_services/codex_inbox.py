@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
+from ..child_process import ResidentManager
 from ..launch_runtime import LaunchRuntime
 from . import ServiceNotServingError, SystemdUserService
 
@@ -38,31 +38,14 @@ class CodexInboxService(SystemdUserService):
         if not cls.unit_file(Path.home()).is_file():
             return ()
         prefix = cls.unit.removesuffix(".service")
-        listed = subprocess.check_output(
-            (
-                "systemctl",
-                "--user",
-                "list-units",
-                prefix + "*",
-                "--state=active",
-                "--plain",
-                "--no-legend",
-            ),
-            text=True,
-        )
         instances = tuple(
-            cls(line.split()[0].removeprefix(prefix).removesuffix(".service"))
-            for line in listed.splitlines()
-            if line.strip()
+            cls(name.removeprefix(prefix).removesuffix(".service"))
+            for name in ResidentManager.current().listed(prefix + "*")
         )
         return tuple(instance for instance in instances if instance.pid() != 0)
 
     def serves(self) -> None:
-        active = subprocess.run(
-            ("systemctl", "--user", "is-active", "--quiet", self.unit_name()),
-            check=False,
-        )
-        if active.returncode != 0:
+        if not ResidentManager.current().activity(self.unit_name()).serving():
             raise ServiceNotServingError(f"{self.described()} is not active")
         runtime = self.runtime()
         installed = LaunchRuntime.installed().interpreter

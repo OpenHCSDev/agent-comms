@@ -13,7 +13,8 @@ from agent_comms.progress_claims import MergedClaim
 from agent_comms.slop import CreatedLine, DeclarationDerivation, ExistingLine, OwnerLine, Slop
 from agent_comms.thread_execution import CommanderForkExecution
 from agent_comms.threads import Thread
-from agent_comms.todos import CommitDelivery, TodoError
+from agent_comms.errors import TodoError
+from agent_comms.todos import CommitDelivery
 from agent_comms.work_branches import WorkBranches
 from test_order_scopes import assigned
 from test_todos import order

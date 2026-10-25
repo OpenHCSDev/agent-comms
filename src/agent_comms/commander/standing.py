@@ -131,7 +131,7 @@ class PendingInstallDue(InstallDue):
         try:
             with self.logs.launching():
                 run = installer_launch.InstallRun.start(command, comms.root, LauncherPhase())
-                run.spawn()
+                run.spawn(wait=False)
         except installer_launch.InstallRunning as running:
             for unit in running.installing(self.target):
                 self.logs.record(unit.logs, self.repo, self.main)
@@ -414,15 +414,14 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
     def scan_orders(cls, comms: Comms, commander: str,
                     scan: HeldOrders) -> tuple[UnownedWheelSpin, ...]:
         actor = comms.registry.require(commander).incarnation
-        rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
-                     if not todo.holder_state.current_assignments())
-        return cls.paired(comms, commander, rows, scan)
+        return cls.paired(comms, commander, comms.goals.todos.for_commander(actor), scan)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str,
                todos: Iterable[Todo], scan: HeldOrders) -> tuple[UnownedWheelSpin, ...]:
         """Both the heartbeat and automatic watcher preserve work before any dispatch."""
-        rows = tuple(todo for todo in todos if todo.pending)
+        rows = tuple(todo for todo in todos
+                     if todo.pending and not todo.holder_state.current_assignments())
         retained = tuple(CheckoutHeldWheelSpin(todo, work)
                          for todo in rows
                          for work in comms.registry.storage_rule.work_for_problem(
@@ -439,6 +438,9 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,
                 *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))
+
+    def redecided(self, comms: Comms, commander: str, current: Todo) -> tuple[StandingRule, ...]:
+        return type(self).paired(comms, commander, (current,), HeldOrders.read(comms, commander))
 
     def line(self) -> str:
         return f"UNOWNED ROW: {self.todo.id} waits for a new unit"

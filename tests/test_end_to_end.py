@@ -15,6 +15,10 @@ from agent_comms.runtime import socket_path
 from agent_comms.read_basis import NamedViewer
 from native_backend_fixture import native_backend_fixture
 
+# Each test boots native Pi and chains CLI children; `fork` alone boots Pi twice (its
+# --model catalog through GetAvailableModels, then the thread), so 60 s is not a budget.
+pytestmark = pytest.mark.timeout(180)
+
 
 @pytest.fixture
 async def native(tmp_path, native_runtime_package):
@@ -27,7 +31,7 @@ async def cli(programs, root, *arguments):
     # wire are one runtime: a root refuses a second one (root_runtime.py:56).
     result = await BoundedRun.run(
         (sys.executable, str(programs.script(main)), '--root', str(root), *arguments),
-        timeout=20, env=dict(os.environ),
+        timeout=60, env=dict(os.environ),
     )
     assert result.outcome.successful, (result.stdout + result.stderr).decode()
     return json.loads(result.stdout)
