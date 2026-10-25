@@ -213,7 +213,7 @@ class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, Pa
     stores: tuple[type[WriterOwnedStore], ...]
 
     def run(self) -> tuple[Annotated[Path, PathText], ...]:
-        paths = []
+        paths: list[Path] = []
         with TemporaryDirectory() as directory:
             for store in self.stores:
                 store.practice_opening(self.files, Path(directory))

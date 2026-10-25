@@ -2646,6 +2646,11 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     @classmethod
     @abstractmethod
+    def path(cls) -> Path:
+        """The live file or common root used by this owner's resource declarations."""
+
+    @classmethod
+    @abstractmethod
     def table_schema(cls) -> type[TableSchema]: ...
 
     @staticmethod

@@ -1154,7 +1154,7 @@ class CliBridge(
     @classmethod
     def state_directories(cls) -> tuple[Path, ...]:
         """Relative state directories declared by the loaded bridge members."""
-        return tuple(bridge.state_directory for bridge in CliBridge.members_with(CliBridge))
+        return tuple(bridge.state_directory for bridge in cls.members_with(cls))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -1289,7 +1289,7 @@ class BridgeDeliveryStore(WriterOwnedStore):
     each bridge's directory are its bindings."""
 
     @classmethod
-    def live(cls, root: Path) -> Path:
+    def path(cls) -> Path:
         return CliBridge.state_root()
 
     @classmethod
