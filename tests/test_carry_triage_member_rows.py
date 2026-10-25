@@ -7,6 +7,7 @@ from pathlib import Path
 from cutover.carry_triage_member_rows import TriageMemberRows
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.field_codec import AssignmentId, InputId
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.triage_native_sources import TriageNativeSource
@@ -33,7 +34,7 @@ def old_triage_store(root: Path) -> Path:
 def test_carry_splits_membership_into_rows_once(tmp_path):
     root = tmp_path / "root"
     path = old_triage_store(root)
-    step = TriageMemberRows(root, root, tmp_path / "spill")
+    step = TriageMemberRows(LiveFilesRequest(root), tmp_path / "spill")
 
     assert step.carry(apply=False).detail == {"members": 3}
     assert step.carry(apply=True).rewritten == (path.relative_to(root),)

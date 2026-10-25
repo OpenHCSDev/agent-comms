@@ -63,12 +63,16 @@ from .field_codec import (
 )
 from .lifecycle import LifecycleState
 from .locked_store import (
-    FileStore,
+    DeclaredFile,
+    DurableFile,
+    FilesRequest,
+    LiveFilesRequest,
     PublishedSQLiteFile,
     RegistryFile,
     RootFile,
     RuntimeFile,
     SQLiteFile,
+    SQLiteStorage,
     StoreCommittedError,
     WrittenFile,
 )
@@ -1051,6 +1055,12 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} foreign-key enforcement is disabled")
 
     @classmethod
+    def require_readable(cls, db: sqlite3.Connection) -> None:
+        """Every stored row must decode through its target declaration before cutover."""
+        for row in cls.schema_rows():
+            row.require_decodable_rows(db)
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         cls.create_tables(db, cls.schema_rows())
 
@@ -1776,8 +1786,42 @@ class DeclaredSchemaFacts:
         return frozenset(cls.schema_objects())
 
 
+class StoredRowDecoding(TypedRow):
+    """Stream a table's stored records through its decoder with diagnostic identities."""
+
+    declared_name: ClassVar[str]
+    row_reference_label: ClassVar[str] = "rowid"
+
+    @classmethod
+    def row_reference(cls) -> str:
+        """The stored row's diagnostic identity, independent of its decoded value."""
+        return cls.row_reference_label
+
+    @classmethod
+    @abstractmethod
+    def _select_list(cls, table: type[StoredRowDecoding]) -> str:
+        """Each stored-row declaration supplies its SQL projection."""
+
+    @classmethod
+    def require_decodable_rows(cls, db: sqlite3.Connection) -> None:
+        """Decode every row without keeping history-sized results in memory."""
+        with closing(db.execute(
+            f'SELECT {cls.row_reference()} AS "__stored_reference", '
+            f'{cls._select_list(cls)} FROM {_identifier(cls.declared_name)}'
+        )) as cursor:
+            positions = cls._positions(cursor, {"stored_reference": "__stored_reference"})
+            for stored in cursor:
+                try:
+                    cls._decode_row(stored, positions)
+                except (ValueError, TypeError) as error:
+                    raise RelationViolationError(
+                        f"{cls.declared_name} {cls.row_reference_label} {stored[0]} "
+                        f"cannot decode: {error}"
+                    ) from error
+
+
 class TypedTable(
-    FrozenColumns, TypedRow, DeclaredFamily, DeclaredSchemaFacts,
+    FrozenColumns, StoredRowDecoding, DeclaredFamily, DeclaredSchemaFacts,
     affix="Row", discovery_package="agent_comms",
 ):
     """The row declaration owns its table; no separate table/schema registry.
@@ -1832,7 +1876,7 @@ class TypedTable(
         return ", ".join(_identifier(item.wire_name) for item in cls._fields_named(names))
 
     @classmethod
-    def _select_list(cls, table: type[TypedTable]) -> str:
+    def _select_list(cls, table: type[StoredRowDecoding]) -> str:
         return cls._column_list(tuple(cls.column_projection()))
 
     @classmethod
@@ -2284,6 +2328,16 @@ class TypedTable(
         )
 
 
+@dataclass(frozen=True)
+class WriterOwnedResource(DeclaredFile):
+    """An external writer's declared live path, retaining the shared copy behavior."""
+
+    owner: type[WriterOwnedStore]
+
+    def live(self, root: Path) -> Path:
+        return self.owner.live(root)
+
+
 class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=None):
     """A table derives its producers from the writers that declare it as an output."""
 
@@ -2375,19 +2429,12 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         return all(stored.get(name) == digest for name, digest in digests.items())
 
 
-class StoreWriter(PublishedSQLiteFile, FileStore):
+class StoreWriter(PublishedSQLiteFile):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits a
     CarriedFile kind or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
     """
-
-    def __init__(self, path: Path) -> None:
-        self._path = path
-
-    @property
-    def path(self) -> Path:
-        return self._path
 
     @property
     @abstractmethod
@@ -2448,7 +2495,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
             return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
 
 
-class WriterOwnedStore(DeclaredFamily, affix="Store"):
+class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"):
     """A durable file outside the bus that its own writer reconciles when it opens it
     (``WriterOwnedFile``). An installed package declares each one through the
     ``agent_comms.writer_owned_stores`` entry point. Before cutover the installer opens a
@@ -2457,6 +2504,63 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
     launch."""
 
     entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
+    retained_directory: ClassVar[Path] = Path("writer-owned")
+
+    @classmethod
+    def retained_filename(cls) -> Path:
+        return cls.retained_directory / cls.declared_name
+
+    @classmethod
+    def content_members(cls, path: Path) -> frozenset[Path]:
+        """Retain the original primary and committed WAL bytes without checkpointing."""
+        observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
+        return cls.snapshot_members(path, observed)
+
+    @classmethod
+    def retained_name(cls, root: Path, path: Path) -> Path:
+        return cls.retained_filename()
+
+    @classmethod
+    def live(cls, root: Path) -> Path:
+        return cls.path()
+
+    @classmethod
+    def resource(cls, name: Path) -> WriterOwnedResource:
+        return WriterOwnedResource(cls, name)
+
+    @classmethod
+    def external_members(cls, files: FilesRequest) -> Mapping[Path, type[RootFile]]:
+        cls.load_declarations()
+        return {files.writer_path(store): store for store in cls.members_with(cls)}
+
+    @classmethod
+    def require_retained_name(cls, name: Path) -> None:
+        names = {store.retained_filename() for store in WriterOwnedStore.members_with(WriterOwnedStore)}
+        if name.is_relative_to(cls.retained_directory) and name not in names:
+            raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
+
+    @classmethod
+    def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
+        path = files.writer_path(cls)
+        if not path.is_file():
+            return
+        copied = directory / cls.declared_name
+        cls.copy_group(path, copied)
+        try:
+            with closing(cls.writer(copied)) as db, db:
+                cls.table_schema().install_schema(db, WriterOwnedFile())
+                cls.table_schema().require_readable(db)
+        except RelationViolationError as error:
+            raise RelationViolationError(
+                f"{path} cannot open on this runtime: {error}") from error
+
+    @staticmethod
+    def practice_openings(root: Path, excluding: tuple[type[WriterOwnedStore], ...] = ()) -> None:
+        WriterOwnedStore.load_declarations()
+        stores = set(WriterOwnedStore.members_with(WriterOwnedStore)) - set(excluding)
+        with TemporaryDirectory() as directory:
+            for store in stores:
+                store.practice_opening(LiveFilesRequest(root), Path(directory))
 
     @classmethod
     @abstractmethod
@@ -2474,25 +2578,9 @@ class WriterOwnedStore(DeclaredFamily, affix="Store"):
             entry.load()
 
     @classmethod
-    def practice_opening(cls, directory: Path) -> None:
-        """The writer's own opening, run on a copy, so the stored file is never written."""
-        path = cls.path()
-        if not path.is_file():
-            return
-        copy = SQLiteFile.copy_file(path, directory / path.name)
-        try:
-            with closing(SQLiteFile.writer(copy)) as db, db:
-                cls.table_schema().install_schema(db, WriterOwnedFile())
-        except RelationViolationError as error:
-            raise RelationViolationError(
-                f"{path} cannot open on this runtime: {error}") from error
-
-    @staticmethod
-    def practice_openings() -> None:
-        WriterOwnedStore.load_declarations()
-        with TemporaryDirectory() as directory:
-            for store in WriterOwnedStore.members_with(WriterOwnedStore):
-                store.practice_opening(Path(directory))
+    def member_named(cls, name: object) -> type[Self]:
+        cls.load_declarations()
+        return super().member_named(name)
 
 
 class CarriedWriter(HolderWrittenFile, StoreWriter):
@@ -2509,6 +2597,11 @@ class WalStore(StoreWriter, StoreLockFile):
     """One WAL file owns connection setup, attachment and retirement."""
 
     synchronous: ClassVar[str] = "FULL"
+
+    @property
+    @abstractmethod
+    def path(self) -> Path:
+        """The physical file, supplied by a root declaration or file constructor."""
 
     @contextmanager
     def committed_or_empty(
@@ -2682,6 +2775,13 @@ class WithoutRowid(TypedTable, declared_name=None):
     """The table is stored directly by its declared primary key."""
 
     without_rowid = True
+    row_reference_label = "key"
+
+    @classmethod
+    def row_reference(cls) -> str:
+        return "json_array(" + cls._column_list(tuple(
+            item.name for item in cls._fields if item.column.primary_key
+        )) + ")"
 
 
 @dataclass(frozen=True)

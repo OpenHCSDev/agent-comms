@@ -1956,12 +1956,14 @@ class ReconcileStoresCliCommand(
 class PlannedReconcileCliCommand(
     StoreReconcileCliCommand[PlannedStoresResult], declared_name="planned-reconcile",
 ):
+    carrying: Annotated[tuple[type[WriterOwnedStore], ...], Argument(options={"nargs": "*"})] = ()
+    """These declarations are validated after their pending carries, not before them."""
     help = ("Name every store reconcile-stores would rewrite, reading each without writing; "
             "the installer backs them up and checks them against its rehearsal first")
 
     def answer(self, root: Path) -> PlannedStoresResult:
         """A store outside the bus that the target's writer could not open refuses the plan."""
-        WriterOwnedStore.practice_openings()
+        WriterOwnedStore.practice_openings(root, excluding=self.carrying)
         rewrites: list[StoreRewrite] = []
         for path, owner in sorted(ReconciledFile.existing_in(root).items()):
             schema = owner.schema_at(path)

@@ -7,6 +7,7 @@ import sqlite3
 
 import pytest
 
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.field_codec import ClaimId, GoalId, InputId, TurnId
 from agent_comms.installer.backup import bus_files
 from bus_record_fixture import prepare_native_comms
@@ -37,7 +38,7 @@ def test_published_change_signal_is_not_a_bus_resource(tmp_path: Path) -> None:
         pass
     CoordinationStore.publish_change(path)
 
-    resources = bus_files(tmp_path)
+    resources = bus_files(LiveFilesRequest(tmp_path))
     paths = {resource.path for resource in resources}
     assert path.relative_to(tmp_path) in paths
     assert all(marker.relative_to(tmp_path) not in paths
@@ -101,7 +102,7 @@ def test_parameterized_sqlite_resources_follow_their_file_owner(tmp_path: Path, 
         actual = {path for path in tmp_path.rglob("*") if path.is_file()}
         assert len(actual) > 1  # The real SQLite writer has an open journal/WAL.
         assert actual <= NativeInputProof.files_in(tmp_path)
-        assert DeclaredFile(NativeInputProof, proof.relative_to(tmp_path)) in bus_files(tmp_path)
+        assert DeclaredFile(NativeInputProof, proof.relative_to(tmp_path)) in bus_files(LiveFilesRequest(tmp_path))
 
 
 def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_path: Path) -> None:

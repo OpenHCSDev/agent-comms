@@ -59,6 +59,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import PathText
+from agent_comms.typed_table import WriterOwnedStore
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer.backup import (
@@ -125,6 +126,7 @@ from agent_comms.installer.probes.carry import (
     FirstPendingOperation,
     MigrateOperation,
     RetireInputsOperation,
+    WriterOwnedOpeningProbe,
 )
 from agent_comms.installer.probes.commands import (
     CliCommandProbe,
@@ -148,7 +150,9 @@ from agent_comms.installer.runtime_resolution import RuntimeResolution, StackPro
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
+from agent_comms.locked_store import (
+    BusFile, DeclaredFile, FilesRequest, LiveFilesRequest, RetainedCopyRequest, RootFile, UndeclaredFile,
+)
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -217,12 +221,13 @@ class RehearsalFiles:
 
 
 def carried(
-    root: Path,
+    files: FilesRequest,
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
     steps: tuple[StepRun, ...], expected: frozenset[Path],
+    external: tuple[type[WriterOwnedStore], ...] = (),
 ) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
-    after = bus_files(root)
+    after = bus_files(files, external)
     physical = {key for key in before.keys() | after.keys()
                 if before.get(key) != after.get(key)}
     members = {member: resource.path for resource, snapshot in (*before.items(), *after.items())
@@ -247,7 +252,7 @@ class Extendable:
     """A record a subclass extends with facts of its own; the shared ones carry over."""
 
     def extended[Record](self, kind: type[Record], **facts: object) -> Record:
-        return kind(**{each.name: getattr(self, each.name) for each in fields(self)}, **facts)
+        return kind(**({each.name: getattr(self, each.name) for each in fields(self)} | facts))
 
 
 @dataclass(frozen=True)
@@ -260,7 +265,7 @@ class CarriedPass(Extendable):
     read: BusReadBack
     retired_inputs: tuple[StepRun, ...] = field(default=(), kw_only=True)
 
-    def after_acceptance(self, pending: tuple[Carry, ...], stack: Stack) -> Self:
+    def after_acceptance(self, pending: tuple[Carry, ...], stack: TargetStack) -> Self:
         return replace(self, retired_inputs=tuple(
             StepRun(step.declared_name, retired) for step, retired in
             zip(pending, stack.call_steps(pending, RetireInputsOperation()), strict=True)
@@ -538,7 +543,7 @@ class HeldOwnersStopped(OwnersStopped):
 
 
 @dataclass(frozen=True)
-class Stack:
+class Stack(Extendable):
     """One built installation and the source checkout containing its install tools."""
 
     checkout: Path
@@ -608,19 +613,20 @@ class Stack:
         self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
                           "--python", "3.14", cwd=self.checkout)
 
-    @classmethod
-    def build(cls, checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> Stack:
+    @staticmethod
+    def build(checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> TargetStack:
         """Resolve current mains once, then build or reuse their immutable installation."""
         with BuildPhase().running(commands.clock):
-            source = cls(checkout.path, commands, home, runtime=LaunchRuntime.running())
+            source = Stack(checkout.path, commands, home, runtime=LaunchRuntime.running())
             source.require_uv()
             source.resolve()
             core = commands.git(checkout.path, "rev-parse", "HEAD").strip()
             resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
             runtimes = home / ".local/share/agent-comms/runtimes"
             prefix = runtimes / f"core-{core[:9]}-lock-{resolution}"
-            built = replace(source, runtime=LaunchRuntime.at_prefix(prefix),
-                            program=TargetProgram(checkout.path / STEPS.parent))
+            built = source.extended(
+                TargetStack, runtime=LaunchRuntime.at_prefix(prefix),
+                program=TargetProgram(checkout.path / STEPS.parent))
             if prefix.exists():
                 if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
                     raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
@@ -733,16 +739,6 @@ class Stack:
             time.sleep(5)
         raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {waited}")
 
-    def call_steps[Answer](self, steps: tuple[Carry, ...],
-                           operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
-        """Run one pass of steps, in order, in this stack's worker; the operation owns
-        traversal and its answer tuple. Every caller passes the staged stack, built from
-        the target tree, so Core comes from its compiled installation and only the steps
-        come from the tree (``TargetProgram``)."""
-        if not steps:
-            return ()
-        return self.probe(CarryProbe(operation, steps))
-
     def restore_stores(self, hold: MaintenanceState) -> MaintenanceState:
         """Retarget the caller's hold while the outgoing runtime rebuilds projections."""
         root = Path(hold.root)
@@ -803,6 +799,34 @@ class Stack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
         with ReadBackVerifyPhase().running(self.commands.clock):
             return self.cli(root, ReadBackCliCommand)
+
+
+@dataclass(frozen=True)
+class TargetStack(Stack):
+    """The built target owns carry declarations and the locks its worker borrows."""
+
+    program: TargetProgram = field(kw_only=True)
+
+    @contextmanager
+    def borrowing(self, stores: tuple[type[WriterOwnedStore], ...],
+                  files: FilesRequest) -> Iterator[TargetStack]:
+        """The installer retains file locks through rollback; workers only borrow them."""
+        if not stores:
+            yield self
+            return
+        with ExitStack() as lifetime:
+            locks = tuple(lifetime.enter_context(store.retaining(files.writer_path(store)))
+                          for store in stores)
+            program = self.program.borrowing(locks)
+            lifetime.callback(self.commands.close_program, self.python, program)
+            yield replace(self, program=program)
+
+    def call_steps[Answer](self, steps: tuple[Carry, ...],
+                           operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
+        """Run the target's declared passes in order, in its own worker."""
+        if not steps:
+            return ()
+        return self.probe(CarryProbe(operation, steps, self.program.inherited_locks))
 
 
 @dataclass(frozen=True)
@@ -875,12 +899,12 @@ class PracticeBus:
             yield cls(Path(scratch), PracticeCopy(root, Path(scratch) / "bus"), root,
                       Path(spill), clock)
 
-    def pending(self, chain: CarryChain, staged: Stack) -> tuple[type[Carry], ...]:
+    def pending(self, chain: CarryChain, staged: TargetStack) -> tuple[type[Carry], ...]:
         """Read-only dry runs in one worker stop at the first step that says work remains."""
         unfinished = chain.unfinished_at(self.original_root).steps
         if not unfinished:
             return ()
-        steps = tuple(step(self.original_root, self.original_root, self.spill_dir)
+        steps = tuple(step(LiveFilesRequest(self.original_root), self.spill_dir)
                       for step in unfinished)
         (position,) = staged.call_steps(steps, FirstPendingOperation())
         return unfinished[position:]
@@ -896,7 +920,7 @@ class PracticeBus:
         with CopyPhase().running(self.clock):
             self.copy.include(paths)
             self.copy.retain(paths)
-        return tuple(sorted(path.relative_to(self.original_root) for path in self.copy.copied))
+        return self.copy.copied_names
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
@@ -961,7 +985,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     chain: CarryChain
     pending: tuple[Carry, ...]
     installed: Stack
-    staged: Stack
+    staged: TargetStack
     tree: TargetTree
     installer: InstallerChoice
     spill_dir: Path
@@ -1006,7 +1030,7 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     @classmethod
     @contextmanager
-    def bridges_paused(cls, installed: Stack, staged: Stack,
+    def bridges_paused(cls, installed: Stack, staged: TargetStack,
                        bridges: SessionBridgeResumes) -> Iterator[None]:
         """Session bridges close their bus resources before the install holds the bus. A
         bridge paused under the hold dies on its exit-time registry write and never answers
@@ -1019,19 +1043,19 @@ class Install[Rehearsed: Rehearsal](ABC):
     @classmethod
     @contextmanager
     def owners_kept(cls, root: Path, installed: Stack,
-                    staged: Stack) -> Iterator[OwnersStopped]:
+                    staged: TargetStack) -> Iterator[OwnersStopped]:
         """Every owner keeps running: none runs at the root, or the run touches only a copy."""
         yield OwnersStopped()
 
     @classmethod
     def owners_stopped(cls, root: Path, installed: Stack,
-                       staged: Stack) -> AbstractContextManager[OwnersStopped]:
+                       staged: TargetStack) -> AbstractContextManager[OwnersStopped]:
         return cls.owners_kept(root, installed, staged)
 
     @classmethod
     @abstractmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
-                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  chain: CarryChain, installed: Stack, staged: TargetStack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path,
                   *, lifetime: ExitStack) -> tuple[Install, Rehearsal]:
         """This member's install, with what is pending, and its rehearsal."""
@@ -1089,7 +1113,7 @@ class StopsOwners:
     @classmethod
     @contextmanager
     def owners_stopped(cls, root: Path, installed: Stack,
-                       staged: Stack) -> Iterator[OwnersStopped]:
+                       staged: TargetStack) -> Iterator[OwnersStopped]:
         owners = OwnersStopped()
         with owners.give_back:
             owners.give_back.callback(owners.start_on, installed, root)
@@ -1105,7 +1129,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     @classmethod
     @contextmanager
     def owners_stopped(cls, root: Path, installed: Stack,
-                       staged: Stack) -> Iterator[OwnersStopped]:
+                       staged: TargetStack) -> Iterator[OwnersStopped]:
         """One hold, one stop and one retarget per install, all at its start. The outgoing
         runtime stops the owners: their stores still hold its declarations until this
         install carries them, and the target refuses every store whose shape it has not
@@ -1134,14 +1158,17 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
 
     @classmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
-                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  chain: CarryChain, installed: Stack, staged: TargetStack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path,
                   *, lifetime: ExitStack) -> tuple[Install, Rehearsal]:
         CarryChain.require_crossed(checkout, root, target)
         practice = lifetime.enter_context(
             PracticeBus.of(root, installer, spill_dir, staged.commands.clock))
         pending = practice.pending(chain, staged)
-        reconciled = staged.cli(root, PlannedReconcileCliCommand).rewritten
+        reconciled = staged.cli(
+            root, PlannedReconcileCliCommand, "--carrying",
+            *(store.declared_name for store in Carry.writer_declarations(pending)),
+        ).rewritten
         install = cls.of(checkout, root, current, target, chain, pending, reconciled,
                          installed, staged, tree, installer, spill_dir)
         if pending or reconciled:
@@ -1151,13 +1178,13 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
            pending: tuple[type[Carry], ...], reconciled: tuple[Path, ...],
-           installed: Stack, staged: Stack, tree: TargetTree,
+           installed: Stack, staged: TargetStack, tree: TargetTree,
            installer: InstallerChoice, spill_dir: Path) -> ExistingBusInstall:
         """A bus already carried, on the target, built from the installed lock needs nothing."""
         unchanged = not pending and not reconciled and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
-        steps = tuple(step(root, root, spill_dir) for step in pending)
+        steps = tuple(step(LiveFilesRequest(root), spill_dir) for step in pending)
         return member(checkout, root, current, target, chain, steps, installed, staged,
                       tree, installer, spill_dir)
 
@@ -1176,35 +1203,39 @@ class PreparedMigration(Extendable):
     hold: MaintenanceState
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]
     read: BusReadBack
+    files: FilesRequest
+    writer_stores: tuple[type[WriterOwnedStore], ...] = ()
 
     @property
     def root(self) -> Path:
-        return Path(self.hold.root)
+        return self.files.root
 
     @classmethod
-    def capture(cls, hold: MaintenanceState, outgoing: Stack) -> PreparedMigration:
-        """The maintenance barrier keeps every carried writer out until the caller's backup ends.
-        Settling first moves committed WAL frames into their files, as the practice copy's
-        backup did, so no later last close rewrites a file no step names."""
-        root = Path(hold.root)
+    def capture(cls, hold: MaintenanceState, outgoing: Stack, files: FilesRequest,
+                steps: tuple[Carry, ...] = ()) -> PreparedMigration:
+        """Snapshot the held bus and the chain's declared external locations.
+        Only bus resources settle; external bytes reach backup without a prior write."""
+        writer_stores = Carry.writer_declarations(steps)
         with BeforeMigrationFileScanPhase().running(outgoing.commands.clock):
-            settle_bus_files(root)
-            before = bus_files(root)
-        return cls(hold, before, outgoing.verify(root))
+            settle_bus_files(files, writer_stores)
+            before = bus_files(files, writer_stores)
+        return cls(hold, before, outgoing.verify(files.root), files, writer_stores)
 
     def carry(
-        self, pending: tuple[Carry, ...], staged: Stack,
+        self, pending: tuple[Carry, ...], staged: TargetStack,
         reconcile_arguments: tuple[str, ...] = (),
     ) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
+        staged.probe(WriterOwnedOpeningProbe(self.files, self.writer_stores))
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand, *reconcile_arguments)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
         declared = tuple(steps)
         with AfterMigrationFileScanPhase().running(staged.commands.clock):
-            files = carried(self.root, self.before, declared, RehearsalFiles.declared(declared))
+            files = carried(self.files, self.before, declared,
+                            RehearsalFiles.declared(declared), self.writer_stores)
         passed = CarriedPass(declared, files, staged.verify(self.root))
         passed.require_read(self.read)
         return passed
@@ -1213,18 +1244,21 @@ class PreparedMigration(Extendable):
 class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> CarriedRehearsal:
         copied = practice.copy.path
+        files = RetainedCopyRequest(copied)
         home = practice.scratch / "home"
         RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(self.staged, home=home)
-        pending = tuple(replace(step, root=copied, spill_dir=practice.spill_dir)
+        pending = tuple(replace(step, files=files, spill_dir=practice.spill_dir)
                         for step in self.pending)
         inputs = practice.select(self.pending, reconciled)
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
-        with hold.holding():
-            migration = PreparedMigration.capture(hold, self.installed)
+        with hold.holding(), stack.borrowing(
+            Carry.writer_declarations(pending), files,
+        ) as stack:
+            migration = PreparedMigration.capture(hold, self.installed, files, pending)
             passed = migration.carry(pending, stack)
             passed = passed.after_acceptance(pending, stack)
         maintenance.clear(hold)
@@ -1235,35 +1269,44 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         return UncopiedRehearsal()
 
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
+        files = LiveFilesRequest(self.root)
+        pending = tuple(replace(step, files=files) for step in self.pending)
         expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
-        selected = tuple(self.root / name for name in sorted(expected))
+        resources = RootFile.named_files(files, expected)
+        selected = tuple(files.location(resource) for resource in resources)
         with RestoreSpaceBackupPhase().running(self.staged.commands.clock):
             restore = RestoreSpace.measure(max(
                 rehearsal.files.restore_bytes,
                 sum(path.stat().st_size for path in selected if path.exists()),
             ), self.root.parent)
             restore.require()
-        with self.staged.services_stopped(self.installed) as stopped:
+        with self.staged.borrowing(
+            Carry.writer_declarations(pending), files,
+        ) as staged, staged.services_stopped(self.installed) as stopped:
             # The install's start holds the root and stopped its owners (owners_stopped).
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
             holder = ExitStack()
             try:
                 try:
-                    planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
+                    planned = self.staged.cli(
+                        self.root, PlannedReconcileCliCommand, "--carrying",
+                        *(store.declared_name for store in Carry.writer_declarations(self.pending)),
+                    )
                     unrehearsed = sorted(
                         frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
                     if unrehearsed:
                         raise UpgradeRefused(
                             f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
                     carry_files = frozenset(
-                        path.relative_to(self.root)
-                        for step in self.pending for path in step.input_files())
+                        resource.path for step in pending
+                        for resource in RootFile.owned_files(files, step.input_files()))
                     omitted = (frozenset(planned.rewritten)
                                - frozenset(planned.backup_files) - carry_files)
-                    selected = tuple(path for path in selected
-                                     if path.relative_to(self.root) not in omitted)
+                    selected = tuple(files.location(resource) for resource in resources
+                                     if resource.path not in omitted)
                     migration = PreparedMigration.capture(
-                        maintenance.held_by(MaintenanceOperator.current()), self.installed)
+                        maintenance.held_by(MaintenanceOperator.current()), self.installed,
+                        files, pending)
                     backup, selected_route = self.backed_up(selected)
                 except BaseException as error:
                     with AbortMaintenancePhase().running(self.staged.commands.clock):
@@ -1275,8 +1318,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     raise
                 try:
                     self.checkout_target()
-                    passed = migration.carry(
-                        self.pending, self.staged, rehearsal.reconcile_arguments())
+                    passed = migration.carry(pending, staged, rehearsal.reconcile_arguments())
                     passed.files.require_rehearsal(rehearsal.files)
                     self.publish(backup, selected_route)
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
@@ -1324,7 +1366,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     retirement = tuple(replace(
                         step, spill_dir=backup.spill_directory(self.spill_dir),
                     ) for step in self.pending)
-                    passed = passed.after_acceptance(retirement, self.staged)
+                    passed = passed.after_acceptance(retirement, staged)
                 finally:
                     started = report.owners.published_on(self.staged, self.root)
                 with BackupRetirePhase().running(self.staged.commands.clock):
@@ -1360,7 +1402,7 @@ class FreshInstall(Install[FreshRehearsal]):
 
     @classmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
-                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  chain: CarryChain, installed: Stack, staged: TargetStack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path,
                   *, lifetime: ExitStack) -> tuple[Install, Rehearsal]:
         """Nothing at the root to copy, so nothing is pending."""
