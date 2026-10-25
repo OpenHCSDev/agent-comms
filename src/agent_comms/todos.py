@@ -3342,10 +3342,6 @@ class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, StorySo
             for event in self.history_events(current):
                 StoredOrderStory.append(db, current.id, event)
             result.upsert(db)
-            result = self.after_write(db, result, store)
-        return result
-
-    def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
         return result
 
     def apply(self, current: Todo) -> Todo:
@@ -3512,9 +3508,7 @@ class StrikeTodo(CitedStrike, StoryEvent):
 
     def notice(self, changed: Todo) -> str:
         count = changed.strikes_against(self.previous.owner_identity)
-        return (f"Core strike {count} on {changed.id} order {changed.order.checked().id}: "
-                f"{self.previous.owner} {self.reason}; read {self.previous.owner}'s trail "
-                "and diff and diagnose why it keeps missing")
+        return f"Core strike {count} on {changed.id}: {self.previous.owner} {self.reason}"
 
     def story_text(self) -> str:
         return f"{self.actor.name} struck {self.previous.owner}: {self.reason}"
@@ -3552,6 +3546,9 @@ class FailedCheckStrike(StrikeTodo):
     once per order and holder, in the existing strike history."""
 
     order_id: OrderId
+
+    def notice(self, changed: Todo) -> str:
+        return f"{super().notice(changed)}; order {self.order_id}"
 
     @classmethod
     def make(cls, todo: Todo, now: float, reason: str) -> Self:
@@ -4214,8 +4211,9 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
         StrikeReason(self.reason)
         return replace(current, revision=current.revision + 1)
 
-    def after_write(self, db: sqlite3.Connection, result: Todo, store: TodoStore) -> Todo:
+    def write(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> Todo:
         """Restore only after the append makes the void visible to the strike aggregate."""
+        result = super().write(db, current, store)
         restored = result.holder_state.after_void(result)
         restored.upsert(db)
         return restored
