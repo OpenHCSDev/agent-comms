@@ -580,7 +580,8 @@ class RegisteredCommanderProject(CommanderProject):
         return selected
 
     def repository_names(self) -> tuple[RepositoryName, ...]:
-        return tuple(repo.github for repo in self.repos)
+        """Each GitHub repository once, however many registered checkouts point at it."""
+        return tuple(dict.fromkeys(repo.github for repo in self.repos))
 
     def require(self) -> RegisteredCommanderProject:
         return self
