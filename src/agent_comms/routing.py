@@ -261,21 +261,5 @@ class DeliveryScope(MessageDisplayScope):
         yield PublicSender()
         yield from source.recorded_or(lambda recorded: (recorded.lookup,), missing)
 
-    def minimum_timestamp(
-        self, sender: str, target: str, sender_lookup: ThreadLookup | PublicSender,
-        snapshot: RegistryProvenance
-    ) -> float | None:
-        """Require current identities while preserving aliases of one incarnation."""
-
-        if not self.delivers(sender, target):
-            return None
-        source = snapshot.threads.get(self.canonical(sender))
-        if source is None:
-            return None
-        incarnation = source.incarnation
-        if sender_lookup not in self.sender_lookups(incarnation, incarnation.require_recorded):
-            return None
-        return max(source.incarnation.wire_birth, snapshot.threads[self.actor].incarnation.wire_birth)
-
     def conversation(self, sender: str, target: str) -> str:
         return CommandTarget.named(target).conversation(sender, self.actor, self.canonical)

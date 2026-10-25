@@ -189,10 +189,12 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
 
     @cached_property
     def sender_bindings(self) -> Mapping[str, str]:
-        """One lazy SQL value for this namespace, including its historical names."""
+        """Current sender identities and births for one SQL read, including aliases."""
         senders = {}
+        births = {}
         unrecorded: list[str] = []
         for name, source in self.named_members():
+            births[name] = source.incarnation.wire_birth
             senders[name] = tuple(DeliveryScope.sender_lookups(
                 source.incarnation, partial(unrecorded.append, name)
             ))
@@ -201,6 +203,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
                 senders, dict[str, tuple[ThreadLookup | PublicSender, ...]]
             )),
             "unrecorded": json.dumps(unrecorded),
+            "births": json.dumps(births),
         })
 
     def retired(self, name: str) -> bool:
