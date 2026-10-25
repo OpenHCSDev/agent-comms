@@ -117,12 +117,16 @@ class PlanPhase(OrderPhase, declared_name=None):
     task: ClassVar[PhaseTask] = UnspecifiedPhaseTask()
 
     @classmethod
+    def phase_evidence(cls) -> PhaseEvidence:
+        return cls.evidence
+
+    @classmethod
     def serving(cls, todos: tuple[Todo, ...]) -> tuple[Todo, ...]:
         return tuple(todo for todo in todos if todo.order.phase is cls)
 
     @classmethod
     def done(cls, reading: PlanReading) -> bool:
-        return reading.holds(cls.evidence)
+        return reading.holds(cls.phase_evidence())
 
     @classmethod
     def holding(cls, reading: PlanReading) -> tuple[Todo, ...]:
@@ -190,9 +194,9 @@ class ToadAskPhase(OwnerAsksPhase, declared_name=None):
     """An ask whose code lands in Toad. Evidence reads only the plan repository's main, so the
     plan document records the merged Toad commit under the phase's own name."""
 
-    def __init_subclass__(cls, **options: str | None) -> None:
-        super().__init_subclass__(**options)
-        cls.evidence = PatternPresent(
+    @classmethod
+    def phase_evidence(cls) -> PhaseEvidence:
+        return PatternPresent(
             rf"^- {cls.declared_name} landed: OpenHCSDev/toad@[0-9a-f]{{40}}$",
             (OwnerAsksPlan.document,),
         )
@@ -283,14 +287,14 @@ class ParityPhase(CommanderNativePhase):
     """The native capability owners, not a second matrix of demonstrations, decide completion."""
 
     after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, CommanderPagePhase)
-    evidence = ParityEvidence(tuple(phase.evidence for phase in after))
+    evidence = ParityEvidence(tuple(phase.phase_evidence() for phase in after))
 
 
 class CutoverPhase(CommanderNativePhase):
     """The native evidence passes and the machine-wide commander configuration is gone."""
 
     after = (ParityPhase,)
-    evidence = AllEvidence((ParityPhase.evidence, PatternAbsent(r"\bCommanderConfig\b")))
+    evidence = AllEvidence((ParityPhase.phase_evidence(), PatternAbsent(r"\bCommanderConfig\b")))
 
 
 class SkillPhase(CommanderNativePhase):
