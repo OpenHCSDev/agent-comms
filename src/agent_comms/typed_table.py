@@ -67,6 +67,7 @@ from .locked_store import (
     SQLiteFile,
     StoreBusy,
     StoreCommittedError,
+    WrittenFile,
 )
 from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
@@ -2268,7 +2269,7 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits a
-    CarriedFile kind or RuntimeWriter, and a TypedStore inherits DurableStore or DerivedStore.
+    CarriedFile kind or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
     """
 
     def __init__(self, path: Path) -> None:
@@ -2279,9 +2280,9 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
         return self._path
 
     @property
-    def store(self) -> StoreWriter:
-        """The store whose committed row changes this writer publishes."""
-        return self
+    @abstractmethod
+    def store(self) -> WrittenFile:
+        """The file whose kind permits writes and whose committed row changes are published."""
 
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
@@ -2290,12 +2291,8 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
         an installer's drain of the write lock waits out every transaction that passed."""
         with self.publishing_changes(connection, self.store.path):
             with self.write_transaction(connection):
-                self.require_maintenance_open()
+                self.store.require_maintenance_open()
                 yield connection
-
-    @abstractmethod
-    def require_maintenance_open(self) -> None:
-        """Whether maintenance refuses this writer, which the file's kind declares."""
 
     @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:
@@ -2389,12 +2386,9 @@ class CarriedWriter(HolderWrittenFile, StoreWriter):
     writes while maintenance runs."""
 
 
-class RuntimeWriter(StoreWriter, RuntimeFile):
+class RuntimeWriter(RuntimeFile, StoreWriter):
     """A writer of a file no carry writes: running owners rewrite it at any time,
     maintenance included."""
-
-    def require_maintenance_open(self) -> None:
-        """No installation reads this file, so maintenance never refuses its writers."""
 
 
 class WalStore(StoreWriter, StoreLockFile):
