@@ -2356,7 +2356,7 @@ class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_n
                     thinking_level=defaults.thinking_level),)
 
     def project_directory(self) -> Path:
-        return Checkout.checked(Path(self.project)).path
+        return Checkout.checked(self.project).path
 
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)

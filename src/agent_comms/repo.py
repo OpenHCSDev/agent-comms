@@ -365,9 +365,11 @@ class Checkout:
         return cls.prepared(Path(path))
 
     @classmethod
-    def checked(cls, path: Path) -> Self:
+    def checked(cls, path: Path | str) -> Self:
         """Resolve a supplied project and require a Git checkout, never the shell's cwd."""
-        path = path.expanduser().resolve(strict=True)
+        if path == "":
+            raise ValueError("Project path must not be empty")
+        path = Path(path).expanduser().resolve(strict=True)
         if not cls.present(path):
             raise ValueError(f"Project {path} is not a Git checkout")
         return cls(path)

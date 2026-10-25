@@ -155,7 +155,7 @@ class NewThreadSpec:
     def __post_init__(self) -> None:
         from .repo import Checkout
 
-        object.__setattr__(self, "project", str(Checkout.checked(Path(self.project)).path))
+        object.__setattr__(self, "project", str(Checkout.checked(self.project).path))
 
     @classmethod
     def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:

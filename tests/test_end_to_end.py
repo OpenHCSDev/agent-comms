@@ -56,7 +56,7 @@ class TestEndToEndLifecycle:
         command = (operation, '--name', 'probe', *parent_arguments)
         plain = native.project.parent / 'plain'
         plain.mkdir()
-        for project_arguments in ((), ('--project', str(plain))):
+        for project_arguments in ((), ('--project', ''), ('--project', str(plain))):
             refused = await cli_result(source_programs, native.root, *command, *project_arguments)
             assert not refused.outcome.successful
             assert 'probe' not in comms.registry.snapshot().threads

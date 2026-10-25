@@ -265,7 +265,7 @@ class Thread(ThreadProvenance, CatalogSelection):
         from .repo import Checkout
 
         try:
-            return Checkout.checked(Path(self.worktree)).path
+            return Checkout.checked(self.worktree).path
         except (OSError, ValueError) as error:
             raise ValueError(f"Thread {self.name!r} has invalid project {self.worktree!r}: {error}") from error
 
