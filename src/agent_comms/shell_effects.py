@@ -27,9 +27,9 @@ class ShellProgram:
     @classmethod
     def executable_names(cls) -> frozenset[str]:
         """Aliases and executable capabilities declare names; consumers derive them."""
-        return cls.names | frozenset(
-            owner.program for owner in cls.__mro__ if issubclass(owner, Executable)
-        )
+        if issubclass(cls, Executable):
+            return cls.names | frozenset((cls.program,))
+        return cls.names
 
     def __init_subclass__(cls, *, names: frozenset[str] = frozenset()) -> None:
         super().__init_subclass__()
