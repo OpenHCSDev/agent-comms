@@ -104,7 +104,7 @@ class _SessionRoutes:
             return NoInputDisplay()
         if native_id not in self._input_cache:
             self._input_cache[native_id] = next(
-                InputDisplay.select(self._connection, native_id=native_id), NoInputDisplay(),
+                iter(InputDisplay.select(self._connection, native_id=native_id)), NoInputDisplay(),
             )
         return self._input_cache[native_id]
 
