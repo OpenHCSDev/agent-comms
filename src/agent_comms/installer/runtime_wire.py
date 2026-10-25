@@ -13,6 +13,8 @@ from typing import ClassVar
 
 from metaclass_registry.discovery import discover_registry_classes_recursive
 
+import agent_comms
+
 
 @dataclass(frozen=True)
 class ClientImport:
@@ -90,8 +92,6 @@ class CrossesRuntimes:
     @staticmethod
     @cache
     def _discover() -> None:
-        import agent_comms
-
         discover_registry_classes_recursive(
             agent_comms.__path__, agent_comms.__name__ + ".", CrossesRuntimes,
         )
