@@ -487,7 +487,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[UnownedWheelSpin, ...]:
         return cls.scan_orders(comms, commander, frame, frame.pulls)
 
     @classmethod
@@ -713,20 +713,20 @@ class UnitDeaf(InboxUnavailable):
 
 @dataclass(frozen=True)
 class Scrutinize(ReasonedStandingRule, UndatedStandingRule):
+    threshold: ClassVar[int] = 2
     text = ("Scrutinize {why} -> read the unit's trail and diff, name the cause, "
             "and order the fix to the cause")
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
         actor = comms.registry.require(commander).incarnation
-        named = ", ".join(
-            f"{held.owner} {todo.id} {count} strikes"
-            for todo in comms.goals.todos.held_for_commander(actor)
-            for held in todo.current_holder.current_assignments()
-            for count in (todo.strikes_against(held.owner_identity),)
-            if count >= 2
-        )
-        return named or None
+        named = []
+        for todo in comms.goals.todos.held_for_commander(actor):
+            for held in todo.current_holder.current_assignments():
+                count = todo.strikes_against(held.owner_identity)
+                if count >= cls.threshold:
+                    named.append(f"{held.owner} {todo.id} {count} strikes")
+        return ", ".join(named) or None
 
 
 @dataclass(frozen=True)

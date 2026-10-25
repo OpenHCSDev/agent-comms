@@ -6,7 +6,6 @@ FieldCodec into the PendingProblemOrder used by native tools; its other fields
 name the problems and explain the defect. No rendered instructions are parsed.
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
-Repeated misses call for diagnosis, not automatic reassignment.
 Strikes measure repeated misses and trigger scrutiny; they never release the task. A strike recorded in
 error is voided with `unstrike`, never deleted: it stays readable beside its void and stops
 counting. An order sent in error is retired with `withdraw`: its problem closes with no strike.
