@@ -148,8 +148,8 @@ def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):
                                     "    with store.locked():\n        pass\n"})
     status, report = repo.compare(base, head, StoreLockCalls)
     assert status == 1
-    grown = StoreLockCalls.key(f"{repo.root}/other.py")
-    assert report["delta"] == {StoreLockCalls.key(f"{repo.root}/turns.py"): -1, grown: 1}
+    grown = StoreLockCalls.at(f"{repo.root}/other.py").text
+    assert report["delta"] == {StoreLockCalls.at(f"{repo.root}/turns.py").text: -1, grown: 1}
     assert report["found"] == {grown: [{"path": f"{repo.root}/other.py", "line": line}
                                        for line in (2, 4)]}
 
