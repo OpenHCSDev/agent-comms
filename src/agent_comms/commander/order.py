@@ -840,12 +840,13 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
         verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
         cls.add_parser(verbs)
         parser, = verbs.choices.values()
+        placeholder = parser._get_formatter()._format_args  # the usage line's own metavar text
         words = [cls.tool(), cls.declared_name]
         for action in parser._actions:
             if action.dest in values:
                 words += [*action.option_strings[:1], values[action.dest]]
             elif action.required and not action.option_strings:
-                words.append(action.metavar or action.dest)
+                words.append(placeholder(action, action.dest))
         return ' '.join(words)
 
 
