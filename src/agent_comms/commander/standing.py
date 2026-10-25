@@ -19,6 +19,7 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.field_codec import GoalId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject
@@ -34,7 +35,7 @@ from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
@@ -396,6 +397,28 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         return f"JUDGE {self.unit} {self.problem} delivery {self.cited} -> {self.clearing_action()}"
+
+
+@dataclass(frozen=True)
+class GoalBlocked(IndependentStandingRule, UndatedStandingRule):
+    """A visible thread's own goal is blocked, with or without a commander order."""
+
+    thread: ThreadIncarnation
+    goal: GoalId
+    reason: str
+    urgent: ClassVar[bool] = True
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        snapshot = comms.registry.snapshot()
+        return tuple(cls(thread.incarnation, goal.id, reason)
+                     for thread in snapshot.visible_threads(DEFAULT_ROSTER)
+                     for goal in thread.goal
+                     for reason in goal.state.blocked_reasons())
+
+    def line(self) -> str:
+        return (f"GOAL BLOCKED {self.thread.name}: {self.reason[:200]}"
+                " -> unblock it or tell Tristan, this wake")
 
 
 @dataclass(frozen=True)

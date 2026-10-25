@@ -17,6 +17,7 @@ from agent_comms.standing_rules import (
     IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule, StuckMerge,
 )
 from agent_comms.errors import ToolRefusedError
+from agent_comms.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth
 from agent_comms.order_tools import CommsHeadVerdictTool
@@ -95,6 +96,20 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
                 "--at", location, "--derive", "base-method", "--by", location], context)
     assert isinstance(comms.goals.todos.head_reviews(request)[0].verdict, RejectedHeadVerdict)
     assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
+
+
+def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(head_bus):
+    """ok with empty --serves and both edit IDs and --pr took one run per refusal."""
+    comms, github, request = head_bus
+    context = order.Commander.read_root(comms.root)
+    with pytest.raises(RecordProblems) as refused:
+        judge.main(["ok", "E1:abcd", "--pr", str(request.pr), "--head", request.head,
+                    "--why", ACCEPTED.text, "--serves", ""], context)
+    assert {"subject", "--serves"} <= refused.value.problems.keys()
+    assert "edit IDs or --pr" in refused.value.problems["subject"]
+    assert "0 words" in refused.value.problems["--serves"]
+    assert not comms.goals.todos.head_reviews(request)
+    assert not any(f"statuses/{request.head}" in call[1] for call in github.calls())
 
 
 def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(

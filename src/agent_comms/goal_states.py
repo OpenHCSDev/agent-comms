@@ -89,6 +89,10 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def reason(self) -> str | None:
         return None
 
+    def blocked_reasons(self) -> tuple[str, ...]:
+        """Only a blocked state contributes a commander warning."""
+        return ()
+
     @property
     def pause_source(self) -> PauseSource | None:
         return None
@@ -155,6 +159,13 @@ class PausedGoal(OpenGoal, FromOpenGoal):
 
 
 class BlockedState(GoalState, FromOpenGoal):
+    @property
+    def reason(self) -> str:
+        return "no reason recorded"
+
+    def blocked_reasons(self) -> tuple[str, ...]:
+        return (self.reason,)
+
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         return replace(action.continue_goal(goal, ctx), state=ActiveGoal())
 

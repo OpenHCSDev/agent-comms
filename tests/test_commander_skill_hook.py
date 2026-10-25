@@ -130,7 +130,7 @@ def test_the_board_rides_every_tool_call_until_a_packet_clears_it(tmp_path, monk
         assert hook.take() == ()  # the bridge has recorded no packet
         BoardLineRow.record(db, CommanderDecisions(lead, (stale, waiting), (stale, waiting), ()))
         line, = stale.board(BoardLine)
-        assert hook.take() == hook.take() == ("BOARD: CLOSE unit-a P1 -> close it (1 min)",)
+        assert hook.take() == hook.take() == ("BOARD: CLOSE unit-a P1 -> close it (seen for 1 min)",)
         BoardLineRow.record(db, CommanderNotice(lead, (waiting,)))
         assert hook.take() == ()
 

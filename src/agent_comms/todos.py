@@ -3644,11 +3644,18 @@ class OrderQuote:
     quote: str
     rule: ClassVar[str] = "Quote 4+ words of the order this verdict carries out."
 
-    def require_quote(self, text: str) -> None:
-        """Whitespace-separated words, so a dotted or CamelCase name counts as one word."""
+    def word_refusal(self) -> tuple[str, ...]:
+        """Whitespace-separated words, so a dotted or CamelCase name counts as one word; the
+        count needs no order text, so a verdict reports it beside its other argument refusals."""
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4:
-            raise TodoError(f"--serves {quoted!r} is {len(quoted.split())} words. {self.rule}")
+            return (f"--serves {quoted!r} is {len(quoted.split())} words. {self.rule}",)
+        return ()
+
+    def require_quote(self, text: str) -> None:
+        for refused in self.word_refusal():
+            raise TodoError(refused)
+        quoted = " ".join(self.quote.split())
         if quoted not in " ".join(text.split()):
             raise TodoError(f"--serves {quoted!r} is not in the order. {self.rule} Copy consecutive words.")
 
