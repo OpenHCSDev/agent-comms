@@ -4,7 +4,7 @@ from contextlib import AsyncExitStack
 from dataclasses import replace
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.coordination_cohort import accept_delivery_cohort
+from conftest import accept_initial
 from agent_comms.coordinator import Coordination
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.notification_progress import SentProgress
@@ -30,8 +30,8 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     assert [row.canonical_thread for row in initial.recipients] == ["beta"]
     assert all(isinstance(decision.wake_mode, BoundedTriageWake) for decision in initial.decisions)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-    assert [assignment.recipient for assignment in accepted.assignments] == ["beta"]
+        accepted = accept_initial(comms.bus, root_id, message.seq, store)
+    assert [assignment.recipient for assignment in accepted] == ["beta"]
     current = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
     assert [(row.recipient, type(row.state)) for row in current] == [("beta", SentProgress)]
     assert not comms.registry.require("beta").executing

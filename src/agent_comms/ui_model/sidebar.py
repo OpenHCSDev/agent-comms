@@ -24,6 +24,12 @@ from agent_comms.thread_status import ActiveThreadPresence
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
+from ..display_references import (
+    ForeignReferences,
+    PendingReferences,
+    UnavailableReferences,
+)
+
 
 @dataclass(frozen=True)
 class PersonUnread(ConversationPreparation):
@@ -133,7 +139,6 @@ class WaitingSidebar(SidebarObservation):
         return "Reading comms"
 
     def references_for(self, root):
-        from ..display_references import PendingReferences
         return PendingReferences(root)
 
 
@@ -148,7 +153,6 @@ class FailedSidebar(SidebarObservation):
         raise self.error
 
     def references_for(self, root):
-        from ..display_references import UnavailableReferences
         return UnavailableReferences(root, str(self.error))
 
 
@@ -178,7 +182,6 @@ class ObservedSidebar(SidebarObservation):
         return UnreadPresentation.for_bus(self.snapshot, target)
 
     def references_for(self, root):
-        from ..display_references import ForeignReferences
         references = self.snapshot.references
         return references if root == references.root else ForeignReferences(root, references.root)
 

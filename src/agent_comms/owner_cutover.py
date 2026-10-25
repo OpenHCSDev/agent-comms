@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, NoReturn
 
 from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime
+from .restart_refusals import OwnerMaintenancePendingRefusal
 
 if TYPE_CHECKING:
     from .maintenance_barrier import MaintenanceState
@@ -47,8 +48,6 @@ class OwnerCutover(ABC):
 
     def require_restart_phase(self, lifecycle: OwnerLifecycle) -> None:
         """Ordinary restarts require READY; maintained cutovers bind their hold."""
-        from .restart_refusals import OwnerMaintenancePendingRefusal
-
         if lifecycle.maintenance.current_unlocked().turn_pending:
             raise OwnerMaintenancePendingRefusal()
 

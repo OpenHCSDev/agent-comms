@@ -185,7 +185,7 @@ class TestThreadOps:
             Thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
         )
 
-        events = wired.transcripts.thread_transcript_page("transcript-thread").events
+        events = wired.transcripts.capture_page_read("transcript-thread").read().events
 
         assert [event.declared_name for event in events] == [
             "user",
@@ -214,7 +214,7 @@ class TestThreadOps:
             Thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session_file), wired.root))
         )
 
-        events = wired.transcripts.thread_transcript_page("compacted-thread").events
+        events = wired.transcripts.capture_page_read("compacted-thread").read().events
 
         assert len(events) == 1
         notice = events[0]
@@ -529,7 +529,7 @@ class TestLedgerOps:
         wired.registry.declare(
             Thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), wired.root))
         )
-        page = wired.transcripts.thread_transcript_page("large")
+        page = wired.transcripts.capture_page_read("large").read()
         assert page.has_older
         texts: list[str] = []
         for event in page.events:

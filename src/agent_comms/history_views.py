@@ -13,14 +13,19 @@ from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
 from .cli_result import CliResult
+from .context_segments.retained import RetainedSegment
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
+from .input_disposition import InputDispositions
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
+from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
+from .view_unread import transcript_read_state
+
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalThread, HistorySource
@@ -51,6 +56,7 @@ from .messages import Message
 from .messaging import Messaging
 from .page_traversal import LiveCursor
 from .presentation import (
+    BusPresentation,
     ChannelView,
     CoordinationSnapshot,
     CountedRead,
@@ -177,9 +183,6 @@ class HistoryViews:
         goals: Goals,
         ledger: CollaborationLedger,
     ):
-        from .presentation import BusPresentation
-        from .view_unread import transcript_read_state
-
         self.root = root
         self.registry = registry
         self.bus = bus
@@ -251,10 +254,6 @@ class HistoryViews:
 
     def retained_context(self, name: str):
         """Project authored context and its export boundary from one captured bus read."""
-        from .context_segments.retained import RetainedSegment
-        from .input_disposition import InputDispositions
-        from .retained_task_facts import RetainedTaskFacts
-
         snapshot = self.registry.snapshot()
         owner = snapshot.require(name)
         with self.bus.bus.reading() as source:

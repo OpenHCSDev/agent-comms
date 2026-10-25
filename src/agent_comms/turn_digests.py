@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
+from .todos import TodoStore
+
 from .turn_item import NativeTurnId
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -195,8 +197,6 @@ class OrderRead[Result](TranscriptRead[Result]):
     @classmethod
     def for_orders(cls, root: Path, holds: Iterable[LiveHold]) -> Iterator[Self]:
         """Read each live hold's transcript from its canonical review cut."""
-        from .todos import TodoStore
-
         store = TodoStore(root)
         for hold in holds:
             yield cls(

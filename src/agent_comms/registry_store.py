@@ -22,6 +22,7 @@ from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
+from .private_runtime_schema import PrivateCoordinatorTable
 from .registration_change import InitialRegistration, NativeSourcePublication
 from .registry_document import (
     HistoricalRootPurpose,
@@ -211,8 +212,6 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
         return type(self), (self.path,)
 
     def __post_init__(self) -> None:
-        from .private_runtime_schema import PrivateCoordinatorTable
-
         # Guard-loss checks must know every private declaration before taking this store's lock.
         PrivateCoordinatorTable.declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))

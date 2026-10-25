@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .input_disposition import InputDispositions
+
 from .input_key import InputKey
 
 from .channel_targets import CommandTarget
@@ -47,8 +49,6 @@ class InputBatch(ABC):
         owner: Thread,
         document: InputDocument,
     ) -> InputBatch:
-        from .input_disposition import InputDispositions
-
         originals = document.originals(keys)
         single = SingleInputBatch(originals)
         # Sequence identity proves distinct channel originals in authorized order.

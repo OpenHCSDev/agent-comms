@@ -7,7 +7,7 @@ from bus_record_fixture import prepare_native_comms
 
 
 from bus_history import read_history
-from conftest import declare_test_bus, publish_initial
+from conftest import accept_initial, declare_test_bus, publish_initial
 import json
 import sqlite3
 import sys
@@ -29,12 +29,10 @@ from agent_comms.messages import Message
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import (
-    accept_delivery_cohort,
     pending_sealed_assignments,
     sealed_cohort_assignments,
 )
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
@@ -94,12 +92,9 @@ def test_frozen_delivery_full_n_observer_and_public_history(tmp_path: Path) -> N
     )
     assert len(verified.decisions) == 2
     assert [type(decision).__name__ for decision in verified.decisions].count("NoWakeDecision") == 1
-    first = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
-    assert isinstance(first, Applied)
-    assert (first.value.member_count, first.value.assignment_count) == (2, 1)
-    assert first.value.assignments[0].recipient_lookup == lookups["Alice"]
-    assert first.value.assignments[0].lifecycle.mode == FullWake()
-    assert first.value.accepted_at_ms == 4723
+    (first,) = accept_initial(comms.bus, root_id, message.seq, coordinator)
+    assert first.recipient_lookup == lookups["Alice"]
+    assert first.lifecycle.mode == FullWake()
     assert len(sealed_cohort_assignments(coordinator, lookups["Alice"])) == 1
     assert sealed_cohort_assignments(coordinator, lookups["Bob"]) == ()
     delivery_rows = coordinator.session._connection.execute(
@@ -136,30 +131,27 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     reopened.registry.rename("Alice", "Alicia")
     reopened.registry.register(replace(reopened.registry.require("Bob"), tags=frozenset({"other"})))
     store = Coordination(str(CoordinationStore.path_in(comms.root)), clock_ms=lambda: 4788)
-    result = accept_delivery_cohort(reopened.bus, root_id, message.seq, store)
-    assert isinstance(result, Applied)
-    assert (result.value.member_count, result.value.assignment_count) == (2, 2)
-    assert {assignment.recipient for assignment in result.value.assignments} == {"Alice", "Bob"}
-    assert {assignment.audience for assignment in result.value.assignments} == {
+    result = accept_initial(reopened.bus, root_id, message.seq, store)
+    assert {assignment.recipient for assignment in result} == {"Alice", "Bob"}
+    assert {assignment.audience for assignment in result} == {
         MessageAudience.COLLECTIVE
     }
     store.assignments.transition_preengagement(
-        result.value.assignments[0].assignment_id, DeferredAssignment, expected_revision=1
+        result[0].assignment_id, DeferredAssignment, expected_revision=1
     )
     store.close()
     # The SQL COMMIT succeeded, but the client lost its reply. No reappend or
     # restamping is allowed, even after dispositions and registration evolve.
     recovered = Coordination(str(CoordinationStore.path_in(comms.root)), clock_ms=lambda: 9000)
-    again = accept_delivery_cohort(reopened.bus, root_id, message.seq, recovered)
-    assert isinstance(again, AlreadyApplied)
-    assert again.value.accepted_at_ms == 4788
+    again = accept_initial(reopened.bus, root_id, message.seq, recovered)
+    assert [a.accepted_at_ms for a in again] == [a.accepted_at_ms for a in result]
     assert any(
-        type(assignment.lifecycle) is DeferredAssignment for assignment in again.value.assignments
+        type(assignment.lifecycle) is DeferredAssignment for assignment in again
     )
-    assert [assignment.recipient_lookup for assignment in again.value.assignments] == [
-        assignment.recipient_lookup for assignment in result.value.assignments
+    assert [assignment.recipient_lookup for assignment in again] == [
+        assignment.recipient_lookup for assignment in result
     ]
-    assert {assignment.recipient_lookup for assignment in again.value.assignments} == {
+    assert {assignment.recipient_lookup for assignment in again} == {
         lookups["Alice"],
         lookups["Bob"],
     }
@@ -174,7 +166,7 @@ def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
     bob = publish_initial(comms, "sender", "Bob", "other recipient")
     alice_second = publish_initial(comms, "sender", "Alice", "second")
     for message in (alice_first, bob, alice_second):
-        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+        accept_initial(comms.bus, root_id, message.seq, store)
 
     assert CohortDeliveries.sealed_sequences_after(
         store.session._connection,
@@ -196,22 +188,14 @@ def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     declare_test_bus(comms, channels=("empty",))
     empty = publish_initial(comms, "sender", "#empty", "No recipient")
-    result = accept_delivery_cohort(comms.bus, root_id, empty.seq, store)
-    assert isinstance(result, Applied)
-    assert (result.value.member_count, result.value.assignment_count, result.value.assignments) == (
-        0,
-        0,
-        (),
-    )
-    assert isinstance(accept_delivery_cohort(comms.bus, root_id, empty.seq, store), AlreadyApplied)
+    # An empty channel has no owner to scan it, so nothing is accepted.
+    assert accept_initial(comms.bus, root_id, empty.seq, store) == ()
     direct = publish_initial(comms, "sender", "Alice", "Direct")
-    single = accept_delivery_cohort(comms.bus, root_id, direct.seq, store)
-    assert isinstance(single, Applied)
-    assert (single.value.member_count, single.value.assignment_count) == (1, 1)
-    assert single.value.assignments[0].recipient_lookup == lookups["Alice"]
-    assert single.value.assignments[0].audience is MessageAudience.DIRECT
+    single = accept_initial(comms.bus, root_id, direct.seq, store)
+    assert [assignment.recipient_lookup for assignment in single] == [lookups["Alice"]]
+    assert single[0].audience is MessageAudience.DIRECT
     comms.registry.rename("Alice", "Alicia")
-    assert accept_delivery_cohort(comms.bus, root_id, direct.seq, store).value == single.value
+    assert accept_initial(comms.bus, root_id, direct.seq, store) == single
 
 
 def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Path) -> None:
@@ -230,7 +214,7 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
     )
     store.assignments.accept(legacy)
     with pytest.raises(IdentityConflict):
-        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+        accept_initial(comms.bus, root_id, sent.seq, store)
     assert (
         store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
         == 0
@@ -247,10 +231,9 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
 def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     sent = publish_initial(comms, "sender", "#team", "@Alice hello")
-    result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
-    assert isinstance(result, Applied)
+    (selected,) = accept_initial(comms.bus, root_id, sent.seq, store)
     observer_claim = replace(
-        result.value.assignments[0],
+        selected,
         assignment_id="legacy-observer",
         recipient="Bob",
         recipient_lookup=lookups["Bob"],
@@ -264,7 +247,7 @@ def test_wrong_native_namespace_rejected_before_sql(tmp_path: Path) -> None:
     comms, store, _root_id, _lookups = _root(tmp_path)
     sent = publish_initial(comms, "sender", "#team", "Hello @Alice")
     with pytest.raises(IdentityConflict):
-        accept_delivery_cohort(comms.bus, "a" * 32, sent.seq, store)
+        accept_initial(comms.bus, "a" * 32, sent.seq, store)
     assert (
         store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
         == 0
@@ -308,15 +291,13 @@ def test_all_channel_excludes_sender_and_nonexecutors(
         Thread(name='human', tags=frozenset(), worktree=str(tmp_path), role=UserThreadRole, created_at=17005.0)
     )
     sent = publish_initial(comms, "sender", "#all", "ordinary")
-    result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
-    assert isinstance(result, Applied)
-    assert (result.value.member_count, result.value.assignment_count) == (3, 3)
-    assert {assignment.recipient_lookup for assignment in result.value.assignments} == {
+    result = accept_initial(comms.bus, root_id, sent.seq, store)
+    assert {assignment.recipient_lookup for assignment in result} == {
         lookups["Alice"],
         lookups["Bob"],
         lookups["Charlie"],
     }
-    assert {assignment.lifecycle.mode for assignment in result.value.assignments} == {
+    assert {assignment.lifecycle.mode for assignment in result} == {
         BoundedTriageWake()
     }
 
@@ -330,7 +311,7 @@ def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path)
             proof, RegistryPrivacy.capture(comms.root), 8,
         ).insert(db)
     with pytest.raises(IdentityConflict):
-        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+        accept_initial(comms.bus, root_id, sent.seq, store)
     assert sealed_cohort_assignments(store, lookups["Alice"]) == ()
     delivery_count = store.session._connection.execute(
         "SELECT COUNT(*) FROM cohort_delivery_receipts"
@@ -374,21 +355,21 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     assert comms.bus.bus.revision() == 0
 
 
-def test_simultaneous_accepts_one_applied_one_replay(tmp_path: Path) -> None:
+def test_simultaneous_accepts_seal_one_cohort(tmp_path: Path) -> None:
     comms, coordinator, root_id, _ = _root(tmp_path)
     sent = publish_initial(comms, "sender", "#team", "all")
     coordinator.close()
 
-    def worker(_: int) -> str:
+    def worker(_: int) -> tuple[WakeAssignment, ...]:
         store = Coordination(str(CoordinationStore.path_in(comms.root)))
         try:
-            result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
-            return type(result).__name__
+            return accept_initial(comms.bus, root_id, sent.seq, store)
         finally:
             store.close()
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        assert sorted(executor.map(worker, range(2))) == ["AlreadyApplied", "Applied"]
+        first, second = executor.map(worker, range(2))
+    assert first == second and len(first) == 2
 
 
 def test_message_taken_by_a_running_turn_is_delivered_once_and_stays_delivered(
@@ -396,8 +377,8 @@ def test_message_taken_by_a_running_turn_is_delivered_once_and_stays_delivered(
 ) -> None:
     comms, coordinator, root_id, lookups = _root(tmp_path)
     message = publish_initial(comms, "sender", "#team", "read this while you work")
-    accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
-    alice, bob = sorted(accepted.value.assignments, key=lambda item: item.recipient)
+    accepted = accept_initial(comms.bus, root_id, message.seq, coordinator)
+    alice, bob = sorted(accepted, key=lambda item: item.recipient)
 
     # Pending cannot jump to delivered: only a message already handed to the
     # running turn (paused) can be proved started there.

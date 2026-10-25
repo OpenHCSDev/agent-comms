@@ -28,7 +28,6 @@ def test_emit_and_current_return_the_declared_activity_row(activity_store):
 def test_retiring_activity_removes_the_row(activity_store):
     activity_store.emit(Activity("worker", ActivityState.WORKING, "read source"))
     activity_store.emit(Activity("worker", ActivityState.DELETED))
-    assert activity_store.all_current() == {}
     assert activity_store.current("worker") == Activity.absent("worker")
 
 

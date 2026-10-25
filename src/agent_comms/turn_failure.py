@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .declared_family import DeclaredFamily
 from .errors import StaleAttemptError
 from .native_arguments import SelectedModel
+from .native_failures import NativePiUnavailable
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -45,8 +46,6 @@ class TurnFailure(DeclaredFamily):
 
     def raise_native(self, proof, model: SelectedModel) -> None:
         """A runtime failure does not prove a completed provider request."""
-        from .native_failures import NativePiUnavailable
-
         raise NativePiUnavailable(self.text)
 
     def retry_delay(self, attempt_ordinal: int) -> float:

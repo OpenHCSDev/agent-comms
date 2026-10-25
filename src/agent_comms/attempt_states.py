@@ -7,7 +7,7 @@ that phase. Native turn ownership remains S2's; these are durable observations.
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import (
@@ -17,8 +17,18 @@ from .coordination_errors import (
     ResponseClaimBlocked,
 )
 from .coordinator_vocabulary import CoordinatorVocabulary
+from .execution_states import (
+    CompletedExecution,
+    DeferredExecution,
+    FailedExecution,
+)
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Failed, Terminal
+from .obligation_states import (
+    DeferredResponse,
+    FailedResponse,
+    SilentResponse,
+)
 
 if TYPE_CHECKING:
     from .coordination_tables.attempts import ReplayFact
@@ -71,11 +81,6 @@ class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
 
     def require_silent_completion(self) -> None:
         raise IdentityConflict("silent completion requires settling phase")
-
-    def renewed(self, expiry: int):
-        if self.process_dead:
-            raise RecoveryBlocked("a dead Pi RPC subprocess cannot renew its live lease")
-        return replace(self, lease_expires_at_ms=max(self.lease_expires_at_ms or 0, expiry))
 
     @property
     def tool_claim_open(self) -> bool:
@@ -288,9 +293,6 @@ class SucceededAttempt(TerminalAttempt):
         return "Released files after a completed turn"
 
     def disposition(self, snapshot, attempt):
-        from .execution_states import CompletedExecution
-        from .obligation_states import SilentResponse
-
         attempt.lifecycle.require_silent_completion()
         snapshot.require_nonpublication_response()
         return CompletedExecution(attempt.attempt_ordinal), SilentResponse()
@@ -302,9 +304,6 @@ class UnsuccessfulTerminal(Failed, TerminalAttempt):
     """A terminal attempt that did not succeed, irrespective of retry authority."""
 
     def disposition(self, snapshot, attempt):
-        from .execution_states import FailedExecution
-        from .obligation_states import FailedResponse
-
         return FailedExecution(attempt.attempt_ordinal), FailedResponse()
 
 
@@ -315,9 +314,6 @@ class RetryPredecessor:
         return True
 
     def disposition(self, snapshot, attempt):
-        from .execution_states import DeferredExecution
-        from .obligation_states import DeferredResponse
-
         if snapshot.retry_authorized:
             return DeferredExecution(attempt.attempt_ordinal), DeferredResponse()
         return super().disposition(snapshot, attempt)
