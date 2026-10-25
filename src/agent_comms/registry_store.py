@@ -318,6 +318,11 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
             original.document.purpose.require_write()
             yield RegistryEdit(self, original.document.copy(), original)
 
+    def retire_processes(self) -> None:
+        with self.editing() as edit:
+            edit.document.retire_processes()
+            edit.commit()
+
     def mark_historical(self) -> None:
         """Explicit archive creation/carry seals this declaration, idempotently."""
         with self.locked():

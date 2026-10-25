@@ -14,7 +14,7 @@ from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 
 import agent_comms
 from agent_comms.field_codec import WireValue
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.package_stamp import STAMP
 
 
@@ -90,7 +90,7 @@ class PackageRecord(BaseModel, WireValue):
         return cls.model_json_schema(by_alias=by_alias, ref_template=ref_template)
 
 
-class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
+class DistributionVersionsProbe(TargetProbe, RuntimeProbe[dict[str, str]]):
     def run(self) -> dict[str, str]:
         from packaging.utils import canonicalize_name
 
@@ -98,7 +98,7 @@ class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
 
 
 @dataclass(frozen=True)
-class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
+class InstalledPackagesProbe(TargetProbe, RuntimeProbe[dict[str, PackageRecord]]):
     core: str
 
     def run(self) -> dict[str, PackageRecord]:

@@ -1,12 +1,11 @@
 """Declared operations sent to an interpreter, with answers separate from diagnostics.
 
-Runtime probes execute this file by path with ``python -P``. The selected runtime
-supplies its own imports even when it predates this file.
+Each runtime's worker serves from its own installed copy of this module; only the
+``ProbeRequest`` wire crosses between versions.
 """
 
 from __future__ import annotations
 
-import base64
 import inspect
 import os
 import shlex
@@ -17,11 +16,9 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from io import BytesIO
 from pathlib import Path
 from threading import Lock
 from typing import ClassVar, cast
-from zipfile import ZIP_DEFLATED, ZipFile
 
 from typing_extensions import TypeForm
 
@@ -416,15 +413,9 @@ class ProbeProgram(ABC):
         return ()
 
 
-class SourceProgram(ProbeProgram):
-    """The target's file can run against a predecessor that does not declare it yet."""
-
-    def entry(self) -> tuple[str, str]:
-        return RetainedProgram.current().entry()
-
-
 class InstalledProgram(ProbeProgram):
-    """A published runtime owns its declaration after the target tree is retired."""
+    """Each runtime answers from its own installed installer, so no installer source ever
+    runs on another version's library."""
 
     def entry(self) -> tuple[str, str]:
         return "-c", f"from {__name__} import serve; serve()"
@@ -442,40 +433,6 @@ class TargetProgram(InstalledProgram):
 
 
 @dataclass(frozen=True)
-class RetainedProgram(ProbeProgram):
-    """Worker declarations that survive retirement of their source checkout."""
-
-    source: str
-
-    @classmethod
-    def current(cls) -> RetainedProgram:
-        """The snapshot owns the whole installer package; the selected runtime owns the rest of Core."""
-        directory = Path(inspect.getfile(RuntimeProbe)).parent
-        output = BytesIO()
-        with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
-            for path in sorted(directory.rglob("*.py")):
-                archive.write(path, str(path.relative_to(directory.parent.parent)))
-        payload = base64.b85encode(output.getvalue()).decode("ascii")
-        return cls(
-            "import base64\n"
-            "from pathlib import Path\n"
-            "from tempfile import TemporaryDirectory\n"
-            "import agent_comms.installer\n"
-            "cache = Path.home() / '.cache'\n"
-            "cache.mkdir(parents=True, exist_ok=True)\n"
-            "with TemporaryDirectory(prefix='agent-comms-probes-', dir=cache) as retained:\n"
-            "    archive = Path(retained) / 'installer.zip'\n"
-            f"    archive.write_bytes(base64.b85decode({payload!r}))\n"
-            "    agent_comms.installer.__path__ = [str(archive) + '/agent_comms/installer']\n"
-            "    from agent_comms.installer.interpreter_operation import serve\n"
-            "    serve()\n"
-        )
-
-    def entry(self) -> tuple[str, str]:
-        return "-c", self.source
-
-
-@dataclass(frozen=True)
 class RuntimeProbe[Answer](
     InterpreterOperation[Answer],
     DeclaredFamily,
@@ -486,6 +443,22 @@ class RuntimeProbe[Answer](
 
     def install_phase(self) -> InstallPhase:
         return ProbePhase(probe=type(self))
+
+    @classmethod
+    def outgoing_wire(cls) -> tuple[type[RuntimeProbe], ...]:
+        """Any probe may reach the outgoing runtime, whose own installer decodes what the
+        target encodes, so its name and fields never change
+        (``tools/module_layers.py --check --base`` holds them to the base)."""
+        return (cls,)
+
+
+class TargetProbe:
+    """A probe only a runtime built from the target tree answers; no older runtime
+    decodes it."""
+
+    @classmethod
+    def outgoing_wire(cls) -> tuple[type[RuntimeProbe], ...]:
+        return ()
 
 
 @dataclass(frozen=True)
