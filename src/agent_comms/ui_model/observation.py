@@ -16,6 +16,7 @@ rows, and no longer competes with that work for its interpreter lock.
 from __future__ import annotations
 
 import asyncio
+import copyreg
 import itertools
 import multiprocessing
 import signal
@@ -79,6 +80,14 @@ if TYPE_CHECKING:
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
 
+
+def reduce_request_error(error: RequestError) -> tuple[type[RequestError], tuple[object, ...]]:
+    """The SDK error hands Exception only its message; this pipe carries it whole. The
+    spawned observer imports this module to run serve(), so it registers before sending."""
+    return RequestError, (error.code, str(error), error.data)
+
+
+copyreg.pickle(RequestError, reduce_request_error)
 
 
 class ObservationRequest(ABC):

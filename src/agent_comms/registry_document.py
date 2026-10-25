@@ -46,6 +46,7 @@ from .restart_refusals import (
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
+from .thread_creation import CreationTime
 from .thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
@@ -279,7 +280,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     """A revision's thread rows, decoded and bound only when read."""
 
     def __init__(self) -> None:
-        self._raw: dict[str, JsonValue] = {}
+        # checked_rows proved each stored row an object, so the type keeps that proof.
+        self._raw: dict[str, dict[str, JsonValue]] = {}
         self._decoded: dict[str, Thread] = {}
         self._binding: Callable[[Thread], Thread] = self.unbound
 
@@ -344,13 +346,25 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         return {"type": "object", "additionalProperties": FieldCodec.record_schema(Thread)}
 
     @classmethod
-    def checked_rows(cls, raw: object) -> dict[str, JsonValue]:
+    def checked_rows(cls, raw: object) -> dict[str, dict[str, JsonValue]]:
         if not isinstance(raw, dict):
             raise MalformedRecord("registry threads must be an object")
         for name, row in raw.items():
             if not isinstance(name, str) or not isinstance(row, dict) or row.get("name") != name:
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
+
+    def require_distinct_births(self) -> None:
+        """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
+        a stored row's birth is read alone, without decoding the rest of its thread."""
+        births: set[float] = set()
+        for name in self:
+            try:
+                birth = (self._decoded[name].created_at if name in self._decoded
+                         else CreationTime.from_wire(self._raw[name].get("created_at")))
+            except ValueError as error:
+                raise InvalidRegistryDocument(error) from error
+            births.add(birth.distinct_from(births))
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:
@@ -1034,18 +1048,14 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 object.__setattr__(
                     self, plan.name, SnapshotValue.of(plan).freeze(getattr(self, plan.name)),
                 )
-        # ThreadRows validates names when rows enter; aliases belong to this cut.
+        # ThreadRows validates names when rows enter; aliases and births belong to this cut.
         self.require_alias_names()
+        self.threads.require_distinct_births()
 
     @cached_property
     def by_lookup(self) -> Mapping[str, Thread]:
-        indexed: dict[str, Thread] = {}
-        for thread in self.threads.values():
-            lookup = thread.incarnation.require_recorded().lookup
-            if lookup in indexed:
-                raise RelationViolationError("Registry creation identities collide.")
-            indexed[lookup] = thread
-        return MappingProxyType(indexed)
+        return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
+                                 for thread in self.threads.values()})
 
     def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
         """Worker restoration preserves scalar policy and re-enters the constructor."""
