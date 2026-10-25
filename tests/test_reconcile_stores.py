@@ -262,4 +262,4 @@ def test_the_goal_ledger_carries_a_family_that_gained_a_member(private_comms):
         completed = reconcile(root, holder)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert str(path.relative_to(root)) in json.loads(completed.stdout)["rewritten"]
-    GoalAttemptStore(path.parent)
+    GoalAttemptStore.at(path.parent)

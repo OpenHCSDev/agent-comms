@@ -87,7 +87,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                 assert turn.done() and not owner.turns.session_busy(session)
                 release.set()
                 paused = comms.registry.require(session).goal
-                failed = GoalAttemptStore(store.root).snapshot(goal_id)
+                failed = GoalAttemptStore.at(store.root).snapshot(goal_id)
                 assert isinstance(paused.state, PausedGoal)
                 assert failed.lifecycle == BlockedGeneration() and failed.attempt_id == claimed.attempt_id
                 with pytest.raises(RuntimeError):
@@ -120,7 +120,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                 finish_goal.set()
                 await asyncio.wait_for(fresh_turn, 10)
                 assert not owner.turns.session_busy(session)
-                final = GoalAttemptStore(store.root).snapshot(goal_id)
+                final = GoalAttemptStore.at(store.root).snapshot(goal_id)
                 assert final.number == fresh_claim.number + 1 and final.lifecycle == ReadyGeneration()
                 assert len(requests) == 2
                 assert (stored_inputs(owner.inputs.dispositions.root).rows.get(

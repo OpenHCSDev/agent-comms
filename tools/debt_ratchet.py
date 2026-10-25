@@ -53,6 +53,9 @@ from agent_comms.installer.carry import STEPS
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
+from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.plan_phases import PlanPhase
+from agent_comms.repo import Repo
 
 AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -2490,6 +2493,56 @@ class UncarriedRecordFormat(ChangeMeasure):
         uncarried = sum(before[name].version == form.version or not carried
                         for name, form in after.items() if name in before and before[name] != form)
         return {cls.__name__: 0}, {cls.__name__: uncarried}
+
+
+class DonePhaseBroken(Measure):
+    """A plan phase whose evidence holds at the base and fails at the head: a done phase is a
+    standing guard, so a change re-adding what the phase deleted fails here, one key per site.
+
+    The phases are the Plan family's registry and ``PlanPhase.done`` is their only reader;
+    a phase not yet done at the base is plan work in progress and blocks nothing. Evidence
+    that cannot be read here (GitHub's rules, with no token) holds at neither revision. Each
+    revision is read in one process, so its modules are parsed once for every phase, and kept
+    by the commit and the ratchet's code, which holds the phases' declarations."""
+
+    @classmethod
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        if root != f"{Repo.of(repo).source}/":
+            return ()
+        return tuple(partial(cls.failing, repo, revision(repo, ref)) for ref in (base, head))
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        """A failing pull request pays for reading its sites; a passing one never reads them."""
+        if not results:
+            return {}, {}
+        before, after = results
+        reading = PlanReading((), MainTree(Repo.of(repo), revision(repo, head)))
+        broken = {
+            cls.key(f"{phase.__name__}::{site}"): 1
+            for phase in PlanPhase.members_with(PlanPhase)
+            if phase.__name__ in after - before
+            for site in phase.evidence.sites(reading) or (reading.describe(phase.evidence),)
+        }
+        return dict.fromkeys(broken, 0), broken
+
+    @classmethod
+    def grew(cls, key: str, grown: int) -> str:
+        phase, _, site = key.partition(":")[2].partition("::")
+        return f"done plan phase {phase} no longer holds: {site}"
+
+    @classmethod
+    def failing(cls, repo: Path, commit: str) -> frozenset[str]:
+        """The name of each phase not done at a commit."""
+        return ContentCache.memo(partial(cls.read, repo, commit), cls.__name__, commit)
+
+    @staticmethod
+    def read(repo: Path, commit: str) -> frozenset[str]:
+        reading = PlanReading((), MainTree(Repo.of(repo), commit))
+        return frozenset(phase.__name__ for phase in PlanPhase.members_with(PlanPhase)
+                         if not phase.done(reading))
 
 
 def git(repo: Path, *args: str, input: bytes = b"") -> bytes:
