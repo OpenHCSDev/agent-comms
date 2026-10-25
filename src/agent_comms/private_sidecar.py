@@ -299,8 +299,7 @@ _DENIED_SIDECAR_ACTIONS = frozenset({
 })
 
 
-def _authorize_sidecar(action: int, argument: str | None, other: str | None,
-                       database: str | None, trigger: str | None) -> int:
+def _authorize_sidecar(action: int, *_: object) -> int:
     return sqlite3.SQLITE_DENY if action in _DENIED_SIDECAR_ACTIONS else sqlite3.SQLITE_OK
 
 
