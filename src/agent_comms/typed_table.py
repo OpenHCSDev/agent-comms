@@ -57,6 +57,7 @@ from .field_codec import (
     WireValue,
     compile_decoder,
 )
+from .installer.store_rewrites import DerivedStoreRewrite, DurableStoreRewrite, StoreRewrite
 from .lifecycle import LifecycleState
 from .locked_store import (
     FileStore,
@@ -947,10 +948,25 @@ class TableSchema(ABC):
             cls.stored_schema(db, sharing), cls.declared_schema()))
 
     @classmethod
-    def reconcile_writes(cls, db: sqlite3.Connection) -> bool:
-        """Whether ``reconcile_schema`` would write this file: the installer plans with
-        this answer, so it names every file the reconcile then rewrites."""
-        return cls.schema_differs(db)
+    def changed_families(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> Iterator[type[TableSchema]]:
+        if cls.schema_differs(db, sharing):
+            yield cls
+
+    @classmethod
+    def backup_rewrite(cls, rewrite: StoreRewrite) -> StoreRewrite:
+        return DurableStoreRewrite(rewrite.path)
+
+    @classmethod
+    def reconcile_plan(cls, db: sqlite3.Connection, path: Path) -> tuple[StoreRewrite, ...]:
+        families = tuple(cls.changed_families(db))
+        if not families:
+            return ()
+        rewrite: StoreRewrite = DerivedStoreRewrite(path)
+        for family in families:
+            rewrite = family.backup_rewrite(rewrite)
+        return (rewrite,)
 
     @classmethod
     def require_schema(
@@ -1051,8 +1067,15 @@ class ComposedSchemas:
     def schema_differs(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
+        return any(cls.changed_families(db, sharing))
+
+    @classmethod
+    def changed_families(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> Iterator[type[TableSchema]]:
         rows = (*cls.schema_rows(), *sharing)
-        return any(family.schema_differs(db, rows) for family in cls.schema_families())
+        for family in cls.schema_families():
+            yield from family.changed_families(db, rows)
 
     @classmethod
     def create_schema(
@@ -1068,9 +1091,8 @@ class ComposedSchemas:
         *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
         rows = (*cls.schema_rows(), *sharing)
-        for family in cls.schema_families():
-            if family.schema_differs(db, rows):
-                family.carry_schema(db, rows, rebuild=rebuild)
+        for family in cls.changed_families(db, sharing):
+            family.carry_schema(db, rows, rebuild=rebuild)
 
 
 class RowMutation(Enum):
@@ -1530,6 +1552,10 @@ class DerivedTables(TableSchema):
     """Rows derived from another source: their owner can recreate schema and contents."""
 
     __slots__ = ()
+
+    @classmethod
+    def backup_rewrite(cls, rewrite: StoreRewrite) -> StoreRewrite:
+        return rewrite
 
     @classmethod
     def projection_rows(cls) -> tuple[type[ProducedTable], ...]:

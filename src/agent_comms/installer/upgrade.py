@@ -47,7 +47,6 @@ from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeRes
 from agent_comms.cli_commands import (
     BusReadBack,
     CliCommand,
-    PlannedReconcileCliCommand,
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
     StartCliCommand,
@@ -111,6 +110,7 @@ from agent_comms.installer.interpreter_operation import (
     TargetProgram,
 )
 from agent_comms.installer.owner_starts import OwnerStart
+from agent_comms.installer.store_rewrites import PlannedStoresResult
 from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
@@ -1071,7 +1071,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
         practice = lifetime.enter_context(
             PracticeBus.of(root, installer, spill_dir, staged.commands.clock))
         pending = practice.pending(chain, staged)
-        reconciled = staged.cli(root, PlannedReconcileCliCommand).rewritten
+        reconciled = PlannedStoresResult.read(staged, root).rewritten
         install = cls.of(checkout, root, current, target, chain, pending, reconciled,
                          installed, staged, tree, installer, spill_dir)
         if pending or reconciled:
@@ -1179,7 +1179,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             holder = ExitStack()
             try:
                 try:
-                    planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
+                    planned = PlannedStoresResult.read(self.staged, self.root)
                     unrehearsed = sorted(
                         frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
                     if unrehearsed:

@@ -27,10 +27,12 @@ from agent_comms.cli_commands import (
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
 from agent_comms.installer.backup import bus_files
+from agent_comms.installer.store_rewrites import PlannedStoresResult
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -54,6 +56,14 @@ def reconcile(root: Path, holder: MaintenanceHolder = NO_MAINTENANCE_HOLDER,
         [sys.executable, "-m", "agent_comms.cli", "--root", str(root),
          *command.invocation()], capture_output=True, text=True, timeout=120,
         env=environment)
+
+
+def planned_reconcile(
+    root: Path, holder: MaintenanceHolder = NO_MAINTENANCE_HOLDER,
+) -> PlannedStoresResult:
+    completed = reconcile(root, holder, PlannedReconcileCliCommand)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    return FieldCodec.decode(PlannedStoresResult, FieldCodec.parse(completed.stdout))
 
 
 def drop_one_index_each(root: Path) -> dict[str, str]:
@@ -107,9 +117,8 @@ def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comm
         db.execute('CREATE TABLE retired_derived_shape (unused INTEGER)')
     with maintenance_held(root) as holder:
         before = bus_files(root)
-        completed = reconcile(root, holder, PlannedReconcileCliCommand)
-        assert completed.returncode == 0, completed.stdout + completed.stderr
-        assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
+        planned = planned_reconcile(root, holder)
+        assert planned.rewritten == tuple(Path(name) for name in sorted(dropped))
         assert bus_files(root) == before
         completed = reconcile(root, holder)
         assert completed.returncode == 0, completed.stdout + completed.stderr
@@ -178,15 +187,13 @@ def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
 
     with maintenance_held(root) as holder:
         before = bus_files(root)
-        planned = reconcile(root, holder, PlannedReconcileCliCommand)
-        assert planned.returncode == 0, planned.stdout + planned.stderr
-        assert json.loads(planned.stdout)["rewritten"] == [database.name]
+        planned = planned_reconcile(root, holder)
+        assert planned.rewritten == (Path(database.name),)
         assert bus_files(root) == before
         carried = reconcile(root, holder)
         assert carried.returncode == 0, carried.stdout + carried.stderr
         assert json.loads(carried.stdout)["rewritten"] == [database.name]
-        assert json.loads(reconcile(
-            root, holder, PlannedReconcileCliCommand).stdout)["rewritten"] == []
+        assert planned_reconcile(root, holder).rewritten == ()
 
     with Coordination(database) as store:
         assert store.participants.get(OWNER_LOOKUP) == retained
@@ -200,9 +207,7 @@ def test_public_reconcile_does_not_install_native_state(tmp_path):
     with CoordinationSession(database):
         pass
     before = bus_files(root)
-    planned = reconcile(root, command=PlannedReconcileCliCommand)
-    assert planned.returncode == 0, planned.stdout + planned.stderr
-    assert json.loads(planned.stdout)["rewritten"] == []
+    assert planned_reconcile(root).rewritten == ()
     carried = reconcile(root)
     assert carried.returncode == 0, carried.stdout + carried.stderr
     assert json.loads(carried.stdout)["rewritten"] == []
