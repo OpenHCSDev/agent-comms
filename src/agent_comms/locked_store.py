@@ -555,7 +555,7 @@ class LockedFile(RootFile, StoreLockOwner, declared_name=None):
             yield
 
 
-@dataclass(frozen=True, slots=True, eq=False, repr=False)
+@dataclass(frozen=True, eq=False, repr=False)
 class FileStore(RootFile):
     """Own file-path construction, state and the factory for file-constructed members."""
 
