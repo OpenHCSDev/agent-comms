@@ -669,7 +669,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     # Problem creates the first order through Commander.send, including its message link.
     cli('problem', str(order_file), '--to', 'outsider', '--where', 'owner.py:2')
     first = held_bus.goals.todos.get('P3')
-    assert first.messages
+    assert first.latest_message.message_id
     document = replace(document, problems=('P3',),
                        order=replace(document.order, id='replacement-deletion'))
     order_file.write_text(json.dumps(FieldCodec.encode(document)))

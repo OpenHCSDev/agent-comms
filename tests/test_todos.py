@@ -435,7 +435,6 @@ def test_order_is_merged_only_when_every_linked_request_merged(pr_commander, git
 def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch):
     """Both real watcher entrypoints, a copied bus, real Git and the external forge stub."""
     pr_work_goal_id = GoalId.mint()
-    print("WATCHPASS SOURCE:", CommanderHeartbeat.watch_pass.__code__.co_filename)
     ctx = pr_commander
     source = ctx.repos[0]
     with LaunchRoot.from_path(ctx.root).selected():
@@ -483,6 +482,11 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
         copied = wire(root)
         with LaunchRoot.from_path(root).selected():
+            # Copying retires source processes; this fixture's commander is this test process.
+            copied.registry.register(replace(
+                copied.registry.require(ctx.commander),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            ))
             with copied.bus.bus.writer_connection():
                 pass  # Create the writer lock through its owner before the child probes it.
             lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))
