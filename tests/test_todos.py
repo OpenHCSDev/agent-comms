@@ -295,7 +295,8 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
 
 
 
-def test_merged_order_refuses_a_new_pull_request(tmp_path: Path, source_repository) -> None:
+def test_merged_order_refuses_a_new_pull_request(
+        tmp_path: Path, source_repository, github_cli) -> None:
     """P605: #3085 linked after #3073 merged left a merged order with an open PR."""
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
@@ -311,6 +312,10 @@ def test_merged_order_refuses_a_new_pull_request(tmp_path: Path, source_reposito
                              PullRequestLink(repo, 3085), held.generation)
     with pytest.raises(TodoError, match="merged as 2b9c1f1ab"):
         link.changed(merged)
+    with pytest.raises(TodoError, match="Ask the commander for a send-back"):
+        merged.order.open_pull_request(merged, tmp_path, "Title", "Body", store,
+                                       held.owner_identity)
+    assert github_cli.calls() == ()
     assert link.changed(todo).order.checked().pull_requests == (PullRequestLink(repo, 3085),)
 
 @pytest.fixture
