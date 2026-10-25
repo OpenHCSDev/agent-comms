@@ -1,18 +1,16 @@
-"""A client's selection of the current Comms route and its guarded writes.
+"""A client's selection of the current Comms route.
 
 The route owner (:mod:`agent_comms.active_route`) validates the published
-selection and private marker without constructing a service. A client captures
-one selection, then enters :func:`selected_write` in the worker that performs
-the side effect, so a route publication cannot interleave with it.
+selection and private marker without constructing a service. Writes need no
+route lock: each store refuses a write under maintenance inside its own write
+transaction.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeVar
 
 from agent_comms import errors
 
@@ -20,9 +18,6 @@ from .active_route import CommsRoute, resolve_comms_route
 from .bus import Bus
 from .launch_root import LaunchRoot
 from .recorded_bus import RecordedBusIdentity
-
-
-T = TypeVar("T")
 
 
 def current_root() -> Path:
@@ -62,21 +57,3 @@ class RouteSelection:
         return cls(
             resolve_comms_route(root), root, RecordedBusIdentity.capture(Bus.path_in(root))
         )
-
-
-@contextmanager
-def selected_write(root: str | Path) -> Iterator[None]:
-    """Hold the selected route through the synchronous side effect."""
-    with RouteSelection.capture(root).route.hold_client_route():
-        yield
-
-
-def run_selected_write(
-    root: str | Path,
-    operation: Callable[..., T],
-    *args: object,
-    **kwargs: object,
-) -> T:
-    """Acquire the route locks inside the worker that actually performs the write."""
-    with selected_write(root):
-        return operation(*args, **kwargs)
