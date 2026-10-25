@@ -620,6 +620,21 @@ class Stack:
                                    env=self.environment(*self.program.import_roots()),
                                    program=self.program)
 
+    @contextmanager
+    def borrowing(self, stores: tuple[type[WriterOwnedStore], ...], root: Path,
+                  original_root: Path) -> Iterator[Stack]:
+        """The installer retains file locks through rollback; workers only borrow them."""
+        if not stores:
+            yield self
+            return
+        with ExitStack() as lifetime:
+            locks = tuple(lifetime.enter_context(store.retaining(store.source_path(
+                root, original_root, store.retained_name(root, store.path()),
+            ))) for store in stores)
+            program = self.program.borrowing(locks)
+            lifetime.callback(self.commands.close_program, self.python, program)
+            yield replace(self, program=program)
+
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
 
@@ -1151,7 +1166,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
-        with hold.holding():
+        with hold.holding(), stack.borrowing(
+            Carry.writer_declarations(pending), copied, self.root,
+        ) as stack:
             migration = PreparedMigration.capture(hold, self.installed, pending)
             passed = migration.carry(pending, stack)
             passed = passed.after_acceptance(pending, stack)
@@ -1172,7 +1189,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 sum(path.stat().st_size for path in selected if path.exists()),
             ), self.root.parent)
             restore.require()
-        with self.staged.services_stopped(self.installed) as stopped:
+        with self.staged.borrowing(
+            Carry.writer_declarations(self.pending), self.root, self.root,
+        ) as staged, staged.services_stopped(self.installed) as stopped:
             # The install's start holds the root and stopped its owners (owners_stopped).
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
             holder = ExitStack()
@@ -1201,7 +1220,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     raise
                 try:
                     self.checkout_target()
-                    passed = migration.carry(self.pending, self.staged)
+                    passed = migration.carry(self.pending, staged)
                     passed.files.require_rehearsal(rehearsal.files)
                     self.publish(backup, selected_route)
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
@@ -1245,7 +1264,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     retirement = tuple(replace(
                         step, spill_dir=backup.spill_directory(self.spill_dir),
                     ) for step in self.pending)
-                    passed = passed.after_acceptance(retirement, self.staged)
+                    passed = passed.after_acceptance(retirement, staged)
                 finally:
                     started = report.owners.published_on(self.staged, self.root)
                 with BackupRetirePhase().running(self.staged.commands.clock):
