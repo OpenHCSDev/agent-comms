@@ -43,6 +43,7 @@ from agent_comms.change_report import (
     PullRequestHeadRevision,
     SourceReference,
     SourceRevision,
+    SourceRoots,
     SourceText,
     WorkingTree,
 )
@@ -147,7 +148,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
-    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry_document import CommanderProject, RegistrySnapshot
 
 
 @dataclass(frozen=True)
@@ -302,7 +303,10 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
         revision = self.source_revision()
         for line in order.created:
             try:
-                await asyncio.to_thread(line.require_exists, check.directory, revision)
+                await asyncio.to_thread(
+                    line.require_exists,
+                    order.source_roots(registry.snapshot().commander_project),
+                    revision)
             except MissingSourceLine as error:
                 raise TodoError(f"The order creates {line.to_wire()}; {error}") from error
         return replace(self, at=await self.delivery_time(check),
@@ -1784,7 +1788,7 @@ class FamilyDeletion(OrderDeletion):
 
 @dataclass(frozen=True)
 class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
-    def require_references(self, root: Path, revision: SourceRevision) -> None:
+    def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         """An unlocated finding has no source reference to validate."""
 
     def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
@@ -1806,8 +1810,8 @@ class UnlocatedProblemFinding(ProblemFinding):
 class LocatedProblemFinding(ProblemFinding):
     where: FileLine
 
-    def require_references(self, root: Path, revision: SourceRevision) -> None:
-        self.where.require_exists(root, revision)
+    def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
+        self.where.require_exists(roots, revision)
 
     def in_declarations(self, declarations: tuple[Declaration, ...], root: Path) -> bool:
         return any(declaration.holds(self.where, root) for declaration in declarations)
@@ -1987,9 +1991,9 @@ class FixShape:
         if not self.parents:
             raise TodoError("scope.shape.parents must name at least one parent class declaration")
 
-    def require_references(self, root: Path, revision: SourceRevision) -> None:
+    def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         for location in (*self.parents, *self.members):
-            location.require_class(root, revision)
+            location.require_class(roots, revision)
 
 
 class DeliverySource(DeclaredFamily, affix="DeliverySource"):
@@ -2017,7 +2021,7 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
             if get_origin(base) is OrderScope
         )
 
-    def require_references(self, root: Path, revision: SourceRevision) -> None:
+    def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         """Triage has no implementation declarations to validate."""
 
     @abstractmethod
@@ -2075,8 +2079,8 @@ class FixScope(OrderScope[CheckedDelivery]):
         evidence = FileDeliveryEvidence(path) if path else NoDeliveryEvidence()
         return source.delivery(todo, repo, evidence)
 
-    def require_references(self, root: Path, revision: SourceRevision) -> None:
-        self.shape.require_references(root, revision)
+    def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
+        self.shape.require_references(roots, revision)
 
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
@@ -2148,11 +2152,14 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def cited_revision(self) -> SourceRevision:
         return CitedRevisions((*map(PullRequestHeadRevision, self.linked_requests), MainRevision()))
 
-    def require_references(self) -> None:
-        root, revision = self.check.directory, self.cited_revision
-        self.owner.require_exists(root, revision)
-        self.finding.require_references(root, revision)
-        self.scope.require_references(root, revision)
+    def source_roots(self, project: CommanderProject) -> SourceRoots:
+        return SourceRoots(self.check.directory, project)
+
+    def require_references(self, project: CommanderProject) -> None:
+        roots, revision = self.source_roots(project), self.cited_revision
+        self.owner.require_exists(roots, revision)
+        self.finding.require_references(roots, revision)
+        self.scope.require_references(roots, revision)
 
     def check_refusals(self, worktrees: Path) -> tuple[str, ...]:
         """Send and correction use the check owner's clean-main acceptance rule."""
@@ -2175,7 +2182,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """Scope, prose and pattern citations share the order's source revision."""
         check = self.check
         problems = []
-        for label, validate in (('order.source', self.require_references),
+        for label, validate in (('order.source', lambda: self.require_references(context.project)),
                                 ('order.check.directory', check.require_directory)):
             try:
                 with MalformedRecord.refusing(label):
@@ -2196,7 +2203,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists(check.directory, self.cited_revision)
+                    reference.require_exists(self.source_roots(context.project), self.cited_revision)
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         body = '\n'.join((document.prose, *self.edits, self.report))
@@ -3361,21 +3368,23 @@ class CitedEvidence:
     evidence: Annotated[tuple[FileLine, ...], WireOmitDefault()] = field(
         default=(), kw_only=True)
 
-    def require_evidence(self, current: Todo) -> None:
+    def require_evidence(self, goals: Goals, current: Todo) -> None:
         order = current.order.checked()
-        self.require_cited(order.check.directory, order.cited_revision)
+        self.require_cited(
+            order.source_roots(goals.registry.snapshot().commander_project),
+            order.cited_revision)
 
-    def require_cited(self, root: Path, source: SourceText) -> None:
+    def require_cited(self, roots: SourceRoots, source: SourceText) -> None:
         if not self.evidence:
             raise TodoError("A strike needs a checkable file:line, not a board row or goal text.")
         for cited in self.evidence:
-            cited.require_exists(root, source)
+            cited.require_exists(roots, source)
 
 
 @dataclass(frozen=True)
 class CitedStrike(CitedEvidence, TodoOperation, declared_name=None):
     def prepare(self, goals: Goals, current: Todo) -> Self:
-        self.require_evidence(current)
+        self.require_evidence(goals, current)
         return self
 
 
@@ -3630,7 +3639,7 @@ class HeadVerdict(HeadReview, declared_name=None):
     def after_record(self, goals: Goals, record: HeadReviewRecord) -> None:
         """A rejection wakes its linked holder after the write; acceptance needs no directive."""
 
-    def prepare_order(self, current: Todo, link: OrderLink) -> None:
+    def prepare_order(self, goals: Goals, current: Todo, link: OrderLink) -> None:
         """Acceptance needs the quoted order; rejection also needs source evidence."""
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
@@ -3698,8 +3707,8 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
     def after_record(self, goals: Goals, record: HeadReviewRecord) -> None:
         record.order.rejected(goals, record)
 
-    def prepare_order(self, current: Todo, link: OrderLink) -> None:
-        link.require_evidence(current)
+    def prepare_order(self, goals: Goals, current: Todo, link: OrderLink) -> None:
+        link.require_evidence(goals, current)
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
         return SendBackStrike(current.revision, record.actor, record.order.previous,
@@ -3901,7 +3910,7 @@ class RecordOrderHeadVerdict(TodoCommand):
         self.review.order.require_current(current, self.review.actor)
         if not current.order.checked().holds_head(self.review.request):
             raise TodoError("The reviewed pull request is not linked to this order.")
-        self.review.verdict.prepare_order(current, self.review.order)
+        self.review.verdict.prepare_order(goals, current, self.review.order)
         return self
 
     def changed(self, current: Todo) -> Todo:
@@ -4096,7 +4105,9 @@ class EditSendBackVerdict(SendBackVerdict, EditVerdict):
     stands on disk."""
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
-        self.require_cited(self.edited(goals, current)[1], WorkingTree())
+        self.require_cited(
+            SourceRoots(self.edited(goals, current)[1], goals.registry.snapshot().commander_project),
+            WorkingTree())
         return self
 
 

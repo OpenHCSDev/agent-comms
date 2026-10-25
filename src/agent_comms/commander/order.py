@@ -33,7 +33,7 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
+from agent_comms.change_report import FileLine, MainRevision, NoSourceReference, SourceRoots
 from agent_comms.channel_targets import CommsTag
 from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.commander.standing import DeliveryAwaitingJudgement, UnownedWheelSpin
@@ -730,7 +730,7 @@ class Commander(CommanderContext):
             directory = Repo.selected(self.repos, repository).checkout
         except ValueError as error:
             sys.exit(f'Refused: {error}')
-        ref.require_exists(directory, MainRevision())
+        ref.require_exists(SourceRoots(directory, self.project), MainRevision())
         if len(why.split()) < 10:
             sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
         ref = FileLine(str((directory / ref.file).resolve()), ref.line)

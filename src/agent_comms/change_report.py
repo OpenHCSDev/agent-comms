@@ -27,8 +27,10 @@ from .field_codec import (
     WireValue,
 )
 from .repo import Checkout, GitCommandError, Repo
+from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
+    from .registry_document import CommanderProject
     from .todos import PullRequestLink
 
 
@@ -164,6 +166,52 @@ class PullRequestHeadRevision(SourceRevision):
         return f'+pull/{self.link.number}/head:{self.reference}'
 
 
+@dataclass(frozen=True)
+class SourceRoots:
+    """Where citations are read: the order's own checkout, and the commander project whose
+    registered repositories a citation may name instead."""
+
+    order: Path
+    project: CommanderProject
+
+
+class CitedRepository(ABC):
+    """The repository a file:line belongs to, carried by the citation itself."""
+
+    @abstractmethod
+    def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
+        """The checkout and revisions this citation's lines are read from."""
+
+    @abstractmethod
+    def qualified(self, location: str) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class OrderRepository(CitedRepository):
+    """An unqualified ``file.py:line`` names the order's own repository at its revisions."""
+
+    def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
+        return roots.order, revision
+
+    def qualified(self, location: str) -> str:
+        return location
+
+
+@dataclass(frozen=True, slots=True)
+class NamedRepository(CitedRepository):
+    """``owner/name:file.py:line`` names another registered repository, read at its main:
+    the order's pull requests belong to the order's repository, not this one."""
+
+    name: RepositoryName
+
+    def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
+        return (Repo.selected(roots.project.require().repos, self.name.to_wire()).checkout,
+                MainRevision())
+
+    def qualified(self, location: str) -> str:
+        return f"{self.name.to_wire()}:{location}"
+
+
 class SourceReference(ABC):
     """A source reference either supplies its location or explains why it is required."""
 
@@ -199,12 +247,15 @@ class Declaration:
 
 @dataclass(frozen=True, slots=True)
 class FileLine(WireValue, SourceReference):
-    """One source reference spelled ``file.py:line`` on the wire."""
+    """One source reference spelled ``file.py:line`` on the wire, or
+    ``owner/name:file.py:line`` when it names another registered repository."""
 
     file: str
     line: int
+    repository: CitedRepository = OrderRepository()
 
-    _line_token: ClassVar[re.Pattern[str]] = re.compile(r"(?<![\w./-])[\w./-]*\.[\w-]+:\d+\b")
+    _line_token: ClassVar[re.Pattern[str]] = re.compile(
+        r"(?<![\w./:-])(?:[\w.-]+(?:/[\w.-]+)?:)?[\w./-]*\.[\w-]+:\d+\b")
 
     def __post_init__(self) -> None:
         if not self.file or not self.file.strip() or "\n" in self.file:
@@ -233,7 +284,8 @@ class FileLine(WireValue, SourceReference):
                       if node.lineno <= self.line <= end)
         return Declaration(self, min(spans, key=len))
 
-    def require_exists(self, repository: Path, revision: SourceText) -> None:
+    def require_exists(self, roots: SourceRoots, revision: SourceText) -> None:
+        repository, revision = self.repository.source(roots, revision)
         revision.require_any(lambda candidate: self.require_line(repository, candidate))
 
     def require_line(self, repository: Path, revision: SourceText) -> None:
@@ -261,7 +313,8 @@ class FileLine(WireValue, SourceReference):
                 )
         return cls(file, node.lineno)
 
-    def require_class(self, repository: Path, revision: SourceText) -> None:
+    def require_class(self, roots: SourceRoots, revision: SourceText) -> None:
+        repository, revision = self.repository.source(roots, revision)
         revision.require_any(lambda candidate: self.require_class_at(repository, candidate))
 
     def require_class_at(self, repository: Path, revision: SourceText) -> None:
@@ -273,20 +326,24 @@ class FileLine(WireValue, SourceReference):
             )
 
     def to_wire(self) -> str:
-        return f"{self.file}:{self.line}"
+        return self.repository.qualified(f"{self.file}:{self.line}")
 
     @classmethod
     def from_wire(cls, data: JsonValue) -> FileLine:
         if not isinstance(data, str):
             raise MalformedRecord("Expected a 'file.py:line' string.")
-        file, separator, line = data.rpartition(":")
+        location, separator, line = data.rpartition(":")
+        qualifier, named, file = location.rpartition(":")
         if not separator or not file or not line.isdigit():
             raise ValueError(f"Expected a 'file.py:line' reference, received {data!r}")
-        return cls(file=file, line=int(line))
+        repository = NamedRepository(RepositoryName.from_wire(qualifier)) if named else OrderRepository()
+        return cls(file=file, line=int(line), repository=repository)
 
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:
-        return {"type": "string", "description": "Source reference spelled file.py:line"}
+        return {"type": "string", "description":
+                "Source reference spelled file.py:line, or owner/name:file.py:line for another "
+                "registered repository"}
 
     @classmethod
     def scan(cls, text: str) -> tuple[FileLine, ...]:

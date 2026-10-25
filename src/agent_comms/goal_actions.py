@@ -60,6 +60,7 @@ from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 
 if TYPE_CHECKING:
     from .goal_management import Goals
+    from .registry_document import CommanderProject
     from .goal_presentation import GoalSnapshot
 
 
@@ -574,15 +575,15 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def require_ready(self, ctx: GoalActionContext) -> None:
         """Recheck local request facts before goal reservation or allocating a child."""
-        self.require_sendable()
+        self.require_sendable(ctx.goals.registry.snapshot().commander_project)
         commander = ctx.goals.registry.require(self.commander)
         ctx.goals.todos.owner_request(self.request).require_open(commander.incarnation)
         self.review_at.require_recorded("A review time")
 
-    def require_sendable(self) -> None:
+    def require_sendable(self, project: CommanderProject) -> None:
         """A new order's wording and source references hold at its declared revision."""
         self.order.require_wording()
-        self.order.require_references()
+        self.order.require_references(project)
         self.order.check.require_directory()
 
     def create(self, ctx: GoalActionContext) -> Goal:
@@ -628,7 +629,7 @@ class ReissuedOrderGoalAction(OrderGoalAction):
             assigner=todo.acting_assigner,
             traced=order.owner)
 
-    def require_sendable(self) -> None:
+    def require_sendable(self, project: CommanderProject) -> None:
         pass
 
 
