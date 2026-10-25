@@ -1013,6 +1013,14 @@ class SendVerb(RequestedOrderVerb):
     def addressed(self) -> tuple[str, ...]:
         return (self.unit,)
 
+    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
+        """Taking held problems over acts on their holders too: reassigning a stopped unit's
+        order is the action its WAKE line asks for."""
+        named = frozenset(OrderFile.read(Path(self.body_file).read_text()).problems)
+        return (*super().acts_on(ctx),
+                *(UnitSubject(assignment.owner_identity) for todo in ctx.todos() if todo.id in named
+                  for assignment in todo.current_holder.current_assignments()))
+
     def resolves_claim(self, unit: str, problem: str) -> bool:
         return (self.unit == unit
                 and problem in OrderFile.read(Path(self.body_file).read_text()).problems)
