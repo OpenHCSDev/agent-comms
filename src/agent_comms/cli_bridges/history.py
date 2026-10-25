@@ -6,8 +6,9 @@ updates the live bridges publish, so an import and a bridge read a session throu
 Each harness declares itself once, on its parent (ClaudeHistory, CodexHistory, OpenCodeHistory,
 PiHistory);
 a reader inherits its harness parent and its path (OfflineHistory, OnlineHistory), and is found by
-that crossing. A bridge is its harness's online reader plus delivery and following; it declares
-itself outside the family, because it follows a session rather than reading one more way.
+that crossing. A bridge is its harness's online reader plus delivery and following. It registers in the same
+family, but contributes no standalone reader declaration because it follows a session rather
+than reading one more way.
 """
 from __future__ import annotations
 
@@ -42,10 +43,16 @@ class History(ReadsHistory, DeclaredFamily, affix="History", discovery_package="
     harness: ClassVar[type[Harness]]
 
     @classmethod
+    def reading_declarations(cls) -> tuple[type[Self], ...]:
+        """The standalone readers contributed by this member."""
+        return (cls,)
+
+    @classmethod
     def readers(cls, harness: type[Harness]) -> tuple[type[Self], ...]:
-        """This path's readers for one harness: the members under both parents."""
+        """This path's standalone readers for one harness, derived by its members."""
         parent, = (parent for parent in HarnessHistory.__subclasses__() if parent.harness is harness)
-        return cls.members_with(parent)
+        return tuple(reader for member in cls.members_with(parent)
+                     for reader in member.reading_declarations())
 
     def imported(self, limits: ImportLimits) -> ImportedConversation:
         """What importing this session writes: a bounded conversation rebuilt as a Pi session."""

@@ -92,6 +92,7 @@ from agent_comms.wire_models import WireModel
 from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
+from .history import History
 from .monitor import (
     BridgeExit,
     InspectSession,
@@ -1128,19 +1129,22 @@ class BridgeLog(io.TextIOBase):
 
 
 @dataclass(eq=False, repr=False)
-class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
+class CliBridge(
+    ExternalRuntime, DeliversInput, History, Generic[BridgeOptions], declared_name=None,
+):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     state_directory: ClassVar[Path]
 
     @classmethod
+    def reading_declarations(cls) -> tuple[type[Self], ...]:
+        """A following bridge is not another standalone history reader."""
+        return ()
+
+    @classmethod
     def state_directories(cls) -> tuple[Path, ...]:
-        """Relative state directories declared by the loaded bridge classes."""
-        bridges: list[type[CliBridge]] = [cls]
-        for bridge in bridges:
-            bridges.extend(bridge.__subclasses__())
-        return tuple(bridge.state_directory for bridge in bridges
-                     if 'state_directory' in vars(bridge))
+        """Relative state directories declared by the loaded bridge members."""
+        return tuple(bridge.state_directory for bridge in CliBridge.members_with(CliBridge))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:

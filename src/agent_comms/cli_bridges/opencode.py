@@ -202,7 +202,7 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
         yield await connection.status()
 
 
-class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared_name=None):
+class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions]):
     state_directory = Path('.local/state/opencode-comms-inbox')
     query = {'limit': '20'}  # A restarted bridge publishes again only the newest messages.
 

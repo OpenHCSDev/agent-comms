@@ -25,6 +25,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.importing import ImportLimits
 from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeTranscript, RunningClaude
+from agent_comms.cli_bridges.shared import CliBridge
 from agent_comms.cli_bridges.codex import CodexAppServer, CodexBridge, CodexConnection
 from agent_comms.cli_bridges.codex_protocol import InitializeResponse, RequestParams, ItemsList
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
@@ -90,9 +91,12 @@ def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path: Pa
 
 
 def test_every_harness_has_one_offline_family_and_one_online_reader() -> None:
-    # Readers are found by crossing the harness parent with offline/online; a bridge is
-    # its harness's online reader plus following, declared outside the family.
-    assert not {ClaudeBridge, CodexBridge, OpenCodeBridge} & set(History.members_with(History))
+    # Following bridges share the registry without contributing another standalone reader.
+    assert {ClaudeBridge, CodexBridge, OpenCodeBridge} <= set(History.members_with(CliBridge))
+    assert CliBridge.state_directories() == tuple(
+        bridge.state_directory for bridge in History.members_with(CliBridge))
+    for bridge in History.members_with(CliBridge):
+        assert bridge.reading_declarations() == ()
     assert OfflineHistory.readers(ClaudeCodeHarness) == (ClaudeTranscript,)
     assert OfflineHistory.readers(CodexHarness)[0].__name__ == "CodexRollout"
     assert set(OfflineHistory.readers(OpenCodeHarness)) == {OpenCodeExport, OpenCodeDatabase}

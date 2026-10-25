@@ -138,7 +138,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
         yield resumed.thread.status.update()
 
 
-class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=None):
+class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
     state_directory = Path('.local/state/codex-comms-inbox')
 
     def __init__(self, options: CodexOptions, binding: Binding, db: sqlite3.Connection) -> None:

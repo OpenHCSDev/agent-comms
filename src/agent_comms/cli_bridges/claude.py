@@ -107,7 +107,7 @@ class BoardLineRow(BoardLine, BridgeStateTable, TypedTable, declared_name=BoardL
                 line.insert(db)
 
 
-class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
+class ClaudeBridge(RunningClaude, LineMonitorBridge):
     """Follow this Claude session's file without submitting an input.
 
     Heartbeat packets go on the board its tool-call hook prints, not to the Monitor: the
