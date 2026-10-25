@@ -203,7 +203,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .typed_table import NoPractice, Practice, ReconciledFile, StoreRewrite, WriterOwnedStore
+from .typed_table import HeldBusFile, NoPractice, Practice, ReconciledFile, StoreRewrite, WriterOwnedStore
 from .working_memory_annotations import WorkingMemoryAnnotations
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
@@ -1938,7 +1938,7 @@ class StoreReconcileCliCommand[Answer: CliResult](CliCommand[Answer]):
 
 @dataclass(frozen=True, kw_only=True)
 class ReconcileStoresCliCommand(
-    StoreReconcileCliCommand[ReconciledStoresResult], declared_name="reconcile-stores",
+    StoreReconcileCliCommand[ReconciledStoresResult], declared_name=HeldBusFile.carry_verb,
 ):
     help = ("Reconcile every declared store's schema onto this runtime's declarations; "
             "the installer runs it under maintenance after the outgoing owners stop")

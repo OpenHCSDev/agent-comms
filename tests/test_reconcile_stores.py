@@ -33,6 +33,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import ClaimId, FieldCodec, MessageId
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
 from agent_comms.installer.backup import StoreBackup, bus_files
@@ -49,7 +50,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorSchema
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.triage_native_sources import TriageNativeSource
 from agent_comms.typed_table import (
-    Column, DurableTables, PracticeRoot, ProjectionProducer, ReconciledFile,
+    Column, DurableTables, HeldBusFile, PracticeRoot, ProjectionProducer, ReconciledFile,
     SharedFileTables, TableSchema, TypedTable, WriterOwnedStore,
 )
 from bus_record_fixture import OWNER_LOOKUP
@@ -365,11 +366,20 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
     assert PlannedReconcileCliCommand().answer(root).rewritten == ()
 
 
-def test_the_goal_ledger_carries_a_family_that_gained_a_member(private_comms):
-    """Install 13: the ledger kept a failure CHECK one member short, nothing carried it, and
-    every opening refused. Its owner is a reconciled file, so the install carries it."""
+def test_an_opening_refuses_a_drifted_store_and_reconcile_stores_carries_it(private_comms):
+    """Install 13: the ledger kept a failure CHECK one member short. Opening it refuses,
+    naming the carry, even under the hold, and rewrites nothing; reconcile-stores is the
+    one carry, keeping every row, and the next opening reads it."""
     root = private_comms.root
     path = ledger_one_failure_short(root)
+    schema = "SELECT sql FROM sqlite_master WHERE name=?"
+    with closing(sqlite3.connect(path)) as db:
+        drifted = db.execute(schema, (FailedTurnEvidence.declared_name,)).fetchone()
+    with maintenance_held(root), pytest.raises(RelationViolationError,
+                                               match=HeldBusFile.carry_verb):
+        GoalAttemptStore.at(path.parent)
+    with closing(sqlite3.connect(path)) as db:
+        assert db.execute(schema, (FailedTurnEvidence.declared_name,)).fetchone() == drifted
     with maintenance_held(root) as holder:
         completed = reconcile(root, holder)
     assert completed.returncode == 0, completed.stdout + completed.stderr
