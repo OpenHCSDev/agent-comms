@@ -13,6 +13,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from itertools import combinations
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.change_report import FileLine
