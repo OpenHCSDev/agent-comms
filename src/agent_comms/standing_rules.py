@@ -741,12 +741,9 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
                    held: Sequence[Todo], ordered: Sequence[Todo]) -> tuple[Self, ...]:
         """Holders are the live holds whose orders link the request, as the HUD cards read;
         the commander's orders' links own which requests are its fleet's."""
-        from agent_comms.todos import PullRequests
-
         now = time.time()
-        fleet = PullRequests(ordered)
         repos = goals.registry.snapshot().commander_project.repository_names()
-        linked = {repo: fleet.linked(repo) for repo in repos}
+        linked = {repo: pulls.linked_among(ordered, repo) for repo in repos}
         holders: dict[tuple[RepositoryName, int], tuple[ThreadIncarnation, ...]] = {}
         for todo in held:
             for request in pulls.open_for(todo):

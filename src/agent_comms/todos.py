@@ -867,8 +867,13 @@ class PullRequests:
                     yield claim, request
 
     def linked(self, repo: RepositoryName) -> dict[int, list[Todo]]:
+        return self.linked_among(self._todos.get(repo, {}).values(), repo)
+
+    @staticmethod
+    def linked_among(todos: Iterable[Todo], repo: RepositoryName) -> dict[int, list[Todo]]:
+        """The requests in ``repo`` that these orders link, with the orders linking each."""
         linked: dict[int, list[Todo]] = {}
-        for candidate in self._todos.get(repo, {}).values():
+        for candidate in todos:
             for number in {link.number for order in candidate.order.declarations
                            for link in order.linked_requests
                            if link.repo == repo}:
