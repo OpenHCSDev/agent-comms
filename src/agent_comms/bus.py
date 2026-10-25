@@ -465,6 +465,13 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     def __init__(self, path: Path):
         super().__init__(path)
 
+    def unreceived(self, lookup: ThreadLookup,
+                   references: Iterable[MessageReference]) -> tuple[MessageReference, ...]:
+        """The references outside this participant's frozen delivery audiences."""
+        with self.observing() as db:
+            return tuple(reference for reference in references if not ReceivedSource.exists(
+                db, where="{seq} = ?", parameters=(reference.seq,), lookup=lookup))
+
     def received_after(self, lookup: ThreadLookup, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""
         with self.observing() as db:

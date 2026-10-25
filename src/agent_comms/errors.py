@@ -66,6 +66,10 @@ class MessageAcknowledgmentError(RelationViolationError):
                          "Delivery remains unconfirmed; no reads were changed.")
 
 
+class UnreceivedAnswerError(ToolRefusedError, RelationViolationError):
+    """A message answers only messages its sender was delivered."""
+
+
 class ThreadNotStoppedError(ToolRefusedError, RelationViolationError):
     """A stopped-thread precondition failed, not an unknown write outcome."""
 
