@@ -423,6 +423,22 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
+class RollbackRetained(DurableFile):
+    """Files every rollback retains, even when no rewrite selected them."""
+
+    __slots__ = ()
+
+    @classmethod
+    def rollback_files(cls, root: Path) -> tuple[Path, ...]:
+        """Include absent files too: rollback must remove a newly created one."""
+        return (cls.path_in(root),)
+
+    @classmethod
+    def retained_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(path for owner, directory in cls.declarations_in(root)
+                         for path in owner.rollback_files(directory))
+
+
 class WrittenFile(RootFile, ABC):
     """A file whose kind declares when maintenance permits its writers."""
 
@@ -480,7 +496,7 @@ class WireWakeFile(RootFile):
         )
 
 
-class RegistryFile(DurableFile, WireWakeFile):
+class RegistryFile(RollbackRetained, WireWakeFile):
     """Registry location usable by record types without importing their decoder."""
 
     __slots__ = ()

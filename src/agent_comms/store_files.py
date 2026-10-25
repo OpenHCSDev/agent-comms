@@ -349,10 +349,10 @@ class StoreLockOwner(StoreLockFile, declared_name=None):
     @contextmanager
     def read_guard(
         cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
-    ) -> Iterator[StoreLock | None]:
+    ) -> Iterator[None]:
         with _store_lock(path, SharedLock(), cls.contention(),
-                         read_budget=read_budget, lock_type=cls.lock_type) as lock:
-            yield lock
+                         read_budget=read_budget, lock_type=cls.lock_type):
+            yield
 
     @classmethod
     @contextmanager
@@ -367,10 +367,10 @@ class StoreLockOwner(StoreLockFile, declared_name=None):
     @asynccontextmanager
     async def read_guard_async(
         cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
-    ) -> AsyncIterator[StoreLock | None]:
+    ) -> AsyncIterator[None]:
         async with _async_store_lock(path, SharedLock(), cls.contention(),
-                                     read_budget=read_budget, lock_type=cls.lock_type) as lock:
-            yield lock
+                                     read_budget=read_budget, lock_type=cls.lock_type):
+            yield
 
     @classmethod
     @asynccontextmanager
@@ -383,7 +383,7 @@ class StoreLockOwner(StoreLockFile, declared_name=None):
 
     def guarded_read(
         self, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
-    ) -> AbstractContextManager[StoreLock | None]:
+    ) -> AbstractContextManager[None]:
         return type(self).read_guard(self.path, read_budget=read_budget)
 
     def guarded_write(
@@ -444,6 +444,15 @@ class RegistryTier(StoreLockTier):
     """Tag updates hold registry before catalog (channel_management.py:191/303)."""
 
     __slots__ = ()
+
+
+class RegistryLocking(MultiFileStore, RegistryTier, declared_name=None):
+    """The registry's lock policy: registry.json and its owner guard are replaced together,
+    and a wait past 5 s names the holders."""
+
+    @classmethod
+    def contention(cls) -> StoreLockContention:
+        return HolderNamingContention(5)
 
 
 class CatalogTier(StoreLockTier):
@@ -537,10 +546,12 @@ class SqliteStore(ABC):
 
     @classmethod
     @contextmanager
-    def exclusive_writer(cls, path: Path) -> Iterator[sqlite3.Connection]:
+    def exclusive_writer(
+        cls, path: Path, *, uri: bool = False,
+    ) -> Iterator[sqlite3.Connection]:
         """A schema reconcile or WAL truncation keeps other connection boundaries out."""
         with (_store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION),
-              closing(cls.writer(path, isolation_level=None)) as db):
+              closing(cls.writer(path, isolation_level=None, uri=uri)) as db):
             yield db
 
 

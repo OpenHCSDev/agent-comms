@@ -33,7 +33,7 @@ from .field_codec import (
     WireRequired,
 )
 from .message_reference import MessageReference
-from .projection_source import ProducedRow, ProjectionSource
+from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
 if TYPE_CHECKING:
@@ -281,15 +281,19 @@ class AcquiringClaim(ClaimIdentity):
     resource_scope: ClaimScope
 
 
-@dataclass(frozen=True)
-class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ProjectionSource, affix=""):
-    """One original resource transition; its member declares what it changes."""
+class ClaimProducer(ProjectionOutputs):
+    """Transitions, their envelopes and their holder rows produce the same claim tables."""
 
     @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
+    @staticmethod
+    def writes(cls: type[ClaimProducer]) -> tuple[type[ProducedRow], ...]:
         from .messages import HeldResources, ClaimOperations
         return (HeldResources, ClaimOperations)
 
+
+@dataclass(frozen=True)
+class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ClaimProducer, ProjectionSource, affix=""):
+    """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
     expired: Annotated[

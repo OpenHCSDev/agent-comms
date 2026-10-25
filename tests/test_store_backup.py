@@ -3,6 +3,7 @@ import multiprocessing
 import os
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 import pytest
 
@@ -13,7 +14,7 @@ from agent_comms.coordination_database import (
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.locked_store import RollbackRetained, SQLiteFile
 from agent_comms.store_files import StoreBusy
 
 
@@ -141,7 +142,6 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
         writer.commit()
         spill_dir = tmp_path / 'spill'
         backup = StoreBackup.take(root, route, (store, created), spill_dir)
-        assert isinstance(backup, StoreBackup)
         assert backup.path.parent == spill_dir
         assert backup.spill_directory(spill_dir) == backup.path
         assert backup.original()
@@ -150,7 +150,7 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
         created.write_text('["new-conversion"]')
     route.write_text('changed route')
     assert not backup.original()
-    backup.restore()
+    backup.restore(lambda: None)
     assert backup.stores_original()
     assert not backup.restoring.exists()
     assert not created.exists()
@@ -160,6 +160,27 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     archived = backup.retire()
     assert not backup.path.exists()
     assert archived.exists()
+
+
+@pytest.mark.parametrize("existed", (False, True))
+def test_rollback_retained_family_is_saved_without_rewrite_selection(tmp_path, existed):
+    root = tmp_path / "wire"
+    root.mkdir()
+    retained = RollbackRetained.retained_in(root)
+    assert retained
+    for path in retained:
+        if existed:
+            path.write_bytes(b"original")
+    backup = StoreBackup.take(root, tmp_path / "route.json", (), tmp_path / "spill")
+    assert set(backup.selected_files()) == {path.relative_to(root) for path in retained}
+    for path in retained:
+        path.write_bytes(b"changed")
+    backup.restore(lambda: None)
+    for path in retained:
+        if existed:
+            assert path.read_bytes() == b"original"
+        else:
+            assert not path.exists()
 
 
 def test_store_backup_restores_a_file_whose_directory_a_carry_deleted(tmp_path):
@@ -173,7 +194,7 @@ def test_store_backup_restores_a_file_whose_directory_a_carry_deleted(tmp_path):
     backup = StoreBackup.take(root, route, (saved,), tmp_path / 'spill')
     saved.unlink()
     saved.parent.rmdir()
-    backup.restore()
+    backup.restore(lambda: None)
     assert saved.read_text() == '{"retained": true}\n'
     assert backup.stores_original()
     assert not backup.restoring.exists()
@@ -251,8 +272,30 @@ def test_route_only_backup_preserves_a_concurrent_change(tmp_path, had_route):
 
     route.write_text('changed route')
     assert not backup.original()
-    backup.restore()
+    backup.restore(lambda: None)
     assert backup.stores_original()
     assert not backup.original()
     assert route.read_text() == 'changed route'
+
+
+def test_restore_remains_interrupted_until_rebuild_finishes(tmp_path):
+    root = tmp_path / 'bus'
+    root.mkdir()
+    saved = root / 'saved'
+    saved.write_text('original')
+    backup = StoreBackup.take(root, tmp_path / 'route', (saved,), tmp_path / 'spill')
+    saved.write_text('changed')
+
+    def incomplete() -> None:
+        assert saved.read_text() == 'original'
+        assert backup.restoring.exists()
+        raise RuntimeError('projection rebuild unfinished')
+
+    with pytest.raises(RuntimeError, match='projection rebuild unfinished'):
+        backup.restore(incomplete)
+    assert backup.restoring.exists()
+    completed: list[Path] = []
+    backup.restore(lambda: completed.append(root))
+    assert completed == [root]
+    assert not backup.restoring.exists()
 

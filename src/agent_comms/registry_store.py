@@ -32,7 +32,7 @@ from .registry_document import (
 )
 from .routing import TurnRouting
 from .session_file import RegistrySessionLocation
-from .store_files import HolderNamingContention, MultiFileStore, RegistryTier, StoreLockContention
+from .store_files import RegistryLocking
 from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
@@ -203,12 +203,8 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(MultiFileStore, RegistryFile, CarriedDocument[RegistryDocument], RegistryTier):
+class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocument]):
     json_indent = 2
-
-    @classmethod
-    def contention(cls) -> StoreLockContention:
-        return HolderNamingContention(5)
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
     def __reduce__(self) -> tuple[type[Self], tuple[Path]]:

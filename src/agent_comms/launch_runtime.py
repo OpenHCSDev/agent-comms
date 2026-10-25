@@ -93,7 +93,12 @@ class LaunchRuntime:
 
     @classmethod
     def installed(cls) -> LaunchRuntime:
-        return cls(cls.current_pointer().resolve(strict=True) / "bin/python")
+        return cls.at_prefix(cls.current_pointer().resolve(strict=True))
+
+    @classmethod
+    def at_prefix(cls, prefix: Path) -> Self:
+        """The interpreter layout shared by installed and newly built runtimes."""
+        return cls(prefix / "bin/python")
 
     @property
     def prefix(self) -> Path:
@@ -114,7 +119,7 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
-        return LaunchRoot.environment(self._environment(source))
+        return LaunchRoot.environment(self.child_environment(self._environment(source)))
 
     def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
@@ -144,7 +149,7 @@ class RunningSource(ABC):
     def serving(runtime: LaunchRuntime) -> RunningSource:
         """The source a runtime's children import: this process's own when the runtime is this
         process's interpreter, otherwise that installation's site-packages."""
-        if runtime.interpreter == Path(sys.executable):
+        if runtime.prefix == LaunchRuntime.running().prefix:
             return RunningSource.current()
         return InstalledSource(runtime.prefix)
 

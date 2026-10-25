@@ -17,12 +17,8 @@ from agent_comms.coordination_errors import (
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
 from agent_comms.store_files import (
-    DEFAULT_STORE_CONTENTION, UNBOUNDED_CONTENTION, StoreContention, StoreLockContention,
-)
-
-from .store_files import (
-    SharedLock,
-    _store_lock,
+    DEFAULT_STORE_CONTENTION, UNBOUNDED_CONTENTION, RegistryLocking,
+    StoreContention, StoreLockContention,
 )
 
 if TYPE_CHECKING:
@@ -90,7 +86,7 @@ class NativeBoundary(ExitStack):
     ) -> None:
         super().__init__()
 
-        # One budget for every lock the boundary takes, the activity cut included.
+        # The activity boundary spends this operation's contention budget.
         self.bus = bus
         self.contention = contention
         self.measurements = PublicationMeasurements()
@@ -99,9 +95,7 @@ class NativeBoundary(ExitStack):
         try:
             self.activity = self.enter_context(self.bus.opened_activity(self.contention))
             with self.measurements.operation("file_exclusion"):
-                self.enter_context(_store_lock(
-                    self.bus._registry.store.path, mode=SharedLock(),
-                    contention=self.contention))
+                self.enter_context(RegistryLocking.read_guard(self.bus._registry.store.path))
             with self.measurements.operation("registry_snapshot"):
                 self.privacy = self.bus._registry.store.private_guard_unlocked()
                 self.registry = self.bus._registry.store.read_snapshot_unlocked()

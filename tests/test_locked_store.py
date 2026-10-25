@@ -63,6 +63,12 @@ def _hold_store_write(owner, path, ready, release):
             raise TimeoutError("store writer was not released")
 
 
+def _competing_write(owner, path, started, entered):
+    started.set()
+    with owner.write_guard(path):
+        entered.set()
+
+
 def _guarded_read(owner, path, started, done, diagnostics):
     with diagnostics.open("w") as report, redirect_stderr(report):
         store = owner(path)
@@ -256,6 +262,12 @@ def test_store_family_read_guards(tmp_path):
             with process(_guarded_read, RuntimeInfoStore, path, started, done,
                          tmp_path / "single-file-wait.log"):
                 assert done.wait(5), "an atomic document read waited on its writer"
+            write_started, write_entered = event(), event()
+            with process(_competing_write, RuntimeInfoStore, path, write_started, write_entered):
+                assert write_started.wait(5)
+                assert not write_entered.wait(0.2), "a competing writer crossed the held write guard"
+                release.set()
+                assert write_entered.wait(5), "a competing writer did not resume after release"
         finally:
             release.set()
 
