@@ -1096,10 +1096,13 @@ class Install[Rehearsed: Rehearsal](ABC):
                 report: InstallReport) -> LiveRun:
         """Bridges paused before the hold (bridges_paused) exec in place once live() publishes
         or rolls back; the installed pointer, not a copied target version, selects each
-        successor. Each serve retains its recorded owner's PID and start time."""
+        successor. Each serve retains its recorded owner's PID and start time. A successor
+        serves only once the bus opens, so the hold clears before any bridge resumes; a
+        failure that kept the hold draining (held_on_failure) left nothing to clear."""
         try:
             return report.record_live(self.live(rehearsal, report))
         finally:
+            report.owners.release()
             with ReleaseBridgePhase().running(self.staged.commands.clock):
                 bridges.release()
 
