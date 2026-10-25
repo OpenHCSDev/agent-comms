@@ -643,7 +643,8 @@ def test_human_refusal_rolls_back_the_header(tmp_path, bus):
 
 
 def test_notification_failure_carries_the_committed_message(tmp_path, bus):
-    bus.path.with_suffix(".changed").mkdir()
+    marker, = bus.source_paths(bus.path.parent)
+    marker.mkdir(parents=True)
     origin = HumanOrigin("author", 1, str(tmp_path))
     with pytest.raises(CommittedMessageError) as failed:
         origin.append(
