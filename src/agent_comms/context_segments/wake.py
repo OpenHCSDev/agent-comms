@@ -21,7 +21,6 @@ from ..turn_context import (
     InstructionFile,
     InstructionSegment,
     NextContextTurn,
-    OwnerProvenance,
     WireProvenance,
 )
 from ..wake_policy import WakePolicy
@@ -57,7 +56,7 @@ class SelectedWakeSegment(InstructionSegment):
         return super().capture(
             (
                 relevance.source,
-                OwnerProvenance(owner.incarnation, NextContextTurn().source_revision(owner)),
+                NextContextTurn().provenance(owner),
                 *(WireProvenance(initial.message.reference) for initial, _ in sources),
                 *(WireProvenance(outcome.message.reference) for outcome in sent_outcomes),
             ),

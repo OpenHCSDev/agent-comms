@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import sqlite3
 from abc import abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -87,7 +88,7 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         db: sqlite3.Connection,
         row: type[TypedTable],
         column: _Field,
-        updates: list[tuple[object, int]],
+        updates: Iterable[tuple[object, object]],
     ) -> None:
         """Inside the caller's write transaction, carry stored values of a guarded row:
         its declared mutation guards are lifted and recreated from the same declaration."""

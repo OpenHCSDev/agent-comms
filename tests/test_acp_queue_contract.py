@@ -34,6 +34,7 @@ from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from agent_comms.threads import Thread
+from agent_comms.transcript_routes import NoDisplayText
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 
@@ -231,7 +232,7 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
     original = OwnerOriginalInput(
         acceptance=NoTurnAcceptance(),
         goal_permission=TurnGoalPermission(InactiveGoalPermission()),
-        prompt="original", original_display=None, origins=(), dependency=NoInputDependency(),
+        prompt="original", original_display=NoDisplayText(), origins=(), dependency=NoInputDependency(),
         batch=SingleInputBatch((row,)),
     )
     started = await original.acceptance.started_update(original, agent.inputs, "beta", row, scope)
@@ -255,7 +256,7 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
     )
     routed = RoutedOriginalInput(
         acceptance=NoTurnAcceptance(), goal_permission=original.goal_permission,
-        prompt="routed", original_display=None, origins=(), dependency=NoInputDependency(),
+        prompt="routed", original_display=NoDisplayText(), origins=(), dependency=NoInputDependency(),
         batch=SingleInputBatch((routed_row,)),
     )
     started = await routed.acceptance.started_update(

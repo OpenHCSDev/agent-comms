@@ -68,7 +68,7 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
     retried.require_active()
     assert retried.id == goal.id
     generation = store.require_generation(goal.id)
-    assert generation.number == 2 and generation.attempt_id is None
+    assert generation.number == 2 and generation.attempt_id.present() == ()
     assert inputs.path.read_bytes() == original_inputs
     with closing(sqlite3.connect(store.path)) as conn:
         assert conn.execute('SELECT COUNT(*) FROM attempt_record').fetchone()[0] == 0

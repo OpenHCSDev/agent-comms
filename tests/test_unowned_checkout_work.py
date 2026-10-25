@@ -47,7 +47,7 @@ from agent_comms.todos import (
     PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason, TodoError,
 )
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
 from agent_comms.threads import Thread
@@ -128,7 +128,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
-        id='shared-work', owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
+        owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(home, 'false'),
         edits=('Keep the changes with their author until they have been pushed.',),
         banned=('No second store of checkout holders.',), report='Report the actual checkout.',
@@ -158,8 +158,8 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
         row.revision, CoreWatcherIncarnation.watcher(), row.held(),
         StrikeReason('The unit stopped answering this order before its checked work was finished.')))
     c.transcripts.external('idle').finish(
-        turn_id=available_turn_id, item_id='answer', events=(AssistantTranscript(
-            'Ready for work', position='answer', timestamp=time.time()),))
+        turn_id=available_turn_id, item_id=NativeItemId('answer'), events=(AssistantTranscript(
+            'Ready for work', position=NativeItemId('answer'), timestamp=time.time()),))
     CommanderHeartbeat.register(c.registry)
     configured_repository(c)
     return c
@@ -212,6 +212,9 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
         assert c.goals.todos.get('P2').holder is None
         beat()
         c.registry.set_work_state('idle', ReadyThreadWorkState())
+        # Copies retire source processes; this test process explicitly owns the copied unit.
+        c.registry.register(replace(c.registry.require('idle'),
+                                    process_identity=ProcessIdentity.capture(os.getpid())))
         available = UnownedWheelSpin.violations(c, 'lead')
         assert len(available) == 1
         assert isinstance(available[0], ReassignedWheelSpin)

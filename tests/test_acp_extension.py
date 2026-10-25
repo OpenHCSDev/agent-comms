@@ -114,7 +114,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             )
         ),
         TurnChangedUpdate(TurnState(finished=FinishedTurn(TurnId('9b473845f684444f80a26586ae298d2b')))),
-        TextRouteUpdate(None),
+        TextRouteUpdate(),
         TranscriptChangedUpdate(NativeTranscriptCursor("session.jsonl", 42)),
         InputFailedUpdate("prompt", BackendDeliveryFailure("provider refused")),
     )

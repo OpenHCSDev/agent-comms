@@ -3,7 +3,7 @@ from contextlib import nullcontext
 
 import pytest
 
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.cli_bridges.claude_protocol import (
     CatchUp, ClaudeSession, ClaudeToolDraft, KnownTurn, Live, RedactedThinking,
@@ -49,8 +49,8 @@ def test_prompt_identifies_finished_and_active_items_with_the_same_turn():
     call = started.accumulator.call
     result = TimedRecord(uuid='result', timestamp='2026-10-18T00:00:01Z', position=18)
     completed, active = session.tool_result('call', 'done', True, result)
-    assert completed == FinishedItem(turn_id_turn_id, 'call', (
+    assert completed == FinishedItem(turn_id_turn_id, NativeItemId('call'), (
         call.started(prompt.position, prompt.timestamp),
         call.ended('done', True, result.position, result.timestamp),
     ))
-    assert active == ActiveItem(turn_id_turn_id, 'call', ModelWaitPhase())
+    assert active == ActiveItem(turn_id_turn_id, NativeItemId('call'), ModelWaitPhase())

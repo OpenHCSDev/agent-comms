@@ -6,12 +6,14 @@ import pytest
 
 from agent_comms.commander.judge import Edit, main
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.todos import DroppedVerdict, RewrittenVerdict, TodoError
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from source_revision_fixture import SourceRepository
+
 pytest_plugins = ("test_held_problem_orders",)
 
 FOREIGN = "FOREIGN_MARKER_LINE = 'only in the second repository the unit edits'"
@@ -25,14 +27,20 @@ def committed(repo, name: str, line: str) -> None:
     SourceRepository.git(repo.checkout, "commit", "-q", "-m", f"add {name}")
 
 
-def recorded_edit(ctx, call_id: str, path: str, line: str) -> None:
+def recorded_edit(ctx, call_id: ToolCallId, path: str, line: str) -> None:
     formatter_turn_id = NativeTurnId('formatter')
     tool = ToolDeclaration.record(
         "edit", {"path": path, "edits": [{"oldText": "", "newText": line}]}, call_id=call_id)
     worker = ctx.comms.registry.require("worker").incarnation
-    ExternalTranscript(ctx.root, worker).finish(turn_id=formatter_turn_id, item_id=call_id, events=(
-        ToolStartTranscript(position=0, tool_call_id=call_id, tool_name="edit",
-                            timestamp=time.time(), tool=tool),))
+    ExternalTranscript(ctx.root, worker).finish(
+        turn_id=formatter_turn_id,
+        item_id=NativeItemId(call_id),
+        events=(
+            ToolStartTranscript(
+                position=0, tool_call_id=call_id, tool_name="edit", timestamp=time.time(), tool=tool
+            ),
+        ),
+    )
 
 
 def unjudged(ctx) -> dict[str, Edit]:
@@ -56,8 +64,8 @@ def discarded_and_kept(held_commander):
     repo.git(repo.checkout, "checkout", "-q", base)
     repo.git(repo.checkout, "branch", "-q", "-D", "formatter")
     committed(repo, "kept_module.py", LIVE)
-    recorded_edit(ctx, "dropped-call", str(gone / "dropped_module.py"), DROPPED)
-    recorded_edit(ctx, "kept-call", str(gone / "kept_module.py"), LIVE)
+    recorded_edit(ctx, ToolCallId("dropped-call"), str(gone / "dropped_module.py"), DROPPED)
+    recorded_edit(ctx, ToolCallId("kept-call"), str(gone / "kept_module.py"), LIVE)
     return ctx
 
 

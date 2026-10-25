@@ -19,6 +19,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
 from .reported_turn import ReportedTurn
+from .attempt_resolution import VerifiedTurnDecision
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore, LaunchPermit
@@ -49,7 +50,7 @@ class VerifiedGoalSettlement(MroDispatch):
                 store = comms.goals.open_goal_store()
                 generation = store.require_generation(goal.id)
                 generation.lifecycle.continue_work(
-                    store, generation, f"verified-turn:{account.turn}"
+                    store, generation, VerifiedTurnDecision(account.turn)
                 )
 
     @property

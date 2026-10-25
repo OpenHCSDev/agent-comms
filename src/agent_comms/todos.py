@@ -25,7 +25,6 @@ from pathlib import Path
 from statistics import median
 from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
-from uuid import uuid4
 
 from agent_comms.build_identity import (
     BuildIdentity,
@@ -61,12 +60,14 @@ from agent_comms.errors import MissingSourceLine, ToolRefusedError
 from agent_comms.field_codec import (
     DefaultNonNull,
     Description,
-    GoalId,
     FieldCodec,
     GitCommitText,
+    GoalId,
+    HuntId,
     MalformedRecord,
     MessageId,
     NullMember,
+    OrderId,
     SingleFieldValue,
     SubclassUnion,
     WireOmitDefault,
@@ -80,6 +81,7 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
+from agent_comms.native_tool_call import ToolCallId
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
@@ -2056,7 +2058,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
         return (self,)
 
-    id: str
+    id: OrderId
     pull_requests: Annotated[tuple[PullRequestLink, ...], WireOmitDefault()] = ()
     owner: FileLine
     scope: OrderScope
@@ -2191,7 +2193,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise TodoError("Check the delivered order before recording installation.")
 
-    def require_delivery(self, order_id: str) -> None:
+    def require_delivery(self, order_id: OrderId) -> None:
         raise TodoError("Only an open order can be delivered.")
 
     def require_checked(self, problem: str) -> None:
@@ -2212,7 +2214,7 @@ class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
     def corrected(self, correction: CorrectOrderTodo) -> Self:
         return correction.corrected(self)
 
-    def require_delivery(self, order_id: str) -> None:
+    def require_delivery(self, order_id: OrderId) -> None:
         if self.id != order_id:
             raise TodoError("The order changed; refresh its state before delivering it.")
 
@@ -2285,7 +2287,7 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
         window = (self.first_call_deadline.recorded_at("A first-call deadline")
                   - self.at.recorded_at("An order"))
         return self.copy_as(
-            PendingProblemOrder, id=uuid4().hex[:12], at=RecordedEventTime(at),
+            PendingProblemOrder, id=OrderId.mint(), at=RecordedEventTime(at),
             first_call_deadline=RecordedEventTime(at + window), edits=edits,
         )
 
@@ -2310,7 +2312,7 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(Pending, DeliverableProblemOrder):
-    id: str = field(default_factory=lambda: uuid4().hex[:12])
+    id: OrderId = field(default_factory=OrderId.mint)
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
@@ -2770,7 +2772,7 @@ class TodoStoreRows(StoreRows):
 
 @dataclass(frozen=True)
 class HuntRecord(TodoStoreRows, TypedTable):
-    id: Annotated[str, Column(primary_key=True)]
+    id: Annotated[HuntId, Column(primary_key=True)]
     commander: Annotated[ThreadIncarnation, Column(index=True)]
     hunt: Hunt
 
@@ -3226,7 +3228,7 @@ class FailedCheckStrike(StrikeTodo):
     """DeliverTodo records a failed order check at the check boundary, before rejecting done;
     once per order and holder, in the existing strike history."""
 
-    order_id: str
+    order_id: OrderId
 
     @classmethod
     def make(cls, todo: Todo, now: float, reason: str) -> Self:
@@ -3304,7 +3306,7 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
         """A Todo-only verdict joins the batch's one write transaction."""
         batch.together.append(call)
 
-    def judged_calls(self) -> tuple[str, ...]:
+    def judged_calls(self) -> tuple[ToolCallId, ...]:
         """The holder's tool calls this verdict judges by identity."""
         return ()
 
@@ -3328,9 +3330,9 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
 
 @dataclass(frozen=True)
 class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
-    tool_call_id: str
+    tool_call_id: ToolCallId
 
-    def judged_calls(self) -> tuple[str, ...]:
+    def judged_calls(self) -> tuple[ToolCallId, ...]:
         return (self.tool_call_id,)
 
     def story_text(self) -> str:
@@ -3338,7 +3340,6 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 
     def require_current(self, current: Todo) -> None:
         current.require_commander(self.actor)
-        _text(self.tool_call_id, "Judged tool call ID", 200)
         if self.tool_call_id in current.judged_calls:
             raise TodoError(f"Tool call {self.tool_call_id} already has a verdict on {current.id}.")
         super().require_current(current)
@@ -3558,7 +3559,7 @@ class ProblemHeadReview(OrderQuote, CitedEvidence, HeadOrderLink):
 
 @dataclass(frozen=True)
 class LinkedHeadReview(ProblemHeadReview):
-    order_id: str
+    order_id: OrderId
 
     @classmethod
     def of(cls, todo: Todo, quote: str, evidence: tuple[FileLine, ...] = ()) -> Self:
@@ -3624,7 +3625,7 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
         str, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(LinkedHeadReview, 'problem')}')", nullable=True),
     )
     order_id: ClassVar[Generated] = Generated(
-        str, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(LinkedHeadReview, 'order_id')}')", nullable=True),
+        OrderId, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(LinkedHeadReview, 'order_id')}')", nullable=True),
     )
     indexes = (Index(("request", "seq")), Index(("problem", "order_id", "seq")))
 
@@ -4050,7 +4051,7 @@ class DeliverTodo(TodoOperation, declared_name=None):
 
     actor: ThreadIncarnation
     delivery: OrderDelivery
-    order_id: str
+    order_id: OrderId
     verified_claims: Annotated[dict[ProgressClaim, tuple[str, ...]], WireTransient()] = field(
         default_factory=dict, kw_only=True, repr=False, compare=False,
     )
@@ -4234,7 +4235,7 @@ class Todo(TodoStoreRows, TypedTable):
         return Repo(checkout=self.order.checked().check.directory, github=self.repo)
 
     @property
-    def judged_calls(self) -> tuple[str, ...]:
+    def judged_calls(self) -> tuple[ToolCallId, ...]:
         return tuple(call for verdict in self.verdicts for call in verdict.judged_calls())
 
     @property
@@ -4623,7 +4624,7 @@ class TodoStore(OwnerRequestStore):
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
-        recorded = HuntRecord(uuid4().hex, commander, hunt)
+        recorded = HuntRecord(HuntId.mint(), commander, hunt)
         with self.writing() as db:
             recorded.upsert(db)
         return recorded
@@ -4730,7 +4731,7 @@ class TodoStore(OwnerRequestStore):
     def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
         return cls._one(Todo.rows(db, "id=?", (todo_id,)), todo_id)
 
-    def for_order(self, order_id: str) -> tuple[Todo, ...]:
+    def for_order(self, order_id: OrderId) -> tuple[Todo, ...]:
         """A sent order can cover several linked problems; its ID is not a Todo key."""
         rows = self._select("json_extract(\"order\",'$.id')=?", (order_id,))
         if not rows:

@@ -6,14 +6,13 @@ import time
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
-from uuid import uuid4
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
-    BoundedText,
     NullMember,
+    OwnerRequestKey,
     RecordMember,
     SingleFieldValue,
     SubclassUnion,
@@ -66,11 +65,11 @@ class RequestSelection(RequestValue, declared_name=None):
 
 @dataclass(frozen=True, slots=True)
 class OwnerRequestId(SingleFieldValue, RequestLink, RequestSelection):
-    value: Annotated[str, BoundedText]
+    value: OwnerRequestKey
 
     @classmethod
     def new(cls) -> Self:
-        return cls(uuid4().hex)
+        return cls(OwnerRequestKey.mint())
 
     def require(self) -> Self:
         return self

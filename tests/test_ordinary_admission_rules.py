@@ -6,10 +6,11 @@ import pytest
 
 
 import agent_comms.ordinary_turn_rules as rules
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import GoalId, GoalWaitId
 from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.goal_waits import NoGoalWait, RecordedGoalWait
 from agent_comms.threads import Thread
+from agent_comms.transcript_routes import DisplayText
 
 
 def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_path):
@@ -37,7 +38,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     message = comms.messaging.send("peer", "owner", "Result").message
     wait = RecordedGoalWait(
         goal_id=goal.id,
-        wait_id="wait",
+        wait_id=GoalWaitId.mint(),
         revision=0,
         after_seq=0,
         targets=(GoalWaitTarget(peer.incarnation.require_recorded()),),
@@ -50,7 +51,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         acceptance=NoTurnAcceptance(),
         goal_permission=TurnGoalPermission(ContinuationGoalPermission(goal)),
         prompt="Result",
-        original_display="Result",
+        original_display=DisplayText("Result"),
         origins=(message,),
         batch=SingleInputBatch(()),
     )
@@ -68,7 +69,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     ).require_valid()
     for source, current_wait, expected in (
         (dependency, NoGoalWait(), rules.OrdinaryDependencyRule),
-        (dependency, replace(wait, wait_id="replacement"), rules.OrdinaryDependencyRule),
+        (dependency, replace(wait, wait_id=GoalWaitId.mint()), rules.OrdinaryDependencyRule),
         (dependency, replace(wait, after_seq=message.seq), rules.OrdinaryWaitRule),
     ):
         with pytest.raises(ReservationViolationError) as error:

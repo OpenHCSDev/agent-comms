@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_pings import LoadPing, PhaseRowPing, Ping, UnitRowPing
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import OrderId, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import PlanPhase
@@ -31,7 +31,7 @@ class CommanderOrder:
 
     problem: str
     text: str
-    order: str
+    order: OrderId
     state: str
     progress: OrderProgress
     review_timers_up: tuple[RecordedEventTime, ...]

@@ -35,6 +35,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
+from .turn_item import NativeItemId
 
 
 def reverse_records(
@@ -239,8 +240,7 @@ class NativeTranscript(TranscriptSource):
         """
         revision = FileRevision.from_stat(self.path.stat())
         with self.path.open("rb") as stream:
-            header = SessionEntry.read(stream.readline())
-            header.require_header()
+            SessionEntry.read(stream.readline())
             sources = []
             for raw in stream:
                 entry = NativeEntry.read(raw)
@@ -295,7 +295,8 @@ class NativeTranscript(TranscriptSource):
             yield tuple(fragment)
 
     def recorded_contexts(self, contexts, entry_ids):
-        return contexts.entries(NativeSessionIdentity(self.session_id, str(self.path)), entry_ids)
+        return contexts.entries(NativeSessionIdentity(self.session_id, str(self.path)),
+                               tuple(NativeItemId(identity) for identity in entry_ids))
 
     @property
     def session_id(self):
@@ -323,7 +324,6 @@ class NativeTranscript(TranscriptSource):
         files.require_private_directory(self.path.parent)
         with self.path.open("rb") as stream:
             header = SessionEntry.read(stream.readline())
-        header.require_header()
         with NativeContextJournal.open_evidence(files) as db:
             proof = NativeContextJournal.for_input(db, user.input_id)
             if proof is None:
