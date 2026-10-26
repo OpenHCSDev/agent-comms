@@ -39,7 +39,7 @@ from .selected_tool_broker import (
     verify_sent_full_input,
 )
 from .storage_room import NoRoomNeeded, RoomReservation
-from .storage_rules import StorageDenied
+from .shell_effects import StorageDenied
 from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 

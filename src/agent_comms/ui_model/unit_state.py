@@ -186,8 +186,9 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     orders: tuple[str, ...]
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
-    verb: ClassVar[str]
     action: ClassVar[str]
+    # What the owner would ask on reading this card; the action answers it.
+    question: ClassVar[str]
 
     @classmethod
     def worst_first(cls) -> tuple[type[UnitState], ...]:
@@ -288,7 +289,7 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
         return " ".join(self.orders)
 
     def line(self) -> str:
-        return f"{self.verb} {self.unit.name} {self.detail()} -> {self.default_action}"
+        return f"{self.unit.name} {self.detail()}. {self.question} -> {self.default_action}"
 
 
 class ConditionalState(UnitState, declared_name=None):
@@ -316,7 +317,7 @@ class PendingWorkState(ConditionalState, declared_name=None):
 @dataclass(frozen=True)
 class Unreadable(NeedsCommanderAttention, UnitState):
     reason: str
-    verb = "REPAIR"
+    question = "its source doesn't even read, so how would we know it's idle?"
     action = "repair the unreadable source; do not infer that the unit is idle"
 
     @classmethod
@@ -338,7 +339,7 @@ class Unreadable(NeedsCommanderAttention, UnitState):
 @dataclass(frozen=True)
 class Blocked(NeedsCommanderAttention, UnitState):
     goal: GoalSnapshot
-    verb = "UNBLOCK"
+    question = "its goal is blocked. what does it need?"
     action = "follow the blocked goal's declared response"
 
     @classmethod
@@ -367,7 +368,7 @@ class Detached(NeedsCommanderAttention, UnitState):
     read now. The registered status owns that fact; the inbox's read marker is the owner's,
     marks what he opened, and says nothing about the unit."""
 
-    verb = "WAKE"
+    question = "is anyone home, or are we yelling into an inbox?"
     action = "wake it or reassign the order"
 
     @classmethod
@@ -382,7 +383,7 @@ class Detached(NeedsCommanderAttention, UnitState):
 @dataclass(frozen=True)
 class AwaitingCommander(NeedsCommanderAttention, UnitState):
     seconds: ClassVar[int] = 5 * 60
-    verb = "ANSWER"
+    question = "it asked you. why is it still waiting?"
     action = "answer the original message"
 
     @classmethod
@@ -398,7 +399,7 @@ class AwaitingCommander(NeedsCommanderAttention, UnitState):
 
 class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
     seconds: ClassVar[int] = 20 * 60
-    verb = "READ"
+    question = "is it doing work, or letting work accumulate?"
     action = "inspect its last turn and restart only known-safe work"
 
     @classmethod
@@ -416,7 +417,7 @@ class Stuck(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
-    verb = "RESHAPE"
+    question = "same failure again. why would the next rerun be different?"
     action = "read the failed approach and change it before another rerun"
 
     @classmethod
@@ -440,7 +441,7 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
-    verb = "RESUME"
+    question = "its turn ended with nothing queued. stalled on what, exactly?"
     action = "resume its work or give it the missing next step"
 
     @classmethod
@@ -453,7 +454,7 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
-    verb = "CLOSE"
+    question = "delivered and still open. why isn't it closed?"
     action = "install the merge or close with the working application evidence"
 
     @classmethod
@@ -471,7 +472,7 @@ class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
     disposes of the line and it locks none. The line names only those orders; while the unit
     still writes source for another, that order's state is the unit's."""
 
-    verb = "AWAIT RUN"
+    question = "installed. did its holder actually run it yet?"
     action = "its holder runs the application proof on the installed build; close it on its evidence"
     commander_disposes = False
 
@@ -486,7 +487,7 @@ class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
 
 
 class Moving(ConditionalState, UnitState):
-    verb = "WATCH"
+    question = "it's moving. toward the order, or somewhere else?"
     action = "let it continue"
 
     @classmethod
@@ -495,7 +496,7 @@ class Moving(ConditionalState, UnitState):
 
 
 class Idle(ConditionalState, UnitState):
-    verb = "ORDER"
+    question = "nothing to do. why is it idle?"
     action = "give it the next useful order"
 
     @classmethod

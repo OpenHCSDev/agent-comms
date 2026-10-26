@@ -18,7 +18,7 @@ UNIT = RecordedThreadIncarnation("unit", 1.0)
 
 
 def unit_line(state: type[UnitState], since: float) -> UnitPing:
-    return UnitPing(UNIT, state, (), (), TextDigest.of(state.verb), text=state.verb,
+    return UnitPing(UNIT, state, (), (), TextDigest.of(state.question), text=state.question,
                     subjects=(UnitSubject(UNIT),), since=RecordedEventTime(since))
 
 
