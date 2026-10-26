@@ -1072,8 +1072,7 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def readings(self, source: ProgressSource, storage: StorageRule,
-                 owner: Thread) -> DistanceReadings: ...
+    def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings: ...
 
     @abstractmethod
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]: ...
@@ -1081,11 +1080,10 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def require_read(self) -> None:
         """A retired checkout needs no local read; present and unread ones decide."""
 
-    def read_commits(self, todo: Todo, storage: StorageRule, owner: Thread,
+    def read_commits(self, todo: Todo, refs: tuple[str, ...],
                      *excluded: str) -> tuple[ProgressPoint, ...]:
-        """Select current owned refs and consume their log in this checkout read."""
+        """Consume this capture's selected refs inside its checkout failure boundary."""
         self.require_read()
-        refs = self.references(storage, owner)
         points = (
             *self.checked_commits(todo.order.checked(), refs, *excluded),
             *self.commits(todo.reference_pattern, refs, *excluded),
@@ -1111,8 +1109,7 @@ class MissingCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         return ()
 
-    def readings(self, source: ProgressSource, storage: StorageRule,
-                 owner: Thread) -> DistanceReadings:
+    def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         return DistanceReadings()
 
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
@@ -1135,8 +1132,7 @@ class UnreadCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         return ()
 
-    def readings(self, source: ProgressSource, storage: StorageRule,
-                 owner: Thread) -> DistanceReadings:
+    def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         raise WorkBranchError(self.reason)
 
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
@@ -1156,7 +1152,7 @@ class PresentCheckout(ProgressCheckout):
     def require_read(self) -> None:
         self.git("rev-parse", "--verify", "HEAD^{commit}")
 
-    @property
+    @cached_property
     def origin_refs(self) -> tuple[str, ...]:
         return tuple(self.git("for-each-ref", "--format=%(refname)",
                               "refs/remotes/origin/").splitlines())
@@ -1223,13 +1219,12 @@ class PresentCheckout(ProgressCheckout):
                      for path in self.branches.read_checkout().uncommitted()
                      if path.exists())
 
-    def readings(self, source: ProgressSource, storage: StorageRule,
-                 owner: Thread) -> DistanceReadings:
+    def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         """Read bounded recorded results; an absent remote default supplies no invented base."""
         if not self.default_refs:
             return DistanceReadings()
         readings: list[DistanceReading] = []
-        for tip in self.read_commits(source.todo, storage, owner, *self.default_refs):
+        for tip in self.read_commits(source.todo, refs, *self.default_refs):
             base = self.git("merge-base", tip.sha, self.default_reference).strip()
             commits = [ProgressPoint.listed(line) for line in reversed(self.git(
                 "log", f"--max-count={DistanceReadings.window}", "--first-parent",
@@ -1254,7 +1249,7 @@ class PresentCheckout(ProgressCheckout):
 
 
 class CheckoutReads:
-    """Share checkout readers within one frame; ref selection is fresh for each log,
+    """Share checkout readers within one frame; each capture selects its refs once,
     while retained commit points and push reflogs belong to that frame alone."""
 
     def __init__(self) -> None:
@@ -1348,8 +1343,14 @@ class ProgressSource(PullRequestSource):
     def capture(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
                 worktrees: tuple[PresentCheckout, ...], storage: StorageRule,
                 owner: Thread) -> Self:
-        """Consume the clock's Git log while the checkout failure belongs to this read."""
-        return cls(todo, pulls, checkout, committed=checkout.read_commits(todo, storage, owner),
+        """Select owned refs once, then consume their logs within this capture."""
+        refs = checkout.references(storage, owner)
+        return cls.from_refs(todo, pulls, checkout, worktrees, refs)
+
+    @classmethod
+    def from_refs(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
+                  worktrees: tuple[PresentCheckout, ...], refs: tuple[str, ...]) -> Self:
+        return cls(todo, pulls, checkout, committed=checkout.read_commits(todo, refs),
                    worktrees=worktrees)
 
     def commits(self) -> Iterator[ProgressPoint]:
@@ -1384,13 +1385,12 @@ class MeasuredProgressSource(ProgressSource):
     """The board captures filtered commits and distances in the same failure boundary."""
 
     @classmethod
-    def capture(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
-                worktrees: tuple[PresentCheckout, ...], storage: StorageRule,
-                owner: Thread) -> Self:
-        source = super().capture(todo, pulls, checkout, worktrees, storage, owner)
+    def from_refs(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
+                  worktrees: tuple[PresentCheckout, ...], refs: tuple[str, ...]) -> Self:
+        source = super().from_refs(todo, pulls, checkout, worktrees, refs)
         return replace(source,
-                       unpublished_commits=checkout.read_commits(todo, storage, owner, "--remotes"),
-                       recorded_readings=checkout.readings(source, storage, owner))
+                       unpublished_commits=checkout.read_commits(todo, refs, "--remotes"),
+                       recorded_readings=checkout.readings(source, refs))
 
 
 @dataclass(frozen=True)
