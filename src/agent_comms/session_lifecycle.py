@@ -140,7 +140,7 @@ class SessionLifecycle:
             raise Refused.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
         return self.published[AcpSessionId(session_id)].name
 
-    def binds(self, session_id: str, name: str) -> bool:
+    def binds(self, session_id: str, name: object) -> bool:
         """Whether this session is published as the named thread."""
         return session_id in self.published and self.published[AcpSessionId(session_id)].name == name
 
