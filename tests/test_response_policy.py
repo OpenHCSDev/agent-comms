@@ -7,7 +7,7 @@ from agent_comms.goal_scope import OneGoal
 
 
 def test_golden_policy_names():
-    assert ResponsePolicy.names() == ("direct", "collective", "mentioned_only", "informational")
+    assert ResponsePolicy.names() == ("direct", "collective", "mentioned", "informational")
 
 
 def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):

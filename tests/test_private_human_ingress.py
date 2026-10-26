@@ -103,7 +103,9 @@ def test_owner_completion_failure_retains_the_committed_send(
     comms, store, _, _ = _root(tmp_path)
     completed = tmp_path / "completed"
     if notification_fails:
-        comms.bus.bus.path.with_suffix(".changed").mkdir()
+        marker, = type(comms.bus.bus).source_paths(comms.root)
+        marker.unlink(missing_ok=True)
+        marker.mkdir()
     try:
         with pytest.raises(CommittedMessageError) as failed:
             comms.messaging.send_user_message(
@@ -135,8 +137,22 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert {member.recipient_lookup for member in initial.recipients} == set(
         lookups.values()
     )
-    # Bob is a frozen unmentioned observer: two members, one claim.
-    assert len(accept_initial(comms.bus, root_id, channel.seq, store)) == 1
+    # The actual publisher, candidate scan and foreground acceptor must all wake Bob,
+    # while Alice is the direct addressee and Bob may contribute if relevant.
+    from agent_comms.wake_candidate_index import WakeCandidateIndex
+    from agent_comms.wake_policy import BoundedTriageWake, FullWake
+
+    expected = {"alice": FullWake, "bob": BoundedTriageWake}
+    for name, mode in expected.items():
+        (candidate,) = WakeCandidateIndex(comms.bus.bus).page(
+            recipient_lookup=lookups[name], after_seq=channel.seq - 1,
+            required_through_seq=channel.seq,
+        ).entries
+        assert candidate.source_seq == channel.seq
+        assert candidate.wake_mode is mode
+    claims = accept_initial(comms.bus, root_id, channel.seq, store)
+    assert {row.recipient: type(row.lifecycle.mode) for row in claims} == expected
+    assert channel.response_eligibility(("alice", "bob")).recipients == ("alice", "bob")
     dm = comms.messaging.send_user_message(CommandTarget.named('bob'), "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
     assert list(comms.views.history_page(CommandTarget.named("bob"), viewer=NamedViewer(channel.sender)).messages)[-1] == dm

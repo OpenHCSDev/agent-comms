@@ -101,14 +101,7 @@ class CollectivePolicy(ResponsePolicy):
         return "collective; channel members may respond"
 
 
-class MentionedOnlyPolicy(ResponsePolicy):
-    def recipients(
-        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
-    ) -> tuple[str, ...]:
-        aliases = aliases or {}
-        selected = {aliases.get(mention.thread, mention.thread) for mention in message.mentions}
-        return tuple(name for name in dict.fromkeys(audience) if name in selected)
-
+class MentionedPolicy(CollectivePolicy):
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
         aliases = aliases or {}
         names = ", ".join(
@@ -117,8 +110,9 @@ class MentionedOnlyPolicy(ResponsePolicy):
             )
         )
         return (
-            f"mentioned_only; only resolved mentioned identities may respond: {names}; "
-            "unmentioned observers dismiss quietly"
+            f"mentioned; addressed especially to: {names}; "
+            "other channel members may contribute when involved or relevant; "
+            "no reply is required from uninvolved members"
         )
 
 

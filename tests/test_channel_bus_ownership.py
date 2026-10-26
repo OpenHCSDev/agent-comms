@@ -40,16 +40,16 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     assert not (root / "acp_passive_channel_awareness.json").exists()
 
 
-def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
+def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
     import json
 
     from agent_comms.field_codec import FieldCodec
     from agent_comms.message_reference import MessageReference
-    from agent_comms.wake_policy import NoWakeDecision
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     observer = comms.registry.require("alpha")
-    assert any(isinstance(decision, NoWakeDecision) for decision in initial.decisions)
+    assert any(isinstance(decision.wake_policy(), BoundedTriageWake)
+               for decision in initial.decisions)
     sent = tuple(comms.messaging.send("sender", "#team", f"@beta review {number}").message
                  for number in range(6))
     assert not comms.registry.require("alpha").executing
