@@ -384,10 +384,16 @@ class FileLine(WireValue, SourceReference):
 
     def require_class_at(self, repository: Path, revision: SourceText) -> None:
         tree = ast.parse('\n'.join(revision.lines(repository, self.file)), filename=self.file)
-        if not any(isinstance(node, ast.ClassDef) and node.lineno == self.line
-                   for node in ast.walk(tree)):
+        declarations = tuple(node for node in ast.walk(tree) if isinstance(node, ast.ClassDef))
+        if not any(node.lineno == self.line for node in declarations):
+            if declarations:
+                nearest = min(declarations, key=lambda node: (abs(node.lineno - self.line), node.lineno))
+                replacement = replace(self, line=nearest.lineno).to_wire()
+                fix = f'nearest class is {nearest.name} at {replacement}; fix: cite {replacement}'
+            else:
+                fix = 'this file declares no classes; fix: cite a file and line declaring the owning class'
             raise MissingSourceLine(
-                f"scope shape reference {self.to_wire()} must name a class declaration"
+                f"scope shape reference {self.to_wire()} must name a class declaration; {fix}"
             )
 
     def to_wire(self) -> str:

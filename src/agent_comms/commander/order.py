@@ -637,18 +637,29 @@ class StrikeSelector(SubclassUnion, affix="Strike"):
     def selects(self, strike: StrikeTodo) -> bool: ...
 
     @abstractmethod
-    def refusal(self, task: str) -> str: ...
+    def mismatch(self, task: str) -> str: ...
+
+    def refusal(self, task: str, live: tuple[StrikeTodo, ...]) -> str:
+        choices = '\n'.join(ClockedStrike.choice(strike) for strike in live) or 'none'
+        return (f'Refused: {self.mismatch(task)}\nLive strikes:\n{choices}\n'
+                f'fix: select a listed {ClockedStrike.option} value, or omit it for the newest live strike')
 
 
 @dataclass(frozen=True, slots=True)
 class ClockedStrike(SingleFieldValue, StrikeSelector):
     clock: str
+    option: ClassVar[str] = '--at'
+
+    @classmethod
+    def choice(cls, strike: StrikeTodo) -> str:
+        return (f'{cls.option} {strike.at.clock()} (event revision {strike.expected_revision}, '
+                f'{strike.previous.owner}): {strike.reason}')
 
     def selects(self, strike: StrikeTodo) -> bool:
         return strike.at.clock() == self.clock
 
-    def refusal(self, task: str) -> str:
-        return f'Refused: {task} has no live strike recorded at {self.clock}.'
+    def mismatch(self, task: str) -> str:
+        return f'{task} has no live strike recorded at {self.clock}.'
 
 
 @dataclass(frozen=True, slots=True)
@@ -656,8 +667,8 @@ class NewestStrike(NullMember, StrikeSelector):
     def selects(self, strike: StrikeTodo) -> bool:
         return True
 
-    def refusal(self, task: str) -> str:
-        return f'Refused: {task} has no live strike.'
+    def mismatch(self, task: str) -> str:
+        return f'{task} has no live strike.'
 
 
 class Commander(CommanderContext):
@@ -753,10 +764,11 @@ class Commander(CommanderContext):
     def unstrike(self, task: str, why: str, at: StrikeSelector = NewestStrike()) -> None:
         """A strike recorded in error is voided in Core, then announced to #comms."""
         todo = self.comms.goals.todos.get(task)
-        live = [s for s in todo.live_strikes() if at.selects(s)]
-        if not live:
-            sys.exit(at.refusal(task))
-        voided = live[0]
+        live = todo.live_strikes()
+        selected = [strike for strike in live if at.selects(strike)]
+        if not selected:
+            sys.exit(at.refusal(task, live))
+        voided = selected[0]
         # posted to #comms, so refused before Core records the void
         refuse(why, *DirectiveText.checks())
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
@@ -1036,7 +1048,7 @@ class UnstrikeVerb(Reasoned, OrderVerb):
     at: Annotated[
         StrikeSelector,
         Argument(
-            flags=("--at",), options={"help": "HH:MM:SS the strike was recorded, as its #comms line prints it; default the newest"}
+            flags=(ClockedStrike.option,), options={"help": "HH:MM:SS the strike was recorded, as its #comms line prints it; default the newest"}
         ),
     ] = NewestStrike()
 

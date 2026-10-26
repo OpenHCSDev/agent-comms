@@ -75,8 +75,8 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
 
 
 @dataclass(frozen=True, slots=True)
-class Refusing:
-    """One non-generator boundary preserves malformed records and locates domain errors."""
+class RefusalBoundary[Suppressed: bool]:
+    """Shared exception handling; each boundary declares whether it can suppress a refusal."""
 
     subject: str
 
@@ -86,7 +86,7 @@ class Refusing:
     def __exit__(
         self, kind: type[BaseException] | None, error: BaseException | None,
         trace: types.TracebackType | None,
-    ) -> bool:
+    ) -> Suppressed | Literal[False]:
         if error is None:
             return False
         try:
@@ -96,18 +96,25 @@ class Refusing:
         except ValueError as refused:
             return self.refused(MalformedRecord(f"{self.subject}: {refused}"))
 
-    def refused(self, error: MalformedRecord) -> bool:
+    @abstractmethod
+    def refused(self, error: MalformedRecord) -> Suppressed: ...
+
+
+class Refusing(RefusalBoundary[Never]):
+    """A normal decode never suppresses its error or falls through without a value."""
+
+    def refused(self, error: MalformedRecord) -> Never:
         raise error
 
 
 @dataclass(frozen=True, slots=True)
-class Collecting(Refusing):
+class Collecting(RefusalBoundary[Literal[True]]):
     """The same data boundary collects a sibling refusal instead of stopping at it."""
 
     problems: dict[str, str]
     fix: str
 
-    def refused(self, error: MalformedRecord) -> bool:
+    def refused(self, error: MalformedRecord) -> Literal[True]:
         self.problems.update(error.located(self.subject, self.fix))
         return True
 

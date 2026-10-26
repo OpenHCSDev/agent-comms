@@ -34,7 +34,7 @@ from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderHud
 from .comms import Comms
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, MessageId, OrderId, WireName
+from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .head_review import HeadReviewOrder, PullRequestHead
@@ -192,8 +192,20 @@ class HeadVerdictTool:
     order: Annotated[HeadReviewOrder, *tool_field("Optional held-order link")] = NoHeadOrder()
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> HeadReviewed:
-        actor = caller.head_review_actor(comms, self.request, self.order)
-        return self.operation.reviewed(comms.goals, self.request, actor, self.order)
+        problems: dict[str, str] = {}
+        orders = self.order.prepared(comms.goals, problems)
+        actors = []
+        for order in orders:
+            with RecordProblems.collecting(problems, '--problem', 'select the current held order'):
+                actors.append(caller.head_review_actor(comms, self.request, order))
+        with RecordProblems.collecting(problems, self.operation.preparation_field,
+                                      self.operation.preparation_fix):
+            prepared = self.operation.prepare(comms.goals, self.request)
+        if problems:
+            raise RecordProblems(problems)
+        order, = orders
+        actor, = actors
+        return self.operation.reviewed(comms.goals, self.request, prepared, actor, order)
 
 
 @dataclass(frozen=True, kw_only=True)
