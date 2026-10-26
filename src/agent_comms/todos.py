@@ -141,7 +141,7 @@ from agent_comms.typed_table import (
 )
 from .goal_scope import OneGoal
 from agent_comms.work_branches import (
-    BranchComparison, BranchDifference, PageInfo, SourceGrowth, WorkBranchError, WorkBranches,
+    BranchComparison, BranchDifference, CommitBase, PageInfo, SourceGrowth, WorkBranchError, WorkBranches,
 )
 
 if TYPE_CHECKING:
@@ -4192,7 +4192,6 @@ class StoredHeadDiff(TodoStoreRows, TypedTable):
 class StoredClosedRepository(TodoStoreRows, TypedTable):
     repo: Annotated[RepositoryName, Column(primary_key=True)]
     main: Annotated[str, GitCommitText]
-    oldest: Annotated[str, GitCommitText]
     observed_at: float
 
 
@@ -4200,7 +4199,7 @@ class StoredClosedRepository(TodoStoreRows, TypedTable):
 class StoredClosedHead(TodoStoreRows, TypedTable):
     """A committed forge observation and its prepared Git answer."""
     request: Annotated[PullRequestHead, Column(primary_key=True)]
-    base: Annotated[str, GitCommitText]
+    base: CommitBase
     closed_at: float
     missing: tuple[str, ...]
 
