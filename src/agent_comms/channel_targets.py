@@ -164,10 +164,52 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         return (None,)
 
 
+class ReplyRoute(ABC):
+    """One reply destination, projected as a value or an indexed SQL selection."""
+
+    @abstractmethod
+    def target(self, target_name: str, sender: str) -> str: ...
+
+    @abstractmethod
+    def sql(
+        self, column: str, sender: str, names: tuple[str, ...],
+    ) -> tuple[str, tuple[str, ...]]: ...
+
+
+class SenderReply(ReplyRoute):
+    def target(self, target_name: str, sender: str) -> str:
+        return sender
+
+    def sql(
+        self, column: str, sender: str, names: tuple[str, ...],
+    ) -> tuple[str, tuple[str, ...]]:
+        marks = ",".join("?" for _ in names)
+        return (
+            f"{self.target(column, sender)} IN ({marks}) AND NOT ({ChannelReply.channel_sql(column)})",
+            names,
+        )
+
+
+class ChannelReply(ReplyRoute):
+    def target(self, target_name: str, sender: str) -> str:
+        return target_name
+
+    def sql(
+        self, column: str, sender: str, names: tuple[str, ...],
+    ) -> tuple[str, tuple[str, ...]]:
+        return f"{self.target(column, sender)}=?", names
+
+    @staticmethod
+    def channel_sql(column: str) -> str:
+        sigil = ChannelTarget.sigil
+        return f"substr({column},1,{len(sigil)})={sql_literal(sigil)}"
+
+
 @dataclass(frozen=True)
 class NamedTarget(CommandTarget):
     name: str
     sigil: ClassVar[str]
+    route: ClassVar[ReplyRoute]
     batchable = False
 
     @property
@@ -229,15 +271,15 @@ class NamedTarget(CommandTarget):
     @abstractmethod
     def validate(self, message: Message) -> None: ...
 
-    @abstractmethod
-    def reply_target(self, sender: str) -> str: ...
+    def reply_target(self, sender: str) -> str:
+        return self.route.target(self.name, sender)
 
-    @abstractmethod
     def answered_sql(
         self, target: str, sender: str, snapshot: RegistryProvenance,
-    ) -> tuple[str, tuple]:
+    ) -> tuple[str, tuple[str, ...]]:
         """Select originals answered by this destination, using the same registry cut."""
-        ...
+        names = tuple(snapshot.names_for(self.canonical_name(snapshot.canonical_name)))
+        return self.route.sql(target, sender, names)
 
     @abstractmethod
     def wake_policy(self, recipient: FrozenRecipient, mentions: frozenset[str]) -> WakePolicy: ...
@@ -294,6 +336,7 @@ class NamedTarget(CommandTarget):
 
 class ThreadTarget(NamedTarget):
     sigil = "@"
+    route: ClassVar[ReplyRoute] = SenderReply()
     history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
@@ -354,19 +397,6 @@ class ThreadTarget(NamedTarget):
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         if not set(self.name) <= allowed:
             raise ValueError(f"Message target {self.name!r} is not a thread name or #channel.")
-
-    def reply_target(self, sender: str) -> str:
-        return sender
-
-    def answered_sql(
-        self, target: str, sender: str, snapshot: RegistryProvenance,
-    ) -> tuple[str, tuple]:
-        names = tuple(snapshot.names_for(self.canonical_name(snapshot.canonical_name)))
-        marks = ",".join("?" for _ in names)
-        return (
-            f"{sender} IN ({marks}) AND NOT ({ChannelTarget.names_channel_sql(target)})",
-            names,
-        )
 
     def wake_policy(self, recipient: FrozenRecipient, mentions: frozenset[str]) -> FullWake:
         return FullWake()
@@ -448,6 +478,7 @@ class ChannelTarget(NamedTarget):
     default_audience = MessageAudience.COLLECTIVE
 
     sigil = "#"
+    route: ClassVar[ReplyRoute] = ChannelReply()
 
     @classmethod
     def address(cls, name: str) -> str:
@@ -456,10 +487,6 @@ class ChannelTarget(NamedTarget):
     @classmethod
     def names_channel(cls, name: str) -> bool:
         return name.startswith(cls.sigil)
-
-    @classmethod
-    def names_channel_sql(cls, name: str) -> str:
-        return f"substr({name},1,{len(cls.sigil)})={sql_literal(cls.sigil)}"
 
     @classmethod
     def normalize_name(cls, name: str) -> str:
@@ -523,14 +550,6 @@ class ChannelTarget(NamedTarget):
         if message.mentions:
             return MentionedOnlyPolicy.instance()
         return message.sender_role.channel_policy()
-
-    def reply_target(self, sender: str) -> str:
-        return self.name
-
-    def answered_sql(
-        self, target: str, sender: str, snapshot: RegistryProvenance,
-    ) -> tuple[str, tuple]:
-        return f"{target}=?", (self.name,)
 
     def effective_mentions(self, message: AudiencedMessage):
         return frozenset(mention.thread for mention in message.mentions).intersection(
