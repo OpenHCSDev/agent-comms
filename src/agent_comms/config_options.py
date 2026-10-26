@@ -6,6 +6,8 @@ import asyncio
 import os
 from abc import abstractmethod
 from collections import Counter
+from collections.abc import Awaitable, Callable
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Protocol
@@ -13,6 +15,7 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 from .coordination_errors import Refused
 
 from .active_route import resolve_comms_route
+from .bus import Bus
 from .declared_family import DeclaredFamily
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
@@ -24,6 +27,7 @@ from .pi_commands import (
     SetModel,
     SetThinkingLevel,
 )
+from .watched import FileSource
 
 if TYPE_CHECKING:
     from .session_config_options import SessionConfigOptions
@@ -279,6 +283,14 @@ class ConfigOptions:
             command, InheritedArguments().configured(), configuration,
             resolve_comms_route(LaunchRoot.current().path),
         )
+
+    async def observe_authentication(
+        self, session_id: str, publish: Callable[[str], Awaitable[None]],
+    ) -> None:
+        """The session retires this configuration's watch with its other producers."""
+        async with aclosing(Bus.watch_sources(FileSource(self.configuration.native_config / "auth.json"))) as observations:
+            async for _ in observations:
+                await publish(session_id)
 
     def native_environment(
         self, thread: Thread, snapshot: RegistrySnapshot, worktree: str,

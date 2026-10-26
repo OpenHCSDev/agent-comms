@@ -574,13 +574,18 @@ class DrainedSession:
 
 
 @dataclass(eq=False)
-class OwnerSession(DrainedSession, ConfigOptions):
-    """Local execution composes queue lifetime with its own native configuration."""
+class OwnerSession(DrainedSession):
+    """Local execution retains its original configuration, never copies its fields."""
 
+    configuration: ConfigOptions = field(kw_only=True)
     stop: OwnerStop = field(kw_only=True)
+    auth_observer: asyncio.Task[None] = field(kw_only=True)
 
     def owned(self) -> OwnerSession:
         return self
+
+    def producers(self) -> tuple[asyncio.Task[None], ...]:
+        return (*super().producers(), self.auth_observer)
 
 
 class InputDrain(InputObservation):
@@ -618,15 +623,17 @@ class InputDrain(InputObservation):
             state = self.drained[session_id] = DrainedSession()
         return state
 
-    def acquire_owner(self, session_id: str, configuration: ConfigOptions) -> OwnerSession:
+    def acquire_owner(self, session_id: str) -> OwnerSession:
         """Only acquisition creates an executing session; a proxy cannot become one silently."""
         try:
             state = self.drained[session_id]
         except KeyError:
             state = self.drained[session_id] = OwnerSession(
-                configuration.agent_bin, configuration.agent_args, configuration.configuration,
-                configuration.route, configuration.models,
+                configuration=self.configuration,
                 stop=OwnerStop(self.comms.owners.maintenance),
+                auth_observer=self.runtime.background(self.configuration.observe_authentication(
+                    session_id, self.sessions.config.publish_configuration,
+                )),
             )
         return state.owned()
 

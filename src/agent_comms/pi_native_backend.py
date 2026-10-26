@@ -222,7 +222,7 @@ class PiNativeBackend(
     @classmethod
     def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
         return cls(
-            runner.inputs.state(session_id).owned(), runner.comms,
+            runner.inputs.state(session_id).owned().configuration, runner.comms,
             partial(runner.observe_selected_preparation, session_id),
         )
 

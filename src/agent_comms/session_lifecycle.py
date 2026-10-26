@@ -179,7 +179,7 @@ class SessionLifecycle:
     async def bind_owned(self, thread: Thread, session_id: str) -> None:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
-        self.effects.inputs.acquire_owner(session_id, self.effects.inputs.configuration)
+        self.effects.inputs.acquire_owner(session_id)
         self.bindings[session_id] = thread.name
         self.titles[session_id] = thread.name
         self.worktrees[session_id] = thread.worktree

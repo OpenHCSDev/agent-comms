@@ -256,35 +256,34 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
 # -- lookup -------------------------------------------------------------------
 
 
-class _Runner:
-    agent_bin = "pi"
-    agent_args = NativeArguments.parse(["--provider", "p", "--model", "m"])
-
-    def __init__(self, comms):
-        self.comms = comms
-        self.persistent_backends = {}
-        self.published = []
-
-    async def observe_selected_preparation(self, session_id, thread, state, info):
-        self.published.append((session_id, thread.name, info))
-
-
-def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comms):
+@pytest.mark.asyncio
+async def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comms):
+    from agent_comms.acp import CommsAgent
     from agent_comms.errors import RelationViolationError
-    from agent_comms.turn_runner import TurnRunner
-
-    runner = _Runner(comms)
-    thread = Thread('owner', frozenset(), '/tmp/owner', model=DeclaredModel('p/m'))
-    backend = TurnRunner.backend_for(runner, "session", thread)
-    assert type(backend) is PiNativeBackend
-    assert TurnRunner.backend_for(runner, "session", thread) is backend
-    assert backend.arguments(thread) == _Runner.agent_args.with_model("p/m").argv
-
+    from agent_comms.native_arguments import GivenArguments, GivenBinary
     from agent_comms.pi_native_backend import PersistentPiSession
 
-    runner.persistent_backends["other"] = PersistentPiSession()
-    with pytest.raises(RelationViolationError):
-        TurnRunner.backend_for(runner, "other", thread)
+    agent = CommsAgent(
+        comms, auto_wake=False, agent_bin=GivenBinary("pi"),
+        agent_args=GivenArguments(("--provider", "p", "--model", "m")),
+    )
+    try:
+        session = agent.inputs.acquire_owner("session")
+        other = agent.inputs.acquire_owner("other")
+        assert session.configuration is other.configuration is agent.inputs.configuration
+        assert session.stop is not other.stop
+        thread = Thread('owner', frozenset(), '/tmp/owner', model=DeclaredModel('p/m'))
+        backend = agent.turns.backend_for("session", thread)
+        assert type(backend) is PiNativeBackend
+        assert agent.turns.backend_for("session", thread) is backend
+        assert backend.configuration is session.configuration
+        assert backend.arguments(thread) == session.configuration.agent_args.with_model("p/m").argv
+
+        agent.turns.persistent_backends["other"] = PersistentPiSession()
+        with pytest.raises(RelationViolationError):
+            agent.turns.backend_for("other", thread)
+    finally:
+        await agent.shutdown()
 
 
 # -- Pi conversions -----------------------------------------------------------
