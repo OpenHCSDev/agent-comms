@@ -9,7 +9,10 @@ from typing import TYPE_CHECKING, Annotated, Self
 from agent_comms.field_codec import OrderId, PathText
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
-from agent_comms.standing_rules import DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule
+from agent_comms.repository_name import RepositoryName
+from agent_comms.standing_rules import (
+    DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule, UndatedStandingRule,
+)
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink
 from agent_comms.work_branches import UnpushedHead, WorkBranches
@@ -84,7 +87,7 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(cls(request=head.request, closed_at=head.closed_at, commits=head.missing)
-                     for head in frame.closed_heads if head.missing
+                     for head in frame.closed.lost if head.missing
                      if not any(review.verdict.supersedes()
                                 for review in frame.head_reviews[head.request]))
 
@@ -102,3 +105,19 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
         pull = PullRequestLink(self.request.repo, self.request.pr)
         return (f'LOST {pull.url} closed unmerged holds {len(self.commits)} commits main lacks'
                 ' -> land them, or record why they are dropped')
+
+
+@dataclass(frozen=True)
+class ClosedPullRequestScanPending(UndatedStandingRule):
+    """A repository without a completed closed-PR scan cannot say whether it lost commits."""
+
+    repo: RepositoryName
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return tuple(cls(repo) for repo in frame.closed.unscanned)
+
+    def line(self) -> str:
+        return (f'closed-PR scan for {self.repo.to_wire()} has not completed yet;'
+                ' lost closed heads there are unknown')

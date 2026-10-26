@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 from agent_comms.commander import judge
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
-from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
+from agent_comms.commander.publication_rules import (
+    ClosedPullRequestScanPending, ClosedUnmergedPullRequest,
+)
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -22,6 +24,33 @@ from agent_comms.todos import (
 )
 
 pytest_plugins = ('test_head_review',)
+
+
+def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
+    comms, github, _ = head_bus
+    source = reviewed_source
+    stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    github.put(source.github, ClosedListedPullRequest(
+        7, 'closed/7', source.branch_commit, closed_at=stamp, updated=stamp,
+        base='main', reviewable_times=(stamp,)))
+    repos = comms.registry.snapshot().commander_project.require().repository_names()
+    plans = CommanderHeartbeat()
+
+    def rules(frame):
+        return (ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame),
+                ClosedPullRequestScanPending.scan_observed(comms, 'lead', (), frame))
+
+    lost, pending = rules(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans))
+    assert lost == ()
+    assert pending == tuple(ClosedPullRequestScanPending(repo) for repo in repos)
+    assert pending[0].line() == (f'closed-PR scan for {repos[0].to_wire()} has not completed yet;'
+                                 ' lost closed heads there are unknown')
+
+    watch = ClosedPullRequestWatch()
+    watch.pass_body(comms, watch.observe(comms))
+    lost, pending = rules(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans))
+    assert {rule.request.pr for rule in lost} == {7}
+    assert source.github not in {rule.repo for rule in pending}
 
 
 def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_source):
