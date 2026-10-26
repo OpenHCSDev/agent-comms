@@ -458,10 +458,9 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
         previous = tuple(row for item in restored for row in item.queue_items(self))
         rows = items + previous
         try:
-            sizes = [len(row.text.encode("utf-8")) for row in rows]
+            for row in rows:
+                row.preview.encode("utf-8")
         except UnicodeError:
-            return UnavailableQueueProjection()
-        if len(rows) > 32 or any(size > 4096 for size in sizes) or sum(sizes) > 65536:
             return UnavailableQueueProjection()
         return AvailableQueueProjection(items, previous)
 
@@ -480,8 +479,19 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
 
 @dataclass(frozen=True)
 class QueueItem:
+    """Exact accepted identity with display-only text, never a resubmission body."""
+
     input_id: InputId
-    text: str
+    preview: str
+
+    @staticmethod
+    def summarize(text: str) -> str:
+        """The queue summary's single-line preview; original content stays with its input."""
+        return " ".join(text.split())[:100]
+
+    @classmethod
+    def from_input(cls, input_id: InputId, text: str) -> QueueItem:
+        return cls(input_id, cls.summarize(text))
 
 
 class QueueProjection(DeclaredFamily, affix="QueueProjection"):

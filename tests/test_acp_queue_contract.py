@@ -135,29 +135,37 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     assert not stored_inputs(agent.inputs.dispositions.root).rows
 
 
-@pytest.mark.parametrize(
-    "rows",
-    [
-        {str(i): "message" for i in range(33)},
-        {"long": "x" * 4097},
-    ],
-)
-async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path, rows):
-    _, agent, incarnation, generation = _owner(tmp_path)
-    agent.inputs.state("beta").queued = {
-        key: QueuedInput(
-            text,
-            True,
-            QueuedInputContext(ClaimedIdentity(incarnation, generation)),
-            key,
-            text,
-        )
-        for key, text in rows.items()
-    }
+@pytest.mark.parametrize("count,text", [
+    (1, "日本語 \n" * 900),
+    (32, "same text"),
+    (17, "x" * 4096),
+], ids=["long-unicode", "many-inputs", "large-total"])
+async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_path, count, text):
+    from agent_comms.agent_backend import ClearQueue, SendNow
+    from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
+
+    comms, agent, _, _ = _owner(tmp_path)
+    comms.agents.begin_turn("beta", TurnId.mint(), "Held native fixture")
+    inbox = agent.inputs.state("beta").open_inbox()
+    requests = [QueuePromptRequest(text) for _ in range(count)]
+    for request in requests:
+        await agent.prompt("beta", [TextContentBlock(type="text", text=text)],
+                           field_meta=encode_request(request))
+        native = inbox.get_nowait()
+        assert native.input_id == request.input_id
+        assert native.content.text == "User follow-up:\n" + text
     state = await agent.inputs.queue_state("beta")
-    assert state.scope.matches_session("beta")
-    assert isinstance(state.projection, UnavailableQueueProjection)
-    assert set(agent.inputs.state("beta").queued) == set(rows)
+    (received,) = decode_updates(encode_updates(state))
+    assert isinstance(received.projection, AvailableQueueProjection)
+    assert [item.input_id for item in received.projection.items] == [r.input_id for r in requests]
+    assert all(item.preview == QueueItem.summarize(text) for item in received.projection.items)
+    assert all(item.text == text for item in agent.inputs.state("beta").queued.values())
+    await agent.inputs.send_now("beta")
+    assert inbox.get_nowait() == SendNow(tuple(r.input_id for r in requests))
+    await agent.inputs.clear_queued_inputs("beta")
+    assert inbox.get_nowait() == ClearQueue(tuple(r.input_id for r in requests))
+    assert not agent.inputs.state("beta").queued
+    assert (await agent.inputs.queue_state("beta")).projection.status == "available"
 
 
 async def test_alias_maps_only_attachment_session_id(tmp_path):
