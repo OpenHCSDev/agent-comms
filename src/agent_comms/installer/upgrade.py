@@ -815,8 +815,8 @@ class TargetStack(Stack):
             yield self
             return
         with ExitStack() as lifetime:
-            locks = tuple(lifetime.enter_context(store.retaining(files.writer_path(store)))
-                          for store in stores)
+            locks = tuple(lifetime.enter_context(store.retaining(files.location(resource)))
+                          for store in stores for resource in store.resources(files))
             program = self.program.borrowing(locks)
             lifetime.callback(self.commands.close_program, self.python, program)
             yield replace(self, program=program)
