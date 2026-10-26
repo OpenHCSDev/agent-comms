@@ -26,8 +26,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.locked_store import DurableFile, SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.locked_store import DurableFile, SQLiteFile
 
 from .field_codec import FieldCodec
 
@@ -39,15 +39,15 @@ from .store_files import ExclusiveLock, StoreOwner
 from .typed_table import (
     AllObjectsTables,
     DurableTables,
+    ImmutableRows,
     NoPractice,
     Practice,
     ReconciledFile,
-    TableSchema,
-    ImmutableRows,
     SingletonRow,
     SQLiteDatabase,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
+    TableSchema,
     TypedRow,
     TypedTable,
 )
@@ -160,12 +160,9 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
         directory.unchanged(lock_name, os.fstat(lock))
 
 
-def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.stat_result] | None:
+def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.stat_result]:
     # O_NONBLOCK ensures a FIFO substitution cannot hang before fstat rejects it.
-    try:
-        fd = PrivateFileRole.read(name, UnprivateSidecarFile(), dir_fd=directory.fd)
-    except FileNotFoundError:
-        return None
+    fd = PrivateFileRole.read(name, UnprivateSidecarFile(), dir_fd=directory.fd)
     try:
         info = os.fstat(fd)
         if not 100 <= info.st_size <= _MAX_SIDECAR_BYTES:
@@ -388,10 +385,7 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
     def copy_file(cls, source: str | Path, target: str | Path) -> Path:
         source, target = Path(source), Path(target)
         with _locked_directory(source) as directory:
-            snapshot = _read_snapshot(directory, source.name)
-            if snapshot is None:
-                raise FileNotFoundError(source)
-            raw, identity = snapshot
+            raw, identity = _read_snapshot(directory, source.name)
             target.write_bytes(raw)
             target.chmod(stat.S_IMODE(identity.st_mode))
             directory.unchanged(source.name, identity)
@@ -429,9 +423,11 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
     def create_at(cls, path: Path) -> None:
         """Serialized create-or-verify; an existing empty/damaged file is not repaired."""
         with _locked_directory(path) as directory:
-            snapshot = _read_snapshot(directory, path.name)
-            if snapshot is not None:
-                raw, identity = snapshot
+            try:
+                raw, identity = _read_snapshot(directory, path.name)
+            except FileNotFoundError:
+                pass
+            else:
                 connection = _connect(raw)
                 try:
                     VerifiedSnapshots.verify(connection, cls, path, identity)
@@ -459,10 +455,7 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
         SQL COMMIT alone is not a durable acknowledgement: the scope must also exit normally.
         """
         with _locked_directory(path) as directory:
-            snapshot = _read_snapshot(directory, path.name)
-            if snapshot is None:
-                raise IdentityConflict("Sidecar store is not installed.")
-            raw, identity = snapshot
+            raw, identity = _read_snapshot(directory, path.name)
             connection = _connect(raw)
             try:
                 VerifiedSnapshots.verify(connection, cls, path, identity)
@@ -482,10 +475,7 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
     @classmethod
     def reconcile_at(cls, path: Path, practice: Practice = NoPractice()) -> bool:
         with _locked_directory(path) as directory:
-            snapshot = _read_snapshot(directory, path.name)
-            if snapshot is None:
-                raise IdentityConflict("Sidecar store is not installed.")
-            raw, identity = snapshot
+            raw, identity = _read_snapshot(directory, path.name)
             connection = _connect(raw)
             try:
                 cls.verify_integrity(connection)

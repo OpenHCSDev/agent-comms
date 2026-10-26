@@ -14,8 +14,6 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from sqlite3 import Connection
-
-from .store_files import StoreContention
 from typing import Annotated, ClassVar
 
 from .activity import ActivityState
@@ -23,10 +21,17 @@ from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import RoomTicket
 from .repo import Checkout
+from .store_files import StoreContention
 from .thread_identity import ThreadIncarnation
 from .typed_table import (
-    Column, DurableTables, JsonStorage, RuntimeWriter, StoreRows, TypedStore,
-    TypedTable, WriterOwnedFile,
+    Column,
+    DurableTables,
+    JsonStorage,
+    RuntimeWriter,
+    StoreRows,
+    TypedStore,
+    TypedTable,
+    WriterOwnedFile,
 )
 from .watched import ChangeSignal, FileSource
 

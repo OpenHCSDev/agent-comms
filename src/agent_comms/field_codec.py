@@ -1065,7 +1065,10 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     structural: ValueDecoder[T]
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
-        return (*self.representation.sql_checks(column, quote), *self.wire_structure.sql_checks(column, quote))
+        return (
+            *self.representation.sql_checks(column, quote),
+            *self.wire_structure.sql_checks(column, quote),
+        )
 
     @property
     def wire_structure(self) -> DecoderPlan:
@@ -2859,7 +2862,9 @@ class UnionDecoder[T](_ContextDecoder[T]):
     alternatives: tuple[ValueDecoder[T], ...]
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
-        alternatives = tuple(alternative.sql_checks(column, quote) for alternative in self.alternatives)
+        alternatives = tuple(
+            alternative.sql_checks(column, quote) for alternative in self.alternatives
+        )
         if not all(alternatives):
             return ()
         return (" OR ".join(
@@ -3397,7 +3402,7 @@ class _EnumDecoder(_ChoiceDecoder[Enum]):
 
 
 class _IntFlagDecoder(_EnumDecoder):
-    """Declared flags admit combinations beyond their individually named values."""
+    """Declared flags support combinations beyond their individually named values."""
 
     __slots__ = ()
     origins = (IntFlag,)
