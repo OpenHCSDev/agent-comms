@@ -15,10 +15,15 @@ from test_todos import order
 from source_revision_fixture import SourceRepository
 from fixture_git import IDENTITY
 
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.commander_hud import CommanderFrame
 from agent_comms.comms import wire
+from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import GitCommandError
 from agent_comms.repository_name import RepositoryName
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tool_caller import ThreadCaller
@@ -28,6 +33,9 @@ from agent_comms.todos import (
     EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout, ProgressRead, ProgressSource,
 )
 from agent_comms.threads import Thread
+from agent_comms.ui_model.unit_state import Unreadable
+
+pytest_plugins = ('test_holder_standing_rules',)
 
 
 
@@ -134,6 +142,46 @@ def test_the_review_timer_comes_back_every_window_until_delivery(held):
     assert todo.timer_up(first + window - 1) == (RecordedEventTime(first),)
     assert todo.timer_up(first + 2 * window + 1) == (RecordedEventTime(first + 2 * window),)
     assert todo.reissued_review(5000.0) == RecordedEventTime(5000.0 + window)
+
+
+def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
+    """Delete after unit reads, before HUD rendering, then complete another heartbeat."""
+    comms = held_bus
+    checkout = comms.goals.todos.get('P1').order.checked().check.directory
+    branch = 'work/worker--P1'
+    git(checkout, 'switch', '-c', branch)
+    lead = replace(comms.registry.require('lead'),
+                   process_identity=ProcessIdentity.capture(os.getpid()))
+    comms.registry.register(lead)
+    heartbeat = CommanderHeartbeat()
+
+    class DeletingRead(ProgressRead):
+        def progress(self, held, registry):
+            # This happens after UnitState.read guarded the checkout, but before
+            # CommanderHud consumes its commit clock. No production code is patched.
+            git(checkout, 'update-ref', '-d', f'refs/heads/{branch}')
+            return super().progress(held, registry)
+
+    with LaunchRoot.from_path(comms.root).selected():
+        before = CommanderObservation.read(comms, lead)
+        healthy = tuple(card for card in before.states if card.unit.name != 'worker')
+        interrupted = CommanderObservation.read(comms, lead, DeletingRead)
+        heartbeat.pass_body(comms, (interrupted,))
+        assert CommanderFrame.read_all(comms.root) == (interrupted.hud,)
+        assert branch not in WorkBranches(checkout).worktrees()
+        reader = WorkBranches(checkout)
+        with pytest.raises(GitCommandError) as git_failure:
+            reader.difference(reader.origin_main)
+        for _ in range(2):
+            observed = heartbeat.observe(comms)
+            (frame,) = observed
+            (broken,) = (card for card in frame.states if card.unit.name == 'worker')
+            assert isinstance(broken, Unreadable)
+            assert broken.reason == str(git_failure.value)
+            assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
+            heartbeat.pass_body(comms, observed)
+            assert CommanderFrame.read_all(comms.root) == (frame.hud,)
+        print(broken.line())
 
 
 def test_push_times_come_from_origin_reflogs_only(tmp_path):
