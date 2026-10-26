@@ -184,9 +184,7 @@ class PiChild:
             raise RuntimeError('Pi child has retired')
         async with self.failures():
             response = await self.reader.request(command, self)
-        if not response.succeeded:
-            raise RuntimeError(response.error.value_or("Pi gave no error text"))
-        return response.data.require_payload()
+        return response.success.require_data(response)
 
     @property
     def retirement_result(self) -> RetirementState:
@@ -407,7 +405,8 @@ class BorrowedNative(SuccessorNative):
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
         async with request.pending_response(self.child) as response:
-            return (await response).data.require_payload()
+            received = await response
+            return received.success.require_data(received)
 
 @dataclass
 class RetainedNative(ChildNative):

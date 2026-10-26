@@ -56,6 +56,7 @@ from .turn_item import PiRequestKey
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import Response, ResponseOutcome
+    from .pending_requests import PendingRequest
 
 
 class SessionSnapshot:
@@ -66,11 +67,6 @@ class SessionSnapshot:
         return response.success.conflicts_attestation(
             response.data, session.native.attestation,
         ) or super().invalidates_identity(response, session)
-
-    def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
-        failure = failures.BackendFailed(response.error.require())
-        session.output.record_failure(failure)
-        return (session.output.error(failure.text, source=UnrecordedFailureSource()),)
 
 
 class MutatesSession:
@@ -118,6 +114,9 @@ class PiCommand(DeclaredFamily):
                     raise EOFError('Pi RPC ended before the requested response')
                 event.correlate_or_deliver(channel, on_event)
             return future.result()
+
+    async def before_settlement(self, pending: PendingRequest) -> None:
+        """Ordinary metadata replies cannot admit another native model run."""
 
     @classmethod
     def response_type(cls) -> type[PiCommand]:
@@ -169,7 +168,11 @@ class PiCommand(DeclaredFamily):
         return ()
 
     def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
-        return ()
+        failure = failures.BackendFailed(
+            f"Native {self.response_type().declared_name} refused: {response.error.require()}"
+        )
+        session.output.record_failure(failure)
+        return (session.output.error(failure.text, source=UnrecordedFailureSource()),)
 
 
 class ExactResponse:
@@ -217,6 +220,10 @@ class Prompt(PiCommand):
     @classmethod
     def response_type(cls) -> type[PiCommand]:
         return Prompt
+
+    async def before_settlement(self, pending: PendingRequest) -> None:
+        # Both original and following prompts can still be in async preflight.
+        await pending.response()
 
     def on_response(
         self, response: Response, session: TurnSession,
@@ -323,9 +330,7 @@ class CatalogQuery(NativeQuery):
     ) -> PiResponseData:
         async with self.catalog(agent_bin, arguments, root=root, package=package) as child:
             response = await self.exchange(child)
-            if response.succeeded:
-                return response.data.require_payload()
-            raise NativePiUnavailable(response.error.text_or("Native catalog query was refused"))
+            return response.success.require_data(response)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -345,12 +350,10 @@ class Abort(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class InterruptSteering(PiCommand):
-    @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
+    def rejected(
+        self, response: Response, session: TurnSession,
     ) -> Iterable[events.AgentEvent]:
-        if response.refused:
-            yield events.Error(text=response.error.text_or("Send now was refused"))
+        return (events.Error(text=response.error.require()),)
 
     input_ids: Annotated[
         list[InputId] | PiOmitted, WireOmitDefault(), WireName("inputIds")
@@ -378,14 +381,9 @@ class SettingCommand(CatalogQuery):
         catalog = self.catalog(agent_bin, arguments, package=package, worktree=worktree, root=root)
         async with catalog as child:
             response = await self.exchange(child)
-            if not response.succeeded:
-                raise NativePiUnavailable(response.error.text_or(self.error_message))
+            response.success.require_success(response)
             state = await GetState().exchange(child)
-            if not state.succeeded:
-                raise NativePiUnavailable(
-                    state.error.text_or("Native configuration was not reported")
-                )
-            return state.data.require_payload()
+            return state.success.require_data(state)
 
     @classmethod
     def on_response(
@@ -393,7 +391,7 @@ class SettingCommand(CatalogQuery):
     ) -> Iterable[events.AgentEvent]:
         yield cls.result_type(
             id=response.id,
-            ok=response.succeeded,
+            ok=response.success.success_value,
             error=response.error.text_or(cls.error_message),
         )
 

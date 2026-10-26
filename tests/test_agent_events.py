@@ -183,19 +183,20 @@ async def test_request_correlation_separates_families_and_ignores_late_results()
     from agent_comms.pi_events import Response
 
     pending = PendingRequests()
-    key = PiRequestKey("same")
+    wire_id = "same"
+    key = PiRequestKey(wire_id)
     model_command = SetModel(id=RequestId(key), provider="test", model_id="one")
     thinking_command = SetThinkingLevel(id=RequestId(key), level="off")
     model = pending.add(SetModel, key, request=model_command)
     thinking = pending.add(SetThinkingLevel, key, request=thinking_command)
     with pytest.raises(ValueError):
         pending.add(SetModel, key, request=model_command)
-    refused = Response.from_wire({"type": "response", "id": key, "command": "set_model",
+    refused = Response.from_wire({"type": "response", "id": wire_id, "command": "set_model",
                                   "success": False, "error": "unavailable"})
     assert pending.take(SetModel, key, refused) is model_command
     assert await model.response() is refused
     assert not thinking.future.done()
-    accepted = Response.from_wire({"type": "response", "id": key, "command": "set_thinking_level",
+    accepted = Response.from_wire({"type": "response", "id": wire_id, "command": "set_thinking_level",
                                    "success": True})
     assert pending.take(SetThinkingLevel, key, accepted) is thinking_command
     assert await thinking.response() is accepted

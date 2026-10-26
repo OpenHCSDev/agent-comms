@@ -54,6 +54,13 @@ class PendingRequests(Sealed):
             pending.future.set_result(value)
         return pending.request
 
+    async def before_settlement(self) -> None:
+        """Join written commands whose declared preflight can precede native work."""
+        await asyncio.gather(*(
+            pending.request.before_settlement(pending)
+            for pending in tuple(self._pending.values())
+        ))
+
     def cancel_all(self) -> None:
         for pending in self._pending.values():
             pending.future.cancel()

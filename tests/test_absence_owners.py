@@ -19,6 +19,7 @@ from agent_comms.pi_payloads import AnonymousRequest, RequestId
 from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 from agent_comms.turn_input_source import SelectedOriginalInput
 from agent_comms.turn_item import PiRequestKey
+from agent_comms.turn_stats import RequestedStats, StatsRequest
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
@@ -68,11 +69,11 @@ def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
 
 async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
     assert isinstance(FinishSignal.from_event(None), NoFinishSignal)
-    assert NoFinishSignal().waiters(settling=False) == ()
+    assert NoFinishSignal().waiters() == ()
     event = asyncio.Event()
     finish = EventFinishSignal(event)
-    assert finish.waiters(settling=True) == ()
-    (waiter,) = finish.waiters(settling=False)
+    assert RequestedStats().finish_waiters(finish) == ()
+    (waiter,) = StatsRequest().finish_waiters(finish)
     event.set()
     assert await waiter
     listener = NoInputStartListener()

@@ -40,6 +40,12 @@ class PromptState(ABC):
     def settle(self, event: AgentSettled) -> PromptState:
         return self
 
+    def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
+        """A user prompt owes its declared input, answer and queue evidence."""
+        for cause in failures.TurnFailure.members_with(failures.TerminalFailure):
+            if cause.detected(session, transport_ok):
+                session.output.record_failure(cause(cause.explanation(session.output)))
+
     def permits_extension_ui(self, session: TurnSession) -> bool:
         return False
 
@@ -74,6 +80,9 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
 
 class PreparedSession(UnwrittenPrompt):
     """An idle-session preparation owns no user prompt."""
+
+    def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
+        """Preparation owes metadata replies, not a user input or assistant answer."""
 
     def permits_retention(self, session: NativeSession) -> bool:
         return session.output.clean

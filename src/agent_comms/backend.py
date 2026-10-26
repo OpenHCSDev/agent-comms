@@ -190,11 +190,11 @@ class FinishSignal(ABC):
         return NoFinishSignal() if event is None else EventFinishSignal(event)
 
     @abstractmethod
-    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]: ...
+    def waiters(self) -> tuple[asyncio.Task[bool], ...]: ...
 
 
 class NoFinishSignal(FinishSignal):
-    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]:
+    def waiters(self) -> tuple[asyncio.Task[bool], ...]:
         return ()
 
 
@@ -202,8 +202,8 @@ class NoFinishSignal(FinishSignal):
 class EventFinishSignal(FinishSignal):
     event: asyncio.Event
 
-    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]:
-        return () if settling else (asyncio.create_task(self.event.wait()),)
+    def waiters(self) -> tuple[asyncio.Task[bool], ...]:
+        return (asyncio.create_task(self.event.wait()),)
 
 
 NO_FINISH_SIGNAL = NoFinishSignal()
@@ -343,9 +343,7 @@ class NativeSession(MroDispatch, ABC):
 
     def permits_live_status(self) -> bool:
         """Only tracked, live input may publish an informational package acknowledgement."""
-        if self.stats.requested:
-            return False
-        return self.prompt_state.permits_extension_ui(self)
+        return self.stats.permits_live_status(self)
 
     async def abort_stalled_rpc(self) -> None:
         await self.finish_input()

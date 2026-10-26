@@ -92,28 +92,24 @@ class PendingAttestation(NativeAttestation):
     def accept(self, event: PiEvent) -> NativeAttestation:
         # Pi multiplexes events and independent replies on this channel. Only
         # the matching response may change whether this input can start.
-        if not event.responds_to(self.request):
-            return self
-        if not event.succeeded:
-            raise AttestationError(
-                failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
-            )
-        try:
-            data = event.data.require_payload()
-        except ValueError as error:
-            raise AttestationError(
-                failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
-            ) from error
-        if data.native_input_proof_capability != CAPABILITY:
-            raise AttestationError(
-                failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
-            )
-        observed = ObservedAttestation(data)
-        if self.expected is not None and observed.identity != self.expected:
-            raise IdentityAttestationError(
-                failures.IdentityUncertain("Pi session identity changed during this turn.")
-            )
-        return observed
+        for response in event.responses_to(self.request):
+            try:
+                data = response.success.require_data(response)
+            except (NativePiUnavailable, ValueError) as error:
+                raise AttestationError(
+                    failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+                ) from error
+            if data.native_input_proof_capability != CAPABILITY:
+                raise AttestationError(
+                    failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+                )
+            observed = ObservedAttestation(data)
+            if self.expected is not None and observed.identity != self.expected:
+                raise IdentityAttestationError(
+                    failures.IdentityUncertain("Pi session identity changed during this turn.")
+                )
+            return observed
+        return self
 
 
 @dataclass(frozen=True)

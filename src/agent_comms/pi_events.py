@@ -14,6 +14,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import DeclaredWireType, FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
+from .native_failures import NativePiUnavailable
 from .native_tool_call import ToolCallId
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
@@ -125,6 +126,10 @@ class PiEvent(OpenPayload, affix=""):
 
     def responds_to(self, request: PiCommand) -> bool:
         return False
+
+    def responses_to(self, request: PiCommand) -> tuple[Response, ...]:
+        """Unsolicited events supply no reply to a correlated request."""
+        return ()
 
     def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
         on_event(self)
@@ -700,6 +705,16 @@ class ResponseOutcome(DeclaredFamily, DeclaredWireType, affix="ResponseOutcome")
     def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
         return False
 
+    def proves_idle(self, response: Response) -> bool:
+        return False
+
+    def require_success(self, response: Response) -> None:
+        """Success need not carry data: native acknowledgement commands omit it."""
+
+    def require_data(self, response: Response) -> PiResponseData:
+        self.require_success(response)
+        return response.data.require_payload()
+
     @abstractmethod
     def apply_command(
         self, command: PiCommand, response: Response, session: TurnSession,
@@ -727,16 +742,6 @@ class Response(NativePiEvent, DurablePiEvent):
             data=owner.decode_response_data(value.get("data")),
         ))
 
-    @property
-    def succeeded(self) -> bool:
-        """Pi reported success; an omitted success is not one."""
-        return self.success.success_value
-
-    @property
-    def refused(self) -> bool:
-        """Pi reported failure outright, as opposed to leaving success out."""
-        return not self.success.success_value
-
     async def deliver_to(self, channel) -> None:
         channel.correlate(self)
 
@@ -745,6 +750,9 @@ class Response(NativePiEvent, DurablePiEvent):
 
     def responds_to(self, request: PiCommand) -> bool:
         return self.id == request.id and self.command is request.response_type()
+
+    def responses_to(self, request: PiCommand) -> tuple[Response, ...]:
+        return (self,) if self.responds_to(request) else ()
 
     def rejection_details(self) -> dict:
         """Private diagnostic projection, excluding response data and prompt content."""
@@ -769,6 +777,9 @@ class SucceededResponseOutcome(ResponseOutcome):
     success_value = True
     payload_field = FieldCodec.field_plan(Response, "data")
 
+    def proves_idle(self, response: Response) -> bool:
+        return not response.data.session_busy
+
     def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
         return data.conflicts_attestation(attestation)
 
@@ -781,6 +792,9 @@ class SucceededResponseOutcome(ResponseOutcome):
 class FailedResponseOutcome(ResponseOutcome):
     success_value = False
     payload_field = FieldCodec.field_plan(Response, "error")
+
+    def require_success(self, response: Response) -> None:
+        raise NativePiUnavailable(response.error.require())
 
     @classmethod
     def validate_payload(cls, error: ReportedText | PiOmitted) -> None:

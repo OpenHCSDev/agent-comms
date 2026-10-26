@@ -70,7 +70,7 @@ def test_selected_command_decodes_original_native_error_envelope(command):
                     "success": False, "error": "Selected preparation source changed"})
     assert isinstance(event, Response)
     assert event.command is PiCommand.member_named(command)
-    assert event.refused and isinstance(event.data, MissingData)
+    assert not event.success.success_value and isinstance(event.data, MissingData)
     assert event.rejection_details() == {"command": command, "id": "original",
         "success": False, "error": "Selected preparation source changed"}
 
@@ -213,6 +213,7 @@ def test_malformed_known_authority_fields_fail_at_boundary(record):
 def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     record = {
         "type": "prompt",
+        "inputId": "1" * 32,
         "message": "see",
         "ownerTools": {"path": "/unused/test-tool-socket", "token": "test-token"},
         "images": [{"type": "image", "data": "YWJj", "mimeType": "image/png"}],

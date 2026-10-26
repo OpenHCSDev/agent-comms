@@ -206,7 +206,8 @@ for line in sys.stdin:
                 ),
                 mode="all",
             )
-            assert (await request.exchange(child, strict=True)).succeeded
+            response = await request.exchange(child, strict=True)
+            response.success.require_success(response)
 
 
 async def test_fragmented_cancelled_line_remains_intact_in_the_only_reader():

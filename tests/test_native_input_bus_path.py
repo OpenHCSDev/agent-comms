@@ -1,17 +1,23 @@
 """A saved native owner answers a fresh DM through its bus-owned proof resource."""
 import asyncio
 import json
+from pathlib import Path
 from contextlib import AsyncExitStack
 from time import perf_counter
 
 import agent_comms.native_package as native_package
 
+from agent_comms.agent_backend import InputContent, InputRequest, SteerInputPolicy, TurnInbox
+from agent_comms.backend import NativeSession
+from agent_comms.field_codec import InputId
+from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.turn_watchdog import ModelWait
 from agent_comms.native_arguments import NativeInputProofArgument
 from agent_comms.native_pi import NativeContextJournal, NativeContextProof
 from agent_comms.native_transcript import NativeTranscript
 from bus_history import read_history
 from delivery_owner_fixture import reply_turn_finished
-from native_backend_fixture import native_backend_fixture
+from native_backend_fixture import native_backend_fixture, wait_for
 from native_package_acquisition_fixture import PackageTrace
 
 
@@ -56,3 +62,43 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
         print('NATIVE_OWNER_READY_SECONDS', ready_seconds, 'TREE_HASH_CALLS', trace.tree_hash_calls,
               'CORE_PACKAGE', native_package.__file__)
     assert all(child.retired for child in native.children)
+
+
+async def test_written_following_input_finishes_through_shared_native_settlement(
+    tmp_path: Path, native_runtime_package: VerifiedNativePackage,
+):
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
+        native.provider.response_gate = asyncio.Event()
+        inbox = TurnInbox()
+        task = asyncio.create_task(native.run("First isolated turn", queue=inbox))
+        try:
+            await wait_for(lambda: native.provider.posts == 1)
+            running = NativeSession.active[task]
+            following = InputRequest(input_id=InputId.mint(), content=InputContent(text="Second isolated input"),
+                                     when_busy=SteerInputPolicy)
+            inbox.put_nowait(following)
+            await wait_for(lambda: bool(running.inputs.pending))
+            await running.native.reader.pending.before_settlement()
+            native.provider.response_gate.set()
+            result = await task
+            assert result[-1].ok, result[-1]
+            assert native.provider.posts == 2
+            assert len(native.starts) == 2
+            assert native.starts[1][0] == following.input_id
+            assert running.inputs.settled and running.stats.complete
+            assert native.persistent.child_state.retained
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_stalled_real_native_run_records_phase_failure_instead_of_name_error(
+    tmp_path: Path, native_runtime_package: VerifiedNativePackage,
+):
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
+        native.provider.status = 0
+        result = await native.run("An isolated request whose provider never answers", model_wait=ModelWait(1.0))
+        assert not result[-1].ok
+        assert result[-1].reason_code == "model_stalled"
+        assert native.provider.posts == 1
+        assert len(native.starts) == 1

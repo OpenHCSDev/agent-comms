@@ -67,10 +67,6 @@ class InputForwarding(MroDispatch):
         session.rejected_signal.set()
         return (session.output.error(failure.text, source=UnrecordedFailureSource()),)
 
-    async def responses(self) -> None:
-        """Join the existing receipts; waiting never owns or cancels those receipts."""
-        await asyncio.gather(*(entry.response() for entry in tuple(self.pending.values())))
-
     async def forward(self, session: NativeSession) -> None:
         # Inputs that wait through one tool batch reach the model together,
         # not one model call apiece.
@@ -142,11 +138,8 @@ class InputForwarding(MroDispatch):
             return True
         async with command.pending_response(session.native) as future:
             response = await future
-        if not response.succeeded:
-            raise RuntimeError(
-                f"Native queue clear failed: {response.error.value_or('Pi gave no error text')}"
-            )
-        for native_id in response.data.require_payload().require_requested(command.input_ids):
+        data = response.success.require_data(response)
+        for native_id in data.require_requested(command.input_ids):
             removed = self.retire(native_id)
             session.rejected_commands.append(events.InputCleared(
                 id=removed.input_id, native_id=native_id, text=removed.content.text,

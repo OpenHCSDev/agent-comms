@@ -229,18 +229,17 @@ class ProgressWatchdog(MroDispatch):
     def wait_for(self, session: TurnSession) -> TurnWait:
         if session.awaiting_native_attestation:
             return self.preflight_wait
-        if session.stats.requested:
-            return self.poll_wait
+        active = self.phase.model_wait(self.model_wait, self.unbounded_wait)
         if session.prompt_state.awaiting_start and not self.phase.pauses_input_clock:
-            return self.input_wait
-        return self.phase.model_wait(self.model_wait, self.unbounded_wait)
+            active = self.input_wait
+        return session.stats.wait_for(self, active)
 
     async def read(self, session: TurnSession) -> bytes:
         if session.rejected_signal.is_set():
             return b"\n"
         read_task = asyncio.create_task(session.native.reader.readline())
         reject_task = asyncio.create_task(session.rejected_signal.wait())
-        finish_tasks = session.finish_signal.waiters(settling=session.stats.requested)
+        finish_tasks = session.stats.finish_waiters(session.finish_signal)
         tasks = {read_task, reject_task, *finish_tasks}
         forwarding = session.native.forwarding
         try:

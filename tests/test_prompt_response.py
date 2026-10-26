@@ -9,11 +9,10 @@ from agent_comms.agent_backend import FollowUpInputPolicy, InputContent, InputRe
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.pi_commands import FollowingPrompt, PiCommand, Prompt
+from agent_comms.pi_commands import FollowingPrompt, GetState, PiCommand, Prompt
 from agent_comms.pi_payloads import AnonymousRequest, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_inputs import InputForwarding
-from agent_comms.pi_events import Response
 from agent_comms.turn_failure import PromptSendFailed
 from agent_comms.agent_events import FollowingInputRefused
 from agent_comms.native_session_prepare import NativeSessionPreparation
@@ -94,11 +93,39 @@ async def test_following_receipt_keeps_its_command_without_a_second_acceptance_s
         reply["error"] = "explicit preflight rejection"
     response = channel.decode_record(json.dumps(reply).encode())
     assert channel.correlate(response) is following
-    await forwarding.responses()
+    await channel.pending.before_settlement()
     assert await receipt.response() is response
-    assert response.succeeded is success
+    assert response.success.success_value is success
     assert forwarding.retire(following.input_id) is following.input
     assert forwarding.settled
+
+
+@pytest.mark.parametrize("reverse", (False, True))
+async def test_settlement_joins_original_and_following_receipts_not_metadata(
+    following: FollowingPrompt, reverse: bool,
+):
+    channel = PiRpcChannel(asyncio.StreamReader())
+    original = prompt()
+    prompts = (following, original) if reverse else (original, following)
+    for command in prompts:
+        channel.track(command)
+    metadata = channel.track(GetState())
+    waiting = asyncio.create_task(channel.pending.before_settlement())
+    try:
+        for command in prompts:
+            completed, _ = await asyncio.wait((waiting,), timeout=0.01)
+            assert not completed
+            response = channel.decode_record(json.dumps({
+                "type": "response", "command": "prompt", "id": command.require_id(),
+                "success": True,
+            }).encode())
+            assert channel.correlate(response) is command
+        await asyncio.wait_for(waiting, timeout=1)
+        assert not metadata.future.done()
+    finally:
+        waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+        channel.pending.cancel_all()
 
 
 async def test_cancelling_a_receipt_waiter_does_not_cancel_the_native_receipt(following: FollowingPrompt):
@@ -119,10 +146,10 @@ async def test_explicit_following_rejection_retires_only_its_transient_write(
     channel = PiRpcChannel(asyncio.StreamReader())
     receipt = channel.track(following)
     session.inputs.pending[following.input_id] = receipt
-    response = Response.from_wire({
+    response = channel.decode_record(json.dumps({
         "type": "response", "command": "prompt", "id": following.require_id(),
         "success": False, "error": "native preflight refused",
-    })
+    }).encode())
     assert channel.correlate(response) is following
     updates = tuple(following.on_response(response, session))
     assert updates
