@@ -25,7 +25,8 @@ from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
 from .repo import Checkout, CheckoutStart, Repo
 from .repository_name import RepositoryName
-from .storage_rules import CheckoutStorageEffect, StorageProjection
+from .shell_effects import CheckoutStorageEffect
+from .storage_rules import StorageProjection
 from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 

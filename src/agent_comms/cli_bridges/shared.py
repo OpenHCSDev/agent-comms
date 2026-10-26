@@ -21,7 +21,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
@@ -74,6 +74,7 @@ from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.repo import Checkout
@@ -87,6 +88,7 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 from agent_comms.wire_models import WireModel
+from agent_comms_hooks.board import BoardEntry, SessionBoard
 from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
@@ -105,9 +107,6 @@ from .monitor import (
     read_monitor,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.task_attachments.commander_pings import CommanderUpdate
-
 
 class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
@@ -118,7 +117,39 @@ class BridgeStateTable(DurableTables):
     """
 
     __slots__ = ()
-    filename = WatchRecord.store_name
+    filename = 'delivery.sqlite3'
+
+
+@dataclass(frozen=True)
+class DeliveredBoardContent(BridgeStateTable, TypedTable, declared_name="board_delivery"):
+    """This bridge's delivery evidence, not a copy of Core's board."""
+
+    content: Annotated[str, Column(primary_key=True)]
+    since: float
+    delivered_at: float
+
+    def alarm_due(self, entry: BoardEntry, now: float) -> bool:
+        return self.delivered_at < entry.alarm_at <= now
+
+    @classmethod
+    def deliver(cls, db: sqlite3.Connection, entries: tuple[BoardEntry, ...], now: float) -> SessionBoard:
+        """Select and stamp together: concurrent hooks cannot deliver the same change."""
+        due: list[BoardEntry] = []
+        unchanged: list[BoardEntry] = []
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            current = {entry.content for entry in entries}
+            for delivered in cls.select(db):
+                if delivered.content not in current:
+                    cls.delete(db, content=delivered.content)
+            for entry in entries:
+                prior = cls.select(db, content=entry.content, since=entry.since)
+                if all(delivered.alarm_due(entry, now) for delivered in prior):
+                    cls(entry.content, entry.since, now).upsert(db)
+                    due.append(entry)
+                else:
+                    unchanged.append(entry)
+        return SessionBoard.presented(due, unchanged, now)
 
 
 class BindingRequest(ABC):
@@ -1430,6 +1461,12 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def declare_reader(self, status: ThreadStatus) -> None:
         await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
+
+    async def board(self) -> tuple[str, ...]:
+        """The commander board this session's tool calls print, derived from Core when asked."""
+        entries = await self.comms.bus.when_open(partial(
+            CommanderUpdate.current_board, self.comms, self.binding.bus))
+        return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),

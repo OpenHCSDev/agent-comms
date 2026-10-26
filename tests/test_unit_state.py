@@ -164,7 +164,7 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
         states = UnitState.current(
-            comms, "lead", HeartbeatFrame.read(comms, "lead", ProgressRead()))
+            comms, "lead", HeartbeatFrame.capture(comms, "lead", ProgressRead()))
         (state,) = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation
@@ -205,7 +205,7 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
         (state,) = (
             state
             for state in UnitState.current(
-                held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead())
+                held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead())
             )
             if state.unit.name == "worker"
         )
@@ -230,7 +230,7 @@ def test_a_stopped_child_holding_no_order_is_no_unit(held_bus):
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
         states = UnitState.current(
-            held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
+            held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead()))
     assert child.incarnation not in {state.unit for state in states}
 
 
@@ -238,7 +238,7 @@ def test_commander_fork_gets_no_unit_card(held_bus):
     fork = held_bus.registry.register_commander_child("judge-fork", "lead", held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
         states = UnitState.current(
-            held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
+            held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead()))
     assert fork.incarnation not in {state.unit for state in states}
 
 

@@ -26,7 +26,7 @@ class HeartbeatFrame(HeldOrders):
     answers: tuple[OwedAnswer, ...]
 
     @classmethod
-    def read(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
+    def capture(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
         scan = HeldOrders.read(comms, commander)
         snapshot = comms.registry.snapshot()
         repository = Repo.declaring(

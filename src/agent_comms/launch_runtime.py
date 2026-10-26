@@ -92,8 +92,12 @@ class LaunchRuntime:
         return dict(environment)
 
     @staticmethod
-    def current_pointer() -> Path:
-        return Path.home() / ".local/share/agent-comms/current"
+    def state_directory(home: Path) -> Path:
+        return home / ".local/share/agent-comms"
+
+    @classmethod
+    def current_pointer(cls) -> Path:
+        return cls.state_directory(Path.home()) / "current"
 
     @classmethod
     def installed(cls) -> LaunchRuntime:
