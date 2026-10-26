@@ -10,11 +10,13 @@ import pytest
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_subjects import HeadSubject
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeadSubject, UnitSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
-    IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule, StuckMerge,
+    HeadReviewTimerUp, IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule,
+    ReviewTimerUp, StuckMerge,
 )
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import RecordProblems
@@ -161,6 +163,40 @@ def test_only_a_head_linked_to_the_callers_held_order_refuses_its_orders(head_bu
     RecordPullRequest(todo.revision, held.owner_identity,
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
+
+
+@pytest.mark.parametrize("has_head", (False, True))
+def test_review_timer_up_with_open_head_builds(held_bus, github_cli, reviewed_source, has_head):
+    """One registry scan builds one timer line, with a head only when the forge has one."""
+    comms = held_bus
+    original = comms.goals.todos.get("P2")
+    comms.goals.update_goal("worker", CreateProblemGoalAction(
+        problem="P3", commander="lead", request=original.request,
+        assigner=comms.registry.require("lead").incarnation,
+        repo=original.repo, text="Repair the overdue order", order=original.order.checked(),
+        review_at=RecordedEventTime(time.time() - 1),
+    ))
+    todo = comms.goals.todos.get("P3")
+    if has_head:
+        request = opened(github_cli, reviewed_source, 7, reviewed_source.branch_commit)
+        held = todo.held()
+        RecordPullRequest(todo.revision, held.owner_identity,
+                          PullRequestLink(request.repo, request.pr), held.generation).record(
+                              comms.goals, todo.id)
+    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead(()))
+    assert HeadReviewTimerUp.scan_owner() is ReviewTimerUp
+    found, = ReviewTimerUp.broken(comms, "lead", observed=(), frame=frame)
+    assert found.problem == "P3"
+    assert found.holder == todo.held().owner_identity
+    assert found.order == todo.order.checked().id
+    assert found.began() <= time.time()
+    if has_head:
+        assert type(found) is HeadReviewTimerUp
+        assert found.request == request
+    else:
+        assert type(found) is ReviewTimerUp
+    assert "P3" in found.line()
+    assert "worker" in found.line()
 
 
 def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
