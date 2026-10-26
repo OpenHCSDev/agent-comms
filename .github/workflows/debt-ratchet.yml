@@ -225,8 +225,11 @@ jobs:
           BASE: ${{ needs.base.outputs.base }}
         run: |
           set -o pipefail
+          ratchet_status=0
           PYTHONPATH=src:tools python tools/debt_ratchet.py \
-            --root ${{ matrix.kind }} --base "$BASE" --head HEAD 2>&1 | tee ratchet.txt
+            --root ${{ matrix.kind }} --base "$BASE" --head HEAD 2>ratchet-findings.txt | tee ratchet.txt || ratchet_status=$?
+          cat ratchet-findings.txt >&2
+          exit "$ratchet_status"
 
       # Hosted annotations stop at ten per step, so a unit never saw a long list (88 findings
       # on the bus batch, 2026-10-21). The whole list goes on the pull request, one comment per
@@ -241,7 +244,7 @@ jobs:
         run: |
           marker="<!-- $KIND findings -->"
           { echo "$marker"; echo "**$KIND** at $(git rev-parse --short HEAD), every finding:"; echo '```';
-            grep -E '^(introduced|found|grew) ' ratchet.txt; echo '```'; } > body.md
+            cat ratchet-findings.txt; echo '```'; } > body.md
           old=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
                 --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
           if [ -n "$old" ]; then

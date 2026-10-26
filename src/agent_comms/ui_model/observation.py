@@ -8,9 +8,10 @@ over a pipe. The UI also asks it for reads it awaits: store reads (transcript
 pages, their currency, message notifications), answered in arrival order, and
 reads a thread's live owner answers over its socket (the goal snapshot, input
 delivery), answered as they complete. Each answer carries the request id and
-the decoded value or the exception the read raised. The UI thread no longer
-polls revisions, reads stores, resolves owners, decodes replies or derives
-rows, and no longer competes with that work for its interpreter lock.
+the decoded value or the exception the read raised. Store work runs in the
+service process. The receiving process reads and unpickles each complete packet
+in a joined worker; only typed delivery and future settlement run on its loop.
+The receiving worker still shares its interpreter lock with the UI.
 """
 
 from __future__ import annotations
@@ -24,11 +25,13 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack, aclosing, suppress
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, ExitStack, aclosing
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
+
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.acp_extension import (
     GoalSnapshotReply,
@@ -37,8 +40,10 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
+from agent_comms.child_process import join_retirement
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.comms import Comms
+from agent_comms.coordinator import Coordination
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -945,7 +950,7 @@ class ServiceResult(ABC):
         service.pending.pop(request.request_id)
 
     @abstractmethod
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None: ...
+    async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None: ...
 
 
 class ReadOutcome(ServiceResult):
@@ -961,8 +966,8 @@ class Observed(ObservationStep, ServiceResult):
     def publish(self, service: ObservationService) -> None:
         service.send(self)
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
-        observed.append(self)
+    async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
+        observed(self)
 
 
 @dataclass(frozen=True)
@@ -970,7 +975,7 @@ class ReadAnswered(ReadOutcome):
     request_id: int
     value: object
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
         if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
             waiter.set_result(self.value)
 
@@ -990,7 +995,7 @@ class ReadBusy(ReadOutcome):
     def title(self) -> str:
         return "History loading"
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
         # Keep the same waiter. The service owns waiting for the source and
         # answers this request when its next observation can acquire a read.
         pass
@@ -1004,7 +1009,7 @@ class ReadRefused(ReadOutcome):
     error: Exception
     trace: str
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
         if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
             self.error.add_note(f"Raised in the comms observation service:\n{self.trace}")
             waiter.set_exception(self.error)
@@ -1184,7 +1189,8 @@ class ObservationFailed(ServiceResult):
 
     error: str
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    async def received(self, process: ObservationProcess, observed: Callable[[Observed], None]) -> None:
+        await Coordination.run_worker(partial(process.process.join, timeout=2))
         raise process.ended(self.error)
 
 
@@ -1197,16 +1203,41 @@ class ObserverStatus(ABC):
     def failure(self, create: Callable[[], ObserverDied]) -> ObserverDied:
         return create()
 
+    def retire(self, process: ObservationProcess) -> None:
+        pass
+
 
 class NoObserverFailure(ObserverStatus):
     def raise_if_failed(self) -> None:
         return None
 
+    def retire(self, process: ObservationProcess) -> None:
+        retired = ObserverRetired("The Comms observation retired before the read was answered")
+        process.status = retired
+        process.abandon_reads(retired)
+
+
+class ObserverRetired(StaleRevision, ObserverStatus):
+    def raise_if_failed(self) -> None:
+        raise self
+
+
+@dataclass(frozen=True)
+class ObserverReadFailed(ObserverStatus):
+    error: BaseException
+
+    def raise_if_failed(self) -> None:
+        raise self.error
+
+    def settle(self, process: ObservationProcess) -> None:
+        process.status = self
+        process.abandon_reads(self.error)
+
 
 class ObserverDied(CoordinationError, ObserverStatus):
-    """The observation service's process ended while the UI was using it.
+    """The observation service ended; reads share its reported cause.
 
-    The UI does not run on what it last observed: it reports this and exits.
+    Presentation and recovery belong to the consuming application.
     """
 
     def __init__(self, pid: int, exit_status: int | None, error: str | None):
@@ -1367,21 +1398,13 @@ def serve(route: CommsRoute, connection: Connection) -> None:
         connection.close()
 
 
-class ObservationProcess(AbstractContextManager):
-    """Own reader retirement, awaited reads, the pipe and the joined service, in that order."""
+class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
+    """One ordered receive/decode task, loop-owned delivery, and joined retirement."""
 
     @classmethod
     def awaited(cls, route: CommsRoute) -> Self:
-        """Attach readiness to the process lifetime, not a suspended generator's finalizer."""
-        loop = asyncio.get_running_loop()
         process = cls(route)
-        descriptor = process.fileno()
-        try:
-            loop.add_reader(descriptor, process.answer_reads)
-        except BaseException:
-            process.close()
-            raise
-        process._reader.callback(loop.remove_reader, descriptor)
+        process.start_receiving(process.observed, process.failed)
         return process
 
     def __init__(self, route: CommsRoute):
@@ -1399,17 +1422,47 @@ class ObservationProcess(AbstractContextManager):
                 self.process.start()
             self._resources.callback(self.process.join)
             self._resources.enter_context(acquisition.pop_all())
-        self._resources.callback(
-            self.abandon_reads,
-            StaleRevision("The Comms observation retired before the read was answered"),
-        )
-        self._reader = self._resources.enter_context(ExitStack())
+        self._reader = AsyncExitStack()
 
-    def __exit__(self, *exc) -> None:
-        self.close()
+    async def __aexit__(self, *exc: object) -> None:
+        await self.close()
 
-    def fileno(self) -> int:
-        return self.connection.fileno()
+    def start_receiving(
+        self, observed: Callable[[Observed], None], failed: Callable[[Exception], None],
+    ) -> None:
+        """Start this process's reader on the delivery loop, once at attachment."""
+        receiving = asyncio.create_task(self.receive(observed, failed))
+        receiving.add_done_callback(partial(self.receive_ended, failed))
+        self._reader.push_async_callback(self.stop_receiving, receiving)
+
+    def receive_ended(
+        self, failed: Callable[[Exception], None], receiving: asyncio.Task[None],
+    ) -> None:
+        if not receiving.cancelled():
+            self.dispatch_sync(receiving.exception(), failed)
+
+    @handles(Exception)
+    def receive_error(self, error: Exception, failed: Callable[[Exception], None]) -> object:
+        ObserverReadFailed(error).settle(self)
+        failed(error)
+        return self.DISCARD
+
+    @handles(BaseException)
+    def receive_interrupted(
+        self, error: BaseException, failed: Callable[[Exception], None],
+    ) -> None:
+        ObserverReadFailed(error).settle(self)
+        raise error
+
+    async def stop_receiving(self, receiving: asyncio.Task[None]) -> None:
+        receiving.cancel()
+        await asyncio.gather(receiving, return_exceptions=True)
+
+    def observed(self, result: Observed) -> None:
+        """Awaited-only consumers have no view updates to apply."""
+
+    def failed(self, error: Exception) -> None:
+        """The status and pending reads already carry this failure."""
 
     def request(self, request: ObservationRequest) -> None:
         """Tell the service what the UI shows, or report its end to this caller."""
@@ -1428,8 +1481,6 @@ class ObservationProcess(AbstractContextManager):
 
     def ended(self, error: str | None) -> ObserverDied:
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""
-        self._reader.close()
-        self.process.join(timeout=2)
         died = self.status.failure(
             partial(ObserverDied, self.process.pid, self.process.exitcode, error)
         )
@@ -1438,7 +1489,7 @@ class ObservationProcess(AbstractContextManager):
         return died
 
     async def read(self, request: AwaitedRead):
-        """Send ``request`` and await its answer, delivered by ``results``.
+        """Send ``request`` and await its loop-delivered answer.
 
         Cancelling the caller cancels the read; an unserved read is dropped.
         """
@@ -1461,36 +1512,58 @@ class ObservationProcess(AbstractContextManager):
             elif not waiter.cancelled():
                 waiter.exception()
 
-    def abandon_reads(self, error: Exception) -> None:
+    def abandon_reads(self, error: BaseException) -> None:
         """The reader's retirement settles its waiters with the original cause."""
         reads, self.reads = self.reads, {}
         for waiter in reads.values():
             if not waiter.done():
                 waiter.set_exception(error)
 
-    def results(self) -> list[Observed]:
-        """Every observation waiting on the pipe; answered reads resolve their waiters.
+    async def readable(self) -> None:
+        """Wait until one packet can be received by the worker."""
+        loop = asyncio.get_running_loop()
+        descriptor = self.connection.fileno()
+        ready: asyncio.Future[None] = loop.create_future()
 
-        The service's end (its failure, or its pipe closing) is raised here
-        as ``ObserverDied``; its owned readiness reader is retired then.
+        def available() -> None:
+            loop.remove_reader(descriptor)
+            if not ready.done():
+                ready.set_result(None)
+
+        loop.add_reader(descriptor, available)
+        try:
+            await ready
+        finally:
+            loop.remove_reader(descriptor)
+
+    async def receive(
+        self, observed: Callable[[Observed], None], failed: Callable[[Exception], None],
+    ) -> None:
+        """Read and unpickle one complete packet off-loop; settle it on this loop.
+
+        Start the next read only after its predecessor is delivered.
+        Retirement joins a started read even when cancelled partway through.
         """
-        observed: list[Observed] = []
-        while not self.connection.closed and self.connection.poll():
-            try:
-                result = self.connection.recv()
-            except (EOFError, ConnectionResetError):
-                raise self.ended(None) from None
-            result.received(self, observed)
-        return observed
+        try:
+            while True:
+                await self.readable()
+                result: ServiceResult = await Coordination.run_worker(self.connection.recv)
+                await result.received(self, observed)
+        except (EOFError, ConnectionResetError):
+            await Coordination.run_worker(partial(self.process.join, timeout=2))
+            failed(self.ended(None))
+        except ObserverDied as error:
+            failed(error)
 
-    def answer_reads(self) -> None:
-        """The loop's reader for awaited reads: answered reads resolve their waiters.
+    @cached_property
+    def closing(self) -> asyncio.Task[None]:
+        return asyncio.create_task(self.retire())
 
-        The service's end has no caller here. ``ended`` already settles it into
-        every awaited read and into the status the next request raises.
-        """
-        with suppress(ObserverDied):
-            self.results()
+    async def retire(self) -> None:
+        self.status.retire(self)
+        async with AsyncExitStack() as release:
+            release.push_async_callback(Coordination.run_worker, self._resources.close)
+            await self._reader.aclose()
 
-    def close(self) -> None:
-        self._resources.close()
+    async def close(self) -> None:
+        await join_retirement(self.closing)
