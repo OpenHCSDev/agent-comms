@@ -11,17 +11,11 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import ToolRefusedError
 
 if TYPE_CHECKING:
-    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import MergedProblemOrder, Todo
 
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
     label: ClassVar[str] = "Works when:"
-
-    def require_assignment(
-        self, unit: ThreadIncarnation, fired: tuple[Todo, ...], strike_limit: int
-    ) -> None:
-        """Mechanical work remains assignable after application work was taken away."""
 
     def require_artifact(self, path: str) -> None:
         pass
@@ -67,16 +61,6 @@ class MechanicalOrderRun(OrderRun):
 
 @dataclass(frozen=True)
 class ApplicationOrderRun(OrderRun):
-    def require_assignment(
-        self, unit: ThreadIncarnation, fired: tuple[Todo, ...], strike_limit: int
-    ) -> None:
-        if fired:
-            raise ToolRefusedError(
-                f"{unit.name} has {strike_limit} strikes on "
-                f"{[todo.id for todo in fired]}. "
-                f"Reassign them; only a mechanical run reaches {unit.name}."
-            )
-
     def merged_line(self, state: str) -> str:
         return f"{super().merged_line(state)}, waiting on the run"
 

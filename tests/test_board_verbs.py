@@ -10,13 +10,14 @@ import pytest
 
 from agent_comms.commander import judge, order
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.head_review import HeadReviewOrder
 from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp
+from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp
+from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.todos import (
     Assignment, ClaimOrder, DeliveredProblemOrder, OrderHeadReview, OrderClaim,
     OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
@@ -116,6 +117,18 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
             comms.bus.bus, comms.registry.snapshot(), {todo.held().owner_identity: (todo,)},
             "lead", ()):
         assert_review_preconditions(delivery, comms, request)
+
+
+def test_head_review_timer_ping_round_trips_through_field_codec(board_review):
+    comms, request, _, link = board_review
+    todo = link()
+    timer = HeadReviewTimerUp(
+        todo.id, todo.held().owner_identity, todo.order.checked().id,
+        RecordedEventTime(time.time()), request, todo=todo)
+    ping = RulePing.capture(timer)
+    decoded = FieldCodec.decode(RulePing, FieldCodec.encode(ping))
+    assert decoded == ping
+    assert decoded.rule is HeadReviewTimerUp
 
 
 def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_review):
