@@ -194,7 +194,7 @@ from .thread_model import ThreadModel
 from .thread_status import ThreadStatus
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
-from .todos import Todo
+from .todos import HeadVerdict, Todo
 from .head_review import PullRequestHead
 from .tool_result import ToolResult
 from .turn_context import (
@@ -1066,7 +1066,7 @@ class CliCommand[Answer: CliResult = CliResult](
 class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-review"):
     """Read the existing exact-head verdict for a commander session's merge command."""
 
-    help = "Require recorded ok verdicts for the current heads an admin/API command merges"
+    help = "Read Core's recorded decision for the current admin/API merge head"
     session: Annotated[str, Argument(flags=("--session",))]
     bash: Annotated[str, Argument(flags=("--bash",))]
 
@@ -1087,10 +1087,7 @@ class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-
                 target = bypass.target()
                 request = PullRequestHead.at(RepositoryName.from_wire(target.repository), target.number)
                 reviews = ctx.goals.todos.head_reviews(request)
-                if not reviews:
-                    raise ToolRefusedError(
-                        f"{request.repo.to_wire()}#{request.pr} at {request.head}: missing recorded commander ok verdict.")
-                reviews[0].verdict.require_merge(request)
+                (type(reviews[0].verdict) if reviews else HeadVerdict).require_merge(request)
                 heads.append(request)
         return MergeReviewResult(tuple(heads))
 
