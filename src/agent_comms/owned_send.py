@@ -146,13 +146,14 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
             scope = NativeClaim(owner_claimed_generation=self.claim_generation,
                                 operation_id=slot, turn_id=self.turn,
                                 input_id=turn.command.input_id)
-            return boundary.bus.publisher._publish_acquisition_unlocked(
-                snapshot, owner, canonical, scope, activity=boundary.activity)
+            with boundary.current():
+                return boundary.bus.publisher._publish_acquisition_unlocked(
+                    snapshot, owner, canonical, scope, activity=boundary.activity)
 
     async def release_resources(self) -> None:
         """The ordinary turn owns its acquisitions through native/tool retirement."""
         def release() -> None:
-            with NativeBoundary(self.comms.bus) as boundary:
+            with NativeBoundary(self.comms.bus) as boundary, boundary.current():
                 boundary.bus.publisher.release_resources(
                     boundary, tuple(self.claims.values()), "Released files after an ordinary turn"
                 )

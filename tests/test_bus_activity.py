@@ -101,3 +101,30 @@ def test_read_boundary_defers_instead_of_waiting_on_a_held_bus(private_comms):
     reader.join(5)
     assert deferred
     assert isinstance(outcome[0], BlockingIOError)
+
+
+def test_open_boundary_never_holds_the_registry_against_its_writers(private_comms):
+    """An open native boundary keeps only its registry copy; a writer acquires at
+    once, and a write from the stale copy refuses instead of publishing over it."""
+    import threading
+
+    from agent_comms.coordination_errors import StaleFence
+    from agent_comms.coordinator import Coordination
+    from agent_comms.store_files import RegistryLocking
+
+    registry = private_comms.bus._registry.store
+    acquired = []
+
+    def write():
+        with RegistryLocking.write_guard(registry.path):
+            registry.save_unlocked(registry.read_revision_unlocked().document.copy())
+            acquired.append(True)
+
+    with Coordination(str(private_comms.root / "coordination.sqlite3")) as store, \
+            store.session.boundary(store.session.bus) as boundary:
+        writer = threading.Thread(target=write, daemon=True)
+        writer.start()
+        writer.join(1)
+        assert acquired == [True]
+        with pytest.raises(StaleFence, match="registry revision changed"), boundary.current():
+            pass

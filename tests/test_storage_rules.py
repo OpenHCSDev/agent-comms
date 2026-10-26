@@ -13,8 +13,9 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.repo import Checkout, CheckoutStart, DetachedStart, GitTreeEntry, KeptBranchStart, NewBranchStart, Repo
+from agent_comms.standing_rules import StorageHomeMissing, StorageOverQuota
 from agent_comms.storage_rules import (
-    CheckoutClaim, StorageRoots, StorageRule, StorageOverQuota, StorageProjection, UnassignedThreadStorage, UnitStorage,
+    CheckoutClaim, StorageRoots, StorageRule, StorageProjection, UnassignedThreadStorage, UnitStorage,
 )
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageDenied, ShellProgram,
@@ -160,7 +161,7 @@ def test_non_git_home_is_not_charged_and_nested_roots_are_counted_once(
     alias = tmp_path / 'alias'
     alias.symlink_to(checkout, target_is_directory=True)
     thread = replace(thread, worktree=str(tmp_path), storage_roots=StorageRoots(scratch))
-    storage = UnitStorage(rule, thread, CheckoutClaim(Checkout(tmp_path)), tuple(
+    storage = UnitStorage(rule, thread.incarnation, rule.roots_of(thread), CheckoutClaim(Checkout(tmp_path)), tuple(
         CheckoutClaim(Checkout(path)) for path in (checkout, nested, alias)))
     (tmp_path / 'unrelated-user-data').write_bytes(b'user' * 2**16)
     before = storage.held_gib
@@ -297,3 +298,14 @@ def test_program_decoders_preserve_command_shapes(tmp_path, command, kind):
 def test_an_unterminated_quote_is_a_declared_refusal(tmp_path):
     with pytest.raises(StorageDenied):
         shell_storage_effects("echo 'never closed\nmkdir target", tmp_path)
+
+
+def test_storage_violation_observation_key_resolves_every_compared_field(checkout_comms: Comms):
+    """The heartbeat digests a storage rule through each field's declared type."""
+    comms = checkout_comms
+    thread = comms.registry.require('worker')
+    storage = UnitStorage.read(comms.registry.storage_rule, thread)
+    assert storage.unit == thread.incarnation
+    assert StorageHomeMissing(storage).observation_key() != StorageOverQuota(storage).observation_key()
+    assert StorageOverQuota(storage).observation_key() == StorageOverQuota(
+        UnitStorage.read(comms.registry.storage_rule, thread)).observation_key()

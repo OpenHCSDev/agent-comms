@@ -6,7 +6,7 @@ import math
 import shutil
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
@@ -30,20 +30,16 @@ from agent_comms.locked_store import DurableFile
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.storage_room import RoomAllocation
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import WorkBranches
 
 from .shell_effects import StorageDenied, StorageEffect
 
 if TYPE_CHECKING:
-    from agent_comms.comms import Comms
-    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.registration import Registration
-    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
     from agent_comms.todos import Todo, TodoStore
-    from agent_comms.ui_model.unit_state import UnitState
 
 StoragePath = Annotated[Path, PathText]
 
@@ -499,14 +495,15 @@ class UnitStorage:
     """Owned scratch and checkout claims measured against one byte budget."""
 
     rule: StorageRule
-    unit: Thread
+    unit: ThreadIncarnation
+    roots: StorageRoots
     home: CheckoutClaim
     extra_checkouts: tuple[CheckoutClaim, ...]
 
     @classmethod
     def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
         home, *extras = rule.checkouts_of(thread)
-        return cls(rule, thread, CheckoutClaim(Checkout(home)), tuple(
+        return cls(rule, thread.incarnation, rule.roots_of(thread), CheckoutClaim(Checkout(home)), tuple(
             CheckoutClaim(Checkout(path)) for path in dict.fromkeys(
                 path for path in (*extras, *proposed) if path != home)))
 
@@ -520,7 +517,7 @@ class UnitStorage:
     @cached_property
     def held_gib(self) -> float:
         roots = {path.resolve() for path in (
-            self.rule.roots_of(self.unit).scratch,
+            self.roots.scratch,
             *Checkout.present(self.home.checkout.path),
             *(claim.checkout.path for claim in self.extra_checkouts))}
         return sum(self.rule.tree_gib(path) for path in roots
@@ -566,65 +563,12 @@ class UnitStorage:
             self.rule.deny(self.quota_text)
 
     def require_retired(self, problem: str) -> None:
-        for path in self.rule.problem_checkouts(self.rule.roots_of(self.unit), problem):
+        for path in self.rule.problem_checkouts(self.roots, problem):
             if Checkout(path) in self.extra_checkout_keys:
                 self.rule.deny(
                     f'{self.unit.name} still has the checkout {path} for this order; '
                     'it removes it before the order counts as done')
         self.require_quota()
-
-
-@dataclass(frozen=True)
-class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
-    """One family scan shares each held unit's storage snapshot between its violations."""
-
-    storage: UnitStorage
-
-    @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        # Storage reads the filesystem, not the git source an unreadable card failed on:
-        # a unit whose declared home is gone is that card and a missing home.
-        held = frame.holders
-        return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
-
-    @classmethod
-    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
-        registry = comms.registry
-        snapshot = registry.snapshot()
-        members = cls.members_with(cls)
-        found = []
-        for unit in sorted(set(units), key=lambda unit: unit.name):
-            thread = snapshot.require(unit.name)
-            if thread.incarnation != unit:
-                raise ValueError("Observed unit incarnation changed")
-            storage = UnitStorage.read(registry.storage_rule, thread)
-            found.extend(member(storage) for member in members if member.violated(storage))
-        return tuple(found)
-
-    @classmethod
-    @abstractmethod
-    def violated(cls, storage: UnitStorage) -> bool: ...
-
-
-class StorageOverQuota(StorageViolation):
-    @classmethod
-    def violated(cls, storage: UnitStorage) -> bool:
-        return storage.over_cap
-
-    def line(self) -> str:
-        return (f'{self.storage.unit.name} holds {self.storage.quota_text}'
-                f' -> order the cleanup')
-
-
-class StorageHomeMissing(StorageViolation):
-    @classmethod
-    def violated(cls, storage: UnitStorage) -> bool:
-        return storage.missing_home
-
-    def line(self) -> str:
-        return (f'{self.storage.unit.name} declared home {self.storage.home.checkout.path} is missing.'
-                f' who deleted it? -> restore the home checkout')
 
 
 @dataclass

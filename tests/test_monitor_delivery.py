@@ -50,7 +50,6 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
     state = tmp_path / 'bridge-state'
     with Binding.open(state) as db:
         binding = GivenBinding({
-            Binding.family_discriminator: Binding.declared_name,
             'root': str(comms.root), 'bus_thread': 'viewer', 'session': 'session',
         }).bind(db).registered(comms).bind(db)
         selected = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)

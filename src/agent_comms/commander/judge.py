@@ -44,8 +44,7 @@ from agent_comms.field_codec import (
     SelectingArgumentDefault,
 )
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.head_review import HeadReviewOrder, PullRequestHead
-from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, UnitSubject
+from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
 from agent_comms.todos import (
@@ -69,6 +68,7 @@ from agent_comms.todos import (
     SendBackVerdict,
     StrikeReason,
     SupersededVerdict,
+    SupersededHeadVerdict,
     Todo,
     ToolCallVerdict,
     UnderReviewHeadVerdict,
@@ -81,7 +81,8 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
-from agent_comms.standing_rules import HeadReviewRule
+from agent_comms.standing_rules import HeadReviewRule, StandingRule
+from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
@@ -223,10 +224,6 @@ class ReviewSubject(DeclaredFamily):
     @abstractmethod
     def run(self, options: VerdictVerb, ctx: order.Commander) -> None: ...
 
-    def acts_on(self, ctx: order.Commander) -> tuple[HeartbeatSubject, ...]:
-        """Edit verdicts touch no heartbeat subject; a PR verdict touches its head."""
-        return ()
-
     @abstractmethod
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]: ...
@@ -311,19 +308,15 @@ class PullRequestReview(ReviewSubject):
             ctx.project.repository_names(options.repo),
             options.pr, options.head))
 
-    def acts_on(self, ctx: order.Commander) -> tuple[HeartbeatSubject, ...]:
-        """The head, and the unit holding it: a verdict reaches that unit's own lines."""
-        return (HeadSubject(self.request),
-                *(UnitSubject(todo.holder_state.previous_assignment().owner_identity)
-                  for todo in HeadReviewOrder.holding(ctx.todos(), self.request)))
-
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
         options.check_edits([])
         linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
-        ctx.call(CommsHeadVerdictTool(request=self.request,
-                                    operation=options.head_operation(), order=linked))
+        reviewed = ctx.call(CommsHeadVerdictTool(request=self.request,
+                                               operation=options.head_operation(), order=linked))
         print(f'PR #{self.request.pr} head {self.request.head}: {options.declared_name}')
+        for line in reviewed.merge.lines(self.request):
+            print(line)
 
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:
@@ -441,8 +434,8 @@ class VerdictVerb(JudgeVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
-    clears = (HeadReviewRule,)
+class HeadVerdictVerb(VerdictVerb, declared_name=None):
+    clears: ClassVar[tuple[type[StandingRule], ...]] = (HeadReviewRule,)
     verdict: ClassVar[type[HeadVerdict]]
 
     @classmethod
@@ -472,10 +465,8 @@ class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
         return UnquotedHeadReview.of(todo, self.head_evidence())
 
     def act(self, ctx: order.Commander) -> None:
-        """The gate and the verdict read one subject: selecting a PR reads GitHub."""
-        subject = self.subject(ctx)
-        self.gate_on(ctx, subject.acts_on(ctx))
-        subject.run(self, ctx)
+        self.gate(ctx)
+        self.subject(ctx).run(self, ctx)
 
     def head_evidence(self) -> tuple[FileLine, ...]:
         return ()
@@ -573,8 +564,10 @@ class ReviewingVerb(HeadVerdictVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SupersededVerb(ReasonedVerb, VerdictVerb):
-    help = "the task moved to another unit; these edits are neither ok nor sent back"
+class SupersededVerb(ReasonedVerb, HeadVerdictVerb):
+    clears = (ClosedUnmergedPullRequest,)
+    verdict = SupersededHeadVerdict
+    help = "the edits or exact PR head were replaced; record the replacement and why"
     by: Annotated[
         str,
         Argument(
@@ -582,6 +575,9 @@ class SupersededVerb(ReasonedVerb, VerdictVerb):
             options={"metavar": "PROBLEM", "help": "the replacing problem id from order board"},
         ),
     ]
+
+    def head_operation(self) -> HeadVerdict:
+        return self.verdict(VerdictReason(self.why), self.by)
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SupersededVerdict:
         return SupersededVerdict(todo.revision,

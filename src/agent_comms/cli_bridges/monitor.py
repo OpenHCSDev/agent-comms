@@ -101,8 +101,14 @@ class MonitorPeer:
     writer: asyncio.StreamWriter
 
     async def write(self, line: str) -> None:
-        self.writer.write((line + "\n").encode())
-        await self.writer.drain()
+        try:
+            self.writer.write((line + "\n").encode())
+            await self.writer.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            # A failed output half cannot keep the attachment's input read alive.
+            # Closing wakes that read; its existing finally releases the reader slot.
+            self.writer.close()
+            raise
 
     async def close(self) -> None:
         self.writer.close()

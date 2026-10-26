@@ -448,7 +448,7 @@ class RecoveryMonitorCapability:
                 if current.reference.recorded:
                     continue
                 loss.require_input_loss(current)
-                with store.session.writing() as db:
+                with boundary.current(), store.session.writing() as db:
                     stage.fail_claims(store, db)
 
     @classmethod

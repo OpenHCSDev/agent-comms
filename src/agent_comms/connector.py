@@ -36,7 +36,8 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal, Self
+from types import MappingProxyType
+from typing import Annotated, ClassVar, Literal, Self, cast
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
@@ -69,6 +70,8 @@ from .locked_store import DocumentChange
 from .messages import QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
+from .closed_pull_requests import ClosedPullRequestWatch
+from .message_bus import Watch
 from .coordinator import Coordination
 from .service_passes import ServicePassStore
 from .tool_result import ToolResult
@@ -494,8 +497,14 @@ class Connector:
     store: ConnectorStore
     issuer: str
     root: Path
-    heartbeat: CommanderHeartbeat = field(default_factory=CommanderHeartbeat,
-                                          init=False, repr=False, compare=False)
+    watches: Mapping[type[Watch], Watch] = field(
+        default_factory=lambda: MappingProxyType({member: member() for member in Watch.members_with(Watch)}),
+        init=False, repr=False, compare=False,
+    )
+
+    @property
+    def heartbeat(self) -> CommanderHeartbeat:
+        return cast(CommanderHeartbeat, self.watches[CommanderHeartbeat])
 
     @property
     def resource_metadata_url(self) -> str:
@@ -577,11 +586,10 @@ class Connector:
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
         passes = ServicePassStore.at(self.root)
-        tasks = (
+        tasks = tuple(
             asyncio.create_task(Coordination.watch_worker(
-                UnownedOrderWatch(), self.service_wire, passes)),
-            asyncio.create_task(Coordination.watch_worker(
-                self.heartbeat, self.service_wire, passes)),
+                watch, self.service_wire, passes))
+            for watch in self.watches.values()
         )
         try:
             yield

@@ -198,17 +198,7 @@ class NoUserThread[Value](UserThreadLookup[Value]):
 
 
 class ThreadSlice[Value](ABC):
-    """How one thread's part of a registry document field is cut from the wire, and
-    how the field is copied. Every document field names its kind in its metadata."""
-
-    @staticmethod
-    def canonical(raw: dict, name: str) -> str:
-        return name
-
-    @staticmethod
-    @abstractmethod
-    def cut(raw: dict, canonical: str) -> dict:
-        """This field's wire value restricted to ``canonical``."""
+    """How a registry field is copied. Each field declares its policy in metadata."""
 
     @classmethod
     @abstractmethod
@@ -248,10 +238,6 @@ class SnapshotValue[Value](ThreadSlice[Value]):
 
 class OwnRow[Rows](SnapshotValue[Rows]):
     """The row under the thread's own name."""
-
-    @staticmethod
-    def cut(raw: dict, canonical: str) -> dict:
-        return {canonical: raw[canonical]} if canonical in raw else {}
 
     @classmethod
     @abstractmethod
@@ -478,24 +464,8 @@ class ThreadSection:
         kind.reuse(self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed))
 
 
-class AliasesOf(MappingRowsSlice):
-    """The aliases that point at the thread; they also resolve its canonical name."""
-
-    @staticmethod
-    def canonical(raw: dict[str, str], name: str) -> str:
-        return raw.get(name, name)
-
-    @staticmethod
-    def cut(raw: dict, canonical: str) -> dict:
-        return {alias: target for alias, target in raw.items() if target == canonical}
-
-
 class GenerationOf(ThreadSlice[GenerationCounter]):
-    """A generation counter whose generations are restricted to the thread."""
-
-    @staticmethod
-    def cut(raw: dict, canonical: str) -> dict:
-        return {**raw, "generations": OwnRow.cut(raw["generations"], canonical)}
+    """An editable generation counter with its own generations mapping."""
 
     @classmethod
     def copy(cls, value: GenerationCounter) -> GenerationCounter:
@@ -503,11 +473,7 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
 
 
 class WholeDocumentValue[Value](SnapshotValue[Value]):
-    """A scalar shared by the whole document and every one-thread view."""
-
-    @staticmethod
-    def cut(raw: Value, canonical: str) -> Value:
-        return raw
+    """An immutable field shared by editable documents and snapshots."""
 
     @classmethod
     def copy(cls, value: Value) -> Value:
@@ -543,6 +509,9 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
     @abstractmethod
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+
+    def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
+        return ()
 
     @abstractmethod
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]: ...
@@ -596,7 +565,14 @@ class RegisteredCommanderProject(CommanderProject):
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         """Each selected GitHub repository once, however many checkouts point at it."""
-        return tuple(dict.fromkeys(repo.github for repo in Repo.candidates(self.repos, name)))
+        return tuple(repo.github for repo in self.unique_repositories(name))
+
+    def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
+        """The first configured checkout owns each forge identity, without a wire round trip."""
+        selected: dict[RepositoryName, Repo] = {}
+        for repo in Repo.candidates(self.repos, name):
+            selected.setdefault(repo.github, repo)
+        return tuple(selected.values())
 
     def require(self) -> RegisteredCommanderProject:
         return self
@@ -634,7 +610,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     last_seen: Annotated[dict[str, float], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict
     )
-    aliases: Annotated[dict[str, str], SlicePolicy(AliasesOf)] = field(
+    aliases: Annotated[dict[str, str], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict
     )
     owners: Annotated[GenerationCounter, SlicePolicy(GenerationOf)] = field(
@@ -695,28 +671,6 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
     def entry_if_present(self, name: str) -> RegistryEntry | None:
         return self.entry(name) if self.canonical_name(name) in self.threads else None
-
-    @classmethod
-    def entry_from_wire(cls, raw: dict, name: str) -> RegistryEntry:
-        """Decode one thread's entry without decoding the other declarations.
-
-        Only this thread's rows go through the document decoder; another
-        thread's declaration is neither decoded nor validated here.
-        """
-        try:
-            keyed = [
-                (ThreadSlice.of(plan), plan.key)
-                for plan in FieldCodec.field_plans(cls)
-                if plan.declared.init and plan.records
-            ]
-            canonical = name
-            for kind, key in keyed:
-                if key in raw:
-                    canonical = kind.canonical(raw[key], canonical)
-            restricted = {key: kind.cut(raw[key], canonical) for kind, key in keyed if key in raw}
-        except (AttributeError, KeyError, TypeError) as error:
-            raise InvalidRegistryDocument(error) from error
-        return cls.from_wire(restricted).entry(name)
 
     @classmethod
     def thread_sections(cls) -> tuple[ThreadSection, ...]:

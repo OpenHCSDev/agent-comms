@@ -36,9 +36,11 @@ def main():
                 if entry["listed"]["kind"] in data["open_kinds"]:
                     print(entry["listed"]["number"])
         elif parts[:1] == ["pulls"] and len(parts) == 2:
-            assert arguments[arguments.index("--jq") + 1] == '.head.sha + " " + .base.ref'
+            assert arguments[arguments.index("--jq") + 1] == (
+                '.head.sha + " " + .base.ref + " " + .node_id + " " + (.draft | tostring)')
             listed = data["requests"][parts[1]]["listed"]
-            print(listed["head"], listed["base"])
+            print(listed["head"], listed["base"], f"{owner}/{name}#{parts[1]}",
+                  str(listed["kind"] == "draft").lower())
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
             print("{}")
@@ -58,6 +60,13 @@ def main():
             print(json.dumps([states[context]] if context in states else []))
         else:
             raise AssertionError(f"Unexpected repository endpoint: {parts}")
+    elif arguments[:2] == ["api", "graphql"] and "enablePullRequestAutoMerge" in arguments[3]:
+        fields = dict(arguments[index + 1].split("=", 1)
+                      for index, value in enumerate(arguments) if value == "-f")
+        repository, number = fields["node"].split("#")
+        if refusal := repositories[repository]["requests"][number].get("arm_refusal"):
+            sys.exit(refusal)
+        print(json.dumps({"data": {"enablePullRequestAutoMerge": {"clientMutationId": None}}}))
     elif arguments[:2] == ["api", "graphql"]:
         query = arguments[arguments.index("-f") + 1]
         assert query.startswith("query=")
@@ -72,6 +81,12 @@ def main():
             # gh --jq returns the typed projection, not the raw GraphQL envelope.
             print(json.dumps({f"p{number}": data["requests"][number]["listed"]
                               for _, number in selections}))
+        elif 'updated: updatedAt }' in query:
+            projection = arguments[arguments.index('--jq') + 1]
+            since = re.search(r'\.updated >= "([^"]+)"', projection).group(1)
+            rows = [{'number': entry['listed']['number'], 'updated': entry['listed']['updated']}
+                    for entry in data['requests'].values() if entry['listed']['updated'] >= since]
+            print(json.dumps({'rows': rows, 'page_info': {'hasNextPage': False, 'endCursor': None}}))
         elif "pullRequests(" in query:
             print(json.dumps({"data": {"repository": {"pullRequests": {
                 "nodes": [{"number": entry["listed"]["number"],

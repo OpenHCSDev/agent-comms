@@ -95,7 +95,7 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
-from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, SessionRefusedError, WatchClaim, WatchRecord
 
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from .history import History
@@ -231,19 +231,16 @@ class GivenBinding(BindingRequest):
         values = {key: value for key, value in vars(arguments).items() if key in keys}
         arguments.base_state = arguments.state
         arguments.state = arguments.state / arguments.binding_thread.thread
-        return cls({Binding.family_discriminator: Binding.declared_name,
-                    **values, **arguments.binding_session.supplied(),
+        return cls({**values, **arguments.binding_session.supplied(),
                     FieldCodec.record_key(BindingAddress, 'bus'): arguments.binding_thread.thread})
 
     def bind(self, db: sqlite3.Connection) -> BindingAddress:
         stored = Binding.select(db)
-        root = self.given[FieldCodec.record_key(BindingAddress, 'root')]
-        start = stored[0].start if stored else Binding.bus_head(root)
-        return FieldCodec.decode(BindingAddress, {
-            'start': FieldCodec.encode(start),
-            **{key: value for key, value in self.given.items()
-               if key != Binding.family_discriminator},
+        defaults: dict[str, object] = (FieldCodec.encode_fields(stored[0].address()) if stored else {
+            'start': FieldCodec.encode(Binding.bus_head(
+                self.given[FieldCodec.record_key(BindingAddress, 'root')])),
         })
+        return FieldCodec.decode_record(BindingAddress, {**defaults, **self.given})
 
 
 class ResolvedBinding(GivenBinding):
@@ -315,6 +312,11 @@ class SessionBinding(ABC):
     def registered(self, comms: Comms) -> Binding:
         return Binding(root=self.root, owner=self.recipient(comms),
                        thread=self.thread, start=self.start)
+
+    def address(self) -> BindingAddress:
+        """Project this session's recipient address without replacing its stored identity."""
+        return BindingAddress(root=self.root, thread=self.thread,
+                              start=self.start, bus=self.bus)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -1352,10 +1354,9 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         current = asyncio.current_task()
         assert current is not None
         self.stop = current.cancel
-        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, self.stop)
         try:
             await self.options.operation.execute(self)
-        except* BlockingIOError:
+        except* (BlockingIOError, SessionRefusedError):
             raise
         except* (OSError, ValueError, CoordinationError) as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
@@ -1636,3 +1637,5 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
         options.operation.retired(bridge)
     except* BlockingIOError:
         sys.exit('Another watcher owns this conversation')
+    except* SessionRefusedError as refused:
+        sys.exit('\n'.join(str(error) for error in refused.exceptions))

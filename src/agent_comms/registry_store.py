@@ -42,16 +42,11 @@ class CachedRegistry(ABC):
     """The registry revision this process last decoded, or none yet."""
 
     @abstractmethod
-    def revision_at(
-        self, revision: FileObservation, decode: Callable[[CachedRegistry], RegistryRevision],
-    ) -> RegistryRevision:
-        """This revision when it is current, else ``decode`` from it."""
-
-    @abstractmethod
-    def entry_at(
-        self, revision: FileRevision, name: str, decode: Callable[[], RegistryEntry],
-    ) -> RegistryEntry:
-        """One thread's entry from this revision when it is current, else ``decode``."""
+    def at[Answer](
+        self, revision: FileObservation, reuse: Callable[[RegistryRevision], Answer],
+        read: Callable[[CachedRegistry], Answer],
+    ) -> Answer:
+        """Reuse this file revision's answer, or read its replacement."""
 
     @abstractmethod
     def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
@@ -60,15 +55,11 @@ class CachedRegistry(ABC):
 
 @dataclass(frozen=True)
 class UncachedRegistry(NullMember, CachedRegistry):
-    def revision_at(
-        self, revision: FileObservation, decode: Callable[[CachedRegistry], RegistryRevision],
-    ) -> RegistryRevision:
-        return decode(self)
-
-    def entry_at(
-        self, revision: FileRevision, name: str, decode: Callable[[], RegistryEntry],
-    ) -> RegistryEntry:
-        return decode()
+    def at[Answer](
+        self, revision: FileObservation, reuse: Callable[[RegistryRevision], Answer],
+        read: Callable[[CachedRegistry], Answer],
+    ) -> Answer:
+        return read(self)
 
     def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
         return store._decode(raw)
@@ -82,19 +73,15 @@ class RegistryRevision(CachedRegistry):
     A missing file's rows are the empty document's.
     """
 
-    revision: FileObservation
+    source: DocumentBytes
     document: RegistryDocument
     raw: dict
 
-    def revision_at(
-        self, revision: FileObservation, decode: Callable[[CachedRegistry], RegistryRevision],
-    ) -> RegistryRevision:
-        return self if self.revision == revision else decode(self)
-
-    def entry_at(
-        self, revision: FileRevision, name: str, decode: Callable[[], RegistryEntry],
-    ) -> RegistryEntry:
-        return self.document.entry(name) if self.revision == revision else decode()
+    def at[Answer](
+        self, revision: FileObservation, reuse: Callable[[RegistryRevision], Answer],
+        read: Callable[[CachedRegistry], Answer],
+    ) -> Answer:
+        return reuse(self) if self.source.revision == revision else read(self)
 
     def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
         document = RegistryDocument.from_wire(raw, (self.raw, self.document))
@@ -226,7 +213,12 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     def _capture_unlocked(self) -> DocumentBytes:
         self.private_guard_unlocked()  # before even a cache hit
-        return super()._capture_unlocked()
+        capture = super()._capture_unlocked
+        entry = self.cache.entry
+        return entry.at(
+            FileRevision.capture(self.path), lambda current: current.source,
+            lambda stale: capture(),
+        )
 
     def _decode_capture(self, source: DocumentBytes) -> RegistryDocument:
         return self._decode_revision(source).document
@@ -236,13 +228,15 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     def _decode_revision(self, source: DocumentBytes) -> RegistryRevision:
         with self.cache.decoding:
-            return self.cache.entry.revision_at(
-                source.revision, lambda stale: self._cache_revision(stale, source))
+            return self.cache.entry.at(
+                source.revision, lambda current: current,
+                lambda stale: self._cache_revision(stale, source),
+            )
 
     def _cache_revision(self, stale: CachedRegistry, source: DocumentBytes) -> RegistryRevision:
         raw = source.revision.either(
             lambda present: FieldCodec.parse(source.content), lambda: self._encode(self.empty()))
-        entry = RegistryRevision(source.revision, stale.decoded(self, raw), raw)
+        entry = RegistryRevision(source, stale.decoded(self, raw), raw)
         self.cache.entry = entry
         return entry
 
@@ -289,24 +283,15 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         return FileRevision.capture(self.path), FileRevision.capture(self.guard_path)
 
     def read_entry(self, name: str) -> RegistryEntryRevision:
-        """One thread's entry from the current file, without decoding the other threads.
+        """Read an entry from the same retained revision as snapshots and edits.
 
-        The revision is taken under the same lock, so it is the one the entry
-        was read from, not an earlier stat taken while a write was in flight.
-        A decoded revision already in this process's cache answers directly.
+        ThreadRows decodes only the requested declaration. The file and guard
+        observations belong to this same locked read, never an earlier stat.
         """
         with self.guarded_read():
-            self.private_guard_unlocked()
-            revision = self.revision_unlocked()
-            return RegistryEntryRevision(revision, revision[0].either(
-                lambda present: self.cache.entry.entry_at(
-                    present, name, lambda: self._decode_entry_unlocked(name)),
-                lambda: self.empty().entry(name),
-            ))
-
-    def _decode_entry_unlocked(self, name: str) -> RegistryEntry:
-        decoded_entry = RegistryDocument.entry_from_wire(FieldCodec.parse(self.path.read_bytes()), name)
-        return replace(decoded_entry, thread=self._bind_thread(decoded_entry.thread))
+            source = self._capture_unlocked()
+            revision = source.revision, FileRevision.capture(self.guard_path)
+        return RegistryEntryRevision(revision, self._decode_revision(source).document.entry(name))
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
@@ -348,8 +333,9 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         raw = self._encode(document)
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
-        for revision in FileRevision.capture(self.path).revisions():
-            self.cache.entry = RegistryRevision(revision, document.copy(), raw)
+        source = DocumentBytes.capture(self.path)
+        source.revision.require(FileNotFoundError(self.path))
+        self.cache.entry = RegistryRevision(source, document.copy(), raw)
 
     def _write_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer.

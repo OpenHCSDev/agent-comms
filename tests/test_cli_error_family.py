@@ -205,17 +205,16 @@ def test_given_binding_fields_override_the_stored_binding(tmp_path, comms):
     both is refused by name, and a changed field still claims another conversation."""
     for name in ('viewer', 'other-viewer'):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
-    type_key = {Binding.family_discriminator: Binding.declared_name}
     with Binding.open(tmp_path) as db:
         with pytest.raises(RecordProblems, match='bus_thread'):
-            GivenBinding({**type_key, 'root': str(comms.root)}).bind(db)
+            GivenBinding({'root': str(comms.root)}).bind(db)
         stored = Binding(
             root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
             thread='external-session', start=Binding.bus_head(str(comms.root)),
         ).bind(db)
-        address = GivenBinding({**type_key, 'root': str(comms.root)}).bind(db)
+        address = GivenBinding({'root': str(comms.root)}).bind(db)
         assert address == stored.address()
         assert address.registered(comms).bind(db) == stored
-        other = GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)
+        other = GivenBinding({'bus_thread': 'other-viewer'}).bind(db)
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             other.registered(comms).bind(db)

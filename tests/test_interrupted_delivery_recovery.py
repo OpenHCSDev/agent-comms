@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from functools import partial
 
 import pytest
@@ -12,6 +13,7 @@ from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import InputId, TurnId
 from agent_comms.input_attempt import NotSentInput
+from agent_comms.private_path import FileRevision
 from agent_comms.queued_input import DeliveredInput
 from conftest import publish_initial
 from stored_inputs import stored_inputs
@@ -72,12 +74,12 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     if not native_bound:
         agent.inputs.state(owner.name).queued = {item.input_id: item}
         assert await DeliveredInput.recover_interrupted(
-            agent.inputs, owner.name, root_id,
+            agent.inputs, agent.inputs.state(owner.name), comms.registry.entry(owner.name).entry, root_id,
         ) == 0
         agent.inputs.state(owner.name).queued = {}
 
     recovered = await DeliveredInput.recover_interrupted(
-        agent.inputs, owner.name, root_id,
+        agent.inputs, agent.inputs.state(owner.name), comms.registry.entry(owner.name).entry, root_id,
     )
     with Coordination(str(store_path)) as store:
         current = store.assignments.get(paused.assignment_id)
@@ -96,19 +98,19 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     await agent.shutdown()
 
 
-async def test_empty_delivery_recovery_opens_no_coordinator(tmp_path, monkeypatch):
+async def test_empty_delivery_recovery_does_not_wait_for_sql_writer(tmp_path):
     comms, agent, root_id = _session(tmp_path)
-    def forbidden(*args, **kwargs):
-        raise AssertionError("empty recovery must not open SQLite")
+    entry = comms.registry.entry("beta").entry
     try:
-        with monkeypatch.context() as patch:
-            patch.setattr(Coordination, "__init__", forbidden)
-            assert await DeliveredInput.recover_interrupted(agent.inputs, "beta", root_id) == 0
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store, store.session.writing():
+            assert await asyncio.wait_for(DeliveredInput.recover_interrupted(
+                agent.inputs, agent.inputs.state("beta"), entry, root_id,
+            ), 1) == 0
     finally:
         await agent.shutdown()
 
 
-async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkeypatch):
+async def test_recovery_without_paused_assignments_is_read_only(tmp_path):
     from agent_comms.coordination_database import CoordinationStore
 
     comms, agent, root_id = _session(tmp_path)
@@ -129,11 +131,15 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
     (item, _content), = reserved
     with Coordination(str(store_path)) as store:
         store.assignments.restore_unbound_delivery(item.assignment)
-    def forbidden(*args, **kwargs):
-        raise AssertionError("a read must not open a writer")
+    path = CoordinationStore.path_in(comms.root)
+    path.chmod(0o400)
+    before = FileRevision.capture(path)
     try:
-        with monkeypatch.context() as patch:
-            patch.setattr(CoordinationStore, "_open_connection", forbidden)
-            assert await DeliveredInput.recover_interrupted(agent.inputs, "beta", root_id) == 0
+        assert await DeliveredInput.recover_interrupted(
+            agent.inputs, agent.inputs.state("beta"), comms.registry.entry("beta").entry, root_id,
+        ) == 0
+        assert FileRevision.capture(path) == before
+        assert path.stat().st_mode & 0o777 == 0o400
     finally:
+        path.chmod(0o600)
         await agent.shutdown()

@@ -12,10 +12,13 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import AsyncGenerator, AsyncIterator, Iterable
 from contextlib import ExitStack, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import reduce
 from pathlib import Path
+from typing import ClassVar, Self
 
 from .locked_store import WireWakeFile
+from .private_path import FileIdentity, FileRevision
 
 # The Linux notification ABI is decoded here, once, not in store consumers.
 _MODIFY = 0x00000002
@@ -29,18 +32,65 @@ _DELETE_SELF = 0x00000400
 _MOVE_SELF = 0x00000800
 _OVERFLOW = 0x00004000
 _IGNORED = 0x00008000
-_MASK = (
-    _MODIFY
-    | _ATTRIB
-    | _CLOSE_WRITE
-    | _MOVED_FROM
-    | _MOVED_TO
-    | _CREATE
-    | _DELETE
-    | _DELETE_SELF
-    | _MOVE_SELF
-)
+_DATA = _MODIFY | _ATTRIB | _CLOSE_WRITE
+_ENTRIES = _MOVED_FROM | _MOVED_TO | _CREATE | _DELETE
+_SELF = _DELETE_SELF | _MOVE_SELF
+_LIFECYCLE = _ENTRIES | _SELF | _IGNORED
+_MASK = _DATA | _ENTRIES | _SELF
+_ONLYDIR = 0x01000000
 _HEADER = struct.Struct("=iIII")
+
+
+class KernelWatch(ABC):
+    """One descriptor's active registration or pending retirement acknowledgement."""
+
+    def active(self) -> tuple[NativeWatch, ...]:
+        return ()
+
+    def pending_retirement(self) -> int:
+        return 0
+
+    def event_paths(self, name: bytes) -> tuple[Path, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class NativeWatch(KernelWatch):
+    path: Path
+    identity: FileIdentity
+    mask: int
+    constraints: ClassVar[int] = 0
+
+    @classmethod
+    def observed(cls, path: Path, mask: int) -> Self:
+        revision = FileRevision.capture(path).require(FileNotFoundError(path))
+        return cls(path, revision.identity, mask)
+
+    def merged(self, other: NativeWatch) -> Self:
+        return replace(self, mask=self.mask | other.mask)
+
+    def active(self) -> tuple[NativeWatch, ...]:
+        return (self,)
+
+    def require_current(self) -> None:
+        revision = FileRevision.capture(self.path).require(FileNotFoundError(self.path))
+        if revision.identity != self.identity:
+            raise FileNotFoundError(errno.ENOENT, "Native watch inode was replaced", self.path)
+
+    def event_paths(self, name: bytes) -> tuple[Path, ...]:
+        # The native ABI supplies an empty name for an inode's own events.
+        return (self.path / os.fsdecode(name),)
+
+
+class DirectoryWatch(NativeWatch):
+    constraints = _ONLYDIR
+
+
+class RetiredWatch(KernelWatch):
+    """Queued events belong to an already-invalidated registration, not every source."""
+
+    def pending_retirement(self) -> int:
+        return 1
 
 
 @dataclass(frozen=True)
@@ -60,6 +110,9 @@ class ChangeSource(ABC):
             directory = directory.parent
         return directory
 
+    @abstractmethod
+    def native_watches(self) -> Iterable[NativeWatch]: ...
+
 
 class FileSource(ChangeSource):
     @property
@@ -68,6 +121,13 @@ class FileSource(ChangeSource):
 
     def includes(self, path: Path) -> bool:
         return path == self.path
+
+    def native_watches(self) -> Iterable[NativeWatch]:
+        # Parent entries cover atomic replacement and missing paths, never
+        # unrelated files' MODIFY/ATTRIB/CLOSE_WRITE (notably SQLite SHM).
+        yield DirectoryWatch.observed(self.observed_directory(), _ENTRIES | _SELF)
+        for revision in FileRevision.capture(self.path).revisions():
+            yield NativeWatch(self.path, revision.identity, _DATA | _SELF)
 
 
 class DirectorySource(ChangeSource):
@@ -78,6 +138,11 @@ class DirectorySource(ChangeSource):
     def includes(self, path: Path) -> bool:
         return path == self.path or path.parent == self.path
 
+    def native_watches(self) -> Iterable[NativeWatch]:
+        directory = self.observed_directory()
+        mask = _MASK if directory == self.path else _ENTRIES | _SELF
+        yield DirectoryWatch.observed(directory, mask)
+
 
 class ChangedSources(ExitStack):
     """One native registration and bounded dirty declared sources.
@@ -87,19 +152,19 @@ class ChangedSources(ExitStack):
     allocated filename. Queue loss invalidates every registered source explicitly.
     """
 
+    reconcile_attempts: ClassVar[int] = 8
+
     def __init__(self, *sources: ChangeSource):
         super().__init__()
         self.sources = tuple(dict.fromkeys(sources))
         self._by_path: dict[Path, list[ChangeSource]] = defaultdict(list)
         self._below: dict[Path, set[Path]] = defaultdict(set)
-        self._directory_ancestors: set[Path] = set()
         self._dirty: set[Path] = set()
-        self._directories: dict[int, Path] = {}
+        self._registrations: dict[int, KernelWatch] = {}
         for source in self.sources:
             self._by_path[source.path].append(source)
             for ancestor in (source.path, *source.path.parents):
                 self._below[ancestor].add(source.path)
-            self._directory_ancestors.update((source.directory, *source.directory.parents))
         self._libc = ctypes.CDLL(None, use_errno=True)
         init = self._libc.inotify_init1
         init.argtypes, init.restype = [ctypes.c_int], ctypes.c_int
@@ -119,20 +184,53 @@ class ChangedSources(ExitStack):
             self.close()
             raise
 
+    def _retire(self, descriptor: int) -> None:
+        removed = self._libc.inotify_rm_watch(self.fd, descriptor)
+        if removed < 0 and ctypes.get_errno() != errno.EINVAL:
+            raise OSError(ctypes.get_errno(), "inotify_rm_watch failed")
+        # EINVAL means the kernel already removed this exact registration.
+        self._registrations[descriptor] = RetiredWatch()
+
     def _refresh(self, *, lost: bool = False) -> None:
-        desired = {source.observed_directory() for source in self.sources}
-        for watch, directory in tuple(self._directories.items()):
-            if lost or directory not in desired:
-                removed = self._libc.inotify_rm_watch(self.fd, watch)
-                if removed < 0 and ctypes.get_errno() != errno.EINVAL:
-                    raise OSError(ctypes.get_errno(), f"inotify_rm_watch failed for {directory}")
-                # EINVAL means the kernel already removed this exact registration.
-                del self._directories[watch]
-        for directory in desired - set(self._directories.values()):
-            watch = self._libc.inotify_add_watch(self.fd, os.fsencode(directory), _MASK)
-            if watch < 0:
-                raise OSError(ctypes.get_errno(), f"inotify_add_watch failed for {directory}")
-            self._directories[watch] = directory
+        if lost:
+            for descriptor, registration in tuple(self._registrations.items()):
+                for _ in registration.active():
+                    self._retire(descriptor)
+        # A source can be atomically replaced between stat and add_watch. Its
+        # parent registration covers the race; reconcile against the new inode.
+        for _ in range(self.reconcile_attempts):
+            try:
+                self._reconcile()
+                return
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+        raise OSError(errno.EAGAIN, "Native watch paths did not stabilize")
+
+    def _reconcile(self) -> None:
+        requested: dict[Path, list[NativeWatch]] = defaultdict(list)
+        for source in self.sources:
+            for target in source.native_watches():
+                requested[target.path].append(target)
+        desired = {path: reduce(NativeWatch.merged, targets) for path, targets in requested.items()}
+        retained: set[Path] = set()
+        for descriptor, registration in tuple(self._registrations.items()):
+            for target in registration.active():
+                if target.path not in desired or target != desired[target.path]:
+                    self._retire(descriptor)
+                else:
+                    retained.add(target.path)
+        for path in desired.keys() - retained:
+            target = desired[path]
+            descriptor = self._libc.inotify_add_watch(
+                self.fd, os.fsencode(path), target.mask | target.constraints,
+            )
+            if descriptor < 0:
+                raise OSError(ctypes.get_errno(), f"inotify_add_watch failed for {path}")
+            self._registrations[descriptor] = target
+        # Parent watches now cover later replacements. Check each inode again
+        # so a replacement before those watches existed is also observed.
+        for target in desired.values():
+            target.require_current()
 
     def _record(self, paths: Iterable[Path]) -> None:
         fresh = set(paths) - self._dirty
@@ -175,17 +273,19 @@ class ChangedSources(ExitStack):
                 self.invalidate()
                 self._refresh(lost=True)
                 continue
-            if watch not in self._directories:
-                # A retired descriptor no longer identifies a current source.
+            if watch not in self._registrations:
                 self.invalidate()
                 continue
-            path = self._directories[watch] / os.fsdecode(name)
-            self._touch(path)
-            if mask & (_DELETE | _MOVED_FROM | _IGNORED | _DELETE_SELF | _MOVE_SELF):
-                self._record(self._below.get(path, ()))
-            if path in self._directory_ancestors:
-                self._record(self._below.get(path, ()))
-                self._refresh(lost=bool(mask & (_IGNORED | _DELETE_SELF | _MOVE_SELF)))
+            registration = self._registrations[watch]
+            if mask & _IGNORED:
+                del self._registrations[watch]
+            for path in registration.event_paths(name):
+                self._touch(path)
+                if mask & _LIFECYCLE:
+                    affected = self._below.get(path, ())
+                    self._record(affected)
+                    if affected:
+                        self._refresh()
 
     def _take_paths(self) -> frozenset[Path]:
         changed = frozenset(self._dirty)
@@ -194,6 +294,8 @@ class ChangedSources(ExitStack):
 
     def changed_paths(self) -> frozenset[Path]:
         self._drain()
+        if any(registration.pending_retirement() for registration in self._registrations.values()):
+            self._drain()
         if self._readiness.poll(0):
             # A synchronous reader cannot claim complete coverage of a bounded
             # batch while the kernel still holds events. Re-read registered sources

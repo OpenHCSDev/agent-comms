@@ -30,7 +30,6 @@ from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import (
-    NativeBoundary,
     ReadNativeCoordinationSession,
 )
 from .coordinator import Coordination
@@ -55,10 +54,10 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
-    from .input_drain import InputDrain
+    from .input_drain import DrainedSession, InputDrain
     from .message_bus import MessageBus
     from .messages import Message
-    from .registry_document import RegistrySnapshot
+    from .registry_document import RegistryEntry, RegistrySnapshot
     from .turn_input_source import TurnInputSource
     from .turn_runner import TurnRunner
 
@@ -404,7 +403,7 @@ class DeliveredInput(QueuedInput):
 
     @classmethod
     async def recover_interrupted(
-        cls, inputs: InputDrain, session_id: str, root_id: RootId,
+        cls, inputs: InputDrain, state: DrainedSession, entry: RegistryEntry, root_id: RootId,
     ) -> int:
         """Requeue only deliveries positively proved absent from native input.
 
@@ -414,13 +413,10 @@ class DeliveredInput(QueuedInput):
         keeps the assignment deferred and therefore never replayed.
         """
         async with inputs.queue_lock:
-            name = inputs.sessions.require(session_id)
-            live_keys = frozenset(
-                item.key for item in inputs.state(session_id).queued.values()
-            )
+            live_keys = frozenset(item.key for item in state.queued.values())
             return await Coordination.run_worker(partial(
                 cls._recover_locked, inputs.comms, inputs.dispositions,
-                name, root_id, live_keys,
+                entry.thread.name, root_id, live_keys,
             ))
 
     @staticmethod
@@ -430,7 +426,6 @@ class DeliveredInput(QueuedInput):
     ) -> int:
         """Acquire, recover and release entirely inside the joined worker."""
         entry = comms.registry.entry(name).entry
-        owner = entry.thread
         document = dispositions.unresolved(entry.names)
         if not any(row.key not in live_keys
                    for row in document.unbound_wire_inputs(root_id).values()):
@@ -485,7 +480,7 @@ class DeliveredInput(QueuedInput):
         def read(store: Coordination):
             with store.session.read():
                 assignments = pending_sealed_assignments(store, lookup, after_seq=after_seq)
-            with NativeBoundary(bus) as boundary, bus.bus.reading() as source:
+            with store.session.capture(bus) as boundary, bus.bus.reading() as source:
                 boundary.privacy.require_root(root_id, IdentityConflict("delivered native namespace changed"))
                 originals = source.deliveries_for_references(tuple(
                     assignment.source for assignment in assignments

@@ -17,6 +17,7 @@ from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.todos import StoredHeadReview
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -50,14 +51,6 @@ class HeartbeatSubject(DeclaredFamily, affix="Subject"):
     def disposed(self, history: CommanderHistory, since: float) -> bool:
         """Whether Core recorded an action on this subject at or after ``since``."""
 
-    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
-        """Whether a verb touching ``acted`` acts on this subject."""
-        return self in acted
-
-    def reviews(self, request: PullRequestHead) -> bool:
-        """Whether a verb touching this subject reads that pull request head."""
-        return False
-
 
 @dataclass(frozen=True)
 class UnitSubject(HeartbeatSubject):
@@ -75,15 +68,18 @@ class HeadSubject(HeartbeatSubject):
 
     def disposed(self, history: CommanderHistory, since: float) -> bool:
         return any(review.at.since(since) and review.verdict.decides()
-                   for review in history.comms.goals.todos.head_reviews(self.request))
+                   for review in StoredHeadReview.head_reviews(history.comms.goals.todos, self.request))
+
+
+@dataclass(frozen=True)
+class UnlandedHeadSubject(HeadSubject):
+    """Only the forge/Git condition clears this line; reviewing it does not land it."""
+
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
+        return False
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
-        """The line is about the pull request: a verdict on any of its heads acts on it, the
-        head the line began at or one a later push or batch merge moved it to."""
-        return any(subject.reviews(self.request) for subject in acted)
-
-    def reviews(self, request: PullRequestHead) -> bool:
-        return self.request.same_pull_request(request)
+        return False
 
 
 @dataclass(frozen=True)

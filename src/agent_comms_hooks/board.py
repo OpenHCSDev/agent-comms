@@ -52,24 +52,11 @@ class BoardSummary:
 
     entries: Sequence[BoardEntry]
     now: float
-    description: ClassVar[str] = "unchanged"
-
-    def reason(self) -> str:
-        return self.description
 
     def line(self) -> str:
         oldest = min(self.entries, key=lambda entry: entry.since)
-        return (f"BOARD: {len(self.entries)} {self.reason()} (oldest: {oldest.text[:60]}, "
+        return (f"BOARD: {len(self.entries)} unchanged (oldest: {oldest.text[:60]}, "
                 f"seen {oldest.minutes(self.now)} min)")
-
-
-@dataclass(frozen=True)
-class UndisposedBoardSummary(BoardSummary):
-    minutes: int
-    description: ClassVar[str] = "undisposed past"
-
-    def reason(self) -> str:
-        return f"{self.description} {self.minutes} min"
 
 
 @dataclass(frozen=True)

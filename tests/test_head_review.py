@@ -11,7 +11,7 @@ from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
-from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, UnitSubject
+from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
     HeadReviewTimerUp, IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule,
@@ -89,9 +89,9 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
         records = tuple(row.record for row in StoredHeadReview.select(db, order_by=("seq",)))
     assert tuple(record.verdict for record in records) == (accepted, rejected)
     assert all(record.request == request and record.order == NoHeadOrder() for record in records)
-    assert comms.goals.todos.head_reviews(request)[0].verdict == rejected
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].verdict == rejected
     current = ReadPullRequestHead(request.repo, request.pr, request.head, base="main")
-    assert comms.goals.todos.head_reviews(current) == comms.goals.todos.head_reviews(request)
+    assert StoredHeadReview.head_reviews(comms.goals.todos, current) == StoredHeadReview.head_reviews(comms.goals.todos, request)
     assert tuple(todo.strike_count for todo in comms.goals.todos.list(request.repo)) == before
     posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
     assert len(posts) == 2
@@ -105,7 +105,7 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
     common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
               "--why", why]
     judge.main(["ok", *common], context)
-    assert isinstance(comms.goals.todos.head_reviews(request)[0].verdict, ReviewedHeadVerdict)
+    assert isinstance(StoredHeadReview.head_reviews(comms.goals.todos, request)[0].verdict, ReviewedHeadVerdict)
     todo = comms.goals.todos.get("P2")
     location = f"{todo.order.check.directory / todo.order.owner.file}:{todo.order.owner.line}"
     judge.main(["back", *common,
@@ -113,8 +113,44 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
                 "--fix", "Put the shared behavior on the existing parent and delete both copies.",
                 "--slop", "IMPL-5", "--fact", "the same decision is written twice",
                 "--at", location, "--derive", "base-method", "--by", location], context)
-    assert isinstance(comms.goals.todos.head_reviews(request)[0].verdict, RejectedHeadVerdict)
+    assert isinstance(StoredHeadReview.head_reviews(comms.goals.todos, request)[0].verdict, RejectedHeadVerdict)
     assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
+
+
+def test_judge_ok_arms_auto_merge_at_the_judged_head_unless_draft_and_fails_loudly(
+        head_bus, reviewed_source, capsys):
+    """2026-10-26: #3454 printed ok and stayed unarmed; #3444 needed a hand bypass-merge."""
+    comms, github, request = head_bus
+    for number in (8, 9):
+        reviewed_source.git(reviewed_source.checkout, "push", "-q", "origin",
+                            f"{request.head}:refs/pull/{number}/head")
+    context = order.Commander.read_root(comms.root)
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    github.put(request.repo, DraftListedPullRequest(
+        8, "fix/draft", request.head, stamp, "main", reviewable_times=(stamp,)))
+    github.put(request.repo, UnmergedListedPullRequest(
+        9, "fix/refused", request.head, stamp, "main", reviewable_times=(stamp,)))
+    github.refuse_arm(request.repo, 9, "GraphQL: Pull request is in clean status")
+
+    def ok(number):
+        judge.main(["ok", "--repo", request.repo.to_wire(), "--pr", str(number),
+                    "--head", request.head, "--why", ACCEPTED.text], context)
+
+    def arms(number):
+        return [dict(part.split("=", 1) for part in call if part.startswith(("node=", "head=")))
+                for call in github.calls() if f"node={request.repo.to_wire()}#{number}" in call]
+
+    ok(request.pr)
+    assert arms(request.pr) == [{"node": f"{request.repo.to_wire()}#{request.pr}", "head": request.head}]
+    assert f"#{request.pr} auto-merge armed at {request.head}" in capsys.readouterr().out
+    ok(8)
+    assert not arms(8)
+    assert "#8 is a draft, so not armed" in capsys.readouterr().out
+    with pytest.raises(ToolRefusedError, match="Pull request is in clean status"):
+        ok(9)
+    assert "ok" not in capsys.readouterr().out
+    assert isinstance(StoredHeadReview.head_reviews(
+        comms.goals.todos, replace(request, pr=9))[0].verdict, ReviewedHeadVerdict)
 
 
 def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(head_bus):
@@ -127,7 +163,7 @@ def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(h
     assert {"subject", "--serves"} <= refused.value.problems.keys()
     assert "edit IDs or --pr" in refused.value.problems["subject"]
     assert "0 words" in refused.value.problems["--serves"]
-    assert not comms.goals.todos.head_reviews(request)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
     assert not any(f"statuses/{request.head}" in call[1] for call in github.calls())
 
 
@@ -158,7 +194,7 @@ def test_moved_head_posts_and_records_nothing(head_bus):
     moved = replace(request, head="a" * 40)
     with pytest.raises(ToolRefusedError):
         invoke(comms, moved, ReviewedHeadVerdict(ACCEPTED))
-    assert not comms.goals.todos.head_reviews(moved)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, moved)
     assert not any("statuses/" in call[1] for call in github.calls())
 
 
@@ -180,7 +216,7 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     pulls = ProgressRead()
     pulls.carry_reviews(comms.goals, request.repo)
     assert pulls.open(request.repo)[0].has_head_review
-    assert comms.goals.todos.head_reviews(moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
+    assert StoredHeadReview.head_reviews(comms.goals.todos, moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
     assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls)
     carried_posts = tuple(call for call in github.calls() if f"statuses/{merged}" in call[1])
     assert len(carried_posts) == 1
@@ -193,7 +229,7 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     pulls = ProgressRead()
     pulls.carry_reviews(comms.goals, request.repo)
     assert not pulls.open(request.repo)[0].has_head_review
-    assert not comms.goals.todos.head_reviews(added)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, added)
     assert not any(f"statuses/{changed}" in call[1] for call in github.calls())
 
     owner.write_text(owner.read_text() + (
@@ -210,7 +246,7 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     pulls = ProgressRead()
     pulls.carry_reviews(comms.goals, request.repo)
     assert not pulls.open(request.repo)[0].has_head_review
-    assert not comms.goals.todos.head_reviews(four)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, four)
     assert not any(f"statuses/{four.head}" in call[1] for call in github.calls())
 
 
@@ -312,7 +348,7 @@ def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus)
     assert changed.order.checked().id != todo.order.checked().id
     assert REASON.text in changed.order.checked().edits
     assert comms.registry.require("worker").goal.require().revision > before.revision
-    assert comms.goals.todos.head_reviews(request)[0].order.problem == todo.id
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == todo.id
 
 
 def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_file(
@@ -332,7 +368,7 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     with pytest.raises(ToolRefusedError, match="names no reason for src/grown.py"):
         invoke(comms, request, GrownHeadVerdict(ACCEPTED, GrowthReason(
             "overgrown.py declares forty one values that the reviewed request needs as names")))
-    assert not comms.goals.todos.head_reviews(request)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
     invoke(comms, request, GrownHeadVerdict(ACCEPTED, GrowthReason(
         "grown.py declares forty one values that the reviewed request needs as separate names")))
     posts = tuple(call for call in github.calls() if f"statuses/{head}" in call[1])
@@ -396,21 +432,6 @@ def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(hea
         " who's fixing it? -> fix debt-src at its owner; merge main into it")
     # The age is the heartbeat Ping's to render, from began(); the line names no clock.
     assert found.began() == found.blocks[0].since and found.broke_after(0)
-
-
-def test_a_pr_verdict_acts_on_the_unit_holding_that_head(head_bus):
-    """A verdict on a unit's PR named only the head, so a stale CLOSE line on that same unit
-    refused the verdict the line was waiting for."""
-    comms, _, request = head_bus
-    todo = comms.goals.todos.get("P2")
-    held = todo.held()
-    RecordPullRequest(todo.revision, held.owner_identity,
-                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
-    verb = judge.JudgeVerb.parse(["ok", "--pr", str(request.pr), "--head", request.head,
-                                  "--why", ACCEPTED.text])
-    ctx = order.Commander.read_root(comms.root)
-    acted = frozenset(verb.subject(ctx).acts_on(ctx))
-    assert acted == {HeadSubject(request), UnitSubject(held.owner_identity)}
 
 
 def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):

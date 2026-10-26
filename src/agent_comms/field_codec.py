@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import annotationlib
 import argparse
 import hashlib
 import json
@@ -923,8 +924,11 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
 
     @classmethod
     def represented_class(cls, annotation: object) -> type[ValueDecoder[object]]:
-        """A represented value with no registered decoder is a scalar of its representation."""
-        scalar: type[ValueDecoder[object]] = _ScalarDecoder
+        """A represented value with no registered decoder is a scalar of its representation;
+        a declared record keeps its record fields as comparison content."""
+        scalar: type[ValueDecoder[object]] = (
+            _OpaqueRecordDecoder if is_dataclass(annotation) else _OpaqueDecoder
+        )
         return next(iter(cls._registered(annotation)), scalar)
 
     @classmethod
@@ -966,6 +970,18 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
 
     def compared(self, value: T) -> object:
         return self.encode(value)
+
+    def represented_comparison(self, represented: ValueDecoder[T], value: T) -> object:
+        """A structure owns its comparison content; wire spellings do not."""
+        return self.compared(value)
+
+    def compile_comparison(self, compiled: set[object]) -> None:
+        """Compile every decoder ``compared`` reaches, so a declaration with no codec
+        owner refuses when its declarer is prepared, never inside an observation.
+        Content compared by its own encoding reaches nothing further."""
+
+    def compile_represented_comparison(self, compiled: set[object]) -> None:
+        self.compile_comparison(compiled)
 
     def decode_external(self, data: object, record: Mapping[str, object]) -> T:
         for decode in self.external_decoders(data):
@@ -1072,8 +1088,10 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
         return None if value is None else self.representation.encode(value)
 
     def compared(self, value: T) -> object:
-        # Wire spellings (including rename labels) do not own value comparison.
-        return _structural_decoder(type(value)).compared(value)
+        return self.structural.represented_comparison(self, value)
+
+    def compile_comparison(self, compiled: set[object]) -> None:
+        self.structural.compile_represented_comparison(compiled)
 
     def accepts_value(self, value: object) -> bool:
         return self.structural.accepts_value(value)
@@ -1101,6 +1119,9 @@ class _NominalTextDecoder[T: str](_RepresentedDecoder[T]):
 
     def compared(self, value: T) -> object:
         return self.encode(value)
+
+    def compile_comparison(self, compiled: set[object]) -> None:
+        """Nominal text compares its encoding."""
 
 
 class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
@@ -2179,6 +2200,20 @@ class FieldCodec(MroDispatch, Sealed):
         return hashlib.sha256(cls.compact(compared, sort_keys=True).encode()).hexdigest()
 
     @classmethod
+    def compile_comparison(cls, record: type) -> None:
+        """Compile everything comparing ``record``'s compared fields reaches, at its
+        declarer's preparation. Each field resolves where it is declared, so class-level
+        names the record never compares need no runtime import."""
+        compiled: set[object] = set()
+        for item in fields(record):
+            if not item.compare:
+                continue
+            declarer = next(owner for owner in record.__mro__ if item.name in
+                            annotationlib.get_annotations(owner, format=annotationlib.Format.FORWARDREF))
+            annotation = annotationlib.get_annotations(declarer, eval_str=True)[item.name]
+            compile_decoder(annotation).compile_comparison(compiled)
+
+    @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
         """A document whose declaration names its leaf member stores that member untagged."""
         return compile_decoder(declared).encode_document(value)
@@ -2514,6 +2549,30 @@ class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
 
+class _OpaqueDecoder[T, Target = object](_ScalarDecoder[T, Target]):
+    """A represented value with no structure of its own: its representation is its content."""
+
+    __slots__ = ()
+
+    def represented_comparison(self, represented: ValueDecoder[T], value: T) -> object:
+        return represented.encode(value)
+
+    def compile_represented_comparison(self, compiled: set[object]) -> None:
+        """Its representation's encoding is its content."""
+
+
+class _OpaqueRecordDecoder[T](_OpaqueDecoder[T, type[T]]):
+    """A represented record compares its declared record fields, not its wire spelling."""
+
+    __slots__ = ()
+
+    def represented_comparison(self, represented: ValueDecoder[T], value: T) -> object:
+        return _RecordDecoder(self.target).compared(value)
+
+    def compile_represented_comparison(self, compiled: set[object]) -> None:
+        _RecordDecoder(self.target).compile_comparison(compiled)
+
+
 class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):
     """A JSON scalar decoded only from its own type."""
 
@@ -2797,6 +2856,10 @@ class UnionDecoder[T](_ContextDecoder[T]):
     def compared(self, value: T) -> object:
         return self.selected(value).compared(value)
 
+    def compile_comparison(self, compiled: set[object]) -> None:
+        for alternative in self.alternatives:
+            alternative.compile_comparison(compiled)
+
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode_candidates(
             data, lambda alternative: alternative.decode_bound(data, context),
@@ -2857,7 +2920,7 @@ class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
     def representation_plan(
         cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
     ) -> ValueDecoder[T]:
-        return _ScalarDecoder[T](cls.container)
+        return _OpaqueDecoder[T](cls.container)
 
     def decode_external(self, data: object, record: Mapping[str, object]) -> T:
         return self.decode_resolved(self.decode_items(
@@ -2872,6 +2935,10 @@ class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
 
     def compared(self, value: T) -> list[object]:
         return [plan.comparison(item) for plan, item in self.plan_items(list(value))]
+
+    def compile_comparison(self, compiled: set[object]) -> None:
+        for plan in self.items:
+            plan.compile_comparison(compiled)
 
     def decode(self, data: object) -> T:
         return self.decode_items(data, lambda plan, value: plan.decode_bound(value, {}))
@@ -2992,10 +3059,14 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     def representation_plan(
         cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
     ) -> ValueDecoder[dict[K, V]]:
-        return _ScalarDecoder[dict[K, V]](dict)
+        return _OpaqueDecoder[dict[K, V]](dict)
 
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, dict)
+
+    def compile_comparison(self, compiled: set[object]) -> None:
+        self.key.compile_comparison(compiled)
+        self.value.compile_comparison(compiled)
 
     def compared(self, value: dict[K, V]) -> list[object]:
         entries = [(self.key.comparison(key), self.value.comparison(item))
@@ -3085,6 +3156,10 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     def compared(self, value: Member) -> object:
         return _member_decoder(type(value)).compared(value)
 
+    def compile_comparison(self, compiled: set[object]) -> None:
+        for member in self.target.members_with(self.target):
+            _member_decoder(member).compile_comparison(compiled)
+
     def editor_choices(self):
         return tuple((member.label, {self.target.family_discriminator: member.declared_name})
                      for member in self.target.members_with(self.target))
@@ -3169,11 +3244,18 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         return result
 
     def compared(self, value: T) -> object:
-        # Do not compile a full wire plan: excluded fields can be live readers
-        # that intentionally have no wire representation.
-        dynamic = compile_decoder(None)
-        return tuple((item.name, dynamic.comparison(getattr(value, item.name)))
-                     for item in fields(value) if item.compare)
+        # Each compared field compares through its declared type. Value decoders
+        # compile per field on demand, so excluded live readers never compile.
+        return tuple((entry.name, entry.value.comparison(entry.current(value)))
+                     for entry in self.plan.declarations if entry.declared.compare)
+
+    def compile_comparison(self, compiled: set[object]) -> None:
+        if self.target in compiled:
+            return
+        compiled.add(self.target)
+        for entry in self.plan.declarations:
+            if entry.declared.compare:
+                entry.value.compile_comparison(compiled)
 
     def problems(self, data: dict) -> dict[str, str]:
         plan = self.plan

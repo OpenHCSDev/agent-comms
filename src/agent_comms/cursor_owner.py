@@ -20,12 +20,12 @@ from .native_input_record import NativeInputReference
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .private_send_rules import RunningTurnRegistryCheck
 from .proven_source_coverage import SourceCoverage, SourcePrefix
-from .registry_document import RegistrySnapshot
 from .thread_identity import GenerationCounter
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
 
+    from .coordination_session import NativeCapture
     from .coordination_tables.participants import OwnerGenerations
     from .historical_native_inputs import HistoricalNativeInput
     from .native_entries import NativeEvidenceScope
@@ -57,9 +57,9 @@ class CursorOwner(RegistryOwner):
         cls, bus: MessageBus, root_id: RootId, owner_name: str,
         source_reads: NativeEvidenceScope, store: Coordination,
     ) -> CursorState:
-        with store.session.boundary(bus) as boundary:
+        with store.session.capture(bus) as boundary:
             reason = "Current native cursor has no matching live owner"
-            bus._registry.store.private_guard_unlocked().require_root(root_id, StaleFence(reason))
+            boundary.privacy.require_root(root_id, StaleFence(reason))
             captured = RegistryOwner.capture(boundary.registry, owner_name, reason)
             with store.session.read():
                 db = store.session._connection
@@ -74,9 +74,9 @@ class CursorOwner(RegistryOwner):
                 state = owner.state(db)
         with source_reads.borrow():
             prefix = SourcePrefix.capture(bus.bus, state.covered_seq)
-        with store.session.boundary(bus) as boundary:
+        with store.session.capture(bus) as boundary:
             prefix.require_current(bus.bus)
-            owner.require_live(bus, boundary.registry, "Current cursor owner changed while reading")
+            owner.require_live(boundary, "Current cursor owner changed while reading")
             with store.session.read():
                 owner.require_participant(store, "Current cursor participant generation changed")
                 if owner.cursor(store.session._connection) != state.cursor:
@@ -118,13 +118,14 @@ class CursorOwner(RegistryOwner):
         with source_reads.borrow():
             sources = SourceCoverage(bus, store, wire_root_id=self.wire_root_id,
                                      recipient_lookup=self.lookup)
-            with store.session.boundary(bus), store.session.read():
+            with store.session.capture(bus), store.session.read():
                 state = self.state(store.session._connection)
             coverage = sources.since(state, source_reads=source_reads)
             proof = coverage.proof
-            with store.session.boundary(bus) as boundary, store.session.writing() as db:
+            with (store.session.boundary(bus) as boundary, boundary.current(),
+                  store.session.writing() as db):
                 coverage.source_prefix.require_current(bus.bus)
-                self.require_live(bus, boundary.registry, "Current cursor owner or namespace changed")
+                self.require_live(boundary, "Current cursor owner or namespace changed")
                 self.require_participant(store, "Current cursor recipient generation changed")
                 if self.cursor(db) != state.cursor:
                     raise StaleFence("Current cursor SQL row changed during source verification")
@@ -144,9 +145,9 @@ class CursorOwner(RegistryOwner):
     def lookup(self) -> ThreadLookup:
         return self.thread.incarnation.require_recorded().lookup
 
-    def require_live(self, bus: MessageBus, registry: RegistrySnapshot, reason: str) -> None:
-        bus._registry.store.private_guard_unlocked().require_root(self.wire_root_id, StaleFence(reason))
-        self.require_snapshot(registry, reason)
+    def require_live(self, boundary: NativeCapture, reason: str) -> None:
+        boundary.privacy.require_root(self.wire_root_id, StaleFence(reason))
+        self.require_snapshot(boundary.registry, reason)
 
     def require_participant(self, store: Coordination, reason: str) -> None:
         NativeRuntimeTable.require_installed(store.session._connection)

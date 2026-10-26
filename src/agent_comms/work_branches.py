@@ -21,17 +21,48 @@ from pydantic.alias_generators import to_camel
 
 from .code_lines import CodeLines
 from .declared_family import DeclaredFamily
-from .field_codec import PathText, projected
+from .field_codec import GitCommitText, PathText, projected
 from .repo import GitCommandError, Repo
 from .repository_name import RepositoryName
 from .wire_models import WireModel
 
 if TYPE_CHECKING:
+    from .closed_pull_requests import ClosedHeadScan
     from .registry_document import RegistrySnapshot
 
 
 class WorkBranchError(ValueError):
     """The checkout or the forge could not answer."""
+
+
+class CommitBase(DeclaredFamily):
+    """A head's relationship to main, decoded from one Git merge-base exit."""
+
+    @abstractmethod
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def description(self, count: int) -> str: ...
+
+
+@dataclass(frozen=True)
+class SharedCommitBase(CommitBase):
+    commit: Annotated[str, GitCommitText]
+
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]:
+        return () if self.commit == head else scan.missing_after(self.commit, head)
+
+    def description(self, count: int) -> str:
+        return f'holds {count} commits main lacks'
+
+
+@dataclass(frozen=True)
+class UnrelatedCommitBase(CommitBase):
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]:
+        return scan.reader.commits_since(head, scan.published)
+
+    def description(self, count: int) -> str:
+        return f'has unrelated Git history: {count} commits cannot be compared with main'
 
 
 class BranchLink(DeclaredFamily, affix="BranchLink"):
@@ -348,6 +379,41 @@ query($owner: String!, $name: String!, $after: String) {
             if name
         )
         return BranchComparison(base_head, head, paths)
+
+    def commit_base(self, main: str, head: str) -> CommitBase:
+        """Git's best common ancestor; exit 1 means the histories share none."""
+        try:
+            return SharedCommitBase(self._git('merge-base', main, head).strip())
+        except GitCommandError as error:
+            if error.returncode != 1:
+                raise
+            return UnrelatedCommitBase()
+
+    def commits_since(self, head: str, *excluded: str) -> tuple[str, ...]:
+        return tuple(self._git('rev-list', '--no-merges', head,
+                               '--not', *excluded).splitlines())
+
+    def whole_patch_ids(self, base: str, head: str) -> frozenset[str]:
+        """One stable fingerprint of the entire immutable diff, including multi-commit squash."""
+        output = Repo.git_pipeline(self.checkout,
+            ('diff', '--full-index', '--no-color', '--no-renames', '--no-ext-diff',
+             '--no-textconv', base, head),
+            ('patch-id', '--stable'), timeout=self.timeout, input='')
+        return frozenset(line.split()[0] for line in output.splitlines())
+
+    def patch_ids(self, commits: tuple[str, ...]) -> dict[str, frozenset[str]]:
+        """Decode Git's patch fingerprints once; an empty commit has an empty set of patches."""
+        patches: dict[str, frozenset[str]] = {commit: frozenset() for commit in commits}
+        if commits:
+            fingerprints = Repo.git_pipeline(self.checkout,
+                ('diff-tree', '--stdin', '--root', '-r', '-p', '--full-index', '--no-color',
+                 '--no-renames', '--no-ext-diff', '--no-textconv'),
+                ('patch-id', '--stable'), timeout=self.timeout,
+                input=''.join(f'{commit}\n' for commit in commits))
+            for line in fingerprints.splitlines():
+                patch, commit = line.split()
+                patches[commit] = frozenset((patch,))
+        return patches
 
     def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
         """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""

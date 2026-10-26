@@ -314,7 +314,7 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
 
 
 @dataclass
-class PublishingWatch(WatchPass[None]):
+class PublishingWatch(WatchPass[None], declared_name=None):
     calls: int = 0
     completed: threading.Event = field(default_factory=threading.Event)
 
@@ -413,7 +413,7 @@ def test_publishing_tool_held_mid_call_refuses_at_once(comms):
     assert comms.bus.bus.revision() == before
 
 
-class FailingWatch(WatchPass[None]):
+class FailingWatch(WatchPass[None], declared_name=None):
     def observe(self, comms: Comms) -> None:
         pass
 

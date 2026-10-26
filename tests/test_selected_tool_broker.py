@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import secrets
+import sqlite3
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,6 +30,7 @@ from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.native_runtime_input import AcknowledgedSlot, ConsumedSlot, SelectedToolSlot
+from agent_comms.storage_room import NoRoomNeeded
 
 
 @pytest.fixture
@@ -103,6 +105,63 @@ def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
     )
     with pytest.raises(SelectedToolDenied):
         broker.record_selected_terminal(slot_store.session.path, slot_id, call_1)
+
+
+@pytest.mark.asyncio
+async def test_prebegin_busy_keeps_native_socket_for_the_next_fresh_call(
+    private_comms, tmp_path: Path, tool_listener,
+) -> None:
+    path = CoordinationStore.path_in(private_comms.root)
+    input_id = InputId.mint()
+
+    class SlotOwner:
+        async def allow(self, turn, round_number, call):
+            await Coordination.run_async(
+                path,
+                lambda store: broker.consume_selected_slot(
+                    store, call.slot(input_id, round_number), call.call_id,
+                ),
+            )
+            return NoRoomNeeded()
+
+    async with Coordination.worker(path):
+        await Coordination.run_async(path, lambda store: None)
+        listener = tool_listener(tmp_path, secrets.token_hex(32))
+        server = CodingToolSocket(listener, SlotOwner(), pid=os.getpid())
+        server.turn = object()
+        arguments = {"path": str(tmp_path / "read-only-proof")}
+        writer = sqlite3.connect(path, isolation_level=None)
+        await server.start()
+        try:
+            writer.execute("BEGIN EXCLUSIVE")
+            for round_number, call_id in enumerate(("busy", "after-busy")):
+                call = CodingCall.decode(call_id, "read", arguments)
+                server.announce((ToolCallContent(id=call_id, name="read", arguments=arguments),))
+                server.tool_started(ToolExecutionStart(
+                    tool_call_id=call_id, tool_name="read", args=arguments,
+                ))
+                payload = (json.dumps({
+                    "token": listener.token, "call_id": call_id,
+                    "name": "read", "arguments": arguments,
+                }) + "\n").encode()
+                assert await query(listener.connection, payload) is bool(round_number)
+                server.calls.require(round_number, call_id).finish(
+                    "read", not bool(round_number), path, input_id, round_number,
+                )
+                assert listener.server.is_serving()
+                if round_number == 0:
+                    writer.execute("ROLLBACK")
+                    with Coordination(str(path)) as store:
+                        assert SelectedToolSlot.one(
+                            store.session._connection, slot_id=call.slot(input_id, round_number),
+                        ) is None
+            with Coordination(str(path)) as store:
+                SelectedToolSlot.require(
+                    store.session._connection, slot_id=call.slot(input_id, round_number),
+                ).verify(call.call_id)
+        finally:
+            writer.close()
+            await server.close()
 
 
 def test_openai_responses_call_id_is_consumed_as_the_provider_spells_it(slot_store) -> None:

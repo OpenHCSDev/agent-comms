@@ -69,11 +69,7 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.task_attachments.commander_pings import CommanderUpdate
-from agent_comms_hooks.board import UndisposedBoardSummary
-from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
 from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingRule
-from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.typed_table import RowNotFoundError
 from agent_comms.held_orders import HeldOrders
@@ -860,32 +856,8 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
         return tuple(commands)
 
 
-class HeartbeatGated(CommanderVerb, declared_name=None):
-    """A writing verb names only the count and oldest overdue heartbeat line beside its result:
-    the hook delivers changes, so a full board dump only hid the verb's own errors. A refusal
-    stopped unit answers, reviews and owner fixes that
-    touched no line. Core records each action, and the record is what disposes of a line.
-    Nothing the commander says about a line counts."""
-
-    @abstractmethod
-    def act(self, ctx: Commander) -> None:
-        """Gate on the heartbeat subjects this verb's recorded action touches, then run;
-        each verb decodes those subjects once, beside the action that records them."""
-
-    def gate_on(self, ctx: Commander, subjects: tuple[HeartbeatSubject, ...]) -> None:
-        self.gate(ctx)
-        now = time.time()
-        board = CommanderUpdate.owed(ctx.comms, ctx.commander, now - AwaitingCommander.seconds)
-        acted = frozenset(subjects)
-        if board and not any(ping.acted_on(acted) for ping in board):
-            print(UndisposedBoardSummary(
-                tuple(ping.board_entry() for ping in board), now,
-                AwaitingCommander.seconds // 60,
-            ).line(), file=sys.stderr)
-
-
 @dataclass(frozen=True, kw_only=True)
-class DirectiveVerb(HeartbeatGated):
+class DirectiveVerb(CommanderVerb):
     """An action may answer named directives; unrelated work cannot clear them."""
 
     answers: Annotated[
@@ -958,18 +930,6 @@ class DirectiveVerb(HeartbeatGated):
     def addressed(self) -> tuple[str, ...]:
         """The threads this action's message is for; only their asks can it answer."""
 
-    def act(self, ctx: Commander) -> None:
-        self.gate_on(ctx, self.acts_on(ctx))
-        self.run(ctx)
-
-    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
-        snapshot = ctx.comms.registry.snapshot()
-        reached = (snapshot.canonical_name(name) for name in self.addressed)
-        # A channel reaches no unit line; only registered threads are subjects.
-        return (*(UnitSubject(snapshot.threads[name].incarnation)
-                  for name in reached if name in snapshot.threads),
-                *(AnswerSubject(identity) for identity in self.answers))
-
     @abstractmethod
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...
 
@@ -1034,14 +994,6 @@ class SendVerb(RequestedOrderVerb):
     @property
     def addressed(self) -> tuple[str, ...]:
         return (self.unit,)
-
-    def acts_on(self, ctx: Commander) -> tuple[HeartbeatSubject, ...]:
-        """Taking held problems over acts on their holders too: reassigning a stopped unit's
-        order is the action its WAKE line asks for."""
-        named = frozenset(OrderFile.read(Path(self.body_file).read_text()).problems)
-        return (*super().acts_on(ctx),
-                *(UnitSubject(assignment.owner_identity) for todo in ctx.todos() if todo.id in named
-                  for assignment in todo.current_holder.current_assignments()))
 
     def resolves_claim(self, unit: str, problem: str) -> bool:
         return (self.unit == unit
