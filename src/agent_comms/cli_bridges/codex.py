@@ -159,7 +159,7 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
     async def session_worktree(self) -> Path:
         async with CodexConnection.open(self.socket) as codex:
             resumed = ResumedThread.model_validate(await codex.call(
-                ResumeThread(threadId=self.binding.thread)))
+                ResumeThread(threadId=self.thread)))
             return Path(resumed.thread.cwd)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
