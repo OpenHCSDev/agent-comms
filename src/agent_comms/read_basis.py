@@ -707,14 +707,14 @@ class DMDisplayBasis:
         Fetching is not paint proof. A UI may use the basis only after proving
         that the corresponding inbound tail was contiguous and visibly painted.
         """
-        with registry.store.reading_snapshot() as snapshot:
-            viewer_name = snapshot.canonical_name(viewer)
-            peer_name = peer.selected_name(snapshot)
-            scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
-            viewer_thread = snapshot.threads[viewer_name]
-            peer_thread = snapshot.participant(peer_name)
-            viewer_names, peer_names = scope.first_names, scope.second_names
-            document = bus.reads.read_conversation(viewer_name, scope.read_key(viewer_name, peer_name, snapshot), snapshot)
+        snapshot = registry.snapshot()
+        viewer_name = snapshot.canonical_name(viewer)
+        peer_name = peer.selected_name(snapshot)
+        scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
+        viewer_thread = snapshot.threads[viewer_name]
+        peer_thread = snapshot.participant(peer_name)
+        viewer_names, peer_names = scope.first_names, scope.second_names
+        document = bus.reads.read_conversation(viewer_name, scope.read_key(viewer_name, peer_name, snapshot), snapshot)
         result = bounds.conversation(scope).displayed(
             bus.reads, document, viewer_name, snapshot, snapshot, bus.bus,
         )
