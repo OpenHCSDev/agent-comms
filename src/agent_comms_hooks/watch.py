@@ -38,11 +38,11 @@ class SessionCommandError(RuntimeError, SessionFailure):
     """A session command could not complete."""
 
 
-class SessionRequestTimeout(TimeoutError, SessionCommandError):
+class SessionRequestTimeout(SessionCommandError):
     """The request's declared reply budget expired."""
 
 
-class SessionConnectionClosed(ConnectionResetError, SessionCommandError):
+class SessionConnectionClosed(SessionCommandError):
     """The peer closed before a required reply or startup probe."""
 
 

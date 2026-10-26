@@ -95,7 +95,10 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
-from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, SessionFailure, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import (
+    HeldClaim, NoSessionBridge, SessionCommandError, SessionConnectionClosed,
+    SessionFailure, SessionRequestTimeout, WatchClaim, WatchRecord,
+)
 
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from .history import History
@@ -1059,10 +1062,10 @@ class SessionBridge:
         paused = PausedSessionBridge(self, peer)
         try:
             request.read_reply(stream)
-        except TimeoutError:
+        except SessionRequestTimeout:
             return UnacknowledgedPause(self.claim.thread, self.claim.socket_path,
                                        request.reply_timeout, paused)
-        except ConnectionResetError:
+        except SessionConnectionClosed:
             return self.closed(paused, request.reply_timeout)
         return paused
 
@@ -1159,7 +1162,7 @@ class ReleasedSessionBridge(ConfirmableBridge):
         except NoSessionBridge:
             return UnobservedBridge(
                 claim.thread, f"process exited before serving {runtime.prefix}")
-        except OSError as error:
+        except (OSError, SessionCommandError) as error:
             return UnobservedBridge(claim.thread, f"{type(error).__name__}: {error}")
         if current.process != observed.process or current.owner != observed.owner:
             return ReplacedBridge(claim.thread, observed.process, current.process)

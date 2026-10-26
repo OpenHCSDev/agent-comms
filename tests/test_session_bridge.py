@@ -1,14 +1,17 @@
 """Socket and delivery owners exercised by the real Claude probe."""
 import asyncio
+import socket
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_bridges.monitor import AttachMonitor, SessionReady
+from agent_comms.cli_bridges.monitor import AttachMonitor, InspectSession, SessionReady
 from agent_comms.cli_bridges.shared import BridgeLog
 from agent_comms.field_codec import FieldCodec
-from agent_comms_hooks.watch import SessionConnectionClosed, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import (
+    SessionConnectionClosed, SessionRequestTimeout, WatchClaim, WatchRecord,
+)
 
 
 def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_tracebacks():
@@ -49,6 +52,14 @@ async def test_monitor_startup_eof_is_loud_before_reply_or_probe(
     async with server:
         with pytest.raises(SessionConnectionClosed):
             await anext(AttachMonitor().lines(endpoint))
+
+
+def test_reply_read_translates_timeout_before_the_borrowed_connection_exits():
+    reader, writer = socket.socketpair()
+    with reader, writer, reader.makefile('rb') as stream:
+        reader.settimeout(.025)
+        with pytest.raises(SessionRequestTimeout):
+            InspectSession().read_reply(stream)
 
 
 def test_enrol_is_idempotent_and_refuses_another_command(tmp_path, monkeypatch):
