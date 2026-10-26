@@ -710,6 +710,9 @@ class ListedPullRequest(HeadReviewStatus, DeclaredFamily, affix="ListedPullReque
     def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
         return ()
 
+    def as_draft(self) -> tuple[DraftListedPullRequest, ...]:
+        return ()
+
     def stuck(self) -> tuple[MergeBlock, ...]:
         """Blocks on a head whose auto-merge is armed: queued, and going nowhere."""
         return self.merge_blocks if self.armed_times else ()
@@ -759,6 +762,9 @@ class UnmergedListedPullRequest(ListedPullRequest):
 
 class DraftListedPullRequest(UnmergedListedPullRequest):
     """An open draft is selectable but never due for review."""
+
+    def as_draft(self) -> tuple[DraftListedPullRequest, ...]:
+        return (self,)
 
     def review_due(self, now: float, seconds: float) -> tuple[float, ...]:
         return ()
@@ -1162,11 +1168,15 @@ class PresentCheckout(ProgressCheckout):
 
         Git walks only the origin references' reflogs; `--all` also walked every
         worktree HEAD, note and PR fetch to throw them away, ten times the work."""
-        if not self.origin_refs:
+        return self.recorded_pushes(self.origin_refs)
+
+    def recorded_pushes(self, refs: tuple[str, ...], *options: str) -> tuple[tuple[str, float], ...]:
+        """Read push clocks only for the references this consumer needs."""
+        if not refs:
             return ()
         pushes = []
         for row in self.git("reflog", "show", "--date=unix", "--grep-reflog=update by push",
-                            "--format=%gD%x09%H", *self.origin_refs).splitlines():
+                            "--format=%gD%x09%H", *options, *refs).splitlines():
             selector, sha = row.split("\t")
             pushes.append((sha, float(selector.rsplit("@{", 1)[1].removesuffix("}"))))
         return tuple(pushes)
@@ -3746,6 +3756,9 @@ class HeadVerdict(HeadReview, declared_name=None):
         """Whether this record answers the head: a reviewing mark still owes the verdict."""
         return False
 
+    def rejects_merge(self) -> bool:
+        return False
+
     def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
               reader: WorkBranches) -> bool:
         """A pending or rejected review never grants a new head acceptance."""
@@ -3838,6 +3851,9 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
     reason: StrikeReason
     state = "failure"
     verb = "Sent back"
+
+    def rejects_merge(self) -> bool:
+        return True
 
     def after_record(self, goals: Goals, record: HeadReviewRecord) -> None:
         record.order.rejected(goals, record)

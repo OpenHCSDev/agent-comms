@@ -201,10 +201,16 @@ class InstallUnit:
     def due(self) -> Callable[..., standing.RunInstallDue]:
         """A run whose unit is gone without printing a result died; any other was launched.
         The run hands itself to the member it selects."""
-        gone = ResidentManager.current().activity(self.unit).ended()
-        member = (standing.DiedInstallDue if gone and not self.result.read_text()
+        member = (standing.DiedInstallDue if self.failed()
                   else standing.LaunchedInstallDue)
         return partial(member, unit=self)
+
+    def failed(self) -> bool:
+        """A terminal unit without its result is the install failure, not a log pattern."""
+        return not self.running() and not self.result.read_text()
+
+    def failure_reasons(self) -> tuple[str, ...]:
+        return (self.last_error(),) if self.failed() else ()
 
     def last_error(self) -> str:
         return next((line for line in reversed(self.errors.read_text().splitlines())
