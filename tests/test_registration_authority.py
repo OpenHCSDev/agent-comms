@@ -144,14 +144,80 @@ def test_a_claim_drop_waiting_on_a_turn_retired_under_it_finds_the_retirement(tm
         except Exception as error:
             failures.append(error)
 
-    with record.writers.guarded_write():
+    with registry.store.guarded_write(), record.writers.guarded_write():
         waiter = threading.Thread(target=drop_claim)
         waiter.start()
         assert started.wait(5)
-        time.sleep(0.2)  # The waiter is parked on the writer lock this thread holds.
+        time.sleep(0.2)  # The waiter is parked on this thread's registry writer lock.
         assert registry.release_turn(first.turn_lease)[0]
         second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
         assert not record.path.exists()
     waiter.join(5)
     assert not waiter.is_alive() and failures == []
     assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
+
+
+@pytest.mark.parametrize('operation', ['read', 'phase', 'claim', 'sidebar'])
+def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
+    from concurrent.futures import ThreadPoolExecutor
+    from agent_comms.private_registry_guard import registry_digest
+    from agent_comms.store_files import AtomicFile
+
+    registry = registered(tmp_path)
+    registry.prepare_native_root()
+    leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
+    record, lease = leased.turn_record, leased.require_turn_lease()
+    entered = threading.Event()
+
+    def access():
+        entered.set()
+        if operation == 'sidebar':
+            return wire(tmp_path).views.presentation.roster('owner')
+        if operation == 'read':
+            return record.read()
+        if operation == 'phase':
+            return record.transition(lease, PreparingPhase('after commit'))
+        return record.without_claim()
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with registry.store.guarded_write():
+            guard = registry.store.private_guard_unlocked()
+            # Execute the real guard protocol and registry replacement, pausing only
+            # at the exact window in which an unlocked reader sees pending state.
+            text = registry.store.path.read_text()
+            digest = registry_digest(registry.store.path)
+            sequence, slot = guard.prepare(digest)
+            AtomicFile(registry.store.path).write_text(text)
+            future = pool.submit(access)
+            try:
+                assert entered.wait(5)
+                time.sleep(0.1)
+                assert not future.done(), 'turn access read an uncommitted registry'
+            finally:
+                guard.commit(sequence, slot, digest)
+        result = future.result(timeout=5)
+    if operation == 'sidebar':
+        assert 'owner' in result.threads
+    elif operation == 'read':
+        assert result.id == leased.turn_lease.turn_id
+    elif operation == 'phase':
+        assert record.read().phase == PreparingPhase('after commit')
+    else:
+        assert not record.read().has_claim(lease.claimed_generation)
+
+
+def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
+    from agent_comms.private_registry_guard import registry_digest
+    from agent_comms.store_files import AtomicFile
+
+    registry = registered(tmp_path)
+    registry.prepare_native_root()
+    leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
+    with registry.store.guarded_write():
+        guard = registry.store.private_guard_unlocked()
+        text = registry.store.path.read_text()
+        guard.prepare(registry_digest(registry.store.path))
+        AtomicFile(registry.store.path).write_text(text)
+        # Deliberately abandon the real write before committing its authority.
+    with pytest.raises(RelationViolationError, match='pending, not committed'):
+        leased.turn_record.read()
