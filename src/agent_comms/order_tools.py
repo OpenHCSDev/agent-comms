@@ -21,7 +21,7 @@ from agent_comms.todos import (
     OrderProgress,
     PlainText,
     ProgressRead,
-    HeadReviewRecord,
+    HeadReviewed,
     HeadVerdict,
     NoHeadOrder,
     ServeTodo,
@@ -186,11 +186,6 @@ class CommsVerdictsTool(ThreadToolRequest):
             caller.commander(comms).name))
 
 
-@dataclass(frozen=True)
-class HeadReviewed(ToolResult):
-    record: HeadReviewRecord
-
-
 @dataclass(frozen=True, kw_only=True)
 class HeadVerdictTool:
     label = "Review a PR head"
@@ -205,7 +200,7 @@ class HeadVerdictTool:
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> HeadReviewed:
         actor = caller.head_review_actor(comms, self.request, self.order)
-        return HeadReviewed(self.operation.reviewed(comms.goals, self.request, actor, self.order))
+        return self.operation.reviewed(comms.goals, self.request, actor, self.order)
 
 
 @dataclass(frozen=True, kw_only=True)
