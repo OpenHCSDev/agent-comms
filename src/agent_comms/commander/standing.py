@@ -36,7 +36,7 @@ from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import RepliesDisplayScope
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -276,11 +276,7 @@ class PhaseSubject(HeartbeatSubject):
     phase: type[PlanPhase]
 
     def disposed(self, history: CommanderHistory, since: float) -> bool:
-        return any(
-            todo.order.checked().at.since(since)
-            for orders in history.orders.values()
-            for todo in self.phase.serving(orders)
-        )
+        return history.phases_checked.get(self.phase, UnrecordedEventTime()).since(since)
 
 
 @dataclass(frozen=True)

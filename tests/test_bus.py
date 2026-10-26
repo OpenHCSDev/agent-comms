@@ -114,16 +114,23 @@ def projection_source_digest(source: Path) -> str:
     ).stdout.strip()
 
 
-def edit_inside(source: Path, owner: type) -> None:
-    """Insert a line inside the class's own declaration, so no test copies our source."""
+def edit_inside(source: Path, owner: type, member: str | None = None) -> None:
+    """Change class source or a method's syntax without copying production code."""
     path = source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
     lines = path.read_text().splitlines(keepends=True)
     declaration = next(
         node for node in ast.walk(ast.parse("".join(lines)))
         if isinstance(node, ast.ClassDef) and node.name == owner.__name__
     )
-    first = declaration.body[0]
-    lines.insert(first.lineno - 1, " " * first.col_offset + "# an edit inside the class\n")
+    if member is None:
+        first = declaration.body[0]
+        inserted = "# an edit inside the class\n"
+    else:
+        method = next(node for node in declaration.body
+                      if isinstance(node, ast.FunctionDef) and node.name == member)
+        first = method.body[0]
+        inserted = "pass  # changed producer implementation\n"
+    lines.insert(first.lineno - 1, " " * first.col_offset + inserted)
     path.write_text("".join(lines))
 
 
@@ -163,24 +170,30 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
 
 
 @pytest.mark.parametrize(
-    "owner",
+    "owner, changes",
     (
-        Delivered,
-        ActivityMaximum,
-        BusProjectionTables,
-        BusRecord,
-        Claimed,
-        ClaimHolders,
-        ConversationActivity,
-        MessageKind,
-        ThreadTarget,
-        ChannelActivity,
+        (Delivered, True),
+        (ActivityMaximum, True),
+        (BusProjectionTables, True),
+        (BusRecord, True),
+        (Claimed, False),
+        (ClaimHolders, False),
+        (ConversationActivity, True),
+        (MessageKind, False),
+        (ThreadTarget, False),
+        (ChannelActivity, True),
     ),
 )
-def test_projection_digest_tracks_producing_source(projection_source: Path, owner: type) -> None:
-    """An edit inside a producing class changes the digest."""
+def test_projection_digest_tracks_producing_source(projection_source: Path, owner: type, changes: bool) -> None:
+    """Whole producers carry source; partial producers carry their contributing syntax."""
     before = projection_source_digest(projection_source)
     edit_inside(projection_source, owner)
+    assert (projection_source_digest(projection_source) != before) == changes
+
+
+def test_projection_digest_tracks_a_routing_override(projection_source: Path) -> None:
+    before = projection_source_digest(projection_source)
+    edit_inside(projection_source, ClaimNoticeKind, "route_rows")
     assert projection_source_digest(projection_source) != before
 
 

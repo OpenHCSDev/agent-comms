@@ -24,8 +24,9 @@ from agent_comms.session_file import RegistrySessionLocation
 
 from agent_comms.importing import ImportLimits
 from agent_comms.cli import main
-from agent_comms.cli_bridges.claude import ClaudeTranscript, RunningClaude
-from agent_comms.cli_bridges.codex import CodexAppServer, CodexConnection
+from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript, RunningClaude
+from agent_comms.cli_bridges.codex import CodexAppServer
+from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import InitializeResponse, RequestParams, ItemsList
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
 from agent_comms.cli_bridges.history import (
@@ -63,7 +64,7 @@ def codex_lines(path: Path, records: Iterable[dict[str, JsonValue]], tail: str =
 
 
 def read(harness: type[Harness], source: Path, limits: ImportLimits = ImportLimits(), session: ExpectedSession = AnySession()) -> ImportSnapshot:
-    return ImportSnapshot.read(OfflineHistory.of(harness, source, session), limits)
+    return ImportSnapshot.read(OfflineHistory.stored(harness, source, session), limits)
 
 
 def bodies(snapshot: ImportSnapshot) -> list[str]:
@@ -181,7 +182,7 @@ def test_claude_narration_before_a_tool_call_is_a_regular_message(tmp_path: Path
         claude_result("o", "b1", "42 passed"),
         claude_reply("d", "Fixed."),
     ])
-    events = [event for update in OfflineHistory.of(ClaudeCodeHarness, source, AnySession()).read()
+    events = [event for update in OfflineHistory.stored(ClaudeCodeHarness, source, AnySession()).read()
               if isinstance(update, FinishedItem) for event in update.events
               if isinstance(event, TextTranscript)]
     assert [(event.as_context().text, event.category) for event in events] == [
@@ -230,10 +231,10 @@ def test_running_claude_session_is_found_by_its_id(tmp_path: Path, monkeypatch: 
     source = tmp_path / ".claude/projects/project/live-session.jsonl"
     source.parent.mkdir(parents=True)
     lines(source, [claude_prompt("a", "keep going", origin={"kind": "human"})])
-    history = OnlineHistory.of(ClaudeCodeHarness, "live-session", DefaultAddress(), tmp_path)
+    history = OnlineHistory.running(ClaudeCodeHarness, "live-session", DefaultAddress(), tmp_path)
     assert bodies(ImportSnapshot.read(history, ImportLimits())) == ["keep going"]
     with pytest.raises(ValueError):
-        ImportSnapshot.read(OnlineHistory.of(ClaudeCodeHarness, "missing", DefaultAddress(), tmp_path), ImportLimits())
+        ImportSnapshot.read(OnlineHistory.running(ClaudeCodeHarness, "missing", DefaultAddress(), tmp_path), ImportLimits())
 
 
 def test_import_subagents_names_each_thread_by_its_id(tmp_path: Path, capsys: pytest.CaptureFixture[str], comms: Comms) -> None:
@@ -280,7 +281,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
             "type": "message", "role": "assistant", "content": "Original answer"}}])
     original = source.read_bytes()
     acknowledgement = comms.threads.import_thread(
-        OfflineHistory.of(CodexHarness, source, AnySession()), name="historical")
+        OfflineHistory.stored(CodexHarness, source, AnySession()), name="historical")
     assert source.read_bytes() == original
     refs = acknowledgement.historical_instructions
     assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
@@ -369,7 +370,7 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, c
         codex_meta("codex-id", home), codex_message("user", "Continue editing the paper")])
     original = source.read_bytes()
     acknowledgement = comms.threads.import_thread(
-        OfflineHistory.of(CodexHarness, source, AnySession()), name="paper4_jair", tags=frozenset({"papers"}))
+        OfflineHistory.stored(CodexHarness, source, AnySession()), name="paper4_jair", tags=frozenset({"papers"}))
     thread = comms.registry.require("paper4_jair")
     assert thread.name == thread.display_title == "paper4_jair"
     assert thread.project_path == home.resolve()
@@ -396,7 +397,7 @@ def test_rehome_moves_a_codex_unit_to_pi_on_its_own_birth(
         codex_meta("codex-session", tmp_path), codex_message("user", "Keep going")])
 
     rehomed = comms.threads.rehome_thread(
-        OfflineHistory.of(CodexHarness, source, AnySession()), name="unit-x")
+        OfflineHistory.stored(CodexHarness, source, AnySession()), name="unit-x")
 
     after = comms.registry.require("unit-x")
     assert after.incarnation == before.incarnation and after.created_at == before.created_at
@@ -409,7 +410,7 @@ def test_rehome_moves_a_codex_unit_to_pi_on_its_own_birth(
                           "codex-comms-inbox@codex-session.service")]
     with pytest.raises(RelationViolationError):
         comms.threads.rehome_thread(
-            OfflineHistory.of(CodexHarness, source, AnySession()), name="unit-x")
+            OfflineHistory.stored(CodexHarness, source, AnySession()), name="unit-x")
 
 
 def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(tmp_path: Path) -> None:
@@ -691,7 +692,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path: P
     before = source.read_bytes()
     directory = comms.root / "imported_sessions"
     acknowledgement = comms.threads.import_thread(
-        OfflineHistory.of(OpenCodeHarness, source, AnySession()), name="imported")
+        OfflineHistory.stored(OpenCodeHarness, source, AnySession()), name="imported")
     thread = comms.registry.require("imported")
     assert comms.registry.status(thread.name) == StoppedThreadStatus()
     assert acknowledgement.source_id == "ses_test" and acknowledgement.imported_messages == 5
@@ -714,7 +715,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path: P
     assert "remaining work" in context and "[Historical attachment: screenshot.png]" in context
     assert "Reverted prompt" not in context
     with pytest.raises(ValueError):
-        comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, AnySession()), name="imported")
+        comms.threads.import_thread(OfflineHistory.stored(OpenCodeHarness, source, AnySession()), name="imported")
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX ownership and symlinks")
@@ -724,7 +725,7 @@ def test_import_refuses_redirected_session_directory(tmp_path: Path, comms: Comm
     outside.mkdir(mode=0o755)
     (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
     with pytest.raises(NativePiUnavailable):
-        comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, AnySession()), name="imported")
+        comms.threads.import_thread(OfflineHistory.stored(OpenCodeHarness, source, AnySession()), name="imported")
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())
     assert not comms.registry.snapshot().taken("imported")
@@ -795,7 +796,7 @@ def test_opencode_server_reads_all_messages_including_the_users() -> None:
     assert bodies(snapshot) == ["Live prompt", "Live answer"]
     assert snapshot.title == GivenThreadText("Live task") and connection.queries == [{}]
     with pytest.raises(ValueError):
-        OnlineHistory.of(OpenCodeHarness, "ses_test", DefaultAddress(), Path("/work"))
+        OnlineHistory.running(OpenCodeHarness, "ses_test", DefaultAddress(), Path("/work"))
 
 
 
@@ -855,4 +856,4 @@ def test_pi_import_keeps_the_native_session_byte_for_byte(
     assert FieldCodec.encode(thread.model) == "openai-codex/gpt-6.1-sol"
     assert comms.registry.status(thread.name) == StoppedThreadStatus()
     with pytest.raises(ValueError):
-        OfflineHistory.of(PiHarness, source, NamedSession("another")).imported(ImportLimits())
+        OfflineHistory.stored(PiHarness, source, NamedSession("another")).imported(ImportLimits())

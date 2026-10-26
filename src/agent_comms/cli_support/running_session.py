@@ -37,4 +37,4 @@ class RunningSessionCliCommand(CliCommand):
     ] = DefaultAddress()
 
     def history(self, directory: Path) -> OnlineHistory:
-        return OnlineHistory.of(self.harness, self.thread, self.address, directory)
+        return OnlineHistory.running(self.harness, self.thread, self.address, directory)

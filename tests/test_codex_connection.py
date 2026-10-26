@@ -7,8 +7,10 @@ from types import SimpleNamespace
 import aiohttp
 import pytest
 
-from agent_comms.cli_bridges.codex import CodexConnection
-from agent_comms.cli_bridges.codex_protocol import Capabilities, ClientInfo, Initialize
+from agent_comms.cli_bridges.codex_connection import CodexConnection
+from agent_comms.cli_bridges.codex_protocol import (
+    Capabilities, ClientInfo, Initialize, MessageInput, TextInput,
+)
 
 
 class Socket:
@@ -41,6 +43,21 @@ async def test_codex_notifications_reject_an_unrequested_answer():
     connection = CodexConnection(Socket([{'id': 1, 'result': {}}]))
     with pytest.raises(ValueError):
         await anext(connection.notifications())
+
+
+@pytest.mark.parametrize('params,method,payload', [
+    (Initialize(clientInfo=ClientInfo(name='wire-client'), capabilities=Capabilities()),
+     'initialize', {'clientInfo': {'name': 'wire-client', 'version': '2'},
+                    'capabilities': {'experimentalApi': True, 'optOutNotificationMethods': []}}),
+    (MessageInput(threadId='session', clientUserMessageId='input-id',
+                  input=(TextInput(text='keep going'),)),
+     'turn/start', {'threadId': 'session', 'clientUserMessageId': 'input-id',
+                    'input': [{'type': 'text', 'text': 'keep going'}]}),
+])
+async def test_generic_call_preserves_concrete_request_payload(params, method, payload):
+    socket = Socket([{'id': 1, 'result': {}}])
+    await CodexConnection(socket).call(params)
+    assert socket.sent == [{'id': 1, 'method': method, 'params': payload}]
 
 
 async def test_codex_cancelled_call_releases_its_answer():

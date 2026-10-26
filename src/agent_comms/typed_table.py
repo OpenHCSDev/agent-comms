@@ -45,7 +45,7 @@ from typing import (
 )
 
 from .class_fact import ClassFact
-from .declared_family import DeclaredFamily, declared_words
+from .declared_family import DeclaredFamily, FamilyMember, declared_words
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
@@ -422,10 +422,10 @@ class Index:
     unique: bool = field(default=False, kw_only=True)
     where: str | None = None
 
-    def term_sql(self, owner: type[TypedTable]) -> str:
+    def term_sql(self, owner: type[DeclaredSchemaFacts]) -> str:
         return owner._column_list(self.terms)
 
-    def name(self, owner: type[TypedTable]) -> str:
+    def name(self, owner: type[DeclaredSchemaFacts]) -> str:
         """Derived from what the index covers, so adding another never renames this one."""
         parts = [owner.declared_name, self.term_sql(owner)]
         if self.where:
@@ -434,7 +434,7 @@ class Index:
             parts.append("unique")
         return "_".join(_NAME_SEPARATORS.sub("_", part).strip("_").lower() for part in (*parts, "idx"))
 
-    def sql(self, owner: type[TypedTable], *, if_not_exists: bool = False) -> str:
+    def sql(self, owner: type[DeclaredSchemaFacts], *, if_not_exists: bool = False) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         return (
             f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
@@ -448,7 +448,7 @@ class Index:
 class ExpressionIndex(Index):
     """An index over SQL expressions of the row's {field} names."""
 
-    def term_sql(self, owner: type[TypedTable]) -> str:
+    def term_sql(self, owner: type[DeclaredSchemaFacts]) -> str:
         return ", ".join(owner._sql(term) for term in self.terms)
 
 
@@ -1923,14 +1923,65 @@ class SQLiteUserVersion(TypedRow):
     user_version: int
 
 
-class DeclaredSchemaFacts:
+class DeclaredSchemaFacts(TypedRow, FamilyMember):
     """The schema facts a row derives once from its declaration, and the one fact the
     whole family shares. Follows ``DeclaredFamily`` in a row's bases, so every row
     declaration reaches ``__init_subclass__`` here."""
 
+    indexes: ClassVar[tuple[Index, ...]] = ()
+
+    @classmethod
+    @abstractmethod
+    def _table_sql(
+        cls, *, if_not_exists: bool = False, columns: tuple[str, ...] = (),
+        required: frozenset[str] = frozenset(),
+    ) -> str: ...
+
+    @classmethod
+    @abstractmethod
+    def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]: ...
+
+    @classmethod
+    def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
+        """Resolve declared columns, generated ones included, by their declared names."""
+        declared = {item.name: item for item in cls._columns}
+        if unknown := set(names).difference(declared):
+            raise ValueError(f"Unknown columns for {cls.__name__}: {sorted(unknown)}")
+        return tuple(declared[name] for name in names)
+
+    @classmethod
+    def _column_list(cls, names: tuple[str, ...]) -> str:
+        if not names:
+            raise ValueError(f"Empty column list for {cls.declared_name}")
+        return ", ".join(_identifier(item.wire_name) for item in cls._fields_named(names))
+
+    @classmethod
+    def _sql(cls, expression: str) -> str:
+        """Durable files compare their stored DDL text with this rendering, so a change
+        here is a schema change every retained root would need carried."""
+        for item in cls._columns:
+            expression = expression.replace("{" + item.name + "}", item.wire_name)
+        return expression
+
+    @classmethod
+    @cache
+    def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        """The table's declared SQL: a function of its class alone, built once per class.
+        Every snapshot compares the stored schema against it."""
+        statements = {cls.declared_name: cls._table_sql(if_not_exists=if_not_exists)}
+        indexes = cls.indexes + tuple(
+            Index((item.name,)) for item in cls._columns if item.column.index
+        )
+        for index in indexes:
+            if index.name(cls) in statements:
+                raise TypeError(f"{cls.__name__} declares two indexes named {index.name(cls)}")
+            statements[index.name(cls)] = index.sql(cls, if_not_exists=if_not_exists)
+        statements.update(cls.triggers(if_not_exists=if_not_exists))
+        return statements
+
     @ClassFact
     @staticmethod
-    def _columns(cls: type[TypedTable]) -> tuple[_Field, ...]:
+    def _columns(cls: type[DeclaredSchemaFacts]) -> tuple[_Field, ...]:
         """Every stored column: the record's fields, each generated column after the field
         declared before it."""
         fields = cls._fields
@@ -1955,7 +2006,7 @@ class DeclaredSchemaFacts:
 
     @ClassFact
     @staticmethod
-    def schema_names(cls: type[TypedTable]) -> frozenset[str]:
+    def schema_names(cls: type[DeclaredSchemaFacts]) -> frozenset[str]:
         """Every object this row declares, by name; overrides change only the SQL."""
         return frozenset(cls.schema_objects())
 
@@ -2090,7 +2141,6 @@ class TypedTable(
     family_discriminator: ClassVar[str] = "row"
     unique: ClassVar[tuple[tuple[str, ...], ...]] = ()
     checks: ClassVar[tuple[str, ...]] = ()
-    indexes: ClassVar[tuple[Index, ...]] = ()
     without_rowid: ClassVar[bool] = False
     renamed_from: ClassVar[tuple[str, ...]] = ()
     """Table names this row's rows were stored under before; the writer renames the one it
@@ -2116,31 +2166,12 @@ class TypedTable(
     def _computed_columns(cls) -> frozenset[str]:
         return frozenset(item.wire_name for item in cls._columns if not item.column.writable)
 
-    @classmethod
-    def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
-        """Resolve declared columns, generated ones included, by their declared names."""
-        declared = {item.name: item for item in cls._columns}
-        if unknown := set(names).difference(declared):
-            raise ValueError(f"Unknown columns for {cls.__name__}: {sorted(unknown)}")
-        return tuple(declared[name] for name in names)
 
-    @classmethod
-    def _column_list(cls, names: tuple[str, ...]) -> str:
-        if not names:
-            raise ValueError(f"Empty column list for {cls.declared_name}")
-        return ", ".join(_identifier(item.wire_name) for item in cls._fields_named(names))
 
     @classmethod
     def _select_list(cls, table: type[StoredRowDecoding]) -> str:
         return cls._column_list(tuple(cls.column_projection()))
 
-    @classmethod
-    def _sql(cls, expression: str) -> str:
-        """Durable files compare their stored DDL text with this rendering, so a change
-        here is a schema change every retained root would need carried."""
-        for item in cls._columns:
-            expression = expression.replace("{" + item.name + "}", item.wire_name)
-        return expression
 
     @classmethod
     def _table_sql(
@@ -2181,18 +2212,6 @@ class TypedTable(
         return (f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
                 + (", WITHOUT ROWID" if cls.without_rowid else ""))
 
-    @classmethod
-    def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
-        statements = {cls.declared_name: cls._table_sql(if_not_exists=if_not_exists)}
-        indexes = cls.indexes + tuple(
-            Index((item.name,)) for item in cls._columns if item.column.index
-        )
-        for index in indexes:
-            if index.name(cls) in statements:
-                raise TypeError(f"{cls.__name__} declares two indexes named {index.name(cls)}")
-            statements[index.name(cls)] = index.sql(cls, if_not_exists=if_not_exists)
-        statements.update(cls.triggers(if_not_exists=if_not_exists))
-        return statements
 
     @classmethod
     def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:

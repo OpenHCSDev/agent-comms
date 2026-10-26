@@ -6,17 +6,12 @@ import asyncio
 import socket
 import sqlite3
 import struct
-from collections import deque
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import AsyncIterator, Self
 
-import aiohttp
-from pydantic import JsonValue
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
@@ -26,70 +21,11 @@ from agent_comms.runtime_updates import (
     EarlierPublishedPage, OfferedToolsObserved, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
 )
 from agent_comms.thread_identity import UnreportedTools
+from .codex_connection import CodexConnection
 from .codex_protocol import (
-    Capabilities, ClientInfo, DisplayOutput, Initialize, InitializeResponse, Initialized,
-    Request, RPC_RESPONSE, RpcReply, RpcNotification,
-    ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
-    ReadRateLimits, RateLimits, RateLimitsResponse,
+    DisplayOutput, ToolOutput, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
 )
 
-
-class CodexConnection:
-    """One WebSocket owns JSON-RPC initialization and response matching."""
-
-    def __init__(self, socket: aiohttp.ClientWebSocketResponse) -> None:
-        self.socket = socket
-        self.sequence = 0
-        self.pending: deque[RpcNotification] = deque()
-        self.answers: dict[int, asyncio.Future[JsonValue]] = {}
-        self.initialized: InitializeResponse
-
-    def answer(self, request_id: int | None) -> asyncio.Future[JsonValue]:
-        if request_id is None:
-            raise ConnectionError('Codex reported a failure outside any request')
-        try:
-            return self.answers.pop(request_id)
-        except KeyError as error:
-            raise ValueError('Codex replied to an unknown request') from error
-
-    async def receive(self) -> RpcReply:
-        frame = await self.socket.receive()
-        if frame.type is not aiohttp.WSMsgType.TEXT:
-            raise ConnectionError(f'Codex connection ended: {frame.type.name}')
-        return RPC_RESPONSE.validate_json(frame.data)
-
-    async def call(self, params: RequestParams) -> JsonValue:
-        self.sequence += 1
-        request = Request[type(params)](id=self.sequence, method=params.method, params=params)
-        future = asyncio.get_running_loop().create_future()
-        self.answers[request.id] = future
-        try:
-            async with asyncio.timeout(15):
-                await self.socket.send_str(request.model_dump_json(by_alias=True))
-                while not future.done():
-                    (await self.receive()).route(self)
-                return await future
-        finally:
-            self.answers.pop(request.id, None)
-            future.cancel()
-
-    async def notifications(self) -> AsyncIterator[RpcNotification]:
-        while True:
-            if self.pending:
-                yield self.pending.popleft()
-                continue
-            (await self.receive()).route(self)
-
-    @classmethod
-    @asynccontextmanager
-    async def open(cls, path: str) -> AsyncIterator[CodexConnection]:
-        async with aiohttp.ClientSession(connector=aiohttp.UnixConnector(path=path)) as client:
-            async with client.ws_connect('http://localhost/') as socket:
-                connection = cls(socket)
-                connection.initialized = InitializeResponse.model_validate(await connection.call(Initialize(
-                    clientInfo=ClientInfo(), capabilities=Capabilities())))
-                await socket.send_str(Initialized().model_dump_json())
-                yield connection
 
 @dataclass
 class CodexOptions(Options):
@@ -99,23 +35,13 @@ class CodexOptions(Options):
 class CodexAppServer(CodexHistory, OnlineHistory):
     """A thread the running Codex app-server can resume, read through its item list."""
 
-    SOCKET = Path.home() / '.codex/app-server-control/app-server-control.sock'
-
     def __init__(self, thread: str, socket: str) -> None:
         self.thread = thread
         self.socket = socket
 
     @classmethod
     def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:
-        return cls(thread, address.otherwise(str(cls.SOCKET)))
-
-    @classmethod
-    async def rate_limits(cls) -> RateLimits:
-        """Read account-wide usage from the running server, never from session logs."""
-        async with CodexConnection.open(str(cls.SOCKET)) as codex:
-            return FieldCodec.decode(
-                RateLimitsResponse, await codex.call(ReadRateLimits()),
-            ).rate_limits
+        return cls(thread, address.otherwise(str(CodexConnection.CONTROL_SOCKET)))
 
     async def history(self) -> AsyncIterator[RuntimeUpdate]:
         async with CodexConnection.open(self.socket) as codex:
@@ -147,7 +73,7 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument('--socket', default=str(cls.SOCKET))
+        parser.add_argument('--socket', default=str(CodexConnection.CONTROL_SOCKET))
 
     def session_process(self) -> ProcessIdentity:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:

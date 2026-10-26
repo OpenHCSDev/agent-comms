@@ -9,39 +9,45 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Mapping, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
+from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.todos import StoredHeadReview
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.todos import Todo
+    from agent_comms.plan_phases import OrderPhase
 
 
 @dataclass(frozen=True)
 class CommanderHistory:
-    """One reader's immutable order history, shared by every subject it evaluates."""
+    """One reader's actors, shared by every subject it evaluates; each subject reads only the
+    record that disposes of it."""
 
     comms: Comms
-    orders: Mapping[ThreadIncarnation, tuple[Todo, ...]]
+    identities: frozenset[ThreadIncarnation]
 
     @classmethod
     def read(cls, comms: Comms, actors: frozenset[str]) -> Self:
         snapshot = comms.registry.snapshot()
-        identities = frozenset(snapshot.require(actor).incarnation for actor in actors)
-        return cls(comms, MappingProxyType({
-            actor: comms.goals.todos.history_for_commander(actor) for actor in identities
-        }))
+        return cls(comms, frozenset(snapshot.require(actor).incarnation for actor in actors))
 
     @property
     def actors(self) -> frozenset[str]:
-        return frozenset(actor.name for actor in self.orders)
+        return frozenset(actor.name for actor in self.identities)
+
+    @cached_property
+    def phases_checked(self) -> Mapping[type[OrderPhase], EventTime]:
+        """When any actor last checked an order serving each phase."""
+        return MappingProxyType({phase: RecordedEventTime(at) for phase, at
+                                 in self.comms.goals.todos.phases_checked(self.identities).items()})
 
 
 @dataclass(frozen=True)

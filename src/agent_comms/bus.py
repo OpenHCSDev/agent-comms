@@ -9,10 +9,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
-from heapq import nlargest
-from itertools import islice, product
+from itertools import islice
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Self
 
 from agent_comms.bus_activity_index import BusActivityIndex
 from agent_comms.bus_display_index import BusDisplayIndex
@@ -101,15 +100,15 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
     def latest(
         cls, db: sqlite3.Connection, senders: frozenset[str], targets: frozenset[str],
     ) -> tuple[Message, ...]:
-        """One indexed candidate per alias pair; an empty selection stays empty."""
-        positions = nlargest(1, (
-            row.seq for sender, target in product(senders, targets)
-            for row in Addressed.table.select(
-                db, sender=sender, target=target,
-                order_by=("seq",), descending=True, limit=1,
-            )
-        ))
-        headers = (BusRow.require(db, seq=seq) for seq in positions)
+        """The newest message between any sender and any target: one covering-index query
+        over the whole selection; an empty selection stays empty."""
+        positions = db.execute(
+            f'SELECT seq FROM "{Addressed.table.declared_name}" WHERE seq = ('
+            f'SELECT MAX(seq) FROM "{Addressed.table.declared_name}" '
+            f'WHERE sender IN ({", ".join("?" * len(senders))}) '
+            f'AND target IN ({", ".join("?" * len(targets))}))',
+            (*senders, *targets))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
 
