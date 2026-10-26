@@ -37,7 +37,7 @@ from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKin
 from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener
 from agent_comms.pi_durable_backend import PiDurableBackend
-from agent_comms.publisher import InitialWrites, ParticipantPublisher, Publisher
+from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registration import Registration
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.typed_table import TypedTable
@@ -140,7 +140,7 @@ async def await_event_or_task[Result, Work](event: Awaitable[Result], task: asyn
 
 def reader(root: Path) -> Comms:
     """A Comms over an existing wire that makes no private write."""
-    return wire(root, Publisher)
+    return wire(root)
 
 
 def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPublisher]:

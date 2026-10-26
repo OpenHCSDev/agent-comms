@@ -7,7 +7,6 @@ import pytest
 
 from agent_comms.locked_store import RegistryFile
 from agent_comms.comms import wire
-from agent_comms.publisher import Publisher
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.registration import Registration
 from bus_record_fixture import append_reply
@@ -23,7 +22,7 @@ async def test_real_message_bus_watch_recipient_suffix_and_rollback(bus):
             name, frozenset(), str(root))).incarnation.require_recorded()
         for name in ("sender", "target", "idle")
     }
-    messages = wire(root, Publisher)
+    messages = wire(root)
     primers = {
         name: append_reply(bus, people["sender"], people[name], f"prime {name}")
         for name in ("target", "idle")
