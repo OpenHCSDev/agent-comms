@@ -112,7 +112,7 @@ class CommanderUnit(HudRow):
             raise ToolRefusedError("The selected unit's assignments changed; read its current card")
         pulls = ProgressRead(held)
         details = tuple(CommanderOrderDetail(
-            card, (current[card.problem].order.instructions(current[card.problem]),),
+            card, (current[card.problem].order.checked().instructions(current[card.problem]),),
             OrderStory.collect(card.order, store.for_order(card.order)),
             tuple(ProgressSource.of(current[card.problem], comms.registry, pulls).commits()),
         ) for card in self.orders)
