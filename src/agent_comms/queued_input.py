@@ -108,7 +108,7 @@ class QueuedInput:
 
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
         """Show the item only when its recorded input generation matches the queue."""
-        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claimed_identity) else ()
+        return (QueueItem.from_input(self.input_id, self.text),) if self.context.owns(scope.claimed_identity) else ()
 
     def source(self) -> AcceptedFollowingInput:
         return AcceptedFollowingInput(
