@@ -65,25 +65,18 @@ class CommanderObservation:
 class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                          WatchPass[tuple[CommanderObservation, ...]]):
 
-    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        try:
-            super().watch_pass(opened_wire)
-        except Exception as error:
-            # Detect the outage through the ordinary bus, then preserve the failed pass.
-            try:
-                with opened_wire() as comms:
-                    self.register(comms.registry)
-                    for thread in self.commanders(comms.registry, comms.goals):
-                        comms.bus.publisher.publish_ordinary(
-                            Message(sender=self.sender, target=thread.name,
-                                    body=f"Heartbeat pass failed: {type(error).__name__}: {error}",
-                                    type=InfoKind, role=ConversationRole()),
-                            origin=AgentOrigin(), destination=ThreadTarget(thread.name),
-                        )
-            except Exception as notification_error:
-                error.add_note(
-                    f"Outage message failed: {type(notification_error).__name__}: {notification_error}")
-            raise
+    def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
+               error: Exception) -> None:
+        """The service loop owns the failure; the heartbeat tells its commanders."""
+        with opened_wire() as comms:
+            self.register(comms.registry)
+            for thread in self.commanders(comms.registry, comms.goals):
+                comms.bus.publisher.publish_ordinary(
+                    Message(sender=self.sender, target=thread.name,
+                            body=f"Heartbeat pass failed: {type(error).__name__}: {error}",
+                            type=InfoKind, role=ConversationRole()),
+                    origin=AgentOrigin(), destination=ThreadTarget(thread.name),
+                )
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
         return tuple(

@@ -73,9 +73,11 @@ def test_failed_heartbeat_pass_messages_commander_and_still_raises(notification_
 
     comms = notification_bus
     assert "lead" in {thread.name for thread in BrokenHeartbeat.commanders(comms.registry, comms.goals)}
+    heartbeat = BrokenHeartbeat()
     with pytest.raises(RuntimeError) as raised:
-        BrokenHeartbeat().watch_pass(lambda: nullcontext(comms))
+        heartbeat.watch_pass(lambda: nullcontext(comms))
     assert raised.value is failure
+    heartbeat.failed(lambda: nullcontext(comms), raised.value)
     page = MessagePageRequest(DMDisplayScope.capture(
         CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
