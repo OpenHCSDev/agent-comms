@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Mapping
+import time
+
+from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
+from agent_comms.head_review import PullRequestHead
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.held_orders import HeldOrders
@@ -13,7 +18,7 @@ from agent_comms.standing_rules import OwedAnswer
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.todos import ProgressRead
+    from agent_comms.todos import ClosedListedPullRequest, HeadReviewRecord, ProgressRead
 
 
 @dataclass(frozen=True)
@@ -24,14 +29,22 @@ class HeartbeatFrame(HeldOrders):
     pulls: ProgressRead
     plan: PlanReading
     answers: tuple[OwedAnswer, ...]
+    closed_pulls: Mapping[Repo, tuple[ClosedListedPullRequest, ...]]
+    head_reviews: Mapping[PullRequestHead, tuple[HeadReviewRecord, ...]]
 
     @classmethod
     def read(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
         scan = HeldOrders.read(comms, commander)
         snapshot = comms.registry.snapshot()
-        repository = Repo.declaring(
-            snapshot.commander_project.require().repos, PlanPhase.__module__
-        )
+        project = snapshot.commander_project.require()
+        repos = project.repos
+        repository = Repo.declaring(repos, PlanPhase.__module__)
+        since = time.time() - ClosedUnmergedPullRequest.window
+        closed = {Repo.selected(repos, name.to_wire()): pulls.closed_unmerged(name, since)
+                  for name in project.repository_names()}
+        reviews = comms.goals.todos.head_reviews_among(
+            PullRequestHead(repo.github, pull.number, pull.head)
+            for repo, rows in closed.items() for pull in rows)
         return cls(
             scan.live,
             scan.orphaned,
@@ -41,4 +54,6 @@ class HeartbeatFrame(HeldOrders):
                 MainTree.of(repository),
             ),
             OwedAnswer.read_scan(comms, commander, scan),
+            closed,
+            reviews,
         )

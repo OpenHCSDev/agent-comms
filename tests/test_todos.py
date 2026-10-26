@@ -384,7 +384,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, git
                                  merged="2026-10-20T12:00:00Z", **common), "No order metadata."),
         (MergedListedPullRequest(number=2, merge=PullRequestCommit(merged),
                                  merged="2026-10-20T12:00:00Z", **common), "## P343\n\n## P344"),
-        (ClosedListedPullRequest(number=3, **common), "Closed without merging."),
+        (ClosedListedPullRequest(number=3, closed_at="2026-10-20T12:00:00Z", **common), "Closed without merging."),
     )
     github_cli.configure(source.github)
     for row, body in requests:
@@ -513,7 +513,7 @@ def test_only_retired_holder_or_closed_pr_allows_cross_unit_dispatch(
         github_cli.put(source.github, ClosedListedPullRequest(
             number=615, branch='pi-mi', head=source.git(Path(c.registry.require('pi-mi').worktree),
                                                       'rev-parse', 'HEAD').strip(),
-            updated=now, base='main', reviewable_times=(now,)))
+            updated=now, base='main', reviewable_times=(now,), closed_at=now))
     with LaunchRoot.from_path(ctx.root).selected():
         rules = UnownedWheelSpin.violations(c, ctx.commander)
         by_problem = {rule.todo.id: rule for rule in rules}

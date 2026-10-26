@@ -35,6 +35,17 @@ def main():
             print("{}")
         else:
             raise AssertionError(f"Unexpected repository endpoint: {parts}")
+    elif arguments[:2] == ["api", "search/issues"]:
+        query = next(arguments[index + 1].removeprefix('q=')
+                     for index, value in enumerate(arguments)
+                     if value == '-f' and arguments[index + 1].startswith('q='))
+        repository = re.search(r'repo:(\S+)', query).group(1)
+        since = re.search(r'closed:>=(\S+)', query).group(1)
+        data = repositories[repository]
+        numbers = [entry['listed']['number'] for entry in data['requests'].values()
+                   if entry['listed']['kind'] == data['closed_kind']
+                   and entry['listed']['closed_at'] >= since]
+        print(json.dumps({'count': len(numbers), 'incomplete': False, 'numbers': numbers}))
     elif arguments[:2] == ["api", "graphql"]:
         query = arguments[arguments.index("-f") + 1]
         assert query.startswith("query=")

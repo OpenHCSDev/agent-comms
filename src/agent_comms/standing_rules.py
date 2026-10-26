@@ -23,7 +23,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
-    AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
+    AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject, UnlandedHeadSubject,
 )
 from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
@@ -322,6 +322,13 @@ class HeadLine(StandingRule, declared_name=None):
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         return (HeadSubject(self.request),)
+
+
+class UnlandedHeadLine(HeadLine, declared_name=None):
+    """A review answers an edit; only landing or explicit supersession ends unlanded work."""
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (UnlandedHeadSubject(self.request),)
 
 
 class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=None):
@@ -762,11 +769,12 @@ class OrderlessUnreviewedHead(UnreviewedHead):
 
 
 @dataclass(frozen=True)
-class StuckMerge(HeadLine, DatedStandingRule):
+class StuckMerge(UnlandedHeadLine, DatedStandingRule):
     """An armed head GitHub will not merge: approved, queued and going nowhere. One line per
     head, naming every block on it."""
     request: PullRequestHead
     blocks: tuple[MergeBlock, ...] = field(compare=False)
+    holders: tuple[ThreadIncarnation, ...] = field(default=(), compare=False)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -776,7 +784,10 @@ class StuckMerge(HeadLine, DatedStandingRule):
     @classmethod
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
         return tuple(
-            cls(PullRequestHead(repo, row.number, row.head), blocks)
+            cls(PullRequestHead(repo, row.number, row.head), blocks,
+                tuple(dict.fromkeys(held.owner_identity
+                    for todo in pulls.linked(repo).get(row.number, ())
+                    for held in todo.current_holder.current_assignments())))
             for repo in goals.registry.snapshot().commander_project.repository_names()
             for row in pulls.open(repo)
             for blocks in (row.stuck(),) if blocks
@@ -788,7 +799,8 @@ class StuckMerge(HeadLine, DatedStandingRule):
     def line(self) -> str:
         return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} has"
                 f" auto-merge armed but {'; '.join(block.what() for block in self.blocks)}. who's fixing it?"
-                f" -> {'; '.join(block.remedy() for block in self.blocks)}")
+                f" -> {'; '.join(block.remedy() for block in self.blocks)}"
+                + (f" at {', '.join(holder.name for holder in self.holders)}" if self.holders else ""))
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
+from datetime import UTC, datetime
 from functools import cached_property, partial
 from math import ceil
 from pathlib import Path
@@ -710,6 +711,51 @@ class ConflictMergeBlock(MergeBlock):
 
 
 @dataclass(frozen=True)
+class PendingCheckMergeBlock(MergeBlock):
+    name: str
+
+    def what(self) -> str:
+        return f'required check {self.name} has not finished'
+
+    def remedy(self) -> str:
+        return f'inspect {self.name} at its owner'
+
+
+@dataclass(frozen=True)
+class MissingReviewMergeBlock(MergeBlock):
+    def what(self) -> str:
+        return 'BLOCKED: no successful agent-comms/review on this head'
+
+    def remedy(self) -> str:
+        return 'judge HEAD'
+
+
+@dataclass(frozen=True)
+class BehindMergeBlock(MergeBlock):
+    def what(self) -> str:
+        return 'BEHIND: head is behind its base'
+
+    def remedy(self) -> str:
+        return 'queue'
+
+
+@dataclass(frozen=True)
+class WaitingMergeBlock(MergeBlock):
+    """The grace period belongs to the cause, not to a second standing rule."""
+    seconds: ClassVar[int] = 3 * 60
+
+    @cached_property
+    def since(self) -> float:
+        return super().since + self.seconds
+
+    def what(self) -> str:
+        return 'required checks finished but the armed head has not merged'
+
+    def remedy(self) -> str:
+        return 'queue'
+
+
+@dataclass(frozen=True)
 class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     """The external query row; conversion lives here, never in its consumers."""
     number: int
@@ -721,6 +767,7 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
     armed_times: tuple[str, ...] = field(default=(), kw_only=True)
     merge_blocks: tuple[MergeBlock, ...] = field(default=(), kw_only=True)
+    required_times: tuple[str, ...] = field(default=(), kw_only=True)
 
     def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
         """Open work and merged work awaiting acceptance stay with their recorded holder."""
@@ -731,7 +778,7 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 
     def stuck(self) -> tuple[MergeBlock, ...]:
         """Blocks on a head whose auto-merge is armed: queued, and going nowhere."""
-        return self.merge_blocks if self.armed_times else ()
+        return ()
 
     def landing(self) -> bool:
         """Armed, or carrying the commander's verdict, with nothing blocking the merge: the
@@ -771,6 +818,12 @@ class UnmergedListedPullRequest(ListedPullRequest):
     def as_unmerged(self) -> tuple[UnmergedListedPullRequest, ...]:
         return (self,)
 
+    def stuck(self) -> tuple[MergeBlock, ...]:
+        return tuple(block for _ in self.armed_times
+                     for block in (self.merge_blocks or (WaitingMergeBlock(
+                         max((*self.required_times, *self.armed_times))),))
+                     if block.since <= time.time())
+
     @classmethod
     def picked(cls, row: ListedPullRequest) -> tuple[UnmergedListedPullRequest, ...]:
         return row.as_unmerged()
@@ -785,12 +838,26 @@ class DraftListedPullRequest(UnmergedListedPullRequest):
     def landing(self) -> bool:
         return False
 
+    def stuck(self) -> tuple[MergeBlock, ...]:
+        return ()
+
     def parsed(self, problems: tuple[str, ...], orders: tuple[OrderId, ...]) -> DraftPullRequest:
         return DraftPullRequest.from_listed(self, problems, orders)
 
 
+@dataclass(frozen=True, kw_only=True)
 class ClosedListedPullRequest(ListedPullRequest):
     """Closed without merging; never selected as an open request."""
+
+    closed_at: str
+
+    def unlanded(self, reader: WorkBranches) -> tuple[str, ...]:
+        """Git owns patch equivalence, including commits landed under different hashes."""
+        return reader.unlanded(reader.main, self.head)
+
+    @cached_property
+    def closed_time(self) -> float:
+        return _github_time(self.closed_at)
 
     def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
         return ()
@@ -820,6 +887,21 @@ class MergedListedPullRequest(ListedPullRequest):
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
                                  problems=problems, status_contexts=self.status_contexts)
+
+
+@dataclass(frozen=True)
+class PullRequestSearchPage:
+    """A search page must not silently certify a truncated GitHub answer as complete."""
+
+    count: int
+    incomplete: bool
+    numbers: tuple[int, ...]
+    limit: ClassVar[int] = 1000
+
+    def require_complete(self) -> tuple[int, ...]:
+        if self.incomplete or self.count > self.limit:
+            raise WorkBranchError(f'GitHub pull request search is incomplete ({self.count} results).')
+        return self.numbers
 
 
 class PullRequests:
@@ -858,6 +940,22 @@ class PullRequests:
     def open_for(self, todo: Todo) -> tuple[PullRequest, ...]:
         """The open requests linked to this order, newest first."""
         return self.listed(todo.repo, UnmergedListedPullRequest, todo)
+
+    def closed_unmerged(self, repo: RepositoryName, since: float) -> tuple[ClosedListedPullRequest, ...]:
+        """Search only the recent closed window, then use this frame's shared metadata read."""
+        stamp = datetime.fromtimestamp(since, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+        found = repo.api(
+            'search/issues', '--method', 'GET', '--paginate', '-f',
+            f'q=repo:{repo.to_wire()} is:pr is:unmerged is:closed closed:>={stamp}',
+            '-f', 'per_page=100', '--jq',
+            '{count: .total_count, incomplete: .incomplete_results, numbers: [.items[].number]}',
+        )
+        if found.returncode:
+            raise WorkBranchError(found.stderr.strip() or f'Closed pull requests in {repo.to_wire()} could not be read.')
+        numbers = tuple(number for line in found.stdout.splitlines()
+                        for number in FieldCodec.decode(PullRequestSearchPage,
+                            FieldCodec.parse(line)).require_complete())
+        return tuple(closed for row in self.rows(repo, numbers) for closed in row.as_closed())
 
     def claimed_heads(self, todo: Todo) -> Iterator[tuple[OrderClaim, PullRequest]]:
         """Join the current claim to its open PR in this same GitHub read."""
@@ -918,11 +1016,11 @@ class PullRequests:
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
             'head: headRefOid base: baseRefName draft: isDraft closed merge: mergeCommit { oid } '
-            'merged: mergedAt updated: updatedAt created: createdAt '
+            'merged: mergedAt closed_at: closedAt updated: updatedAt created: createdAt '
             'ready_events: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT], last: 1) '
             '{ nodes { ... on ReadyForReviewEvent { createdAt } } } '
             'auto: autoMergeRequest { enabledAt } merge_state: mergeStateStatus '
-            'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context } } '
+            'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context state } } '
             'statusCheckRollup { contexts(first: 100) { nodes { '
             f'... on CheckRun {{ name conclusion completedAt isRequired(pullRequestNumber: {number}) }} '
             f'... on StatusContext {{ context state createdAt isRequired(pullRequestNumber: {number}) }} '
@@ -939,19 +1037,28 @@ class PullRequests:
             f'del(.merge,.merged) + {{kind: "{DraftListedPullRequest.declared_name}"}} else '
             f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) end) else '
             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
-            '| . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context], '
+            '| .updated as $updated | . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context], '
             'reviewable_times: [.created, .head_statuses.nodes[].commit.committedDate, '
             '.ready_events.nodes[].createdAt], '
             'armed_times: [.auto.enabledAt? // empty], '
+            'required_times: [.head_statuses.nodes[].commit.statusCheckRollup.contexts.nodes[]? '
+            '| select(.isRequired) | (.completedAt // .createdAt // empty)], '
             # A required check run once per workflow suite fails once per run: one block per name.
             'merge_blocks: (([.head_statuses.nodes[].commit.statusCheckRollup.contexts.nodes[]? '
-            '| select(.isRequired) | select((.conclusion // .state) as $c '
-            '| ["FAILURE","TIMED_OUT","CANCELLED","ACTION_REQUIRED","STARTUP_FAILURE","ERROR"] '
-            '| index($c)) '
-            f'| {{kind: "{FailedCheckMergeBlock.declared_name}", name: (.name // .context), '
-            'at: (.completedAt // .createdAt)}] | group_by(.name) | map(min_by(.at))) '
+            '| select(.isRequired) | (.conclusion // .state) as $c '
+            '| (if (["FAILURE","TIMED_OUT","CANCELLED","ACTION_REQUIRED","STARTUP_FAILURE","ERROR"] '
+            f'| index($c)) then {{kind: "{FailedCheckMergeBlock.declared_name}", '
+            'at: (.completedAt // .createdAt)} '
+            f'elif $c == null or $c == "PENDING" then {{kind: "{PendingCheckMergeBlock.declared_name}", '
+            'at: (.createdAt // $updated)} else empty end) + {name: (.name // .context)}] '
+            '| group_by(.name) | map(min_by(.at))) '
             f'+ [select(.merge_state == "DIRTY") | {{kind: "{ConflictMergeBlock.declared_name}", '
-            'at: .updated}])} '
+            'at: .updated}] '
+            f'+ [select(.merge_state == "BEHIND") | {{kind: "{BehindMergeBlock.declared_name}", at: .updated}}] '
+            '+ [select(.merge_state == "BLOCKED") '
+            f'| select([.head_statuses.nodes[].commit.status.contexts[]? | select(.context == "{HeadReview.context}" and .state == "SUCCESS")] | length == 0) '
+            f'| {{kind: "{MissingReviewMergeBlock.declared_name}", at: .updated}}])}} '
+            f'| (if .kind == "{ClosedListedPullRequest.declared_name}" then . else del(.closed_at) end) '
             '| del(.draft,.closed,.created,.head_statuses,.ready_events,.auto,.merge_state))')
         if listed.returncode:
             raise WorkBranchError(
@@ -3729,6 +3836,10 @@ class HeadVerdict(HeadReview, declared_name=None):
         """Whether this record answers the head: a reviewing mark still owes the verdict."""
         return False
 
+    def supersedes(self) -> bool:
+        """A review does not authorize dropping unlanded patches."""
+        return False
+
     def order_events(self, record: OrderHeadReviewRecord, revision: int) -> tuple[StrikeTodo, ...]:
         return ()
 
@@ -3801,6 +3912,21 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
     def order_events(self, record: OrderHeadReviewRecord, revision: int) -> tuple[StrikeTodo, ...]:
         return (SendBackStrike(revision, record.actor, record.order.previous,
                                self.reason.text, record.at, evidence=record.order.evidence),)
+
+
+@dataclass(frozen=True)
+class SupersededHeadVerdict(DecidedHeadVerdict):
+    """The commander explicitly drops this exact head in favor of recorded replacement work."""
+
+    replacement: str
+    state = "success"
+    verb = "Superseded"
+
+    def supersedes(self) -> bool:
+        return True
+
+    def description(self, reviewer: str, subject: str) -> str:
+        return f"{super().description(reviewer, subject)} (replaced by {self.replacement})"
 
 
 @dataclass(frozen=True)
@@ -5471,10 +5597,14 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     def head_reviews(self, request: PullRequestHead) -> tuple[HeadReviewRecord, ...]:
         """An indexed exact-head lookup, newest committed verdict first."""
+        return self.head_reviews_among((request,))[request]
+
+    def head_reviews_among(self, requests: Iterable[PullRequestHead]) -> dict[PullRequestHead, tuple[HeadReviewRecord, ...]]:
+        """Read exact-head decisions from one snapshot; callers share this beat's answers."""
         with self.snapshot() as db:
-            return tuple(row.record for row in StoredHeadReview.select(
+            return {request: tuple(row.record for row in StoredHeadReview.select(
                 db, request=request, order_by=("seq",), descending=True, limit=1,
-            ))
+            )) for request in dict.fromkeys(requests)}
 
     def unjudged_since(self, todo: Todo) -> float:
         """The problem's work starts at its first order; a send-back reissues the order but

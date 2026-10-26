@@ -65,6 +65,17 @@ class HeadSubject(HeartbeatSubject):
 
 
 @dataclass(frozen=True)
+class UnlandedHeadSubject(HeadSubject):
+    """Only the forge/Git condition clears this line; reviewing it does not land it."""
+
+    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
+        return False
+
+    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
 class AnswerSubject(HeartbeatSubject):
     """A message owed an answer: an action naming it with --answers acts on it."""
 
