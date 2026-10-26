@@ -2211,11 +2211,7 @@ class FieldCodec(MroDispatch, Sealed):
             declarer = next(owner for owner in record.__mro__ if item.name in
                             annotationlib.get_annotations(owner, format=annotationlib.Format.FORWARDREF))
             annotation = annotationlib.get_annotations(declarer, eval_str=True)[item.name]
-            try:
-                compile_decoder(annotation).compile_comparison(compiled)
-            except TypeError as error:
-                error.add_note(f"compared by {record.__module__}.{record.__qualname__}.{item.name}")
-                raise
+            compile_decoder(annotation).compile_comparison(compiled)
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
