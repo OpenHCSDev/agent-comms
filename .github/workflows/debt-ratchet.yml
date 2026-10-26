@@ -124,7 +124,7 @@ jobs:
     timeout-minutes: 15
     env:
       # Private runtime homes must use the same content-addressed download/wheel cache.
-      UV_CACHE_DIR: ${{ runner.temp }}/rehearsal-uv-cache
+      UV_CACHE_DIR: ${{ github.workspace }}/../rehearsal-uv-cache
       REHEARSALS: >-
         tests/test_install_rehearsal.py
         tests/test_native_input_bus_path.py
