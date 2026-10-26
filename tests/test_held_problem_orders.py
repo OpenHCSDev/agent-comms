@@ -74,10 +74,10 @@ def link_pull_request(ctx, pid, number):
     return store.get(pid)
 
 
-def merge_two_commit_fix(source, binaries, number):
-    """A fix PR merged with a merge commit: its first commit only half-fixes count.txt.
+def merge_two_commit_fix(source, binaries, number, merge_style: str = '--no-ff'):
+    """A two-commit fix under either Git merge style, with the real head in the forge row.
 
-    Returns (base, first, merge); GitHub's row for the request joins the forge stub."""
+    Returns (base, head, merge); the first source commit only half-fixes count.txt."""
     checkout = source.checkout
     source.git(checkout, 'fetch', '-q', 'origin', WorkBranches.main)
     source.git(checkout, 'checkout', '-q', '-B', 'main', f'origin/{WorkBranches.main}')
@@ -92,7 +92,8 @@ def merge_two_commit_fix(source, binaries, number):
         source.git(checkout, 'commit', '-qam', f'The fix leaves {count}')
         commits.append(source.git(checkout, 'rev-parse', 'HEAD').strip())
     source.git(checkout, 'checkout', '-q', 'main')
-    source.git(checkout, 'merge', '-q', '--no-ff', '-m', f'Merge pull request #{number}', f'fix/{number}')
+    source.git(checkout, 'merge', '-q', '--no-commit', merge_style, f'fix/{number}')
+    source.git(checkout, 'commit', '-qm', f'Merge pull request #{number}')
     merge = source.git(checkout, 'rev-parse', 'HEAD').strip()
     source.git(checkout, 'push', '-q', 'origin', 'main', f'{commits[-1]}:refs/pull/{number}/head')
     from github_fixture import GitHubFixture
@@ -103,7 +104,7 @@ def merge_two_commit_fix(source, binaries, number):
                                 reviewable_times=('2026-10-23T12:00:00Z',),
                                 merge=PullRequestCommit(merge), merged='2026-10-23T12:00:00Z'),
         body=f'## fix {number}')
-    return base, commits[0], merge
+    return base, commits[-1], merge
 
 
 def test_clean_resend_keeps_three_strikes_and_the_existing_holder(held_commander, cited_source):
@@ -215,12 +216,13 @@ def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
     assert [todo.holder for todo in created] == ["worker"]
 
 
-def test_done_checks_the_merged_tree_and_records_the_first_commit(
-    held_commander, cited_source, tmp_path,
+@pytest.mark.parametrize('merge_style', ('--no-ff', '--squash'))
+def test_done_checks_the_merge_and_records_its_pr_head(
+    held_commander, cited_source, tmp_path, merge_style: str,
 ):
-    """The merged tree is the delivered tree; a half-fixed first commit is still the delivery."""
+    """Merge and squash share the PR-owned source/merge relation, not an ancestry test."""
     ctx = held_commander
-    base, first, merge = merge_two_commit_fix(cited_source, tmp_path / 'bin', 4)
+    base, head, merge = merge_two_commit_fix(cited_source, tmp_path / 'bin', 4, merge_style)
     current = ctx.comms.goals.todos.get('P1')
     check = OrderCheck(cited_source.checkout, 'cat count.txt', CountCheckResult(0))
     store = ctx.comms.goals.todos
@@ -233,7 +235,8 @@ def test_done_checks_the_merged_tree_and_records_the_first_commit(
     saved = store.get("P1")
     assert not saved.pending
     assert isinstance(saved.order, DeliveredProblemOrder)
-    assert (saved.order.delivery.delivered, saved.order.delivery.commit) == (first, merge)
+    assert (saved.order.delivery.delivered, saved.order.delivery.commit) == (head, merge)
+    assert saved.order.delivery.installation_commits == (merge,)
     assert saved.order.check_base(cited_source.checkout) == base
 
 
