@@ -3958,10 +3958,6 @@ class HeadVerdict(HeadReview, declared_name=None):
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
 
-    def prepare(self, goals: Goals, request: PullRequestHead) -> PreparedHeadReview:
-        current = request.current()
-        return PreparedHeadReview(current, self.subject(goals, current))
-
     def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
                  reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
         request = replace(request, head=prepared.current.head)
