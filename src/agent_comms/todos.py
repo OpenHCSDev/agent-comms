@@ -1083,7 +1083,6 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def read_commits(self, todo: Todo, refs: tuple[str, ...],
                      *excluded: str) -> tuple[ProgressPoint, ...]:
         """Consume this capture's selected refs inside its checkout failure boundary."""
-        self.require_read()
         points = (
             *self.checked_commits(todo.order.checked(), refs, *excluded),
             *self.commits(todo.reference_pattern, refs, *excluded),
@@ -1344,6 +1343,7 @@ class ProgressSource(PullRequestSource):
                 worktrees: tuple[PresentCheckout, ...], storage: StorageRule,
                 owner: Thread) -> Self:
         """Select owned refs once, then consume their logs within this capture."""
+        checkout.require_read()
         refs = checkout.references(storage, owner)
         return cls.from_refs(todo, pulls, checkout, worktrees, refs)
 
