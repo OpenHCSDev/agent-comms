@@ -50,8 +50,8 @@ class KernelWatch(ABC):
     def pending_retirement(self) -> int:
         return 0
 
-    @abstractmethod
-    def accept(self, owner: ChangedSources, descriptor: int, mask: int, name: bytes) -> None: ...
+    def event_paths(self, name: bytes) -> tuple[Path, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -77,31 +77,13 @@ class NativeWatch(KernelWatch):
         if revision.identity != self.identity:
             raise FileNotFoundError(errno.ENOENT, "Native watch inode was replaced", self.path)
 
-    @abstractmethod
-    def event_path(self, name: bytes) -> Path: ...
-
-    def accept(self, owner: ChangedSources, descriptor: int, mask: int, name: bytes) -> None:
-        path = self.event_path(name)
-        owner._touch(path)
-        if mask & _IGNORED:
-            del owner._registrations[descriptor]
-        if mask & _LIFECYCLE:
-            affected = owner._below.get(path, ())
-            owner._record(affected)
-            if affected:
-                owner._refresh()
-
-
-class FileWatch(NativeWatch):
-    def event_path(self, name: bytes) -> Path:
-        return self.path
+    def event_paths(self, name: bytes) -> tuple[Path, ...]:
+        # The native ABI supplies an empty name for an inode's own events.
+        return (self.path / os.fsdecode(name),)
 
 
 class DirectoryWatch(NativeWatch):
     constraints = _ONLYDIR
-
-    def event_path(self, name: bytes) -> Path:
-        return self.path / os.fsdecode(name)
 
 
 class RetiredWatch(KernelWatch):
@@ -109,10 +91,6 @@ class RetiredWatch(KernelWatch):
 
     def pending_retirement(self) -> int:
         return 1
-
-    def accept(self, owner: ChangedSources, descriptor: int, mask: int, name: bytes) -> None:
-        if mask & _IGNORED:
-            del owner._registrations[descriptor]
 
 
 @dataclass(frozen=True)
@@ -149,7 +127,7 @@ class FileSource(ChangeSource):
         # unrelated files' MODIFY/ATTRIB/CLOSE_WRITE (notably SQLite SHM).
         yield DirectoryWatch.observed(self.observed_directory(), _ENTRIES | _SELF)
         for revision in FileRevision.capture(self.path).revisions():
-            yield FileWatch(self.path, revision.identity, _DATA | _SELF)
+            yield NativeWatch(self.path, revision.identity, _DATA | _SELF)
 
 
 class DirectorySource(ChangeSource):
@@ -173,6 +151,8 @@ class ChangedSources(ExitStack):
     of registrations. Directory sources dirty their declaration, not every new
     allocated filename. Queue loss invalidates every registered source explicitly.
     """
+
+    reconcile_attempts: ClassVar[int] = 8
 
     def __init__(self, *sources: ChangeSource):
         super().__init__()
@@ -218,7 +198,7 @@ class ChangedSources(ExitStack):
                     self._retire(descriptor)
         # A source can be atomically replaced between stat and add_watch. Its
         # parent registration covers the race; reconcile against the new inode.
-        for _ in range(8):
+        for _ in range(self.reconcile_attempts):
             try:
                 self._reconcile()
                 return
@@ -247,9 +227,8 @@ class ChangedSources(ExitStack):
             if descriptor < 0:
                 raise OSError(ctypes.get_errno(), f"inotify_add_watch failed for {path}")
             self._registrations[descriptor] = target
-        # All ancestor registrations are now installed. Validate the inodes
-        # observed before add_watch; a replacement before ancestor admission
-        # must be reconciled, not left watching an unlinked file indefinitely.
+        # Parent watches now cover later replacements. Check each inode again
+        # so a replacement before those watches existed is also observed.
         for target in desired.values():
             target.require_current()
 
@@ -297,7 +276,16 @@ class ChangedSources(ExitStack):
             if watch not in self._registrations:
                 self.invalidate()
                 continue
-            self._registrations[watch].accept(self, watch, mask, name)
+            registration = self._registrations[watch]
+            if mask & _IGNORED:
+                del self._registrations[watch]
+            for path in registration.event_paths(name):
+                self._touch(path)
+                if mask & _LIFECYCLE:
+                    affected = self._below.get(path, ())
+                    self._record(affected)
+                    if affected:
+                        self._refresh()
 
     def _take_paths(self) -> frozenset[Path]:
         changed = frozenset(self._dirty)
