@@ -12,7 +12,7 @@ from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, Writab
 from .field_codec import FieldCodec, NullMember, WireContext, WireOmitDefault
 from .native_tool_call import CodingCall, ToolCallId
 from .recorded_time import EventTime
-from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
+from .shell_effects import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import (
     EditAction,
     EditCall,
