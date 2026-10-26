@@ -94,7 +94,7 @@ class PendingAttestation(NativeAttestation):
         # the matching response may change whether this input can start.
         for response in event.responses_to(self.request):
             try:
-                data = response.success.require_data(response)
+                data = response.success.require_data(response).require_state()
             except (NativePiUnavailable, ValueError) as error:
                 raise AttestationError(
                     failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")

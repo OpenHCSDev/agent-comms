@@ -1164,6 +1164,10 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
     def require_payload(self) -> PiResponseData:
         return self
 
+    def require_state(self) -> StateData:
+        """Only Pi's session-state reply answers a state query."""
+        raise ValueError(f"{type(self).__name__} is not Pi's session state")
+
     def native_updates(self, session: NativeSession) -> Iterable[AgentEvent]:
         return ()
 
@@ -1243,6 +1247,9 @@ class NativeSessionSnapshot(PiPayload):
 
 @dataclass(frozen=True)
 class StateData(NativeSessionSnapshot, PiResponseData):
+    def require_state(self) -> StateData:
+        return self
+
     native_input_proof_capability: Annotated[
         PiField[str | PiOmitted], WireName("nativeInputProofCapability")
     ] = PiOmitted()
