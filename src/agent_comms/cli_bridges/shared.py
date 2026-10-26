@@ -62,7 +62,6 @@ from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
-from agent_comms.commander_hud import CommanderFrame
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.threads import Thread
@@ -1430,11 +1429,10 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
             self.comms.registry.require(self.binding.bus), status))
 
     async def board(self) -> tuple[str, ...]:
-        """The commander board this session's tool calls print: the board the heartbeat
-        derived and published in its frame, never derived again per tool call."""
-        hud = await self.comms.bus.when_open(partial(
-            CommanderFrame.current, self.comms, self.binding.bus))
-        return DeliveredBoardContent.deliver(self.db, hud.board, time.time()).lines
+        """The commander board this session's tool calls print, derived from Core when asked."""
+        entries = await self.comms.bus.when_open(partial(
+            CommanderUpdate.current_board, self.comms, self.binding.bus))
+        return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),

@@ -16,7 +16,8 @@ from conftest import declare_test_bus
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 
-from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
 from agent_comms.cli_bridges.claude_protocol import (

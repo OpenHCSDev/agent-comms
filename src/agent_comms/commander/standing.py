@@ -278,8 +278,8 @@ class PhaseSubject(HeartbeatSubject):
     def disposed(self, history: CommanderHistory, since: float) -> bool:
         return any(
             todo.order.checked().at.since(since)
-            for orders in history.orders.values()
-            for todo in self.phase.serving(orders)
+            for actor in history.identities
+            for todo in history.comms.goals.todos.serving_phase(actor, self.phase)
         )
 
 

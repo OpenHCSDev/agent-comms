@@ -5770,6 +5770,13 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
 
+    def serving_phase(self, commander: ThreadIncarnation, phase: type[OrderPhase]) -> tuple[Todo, ...]:
+        """This commander's orders serving ``phase``; a folded order serves its original's."""
+        return self._select(
+            "creator=? AND creator_created=? AND ? IN "
+            "(json_extract(\"order\",'$.serves'), json_extract(\"order\",'$.original.serves'))",
+            (commander.name, commander.wire_birth, FieldCodec.encode(phase)))
+
     def units(self, commander: ThreadIncarnation) -> frozenset[ThreadIncarnation]:
         """The threads this commander gives orders to: everyone who holds or held one of its
         problems, by birth, so a renamed holder stays one unit."""

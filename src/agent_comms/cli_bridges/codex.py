@@ -6,17 +6,12 @@ import asyncio
 import socket
 import sqlite3
 import struct
-from collections import deque
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import AsyncIterator, Self
 
-import aiohttp
-from pydantic import JsonValue
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
@@ -28,10 +23,7 @@ from agent_comms.runtime_updates import (
 from agent_comms.thread_identity import UnreportedTools
 from .codex_connection import CodexConnection
 from .codex_protocol import (
-    Capabilities, ClientInfo, DisplayOutput, Initialize, InitializeResponse, Initialized,
-    Request, RPC_RESPONSE, RpcReply, RpcNotification,
-    ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
-    ReadRateLimits, RateLimits, RateLimitsResponse,
+    DisplayOutput, ToolOutput, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
 )
 
 

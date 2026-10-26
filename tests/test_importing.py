@@ -24,7 +24,7 @@ from agent_comms.session_file import RegistrySessionLocation
 
 from agent_comms.importing import ImportLimits
 from agent_comms.cli import main
-from agent_comms.cli_bridges.claude import ClaudeTranscript, RunningClaude
+from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript, RunningClaude
 from agent_comms.cli_bridges.codex import CodexAppServer
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import InitializeResponse, RequestParams, ItemsList
