@@ -3,10 +3,12 @@
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
+from typing import Annotated
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, WireRequired
+from agent_comms.thread_creation import CreationSeconds, CreationTime, RecordedCreationTime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
@@ -47,3 +49,15 @@ def test_unordered_comparison_is_independent_of_insertion_order():
     left = {"first": frozenset(("b", "a")), "second": 2}
     right = {"second": 2, "first": frozenset(("a", "b"))}
     assert FieldCodec.comparison_digest(left) == FieldCodec.comparison_digest(right)
+
+
+@dataclass(frozen=True)
+class Born:
+    created_at: Annotated[CreationTime, CreationSeconds, WireRequired()]
+
+
+def test_represented_scalar_compares_through_its_declared_representation():
+    recorded = Born(RecordedCreationTime(12.5))
+    digest = FieldCodec.comparison_digest(recorded)
+    assert digest == FieldCodec.comparison_digest(Born(RecordedCreationTime(12.5)))
+    assert digest != FieldCodec.comparison_digest(Born(RecordedCreationTime(13.0)))
