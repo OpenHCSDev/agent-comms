@@ -26,8 +26,16 @@ GH = Program("gh")
 
 
 @dataclass(frozen=True)
+class MergeTarget(HookRecord):
+    """The merge's repository and PR, decoded once at the command boundary."""
+
+    repository: str
+    number: int
+
+
+@dataclass(frozen=True)
 class QueueBypass(ABC):
-    """One external merge command and the GitHub read that identifies its current head."""
+    """One external merge command and its decoded merge target."""
 
     command: ShellCommand
     reason: ClassVar[str]
@@ -37,10 +45,7 @@ class QueueBypass(ABC):
     def merges(cls, args: list[str]) -> bool: ...
 
     @abstractmethod
-    def subject(self) -> tuple[str, ...]: ...
-
-    def view_arguments(self) -> tuple[str, ...]:
-        return ("pr", "view", *self.subject(), "--json", "headRefOid,number,url")
+    def target(self) -> MergeTarget: ...
 
     @classmethod
     def matching(cls, command: ShellCommand) -> tuple[QueueBypass, ...]:
@@ -69,21 +74,14 @@ class AdminMerge(QueueBypass):
     def merges(cls, args: list[str]) -> bool:
         return args[:2] == ["pr", "merge"] and "--admin" in args
 
-    def subject(self) -> tuple[str, ...]:
+    def target(self) -> MergeTarget:
         options, selectors = getopt.gnu_getopt(
             self.command.args[2:], self.short_options, self.long_options)
-        if len(selectors) > 1:
-            raise ValueError("An admin merge must identify one pull request.")
-        return (*selectors, *(word for flag, value in options if flag in ("-R", "--repo")
-                              for word in ("--repo", value)))
-
-
-@dataclass(frozen=True)
-class MergeTarget(HookRecord):
-    """The merge endpoint's repository and PR, decoded once from its captures."""
-
-    repository: str
-    number: int
+        repositories = tuple(value for flag, value in options if flag in ("-R", "--repo"))
+        if (len(selectors) != 1 or not selectors[0].isdigit()
+                or len(repositories) != 1 or not repositories[0]):
+            raise ValueError("An admin merge must name one PR number and --repo OWNER/REPO.")
+        return MergeTarget(repository=repositories[0], number=int(selectors[0]))
 
 
 class ApiMerge(QueueBypass):
@@ -97,10 +95,9 @@ class ApiMerge(QueueBypass):
     def merges(cls, args: list[str]) -> bool:
         return args[:1] == ["api"] and any(map(cls.path.fullmatch, args))
 
-    def subject(self) -> tuple[str, ...]:
+    def target(self) -> MergeTarget:
         matched = next(match for arg in self.command.args if (match := self.path.fullmatch(arg)))
-        target = MergeTarget.decode(matched.groupdict())
-        return (str(target.number), "--repo", target.repository)
+        return MergeTarget.decode(matched.groupdict())
 
 
 class QueueBypassGuard(BashRefusal):
