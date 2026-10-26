@@ -528,13 +528,16 @@ async def test_discard_stderr_drains_past_transport_capacity_to_real_eof():
 
 
 @pytest.mark.asyncio
-async def test_parent_process_reaps_but_observation_cannot_claim_exit_code():
+@pytest.mark.parametrize("exit_delay", (.1, STOP_GRACE_SECONDS + .1))
+async def test_parent_process_reaps_but_observation_cannot_claim_exit_code(exit_delay: float) -> None:
     from agent_comms.child_process import DetachedExitOutcome
 
-    child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(.1); exit(7)"))
+    child = SpawnedProcess.launch((sys.executable, "-c",
+                                  "import sys,time; time.sleep(float(sys.argv[1])); sys.exit(7)",
+                                  str(exit_delay)))
     observed = ObservedProcess(child.identity)
     try:
-        assert await child.wait() == ExitedOutcome(7)
+        assert child.reap() == ExitedOutcome(7)
         assert await observed.wait() == DetachedExitOutcome()
         with pytest.raises(IdentityMismatchError):
             observed.stop_sync()
