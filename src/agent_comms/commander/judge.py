@@ -312,9 +312,11 @@ class PullRequestReview(ReviewSubject):
         options.check_edits([])
         linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
-        ctx.call(CommsHeadVerdictTool(request=self.request,
-                                    operation=options.head_operation(), order=linked))
+        reviewed = ctx.call(CommsHeadVerdictTool(request=self.request,
+                                               operation=options.head_operation(), order=linked))
         print(f'PR #{self.request.pr} head {self.request.head}: {options.declared_name}')
+        for line in reviewed.merge.lines(self.request):
+            print(line)
 
     def verdicts(self, options: VerdictVerb, ctx: order.Commander,
                  unjudged: list[Edit]) -> tuple[JudgedCall, ...]:

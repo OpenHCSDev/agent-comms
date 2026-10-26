@@ -6,7 +6,6 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import AbstractContextManager, aclosing, contextmanager
 from functools import partial
 from pathlib import Path
-from typing import ClassVar
 
 from .active_route import CommsRoute, resolve_comms_route
 from .agent_activity import AgentActivity
@@ -27,7 +26,7 @@ from .messages import Message
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
 from .phase_evidence import PlanReadings
-from .publisher import OwnerPublisher, Publisher
+from .publisher import OwnerPublisher
 from .registration import Registration
 from .relationships import ThreadRelationships
 from .read_basis import WatchAcknowledgment
@@ -39,10 +38,8 @@ from .watched import FileSource
 
 
 class Comms:
-    default_publisher: ClassVar[type[Publisher]] = OwnerPublisher
-
     def __init__(
-        self, root: CommsRoute, publisher: type[Publisher] = default_publisher,
+        self, root: CommsRoute,
         *, plans: PlanReadings = PlanReadings(),
     ) -> None:
         self.plans = plans
@@ -53,7 +50,7 @@ class Comms:
         self.bus = MessageBus(
             self.root,
             self.registry,
-            publisher,
+            OwnerPublisher,
         )
         self.agents = AgentActivity(self.root, self.registry)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)
@@ -120,12 +117,11 @@ class Comms:
 
 def wire(
     root: Path | str | None = None,
-    publisher: type[Publisher] = Comms.default_publisher,
     *, plans: PlanReadings = PlanReadings(),
 ) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
     route = resolve_comms_route(root)
-    return Comms(route, publisher, plans=plans)
+    return Comms(route, plans=plans)
 
 
 def client_wire(root: Path | str | None = None, *,

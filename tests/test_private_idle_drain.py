@@ -67,7 +67,9 @@ async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
     writer_thread = threading.Thread(target=writer)
     writer_thread.start()
     assert entered.wait(2)
-    task = asyncio.create_task(DeliveredInput.recover_interrupted(agent.inputs, "beta", root_id))
+    task = asyncio.create_task(DeliveredInput.recover_interrupted(
+        agent.inputs, agent.inputs.state("beta"), comms.registry.entry("beta").entry, root_id,
+    ))
     try:
         # The real write lock is held; an empty recovery must finish without it.
         done, _ = await asyncio.wait({task}, timeout=1)

@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterable, Iterator
+from collections.abc import AsyncIterator, Iterable, Iterator
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -270,19 +270,6 @@ class StoreGuard:
 
     @classmethod
     @contextmanager
-    def attached[Resource](
-        cls, path: Path, opening: Callable[[], AbstractContextManager[Resource]],
-    ) -> Iterator[Resource]:
-        """The same guard family owns opening and retirement of a borrowed resource."""
-        with ExitStack() as lifetime:
-            retirement = lifetime.enter_context(ExitStack())
-            with cls.write_guard(path):
-                resource = lifetime.enter_context(opening())
-            lifetime.callback(retirement.enter_context, cls.write_guard(path))
-            yield resource
-
-    @classmethod
-    @contextmanager
     def read_guard(
         cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     ) -> Iterator[None]:
@@ -475,7 +462,7 @@ DEFAULT_STORE_CONTENTION = StoreWait()
 
 
 class SqliteStore(StoreGuard, ABC):
-    """A SQLite file serializes connection boundaries, not the SQL between them."""
+    """SQLite owns ordinary connection concurrency; file guards protect maintenance."""
 
     __slots__ = ()
 
@@ -500,7 +487,7 @@ class SqliteStore(StoreGuard, ABC):
     def exclusive_writer(
         cls, path: Path, *, isolation_level: _IsolationLevel = None, uri: bool = False,
     ) -> Iterator[sqlite3.Connection]:
-        """Keep other connections out, with transaction semantics declared by the caller."""
+        """Serialize schema reconciliation and WAL truncation with other maintenance."""
         with (cls.write_guard(path),
               closing(cls.writer(path, isolation_level=isolation_level, uri=uri)) as db):
             yield db

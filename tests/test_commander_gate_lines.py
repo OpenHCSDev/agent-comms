@@ -1,6 +1,6 @@
 """Only a heartbeat line the commander can dispose of locks its writing verbs."""
 
-from agent_comms.heartbeat_subjects import UnitSubject
+from agent_comms.heartbeat_subjects import CommanderHistory, UnitSubject
 from agent_comms.build_identity import InstalledCommitInstallation, MissingCommitInstallation, RecordedBuildIdentity
 from agent_comms.task_attachments.commander_pings import RulePing, UnitPing
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
@@ -25,14 +25,15 @@ def unit_line(state: type[UnitState], since: float) -> UnitPing:
 def test_only_commander_disposable_stale_lines_are_undisposed(comms):
     """2026-10-25: AWAIT RUN lines, the holder's to dispose of, were restated as UNDISPOSED and
     printed on every verb refusal beside the lines that actually locked."""
-    cut, actors = 1000.0, frozenset({"lead"})
+    cut = 1000.0
+    history = CommanderHistory.read(comms, frozenset())
     judge = RulePing(OrderlessUnreviewedHead, TextDigest.of("JUDGE"), text="JUDGE", subjects=(UnitSubject(UNIT),),
                      since=RecordedEventTime(10.0))
-    assert unit_line(DeliveredUnclosed, 10.0).undisposed(comms, actors, cut)
-    assert judge.undisposed(comms, actors, cut)
-    assert not unit_line(DeliveredUnclosed, 2000.0).undisposed(comms, actors, cut)
+    assert unit_line(DeliveredUnclosed, 10.0).undisposed(history, cut)
+    assert judge.undisposed(history, cut)
+    assert not unit_line(DeliveredUnclosed, 2000.0).undisposed(history, cut)
     assert not unit_line(DeliveredUnclosed, 2000.0).waits_on_commander(cut)
-    assert not unit_line(AwaitingApplicationRun, 10.0).undisposed(comms, actors, cut)
+    assert not unit_line(AwaitingApplicationRun, 10.0).undisposed(history, cut)
 
 
 def test_an_installed_application_order_waits_on_its_holder_not_the_commander():

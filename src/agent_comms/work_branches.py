@@ -21,17 +21,48 @@ from pydantic.alias_generators import to_camel
 
 from .code_lines import CodeLines
 from .declared_family import DeclaredFamily
-from .field_codec import PathText, projected
+from .field_codec import GitCommitText, PathText, projected
 from .repo import GitCommandError, Repo
 from .repository_name import RepositoryName
 from .wire_models import WireModel
 
 if TYPE_CHECKING:
+    from .closed_pull_requests import ClosedHeadScan
     from .registry_document import RegistrySnapshot
 
 
 class WorkBranchError(ValueError):
     """The checkout or the forge could not answer."""
+
+
+class CommitBase(DeclaredFamily):
+    """A head's relationship to main, decoded from one Git merge-base exit."""
+
+    @abstractmethod
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def description(self, count: int) -> str: ...
+
+
+@dataclass(frozen=True)
+class SharedCommitBase(CommitBase):
+    commit: Annotated[str, GitCommitText]
+
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]:
+        return () if self.commit == head else scan.missing_after(self.commit, head)
+
+    def description(self, count: int) -> str:
+        return f'holds {count} commits main lacks'
+
+
+@dataclass(frozen=True)
+class UnrelatedCommitBase(CommitBase):
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]:
+        return scan.reader.commits_since(head, scan.published)
+
+    def description(self, count: int) -> str:
+        return f'has unrelated Git history: {count} commits cannot be compared with main'
 
 
 class BranchLink(DeclaredFamily, affix="BranchLink"):
@@ -349,8 +380,14 @@ query($owner: String!, $name: String!, $after: String) {
         )
         return BranchComparison(base_head, head, paths)
 
-    def common_commit(self, *commits: str) -> str:
-        return self._git('merge-base', '--octopus', *commits).strip()
+    def commit_base(self, main: str, head: str) -> CommitBase:
+        """Git's best common ancestor; exit 1 means the histories share none."""
+        try:
+            return SharedCommitBase(self._git('merge-base', main, head).strip())
+        except GitCommandError as error:
+            if error.returncode != 1:
+                raise
+            return UnrelatedCommitBase()
 
     def commits_since(self, head: str, *excluded: str) -> tuple[str, ...]:
         return tuple(self._git('rev-list', '--no-merges', head,
