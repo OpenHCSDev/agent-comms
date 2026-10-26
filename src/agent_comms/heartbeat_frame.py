@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.held_orders import HeldOrders
-from agent_comms.phase_evidence import PlanReading, PlanReadings
+from agent_comms.phase_evidence import PlanReading, PlanReadings, RetainedPlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import OwedAnswer
@@ -27,7 +27,7 @@ class HeartbeatFrame(HeldOrders):
 
     @classmethod
     def capture(cls, comms: Comms, commander: str, pulls: ProgressRead,
-                plans: PlanReadings = PlanReadings()) -> Self:
+                plans: PlanReadings = RetainedPlanReadings()) -> Self:
         scan = HeldOrders.read(comms, commander)
         snapshot = comms.registry.snapshot()
         repository = Repo.declaring(
