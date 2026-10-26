@@ -117,6 +117,7 @@ class BridgeStateTable(DurableTables):
 
     __slots__ = ()
     filename = 'delivery.sqlite3'
+    retired_tables: ClassVar[tuple[str, ...]] = ('board_line',)
 
 
 @dataclass(frozen=True)
