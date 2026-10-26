@@ -162,11 +162,13 @@ class ShellInvocation(ShellCommand):
 
 class ChangeDirectoryProgram(ShellProgram, names=frozenset({'cd'})):
     def invocation(self, decoded: ShellCommand, cwd: Path) -> ShellInvocation:
-        words = decoded.words
-        if len(words) > 1:
-            target = words[2] if words[1] == '--' and len(words) > 2 else words[1]
-            cwd = physical_path(target, cwd)
-        return ShellInvocation(words, cwd)
+        try:
+            _, targets = getopt.getopt(decoded.words[1:], '')
+        except getopt.GetoptError as error:
+            raise StorageDenied(f'StorageRule: unknown cd option: {error}') from error
+        if targets:
+            cwd = physical_path(targets[0], cwd)
+        return ShellInvocation(decoded.words, cwd)
 
 
 @dataclass(frozen=True)
