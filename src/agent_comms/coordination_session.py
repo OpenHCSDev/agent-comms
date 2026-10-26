@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Self
 
 from agent_comms.bus import StoredBusReader
 from agent_comms.coordination_database import CoordinationStore
@@ -19,7 +19,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
 from agent_comms.store_files import (
-    DEFAULT_STORE_CONTENTION, StoreContention, StoreLockContention,
+    DEFAULT_STORE_CONTENTION, StoreContention,
 )
 
 if TYPE_CHECKING:
@@ -105,16 +105,8 @@ class NativeBoundary(ExitStack, StoredBusReader):
             raise
 
 
-class ReadNativeBoundary(NativeBoundary):
-    """Optional native reads refuse busy bus and registry guards without waiting."""
-
-    contention = StoreLockContention(0.0)
-
-
 class NativeCoordinationSession(CoordinationSession):
     """Native sessions declare their bus boundary, independent of file existence."""
-
-    boundary_family: ClassVar[type[NativeBoundary]] = NativeBoundary
 
     @cached_property
     def bus(self) -> MessageBus:
@@ -130,7 +122,7 @@ class NativeCoordinationSession(CoordinationSession):
     def boundary(self, bus: MessageBus) -> NativeBoundary:
         if bus.bus.path.parent.resolve() != self.path.parent.resolve():
             raise IntegrityViolationError("native boundary belongs to another coordinator")
-        return self.boundary_family(bus)
+        return NativeBoundary(bus)
 
     @contextmanager
     def settlement(
@@ -149,8 +141,6 @@ class NativeCoordinationSession(CoordinationSession):
 
 class ReadNativeCoordinationSession(NativeCoordinationSession):
     """Read-only native coordination through the complete session constructor."""
-
-    boundary_family = ReadNativeBoundary
 
     def _prepare_private_file(self) -> None:
         self._private_file()
