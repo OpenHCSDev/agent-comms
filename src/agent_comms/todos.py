@@ -4160,6 +4160,19 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
                pull_request_index)
 
     @classmethod
+    def head_reviews(cls, store: TodoStore, request: PullRequestHead) -> tuple[HeadReviewRecord, ...]:
+        """An indexed exact-head lookup, newest committed verdict first."""
+        return cls.head_reviews_among(store, (request,))[request]
+
+    @classmethod
+    def head_reviews_among(cls, store: TodoStore, requests: Iterable[PullRequestHead]) -> dict[PullRequestHead, tuple[HeadReviewRecord, ...]]:
+        """Read exact-head decisions from one snapshot; callers share this beat's answers."""
+        with store.snapshot() as db:
+            return {request: tuple(row.record for row in cls.select(
+                db, request=request, order_by=("seq",), descending=True, limit=1,
+            )) for request in dict.fromkeys(requests)}
+
+    @classmethod
     def latest_for_pull_request(
         cls, db: sqlite3.Connection, request: PullRequestHead,
     ) -> tuple[HeadReviewRecord, ...]:
@@ -5678,17 +5691,6 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def record_head(self, record: HeadReviewRecord) -> None:
         with self.writing() as db:
             StoredHeadReview.insert_values(db, record=record)
-
-    def head_reviews(self, request: PullRequestHead) -> tuple[HeadReviewRecord, ...]:
-        """An indexed exact-head lookup, newest committed verdict first."""
-        return self.head_reviews_among((request,))[request]
-
-    def head_reviews_among(self, requests: Iterable[PullRequestHead]) -> dict[PullRequestHead, tuple[HeadReviewRecord, ...]]:
-        """Read exact-head decisions from one snapshot; callers share this beat's answers."""
-        with self.snapshot() as db:
-            return {request: tuple(row.record for row in StoredHeadReview.select(
-                db, request=request, order_by=("seq",), descending=True, limit=1,
-            )) for request in dict.fromkeys(requests)}
 
     def unjudged_since(self, todo: Todo) -> float:
         """The problem's work starts at its first order; a send-back reissues the order but

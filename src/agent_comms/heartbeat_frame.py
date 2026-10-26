@@ -34,6 +34,8 @@ class HeartbeatFrame(HeldOrders):
     @classmethod
     def capture(cls, comms: Comms, commander: str, pulls: ProgressRead,
                 plans: PlanReadings = PlanReadings()) -> Self:
+        from agent_comms.todos import StoredHeadReview
+
         scan = HeldOrders.read(comms, commander)
         snapshot = comms.registry.snapshot()
         project = snapshot.commander_project.require()
@@ -42,9 +44,11 @@ class HeartbeatFrame(HeldOrders):
         since = time.time() - ClosedUnmergedPullRequest.window
         closed = {repo: pulls.closed_unmerged(repo.github, since)
                   for repo in project.unique_repositories()}
-        reviews = comms.goals.todos.head_reviews_among(
-            PullRequestHead(repo.github, pull.number, pull.head)
-            for repo, rows in closed.items() for pull in rows)
+        reviews = StoredHeadReview.head_reviews_among(
+            comms.goals.todos,
+            (PullRequestHead(repo.github, pull.number, pull.head)
+             for repo, rows in closed.items() for pull in rows),
+        )
         return cls(
             scan.live,
             scan.orphaned,

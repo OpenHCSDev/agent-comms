@@ -726,6 +726,8 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
 
     @classmethod
     def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
+        from agent_comms.todos import StoredHeadReview
+
         now = time.time()
         snapshot = goals.registry.snapshot()
         todos = goals.todos.for_commander(snapshot.require(commander).incarnation)
@@ -735,7 +737,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
             for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
-            if not any(review.verdict.decides() for review in goals.todos.head_reviews(request))
+            if not any(review.verdict.decides() for review in StoredHeadReview.head_reviews(goals.todos, request))
             for rule in cls.for_head(request, due, todos)
         )
 
