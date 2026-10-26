@@ -7,8 +7,10 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.bus import StoredBusReader
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
@@ -17,8 +19,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
 from agent_comms.store_files import (
-    DEFAULT_STORE_CONTENTION, RegistryLocking, SqliteStore,
-    StoreContention, StoreLockContention,
+    DEFAULT_STORE_CONTENTION, StoreContention, StoreLockContention,
 )
 
 if TYPE_CHECKING:
@@ -78,24 +79,23 @@ class CoordinationSession(CoordinationStore):
                     db.execute("ROLLBACK")
 
 
-class NativeBoundary(ExitStack):
-    """Borrow the registry's own read lock for a publication decision."""
+class NativeBoundary(ExitStack, StoredBusReader):
+    """One guard family owns the bus cut and registry exclusion for a native decision."""
 
-    def __init__(
-        self, bus: MessageBus, *, contention: StoreLockContention = SqliteStore.contention,
-    ) -> None:
+    def __init__(self, bus: MessageBus) -> None:
         super().__init__()
-
-        # The activity boundary spends this operation's contention budget.
         self.bus = bus
-        self.contention = contention
         self.measurements = PublicationMeasurements()
 
-    def __enter__(self):
+    @property
+    def path(self) -> Path:
+        return self.bus.bus.path
+
+    def __enter__(self) -> Self:
         try:
-            self.activity = self.enter_context(self.bus.opened_activity(self.contention))
+            self.activity = self.activity_clocks()
             with self.measurements.operation("file_exclusion"):
-                self.enter_context(RegistryLocking.read_guard(self.bus._registry.store.path))
+                self.enter_context(self.read_guard(self.bus._registry.store.path))
             with self.measurements.operation("registry_snapshot"):
                 self.privacy = self.bus._registry.store.private_guard_unlocked()
                 self.registry = self.bus._registry.store.read_snapshot_unlocked()
@@ -105,8 +105,16 @@ class NativeBoundary(ExitStack):
             raise
 
 
+class ReadNativeBoundary(NativeBoundary):
+    """Optional native reads refuse busy bus and registry guards without waiting."""
+
+    contention = StoreLockContention(0.0)
+
+
 class NativeCoordinationSession(CoordinationSession):
     """Native sessions declare their bus boundary, independent of file existence."""
+
+    boundary_family: ClassVar[type[NativeBoundary]] = NativeBoundary
 
     @cached_property
     def bus(self) -> MessageBus:
@@ -119,14 +127,10 @@ class NativeCoordinationSession(CoordinationSession):
             publisher.ClaimWrites,
         )
 
-    def boundary_contention(self) -> StoreLockContention:
-        """Use the SQLite guard family's declared wait for the bus boundary."""
-        return SqliteStore.contention
-
     def boundary(self, bus: MessageBus) -> NativeBoundary:
         if bus.bus.path.parent.resolve() != self.path.parent.resolve():
             raise IntegrityViolationError("native boundary belongs to another coordinator")
-        return NativeBoundary(bus, contention=self.boundary_contention())
+        return self.boundary_family(bus)
 
     @contextmanager
     def settlement(
@@ -146,18 +150,7 @@ class NativeCoordinationSession(CoordinationSession):
 class ReadNativeCoordinationSession(NativeCoordinationSession):
     """Read-only native coordination through the complete session constructor."""
 
-    def __init__(
-        self, path: str, *, clock_ms: Callable[[], int] = system_clock,
-        contention: StoreContention = DEFAULT_STORE_CONTENTION,
-    ) -> None:
-        self.read_budget = contention
-        super().__init__(path, clock_ms=clock_ms, contention=contention)
-
-    def boundary_contention(self) -> StoreLockContention:
-        """A read's boundary spends the read's own budget on every lock it takes, so
-        contention the read cannot wait out raises BlockingIOError for its caller to
-        defer, instead of a wait with no end."""
-        return self.read_budget.lock_budget()
+    boundary_family = ReadNativeBoundary
 
     def _prepare_private_file(self) -> None:
         self._private_file()

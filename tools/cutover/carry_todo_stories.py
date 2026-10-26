@@ -28,7 +28,7 @@ class TodoStories(Carry):
         self.require_confined(path)
         if not path.exists():
             return Carried(0)
-        with TodoStore.observing(path) as db:
+        with TodoStore.opened_reader(path) as db:
             present = set(Todo.stored_columns(db)).intersection(INLINE_FIELDS)
             if not present:
                 return Carried(0)

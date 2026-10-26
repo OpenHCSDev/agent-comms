@@ -83,7 +83,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
-    SqliteStore, StoreBusy, StoreLockContention, StoreLockFile,
+    StoreBusy, StoreLockFile,
 )
 
 if TYPE_CHECKING:
@@ -2738,14 +2738,13 @@ class WalStore(StoreWriter, StoreLockFile):
         self,
         schema: type[TableSchema],
         opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention = SqliteStore.contention,
     ) -> Iterator[sqlite3.Connection]:
         """Read the committed file, or its declared empty schema before its first write.
 
         An absent file is established absence: a reader sees every declared table empty
         and creates no storage."""
         if self.path.exists():
-            with self.attached(self.path, opening, contention) as connection:
+            with self.attached(self.path, opening) as connection:
                 yield connection
             return
         with closing(self.writer(":memory:", isolation_level=None)) as connection:
@@ -2853,7 +2852,7 @@ class TypedStore(WalStore, TableSchema):
     def snapshot(self) -> Iterator[sqlite3.Connection]:
         """Read a committed store, or its declared empty schema before its first write."""
         with self.committed_or_empty(
-            type(self), lambda: self.observing(self.path, StoreBusy())
+            type(self), lambda: self.opened_reader(self.path, StoreBusy())
         ) as connection:
             self.require_schema(connection)
             yield connection

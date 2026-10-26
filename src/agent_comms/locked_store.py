@@ -787,9 +787,9 @@ class SQLiteStorage(RootFile, SqliteStore):
 
     @classmethod
     @contextmanager
-    def observing(
+    def opened_reader(
         cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
-    ):
+    ) -> Iterator[sqlite3.Connection]:
         """Read existing committed data without initializing storage or permitting writes."""
         with CoordinationReadUnavailable.checking():
             try:

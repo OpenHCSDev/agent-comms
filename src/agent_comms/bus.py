@@ -54,7 +54,7 @@ from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import (
     DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
 )
-from agent_comms.store_files import SqliteStore, StoreLockContention
+from agent_comms.store_files import StoreGuard
 from agent_comms.typed_table import (
     CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
     SQLiteDatabase, WalStore,
@@ -148,11 +148,8 @@ class BusReader(RouteCounts, ABC):
     """One query implementation for individual reads and a held read snapshot."""
 
     @abstractmethod
-    def observing(
-        self, contention: StoreLockContention = SqliteStore.contention,
-    ) -> AbstractContextManager[sqlite3.Connection]:
-        """One read snapshot; a file attachment spends ``contention``, the lock budget of
-        the read it serves."""
+    def observing(self) -> AbstractContextManager[sqlite3.Connection]:
+        """Borrow one read snapshot through the reader's declared lifetime."""
 
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
@@ -164,10 +161,8 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return BusRow.last_seq(db)
 
-    def activity_clocks(
-        self, contention: StoreLockContention = SqliteStore.contention,
-    ) -> ActivityClocks:
-        with self.observing(contention) as db:
+    def activity_clocks(self) -> ActivityClocks:
+        with self.observing() as db:
             return BusActivityIndex.clocks(db)
 
     def target_activity(self, predicate: str, parameters: tuple[object, ...]) -> ChannelActivity:
@@ -488,7 +483,21 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class Bus(FileStore, BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
+class StoredBusReader(StoreGuard, BusReader):
+    """File-backed readers share opening and retirement; held snapshots need neither."""
+
+    @property
+    @abstractmethod
+    def path(self) -> Path:
+        """The file named by this reader's owning declaration."""
+
+    @contextmanager
+    def observing(self) -> Iterator[sqlite3.Connection]:
+        with self.attached(self.path, lambda: SQLiteFile.opened_reader(self.path)) as db:
+            yield db
+
+
+class Bus(FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     filename = "bus.sqlite3"
@@ -528,16 +537,6 @@ class Bus(FileStore, BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile
     @classmethod
     def practice_rebuild(cls, path: Path, practice_root: Path) -> SchemaRebuild:
         return PracticeRebuild(practice_root / path.relative_to(cls.bus_root(path)))
-
-    @contextmanager
-    def observing(
-        self, contention: StoreLockContention = SqliteStore.contention,
-    ) -> Iterator[sqlite3.Connection]:
-        """Borrow one read-only snapshot, including for an archived bus. Root adoption
-        creates the bus, so an absent file is a deleted bus and fails to open."""
-        with self.attached(
-                self.path, lambda: SQLiteFile.observing(self.path), contention) as db:
-            yield db
 
     def backup(self, destination: Path) -> None:
         """Copy a consistent SQLite snapshot, never replace an existing destination."""
@@ -617,9 +616,7 @@ class BusSnapshot(PresentPath, BusReader):
         return cls(identity=FileIdentity.from_stat(path.stat()), path=path, _connection=connection)
 
     @contextmanager
-    def observing(
-        self, contention: StoreLockContention = SqliteStore.contention,
-    ) -> Iterator[sqlite3.Connection]:
+    def observing(self) -> Iterator[sqlite3.Connection]:
         """The held snapshot is already attached, so it takes no lock."""
         yield self._connection
 

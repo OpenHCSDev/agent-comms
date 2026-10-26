@@ -22,6 +22,10 @@ from test_locked_store import (
 )
 
 
+class ImmediateSQLite(SQLiteFile):
+    contention = StoreLockContention(0.0)
+
+
 def _competing_write(owner, path, started, entered):
     started.set()
     with owner.write_guard(path):
@@ -130,7 +134,7 @@ def test_sqlite_boundaries_serialize_and_retire_with_the_real_exception(tmp_path
     ready, release = event(), event()
     with process(_hold_boundary, path, ready, release):
         assert ready.wait(10)
-        with pytest.raises(BlockingIOError), SQLiteFile.attached(path, opening, StoreLockContention(0)):
+        with pytest.raises(BlockingIOError), ImmediateSQLite.attached(path, opening):
             pytest.fail("attached during another process's connection boundary")
         assert opened == []
         release.set()

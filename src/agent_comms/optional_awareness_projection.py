@@ -201,7 +201,7 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
         path = CoordinationStore.path_in(self.index.root)
-        with CoordinationStore.observing(path) as db:
+        with CoordinationStore.opened_reader(path) as db:
             self._verify_schema_and_owner(db, initial, assignment, owner, privacy)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
             candidates = tuple(
@@ -274,7 +274,7 @@ class OptionalAwarenessProjection:
             ).require_snapshot(snapshot, "current registry owner turn changed")
         # A new read transaction, not the earlier candidate/decision snapshot,
         # observes a supported SQL generation advance during the optional read.
-        with CoordinationStore.observing(Path(path), StoreBusy()) as db:
+        with CoordinationStore.opened_reader(Path(path), StoreBusy()) as db:
             rows = _ParticipantOwner.read(
                 db.execute(
                     "SELECT g.generation,p.committed FROM owner_generations g "

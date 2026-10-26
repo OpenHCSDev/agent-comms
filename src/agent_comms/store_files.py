@@ -270,6 +270,19 @@ class StoreGuard:
 
     @classmethod
     @contextmanager
+    def attached[Resource](
+        cls, path: Path, opening: Callable[[], AbstractContextManager[Resource]],
+    ) -> Iterator[Resource]:
+        """The same guard family owns opening and retirement of a borrowed resource."""
+        with ExitStack() as lifetime:
+            retirement = lifetime.enter_context(ExitStack())
+            with cls.write_guard(path):
+                resource = lifetime.enter_context(opening())
+            lifetime.callback(retirement.enter_context, cls.write_guard(path))
+            yield resource
+
+    @classmethod
+    @contextmanager
     def read_guard(
         cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     ) -> Iterator[None]:
@@ -441,10 +454,6 @@ class StoreContention(ABC):
             uri=uri, check_same_thread=check_same_thread,
         )
 
-    def lock_budget(self) -> StoreLockContention:
-        """Express SQLite's timeout as the file-lock policy for each acquisition."""
-        return StoreLockContention(self.timeout)
-
 
 @dataclass(frozen=True)
 class StoreWait(StoreContention):
@@ -478,24 +487,6 @@ class SqliteStore(StoreGuard, ABC):
         uri: bool = False, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open the file family's writer with its declared contention policy and options."""
-
-    @classmethod
-    @contextmanager
-    def attached(
-        cls, path: Path, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention = StoreGuard.contention,
-    ) -> Iterator[sqlite3.Connection]:
-        """Serialize attachment and retirement, including cold WAL-index initialization.
-
-        Attachment spends the supplied budget; retirement uses the family's bounded wait. SQLite's own
-        transactions retain parallel execution between those two boundaries.
-        """
-        with ExitStack() as lifetime:
-            retirement = lifetime.enter_context(ExitStack())
-            with _store_lock(path, ExclusiveLock(), contention):
-                connection = lifetime.enter_context(opening())
-            lifetime.callback(retirement.enter_context, cls.write_guard(path))
-            yield connection
 
     @classmethod
     @contextmanager

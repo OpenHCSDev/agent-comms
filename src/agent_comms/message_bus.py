@@ -47,7 +47,6 @@ from agent_comms.read_basis import (
 )
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import DeliveryScope
-from agent_comms.store_files import SqliteStore, StoreLockContention
 
 from .watched import FileSource
 
@@ -105,10 +104,8 @@ class MessageBus[Writes: Publisher]:
         self.publisher = publisher(self.bus, registry, self._channels, self.opened_activity)
 
     @contextmanager
-    def opened_activity(
-        self, contention: StoreLockContention = SqliteStore.contention,
-    ) -> Iterator[ActivityClocks]:
-        yield self.bus.activity_clocks(contention)
+    def opened_activity(self) -> Iterator[ActivityClocks]:
+        yield self.bus.activity_clocks()
 
     def require_channel(self, target: str):
         with self.opened_activity() as activity:
