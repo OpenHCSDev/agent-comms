@@ -11,22 +11,19 @@ import sqlite3
 import threading
 import time
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, ClassVar, Iterator, TYPE_CHECKING
+from typing import Annotated, ClassVar
 
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, PathText, RoomTicket
 from .thread_identity import ThreadIncarnation
-from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable, WriterOwnedFile
+from .room_need import RoomNeed
+from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
 from .watched import ChangeSignal, FileSource
-
-if TYPE_CHECKING:
-    from .threads import Thread
-
 
 @dataclass(frozen=True)
 class RoomWork(DeclaredFamily, affix="RoomWork"):
@@ -40,14 +37,11 @@ class RoomWork(DeclaredFamily, affix="RoomWork"):
     def per_owner(self, measured: RoomNeed) -> RoomNeed:
         return measured.divided(len(self.owners))
 
-    def measured_needs(self, db: sqlite3.Connection, root: str) -> tuple[RoomNeed, ...]:
-        return tuple(self.estimate(peak.need) for peak in WorkPeak.select(db, work=type(self)))
+    def measured_needs(self, peaks: tuple[RoomNeed, ...], root: str) -> tuple[RoomNeed, ...]:
+        return tuple(self.estimate(peak) for peak in peaks)
 
     def floor(self, rule: RoomAllocation) -> RoomNeed:
         return rule.room_floor()
-
-    def consume(self, db: sqlite3.Connection, root: str) -> None:
-        pass
 
 
 class BuildRoomWork(RoomWork):
@@ -62,44 +56,19 @@ class UnitStartRoomWork(RoomWork):
     def floor(self, rule: RoomAllocation) -> RoomNeed:
         return RoomNeed(disk=rule.room_floor().disk)
 
-    def measured_needs(self, db: sqlite3.Connection, root: str) -> tuple[RoomNeed, ...]:
-        released = tuple(peak for owner in self.owners
-                         for peak in StoppedOwnerPeak.select(db, root=root, owner=owner))
-        if len(released) == len(self.owners):
-            return (sum((peak.need for peak in released), RoomNeed()),)
-        return super().measured_needs(db, root)
+    def measured_needs(self, peaks: tuple[RoomNeed, ...], root: str) -> tuple[RoomNeed, ...]:
+        from .registry_store import RegistryFile, RegistryStore
 
-    def consume(self, db: sqlite3.Connection, root: str) -> None:
-        for owner in self.owners:
-            StoppedOwnerPeak.delete(db, root=root, owner=owner)
+        snapshot = RegistryStore(RegistryFile.path_in(Path(root))).snapshot()
+        released = tuple(need for owner in self.owners if owner.current(snapshot)
+                         for need in snapshot.status(owner.name).stopped_needs())
+        if len(released) == len(self.owners):
+            return (sum(released, RoomNeed()),)
+        return super().measured_needs(peaks, root)
 
 
 class AllocationRoomWork(RoomWork):
     """Other allocating operations, not mislabeled as builds or tests."""
-
-
-@dataclass(frozen=True)
-class RoomNeed:
-    memory: int = 0
-    disk: int = 0
-
-    def __add__(self, other: RoomNeed) -> RoomNeed:
-        return RoomNeed(self.memory + other.memory, self.disk + other.disk)
-
-    def scaled(self, count: int) -> RoomNeed:
-        return RoomNeed(self.memory * count, self.disk * count)
-
-    def divided(self, count: int) -> RoomNeed:
-        return RoomNeed((self.memory + count - 1) // count, (self.disk + count - 1) // count)
-
-    def remaining(self, other):
-        return RoomNeed(max(0, self.memory - other.memory), max(0, self.disk - other.disk))
-
-    def fits(self, free):
-        return self.memory <= free.memory and self.disk <= free.disk
-
-    def peak(self, other):
-        return RoomNeed(max(self.memory, other.memory), max(self.disk, other.disk))
 
 
 @dataclass(frozen=True)
@@ -135,15 +104,6 @@ class WorkPeak(RoomLedgerRows, TypedTable):
 
 
 @dataclass(frozen=True)
-class StoppedOwnerPeak(RoomLedgerRows, TypedTable):
-    """The exited owner's measured process-tree room, not the cleanup threshold."""
-
-    root: Annotated[str, Column(primary_key=True)]
-    owner: Annotated[ThreadIncarnation, Column(primary_key=True, storage=JsonStorage)]
-    need: Annotated[RoomNeed, Column(storage=JsonStorage)]
-
-
-@dataclass(frozen=True)
 class RoomClaim(RoomLedgerRows, TypedTable):
     dropped_fields: ClassVar[tuple[str, ...]] = ('unit',)
 
@@ -154,30 +114,23 @@ class RoomClaim(RoomLedgerRows, TypedTable):
     phase: Annotated[RoomPhase, Column(storage=JsonStorage)]
     at: float
 
+    @classmethod
+    def carry_columns(cls, db: sqlite3.Connection) -> None:
+        previous_owner, = cls.dropped_fields
+        if previous_owner in cls.stored_columns(db):
+            db.execute(cls._sql(
+                f'UPDATE "{cls.declared_name}" SET {{work}} = '
+                '(SELECT json_group_array(json_object(?, member.value, ?, '
+                f'json_array(json("{previous_owner}")))) FROM json_each({{work}}) AS member)'
+            ), (RoomWork.family_discriminator, FieldCodec.field_plan(RoomWork, 'owners').key))
+        super().carry_columns(db)
+
 
 @dataclass(frozen=True)
 class RoomLedger(DurableStore):
     root: Path
     filename = "work_room.sqlite3"
     tables = RoomLedgerRows
-
-    @classmethod
-    def schema_change(cls, path: Path) -> WriterOwnedFile:
-        # This machine-wide ledger is outside the bus; its writer owns its carry.
-        return WriterOwnedFile()
-
-    @classmethod
-    def derive_schema(cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = ()) -> None:
-        previous_owner, = RoomClaim.dropped_fields
-        if previous_owner in RoomClaim.stored_columns(db):
-            # Carry the old claim's complete membership before dropping its column.
-            # All rows and process identities survive, including live holders.
-            db.execute(RoomClaim._sql(
-                f'UPDATE "{RoomClaim.declared_name}" SET {{work}} = '
-                '(SELECT json_group_array(json_object(?, member.value, ?, '
-                f'json_array(json("{previous_owner}")))) FROM json_each({{work}}) AS member)'
-            ), (RoomWork.family_discriminator, FieldCodec.field_plan(RoomWork, 'owners').key))
-        super().derive_schema(db, sharing)
 
     def dead_claims(self):
         # Dead/replaced processes cannot hold room, but are never replayed.
@@ -323,27 +276,16 @@ class RoomAllocation(ABC):
     def room_floor(self) -> RoomNeed:
         """The rule declares its ordinary-work thresholds."""
 
-    @contextmanager
-    def stopping(self, root: Path, owners: tuple[Thread, ...]) -> Iterator[None]:
-        """Measure the stopped owners once; replacements request these peaks."""
-        if not owners:
-            yield
-            return
-        memory = WorkMeasurement.residents(
-            self.proc, tuple(owner.require_process() for owner in owners),
-        )
-        peaks = tuple(StoppedOwnerPeak(str(root), owner.incarnation, RoomNeed(amount))
-                      for owner, amount in zip(owners, memory, strict=True))
-        yield
-        self.room_ledger.root.mkdir(parents=True, exist_ok=True)
-        with self.room_ledger.writing() as db:
-            for peak in peaks:
-                StoppedOwnerPeak.delete(db, root=peak.root, owner=peak.owner)
-                peak.insert(db)
-
     def _admit(self, ticket):
         ledger = self.room_ledger
         # OS reads and /proc traversal never hold the writer transaction.
+        with ledger.snapshot() as db:
+            requested = RoomClaim.require(db, ticket=ticket)
+            measured = tuple(tuple(peak.need for peak in WorkPeak.select(db, work=type(work)))
+                             for work in requested.work)
+        # Registry reads finish before the machine ledger's writer is acquired.
+        peaks = tuple(work.measured_needs(known, requested.root)
+                      for work, known in zip(requested.work, measured, strict=True))
         free = self.free_room()
         dead = ledger.dead_claims()
         with ledger.writing() as db:
@@ -359,7 +301,6 @@ class RoomAllocation(ABC):
             for work in claim.work:
                 floor = floor.peak(work.floor(self))
             spare = free.remaining(floor + held)
-            peaks = tuple(work.measured_needs(db, claim.root) for work in claim.work)
             # An unmeasured run calibrates alone. It reserves the observed spare
             # room, never a typed-in estimate and never zero alongside another run.
             if not all(peaks):
@@ -374,8 +315,6 @@ class RoomAllocation(ABC):
                     return False
             RoomClaim.update(db, where='{ticket}=?', parameters=(ticket,),
                              phase=HoldingRoomPhase(need))
-            for work in claim.work:
-                work.consume(db, claim.root)
             return True
 
     async def wait_for_room(

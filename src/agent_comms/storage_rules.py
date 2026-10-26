@@ -31,7 +31,8 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
-from agent_comms.storage_room import RoomAllocation, RoomNeed
+from agent_comms.storage_room import RoomAllocation
+from agent_comms.room_need import RoomNeed
 from agent_comms.work_branches import WorkBranches
 
 from .shell_effects import StorageDenied, StorageEffect

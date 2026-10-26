@@ -13,6 +13,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ThreadNotStoppedError
 from .field_codec import FieldCodec, TextRepresentation
 from .lifecycle_capability import LifecycleCapability
+from .room_need import RoomNeed
 from .thread_presentation import (
     InactiveThreadPresentationStatus,
     LiveThreadOwnerBinding,
@@ -80,6 +81,19 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
 
     def paused_since(self, last_seen: float) -> tuple[float, ...]:
         return ()
+
+    def stopped_needs(self) -> tuple[RoomNeed, ...]:
+        return ()
+
+    def with_stopped_peak(self, need: RoomNeed) -> ThreadStatus:
+        return self
+
+    def without_stopped_peak(self) -> ThreadStatus:
+        return self
+
+    @property
+    def display_name(self) -> str:
+        return self.declared_name.title()
 
     @property
     def answers_later(self) -> bool:
@@ -169,7 +183,7 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
         self, title: str, activity: ObservedActivity,
         idle: Callable[[ThreadPresentation], ThreadPresentation],
     ) -> ThreadPresentation:
-        return ThreadPresentation(title, "○", self.declared_name.title(),
+        return ThreadPresentation(title, "○", self.display_name,
                                   status=InactiveThreadPresentationStatus())
 
 
@@ -289,6 +303,9 @@ class IdleThreadStatus(ActiveThreadPresence):
 class StoppedThreadStatus(Visible, ThreadStatus):
     stopped = True
 
+    def with_stopped_peak(self, need: RoomNeed) -> ThreadStatus:
+        return MeasuredStoppedThreadStatus(need)
+
     def require_stopped(self) -> None:
         pass
 
@@ -296,10 +313,31 @@ class StoppedThreadStatus(Visible, ThreadStatus):
         return visibility.stopped
 
 
+@dataclass(frozen=True)
+class MeasuredStoppedThreadStatus(StoppedThreadStatus):
+    """The last exited process's room belongs to this stopped declaration."""
+
+    need: RoomNeed
+
+    def stopped_needs(self) -> tuple[RoomNeed, ...]:
+        return (self.need,)
+
+    def without_stopped_peak(self) -> ThreadStatus:
+        return StoppedThreadStatus()
+
+    @property
+    def display_name(self) -> str:
+        return StoppedThreadStatus.declared_name.title()
+
+
 class CliInboxPresence(AlwaysListed):
     """The declared inbox resolves its bridge process at every read."""
 
     may_be_active: ClassVar[bool] = True
+
+    def with_stopped_peak(self, need: RoomNeed) -> Self:
+        """An external inbox is not a managed owner replacement."""
+        return self
 
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
         return (ConnectedThreadStatus() if thread.process_identity.alive()

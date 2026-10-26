@@ -24,7 +24,8 @@ from agent_comms.cli_commands import TargetActionCliCommand
 from agent_comms.private_nk_entrypoint import RootLaunch
 from agent_comms.registry_store import RegistryEdit
 from agent_comms.storage_rules import StorageRule
-from agent_comms.storage_room import RoomAllocation, RoomClaim, RoomNeed, StoppedOwnerPeak
+from agent_comms.storage_room import RoomAllocation, RoomClaim
+from agent_comms.room_need import RoomNeed
 from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
@@ -115,10 +116,10 @@ async def test_install_restart_admits_owners_its_stop_released(tmp_path: Path, n
     originals = tuple(comms.registry.require(name) for name in names)
     await Coordination.run_worker(partial(comms.owners.stop, *names))
     assert all(not owner.process_alive for owner in originals)
-    with rule.room_ledger.snapshot() as db:
-        peaks = StoppedOwnerPeak.select(db, root=str(comms.root))
-    assert {peak.owner for peak in peaks} == {owner.incarnation for owner in originals}
-    released = sum((peak.need for peak in peaks), RoomNeed())
+    snapshot = comms.registry.snapshot()
+    peaks = tuple(need for name in names for need in snapshot.status(name).stopped_needs())
+    assert len(peaks) == len(originals)
+    released = sum(peaks, RoomNeed())
     assert 0 < released.memory < rule.memory_gib * 2**30
     # The OS reports enough for these replacements, but less than CLEANUP-DUE.
     proc = tmp_path / 'proc'
@@ -144,7 +145,8 @@ async def test_install_restart_admits_owners_its_stop_released(tmp_path: Path, n
         assert admissions == [True], 'The whole replacement batch must be admitted without waiting'
         with rule.room_ledger.snapshot() as db:
             assert RoomClaim.count(db) == 0
-            assert StoppedOwnerPeak.count(db) == 0
+        snapshot = comms.registry.snapshot()
+        assert all(not snapshot.status(name).stopped_needs() for name in names)
     finally:
         threading.setprofile(previous)
         comms.registry.storage_rule = rule

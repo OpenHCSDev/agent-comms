@@ -47,7 +47,8 @@ from .native_arguments import (
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .repo import Checkout
-from .storage_room import MeasuredRoomReservation, UnitStartRoomWork
+from .storage_room import MeasuredRoomReservation, UnitStartRoomWork, WorkMeasurement
+from .room_need import RoomNeed
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (
     OwnerBusyRefusal,
@@ -526,10 +527,28 @@ class OwnerLifecycle:
         else:
             self.registry.unregister(thread.name)
 
+    @contextmanager
+    def _stopping(self, owners: tuple[Thread, ...]) -> Iterator[None]:
+        """Attach the exited process's measurement to its stopped declaration."""
+        if not owners:
+            yield
+            return
+        memory = WorkMeasurement.residents(
+            self.registry.storage_rule.proc, tuple(owner.require_process() for owner in owners),
+        )
+        yield
+        with self.registry.store.editing() as edit:
+            for owner, amount in zip(owners, memory, strict=True):
+                edit.document.transition_status(
+                    owner.incarnation,
+                    lambda status, need=RoomNeed(amount): status.with_stopped_peak(need),
+                )
+            edit.commit()
+
     def stop(self, *names: str) -> None:
         owners = tuple(owner for name in dict.fromkeys(names)
                        if (owner := self._stop_selection(name)) is not None)
-        with self.registry.storage_rule.stopping(self.root, tuple(thread for thread, _ in owners)):
+        with self._stopping(tuple(thread for thread, _ in owners)):
             # Move the registry claim and record its release before any signal.
             # A GRANT that follows this fence must refuse, even while the process lives.
             self._finish_stopped_owners(owners)

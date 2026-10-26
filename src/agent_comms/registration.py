@@ -322,6 +322,7 @@ class Registration:
             edit.commit()
             return fenced
 
+    transition_status = changing(RegistryDocument.transition_status)
     unregister = changing(RegistryDocument.unregister)
     archive = changing(RegistryDocument.archive)
     begin_delete = changing(RegistryDocument.begin_delete)
