@@ -25,7 +25,7 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
-from .store_files import DependentStateTier, SingleFileStore, StoreLockContention
+from .store_files import DependentStateTier, HolderNamingContention, SingleFileStore, StoreLockContention
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
@@ -42,7 +42,7 @@ class ActiveRouteFile(SingleFileStore, DependentStateTier):
 
     @classmethod
     def contention(cls) -> StoreLockContention:
-        return StoreLockContention(ROUTE_PUBLICATION_WAIT_SECONDS)
+        return HolderNamingContention(remaining=ROUTE_PUBLICATION_WAIT_SECONDS)
 
 
 @dataclass(frozen=True, slots=True)
