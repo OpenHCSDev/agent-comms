@@ -68,7 +68,8 @@ def bus_paths(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...])
         info = path.lstat()
         if stat.S_ISREG(info.st_mode):
             observed.append(path)
-    return (*observed, *(files.writer_path(store) for store in external))
+    return (*observed, *(files.location(resource) for store in external
+                         for resource in store.resources(files)))
 
 
 def settle_bus_files(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...] = ()) -> None:
