@@ -297,6 +297,10 @@ def main(package: Path) -> None:
     replace_once(settings_types, SETTINGS_DTS_STOCK, SETTINGS_DTS_OWNED)
     replace_once(compaction, SUMMARY_JS_STOCK, SUMMARY_JS_OWNED)
     replace_once(compaction, TURN_PREFIX_JS_STOCK, TURN_PREFIX_JS_OWNED)
+    # A split can discard only a turn prefix, with no new complete history.
+    # Keep the existing history summary when there is nothing to resummarize.
+    replace_once(compaction, 'let historyText = "No prior history.";',
+                 'let historyText = previousSummary ?? "No prior history.";')
     replace_once(session, SUCCESSFUL_OVERFLOW_STOCK, SUCCESSFUL_OVERFLOW_OWNED)
     # AgentSession.prompt already checks the threshold before the next input.
     # Post-run work owns recovery/queued continuation, not withholding a final answer.
