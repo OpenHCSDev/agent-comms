@@ -4199,12 +4199,26 @@ class StoredClosedHead(TodoStoreRows, TypedTable):
     indexes = (Index(("repo", "pr")), Index(("repo",), where=missing_where))
 
     @classmethod
-    def current(cls, db: sqlite3.Connection, repos: Iterable[RepositoryName]) -> tuple[Self, ...]:
-        result: list[Self] = []
+    def current(cls, db: sqlite3.Connection, repos: Iterable[RepositoryName]) -> ClosedHeadReading:
+        """Lost heads of every scanned repository; a repository with no progress row has not
+        completed its first closed-PR scan, which is its own state, never "nothing lost"."""
+        lost: list[StoredClosedHead] = []
+        unscanned: list[RepositoryName] = []
         for repo in repos:
-            StoredClosedRepository.require(db, repo=repo)
-            result.extend(cls.select(db, repo=repo, where=cls.missing_where))
-        return tuple(result)
+            if StoredClosedRepository.select(db, repo=repo):
+                lost.extend(cls.select(db, repo=repo, where=cls.missing_where))
+            else:
+                unscanned.append(repo)
+        return ClosedHeadReading(tuple(lost), tuple(unscanned))
+
+
+@dataclass(frozen=True)
+class ClosedHeadReading:
+    """One read of the closed-PR store: lost heads of scanned repositories, and the
+    repositories whose first scan has not completed."""
+
+    lost: tuple[StoredClosedHead, ...]
+    unscanned: tuple[RepositoryName, ...]
 
 
 @dataclass(frozen=True)
