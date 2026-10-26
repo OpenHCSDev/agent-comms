@@ -464,21 +464,28 @@ class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def latest_reference(cls, db: sqlite3.Connection) -> tuple[MessageReference, ...]:
-        """The sequence index selects the newest attempt, including uncertain emissions;
-        the cursor is its seq and id, so a payload in an older wire shape never decodes."""
+    def references(
+        cls, db: sqlite3.Connection, *, limit: int | None = None, **key: object,
+    ) -> tuple[MessageReference, ...]:
+        """Read indexed identities without decoding retained message payloads.
+
+        The resume cursor includes uncertain attempts; acknowledgment selects only
+        the journal's confirmed outcome through the same declared-column query.
+        """
         sequence = cls._sql(cls.sequence_sql)
-        return tuple(
-            MessageReference(seq, FieldCodec.decode(MessageId, message_id))
-            for seq, message_id in db.execute(
-                f'SELECT {sequence}, {cls._sql("{id}")} FROM "{cls.declared_name}" '
-                f'ORDER BY {sequence} DESC LIMIT 1'))
+        condition, parameters = cls._condition("1", (), key)
+        return tuple(MessageReference.iterate(db.execute(
+            f'SELECT {sequence}, {cls._sql("{id}")} FROM "{cls.declared_name}" '
+            f'WHERE {condition} ORDER BY {sequence} DESC'
+            + (" LIMIT ?" if limit is not None else ""),
+            parameters + ((limit,) if limit is not None else ()),
+        )))
 
     @classmethod
     def resume_after(cls, db: sqlite3.Connection, binding: Binding) -> InboxStart:
         """The binding and journal own progress, including uncertain emissions."""
         return max((binding.start, *(BridgeStart(reference)
-                                     for reference in cls.latest_reference(db))),
+                                     for reference in cls.references(db, limit=1))),
                    key=lambda point: point.cursor())
 
     outcome: Annotated[type[Outcome], Column(index=True)]
@@ -1268,6 +1275,9 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     async def watch(self) -> None:
         await self.prepare_delivery()
+        await DeliveredOutcome.acknowledge(
+            self, DeliveryRow.references(self.db, outcome=DeliveredOutcome),
+        )
         self.log(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay')
         while True:
             await self.comms.bus.when_open(self.watch_child)

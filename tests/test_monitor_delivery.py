@@ -170,6 +170,7 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
                     await update.observed(bridge)
                 confirmed, = DeliveryRow.select(bridge.db, id=second.message_id)
                 assert confirmed.monitor == ObservedMonitor('healthy-second', 1792168805.123)
+                assert confirmed.outcome is DeliveredOutcome
                 assert not attachment.done()
                 # Reopening starts after the journal's latest attempt, never at the
                 # uncertain first message. Its original outcome remains untouched.
@@ -192,6 +193,33 @@ def test_resume_cursor_reads_seq_and_id_without_decoding_an_old_payload(bridge):
         DeliveryRow(message.message_id, json.dumps(retired), DeliveredOutcome).insert(bridge.db)
     assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(
         MessageReference(message.seq, message.message_id))
+
+@pytest.mark.asyncio
+async def test_retained_confirmations_ack_exact_references_not_uncertain_attempts(bridge):
+    old, uncertain, fresh = (
+        bridge.comms.messaging.send('peer', 'viewer', body).message
+        for body in ('confirmed before Core recorded acknowledgments', 'uncertain emission', 'new confirmation')
+    )
+    retired = {**old.to_wire(), 'task': {TaskAttachment.family_discriminator: 'RetiredTask'}}
+    old_row = DeliveryRow(old.message_id, json.dumps(retired), DeliveredOutcome)
+    unknown_row = DeliveryRow(uncertain.message_id, json.dumps(uncertain.to_wire()), EmittedOutcome)
+    new_row = DeliveryRow(fresh.message_id, json.dumps(fresh.to_wire()), EmittedOutcome)
+    with bridge.db:
+        for row in (old_row, unknown_row, new_row):
+            row.insert(bridge.db)
+    assert bridge.comms.bus.pending_count('viewer') == 3
+    await new_row.finish(bridge, DeliveredOutcome)
+    recorded, = DeliveryRow.select(bridge.db, id=fresh.message_id)
+    assert recorded.outcome is DeliveredOutcome
+    assert bridge.comms.bus.pending_count('viewer') == 2
+    references = DeliveryRow.references(bridge.db, outcome=DeliveredOutcome)
+    assert set(references) == {old.reference, fresh.reference}
+    await DeliveredOutcome.acknowledge(bridge, references)
+    assert bridge.comms.bus.pending_count('viewer') == 1
+    assert DeliveryRow.select(bridge.db, id=uncertain.message_id) == [unknown_row]
+    await DeliveredOutcome.acknowledge(bridge, references)
+    assert bridge.comms.bus.pending_count('viewer') == 1
+
 
 def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
