@@ -83,6 +83,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
+    ExclusiveAtomicFile,
     StoreLockFile,
 )
 
@@ -2858,6 +2859,15 @@ class WalStore(StoreWriter, StoreLockFile):
     def path(self) -> Path:
         """The physical file, supplied by a root declaration or file constructor."""
 
+    def _create_file(self) -> None:
+        """Create only a new inode; never close a descriptor for a live SQLite inode."""
+        try:
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            os.close(descriptor)
+
     @contextmanager
     def committed_or_empty(
         self,
@@ -2882,16 +2892,18 @@ class WalStore(StoreWriter, StoreLockFile):
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Open one private writer and apply the file's declared WAL policy."""
         self.store.require_maintenance_open()
-        # Never open/close an extra descriptor for an existing SQLite inode:
-        # doing so can release another connection's process-wide fcntl locks.
-        try:
-            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
-        except FileExistsError:
-            pass
-        else:
-            os.close(descriptor)
+        if not self.path.exists():
+            self._create_file()
+        with self._configured_writer(self.path, check_same_thread=check_same_thread) as connection:
+            yield connection
+
+    @contextmanager
+    def _configured_writer(
+        self, path: Path, *, check_same_thread: bool = True,
+    ) -> Iterator[sqlite3.Connection]:
+        """Apply the same WAL policy before staging or using a published file."""
         connection = self.writer(
-            self.path, isolation_level=None, check_same_thread=check_same_thread)
+            path, isolation_level=None, check_same_thread=check_same_thread)
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             connection.execute("PRAGMA foreign_keys=ON")
@@ -2965,6 +2977,21 @@ class TypedStore(WalStore, TableSchema):
     @classmethod
     def declares_schema(cls) -> bool:
         return "tables" in vars(cls)
+
+    def _create_file(self) -> None:
+        """Publish a new store only after its own declared schema commits."""
+        descriptor, staged = self.stage_file(self.path)
+        os.close(descriptor)
+        try:
+            with self._configured_writer(staged) as initial:
+                with self.write_transaction(initial):
+                    self.create_schema(initial)
+            try:
+                ExclusiveAtomicFile(self.path).replace(staged)
+            except FileExistsError:
+                pass  # Another writer published its complete schema first.
+        finally:
+            staged.unlink(missing_ok=True)
 
     @contextmanager
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
