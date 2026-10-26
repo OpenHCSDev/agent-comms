@@ -17,6 +17,7 @@ from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from threading import Lock
 from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
 
 from agent_comms.declared_family import DeclaredFamily
@@ -250,25 +251,35 @@ class PlanReadings:
         reading = self.observed(repo, todos)
         for declared in evidence:
             declared.recorded(reading)
+        self.retain(reading)
         return reading
+
+    def retain(self, reading: PlanReading) -> None:
+        """An ordinary command releases its reading when its caller does."""
+        pass
 
 
 class RetainedPlanReadings(PlanReadings):
-    """The heartbeat owns the current answers for each repository's fetched main."""
+    """Keep completed private snapshots; consumers may extend their own readings."""
 
     def __init__(self) -> None:
         super().__init__()
         self.plans: tuple[PlanReading, ...] = ()
+        self.lock = Lock()
 
     def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
-        for previous in self.plans:
+        with self.lock:
+            plans = self.plans
+        for previous in plans:
             if previous.main.repo == repo:
-                reading = previous.following(todos)
-                break
-        else:
-            reading = PlanReading(todos, LiveMainTree.of(repo))
-        self.plans = (*(plan for plan in self.plans if plan.main.repo != repo), reading)
-        return reading
+                return previous.following(todos)
+        return PlanReading(todos, LiveMainTree.of(repo))
+
+    def retain(self, reading: PlanReading) -> None:
+        retained = reading.following(reading.todos)
+        with self.lock:
+            self.plans = (*(plan for plan in self.plans
+                            if plan.main.repo != retained.main.repo), retained)
 
 
 class PhaseEvidence(ABC):
