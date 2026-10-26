@@ -1148,8 +1148,12 @@ class PresentCheckout(ProgressCheckout):
     def git(self, *args: str) -> str:
         return Repo.git(self.path, *args)
 
+    @cached_property
+    def head(self) -> str:
+        return self.git("rev-parse", "--verify", "HEAD^{commit}")
+
     def require_read(self) -> None:
-        self.git("rev-parse", "--verify", "HEAD^{commit}")
+        self.head
 
     @cached_property
     def origin_refs(self) -> tuple[str, ...]:
