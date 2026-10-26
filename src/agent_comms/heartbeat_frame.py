@@ -12,11 +12,12 @@ from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import OwedAnswer
-from agent_comms.todos import ClosedHeadReading, StoredClosedHead, StoredHeadReview
+from agent_comms.todos import (
+    ClosedHeadReading, HeadReviewRecord, ProgressRead, StoredClosedHead, StoredHeadReview,
+)
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.todos import HeadReviewRecord, ProgressRead
 
 
 @dataclass(frozen=True)
