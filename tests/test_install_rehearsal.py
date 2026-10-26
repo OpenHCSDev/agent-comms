@@ -199,7 +199,7 @@ def test_rehearsal_refuses_changed_native_inputs(installed_comms, rehearsal_stac
          "--rehearse", "--checkout", checkout, "--to", target, "--project", checkout],
         cwd=checkout, env=rehearsal_stack.environment(), capture_output=True, text=True, timeout=270)
     assert installed.returncode != 0
-    assert "Native build inputs changed; rebuild with --update-pins" in installed.stderr
+    assert "Native build inputs changed; rebuild with --update-pins" in installed.stderr, installed.stderr
 
 
 def test_failed_live_migration_restores_data_checkout_and_runtime(
@@ -291,7 +291,7 @@ def test_failed_publication_restores_absent_route_without_store_changes(
     )
     assert completed.returncode != 0
     assert "Install rolled back:" in completed.stderr, completed.stderr
-    assert "route-publication-fault" in completed.stderr
+    assert "route-publication-fault" in completed.stderr, completed.stderr
     assert not route.exists()
     assert pointer.resolve() == outgoing
     assert blocker.read_text() == "An owner file that publication must preserve"
