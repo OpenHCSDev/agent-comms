@@ -662,10 +662,8 @@ class TypedRow(SqlProjection):
     @classmethod
     def capture(cls, cursor: sqlite3.Cursor) -> CapturedRows[Self]:
         """Copy a bounded result and close its cursor; decode after releasing the snapshot."""
-        try:
+        with closing(cursor) as cursor:
             return CapturedRows(cls, cls.result_columns(cursor), tuple(cursor))
-        finally:
-            cursor.close()
 
 
 @dataclass(frozen=True)
