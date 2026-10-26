@@ -3769,8 +3769,12 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
 
     def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
               reader: WorkBranches) -> bool:
-        if record.request.change_identity(reader, current.base) != current.change_identity(
-                reader, current.base):
+        try:
+            reviewed_change = record.request.change_identity(reader, current.base)
+            current_change = current.change_identity(reader, current.base)
+        except (GitCommandError, subprocess.TimeoutExpired):
+            return False
+        if reviewed_change != current_change:
             return False
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
