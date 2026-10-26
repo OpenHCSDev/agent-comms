@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from aiohttp import ClientError
+from pydantic import JsonValue
 
 from agent_comms.build_identity import InstalledBuild
 from agent_comms.cli_bridges.codex_connection import CodexConnection
@@ -23,12 +24,13 @@ from agent_comms.field_codec import OrderId, WireTransient, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
+from agent_comms.order_story import OrderStory
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, PullRequest
+from agent_comms.todos import OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest
 from agent_comms.tool_result import ToolResult
-from agent_comms.turn_digests import OrderEditCountRead
+from agent_comms.turn_digests import LastTurns, OrderEditCountRead
 from agent_comms.ui_model.unit_state import UnitClock, UnitState
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms_hooks.board import BoardEntry
@@ -95,6 +97,49 @@ class CommanderUnit(HudRow):
         return (self.state.attention() and self.state.commander_disposes) or any(
             order.review_timers_up for order in self.orders
         )
+
+    def detail(self, comms: Comms, commander: ThreadIncarnation,
+               orders: tuple[OrderId, ...]) -> CommanderUnitDetail:
+        """Expand this published selection from its original record owners."""
+        if tuple(dict.fromkeys(card.order for card in self.orders)) != orders:
+            raise ToolRefusedError("The selected unit's orders changed; read its current card")
+        store = comms.goals.todos
+        held = store.held_by(commander, self.unit)
+        current = {todo.id: todo for todo in held}
+        if {(todo.id, todo.order.checked().id) for todo in held} != {
+            (card.problem, card.order) for card in self.orders
+        }:
+            raise ToolRefusedError("The selected unit's assignments changed; read its current card")
+        pulls = ProgressRead(held)
+        details = tuple(CommanderOrderDetail(
+            card, (current[card.problem].order.checked().instructions(current[card.problem]),),
+            OrderStory.collect(card.order, store.for_order(card.order)),
+            tuple(ProgressSource.of(current[card.problem], comms.registry, pulls).commits()),
+        ) for card in self.orders)
+        turns = comms.transcripts.turns(self.unit.name, LastTurns())
+        snapshot = comms.registry.snapshot()
+        if turns.thread != self.unit or not self.unit.current(snapshot) or not commander.current(snapshot):
+            raise ToolRefusedError("The selected incarnation changed while its details were read")
+        return CommanderUnitDetail(self, details, turns.to_wire())
+
+
+@dataclass(frozen=True)
+class CommanderOrderDetail:
+    """The selected card beside its original instructions, story and captured Git points."""
+
+    card: CommanderOrder
+    instructions: tuple[str, ...]
+    story: OrderStory
+    commits: tuple[ProgressPoint, ...]
+
+
+@dataclass(frozen=True)
+class CommanderUnitDetail:
+    """A lazy disclosure; activity uses the existing bounded turn wire projection."""
+
+    unit: CommanderUnit
+    orders: tuple[CommanderOrderDetail, ...]
+    activity: JsonValue
 
 
 @dataclass(frozen=True)
