@@ -174,6 +174,7 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
                     await update.observed(bridge)
                 confirmed, = DeliveryRow.select(bridge.db, id=second.message_id)
                 assert confirmed.monitor == ObservedMonitor('healthy-second', 1792168805.123)
+                assert confirmed.outcome is DeliveredOutcome
                 assert not attachment.done()
                 # Reopening starts after the journal's latest attempt, never at the
                 # uncertain first message. Its original outcome remains untouched.
