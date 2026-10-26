@@ -22,7 +22,7 @@ from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.field_codec import GoalId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject
+from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, PassSubject
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer import launch as installer_launch
 from agent_comms.installer.interpreter_operation import LauncherPhase
@@ -50,7 +50,7 @@ from agent_comms.standing_rules import (
     FamilyScan,
     UndatedStandingRule,
 )
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
@@ -257,6 +257,22 @@ class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
 
 
 @dataclass(frozen=True)
+class PhaseSubject(HeartbeatSubject):
+    """An order serving this phase answers its ready-without-an-owner line."""
+
+    phase: type[PlanPhase]
+
+    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
+        snapshot = comms.registry.snapshot()
+        return any(
+            todo.order.checked().at.since(since)
+            for actor in actors
+            for todo in self.phase.serving(comms.goals.todos.history_for_commander(
+                snapshot.require(actor).incarnation))
+        )
+
+
+@dataclass(frozen=True)
 class PlanIdle(PlanRule):
     """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
 
@@ -270,6 +286,9 @@ class PlanIdle(PlanRule):
             for phase in PlanPhase.members_with(PlanPhase)
             if phase.ready(reading) and not phase.ordered(reading)
         )
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (PhaseSubject(self.phase),)
 
     def enforce(self, comms: Comms, commander: str) -> None:
         self.phase.task.start(comms, comms.registry.require(commander), self.phase, self.reading)
@@ -615,18 +634,24 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
 
     seconds: ClassVar[int] = 180
     since: float
+    commander: RecordedThreadIncarnation
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (PassSubject(self.commander),)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[HeartbeatSilent, ...]:
         owner = comms.registry.require(commander)
-        completed = ServicePassStore.at(comms.root).read().commander_completed.get(owner.incarnation)
+        incarnation = owner.incarnation.require_recorded()
+        completed = ServicePassStore.at(comms.root).read().commander_completed.get(incarnation)
         now = time.time()
         found = []
+        rule: HeartbeatSilent
         for request in CommanderService.requested_by(owner, comms.goals):
             if completed is None or completed < request.created_at:
-                rule = HeartbeatNotStarted(request.created_at + cls.seconds, request.id)
+                rule = HeartbeatNotStarted(request.created_at + cls.seconds, incarnation, request.id)
             else:
-                rule = MissedHeartbeat(completed + cls.seconds)
+                rule = MissedHeartbeat(completed + cls.seconds, incarnation)
             if rule.since < now:
                 found.append(rule)
         return tuple(found)

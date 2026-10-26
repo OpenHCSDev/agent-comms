@@ -14,8 +14,8 @@ from dataclasses import dataclass, replace
 from itertools import dropwhile, takewhile
 from typing import ClassVar
 
+from agent_comms.shell_commands import ShellCommand, shell_commands
 from agent_comms_hooks import Bash, BashRefusal
-from agent_comms_hooks.shell import ShellCommand, shell_commands
 
 Words = tuple[str, ...]
 

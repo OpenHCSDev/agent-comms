@@ -152,9 +152,10 @@ def test_crosses_runtimes_discovers_a_new_session_member(tmp_path: Path) -> None
     write(script, '''
 from dataclasses import dataclass
 from agent_comms.cli_bridges.monitor import SessionRequest, SessionReady
+from agent_comms.installer.runtime_wire import CrossesRuntimes
 
 @dataclass(frozen=True)
-class FreshSession(SessionRequest[SessionReady], declared_name="fresh"):
+class FreshSession(CrossesRuntimes, SessionRequest[SessionReady], declared_name="fresh"):
     fresh_field: str
 
     async def handle(self, service, peer):

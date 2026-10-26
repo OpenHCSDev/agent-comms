@@ -30,9 +30,10 @@ class UnpushedBranch(HeldBranchRule):
                      for unpublished in held.repository.branches.unpushed(held.difference))
 
     def line(self) -> str:
-        return (f"PUSH {self.holder.name} {self.problem} {self.unpublished.head[:9]}: "
-                f"{self.unpublished.commits} unpushed commits in {self.worktree}, upstream "
-                f"{self.unpublished.upstream or 'not configured'}")
+        return (f"{self.holder.name} has {self.unpublished.commits} unpushed commits on"
+                f" {self.problem} ({self.unpublished.head[:9]} in {self.worktree}, upstream"
+                f" {self.unpublished.upstream or 'not configured'}). waiting for the disk to die?"
+                " -> push them")
 
 
 @dataclass(frozen=True)
@@ -58,5 +59,6 @@ class EmptyPullRequest(HeldBranchRule):
         return tuple(found)
 
     def line(self) -> str:
-        return (f"FILL {self.pull_request.url} ({self.holder.name} {self.problem}): no change"
-                " against its base -> restore the intended change or close the empty pull request")
+        return (f"{self.pull_request.url} ({self.holder.name} {self.problem}) changes nothing"
+                " against its base. a PR of nothing, why? -> restore the intended change or close"
+                " the empty pull request")
