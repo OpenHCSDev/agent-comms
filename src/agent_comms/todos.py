@@ -5479,11 +5479,11 @@ class OwnerRequestStore(DurableStore):
 
     def serving_orders(self, request: OwnerRequestId) -> tuple[Todo, ...]:
         """Pending work and unaccepted claims, through the request's partial index."""
-        return self._select(f'request=? AND ({Todo.serving_request})', (request,))
+        return self._select(f'request=? AND ({Todo.serving_request})', (FieldCodec.encode(request),))
 
     def for_request(self, request: OwnerRequestId) -> tuple[Todo, ...]:
         """Every order that served this independent request, open or done."""
-        return self._select('request=?', (request,))
+        return self._select('request=?', (FieldCodec.encode(request),))
 
     def _select(self, where: str, parameters: tuple, *,
                 reader: Callable[[sqlite3.Connection, str, tuple], CapturedRows[Todo]] = Todo.capture_rows,
