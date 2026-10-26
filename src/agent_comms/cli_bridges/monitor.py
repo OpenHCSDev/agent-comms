@@ -152,7 +152,8 @@ class NoReader(ReaderState):
                 bridge.reader_changed.notify_all()
             async with attachment.window_changed:
                 attachment.window_changed.notify_all()
-            bridge.log("Monitor detached; delivery paused, bridge remains connected.")
+            bridge.log(f"Monitor detached; exception={sys.exception()!r} "
+                       "(None means reader EOF); delivery paused.")
 
 
 @dataclass
