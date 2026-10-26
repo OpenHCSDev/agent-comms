@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from acp.schema import (
     AgentMessageChunk,
@@ -22,6 +22,7 @@ from .acp_extension import (
     CompactionChangedUpdate,
     McpClientAcknowledgementUpdate,
     NativeOutputCommittedUpdate,
+    NativeRoundCommittedUpdate,
     PromptCancelledUpdate,
     TextRouteUpdate,
     encode_updates,
@@ -45,6 +46,9 @@ if TYPE_CHECKING:
     from .controller import SessionUpdateSink
     from .routing import MessageRoute, NoMessageRoute
     from .turn_effects import TurnEffects
+    from .native_output import NativeRecordLocation
+    from .transcripts import TranscriptReadIdentity
+    from .acp_extension import AgentCommsUpdate
 
 
 class AcpToolAction(MroDispatch):
@@ -99,17 +103,27 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.NativeOutputCommitted)
     async def native_output_committed(self, event: events.NativeOutputCommitted) -> None:
+        await self.publish_native_commit(event.location, partial(NativeOutputCommittedUpdate, output=event.location.output))
+
+    @handles(events.NativeRoundCommitted)
+    async def native_round_committed(self, event: events.NativeRoundCommitted) -> None:
+        await self.publish_native_commit(event.location, NativeRoundCommittedUpdate)
+
+    async def publish_native_commit(
+        self, location: NativeRecordLocation,
+        update: Callable[[TranscriptReadIdentity], AgentCommsUpdate],
+    ) -> None:
         sessions = self.agent.sessions
         identity = await Coordination.run_worker(partial(
             sessions.comms.transcripts.capture_native_output,
-            sessions.require(self.session_id), event.location,
+            sessions.require(self.session_id), location,
         ))
         await self.client.publish_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(NativeOutputCommittedUpdate(identity, event.location.output)),
+                field_meta=encode_updates(update(identity)),
             ),
         )
 

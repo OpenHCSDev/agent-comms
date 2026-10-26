@@ -97,4 +97,10 @@ def test_sdk_emits_scoped_marker_after_original_append(pinned_native, tmp_path):
     ], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     markers = json.loads(result.stdout)
-    assert [type(PiEvent.from_wire(marker).output) for marker in markers] == [AssistantOutput, ToolOutput]
+    assert [type(PiEvent.from_wire(marker).output) for marker in markers[:-1]] == [AssistantOutput, ToolOutput, ToolOutput]
+
+    from agent_comms.agent_events import NativeRoundCommitted
+
+    ended = tuple(PiEvent.from_wire(markers[-1]).convert())
+    assert len(ended) == 1 and isinstance(ended[0], NativeRoundCommitted)
+    assert ended[0].location.session_entry_end == markers[-2]['sessionEntryEnd']

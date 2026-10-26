@@ -28,7 +28,7 @@ from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
 from .native_tool_call import ToolCallId
-from .native_output import NativeOutputLocation
+from .native_output import NativeOutputLocation, NativeRecordLocation
 from .turn_item import UsageChargeId
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
@@ -102,6 +102,11 @@ class GoalChanged(AgentEvent, GoalChange):
     ) -> GoalPublicationSnapshot:
         await consumer.dispatch(self)
         return self.snapshot
+
+
+@dataclass(frozen=True)
+class NativeRoundCommitted(AgentEvent):
+    location: NativeRecordLocation
 
 
 @dataclass(frozen=True)

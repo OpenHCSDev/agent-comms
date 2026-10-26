@@ -662,6 +662,11 @@ class CompactionCommittedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
+class NativeRoundCommittedUpdate(AgentCommsUpdate):
+    identity: TranscriptReadIdentity
+
+
+@dataclass(frozen=True)
 class NativeOutputCommittedUpdate(AgentCommsUpdate):
     identity: TranscriptReadIdentity
     output: NativeOutputScope

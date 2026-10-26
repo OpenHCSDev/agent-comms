@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .field_codec import WireName
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import ToolCallId
+from .turn_item import NativeItemId
+from .coordination_errors import TranscriptChanged
+
+if TYPE_CHECKING:
+    from .native_entries import NativeEntry
 
 
 @dataclass(frozen=True)
@@ -26,13 +31,27 @@ class ToolOutput(NativeOutputScope):
 
 
 @dataclass(frozen=True)
-class NativeOutputLocation(NativeSessionIdentity):
-    session_entry_id: Annotated[str, WireName("sessionEntryId")]
+class NativeRecordLocation(NativeSessionIdentity):
+    session_entry_id: Annotated[NativeItemId, WireName("sessionEntryId")]
     session_entry_start: Annotated[int, WireName("sessionEntryStart")]
     session_entry_end: Annotated[int, WireName("sessionEntryEnd")]
-    output: NativeOutputScope
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()
         if not self.session_entry_id or not 0 < self.session_entry_start < self.session_entry_end:
-            raise ValueError("Native output requires a complete original record")
+            raise ValueError("Native commit requires a complete original record")
+
+    def require_entry(self, entry: NativeEntry) -> None:
+        if entry.id != self.session_entry_id:
+            raise TranscriptChanged()
+
+
+@dataclass(frozen=True)
+class NativeOutputLocation(NativeRecordLocation):
+    output: NativeOutputScope
+
+    def require_entry(self, entry: NativeEntry) -> None:
+        super().require_entry(entry)
+        if self.output not in tuple(scope for message in entry.messages
+                                    for scope in message.committed_outputs()):
+            raise TranscriptChanged()

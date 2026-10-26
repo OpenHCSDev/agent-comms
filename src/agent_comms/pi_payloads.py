@@ -49,6 +49,7 @@ from .goals import GoalDeclaration
 from .lifecycle_capability import Successful
 from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
+from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import ToolCallId
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
@@ -85,7 +86,6 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .backend import NativeSession, TurnSession
     from .native_entries import TranscriptProjection
-    from .native_output import NativeOutputScope
     from .pending_requests import PendingRequest, PendingRequests
     from .pi_commands import PiCommand
     from .pi_events import AutoRetryEnd, Response
@@ -910,8 +910,6 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     assistant = True
 
     def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
-        from .native_output import AssistantOutput
-
         return (AssistantOutput(),)
 
     @property
@@ -1018,8 +1016,6 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
     def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
-        from .native_output import ToolOutput
-
         return (ToolOutput(self.tool_call_id),)
 
     def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:

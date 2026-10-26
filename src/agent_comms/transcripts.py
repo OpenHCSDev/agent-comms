@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from .coordination_database import InvalidStore, MissingStore
-    from .native_output import NativeOutputLocation
+    from .native_output import NativeRecordLocation
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
@@ -313,14 +313,14 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
         Assigned wire messages may advance independently of native output.
         """
-        return (type(self) is type(current)
-                and self.root == current.root
-                and self.historical_source == current.historical_source
-                and self.runtime == current.runtime
-                and self.thread.incarnation == current.thread.incarnation
-                and self.page_bound.accepts_source(current.page_bound)
+        return (self.native_source == current.native_source
                 and self.page_bound.offset <= current.page_bound.offset
                 and self.contains_records_cut(current))
+
+    @property
+    def native_source(self) -> tuple[str, str, str | None, RuntimeLocation, ThreadIncarnation, str | None]:
+        return (self.declared_name, self.root, self.historical_source, self.runtime,
+                self.thread.incarnation, self.page_bound.session_file)
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
@@ -524,10 +524,8 @@ class Transcripts:
         source = self._page_source(name, identity.page_bound, identity.historical_source)
         return TranscriptRead(self, identity, source)
 
-    def capture_native_output(self, name: str, location: NativeOutputLocation) -> TranscriptReadIdentity:
+    def capture_native_output(self, name: str, location: NativeRecordLocation) -> TranscriptReadIdentity:
         page = self._page_source(name, None, None)
-        if not isinstance(page.records, NativeTranscript):
-            raise TranscriptChanged()
         original = page.records.committed_output_cut(location)
         frontier = page.projection.frontier
         through = page.thread.runtime.transcript_cursor(

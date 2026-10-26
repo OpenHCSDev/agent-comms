@@ -27,6 +27,13 @@ const result={role:'toolResult',toolCallId:'parallel-b',toolName:'read',isError:
     content:[{type:'text',text:'Only B finished'}],timestamp:3};
 const observed=[];
 session.subscribe(event=>{
+    if (event.type==='turn_end') {
+        assert.equal(event.roundCommitted.sessionEntryId,sessionManager.getLeafId());
+        const row=JSON.parse(readFileSync(event.roundCommitted.sessionFile).subarray(
+            event.roundCommitted.sessionEntryStart,event.roundCommitted.sessionEntryEnd));
+        assert.equal(row.message.toolCallId,'parallel-b');
+        observed.push(event);
+    }
     if (event.type==='message_end') observed.push({type:event.type,end:sessionManager.entryStore.lastId});
     if (event.type==='native_output_committed') {
         const previous=observed.at(-1);
@@ -45,11 +52,18 @@ session.subscribe(event=>{
 });
 try {
     await session._handleAgentEvent({type:'message_end',message:assistant});
+    const firstResult={...result,toolCallId:'parallel-a'};
+    await session._handleAgentEvent({type:'message_end',message:firstResult});
+    assert.equal(observed.filter(event=>event.type==='turn_end').length,0);
     await session._handleAgentEvent({type:'message_end',message:result});
     const markers=observed.filter(event=>event.type==='native_output_committed');
     assert.deepEqual(markers.map(event=>event.output),[
-        {kind:'assistant'}, {kind:'tool',toolCallId:'parallel-b'},
+        {kind:'assistant'}, {kind:'tool',toolCallId:'parallel-a'}, {kind:'tool',toolCallId:'parallel-b'},
     ]);
     assert.ok(markers[0].sessionEntryEnd < markers[1].sessionEntryEnd);
-    console.log(JSON.stringify(markers));
+    assert.equal(observed.filter(event=>event.type==='turn_end').length,0);
+    await session._handleAgentEvent({type:'turn_end',message:assistant,toolResults:[firstResult,result]});
+    assert.equal(observed.at(-1).type,'turn_end');
+    assert.equal(observed.at(-1).roundCommitted.sessionEntryEnd,markers.at(-1).sessionEntryEnd);
+    console.log(JSON.stringify([...markers,observed.at(-1)]));
 } finally {session.dispose();sessionManager.entryStore.close();}
