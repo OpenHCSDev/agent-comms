@@ -5,8 +5,11 @@ Standard library only, because every hook imports it on every tool call.
 
 from __future__ import annotations
 
+import getopt
 import io
+import re
 import shlex
+import subprocess
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import groupby
@@ -102,6 +105,27 @@ class ShellCommand:
         for words in shell_commands(command):
             for simple in cls.of(words):
                 yield from simple.run_commands()
+
+    def options(self, prefix: tuple[str, ...]) -> tuple[list[tuple[str, str]], list[str]]:
+        """The executable declares option arity; consumers select only their own values."""
+        help_text = subprocess.run(
+            (self.words[0], *prefix, "--help"), check=True, capture_output=True,
+            text=True, timeout=10,
+        ).stdout
+        short, long = [], []
+        for declaration in re.finditer(
+            r"^  (?:-(\S), |    )?--([\w-]+)(?: ([^\s]+))? {2,}", help_text, re.MULTILINE,
+        ):
+            alias, name, argument = declaration.groups()
+            long.append(name + ("=" if argument else ""))
+            if alias:
+                short.append(alias + (":" if argument else ""))
+        if not long:
+            raise ValueError(f"{self.program} declared no readable command options.")
+        try:
+            return getopt.gnu_getopt(self.args[len(prefix):], "".join(short), long)
+        except getopt.GetoptError as error:
+            raise ValueError(f"Unsupported {self.program} command option: {error}") from error
 
     def run_commands(self) -> Iterator[Self]:
         """This command and every command it runs: a `-c` string, or the command a runner

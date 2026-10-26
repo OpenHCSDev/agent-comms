@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -1066,7 +1067,7 @@ class CliCommand[Answer: CliResult = CliResult](
 class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-review"):
     """Read the existing exact-head verdict for a commander session's merge command."""
 
-    help = "Read Core's recorded decision for the current admin/API merge head"
+    help = "Read Core's recorded decision for the pinned admin/API merge head"
     session: Annotated[str, Argument(flags=("--session",))]
     bash: Annotated[str, Argument(flags=("--bash",))]
 
@@ -1084,8 +1085,11 @@ class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-
         heads = []
         for simple in ShellCommand.split(self.bash):
             for bypass in QueueBypass.matching(simple):
-                target = bypass.target()
-                request = PullRequestHead.at(RepositoryName.from_wire(target.repository), target.number)
+                try:
+                    target = bypass.target()
+                    request = PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
+                except (ValueError, OSError, subprocess.SubprocessError) as error:
+                    raise ToolRefusedError(f"Cannot read pinned merge target: {error}") from error
                 reviews = ctx.goals.todos.head_reviews(request)
                 (type(reviews[0].verdict) if reviews else HeadVerdict).require_merge(request)
                 heads.append(request)

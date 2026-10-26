@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.todos import ReviewedHeadVerdict, RejectedHeadVerdict
+from agent_comms.shell_commands import ShellCommand
+from agent_comms_hooks.queue_bypass import MergeTarget, QueueBypass
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 from test_head_review import ACCEPTED, REASON, invoke, opened
 
@@ -54,19 +56,49 @@ def test_queue_merges_and_reads_pass(command):
     assert result.stdout == ""
 
 
-def test_commander_admin_and_api_merges_require_the_current_recorded_ok(
+@pytest.mark.parametrize("command", [
+    "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --match-head-commit {head} -A author@example.com",
+    "gh pr merge -A author@example.com 7 --admin --repo=OpenHCSDev/agent-comms --match-head-commit={head}",
+    "gh api -X PUT repos/OpenHCSDev/agent-comms/pulls/7/merge -f sha={head}",
+    "gh api https://api.github.com/repos/OpenHCSDev/agent-comms/pulls/7/merge?x=y --method PUT --field sha={head}",
+])
+def test_merge_target_uses_the_executables_options(command, github_cli):
+    head = "a" * 40
+    simple, = ShellCommand.split(command.format(head=head))
+    bypass, = QueueBypass.matching(simple)
+    assert bypass.target() == MergeTarget("OpenHCSDev/agent-comms", 7, head)
+
+
+@pytest.mark.parametrize("command", [
+    "gh pr merge 7 --admin -R OpenHCSDev/agent-comms",
+    "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --subject --match-head-commit={head}",
+    "gh pr merge 7 --admin -R OpenHCSDev/agent-comms -A --match-head-commit={head}",
+    "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --unknown-option --match-head-commit={head}",
+    "gh api repos/OpenHCSDev/agent-comms/pulls/7/merge -X PUT",
+    "gh api repos/OpenHCSDev/agent-comms/pulls/7/merge -f sha={head} --input body.json",
+    "gh api repos/OpenHCSDev/agent-comms/pulls/7/merge -f sha={head} -f sha={head}",
+])
+def test_merge_target_refuses_an_absent_ambiguous_or_shadowed_pin(command, github_cli):
+    simple, = ShellCommand.split(command.format(head="a" * 40))
+    bypass, = QueueBypass.matching(simple)
+    with pytest.raises(ValueError):
+        bypass.target()
+
+
+def test_commander_admin_and_api_merges_require_the_pinned_recorded_ok(
         head_bus, reviewed_source, tmp_path):
     comms, github, request = head_bus
     transcript = tmp_path / "s.jsonl"
     transcript.with_suffix(".reread").mkdir()
     WatchClaim("s").enrol(WatchRecord("lead", str(comms.root), (), tmp_path / "state"))
-    commands = (
-        f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()}",
-        f"gh api -X PUT repos/{request.repo.to_wire()}/pulls/{request.pr}/merge -f merge_method=merge",
-    )
+    def commands(head):
+        return (
+            f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()} --match-head-commit {head}",
+            f"gh api -X PUT repos/{request.repo.to_wire()}/pulls/{request.pr}/merge -f merge_method=merge -f sha={head}",
+        )
 
     def refused(head):
-        for command in commands:
+        for command in commands(head):
             result = pre_tool_use(command, transcript)
             assert result.returncode == 0, result.stderr
             decision = json.loads(result.stdout)["hookSpecificOutput"]
@@ -77,12 +109,17 @@ def test_commander_admin_and_api_merges_require_the_current_recorded_ok(
 
     refused(request.head)
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-    for command in commands:
+    for command in commands(request.head):
         result = pre_tool_use(command, transcript)
         assert result.returncode == 0, result.stderr
         assert result.stdout == ""
     moved = opened(github, reviewed_source, request.pr, "b" * 40)
     refused(moved.head)
+    # Core authorizes the saved pin; GitHub's precondition refuses that old pin after a push.
+    for command in commands(request.head):
+        result = pre_tool_use(command, transcript)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == ""
     opened(github, reviewed_source, request.pr, request.head)
     invoke(comms, request, RejectedHeadVerdict(REASON))
     refused(request.head)

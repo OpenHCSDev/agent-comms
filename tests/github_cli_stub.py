@@ -2,15 +2,24 @@
 """The external gh boundary for local pull-request fixtures; never contacts GitHub."""
 
 import json
+import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
 
 def main():
     directory = Path(sys.argv[0]).parent
-    repositories = json.loads((directory / "pull_requests.json").read_text())
     arguments = sys.argv[1:]
+    if arguments[-1:] == ["--help"]:
+        path = os.pathsep.join(part for part in os.environ["PATH"].split(os.pathsep)
+                               if Path(part).resolve() != directory.resolve())
+        executable = shutil.which(Path(sys.argv[0]).name, path=path)
+        if executable is None:
+            raise FileNotFoundError("The actual gh executable is required for its option declarations.")
+        os.execv(executable, [executable, *arguments])
+    repositories = json.loads((directory / "pull_requests.json").read_text())
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
     if arguments[:2] == ["pr", "view"]:

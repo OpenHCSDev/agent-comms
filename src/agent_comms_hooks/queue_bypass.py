@@ -1,7 +1,7 @@
 """Required checks and the commander's head verdict protect merges.
 
 The owner's admin bypass stays. A commander-session admin or API merge needs
-Core's recorded ok verdict on the current head. Other hook sessions cannot
+Core's recorded ok verdict on the explicitly pinned head. Other hook sessions cannot
 bypass the checks. claude-ai's separate owner path is unchanged.
 
 Ordinary Bash calls stay standard-library-only; only a merge invokes Core's reader.
@@ -9,7 +9,6 @@ Ordinary Bash calls stay standard-library-only; only a merge invokes Core's read
 
 from __future__ import annotations
 
-import getopt
 import re
 import subprocess
 import sys
@@ -17,6 +16,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import ClassVar
+from urllib.parse import unquote, urlsplit
 
 from agent_comms.shell_commands import Program, ShellCommand
 from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook, HookRecord, HookRefused
@@ -27,10 +27,11 @@ GH = Program("gh")
 
 @dataclass(frozen=True)
 class MergeTarget(HookRecord):
-    """The merge's repository and PR, decoded once at the command boundary."""
+    """The external merge's repository, PR and required head precondition."""
 
     repository: str
     number: int
+    head: str
 
 
 @dataclass(frozen=True)
@@ -39,10 +40,15 @@ class QueueBypass(ABC):
 
     command: ShellCommand
     reason: ClassVar[str]
+    prefix: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def merges(cls, args: list[str]) -> bool:
+        return args[:len(cls.prefix)] == list(cls.prefix) and cls.selects(args[len(cls.prefix):])
 
     @classmethod
     @abstractmethod
-    def merges(cls, args: list[str]) -> bool: ...
+    def selects(cls, args: list[str]) -> bool: ...
 
     @abstractmethod
     def target(self) -> MergeTarget: ...
@@ -60,44 +66,58 @@ class QueueBypass(ABC):
 
 
 class AdminMerge(QueueBypass):
-    """The external gh merge options select the PR, never its verdict."""
+    """GitHub's head precondition and Core's verdict name the same commit."""
 
     reason = "`gh pr merge --admin` bypasses required checks."
-    # gh's external option contract: values must not become a PR selector.
-    short_options: ClassVar[str] = "R:b:F:dmrst:"
-    long_options: ClassVar[tuple[str, ...]] = (
-        "repo=", "body=", "body-file=", "delete-branch", "merge", "rebase", "squash",
-        "subject=", "admin", "auto", "disable-auto", "author-email=", "match-head-commit=",
-    )
+    prefix = ("pr", "merge")
+    head_flag: ClassVar[str] = "--match-head-commit"
 
     @classmethod
-    def merges(cls, args: list[str]) -> bool:
-        return args[:2] == ["pr", "merge"] and "--admin" in args
+    def selects(cls, args: list[str]) -> bool:
+        return any(arg.partition("=")[0] == "--admin" for arg in args)
 
     def target(self) -> MergeTarget:
-        options, selectors = getopt.gnu_getopt(
-            self.command.args[2:], self.short_options, self.long_options)
-        repositories = tuple(value for flag, value in options if flag in ("-R", "--repo"))
-        if (len(selectors) != 1 or not selectors[0].isdigit()
-                or len(repositories) != 1 or not repositories[0]):
-            raise ValueError("An admin merge must name one PR number and --repo OWNER/REPO.")
-        return MergeTarget(repository=repositories[0], number=int(selectors[0]))
+        options, selectors = self.command.options(self.prefix)
+        try:
+            repository, = (value for flag, value in options if flag in ("-R", "--repo"))
+            head, = (value for flag, value in options if flag == self.head_flag)
+            selector, = selectors
+            return MergeTarget(repository=repository, number=int(selector), head=head)
+        except ValueError as error:
+            raise ValueError(f"Admin merge requires one PR number, --repo and {self.head_flag} HEAD.") from error
 
 
 class ApiMerge(QueueBypass):
-    """The merge API's external path already identifies the PR and repository."""
+    """The merge endpoint and literal sha body field select the reviewed head."""
 
     reason = "`gh api .../pulls/N/merge` bypasses required checks."
+    prefix = ("api",)
     path: ClassVar[re.Pattern[str]] = re.compile(
         r"/?repos/(?P<repository>[^/\s]+/[^/\s]+)/pulls/(?P<number>\d+)/merge")
 
     @classmethod
-    def merges(cls, args: list[str]) -> bool:
-        return args[:1] == ["api"] and any(map(cls.path.fullmatch, args))
+    def endpoint(cls, value: str) -> re.Match[str] | None:
+        return cls.path.fullmatch(unquote(urlsplit(value).path).rstrip("/"))
+
+    @classmethod
+    def selects(cls, args: list[str]) -> bool:
+        return any(map(cls.endpoint, args))
 
     def target(self) -> MergeTarget:
-        matched = next(match for arg in self.command.args if (match := self.path.fullmatch(arg)))
-        return MergeTarget.decode(matched.groupdict())
+        options, selectors = self.command.options(self.prefix)
+        if any(flag == "--input" for flag, _ in options):
+            raise ValueError("A merge bypass requires a literal sha body field, not --input.")
+        selector, = selectors
+        matched = self.endpoint(selector)
+        if matched is None:
+            raise ValueError("A merge bypass requires one explicit repos/OWNER/REPO/pulls/N/merge endpoint.")
+        fields = (value.partition("=") for flag, value in options
+                  if flag in ("-f", "--raw-field", "-F", "--field"))
+        try:
+            head, = (value for name, _, value in fields if name == "sha")
+        except ValueError as error:
+            raise ValueError("A merge bypass requires exactly one literal sha=HEAD body field.") from error
+        return MergeTarget.decode({**matched.groupdict(), "head": head})
 
 
 class QueueBypassGuard(BashRefusal):
@@ -114,7 +134,10 @@ class QueueBypassGuard(BashRefusal):
     @classmethod
     def reasons_for(cls, hook: ClaudeToolHook) -> tuple[str, ...]:
         command = Bash.decode(hook.tool_input).command
-        reasons = cls.reasons(command)
+        try:
+            reasons = cls.reasons(command)
+        except ValueError as error:
+            raise HookRefused(f"Cannot read merge command: {error}") from error
         if not reasons or not hook.parts.exists():
             return reasons
         bindings = WatchClaim(hook.session_id).state().bindings()
