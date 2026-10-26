@@ -17,6 +17,7 @@ from agent_comms.pi_payloads import PiMessage
 from agent_comms.native_entries import SessionEntry
 from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
 from contextlib import AsyncExitStack, contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -43,7 +44,7 @@ from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.typed_table import TypedTable
 from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.native_package import NativePackageStore, VerifiedNativePackage
 from agent_comms.commander.order import Commander
 from agent_comms.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
@@ -411,6 +412,26 @@ def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *t
     return configure
 
 
+@dataclass(frozen=True)
+class InstalledHome(TestHome):
+    """Private host state borrows the caller's installed, immutable artifacts."""
+
+    runtime: LaunchRuntime
+
+    @property
+    def uv(self) -> Path:
+        return self.runtime.interpreter.with_name("uv")
+
+    def prepare(self) -> None:
+        super().prepare()
+        pointer = LaunchRuntime.state_directory(self.path) / LaunchRuntime.current_pointer().name
+        pointer.parent.mkdir(parents=True, exist_ok=True)
+        pointer.symlink_to(self.runtime.prefix, target_is_directory=True)
+        NativePackageStore.at_home(self.path).path.symlink_to(
+            NativePackageStore.at_home(Path.home()).path.resolve(strict=True),
+            target_is_directory=True)
+
+
 @pytest.fixture(scope="session")
 def rehearsal_runtime() -> LaunchRuntime:
     """The installed CLI built this artifact once before starting its rehearsal tests."""
@@ -425,10 +446,7 @@ def rehearsal_stack(tmp_path_factory: pytest.TempPathFactory,
                     rehearsal_runtime: LaunchRuntime) -> Iterator[Stack]:
     """Separate writable host state shares the session's immutable runtime artifact."""
     home = tmp_path_factory.mktemp("installed-home")
-    TestHome(home).prepare()
-    pointer = home / ".local/share/agent-comms/current"
-    pointer.parent.mkdir(parents=True)
-    pointer.symlink_to(rehearsal_runtime.prefix, target_is_directory=True)
+    InstalledHome(home, rehearsal_runtime).prepare()
     with InstallCommands() as commands:
         yield Stack(Path(__file__).resolve().parents[1], commands, home,
                     runtime=rehearsal_runtime)

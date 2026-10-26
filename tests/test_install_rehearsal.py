@@ -44,7 +44,7 @@ from agent_comms.repo import ScratchCheckout
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
-from conftest import declare_test_bus, publish_initial
+from conftest import InstalledHome, declare_test_bus, publish_initial
 from agent_comms.threads import Thread
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -274,13 +274,9 @@ def test_failed_publication_restores_absent_route_without_store_changes(
     subprocess.run(["git", "-C", checkout, "checkout", "--detach", "-q", current], check=True)
 
     home = tmp_path / "publication-home"
-    uv = home / ".local/state/agent-comms/upgrade-bus/uv"
-    uv.parent.mkdir(mode=0o700, parents=True)
-    uv.symlink_to(rehearsal_stack.uv)
+    InstalledHome(home, rehearsal_stack.runtime).prepare()
     outgoing = rehearsal_stack.runtime.prefix
-    pointer = home / ".local/share/agent-comms/current"
-    pointer.parent.mkdir(mode=0o700, parents=True)
-    pointer.symlink_to(outgoing, target_is_directory=True)
+    pointer = LaunchRuntime.state_directory(home) / LaunchRuntime.current_pointer().name
     blocker = home / ".local/bin/route-publication-fault"
     blocker.parent.mkdir(mode=0o700, parents=True)
     blocker.write_text("An owner file that publication must preserve")
