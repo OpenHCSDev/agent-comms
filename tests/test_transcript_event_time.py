@@ -102,7 +102,7 @@ def test_codex_rollout_projects_the_enclosing_record_clock():
 
 
 def test_malformed_shell_words_refuse_instead_of_reaching_any_rule(tmp_path):
-    from agent_comms.storage_rules import ShellInvocation
+    from agent_comms.shell_effects import ShellInvocation
 
     with pytest.raises(ValueError):
         tuple(ShellInvocation.parse('uv pip install package "unterminated', tmp_path))
