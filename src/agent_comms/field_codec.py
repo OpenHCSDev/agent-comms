@@ -231,6 +231,10 @@ class WireExclude(ViewExclusion):
     pass
 
 
+class ActivityExclude(ViewExclusion):
+    pass
+
+
 class SnapshotExclude(ViewExclusion):
     pass
 
