@@ -102,7 +102,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
     assert first.live(copied.registry.snapshot())
     with pytest.raises(ClaimConflict):
         acquire(copied, "holder-b")
-    copied.owners.stop("holder-a")
+    copied.registry.unregister("holder-a")
     assert not first.live(copied.registry.snapshot())
     second = acquire(copied, "holder-b")
     assert second.owner == "holder-b" and second.generation != first.generation
