@@ -245,7 +245,7 @@ class PiNativeBackend(
         if open_native is None:
             open_native = NativeSessionPreparation.open
         environment = await Coordination.run_worker(lambda: thread.native_environment(
-            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+            self.comms.root, self.comms.registry.snapshot(),
         ))
         package = self.comms.owners.require_private_launch().native_package
         return await open_native(
