@@ -6,6 +6,11 @@ from contextlib import AsyncExitStack
 from functools import partial
 from typing import TYPE_CHECKING
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 from .coordination_errors import Refused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
@@ -21,7 +26,6 @@ from .agent_backend import (
 )
 from .agent_event_updates import TurnEventConsumer
 from .coordinator import Coordination
-from .mro_dispatch import MroDispatch, handles
 from .pi_vocabulary import ManualCompactionReason
 from .turn_phase import CompactionPhase, PublishingPhase
 

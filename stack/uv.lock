@@ -5,6 +5,7 @@ requires-python = ">=3.14.8, <3.15"
 [manifest]
 overrides = [
     { name = "agent-comms", editable = "../" },
+    { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?branch=main" },
     { name = "ui-theme", git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main" },
 ]
@@ -37,7 +38,7 @@ requires-dist = [
     { name = "agent-client-protocol", specifier = ">=0.8" },
     { name = "aiohttp", specifier = ">=3.14" },
     { name = "black", marker = "extra == 'dev'", specifier = "==26.5.1" },
-    { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main" },
+    { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?rev=main" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.0" },
     { name = "nominal-refactor-advisor", marker = "extra == 'dev'", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main" },
     { name = "packaging", specifier = ">=24" },
@@ -204,7 +205,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#49afcd28bd74a110a98b2e693ecd25bca0448e2d" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#c0d8fb70d01b7a5d8a31c185507515827443f8cc" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
@@ -984,7 +985,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#e67b62c09c387a9e78edaab8ccc826d00cb27b53" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#013795e8153326057e97cf850df02017f22dfb62" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },

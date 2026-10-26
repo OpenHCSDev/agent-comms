@@ -14,12 +14,14 @@ package = false
 # This stack owns source selection, including Toad's transitive requirements.
 override-dependencies = [
     "agent-comms",
+    "metaclass-registry",
     "textual[syntax]",
     "ui-theme",
 ]
 
 [tool.uv.sources]
 agent-comms = { path = "..", editable = true }
+metaclass-registry = { git = "https://github.com/OpenHCSDev/metaclass-registry", branch = "main" }
 batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", branch = "main" }
 textual = { git = "https://github.com/OpenHCSDev/textual.git", branch = "main" }
 ui-theme = { git = "https://github.com/OpenHCSDev/ui-theme.git", branch = "main" }

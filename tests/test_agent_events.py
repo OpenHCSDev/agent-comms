@@ -6,8 +6,11 @@ from dataclasses import FrozenInstanceError, dataclass, replace
 import pytest
 
 import agent_comms.agent_events as events
-from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.pending_requests import PendingRequests
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 from agent_comms.turn_item import PiRequestKey
 
 

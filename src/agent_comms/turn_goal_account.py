@@ -6,6 +6,11 @@ owns only the live turn's permits and observations, never a reconstructed grant.
 
 from __future__ import annotations
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 from .coordination_errors import Refused
 
 from agent_comms.errors import GoalAttemptError
@@ -18,7 +23,6 @@ from .field_codec import GoalId, TurnId
 from .turn_item import UsageChargeId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from .mro_dispatch import MroDispatch, handles
 from .reported_turn import ReportedTurn
 from .attempt_resolution import VerifiedTurnDecision
 

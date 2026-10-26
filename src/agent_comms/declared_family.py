@@ -17,8 +17,11 @@ from metaclass_registry import (
     RegistryConfig,
 )
 from metaclass_registry.discovery import import_module_preserving_root_logging
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
-from .mro_dispatch import MroDispatch, handles
 
 
 def declared_words(stem: str) -> str:
