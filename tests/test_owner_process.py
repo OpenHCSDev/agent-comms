@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from collections import Counter
 from contextlib import AsyncExitStack
@@ -23,7 +24,7 @@ from agent_comms.cli_commands import TargetActionCliCommand
 from agent_comms.private_nk_entrypoint import RootLaunch
 from agent_comms.registry_store import RegistryEdit
 from agent_comms.storage_rules import StorageRule
-from agent_comms.storage_room import RoomClaim
+from agent_comms.storage_room import RoomAllocation, RoomClaim, RoomNeed, StoppedOwnerPeak
 from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
@@ -99,6 +100,53 @@ async def test_start_owners_reserves_all_in_one_registry_edit(tmp_path: Path, na
         with comms.registry.storage_rule.room_ledger.snapshot() as db:
             assert RoomClaim.count(db) == 0
     finally:
+        await Coordination.run_worker(partial(comms.owners.stop, *names))
+
+
+async def test_install_restart_admits_owners_its_stop_released(tmp_path: Path, native_workers) -> None:
+    comms = wire(native_workers.root)
+    rule = StorageRule(volume=tmp_path, floor_gib=0,
+                       checkout_base=tmp_path / 'checkouts', scratch_base=tmp_path / 'scratch')
+    comms.registry.storage_rule = rule
+    names = ('restart-one', 'restart-two')
+    for name in names:
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    await Coordination.run_worker(partial(comms.owners.start, *names))
+    originals = tuple(comms.registry.require(name) for name in names)
+    await Coordination.run_worker(partial(comms.owners.stop, *names))
+    assert all(not owner.process_alive for owner in originals)
+    with rule.room_ledger.snapshot() as db:
+        peaks = StoppedOwnerPeak.select(db, root=str(comms.root))
+    assert {peak.owner for peak in peaks} == {owner.incarnation for owner in originals}
+    released = sum((peak.need for peak in peaks), RoomNeed())
+    assert 0 < released.memory < rule.memory_gib * 2**30
+    # The OS reports enough for these replacements, but less than CLEANUP-DUE.
+    proc = tmp_path / 'proc'
+    proc.mkdir()
+    available = released.memory + 64 * 2**20
+    (proc / 'meminfo').write_text(f'MemAvailable: {(available + 1023) // 1024} kB\n')
+    comms.registry.storage_rule = replace(rule, proc=proc)
+    assert comms.registry.storage_rule.memory_available_bytes() < rule.memory_gib * 2**30
+    admissions: list[bool] = []
+    previous = threading.getprofile()
+
+    def observe(frame, event, result):
+        if event == 'return' and frame.f_code == RoomAllocation._admit.__code__:
+            admissions.append(result)
+
+    threading.setprofile(observe)
+    try:
+        replacements = await asyncio.wait_for(
+            Coordination.run_worker(partial(comms.owners.start, *names)), 15,
+        )
+        assert len(replacements) == len(names)
+        assert all(comms.registry.require(name).process_alive for name in names)
+        assert admissions == [True], 'The whole replacement batch must be admitted without waiting'
+        with rule.room_ledger.snapshot() as db:
+            assert RoomClaim.count(db) == 0
+    finally:
+        threading.setprofile(previous)
+        comms.registry.storage_rule = rule
         await Coordination.run_worker(partial(comms.owners.stop, *names))
 
 

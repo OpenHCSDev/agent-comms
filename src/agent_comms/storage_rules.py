@@ -260,7 +260,6 @@ class StorageRule(RoomAllocation, DurableFile):
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
     idle_minutes: float = 30.0  # a pytest temp dir untouched this long holds memory for nothing
     temp_root: StoragePath = Path('/tmp')  # RAM-backed, so its pytest dirs hold memory
-    proc: StoragePath = Path('/proc')
     shown: ClassVar[int] = 5  # holders named in each list
     scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
     max_checkouts: int = 2

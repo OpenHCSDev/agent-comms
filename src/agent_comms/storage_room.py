@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sqlite3
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -18,7 +19,7 @@ from typing import Annotated, ClassVar, Iterator, TYPE_CHECKING
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
-from .field_codec import RoomTicket
+from .field_codec import PathText, RoomTicket
 from .thread_identity import ThreadIncarnation
 from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
 from .watched import ChangeSignal, FileSource
@@ -39,7 +40,7 @@ class RoomWork(DeclaredFamily, affix="RoomWork"):
     def per_owner(self, measured: RoomNeed) -> RoomNeed:
         return measured.divided(len(self.owners))
 
-    def measured_needs(self, db, root: str) -> tuple[RoomNeed, ...]:
+    def measured_needs(self, db: sqlite3.Connection, root: str) -> tuple[RoomNeed, ...]:
         return tuple(self.estimate(peak.need) for peak in WorkPeak.select(db, work=type(self)))
 
 
@@ -52,7 +53,7 @@ class TestGateRoomWork(RoomWork):
 
 
 class UnitStartRoomWork(RoomWork):
-    def measured_needs(self, db, root: str) -> tuple[RoomNeed, ...]:
+    def measured_needs(self, db: sqlite3.Connection, root: str) -> tuple[RoomNeed, ...]:
         released = tuple(peak for owner in self.owners
                          for peak in StoppedOwnerPeak.select(db, root=root, owner=owner))
         if len(released) == len(self.owners):
@@ -269,8 +270,10 @@ class MeasuredRoomReservation(RoomReservation):
                 RoomClaim.delete(db, ticket=ticket)
 
 
+@dataclass(frozen=True)
 class RoomAllocation:
     """StorageRule's admission and measurement behavior, shared by all callers."""
+    proc: Annotated[Path, PathText] = Path('/proc')
     work_kinds: ClassVar[type[RoomWork]] = RoomWork
     # A release wakes through inotify. The timed OS refresh also observes room
     # freed by jobs outside Core, which cannot notify this ledger.
@@ -288,7 +291,7 @@ class RoomAllocation:
 
     @contextmanager
     def stopping(self, root: Path, owners: tuple[Thread, ...]) -> Iterator[None]:
-        """Retain the stopped batch's observed peaks for its replacement admission."""
+        """Measure the stopped owners once; replacements request these peaks."""
         if not owners:
             yield
             return
@@ -336,7 +339,9 @@ class RoomAllocation:
                              phase=HoldingRoomPhase(need))
             return True
 
-    async def wait_for_room(self, work: tuple[RoomWork, ...], root, *, process=None):
+    async def wait_for_room(
+        self, work: tuple[RoomWork, ...], root: Path, *, process: ProcessIdentity | None = None,
+    ) -> MeasuredRoomReservation:
         """Wait without a registry/wire lock, atomically reserve, and measure."""
         process = process or ProcessIdentity.capture(os.getpid())
         ledger = self.room_ledger
