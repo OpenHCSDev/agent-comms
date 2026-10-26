@@ -94,6 +94,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         retired = Thread('retired-owner', frozenset(), str(project), process_identity=ProcessIdentity.capture(os.getpid()))
         comms.registry.declare(retired)
         await owner.sessions.bind_owned(retired, "retired-acp-session")
+        await asyncio.to_thread(comms.owners.stop, retired.name)
         comms.registry.remove(retired.name)
         snapshot = comms.registry.snapshot()
         assert snapshot.canonical_name(retired.name) == retired.name
@@ -112,7 +113,6 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             == "original-acp-session"
         )
         assert {session: published.name for session, published in owner.sessions.published.items()} == {
-            "retired-acp-session": "retired-owner",
             "original-acp-session": "registered",
         }
         assert not (root / "native-sessions").exists()

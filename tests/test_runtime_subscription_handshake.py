@@ -17,6 +17,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
+from agent_comms.private_path import PrivateSocketRole
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 
@@ -114,7 +115,8 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(
             writer.close()
             await writer.wait_closed()
 
-    server = await asyncio.start_unix_server(reply, path=path)
+    with PrivateSocketRole.address(path) as address:
+        server = await asyncio.start_unix_server(reply, path=address)
     client = CommsAgent(comms, auto_wake=False)
     proxy = RuntimeProxy(client, "owner", path)
     try:

@@ -89,11 +89,13 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                         pending = NativeRuntimeInput.select(
                             store.session._connection,
                             where=(
-                                "owner_lookup=? AND session_entry_id IS NULL"
-                                if broadcast else "session_entry_id IS NULL"
+                                "owner_lookup=? AND session_id IS NOT NULL AND session_entry_id IS NULL"
+                                if broadcast else "session_id IS NOT NULL AND session_entry_id IS NULL"
                             ),
                             parameters=((comms.registry.require(request["model"]).incarnation.lookup,) if broadcast else ()),
                         )
+                        # Native send records session_id before writing prompt bytes.
+                        # An ungranted reservation cannot identify this HTTP request.
                         if not pending:
                             assert not broadcast
                             request_text = json.dumps(request.get("messages", ()))

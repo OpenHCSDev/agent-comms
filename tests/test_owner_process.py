@@ -113,21 +113,49 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
 
 
 async def test_shared_host_restarts_one_session_without_stopping_its_siblings(tmp_path, native_workers):
+    from acp.schema import TextContentBlock
+    from agent_comms.acp import CommsClient
     from agent_comms.owner_launch import RetainedOwnerLaunch
     from agent_comms.owner_lifecycle import OwnerRestartSelection
+    from native_backend_fixture import NativeBackendFixture
+    from delivery_owner_fixture import FakeClient
 
     comms = wire(native_workers.root)
     names = ("shared-a", "shared-b", "shared-c")
+    client = CommsClient(comms, auto_wake=False)
+    client.on_connect(FakeClient())
     try:
         for name in names:
-            comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+            comms.registry.declare(Thread(name, frozenset(), str(tmp_path),
+                                          model=DeclaredModel("response-local/fixture")))
             await Coordination.run_worker(partial(
                 comms.owners.start, name,
                 agent_bin=GivenBinary(str(Path(sys.executable).with_name("pi-comms-native").resolve())),
-                agent_args=GivenArguments(("--no-tools",)),
+                agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
             ))
         before = comms.registry.snapshot()
         host, = {before.require(name).require_process() for name in names}
+        for name in names:
+            await client.load_session(cwd=str(tmp_path), session_id=name)
+        gate = native_workers.provider.response_gate = asyncio.Event()
+        async with asyncio.TaskGroup() as replies:
+            pending = tuple(replies.create_task(client.prompt(
+                session_id=name, prompt=[TextContentBlock(type="text", text=f"FRESH_SHARED_INPUT_{name}")],
+            )) for name in names)
+            try:
+                async with asyncio.timeout(15):
+                    while native_workers.provider.posts < len(names):
+                        await asyncio.sleep(.01)
+                assert native_workers.provider.posts == len(names)
+            finally:
+                gate.set()
+        assert all(reply.result().stop_reason == "end_turn" for reply in pending)
+        journals = {name: Path(comms.registry.require(name).runtime.read_key) for name in names}
+        assert len(set(journals.values())) == len(names)
+        for name, journal in journals.items():
+            original_history = journal.read_text()
+            assert f"FRESH_SHARED_INPUT_{name}" in original_history
+            assert all(f"FRESH_SHARED_INPUT_{other}" not in original_history for other in names if other != name)
         selected = OwnerRestartSelection.capture(before, names[1])
         original = await Coordination.run_worker(partial(
             RetainedOwnerLaunch.capture, selected, before, comms.root))
@@ -152,6 +180,7 @@ async def test_shared_host_restarts_one_session_without_stopping_its_siblings(tm
         assert not host.alive()
         assert all(comms.registry.require(name).process_identity == NoProcess() for name in names)
     finally:
+        await client.shutdown()
         await Coordination.run_worker(partial(comms.owners.stop, *names))
 
 

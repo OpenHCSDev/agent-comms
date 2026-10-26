@@ -34,8 +34,6 @@ from .watched import FileSource
 
 if TYPE_CHECKING:
     from .session_config_options import SessionConfigOptions
-    from .field_codec import AcpSessionId
-
     from .active_route import CommsRoute
     from .native_package import VerifiedNativePackage
     from .registry_document import RegistrySnapshot
@@ -276,7 +274,7 @@ class ConfigOptions:
         return cls(RetainedOwnerLaunch.configured(), resolve_comms_route(LaunchRoot.current().path))
 
     async def observe_authentication(
-        self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[object]],
+        self, session_id: str, publish: Callable[[str], Awaitable[object]],
     ) -> None:
         """The session retires this configuration's watch with its other producers."""
         async with aclosing(Bus.watch_sources(FileSource(self.launch.configuration.native_config / "auth.json"))) as observations:
