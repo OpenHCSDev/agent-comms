@@ -2894,8 +2894,16 @@ class WalStore(StoreWriter, StoreLockFile):
         self.store.require_maintenance_open()
         if not self.path.exists():
             self._create_file()
+        with self._configured_writer(self.path, check_same_thread=check_same_thread) as connection:
+            yield connection
+
+    @contextmanager
+    def _configured_writer(
+        self, path: Path, *, check_same_thread: bool = True,
+    ) -> Iterator[sqlite3.Connection]:
+        """Apply the same WAL policy before staging or using a published file."""
         connection = self.writer(
-            self.path, isolation_level=None, check_same_thread=check_same_thread)
+            path, isolation_level=None, check_same_thread=check_same_thread)
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             connection.execute("PRAGMA foreign_keys=ON")
@@ -2975,7 +2983,7 @@ class TypedStore(WalStore, TableSchema):
         descriptor, staged = self.stage_file(self.path)
         os.close(descriptor)
         try:
-            with closing(self.writer(staged, isolation_level=None)) as initial:
+            with self._configured_writer(staged) as initial:
                 with self.write_transaction(initial):
                     self.create_schema(initial)
             try:
