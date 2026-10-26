@@ -135,7 +135,7 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
     assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
 
 
-def test_judge_ok_arms_auto_merge_at_the_judged_head_unless_draft_and_fails_loudly(
+def test_judge_ok_requests_merge_at_the_judged_head_unless_draft_and_fails_loudly(
         head_bus, reviewed_source, capsys):
     """2026-10-26: #3454 printed ok and stayed unarmed; #3444 needed a hand bypass-merge."""
     comms, github, request = head_bus
@@ -148,23 +148,23 @@ def test_judge_ok_arms_auto_merge_at_the_judged_head_unless_draft_and_fails_loud
         8, "fix/draft", request.head, stamp, "main", reviewable_times=(stamp,)))
     github.put(request.repo, UnmergedListedPullRequest(
         9, "fix/refused", request.head, stamp, "main", reviewable_times=(stamp,)))
-    github.refuse_arm(request.repo, 9, "GraphQL: Pull request is in clean status")
+    github.refuse_arm(request.repo, 9, "Merge permission denied")
 
     def ok(number):
         judge.main(["ok", "--repo", request.repo.to_wire(), "--pr", str(number),
                     "--head", request.head, "--why", ACCEPTED.text], context)
 
     def arms(number):
-        return [dict(part.split("=", 1) for part in call if part.startswith(("node=", "head=")))
-                for call in github.calls() if f"node={request.repo.to_wire()}#{number}" in call]
+        return [call for call in github.calls() if call[:3] == ("pr", "merge", str(number))]
 
     ok(request.pr)
-    assert arms(request.pr) == [{"node": f"{request.repo.to_wire()}#{request.pr}", "head": request.head}]
-    assert f"#{request.pr} auto-merge armed at {request.head}" in capsys.readouterr().out
+    assert arms(request.pr) == [("pr", "merge", str(request.pr), "--repo", request.repo.to_wire(),
+                                 "--auto", "--merge", "--match-head-commit", request.head)]
+    assert f"#{request.pr} merge requested at {request.head}" in capsys.readouterr().out
     ok(8)
     assert not arms(8)
     assert "#8 is a draft, so not armed" in capsys.readouterr().out
-    with pytest.raises(ToolRefusedError, match="Pull request is in clean status"):
+    with pytest.raises(ToolRefusedError, match="Merge permission denied"):
         ok(9)
     assert "ok" not in capsys.readouterr().out
     assert isinstance(StoredHeadReview.head_reviews(

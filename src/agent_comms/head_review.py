@@ -80,13 +80,13 @@ class PullRequestHead:
 
     @classmethod
     def at(cls, repo: RepositoryName, pr: int) -> OpenPullRequestHead:
-        """Read GitHub's head, the branch it merges into, its node and draft state in one request."""
+        """Read GitHub's head, its base branch and draft state in one request."""
         read = repo.rest(f"pulls/{pr}", "--jq",
-                         '.head.sha + " " + .base.ref + " " + .node_id + " " + (.draft | tostring)')
+                         '.head.sha + " " + .base.ref + " " + (.draft | tostring)')
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
-        head, base, node, draft = read.stdout.split()
-        return OpenPullRequestHead.drafted(draft)(repo, pr, head, base=base, node=node)
+        head, base, draft = read.stdout.split()
+        return OpenPullRequestHead.drafted(draft)(repo, pr, head, base=base)
 
     def change_identity(self, reader: WorkBranches, base: str) -> PullRequestChange:
         """Compare the PR's patch, never the unrelated changes in its base tree.
@@ -142,18 +142,17 @@ class DraftMergeArm(MergeArm):
 
 
 @dataclass(frozen=True)
-class ArmedMergeArm(MergeArm):
+class RequestedMergeArm(MergeArm):
     head: Annotated[str, GitCommitText]
 
     def lines(self, request: PullRequestHead) -> tuple[str, ...]:
-        return (f"#{request.pr} auto-merge armed at {self.head}",)
+        return (f"#{request.pr} merge requested at {self.head}",)
 
 
 @dataclass(frozen=True)
 class OpenPullRequestHead(ReadPullRequestHead):
-    """GitHub's read of an open PR: the node its mutations name, and whether it is a draft."""
+    """GitHub's read of an open PR and whether its declared state permits integration."""
 
-    node: str = field(kw_only=True)
     # GitHub's REST ``draft`` field as ``tostring`` renders it.
     forge_draft: ClassVar[str]
 
@@ -163,7 +162,7 @@ class OpenPullRequestHead(ReadPullRequestHead):
 
     @abstractmethod
     def arm(self) -> MergeArm:
-        """Auto-merge pinned to exactly this head, so a later push never lands unreviewed."""
+        """Request normal integration at this exact head; later pushes need a new review."""
 
 
 @dataclass(frozen=True)
@@ -177,18 +176,17 @@ class DraftPullRequestHead(OpenPullRequestHead):
 @dataclass(frozen=True)
 class ReadyPullRequestHead(OpenPullRequestHead):
     forge_draft = "false"
-    mutation: ClassVar[str] = (
-        "mutation($node: ID!, $head: GitObjectID!) { enablePullRequestAutoMerge(input: "
-        "{pullRequestId: $node, expectedHeadOid: $head, mergeMethod: MERGE}) { clientMutationId } }")
 
     def arm(self) -> MergeArm:
-        armed = self.repo.api("graphql", "-f", "query=" + self.mutation,
-                              "-f", f"node={self.node}", "-f", f"head={self.head}")
-        if armed.returncode:
+        requested = self.repo.command(
+            "pr", "merge", str(self.pr), "--repo", self.repo.to_wire(),
+            "--auto", "--merge", "--match-head-commit", self.head,
+        )
+        if requested.returncode:
             raise ToolRefusedError(
-                f"#{self.pr} verdict recorded but auto-merge was not armed: "
-                f"{armed.stderr.strip() or 'gh api graphql failed'}")
-        return ArmedMergeArm(self.head)
+                f"#{self.pr} verdict recorded but merge was not requested: "
+                f"{requested.stderr.strip() or 'gh pr merge failed'}")
+        return RequestedMergeArm(self.head)
 
 
 class HeadReviewRelation(DeclaredFamily):
