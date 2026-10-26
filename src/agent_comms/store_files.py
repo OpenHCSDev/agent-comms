@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Annotated, TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
 
 from .child_process import LockHolder, Platform
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationReadUnavailable, DeferredRead
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import PathText
@@ -70,7 +70,7 @@ class ExclusiveLock(ExclusiveFlock, LockMode):
         held.require_writer()
 
 
-class StoreLockBusyError(BlockingIOError):
+class StoreLockBusyError(BlockingIOError, DeferredRead):
     """A store lock exhausted its wait budget, with the observed holders."""
 
     holders: tuple[LockHolder, ...]
