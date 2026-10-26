@@ -99,10 +99,14 @@ class AcpEventConsumer(MroDispatch):
     async def transcript(self, event: TranscriptUpdate) -> None:
         await event.publish(self.session_id, self.client)
 
-    def text_update(self, text: str) -> AgentMessageChunk:
+    def text_metadata(self, event: events.TextEvent) -> tuple[AgentCommsUpdate, ...]:
+        return event.acp_updates()
+
+    def text_update(self, event: events.TextEvent) -> AgentMessageChunk:
         return AgentMessageChunk(
             session_update="agent_message_chunk",
-            content=TextContentBlock(type="text", text=text),
+            content=TextContentBlock(type="text", text=event.text),
+            field_meta=encode_updates(*self.text_metadata(event)),
         )
 
     @handles(events.NativeOutputCommitted)
@@ -141,11 +145,11 @@ class AcpEventConsumer(MroDispatch):
     async def goal_changed(self, event: events.GoalChanged) -> None:
         await self.agent.sessions.publish_metadata(self.session_id)
 
-    @handles(events.Chunk, events.Notice)
-    async def text(self, event: events.Chunk | events.Notice) -> None:
+    @handles(events.TextEvent)
+    async def text(self, event: events.TextEvent) -> None:
         if event.text:
             await self.client.publish_update(
-                session_id=self.session_id, update=self.text_update(event.text)
+                session_id=self.session_id, update=self.text_update(event)
             )
 
     @handles(events.ToolStart)
@@ -284,10 +288,8 @@ class TurnEventConsumer(AcpEventConsumer):
 class Routed(AcpEventConsumer):
     route: MessageRoute | NoMessageRoute
 
-    def text_update(self, text: str) -> AgentMessageChunk:
-        update = super().text_update(text)
-        update.field_meta = encode_updates(TextRouteUpdate(self.route))
-        return update
+    def text_metadata(self, event: events.TextEvent) -> tuple[AgentCommsUpdate, ...]:
+        return (*super().text_metadata(event), TextRouteUpdate(self.route))
 
 
 @dataclass(eq=False, repr=False)

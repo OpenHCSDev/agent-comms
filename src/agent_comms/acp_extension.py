@@ -99,6 +99,11 @@ class TextRouteUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
+class TextNoticeUpdate(AgentCommsUpdate):
+    """The accompanying ACP text is one complete standalone notice."""
+
+
+@dataclass(frozen=True)
 class TranscriptChangedUpdate(AgentCommsUpdate):
     cursor: TranscriptCursor | None
 

@@ -54,6 +54,7 @@ from .turn_item import UsageChargeId
 from .turn_terminal import FailedGoalTurn
 
 if TYPE_CHECKING:
+    from .acp_extension import AgentCommsUpdate
     from .agent_event_updates import AcpEventConsumer
     from .comms import Comms
     from .goal_presentation import GoalPublicationSnapshot, GoalSnapshot
@@ -349,8 +350,18 @@ class StreamSettled(AgentEvent):
 
 
 @dataclass(frozen=True)
-class Chunk(AgentEvent):
+class TextEvent(AgentEvent):
+    """Text keeps its producer-declared meaning across ACP publication."""
+
     text: str
+
+    def acp_updates(self) -> tuple[AgentCommsUpdate, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class Chunk(TextEvent):
+    """An incremental fragment of the current native assistant message."""
 
 
 @dataclass(frozen=True)
@@ -364,8 +375,13 @@ class Thinking(AgentEvent):
 
 
 @dataclass(frozen=True)
-class Notice(AgentEvent):
-    text: str
+class Notice(TextEvent):
+    """A standalone message, complete independently of the native turn phase."""
+
+    def acp_updates(self) -> tuple[AgentCommsUpdate, ...]:
+        from .acp_extension import TextNoticeUpdate
+
+        return (TextNoticeUpdate(),)
 
 
 @dataclass(frozen=True)
