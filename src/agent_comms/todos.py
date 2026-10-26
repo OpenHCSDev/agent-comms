@@ -4642,18 +4642,12 @@ class Todo(TodoStoreRows, TypedTable):
         Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
     ))
     problem_index: ClassVar[ExpressionIndex] = ExpressionIndex((ProblemNumber.sql_number('{id}'),))
-    phase_index: ClassVar[ExpressionIndex] = ExpressionIndex((
-        f"json_extract(\"{{order}}\", '$.{FieldCodec.record_key(CheckedProblemOrder, 'serves')}')",
-        '{creator}', '{creator_created}',
-        f"json_extract(\"{{order}}\", '$.{FieldCodec.record_key(CheckedProblemOrder, 'at')}"
-        f".{FieldCodec.record_key(RecordedEventTime, 'at')}')",
-    ))
     serving_request: ClassVar[str] = (
         f'json_extract("order",\'$.{ProblemOrder.family_discriminator}\') '
         f'IN {DeliverableProblemOrder.sql_choices()}'
     )
     indexes = (Index(("creator", "creator_created", "state")), Index(("state",)),
-               unit_index, problem_index, phase_index, Index(("request",)),
+               unit_index, problem_index, Index(("request",)),
                Index(("request",), where=serving_request))
 
     id: Annotated[str, Column(primary_key=True)]
@@ -4679,27 +4673,6 @@ class Todo(TodoStoreRows, TypedTable):
         return tuple(replace(todo, history=TransactionTodoHistory(db)) for todo in cls.read(db.execute(
             f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid",
             parameters)))
-
-    @classmethod
-    def phase_ordered_since(
-        cls, store: TodoStore, phase: type[OrderPhase],
-        commanders: frozenset[ThreadIncarnation], since: float,
-    ) -> bool:
-        """The row's phase and checked time answer this without reading its story."""
-        if not commanders:
-            return False
-        phase_key, creator, birth, ordered = cls.phase_index.terms
-        actors = ','.join('(?,?)' for commander in commanders)
-        parameters = tuple(value for commander in commanders
-                           for value in (commander.name, commander.wire_birth))
-        with store.snapshot() as db:
-            return db.execute(cls._sql(
-                f'WITH actors(name,birth) AS (VALUES {actors}) '
-                f'SELECT 1 FROM actors JOIN {cls.declared_name} '
-                f'ON {creator}=actors.name AND {birth}=actors.birth '
-                f'WHERE {phase_key}=? AND {ordered}>=? LIMIT 1'),
-                (*parameters, FieldCodec.encode(phase), since),
-            ).fetchone() is not None
 
     @property
     def repository(self) -> Repo:

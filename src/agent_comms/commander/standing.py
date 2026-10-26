@@ -264,9 +264,11 @@ class PhaseSubject(HeartbeatSubject):
 
     def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
         snapshot = comms.registry.snapshot()
-        return Todo.phase_ordered_since(
-            comms.goals.todos, self.phase,
-            frozenset(snapshot.require(actor).incarnation for actor in actors), since,
+        return any(
+            todo.order.checked().at.since(since)
+            for actor in actors
+            for todo in self.phase.serving(comms.goals.todos.history_for_commander(
+                snapshot.require(actor).incarnation))
         )
 
 
