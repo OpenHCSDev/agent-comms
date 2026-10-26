@@ -21,7 +21,6 @@ from agent_comms.todos import (
     OrderProgress,
     PlainText,
     ProgressRead,
-    HeadReviewOrder,
     HeadReviewRecord,
     HeadVerdict,
     NoHeadOrder,
@@ -40,7 +39,7 @@ from .field_codec import FieldCodec, MessageId, OrderId, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
-from .head_review import PullRequestHead
+from .head_review import HeadReviewOrder, PullRequestHead
 from .held_orders import HeldOrders
 from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
@@ -324,7 +323,7 @@ class CommsStandingRulesTool(ThreadToolRequest):
     ] = 0.0
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        frame = HeartbeatFrame.read(comms, caller.name, ProgressRead())
+        frame = HeartbeatFrame.capture(comms, caller.name, ProgressRead())
         states = UnitState.current(comms, caller.name, frame)
         broken = (*StandingRule.broken(comms, caller.name, observed=states, frame=frame),
                   *(state for state in states if state.attention()))

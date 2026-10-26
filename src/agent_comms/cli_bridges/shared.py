@@ -21,7 +21,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
@@ -75,6 +75,7 @@ from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, Thr
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.threads import Thread
@@ -87,6 +88,7 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 from agent_comms.wire_models import WireModel
+from agent_comms_hooks.board import BoardEntry, SessionBoard
 from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
@@ -105,9 +107,6 @@ from .monitor import (
     read_monitor,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.task_attachments.commander_pings import CommanderUpdate
-
 
 class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
@@ -118,14 +117,46 @@ class BridgeStateTable(DurableTables):
     """
 
     __slots__ = ()
-    filename = WatchRecord.store_name
+    filename = 'delivery.sqlite3'
+
+
+@dataclass(frozen=True)
+class DeliveredBoardContent(BridgeStateTable, TypedTable, declared_name="board_delivery"):
+    """This bridge's delivery evidence, not a copy of Core's board."""
+
+    content: Annotated[str, Column(primary_key=True)]
+    since: float
+    delivered_at: float
+
+    def alarm_due(self, entry: BoardEntry, now: float) -> bool:
+        return self.delivered_at < entry.alarm_at <= now
+
+    @classmethod
+    def deliver(cls, db: sqlite3.Connection, entries: tuple[BoardEntry, ...], now: float) -> SessionBoard:
+        """Select and stamp together: concurrent hooks cannot deliver the same change."""
+        due: list[BoardEntry] = []
+        unchanged: list[BoardEntry] = []
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            current = {entry.content for entry in entries}
+            for delivered in cls.select(db):
+                if delivered.content not in current:
+                    cls.delete(db, content=delivered.content)
+            for entry in entries:
+                prior = cls.select(db, content=entry.content, since=entry.since)
+                if all(delivered.alarm_due(entry, now) for delivered in prior):
+                    cls(entry.content, entry.since, now).upsert(db)
+                    due.append(entry)
+                else:
+                    unchanged.append(entry)
+        return SessionBoard.presented(due, unchanged, now)
 
 
 class BindingRequest(ABC):
     """What the command line asks of the state directory's one binding."""
 
     @abstractmethod
-    def bind(self, db: sqlite3.Connection) -> BindingAddress: ...
+    def bind(self, db: sqlite3.Connection) -> SessionBinding: ...
 
 
 class BindingSession(ABC):
@@ -175,8 +206,8 @@ class EnvironmentSession(BindingSession):
 class StoredBinding(BindingRequest):
     """No binding given: the directory's own, read without taking the writer."""
 
-    def bind(self, db: sqlite3.Connection) -> BindingAddress:
-        return Binding.require(db).address()
+    def bind(self, db: sqlite3.Connection) -> SessionBinding:
+        return Binding.require(db)
 
 
 @dataclass(frozen=True)
@@ -198,13 +229,10 @@ class GivenBinding(BindingRequest):
 
     def bind(self, db: sqlite3.Connection) -> BindingAddress:
         stored = Binding.select(db)
-        if stored:
-            supplied = {name: value for plan in FieldCodec.field_plans(BindingAddress)
-                        for name, value in plan.decoded(self.given).items()}
-            return replace(stored[0].address(), **supplied)
         root = self.given[FieldCodec.record_key(BindingAddress, 'root')]
+        start = stored[0].start if stored else Binding.bus_head(root)
         return FieldCodec.decode(BindingAddress, {
-            'start': FieldCodec.encode(Binding.bus_head(root)),
+            'start': FieldCodec.encode(start),
             **{key: value for key, value in self.given.items()
                if key != Binding.family_discriminator},
         })
@@ -298,9 +326,6 @@ class BindingIdentity(SessionBinding):
     @property
     def bus(self) -> str:
         return self.owner.name
-
-    def address(self) -> BindingAddress:
-        return BindingAddress(root=self.root, bus=self.bus, thread=self.thread, start=self.start)
 
     def recipient(self, comms: Comms) -> ThreadIncarnation:
         current = comms.registry.require_lookup(self.owner.require_recorded().lookup)
@@ -1182,7 +1207,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         raise ValueError('Supply --session or a complete bus binding')
 
     options: BridgeOptions
-    address: BindingAddress
+    address: SessionBinding
     db: sqlite3.Connection
     binding: Binding = field(init=False)
 
@@ -1464,7 +1489,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 
-    def __init__(self, options: Options, address: BindingAddress, db: sqlite3.Connection) -> None:
+    def __init__(self, options: Options, address: SessionBinding, db: sqlite3.Connection) -> None:
         super().__init__(options, address, db)
         self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()
@@ -1473,6 +1498,12 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def declare_reader(self, status: ThreadStatus) -> None:
         await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
+
+    async def board(self) -> tuple[str, ...]:
+        """The commander board this session's tool calls print, derived from Core when asked."""
+        entries = await self.comms.bus.when_open(partial(
+            CommanderUpdate.current_board, self.comms, self.binding.bus))
+        return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),

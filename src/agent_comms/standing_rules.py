@@ -21,7 +21,7 @@ from agent_comms.errors import RejectedEnforcementError, TodoConflict
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
 )
@@ -41,7 +41,6 @@ if TYPE_CHECKING:
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
         MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
-        UnmergedListedPullRequest,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -124,18 +123,31 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     urgent: ClassVar[bool] = False
 
     @classmethod
+    def disposes_subjects(cls, subjects: tuple[HeartbeatSubject, ...]) -> bool:
+        """A commander verb can dispose of this rule only through its declared subjects."""
+        return cls.commander_disposes and bool(subjects)
+
+    @classmethod
     def cleared_by(cls, verb: type[CommanderVerb]) -> None:
         """A verb declaring that it clears this rule joins the action its line prints."""
-        cls.clearing_verbs = (*cls.clearing_verbs, verb)
+        cls.clearing_verbs = (*vars(cls).get("clearing_verbs", ()), verb)
 
     def command_values(self) -> Mapping[str, str]:
         """The verb arguments this line knows, by argument name."""
         return {}
 
+    def review_allowed(self, verb: type[CommanderVerb]) -> bool:
+        """Ordinary lines retain every verb that declares it clears them."""
+        return True
+
     def clearing_commands(self) -> str:
-        """The verbs that clear this line, each with the arguments this line fills."""
+        """The applicable verbs, with arguments supplied by this line's observed owners."""
         values = self.command_values()
-        return " or ".join(f"`{verb.command(values)}`" for verb in self.clearing_verbs)
+        verbs = dict.fromkeys(member for parent in type(self).__mro__
+                              for family in vars(parent).get("clearing_verbs", ())
+                              for member in family.members_with(family))
+        return " or ".join(f"`{command}`" for verb in verbs if self.review_allowed(verb)
+                           for command in verb.commands(values))
 
     def attention(self) -> bool:
         return True
@@ -276,7 +288,8 @@ class LostTools(UndatedStandingRule):
         return tuple(found)
 
     def line(self) -> str:
-        return f"{self.thread.name}: {'; '.join(self.changes)}"
+        return (f"RESTORE {self.thread.name} lost tools: {'; '.join(self.changes)}."
+                " who took them, and why? -> restore its required tools")
 
 
 @dataclass(frozen=True)
@@ -368,9 +381,9 @@ class BranchBehindMain(HeldBranchRule):
                      for held in branches if held.difference.behind > cls.limit)
 
     def line(self) -> str:
-        return (f"MERGE MAIN into {self.repository.to_wire()}:{self.branch} "
-                f"({self.holder.name} {self.problem}): {self.behind} commits behind, "
-                f"limit {self.limit}")
+        return (f"MERGE {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) is"
+                f" {self.behind} commits behind main, limit {self.limit}. building on a stale tree"
+                " for fun? -> merge main into it")
 
 
 @dataclass(frozen=True)
@@ -393,9 +406,10 @@ class BranchGrowth(HeldBranchRule):
 
     def line(self) -> str:
         return (
-            f"SHRINK {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}):"
-            f" src grows {self.growth.total} code lines, limit {self.growth.limit} -> the verdict"
-            " states why the growth is necessary, or the slop is deleted"
+            f"SHRINK {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) grows"
+            f" src by {self.growth.total} code lines, limit {self.growth.limit}. is all of it"
+            " necessary, or is it slop? -> the verdict states why the growth is necessary, or the"
+            " slop is deleted"
         )
 
 
@@ -426,8 +440,9 @@ class SharedFileBranches(HeldBranchRule):
         return tuple(found)
 
     def line(self) -> str:
-        return (f"SEQUENCE {self.holder.name} {self.problem} and {self.other_holder.name} "
-                f"{self.other_problem}: both touch {self.repository.to_wire()}:{self.path}")
+        return (f"SEQUENCE {self.holder.name} {self.problem} and {self.other_holder.name} {self.other_problem}"
+                f" both touch {self.repository.to_wire()}:{self.path}. who goes first? -> sequence"
+                " them")
 
 
 class DatedStandingRule(StandingRule, declared_name=None):
@@ -575,6 +590,34 @@ class HeldOrderDue(HolderLine, DatedStandingRule, declared_name=None):
         return self.since.recorded_at("An order alarm")
 
 
+class HeadReviewRule(StandingRule, declared_name=None):
+    """A head verdict can answer this rule's review request."""
+
+
+@dataclass(frozen=True)
+class HeadReviewCommands(HeadReviewRule, declared_name=None):
+    """A review head supplies the common arguments accepted by the judge."""
+
+    request: PullRequestHead
+
+    def command_values(self) -> Mapping[str, str]:
+        return {"repo": self.request.repo.to_wire(), "pr": str(self.request.pr),
+                "head": self.request.head}
+
+
+@dataclass(frozen=True)
+class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
+    """A linked review carries exactly the order whose verdict permissions it prints."""
+
+    todo: Todo = field(kw_only=True, compare=False)
+
+    def review_allowed(self, verb: type[CommanderVerb]) -> bool:
+        return verb.review_allowed(self.todo.order.checked().review_verdicts())
+
+    def command_values(self) -> Mapping[str, str]:
+        return {**super().command_values(), "problem": self.todo.id}
+
+
 class ReviewTimerUp(HeldOrderDue):
     """Each round of a held order's review timer is its own condition, so the heartbeat wakes
     the commander once per round; the unit sees no timer and nothing is struck."""
@@ -585,9 +628,34 @@ class ReviewTimerUp(HeldOrderDue):
             frame.todos, time.time(), frame.pulls.progress(frame.todos, comms.registry),
         )
 
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[ReviewTimerUp, ...]:
+        rules: list[ReviewTimerUp] = []
+        for todo, due in cls.conditions(comms, frame):
+            for request in frame.pulls.open_for(todo)[:1]:
+                head = PullRequestHead(todo.repo, request.number, request.head)
+                if todo.order.holds_head(head):
+                    rules.append(HeadReviewTimerUp(
+                        todo.id, todo.held().owner_identity, todo.order.checked().id,
+                        due, head, todo=todo))
+                    break
+            else:
+                rules.append(cls(todo.id, todo.held().owner_identity,
+                                 todo.order.checked().id, due))
+        return tuple(rules)
+
     def line(self) -> str:
-        return (f"READ {self.holder.name} {self.problem}: review timer up at {self.since.clock()},"
-                f" order {self.order} -> read its diff and judge it")
+        return (f"READ {self.holder.name}'s timer on {self.problem} is up ({self.since.clock()}, order"
+                f" {self.order}). what did it actually do? -> read its diff and judge it")
+
+
+@dataclass(frozen=True)
+class HeadReviewTimerUp(OrderHeadReviewCommands, ReviewTimerUp):
+    """A timer with a current PR head offers only that order's accepted verdicts."""
+
+    def line(self) -> str:
+        return f"{super().line()} -> {self.clearing_commands()}"
 
 
 @dataclass(frozen=True)
@@ -635,14 +703,14 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
         return (*super().subjects(), HeadSubject(PullRequestHead(self.repo, self.pr, self.head)))
 
     def line(self) -> str:
-        return (f"JUDGE {self.repo.to_wire()}#{self.pr} {self.head[:9]} delivered by "
-                f"{self.holder.name} ({self.problem}, order {self.order})")
+        return (f"JUDGE {self.holder.name} delivered {self.repo.to_wire()}#{self.pr} {self.head[:9]}"
+                f" ({self.problem}, order {self.order}). you read it yet?"
+                f" -> judge ok/back --pr {self.pr} --head {self.head}")
 
 
 @dataclass(frozen=True)
-class UnreviewedHead(HeadLine, DatedStandingRule, declared_name=None):
+class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_name=None):
     """One ready head waiting too long for a decision; a reviewing mark is not one."""
-    request: PullRequestHead
     due_at: float
     seconds: ClassVar[int] = 10 * 60
 
@@ -654,38 +722,39 @@ class UnreviewedHead(HeadLine, DatedStandingRule, declared_name=None):
     @classmethod
     def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
         now = time.time()
+        snapshot = goals.registry.snapshot()
+        todos = goals.todos.for_commander(snapshot.require(commander).incarnation)
         return tuple(
-            cls(request, due)
-            for repo in goals.registry.snapshot().commander_project.repository_names()
-            for row in cls.reviewed(pulls, repo)
+            rule
+            for repo in snapshot.commander_project.repository_names()
+            for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
             if not any(review.verdict.decides() for review in goals.todos.head_reviews(request))
+            for rule in cls.for_head(request, due, todos)
         )
 
     @classmethod
-    @abstractmethod
-    def reviewed(cls, pulls: ProgressRead,
-                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]: ...
+    def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
+        return (cls(request, due),)
 
     def began(self) -> float:
         return self.due_at
 
     def line(self) -> str:
-        return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
-                f" -> judge ok/back --pr {self.request.pr} --head {self.request.head}")
+        return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} is sitting"
+                f" there unjudged. you read it yet?"
+                f" -> {self.clearing_commands()}")
 
 
 @dataclass(frozen=True)
-class LinkedUnreviewedHead(UnreviewedHead, OrderRefusingStandingRule):
+class LinkedUnreviewedHead(OrderHeadReviewCommands, UnreviewedHead, OrderRefusingStandingRule):
     """A head linked to the caller's held order: the reader is registered with exactly the
     caller's holds, so another commander's heads never freeze its orders."""
 
     @classmethod
-    def reviewed(cls, pulls: ProgressRead,
-                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
-        linked = pulls.linked(repo)
-        return tuple(row for row in pulls.open(repo) if row.number in linked)
+    def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
+        return tuple(cls(request, due, todo=todo) for todo in HeadReviewOrder.holding(todos, request))
 
 
 @dataclass(frozen=True)
@@ -693,10 +762,8 @@ class OrderlessUnreviewedHead(UnreviewedHead):
     """A head no held order links: a board line that refuses nobody's orders."""
 
     @classmethod
-    def reviewed(cls, pulls: ProgressRead,
-                 repo: RepositoryName) -> tuple[UnmergedListedPullRequest, ...]:
-        linked = pulls.linked(repo)
-        return tuple(row for row in pulls.open(repo) if row.number not in linked)
+    def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
+        return () if HeadReviewOrder.holding(todos, request) else super().for_head(request, due, todos)
 
 
 @dataclass(frozen=True)
@@ -724,8 +791,8 @@ class StuckMerge(HeadLine, DatedStandingRule):
         return min(block.since for block in self.blocks)
 
     def line(self) -> str:
-        return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}:"
-                f" auto-merge armed but {'; '.join(block.what() for block in self.blocks)}"
+        return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} has"
+                f" auto-merge armed but {'; '.join(block.what() for block in self.blocks)}. who's fixing it?"
                 f" -> {'; '.join(block.remedy() for block in self.blocks)}")
 
 
@@ -781,9 +848,9 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
         actions = ((*(block.remedy() for block in self.blocks),
                     *(f"order {holder.name}" for holder in self.holders))
                    or ("land or supersede it",))
-        return (f"IDLE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
-                f" ({held}): {why}, idle {int((time.time() - self.moved) // 60)} min"
-                f" -> {'; '.join(actions)}")
+        return (f"IDLE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
+                f" {why}, idle {int((time.time() - self.moved) // 60)} min. who owns it, or are we"
+                f" pretending it doesn't exist? -> {'; '.join(actions)}")
 
 
 @dataclass(frozen=True)
@@ -836,7 +903,8 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
         return tuple(sorted(set(candidates), key=lambda path: (hunted.get(path, 0), path)))[:1]
 
     def line(self) -> str:
-        return "HUNT a held order's production source (no hot file found); order the fix this wake"
+        return ("HUNT nothing hot found in any held order's production source. so what's slow?"
+                " -> hunt it and order the fix this wake")
 
     def began(self) -> float:
         return self.since
@@ -849,7 +917,7 @@ class LocatedHuntDue(HuntDue):
     where: str
 
     def line(self) -> str:
-        return f"HUNT {self.where}; order the fix this wake"
+        return f"HUNT {self.where} is hot and nobody's on it. why? -> order the fix this wake"
 
 
 @dataclass(frozen=True)
@@ -884,9 +952,9 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"ACT ON owner directive {self.cited}"
-            f" on request {self.request.value},"
-            f" due {self.directive.due_time} -> order its next step or mark the request done"
+            f"ACT owner directive {self.cited} on request {self.request.value} was due"
+            f" {self.directive.due_time}. didn't we already have a plan due then?"
+            " -> order its next step or mark the request done"
         )
 
 
@@ -908,8 +976,8 @@ class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan)
         return self.since
 
     def line(self) -> str:
-        return (f"FIX service pass {self.watch}: failing since "
-                f"{RecordedEventTime(self.since).clock()}: {self.error}"
+        return (f"FIX service pass {self.watch} failing since {RecordedEventTime(self.since).clock()}:"
+                f" {self.error}. is anyone fixing it, or letting it pile up?"
                 " -> fix the owner of the failing read this wake")
 
 @dataclass(frozen=True)
@@ -936,8 +1004,9 @@ class BoardDisagrees(UndatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"REPAIR the board for {self.problem} order {self.order}: it reads no commit, "
-            f"but its linked PR merged as {self.merge[:9]} -> repair the progress read this wake"
+            f"REPAIR the board reads no commit for {self.problem} order {self.order}, but its linked PR"
+            f" merged as {self.merge[:9]}. why guess when git has the answer?"
+            " -> repair the progress read this wake"
         )
 
 
@@ -958,10 +1027,10 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
         dirs = ", ".join(map(str, self.memory.idle_dirs)) or "none"
         processes = ", ".join(map(str, self.memory.processes)) or "none"
         return (
-            f"FREE MEMORY: {self.memory.available_gib:.1f} GiB available (cleanup due under"
+            f"FREE {self.memory.available_gib:.1f} GiB of memory available (cleanup due under"
             f" {self.rule.memory_gib:g} GiB); pytest temp dirs idle over"
             f" {self.rule.idle_minutes:g} min: {dirs}; test processes: {processes}"
-            " -> put a cleanup owner on it now"
+            ". who's cleaning up? -> put a cleanup owner on it now"
         )
 
 
@@ -984,8 +1053,8 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
 
     def line(self) -> str:
         return (
-            f"FREE DISK on {self.rule.volume}: {self.free_gib:.1f} GiB free (cleanup due under"
-            f" {self.rule.cleanup_gib:g} GiB{self.floor_warning()})"
+            f"FREE {self.free_gib:.1f} GiB free on {self.rule.volume} (cleanup due under"
+            f" {self.rule.cleanup_gib:g} GiB{self.floor_warning()}). who's cleaning up?"
             " -> put a cleanup owner on it now"
         )
 

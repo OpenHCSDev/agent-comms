@@ -6,8 +6,7 @@ FieldCodec into the PendingProblemOrder used by native tools; its other fields
 name the problems and explain the defect. No rendered instructions are parsed.
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
-Incompetence is not tolerated: a unit is fired from a task, not berated about it.
-Two strikes on one task: the task is taken away and reassigned (`fire`). A strike recorded in
+Strikes measure repeated misses and trigger scrutiny; they never release the task. A strike recorded in
 error is voided with `unstrike`, never deleted: it stays readable beside its void and stops
 counting. An order sent in error is retired with `withdraw`: its problem closes with no strike.
 Nothing here judges code; it refuses orders that leave a unit room to interpret. The unit never
@@ -19,6 +18,7 @@ from __future__ import annotations
 import argparse
 import ast
 import dataclasses
+import json
 import re
 import shlex
 import subprocess
@@ -70,6 +70,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
+from agent_comms_hooks.board import UndisposedBoardSummary
 from agent_comms.heartbeat_subjects import AnswerSubject, HeartbeatSubject, UnitSubject
 from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingRule
 from agent_comms.ui_model.unit_state import AwaitingCommander
@@ -83,6 +84,7 @@ from agent_comms.todos import (
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
+    HeadVerdict,
     LocatedProblemFinding,
     NoSuccessor,
     OperationDelivery,
@@ -305,7 +307,8 @@ class OrderFile:
         if not clean and (timid := BluntText.refused(self.prose)):
             problems.append(timid + '; fix: name the defect in why_stupid, or use --clean')
         if re.search(r'\bslop\b', self.prose, re.I) and not self.slop:
-            problems.append('slop: fix: supply pattern, fact, at, derive and by citation fields')
+            problems.append('slop: fix: supply one slop item matching this JSON schema: '
+                            + json.dumps(FieldCodec.record_schema(Slop)))
         return problems
 
     def resolved(self, finding: ProblemFinding) -> OrderFile:
@@ -542,7 +545,7 @@ class ListedProblems(OrderedProblems):
                 listed: Mapping[str, Todo]) -> PendingProblemOrder:
         """A replacement order keeps the problem's pull requests: a restore cites their heads."""
         return order.carrying(link for pid in group if pid in listed
-                              for link in listed[pid].order.linked_requests)
+                              for link in listed[pid].order.pull_requests)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
@@ -721,11 +724,9 @@ class Commander(CommanderContext):
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
         n = todo.strikes_against(self.comms.registry.require(unit).incarnation)
-        taken = f", {todo.id} taken away" if todo.holder != unit else ""
-        line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
-                f'{taken}): {strike.reason}')
+        line = f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {strike.notice(todo)}'
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
-        print(f'{unit}: {n} strike(s) on {todo.id}{taken}')
+        print(f'{unit}: {n} strike(s) on {todo.id}')
 
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order.
@@ -825,6 +826,11 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def gate(self, ctx: Commander) -> None:
         ctx.comms.registry.require(self.who(ctx)).require_commander()
 
+    @classmethod
+    def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
+        """Ordinary verbs do not select a head verdict."""
+        return True
+
     def resolves_claim(self, unit: str, problem: str) -> bool:
         """Ordinary messages and actions do not judge a delivery claim."""
         return False
@@ -833,27 +839,31 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def run(self, ctx: Commander) -> None: ...
 
     @classmethod
-    def command(cls, values: Mapping[str, str]) -> str:
-        """This verb's name and the arguments ``values`` fills, in the order its parser
-        declares them; a required positional left unfilled shows its placeholder, and every
-        other option is left out."""
+    def commands(cls, values: Mapping[str, str]) -> tuple[str, ...]:
+        """The commands its parser exposes, filled from this line's observed arguments.
+
+        A parameter variant with no parser contributes no second command. Required review
+        prose remains the reviewer's, not something the board can manufacture.
+        """
         verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
         cls.add_parser(verbs)
-        parser, = verbs.choices.values()
-        placeholder = parser._get_formatter()._format_args  # the usage line's own metavar text
-        words = [cls.tool(), cls.declared_name]
-        for action in parser._actions:
-            if action.dest in values:
-                words += [*action.option_strings[:1], values[action.dest]]
-            elif action.required and not action.option_strings:
-                words.append(placeholder(action, action.dest))
-        return ' '.join(words)
+        commands = []
+        for parser in verbs.choices.values():
+            placeholder = parser._get_formatter()._format_args
+            words = [cls.tool(), cls.declared_name]
+            for action in parser._actions:
+                if action.dest in values:
+                    words += [*action.option_strings[:1], values[action.dest]]
+                elif action.required and not action.option_strings:
+                    words.append(placeholder(action, action.dest))
+            commands.append(' '.join(words))
+        return tuple(commands)
 
 
 class HeartbeatGated(CommanderVerb, declared_name=None):
-    """A writing verb run while a heartbeat line sits undisposed past the answer window prints
-    the board beside its result instead of refusing: the board already reaches the commander
-    on every tool call, so a refusal only stopped unit answers, reviews and owner fixes that
+    """A writing verb names only the count and oldest overdue heartbeat line beside its result:
+    the hook delivers changes, so a full board dump only hid the verb's own errors. A refusal
+    stopped unit answers, reviews and owner fixes that
     touched no line. Core records each action, and the record is what disposes of a line.
     Nothing the commander says about a line counts."""
 
@@ -865,13 +875,13 @@ class HeartbeatGated(CommanderVerb, declared_name=None):
     def gate_on(self, ctx: Commander, subjects: tuple[HeartbeatSubject, ...]) -> None:
         self.gate(ctx)
         now = time.time()
-        board = CommanderUpdate.owed(ctx.comms, ctx.commander, now)
+        board = CommanderUpdate.owed(ctx.comms, ctx.commander, now - AwaitingCommander.seconds)
         acted = frozenset(subjects)
-        if (any(ping.waits_on_commander(now - AwaitingCommander.seconds) for ping in board)
-                and not any(ping.acted_on(acted) for ping in board)):
-            print(f'BOARD: heartbeat lines undisposed past '
-                  f'{AwaitingCommander.seconds // 60} min; act on them next:\n'
-                  + '\n'.join(ping.render(now) for ping in board), file=sys.stderr)
+        if board and not any(ping.acted_on(acted) for ping in board):
+            print(UndisposedBoardSummary(
+                tuple(ping.board_entry() for ping in board), now,
+                AwaitingCommander.seconds // 60,
+            ).line(), file=sys.stderr)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1158,7 +1168,7 @@ class DoneVerb(OrderVerb):
         ctx.call(CommsOrderDoneTool(
             problem=todo.id, order_id=order.id, delivery=delivery,
             claims=delivery.done_claims(order)))
-        print(f'{todo.held().owner}: order {order.id} delivered as {delivery.work}')
+        print(f'{todo.holder_state.previous_assignment().owner}: order {order.id} delivered as {delivery.work}')
 
 
 @dataclass(frozen=True)

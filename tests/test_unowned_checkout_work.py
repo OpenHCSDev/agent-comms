@@ -283,7 +283,7 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
         read = WorkBranches(checkout).read_checkout()
         assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
         unreadable, = (state for state in UnitState.current(
-            c, 'lead', HeartbeatFrame.read(c, 'lead', ProgressRead()))
+            c, 'lead', HeartbeatFrame.capture(c, 'lead', ProgressRead()))
                       if isinstance(state, Unreadable))
         assert unreadable.unit == c.registry.require('worker').incarnation
         assert str(checkout) in unreadable.reason
@@ -297,7 +297,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
     practice.include(tuple(RootFile.existing_in(practice.root)))
     c = wire(practice.path)
     with LaunchRoot.from_path(practice.path).selected():
-        frame = HeartbeatFrame.read(c, 'lead', ProgressRead())
+        frame = HeartbeatFrame.capture(c, 'lead', ProgressRead())
         worker, = (state for state in UnitState.current(c, 'lead', frame)
                    if state.unit == c.registry.require('worker').incarnation)
         assert 'P1' in worker.orders and not isinstance(worker, Unreadable)

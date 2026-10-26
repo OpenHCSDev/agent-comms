@@ -248,7 +248,6 @@ class SessionLifecycle:
         return thread
 
     async def _bind_loaded(self, thread: Thread, session_id: str) -> None:
-        await Coordination.run_worker(partial(self.comms.threads.heartbeat, thread.name))
         await self.bind_owned(thread, session_id)
         await self.effects.inputs.emit_input_delivery_changed(session_id)
 

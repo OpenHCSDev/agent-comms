@@ -318,12 +318,24 @@ query($owner: String!, $name: String!, $after: String) {
             )
         return self._remote_heads[key]
 
-    def pull_request_diff(self, base: str, head: str) -> BranchComparison:
+    def pull_request_base(self, base: str, head: str) -> str:
         published = self.remote_heads("origin", f"refs/heads/{base}")
         if not published:
             raise WorkBranchError(f"Origin has no pull request base {base!r} in {self.checkout}")
         (base_head,) = published
         self.require_commits("origin", base_head, head)
+        return base_head
+
+    def pull_request_patch_id(self, base: str, head: str) -> str:
+        base_head = self.pull_request_base(base, head)
+        patch = self._git(
+            "diff", "--binary", "--full-index", "--no-ext-diff", "--no-textconv",
+            f"{base_head}...{head}", "--",
+        )
+        return self._git("patch-id", "--verbatim", input=patch).partition(" ")[0].strip()
+
+    def pull_request_diff(self, base: str, head: str) -> BranchComparison:
+        base_head = self.pull_request_base(base, head)
         paths = tuple(
             Path(name)
             for name in self._git(
@@ -460,10 +472,16 @@ query($owner: String!, $name: String!, $after: String) {
         """Branch name -> worktree paths that have it checked out."""
         checked: dict[str, list[str]] = {}
         path = None
+        head = ""
         for line in self._git("worktree", "list", "--porcelain").splitlines():
             if line.startswith("worktree "):
                 path = line.removeprefix("worktree ")
-            elif line.startswith("branch refs/heads/") and path is not None:
+                head = ""
+            elif line.startswith("HEAD "):
+                head = line.removeprefix("HEAD ")
+            elif line.startswith("branch refs/heads/") and path is not None and head.strip("0"):
+                # Git retains a worktree's symbolic branch after its ref is deleted,
+                # with an all-zero HEAD. That is not an existing local branch.
                 checked.setdefault(line.removeprefix("branch refs/heads/"), []).append(path)
         return {branch: tuple(paths) for branch, paths in checked.items()}
 

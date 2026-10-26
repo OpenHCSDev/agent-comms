@@ -254,5 +254,5 @@ def test_unit_deaf_is_dated_by_the_drain_that_cannot_read_its_inbox(
     assert found == ((UnitDeaf(100.0 + InboxUnavailable.seconds, "beta"),) if deaf else ())
     assert UnitDeaf.violations(comms, "beta") == ()
     if deaf:
-        assert found[0].line().startswith("UNIT DEAF: beta")
+        assert found[0].line().startswith("beta ")
         assert found[0].broke_after(100.0)

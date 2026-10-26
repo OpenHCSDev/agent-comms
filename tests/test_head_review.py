@@ -9,8 +9,7 @@ import pytest
 
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.heartbeat_subjects import HeadSubject
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import HeadReview, PullRequestHead
 from agent_comms.heartbeat_subjects import HeadSubject, UnitSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
@@ -19,10 +18,10 @@ from agent_comms.standing_rules import (
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.work_branches import SourceGrowth
+from agent_comms.work_branches import SourceGrowth, WorkBranches
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, HeadReviewOrder, LinkedHeadReview,
+    CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
@@ -60,6 +59,22 @@ def head_bus(held_bus, github_cli, reviewed_source):
 def invoke(comms, request, verdict, order=NoHeadOrder()):
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=order)
     return tool.invoke(comms, tool.arguments, caller=ThreadCaller("lead"))
+
+
+def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp_path):
+    source = SourceRepository.create(tmp_path / 'status-source')
+    github_cli.configure(source.github)
+    request = PullRequestHead(source.github, source.number, source.branch_commit)
+    assert not HeadReview.accepted(request.repo, request.head)
+    ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, 'lead', 'integration')
+    assert HeadReview.accepted(request.repo, request.head)
+    UnderReviewHeadVerdict().post(request.repo, request.head, 'lead', 'integration')
+    assert not HeadReview.accepted(request.repo, request.head)
+    ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, 'lead', 'integration')
+    assert HeadReview.accepted(request.repo, request.head)
+    RejectedHeadVerdict(REASON).post(request.repo, request.head, 'lead', 'integration')
+    assert not HeadReview.accepted(request.repo, request.head)
+    assert not HeadReview.accepted(request.repo, 'a' * 40)
 
 
 def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(head_bus):
@@ -143,6 +158,58 @@ def test_moved_head_posts_and_records_nothing(head_bus):
     assert not any("statuses/" in call[1] for call in github.calls())
 
 
+def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
+    comms, github, request = head_bus
+    source = reviewed_source
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+
+    (source.checkout / "base_only.py").write_text("advanced = True\n")
+    source.git(source.checkout, "add", "base_only.py")
+    source.git(source.checkout, "commit", "-m", "Advance the base independently")
+    source.git(source.checkout, "push", "origin", "main")
+    source.git(source.checkout, "checkout", "feature")
+    source.git(source.checkout, "merge", "--no-edit", "main")
+    merged = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
+    moved = opened(github, source, request.pr, merged)
+
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    assert pulls.open(request.repo)[0].has_head_review
+    assert comms.goals.todos.head_reviews(moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
+    assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls)
+    carried_posts = tuple(call for call in github.calls() if f"statuses/{merged}" in call[1])
+    assert len(carried_posts) == 1
+    assert f"description=carried from {request.head[:9]}: same change" in carried_posts[0]
+
+    owner = source.checkout / "owner.py"
+    owner.write_text(owner.read_text() + 'spacing = "a b"\n')
+    changed = source.publish_change("Add an unreviewed line", "owner.py")
+    added = opened(github, source, request.pr, changed)
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    assert not pulls.open(request.repo)[0].has_head_review
+    assert not comms.goals.todos.head_reviews(added)
+    assert not any(f"statuses/{changed}" in call[1] for call in github.calls())
+
+    owner.write_text(owner.read_text() + (
+        "\ndef evaluate(flag):\n    if flag:\n        print(flag)\n"
+        "        return 2\n    return 1\n"))
+    eight = opened(github, source, request.pr,
+                   source.publish_change("Review an eight-space return", "owner.py"))
+    invoke(comms, eight, ReviewedHeadVerdict(ACCEPTED))
+    owner.write_text(owner.read_text().replace("        return 2\n", "    return 2\n"))
+    four = opened(github, source, request.pr,
+                  source.publish_change("Move the return outside the branch", "owner.py"))
+    reader = WorkBranches(source.checkout)
+    assert eight.change_identity(reader, "main") != four.change_identity(reader, "main")
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    assert not pulls.open(request.repo)[0].has_head_review
+    assert not comms.goals.todos.head_reviews(four)
+    assert not any(f"statuses/{four.head}" in call[1] for call in github.calls())
+
+
 def test_only_a_head_linked_to_the_callers_held_order_refuses_its_orders(head_bus):
     """2026-10-25: dqdock's orders froze on claude-code's orderless #3311."""
     comms, _, request = head_bus
@@ -190,13 +257,13 @@ def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus)
     RecordPullRequest(todo.revision, held.owner_identity,
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
     todo = comms.goals.todos.get(todo.id)
-    scope = HeadReviewOrder.for_request(
+    scope = OrderHeadReview.for_request(
         (todo,), request, lambda linked: LinkedHeadReview.of(
             linked, "Repair the existing owner", (linked.order.checked().owner,)),
     )
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
     todo = comms.goals.todos.get(todo.id)
-    scope = HeadReviewOrder.for_request(
+    scope = OrderHeadReview.for_request(
         (todo,), request, lambda linked: UnquotedHeadReview.of(
             linked, (linked.order.checked().owner,)),
     )
@@ -287,8 +354,8 @@ def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(hea
     found, = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
     assert found.request.pr == 8
     assert found.line().endswith(
-        ": auto-merge armed but required check debt-src failed; conflicts with its base"
-        " -> fix debt-src at its owner; merge main into it")
+        " has auto-merge armed but required check debt-src failed; conflicts with its base."
+        " who's fixing it? -> fix debt-src at its owner; merge main into it")
     # The age is the heartbeat Ping's to render, from began(); the line names no clock.
     assert found.began() == found.blocks[0].since and found.broke_after(0)
 
@@ -330,6 +397,6 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
     found = {rule.request.pr: rule.line()
              for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), (), ordered)}
     assert 11 not in found
-    assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 cccccccc")
-    assert "(no live holder): head unmoved, idle 60 min -> land or supersede it" in found[9]
-    assert "conflicts with its base, idle 0 min -> merge main into it" in found[7]
+    assert found[9].startswith(f"{ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")
+    assert "idle 60 min" in found[9] and found[9].endswith(" -> land or supersede it")
+    assert "idle 0 min" in found[7] and found[7].endswith(" -> merge main into it")

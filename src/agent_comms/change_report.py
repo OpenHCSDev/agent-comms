@@ -296,6 +296,10 @@ class Declaration:
 
     at: FileLine
     lines: range
+    name: str
+
+    def __str__(self) -> str:
+        return f"{self.name} at {self.at.to_wire()}-{self.lines.stop - 1}"
 
     def holds(self, line: FileLine, root: Path) -> bool:
         return line.same_file(self.at, root) and line.line in self.lines
@@ -332,16 +336,16 @@ class FileLine(WireValue, SourceReference):
     def declaration(self, root: Path) -> Declaration:
         """The innermost class or def holding this line; its whole file at module level."""
         text = (root / self.file).read_text()
-        spans = [range(1, text.count("\n") + 2)]
+        at = replace(self, file=str((root / self.file).resolve()))
+        declarations = [Declaration(replace(at, line=1), range(1, text.count("\n") + 2), self.file)]
         if self.file.endswith(".py"):
-            spans += (range(node.lineno, end + 1)
-                      for node in ast.walk(ast.parse(text, filename=self.file))
-                      if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-                      for end in (cast(int, node.end_lineno),)
-                      if node.lineno <= self.line <= end)
-        span = min(spans, key=len)
-        return Declaration(replace(self, file=str((root / self.file).resolve()),
-                                   line=span.start), span)
+            declarations += (Declaration(replace(at, line=node.lineno),
+                                         range(node.lineno, end + 1), node.name)
+                             for node in ast.walk(ast.parse(text, filename=self.file))
+                             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+                             for end in (cast(int, node.end_lineno),)
+                             if node.lineno <= self.line <= end)
+        return min(declarations, key=lambda declaration: len(declaration.lines))
 
     def require_exists(self, roots: SourceRoots, revision: SourceText) -> None:
         repository, revision = self.repository.source(roots, revision)
@@ -401,8 +405,8 @@ class FileLine(WireValue, SourceReference):
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:
         return {"type": "string", "description":
-                "Source reference spelled file.py:line, or owner/name:file.py:line for another "
-                "registered repository"}
+                "Source reference format src/agent_comms/FILE.py:LINE, or "
+                "owner/name:src/agent_comms/FILE.py:LINE for another registered repository"}
 
     @classmethod
     def cites(cls, text: str) -> bool:

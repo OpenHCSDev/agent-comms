@@ -707,14 +707,14 @@ class DMDisplayBasis:
         Fetching is not paint proof. A UI may use the basis only after proving
         that the corresponding inbound tail was contiguous and visibly painted.
         """
-        with registry.store.reading_snapshot() as snapshot:
-            viewer_name = snapshot.canonical_name(viewer)
-            peer_name = peer.selected_name(snapshot)
-            scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
-            viewer_thread = snapshot.threads[viewer_name]
-            peer_thread = snapshot.participant(peer_name)
-            viewer_names, peer_names = scope.first_names, scope.second_names
-            document = bus.reads.read_conversation(viewer_name, scope.read_key(viewer_name, peer_name, snapshot), snapshot)
+        snapshot = registry.snapshot()
+        viewer_name = snapshot.canonical_name(viewer)
+        peer_name = peer.selected_name(snapshot)
+        scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
+        viewer_thread = snapshot.threads[viewer_name]
+        peer_thread = snapshot.participant(peer_name)
+        viewer_names, peer_names = scope.first_names, scope.second_names
+        document = bus.reads.read_conversation(viewer_name, scope.read_key(viewer_name, peer_name, snapshot), snapshot)
         result = bounds.conversation(scope).displayed(
             bus.reads, document, viewer_name, snapshot, snapshot, bus.bus,
         )
@@ -1184,17 +1184,16 @@ class CapturedSelection:
         cls, registry: Registration, catalog: ChannelCatalog,
         reads: ReadLedger, viewer: DisplayViewer, activity: ActivityClocks,
     ) -> Iterator[CapturedSelection]:
-        """Borrow the original identity resources and read the ledger once.
+        """Capture identity, membership and reads, then release their guards.
 
-        Finish reading the ledger before yielding: painted acknowledgement may
-        write that same ledger while identity and membership remain acquired.
+        The yielded value does not borrow the fleet's locks for caller work.
         """
         with registry.store.reading_snapshot() as snapshot, catalog.reading() as channels:
             with reads.reading() as read_document:
                 selected = cls.capture(
                     snapshot, channels, reads, read_document, viewer, activity
                 )
-            yield selected
+        yield selected
 
     @property
     def channels(self) -> Channels:

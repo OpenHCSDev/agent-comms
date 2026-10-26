@@ -156,10 +156,8 @@ from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
 from .repo import Checkout, CheckoutStart, GitCommandError, Repo
 from .repository_name import RepositoryName
-from .storage_rules import (
-    CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
-    RepositoryCheckoutAllocation, StorageProjection, StorageRule,
-)
+from .storage_rules import OrderCheckoutAllocation, RepositoryCheckoutAllocation, StorageProjection, StorageRule
+from .shell_effects import CheckoutStorageEffect, RemoveCheckoutStorageEffect
 from .restart_queue import RestartQueued, enqueue
 from .restart_scope import AllOwners, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
@@ -1910,8 +1908,7 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
             "with it before and after its carries")
 
     def answer(self, root: Path) -> BusReadBack:
-        with RegistryStore.at(root).reading_snapshot() as snapshot:
-            return BusReadBack(len(snapshot.threads))
+        return BusReadBack(len(RegistryStore.at(root).snapshot().threads))
 
     def apply(self, ctx: Comms) -> BusReadBack:
         return self.answer(ctx.root)
