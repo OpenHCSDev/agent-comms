@@ -1229,9 +1229,9 @@ class ObserverReadFailed(ObserverStatus):
 
 
 class ObserverDied(CoordinationError, ObserverStatus):
-    """The observation service's process ended while the UI was using it.
+    """The observation service ended; reads share its reported cause.
 
-    The UI does not run on what it last observed: it reports this and exits.
+    Presentation and recovery belong to the consuming application.
     """
 
     def __init__(self, pid: int, exit_status: int | None, error: str | None):
