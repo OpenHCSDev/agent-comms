@@ -156,10 +156,8 @@ from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
 from .repo import Checkout, CheckoutStart, GitCommandError, Repo
 from .repository_name import RepositoryName
-from .storage_rules import (
-    CheckoutStorageEffect, OrderCheckoutAllocation, RemoveCheckoutStorageEffect,
-    RepositoryCheckoutAllocation, StorageProjection, StorageRule,
-)
+from .storage_rules import OrderCheckoutAllocation, RepositoryCheckoutAllocation, StorageProjection, StorageRule
+from .shell_effects import CheckoutStorageEffect, RemoveCheckoutStorageEffect
 from .restart_queue import RestartQueued, enqueue
 from .restart_scope import AllOwners, RestartTarget
 from .owner_connection import OwnerConnection, socket_path

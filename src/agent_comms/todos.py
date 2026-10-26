@@ -112,7 +112,7 @@ from agent_comms.recorded_time import (
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.slop import Slop
+from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import StorageRule, UnitStorage
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
@@ -3755,6 +3755,10 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     state = "success"
     verb = "Accepted"
 
+    @classmethod
+    def allows_integration(cls) -> bool:
+        return True
+
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
         project = goals.registry.snapshot().commander_project.require()
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
@@ -5407,12 +5411,18 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         declarations = (order.owner.declaration(root), where.declaration(root))
         previous = tuple(line for todo in self.list(Repo.of(root).github)
                          for line in todo.recurrence(declarations, root, now))
-        if previous and not any(
-            item.derive.declaration_elsewhere(item.by.line, where, root) for item in slop
-        ):
-            raise TodoError('\n'.join((*previous,
-                'the same declaration broke again, name the fact written in more than one place '
-                'and the declaration that replaces the copies.')))
+        if not previous:
+            return
+        rejected = []
+        for item in slop:
+            reason = item.derive.recurrence_refusal(item.by.line, where, root)
+            if not reason:
+                return
+            rejected.append(f"slop {item.pattern} at {item.at.to_wire()}: {reason}")
+        raise TodoError('\n'.join((*previous,
+            'the same declaration broke again, name the fact written in more than one place '
+            'and the declaration that replaces the copies.',
+            DeclarationDerivation.requirement(declarations[1]), *rejected)))
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))

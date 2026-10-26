@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
-import shlex
+import getopt
 import signal
 import subprocess
 import tempfile
@@ -14,8 +12,19 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
-                            ExitedOutcome, SignaledOutcome, TimedOutOutcome)
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.lifecycle_capability import Active
+
+from .child_process import (
+    BoundedRun,
+    CheckPrinted,
+    ChildOutcome,
+    ChildResult,
+    CountPrinted,
+    ExitedOutcome,
+    SignaledOutcome,
+    TimedOutOutcome,
+)
 from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
 from .declared_family import DeclaredFamily
 from .errors import RejectedEnforcementError, RelationViolationError
@@ -32,13 +41,14 @@ from .field_codec import (
     TurnId,
 )
 from .goal_states import ActiveGoal, GoalState
-from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
-from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .text_digest import TextDigest
 from .reported_turn import NoReportedTurn, ReportedTurnState
+from .shell_commands import ShellCommand
+from .shell_effects import shell_storage_effects
+from .text_digest import TextDigest
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
@@ -50,10 +60,10 @@ if TYPE_CHECKING:
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:
-    from .goal_management import Goals
     from .goal_attempts import GoalAttemptStore, LaunchPermit
-    from .turn_goal_account import VerifiedGoalSettlement
+    from .goal_management import Goals
     from .todos import Todo
+    from .turn_goal_account import VerifiedGoalSettlement
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -311,41 +321,28 @@ class CheckCommand:
 
     def require_writable(self) -> None:
         """New checks cannot select revisions; saved checks remain readable for correction."""
-        if any(self.git_command(words) in self.REVISION_COMMANDS
-               for words in self.simple_commands(self.command)):
+        self.require_order_effects(Path.cwd())
+        if any(self.git_command(list(simple.words)) in self.REVISION_COMMANDS
+               for simple in ShellCommand.split(self.command)):
             raise ValueError("A check never checks out a revision: Core runs it at the "
                              "delivered commit and at each branch commit. Drop the checkout.")
 
+    def require_order_effects(self, cwd: Path) -> None:
+        for effect in shell_storage_effects(self.command, cwd):
+            effect.require_order_check()
+
     # The revision is the run's parameter; a check line that chooses one is refused.
     REVISION_COMMANDS: ClassVar[frozenset[str]] = frozenset({"checkout", "switch"})
-    SEPARATORS: ClassVar[frozenset[str]] = frozenset({"&&", "||", ";", "|", "&", "\n"})
-
-    @classmethod
-    def simple_commands(cls, command: str) -> list[list[str]]:
-        """The shell words of each simple command in ``command``."""
-        lexer = shlex.shlex(command, posix=True, punctuation_chars="();<>|&\n")
-        lexer.whitespace = " \t\r"
-        lexer.whitespace_split = True
-        commands: list[list[str]] = [[]]
-        for word in lexer:
-            if word in cls.SEPARATORS or not word.strip("\n"):
-                commands.append([])
-            else:
-                commands[-1].append(word)
-        return commands
-
     @staticmethod
     def git_command(words: Sequence[str]) -> str:
         """The git subcommand ``words`` run, or "" when they run no git."""
-        if words[:1] != ["git"]:
+        if not words or Path(words[0]).name != Repo.program:
             return ""
-        rest = iter(words[1:])
-        for word in rest:
-            if word in ("-C", "-c"):
-                next(rest, "")
-            elif not word.startswith("-"):
-                return word
-        return ""
+        try:
+            selected = Repo.options(list(words[1:]))
+        except getopt.GetoptError as error:
+            raise ValueError(f"Incomplete or unknown git option: {error}") from error
+        return next(iter(selected.arguments), "")
 
 
 @dataclass(frozen=True)
@@ -384,6 +381,7 @@ class OrderCheck(CheckCommand):
 
     async def run(self) -> ChildResult:
         """The check on its directory's live state."""
+        self.require_order_effects(self.directory)
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout)
 
@@ -411,6 +409,7 @@ class OrderCheck(CheckCommand):
 
     def run_at(self, revision: str, repository: Path, checkout_base: Path) -> ChildResult:
         """Run in a fresh detached tree, never in the configured checkout."""
+        self.require_order_effects(repository)
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")

@@ -26,10 +26,10 @@ def source(tmp_path):
 @pytest.mark.parametrize('mechanism', Derivation.members_with(DeclarationDerivation))
 def test_declaration_derivations_require_another_declaration(mechanism, source):
     where = FileLine('rules.py', 9)
-    assert mechanism.declaration_elsewhere(FileLine('rules.py', 3), where, source)
-    assert mechanism.declaration_elsewhere(FileLine('other.py', 1), where, source)
-    assert not mechanism.declaration_elsewhere(FileLine('rules.py', 8), where, source)
-    assert not mechanism.declaration_elsewhere(
+    assert not mechanism.recurrence_refusal(FileLine('rules.py', 3), where, source)
+    assert not mechanism.recurrence_refusal(FileLine('other.py', 1), where, source)
+    assert mechanism.recurrence_refusal(FileLine('rules.py', 8), where, source)
+    assert mechanism.recurrence_refusal(
         FileLine(str(source / 'rules.py'), 9), where, source)
 
 
