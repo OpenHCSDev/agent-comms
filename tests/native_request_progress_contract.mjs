@@ -44,7 +44,7 @@ const server = createServer(async (req, res) => {
         // Metadata arrives before text: first_event must not wait for text_delta.
         const event = {id:'local',model:'fixture',choices:[{index:0,delta:{role:'assistant'},finish_reason:null}]};
         res.write(`data: ${JSON.stringify(event)}\n\n`);
-        await sleep(15);
+        await sleep(mode === 'held-http' ? 160 : 15);
         for (const delta of [{content:'OBSERVED'},{}]) {
             event.choices[0].delta = delta;
             event.choices[0].finish_reason = Object.keys(delta).length ? null : 'stop';
@@ -60,7 +60,10 @@ wss.on('connection', socket => socket.on('message', async () => {
     wsSends++;
     await sleep(20);
     socket.send(JSON.stringify({type:'response.created',response:{id:'ws-local',status:'in_progress'}}));
-    await sleep(20);
+    await sleep(mode === 'held-websocket' ? 160 : 20);
+    socket.send(JSON.stringify({type:'response.output_item.added',output_index:0,item:{type:'message',id:'message-local',role:'assistant',content:[]}}));
+    socket.send(JSON.stringify({type:'response.content_part.added',output_index:0,content_index:0,item_id:'message-local',part:{type:'output_text',text:'',annotations:[]}}));
+    socket.send(JSON.stringify({type:'response.output_text.delta',output_index:0,content_index:0,item_id:'message-local',delta:'OBSERVED'}));
     socket.send(JSON.stringify({type:'response.completed',response:{id:'ws-local',status:'completed',output:[],usage:{input_tokens:1,output_tokens:1,total_tokens:2}}}));
 }));
 await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
@@ -80,11 +83,27 @@ async function run(label, adapter, selectedModel, config = {}) {
     const options = observation.options({apiKey:'local-fixture',maxRetries:0,
         ...config, onResponse:async()=>{ if(label==='ordinary') await sleep(120); }});
     const stream = adapter.streamSimple(selectedModel,context,options);
-    for await (const event of stream) nativeEvents.push({type:event.type,at:performance.now()});
+    // Delay the actual SDK publication site without replacing its projector or
+    // result. Synchronous projection work holds the original iterator's yield.
+    if (label === 'projection') {
+        const push = stream.push.bind(stream);
+        let delayed = false;
+        stream.push = event => {
+            if (!delayed && event.type === 'text_delta') {
+                delayed = true;
+                const until = performance.now() + 160;
+                while (performance.now() < until) {} // bounded CPU control
+            }
+            return push(event);
+        };
+    }
+    if (label === 'consumer-queue') await sleep(300);
+    for await (const event of observation.events(stream)) nativeEvents.push({type:event.type,at:performance.now()});
     const result = await stream.result();
     const selected = points.filter(p=>['dispatch','headers','first_event','stream_end'].includes(p.stage));
     const record = {label,stopReason:result.stopReason,points:selected,nativeEvents,
-        posts:requests.length-start,callbackMs:points.at(-1)?.callbackMs};
+        posts:requests.length-start,callbackMs:points.at(-1)?.callbackMs,
+        firstDelta:points.find(p=>p.stage==='first_delta_consumed')};
     if(label==='cancel') assert.equal(result.stopReason,'aborted',result.errorMessage);
     else assert.equal(result.stopReason,'stop',result.errorMessage);
     assert.equal(points.filter(p=>p.stage==='stream_end').length,1,label);
@@ -100,10 +119,34 @@ async function run(label, adapter, selectedModel, config = {}) {
         assert.deepEqual(selected.map(p=>p.stage),['dispatch','headers','first_event','stream_end']);
     }
     if(label==='transient') assert.deepEqual(selected.filter(p=>p.stage==='dispatch').map(p=>p.attempt),[0,1]);
+    const end = points.find(p=>p.stage==='stream_end');
+    assert.equal(end.iteratorTiming.phase, 'closed');
+    assert.equal(end.iteratorTiming.transport, end.transport);
+    assert(end.iteratorTiming.eventCount > 0);
+    assert(points.filter(p=>p.iteratorTiming).every(p=>
+        p.iteratorTiming.streamId === end.iteratorTiming.streamId));
+    assert(!('iteratorTiming' in points.find(p=>p.stage==='dispatch')));
+    if (label.startsWith('held-')) {
+        assert(record.firstDelta.iteratorTiming.iteratorAwaitMs >= 140, JSON.stringify(record));
+        assert(record.firstDelta.iteratorTiming.iteratorAwaitMs > record.firstDelta.iteratorTiming.consumerYieldMs);
+    }
+    if (label === 'projection') {
+        assert(record.firstDelta.iteratorTiming.consumerYieldMs >= 140, JSON.stringify(record));
+        assert(record.firstDelta.iteratorTiming.consumerYieldMs > record.firstDelta.iteratorTiming.iteratorAwaitMs);
+    }
+    if (label === 'consumer-queue') {
+        assert.equal(record.firstDelta.iteratorTiming.phase, 'closed');
+        assert(record.firstDelta.elapsedMs - end.elapsedMs >= 120);
+        assert.equal(record.firstDelta.iteratorTiming.iteratorAwaitMs, end.iteratorTiming.iteratorAwaitMs);
+        assert.equal(record.firstDelta.iteratorTiming.consumerYieldMs, end.iteratorTiming.consumerYieldMs);
+    }
     controls.push(record);
 }
 try {
     await run('ordinary',chat,model);
+    await run('held-http',chat,model);
+    await run('projection',chat,model);
+    await run('consumer-queue',chat,model);
     await run('anthropic',anthropic,{...model,api:'anthropic-messages',baseUrl});
     await run('transient',chat,model,{maxRetries:1});
     await run('throwing',chat,model);
@@ -115,6 +158,8 @@ try {
     assert(ws.points.every(p=>p.transport==='websocket'));
     assert(!ws.points.some(p=>p.stage==='headers'));
     assert.equal(wsSends,1);
+    await run('held-websocket',codex,{...model,api:'openai-codex-responses',baseUrl}, {apiKey:token,transport:'websocket'});
+    assert.equal(wsSends,2);
     // Iterator return must close the upstream resource on early consumption end.
     let released = false; const terminal = [];
     async function* original() {try{yield 1;yield 2;}finally{released=true;}}

@@ -26,8 +26,8 @@ d7ad93bcb341424fa79014ce2fec4226326cfab1e8d5fee27c1859138e120161  dist/core/sdk.
 aae7f609bfa65d29ed16e311456921a88221622e08cf6a1f5c7aab8e58bd69e6  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
 99f2649a743a3bf2b8765b502c04cd8d45bf0f954bb1419b446669c07de0c4db  agent-comms-extensions/global-agent-comms/index.mjs
 8b9fce004ea6e178729afa9d2252c5031592125191b9bee796663d2b525c21f5  dist/agent-comms-imports.json
-10ccd96a00f55297e7f644e9b0d5b9af29dbef2916e005aad28415437398ff42  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
-54bd040f59d41a7a53766ed28206e2e5528bbb0704a350a8e01abeab2f6d4c6d  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
+4364451e7acf1d1fdda67ee01bc978bd6dccdb5ce31578c482874e7509fdc8b0  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
+87c1403e1380e2f515e8ea2f2825eef186de53ea8fac7d131d00f1d053b71e4a  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
 e87b99fc294377e78a6bc6019a6b21816d9ba27012f109fb2626105e0c3f1ceb  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js
 21d23e4671b0d98af353253b4fcb33d4cabc018df9737a018660e29c72ebd333  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.d.ts
 a7d2f09e1c671842d0e80e1aea016af8f18e405863beb61e6c46c07d823abedc  node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 0baf2b9cc00715dadc81c1d0c2b1f1983282f0c00042fd6abb1c79b67db6bd96
-# agent-comms-native-inputs-v1 413d0a4f20076f721289474545a40a016a59f0561e0ff44c1ff422c2f3d30254
+# agent-comms-native-tree-v1 5dddd01998419ce5896f1e93da0fe13ef51307e95f0dda508ac8f65e9ed0c48d
+# agent-comms-native-inputs-v1 4c9d124d1252d06da7500951838bec427bb99b93b3a45bafc9db2c25271ffeaa

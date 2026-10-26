@@ -1,8 +1,9 @@
 """Native request measurements do not permit input, confirm completion or allow retry."""
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Literal
 
 from agent_comms import field_codec
 
@@ -14,6 +15,36 @@ from .pi_payloads import PiModel, PiPayload, UnreportedModel
 @dataclass(frozen=True, slots=True)
 class UnreportedText(field_codec.NullMember):
     """Pi did not report this text observation for the request."""
+
+
+@dataclass(frozen=True, slots=True)
+class UnreportedIteratorTiming(field_codec.NullMember):
+    """Original record has no iterator timing, not a measured zero."""
+
+
+@dataclass(frozen=True)
+class IteratorTiming(PiPayload):
+    """Original-iterator custody wall times, not server/network/CPU attribution."""
+
+    stream_id: Annotated[str, field_codec.WireName("streamId")]
+    transport: str
+    phase: Literal["iteratorAwait", "consumerYield", "closed"]
+    started_monotonic_ns: Annotated[str, field_codec.WireName("startedMonotonicNs")]
+    observed_monotonic_ns: Annotated[str, field_codec.WireName("observedMonotonicNs")]
+    iterator_await_ms: Annotated[float, field_codec.WireName("iteratorAwaitMs")]
+    consumer_yield_ms: Annotated[float, field_codec.WireName("consumerYieldMs")]
+    event_count: Annotated[int, field_codec.WireName("eventCount")]
+
+    def __post_init__(self) -> None:
+        if any(not math.isfinite(value) or value < 0
+               for value in (self.iterator_await_ms, self.consumer_yield_ms)):
+            raise ValueError("Invalid iterator duration")
+        if self.event_count < 0:
+            raise ValueError("Invalid iterator event count")
+        if not (self.started_monotonic_ns.isdecimal() and self.observed_monotonic_ns.isdecimal()):
+            raise ValueError("Invalid iterator monotonic observation")
+        if int(self.observed_monotonic_ns) < int(self.started_monotonic_ns):
+            raise ValueError("Iterator observation precedes its source")
 
 
 @dataclass(frozen=True)
@@ -28,6 +59,10 @@ class RequestProgress(PiPayload):
     callback_count: Annotated[int, field_codec.WireName("callbackCount")]
     callback_max_ms: Annotated[float, field_codec.WireName("callbackMaxMs")]
     stage: str
+    iterator_timing: Annotated[
+        IteratorTiming | UnreportedIteratorTiming,
+        field_codec.WireName("iteratorTiming"), field_codec.WireOmitDefault(),
+    ] = UnreportedIteratorTiming()
     detail: str = ""
     transport: str = ""
     attempt: int = 0
