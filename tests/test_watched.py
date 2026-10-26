@@ -17,7 +17,7 @@ from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncer
 from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
-from agent_comms.locked_store import RegistryFile
+from agent_comms.locked_store import RegistryFile, SQLiteStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.watched import ChangeSignal, FileSource
 from agent_comms.private_path import FileRevision
@@ -256,7 +256,7 @@ def test_native_reply_publication_uses_the_index_commit_source(tmp_path):
         state.close()
 
 
-def test_retired_native_events_invalidate_registered_source_coverage(tmp_path):
+def test_retired_native_events_preserve_unrelated_source_coverage(tmp_path):
     root = tmp_path / "root"
     root.mkdir()
     path = root / "observed"
@@ -264,15 +264,33 @@ def test_retired_native_events_invalidate_registered_source_coverage(tmp_path):
     with Bus.register_sources(FileSource(path), FileSource(unrelated)) as changes:
         root.rename(tmp_path / "retired")
         assert path in changes.changed_paths()
-        # Removing the old native registration queues its final events after
-        # the rename batch. Their retired descriptor cannot prove quietness.
-        assert changes.changed_paths() == frozenset((path, unrelated))
+        # Retirement belongs to the source already invalidated by the rename.
+        # Its queued acknowledgement does not invalidate another source's cut.
+        assert changes.changed_paths() == frozenset()
+
+
+def test_unrelated_sqlite_data_events_never_enter_the_native_queue(tmp_path):
+    path = tmp_path / "registry.json"
+    path.write_text("{}")
+    sidecars = tuple(tmp_path / ("store.sqlite3" + suffix) for suffix in (
+        *SQLiteStorage.transient_suffixes, SQLiteStorage.wal_suffix,
+    ))
+    for sidecar in sidecars:
+        sidecar.write_text("before")
+    with Bus.register_sources(FileSource(path)) as changes:
+        for sidecar in sidecars:
+            sidecar.write_text("after")
+            sidecar.touch()
+        assert not changes._readiness.poll(0)
+        assert changes.changed_paths() == frozenset()
+        path.write_text('{"changed":true}')
+        assert changes.changed_paths() == frozenset((path,))
 
 
 def test_synchronous_backlog_invalidates_admitted_sources(tmp_path):
     path = tmp_path / "observed"
     with Bus.register_sources(FileSource(path)) as changes:
         # More than a single native read, without changing the admitted file.
-        for index in range(2048):
+        for index in range(8192):
             (tmp_path / str(index)).write_text("unrelated")
         assert changes.changed_paths() == frozenset((path,))
