@@ -36,6 +36,21 @@ REASON = StrikeReason("This head repeats the same decision in two unrelated plac
 ACCEPTED = VerdictReason("The existing class owns this behavior without another copy")
 
 
+@pytest.mark.parametrize('roast,fields', (
+    ('The decision could be improved because the same required checks are repeated across fields',
+     {'why', 'roast.blunt'}),
+    ('Maybe improve this', {'why', 'roast.words', 'roast.because', 'roast.blunt'}),
+))
+def test_back_collects_missing_and_invalid_fields(roast: str, fields: set[str]) -> None:
+    with pytest.raises(RecordProblems) as refused:
+        judge.JudgeVerb.parse([
+            'back', '--pr', '1', '--head', 'a' * 40, '--at', 'owner.py:1',
+            '--roast', roast,
+            '--fix', 'Put the repeated checks on their existing declaring parent class',
+        ])
+    assert refused.value.problems.keys() >= fields
+
+
 @pytest.fixture
 def reviewed_source(held_bus, configured_repository, tmp_path):
     """The registered checkout whose origin carries main and every reviewed pull request head."""

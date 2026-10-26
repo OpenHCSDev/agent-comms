@@ -370,16 +370,8 @@ class ArgumentDefault(ABC):
 
 @dataclass(frozen=True)
 class InferredArgumentDefault(ArgumentDefault):
-    """An absent optional argument stays absent, so the field's own default applies."""
-
-    def options(self, plan: FieldPlan) -> Mapping[str, object]:
-        return {"required": True} if plan.constructor_required else {"default": argparse.SUPPRESS}
-
-
-@dataclass(frozen=True)
-class SelectingArgumentDefault(ArgumentDefault):
-    """An option that chooses its command's member: absent, it stays absent, and the member
-    the given options chose reports every one of its own it still lacks."""
+    """An absent option stays absent. The constructor's declaration, not argparse,
+    reports required fields beside every other decoding refusal."""
 
     def options(self, plan: FieldPlan) -> Mapping[str, object]:
         return {"default": argparse.SUPPRESS}

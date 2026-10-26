@@ -95,7 +95,9 @@ from agent_comms.todos import (
     PullRequestLink,
     PullRequests,
     RecordPullRequest,
+    SourceCompletion,
     StrikeReason,
+    WorkingEvidence,
     StrikeTodo,
     Successor,
     Todo,
@@ -237,7 +239,7 @@ class PullRequestDeliverySource(CommandDeliverySource):
 
 
 @dataclass(frozen=True)
-class OpDeliverySource(CommandDeliverySource):
+class OpDeliverySource(WorkingEvidence, CommandDeliverySource):
     def delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
         return OperationDelivery(evidence=evidence)
 
@@ -805,6 +807,14 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
         for rule in vars(cls).get("clears", ()):
             rule.cleared_by(cls)
 
+    def __post_init__(self) -> None:
+        if problems := self.argument_problems():
+            raise RecordProblems(problems)
+
+    def argument_problems(self) -> dict[str, str]:
+        """Members add their cross-field rules; FieldCodec owns their field rules."""
+        return {}
+
     def who(self, ctx: Commander) -> str:
         return ctx.actor_name
 
@@ -1114,13 +1124,10 @@ class DoneVerb(OrderVerb):
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
         order = todo.order.checked()
-        delivery = order.scope.delivery(
-            todo, order.check.directory, self.source,
-            self.screenshot, self.seen)
         ctx.call(CommsOrderDoneTool(
-            problem=todo.id, order_id=order.id, delivery=delivery,
-            claims=delivery.done_claims(order)))
-        print(f'{todo.holder_state.previous_assignment().owner}: order {order.id} delivered as {delivery.work}')
+            problem=todo.id, order_id=order.id,
+            delivery=SourceCompletion(self.source, self.screenshot, self.seen), claims=()))
+        print(f'{todo.holder_state.previous_assignment().owner}: order {order.id} delivered')
 
 
 @dataclass(frozen=True)
