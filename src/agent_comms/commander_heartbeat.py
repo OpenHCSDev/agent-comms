@@ -11,6 +11,7 @@ from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePi
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
+from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import StandingRule
 from agent_comms.threads import Thread
@@ -32,9 +33,10 @@ class CommanderObservation:
 
     @classmethod
     def read(cls, comms: Comms, thread: Thread,
-             reading: type[ProgressRead] = ProgressRead) -> CommanderObservation:
+             reading: type[ProgressRead] = ProgressRead, *,
+             plans: PlanReadings = PlanReadings()) -> CommanderObservation:
         """One frame's progress facts come from ``reading``; Core reads the live forge and Git."""
-        frame = HeartbeatFrame.capture(comms, thread.name, reading())
+        frame = HeartbeatFrame.capture(comms, thread.name, reading(), plans)
         pulls = frame.pulls
         for repo in comms.registry.snapshot().commander_project.repository_names():
             pulls.carry_reviews(comms.goals, repo)
@@ -55,11 +57,12 @@ class CommanderObservation:
         return cls(thread, merged, rules, states, hud)
 
 
-class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation, ...]]):
+class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
+                         WatchPass[tuple[CommanderObservation, ...]]):
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
         return tuple(
-            CommanderObservation.read(comms, thread)
+            CommanderObservation.read(comms, thread, plans=self)
             for thread in self.commanders(comms.registry, comms.goals)
         )
 

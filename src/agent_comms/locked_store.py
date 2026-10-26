@@ -46,7 +46,6 @@ from .store_files import (
 if TYPE_CHECKING:
     from sqlite3 import _IsolationLevel
 
-    from .typed_table import WriterOwnedStore
 
 T = TypeVar("T")
 
@@ -332,7 +331,7 @@ class RootFile:
                     ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
         root = files.root
         declarations = cls.installation_declarations(files)
-        known = {owner.retained_name(root, path): path for path, owner in declarations.items()}
+        known = {files.retained_name(owner, path): path for path, owner in declarations.items()}
         for name in names:
             if name.is_absolute() or ".." in name.parts:
                 raise RelationViolationError(f"Installation refuses a retained name: {name}")
@@ -378,7 +377,7 @@ class RootFile:
                 raise RelationViolationError(f"Installation refuses an aliased file: {path}")
             if path not in declarations and not path.is_relative_to(root):
                 raise RelationViolationError(f"Installation refuses an undeclared file: {path}")
-            name = owner.retained_name(root, path)
+            name = files.retained_name(owner, path)
             resource = (declarations[path].resource(name) if path in declarations
                         else UndeclaredFile(name))
             if name in names:
@@ -532,18 +531,24 @@ class FilesRequest(DeclaredFamily, affix="Request"):
     @abstractmethod
     def location(self, resource: FileResource) -> Path: ...
 
-    def writer_path(self, store: type[WriterOwnedStore]) -> Path:
-        return self.location(store.resource(store.retained_filename()))
+    @abstractmethod
+    def retained_name(self, owner: type[RootFile], path: Path) -> Path: ...
 
 
 class LiveFilesRequest(FilesRequest):
     def location(self, resource: FileResource) -> Path:
         return resource.live(self.root)
 
+    def retained_name(self, owner: type[RootFile], path: Path) -> Path:
+        return owner.retained_name(self.root, path)
+
 
 class RetainedCopyRequest(FilesRequest):
     def location(self, resource: FileResource) -> Path:
         return resource.retained(self.root)
+
+    def retained_name(self, owner: type[RootFile], path: Path) -> Path:
+        return path.relative_to(self.root)
 
 
 class LockedFile(RootFile, StoreLockOwner, declared_name=None):
