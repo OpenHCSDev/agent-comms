@@ -29,6 +29,8 @@ from agent_comms.cli_commands import (
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
 )
+from agent_comms.cli_bridges.codex import CodexBridge
+from agent_comms.cli_bridges.shared import BridgeDeliveryStore, BridgeStateTable
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import ClaimId, FieldCodec, MessageId
@@ -38,9 +40,11 @@ from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordinator import Coordination
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.probes.carry import WriterOwnedOpeningProbe
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import RegistryFile, SQLiteFile
+from agent_comms.locked_store import RegistryFile, RetainedCopyRequest, SQLiteFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceHolder, MaintenanceOperator, NoMaintenanceHolder,
 )
@@ -51,7 +55,7 @@ from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.triage_native_sources import TriageNativeSource
 from agent_comms.typed_table import (
     Column, DurableTables, HeldBusFile, PracticeRoot, ProjectionProducer, ReconciledFile,
-    SharedFileTables, TableSchema, TypedTable, WriterOwnedStore,
+    SharedFileTables, TableSchema, TypedTable, WriterOwnedFile, WriterOwnedStore,
 )
 from bus_record_fixture import OWNER_LOOKUP
 from cli_command import core
@@ -364,6 +368,58 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
     finally:
         stored.unlink()
     assert PlannedReconcileCliCommand().answer(root).rewritten == ()
+
+
+@pytest.mark.parametrize("readable", (False, True))
+def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_cannot_open(
+        tmp_path, monkeypatch, readable):
+    """Each binding keeps its own delivery.sqlite3 under its bridge's state directory; one in
+    a shape the bridge cannot open fails the install's plan, naming that binding's file."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    stored = tmp_path / "home" / CodexBridge.state_directory / "unit-old" / "delivery.sqlite3"
+    stored.parent.mkdir(parents=True)
+    with closing(sqlite3.connect(stored)) as db:
+        db.execute('CREATE TABLE observed_part (id TEXT NOT NULL, number TEXT NOT NULL, '
+                   'sender TEXT NOT NULL, body TEXT NOT NULL, record_id TEXT NOT NULL, '
+                   'timestamp REAL NOT NULL, PRIMARY KEY (id, number))')
+        db.execute("INSERT INTO observed_part VALUES ('m', 'first', 'a', 'b', 'r', 0)")
+        db.commit()
+    if readable:
+        stored.unlink()
+        with closing(SQLiteFile.writer(stored)) as db, db:
+            BridgeStateTable.install_schema(db, WriterOwnedFile())
+    sibling = stored.parent.with_name("unit-second") / BridgeStateTable.filename
+    sibling.parent.mkdir()
+    with closing(SQLiteFile.writer(sibling)) as db, db:
+        BridgeStateTable.install_schema(db, WriterOwnedFile())
+    originals = {path: path.read_bytes() for path in (stored, sibling)}
+    root = tmp_path / "bus"
+    root.mkdir()
+    files = LiveFilesRequest(root)
+    resources = BridgeDeliveryStore.resources(files)
+    assert {files.location(resource) for resource in resources} == set(originals)
+    assert len({resource.path for resource in resources}) == 2
+    practice = PracticeCopy(root, tmp_path / "practice")
+    practice.include(tuple(originals))
+    copied = RetainedCopyRequest(practice.path)
+    probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,))
+    copied_paths = tuple(copied.location(resource) for resource in resources)
+    planned = subprocess.run(
+        [sys.executable, "-m", "agent_comms.cli", "--root", str(root),
+         *PlannedReconcileCliCommand.invocation()],
+        capture_output=True, text=True, timeout=60,
+    )
+    if readable:
+        assert planned.returncode == 0, planned.stdout + planned.stderr
+        result = FieldCodec.decode(PlannedStoresResult, FieldCodec.parse(planned.stdout))
+        assert result.rewritten == ()
+        assert probe.run() == copied_paths
+    else:
+        assert planned.returncode != 0
+        assert str(stored) in planned.stdout + planned.stderr
+        with pytest.raises(RelationViolationError, match=str(copied_paths[0])):
+            probe.run()
+    assert {path: path.read_bytes() for path in originals} == originals
 
 
 def test_an_opening_refuses_a_drifted_store_and_reconcile_stores_carries_it(private_comms):

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
+from .bus_tables import MessageIdentitySource
 from .errors import RelationViolationError
 from .field_codec import GoalId, InputId, RootId, TurnId
 from .input_attempt import (
@@ -153,12 +154,8 @@ class InputDocument:
             for row in sorted(self.rows.values(), key=lambda item: item.order)
             for reference in row.delivered_in(lease, privacy.namespace, snapshot).references()
         )
-        route = CommandTarget.named(target).canonical_name(snapshot.canonical_name)
-        return tuple(
-            original.message.reference
-            for original in source.messages_for_references(delivered)
-            if original.message.exact_reply_target == route
-        )
+        with source.observing() as db:
+            return MessageIdentitySource.answering(db, delivered, CommandTarget.named(target), snapshot)
 
     def unbound_wire_inputs(self, root_id: RootId) -> dict[MessageReference, StoredInput]:
         """Original bus deliveries with positive evidence that Pi never received them."""

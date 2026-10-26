@@ -92,7 +92,7 @@ class RunningClaude(ClaudeJsonLines, ClaudeHistory, OnlineHistory):
         return cls(thread)
 
 
-class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
+class ClaudeBridge(RunningClaude, LineMonitorBridge):
     """Follow this Claude session's file without submitting an input.
 
     Heartbeat packets reach the session through the board its tool-call hook prints, which
@@ -177,4 +177,4 @@ class Connect(Enrol):
 
 def main() -> None:
     run_bridge(ClaudeBridge, Options.parse(
-        __doc__, Path.home() / ClaudeBridge.state_directory, ClaudeBridge))
+        __doc__, ClaudeBridge.state_path(), ClaudeBridge))
