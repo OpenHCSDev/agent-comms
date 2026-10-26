@@ -14,6 +14,7 @@ from threading import Event, RLock
 from typing import TYPE_CHECKING, ClassVar, Annotated
 from weakref import WeakValueDictionary, finalize
 
+from .agent_backend import RuntimeLocation
 from .coordination_errors import CoordinationReadUnavailable
 from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
 from .store_files import StoreBusy
@@ -23,6 +24,7 @@ from .native_transcript import SessionCut, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
+from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import (
     Column,
@@ -37,9 +39,7 @@ from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, Unr
 from .watched import FileSource
 
 if TYPE_CHECKING:
-    from .agent_backend import RuntimeLocation
     from .registry_document import RegistrySnapshot
-    from .thread_identity import ThreadIncarnation
     from .threads import Thread
 
 _INDEX_VERSION = 7
