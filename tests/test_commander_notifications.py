@@ -26,6 +26,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
+from agent_comms.ui_model.observation import ReadCommanderUnit, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import (
@@ -35,6 +36,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
+from test_unit_state import recorded_turn
 
 pytest_plugins = ("test_holder_standing_rules",)
 
@@ -68,6 +70,37 @@ def beat(comms, rules=(), *, states=()):
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     CommanderHeartbeat().pass_body(comms, (frame,))
     return frame.hud
+
+
+def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_stale_selection(
+    notification_bus,
+):
+    comms = notification_bus
+    recorded_turn(comms, 10)
+    original = (comms.root / 'state-source.jsonl').read_bytes()
+    hud = beat(comms, states=state_cards(comms, UnitState))
+    ServicePassStore.at(comms.root).heartbeat_passed((hud.commander,), (hud.commander,))
+    card = next(card for card in hud.units if card.unit.name == 'worker')
+    request = ReadCommanderUnit(str(comms.root), hud.commander, card.unit,
+                               tuple(dict.fromkeys(order.order for order in card.orders)))
+    detail = pickle.loads(pickle.dumps(request.read(comms)))
+    assert detail.unit == card
+    assert {order.card.problem for order in detail.orders} == {'P1', 'P2'}
+    for order in detail.orders:
+        todo = comms.goals.todos.get(order.card.problem)
+        assert order.instructions == (todo.order.instructions(todo),)
+        assert {problem.problem for problem in order.story.problems} >= {todo.id}
+    turn, = detail.activity['turns']
+    assert len(turn['calls_started']) == 6
+    assert 'contents' not in json.dumps(detail.activity)
+    assert (comms.root / 'state-source.jsonl').read_bytes() == original
+    for stale in (
+        replace(request, orders=()),
+        replace(request, root=str(comms.root / 'other')),
+        replace(request, unit=replace(card.unit, created_at=card.unit.wire_birth + 1)),
+        replace(request, commander=card.unit),
+    ):
+        assert isinstance(stale.answer(comms), ReadRefused)
 
 
 def test_failed_heartbeat_pass_messages_commander_and_still_raises(notification_bus):

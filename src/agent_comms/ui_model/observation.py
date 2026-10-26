@@ -41,7 +41,7 @@ from agent_comms.acp_extension import (
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.child_process import join_retirement
-from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_errors import (
@@ -53,7 +53,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.historical_views import HistorySource
 from agent_comms.history_views import RetiredViews
 from agent_comms.message_reference import MessageReference
@@ -423,6 +423,29 @@ class ReadRequest(AwaitedRead):
             return ReadAnswered(self.request_id, value)
         except self.refusal_errors as error:
             return self.refused(error)
+
+
+@dataclass(frozen=True)
+class ReadCommanderUnit(ReadRequest):
+    """Expand an exact published card, refusing a reused name or changed assignment."""
+
+    commander: ThreadIncarnation
+    unit: ThreadIncarnation
+    orders: tuple[OrderId, ...]
+
+    @property
+    def refusal_errors(self) -> tuple[type[Exception], ...]:
+        return (*super().refusal_errors, ToolRefusedError)
+
+    def read(self, comms: Comms) -> CommanderUnitDetail:
+        snapshot = comms.registry.snapshot()
+        if not self.commander.current(snapshot) or not self.unit.current(snapshot):
+            raise ToolRefusedError("The selected commander or unit incarnation is no longer current")
+        hud = CommanderFrame.current(comms, self.commander.name)
+        for card in hud.units:
+            if card.unit == self.unit:
+                return card.detail(comms, self.commander, self.orders)
+        raise ToolRefusedError("The selected unit is no longer in this commander's published frame")
 
 
 @dataclass(frozen=True)
