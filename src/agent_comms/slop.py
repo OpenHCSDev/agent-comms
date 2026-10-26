@@ -14,7 +14,7 @@ from typing import ClassVar
 from pydantic import JsonValue
 
 from agent_comms import skills
-from agent_comms.change_report import FileLine
+from agent_comms.change_report import Declaration, FileLine
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
     FieldCodec,
@@ -30,16 +30,25 @@ class Derivation(DeclaredFamily, affix="Derivation"):
     sentence: ClassVar[str]
 
     @classmethod
-    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
-        return False
+    def recurrence_refusal(cls, by: FileLine, where: FileLine, root: Path) -> str:
+        return f"derive {cls.declared_name} never satisfies recurrence"
 
 
 class DeclarationDerivation(Derivation):
     sentence = "the declaration derives it"
 
     @classmethod
-    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
-        return by.declaration(root) != where.declaration(root)
+    def recurrence_refusal(cls, by: FileLine, where: FileLine, root: Path) -> str:
+        declaration = where.declaration(root)
+        if by.declaration(root) != declaration:
+            return ""
+        return f"by {by.to_wire()} is inside the same declaration {declaration}"
+
+    @classmethod
+    def requirement(cls, declaration: Declaration) -> str:
+        accepted = ", ".join(member.declared_name for member in Derivation.members_with(cls))
+        return (f"accepted derive values: {accepted}; "
+                f"by must lie outside the declaration {declaration}")
 
 
 class NominalKeyDerivation(Derivation, declared_name="nominal-key"):
