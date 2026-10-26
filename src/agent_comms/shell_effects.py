@@ -44,6 +44,9 @@ class ShellProgram(NamedProgram):
     def matches(args: Sequence[str], prefixes: Sequence[tuple[str, ...]]) -> bool:
         return any(tuple(args[:len(prefix)]) == prefix for prefix in prefixes)
 
+    def invocation(self, decoded: ShellCommand, cwd: Path) -> ShellInvocation:
+        return ShellInvocation(decoded.words, cwd)
+
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         """Unknown programs have no declared effects; capabilities compose through super()."""
         return ()
@@ -152,12 +155,18 @@ class ShellInvocation(ShellCommand):
             raise StorageDenied(f'StorageRule: the shell command cannot be decoded ({error}); '
                                 'no tool was started') from error
         for decoded in decoded_commands:
-            words = decoded.words
-            if decoded.program == 'cd' and len(words) > 1:
-                target = words[2] if words[1] == '--' and len(words) > 2 else words[1]
-                cwd = physical_path(target, cwd)
-                continue
-            yield cls(words, cwd)
+            invocation = ShellProgram.named(decoded.program).invocation(decoded, cwd)
+            cwd = invocation.cwd
+            yield invocation
+
+
+class ChangeDirectoryProgram(ShellProgram, names=frozenset({'cd'})):
+    def invocation(self, decoded: ShellCommand, cwd: Path) -> ShellInvocation:
+        words = decoded.words
+        if len(words) > 1:
+            target = words[2] if words[1] == '--' and len(words) > 2 else words[1]
+            cwd = physical_path(target, cwd)
+        return ShellInvocation(words, cwd)
 
 
 @dataclass(frozen=True)
@@ -247,7 +256,7 @@ class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
               'checkout add PROBLEM or checkout remove PROBLEM, which own the pinned submodules')
 
     @classmethod
-    def invocation(cls, args: list[str], cwd: Path) -> GitInvocation:
+    def git_invocation(cls, args: list[str], cwd: Path) -> GitInvocation:
         try:
             selected = cls.options(args)
         except getopt.GetoptError as error:
@@ -261,7 +270,7 @@ class GitProgram(GitLaunch, ForbidsCommands, WritesWorkingTree):
         return GitInvocation(selected.arguments, cwd)
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
-        invocation = self.invocation(args, cwd)
+        invocation = self.git_invocation(args, cwd)
         return super().effects(invocation.args, invocation.cwd)
 
 
