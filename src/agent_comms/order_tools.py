@@ -38,7 +38,7 @@ from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireNam
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .heartbeat_frame import HeartbeatFrame
-from .head_review import HeadReviewOrder, PullRequestHead
+from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
 from .held_orders import HeldOrders
 from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
@@ -204,13 +204,19 @@ class HeadVerdictTool:
         for order in orders:
             with RecordProblems.collecting(problems, '--problem', 'select the current held order'):
                 actors.append(caller.head_review_actor(comms, self.request, order))
-        with RecordProblems.collecting(problems, self.operation.preparation_field,
-                                      self.operation.preparation_fix):
-            prepared = self.operation.prepare(comms.goals, self.request)
+        heads = []
+        with RecordProblems.collecting(problems, '--head', 'supply the current PR head SHA with --head'):
+            heads.append(self.request.current())
+        preparations = []
+        for current in heads:
+            with RecordProblems.collecting(problems, self.operation.preparation_field,
+                                          self.operation.preparation_fix):
+                preparations.append(PreparedHeadReview(current, self.operation.subject(comms.goals, current)))
         if problems:
             raise RecordProblems(problems)
         order, = orders
         actor, = actors
+        prepared, = preparations
         return self.operation.reviewed(comms.goals, self.request, prepared, actor, order)
 
 

@@ -3933,10 +3933,6 @@ class HeadVerdict(HeadReview, declared_name=None):
     preparation_field: ClassVar[str] = '--head'
     preparation_fix: ClassVar[str] = 'supply the current PR head SHA with --head'
 
-    def prepare(self, goals: Goals, request: PullRequestHead) -> PreparedHeadReview:
-        current = request.current()
-        return PreparedHeadReview(current, self.subject(goals, current))
-
     def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
                  reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
         request = replace(request, head=prepared.current.head)
