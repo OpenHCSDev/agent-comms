@@ -1830,10 +1830,8 @@ class BroadSwallow(CleanChangedLines, BroadExceptDefault):
                     for child in ast.walk(handler)
                     for argument in BroadSwallow.constructor_arguments(child)
                     for name in ast.walk(argument))
-                returns_value = any(
-                    isinstance(node, ast.Return) and node.value is not None
-                    and not (isinstance(node.value, ast.Constant) and node.value.value is None)
-                    for node in ast.walk(handler))
+                returns_value = any(BroadSwallow.returns_replacement(node)
+                                    for node in ast.walk(handler))
                 reported = any(
                     isinstance(argument, ast.Name) and argument.id == bound
                     for statement in handler.body
@@ -1842,6 +1840,16 @@ class BroadSwallow(CleanChangedLines, BroadExceptDefault):
                     for argument in (*statement.value.args,
                                      *(keyword.value for keyword in statement.value.keywords)))
                 return constructed or (reported and not returns_value)
+        return False
+
+    @staticmethod
+    def returns_replacement(node: ast.AST) -> bool:
+        """A bare return ends a notification; a returned value replaces the failure."""
+        match node:
+            case ast.Return(value=None | ast.Constant(value=None)):
+                return False
+            case ast.Return():
+                return True
         return False
 
     @staticmethod
