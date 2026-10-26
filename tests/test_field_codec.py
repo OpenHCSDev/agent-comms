@@ -27,6 +27,7 @@ from agent_comms.field_codec import (
     MessageId,
     NullMember,
     PathText,
+    projected,
     RecordMember,
     RecordedTimestamp,
     RootId,
@@ -117,6 +118,31 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access() -> None
     assert set(properties) == {"value"}
     with pytest.raises(MalformedRecord):
         FieldCodec.decode(Record, {"value": "kept", "local": {}})
+
+
+def test_record_encoding_uses_the_declared_fields_and_projections() -> None:
+    @dataclass(frozen=True)
+    class Key:
+        value: str
+
+        @projected(view="wire")
+        def uppercase(self) -> str:
+            return self.value.upper()
+
+    @dataclass(frozen=True)
+    class ReadKey(Key):
+        local: str
+
+        @projected(view="wire")
+        def local_uppercase(self) -> str:
+            return self.local.upper()
+
+    key = Key("key")
+    read = ReadKey(key.value, "runtime")
+    assert FieldCodec.encode(read, Key) == FieldCodec.encode(key)
+    assert FieldCodec.decode(Key, FieldCodec.encode(read, Key)) == key
+    assert FieldCodec.encode(read) == FieldCodec.encode(read, ReadKey)
+    assert FieldCodec.decode(ReadKey, FieldCodec.encode(read)) == read
 
 
 def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims() -> None:
