@@ -901,7 +901,9 @@ class PullRequests:
         for row in self.open(repo):
             if not row.has_head_review:
                 current = ReadPullRequestHead(repo, row.number, row.head, base=row.base)
-                for review in goals.todos.pull_request_reviews(current):
+                with goals.todos.snapshot() as db:
+                    reviews = StoredHeadReview.latest_for_pull_request(db, current)
+                for review in reviews:
                     if review.verdict.carry(goals, review, current, reader):
                         self._read[repo, row.number] = replace(
                             row, status_contexts=(*row.status_contexts, HeadReview.context))
@@ -5529,11 +5531,6 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             return tuple(row.record for row in StoredHeadReview.select(
                 db, request=request, order_by=("seq",), descending=True, limit=1,
             ))
-
-    def pull_request_reviews(self, request: PullRequestHead) -> tuple[HeadReviewRecord, ...]:
-        """The latest verdict on this PR, so a later back/reviewing mark defeats an old ok."""
-        with self.snapshot() as db:
-            return StoredHeadReview.latest_for_pull_request(db, request)
 
     def unjudged_since(self, todo: Todo) -> float:
         """The problem's work starts at its first order; a send-back reissues the order but
