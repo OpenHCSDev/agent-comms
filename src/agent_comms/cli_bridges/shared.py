@@ -86,7 +86,8 @@ from agent_comms.typed_table import (
     ExpressionIndex,
     TableSchema,
     TypedRow,
-    StoredColumnCarry,
+    DerivedColumn,
+    StoredRowDerivation,
     TypedTable,
     WriterOwnedFile,
     WriterOwnedResource,
@@ -327,8 +328,21 @@ class BindingAddress(SessionBinding):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RegisteredReader(BindingAddress, StoredRowDerivation):
+    """The registered incarnation derived from a stored reader address."""
+
+    def derived_value(self) -> ThreadIncarnation:
+        try:
+            return Registration(RegistryFile.path_in(Path(self.root))).require(self.bus).incarnation
+        except UnregisteredThreadError as error:
+            raise RelationViolationError(
+                f'cannot bind unregistered reader {self.bus!r} in {self.root}'
+            ) from error
+
+
+@dataclass(frozen=True, kw_only=True)
 class BindingIdentity(SessionBinding):
-    owner: ThreadIncarnation
+    owner: Annotated[ThreadIncarnation, DerivedColumn(source=RegisteredReader)]
 
     @property
     def bus(self) -> str:
@@ -341,32 +355,6 @@ class BindingIdentity(SessionBinding):
 @dataclass(frozen=True)
 class Binding(BindingIdentity, BridgeStateTable, TypedTable):
     dropped_fields = ('bus',)
-
-    @staticmethod
-    def carry_columns(row: type[TypedTable], db: sqlite3.Connection) -> None:
-        """Replace the old address with its registered incarnation before dropping it."""
-        if 'bus' in row.stored_columns(db):
-            if 'owner' in row.stored_columns(db):
-                raise RelationViolationError('Binding stores both an address and an owner')
-            table = f'"{row.declared_name}"'
-            cases: list[str] = []
-            (owner_column,) = row._fields_named(('owner',))
-            for root, bus in db.execute(f'SELECT root, bus FROM {table}'):
-                try:
-                    owner = Registration(RegistryFile.path_in(Path(root))).require(bus).incarnation
-                except UnregisteredThreadError as error:
-                    path = db.execute('PRAGMA database_list').fetchone()[2]
-                    raise RelationViolationError(
-                        f'{path}: cannot bind unregistered reader {bus!r} in {root}'
-                    ) from error
-                quoted = tuple(db.execute('SELECT quote(?), quote(?), quote(?)',
-                    (root, bus, owner_column.encode(owner))).fetchone())
-                stored_root, stored_bus, encoded_owner = quoted
-                cases.append(f'WHEN root = {stored_root} AND bus = {stored_bus} '
-                             f'THEN {encoded_owner}')
-            expression = 'CASE ' + ' '.join(cases) + ' END' if cases else 'NULL'
-            row.rebuild(db, {'owner': expression})
-        StoredColumnCarry.carry_columns(row, db)
 
     @staticmethod
     def bus_head(root: str) -> BridgePosition:
