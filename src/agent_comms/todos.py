@@ -4642,12 +4642,18 @@ class Todo(TodoStoreRows, TypedTable):
         Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
     ))
     problem_index: ClassVar[ExpressionIndex] = ExpressionIndex((ProblemNumber.sql_number('{id}'),))
+    phase_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+        f"json_extract({{order}}, '$.{FieldCodec.record_key(CheckedProblemOrder, 'serves')}')",
+        '{creator}', '{creator_created}',
+        f"json_extract({{order}}, '$.{FieldCodec.record_key(CheckedProblemOrder, 'at')}"
+        f".{FieldCodec.record_key(RecordedEventTime, 'at')}')",
+    ))
     serving_request: ClassVar[str] = (
         f'json_extract("order",\'$.{ProblemOrder.family_discriminator}\') '
         f'IN {DeliverableProblemOrder.sql_choices()}'
     )
     indexes = (Index(("creator", "creator_created", "state")), Index(("state",)),
-               unit_index, problem_index, Index(("request",)),
+               unit_index, problem_index, phase_index, Index(("request",)),
                Index(("request",), where=serving_request))
 
     id: Annotated[str, Column(primary_key=True)]
@@ -5487,6 +5493,25 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             'the same declaration broke again, name the fact written in more than one place '
             'and the declaration that replaces the copies.',
             DeclarationDerivation.requirement(declarations[1]), *rejected)))
+
+    def phase_ordered_since(
+        self, phase: type[OrderPhase], commanders: frozenset[ThreadIncarnation], since: float,
+    ) -> bool:
+        """An existing order's phase and checked time answer this, without reading its story."""
+        if not commanders:
+            return False
+        phase_key, creator, birth, ordered = Todo.phase_index.terms
+        actors = ','.join('(?,?)' for commander in commanders)
+        parameters = tuple(value for commander in commanders
+                           for value in (commander.name, commander.wire_birth))
+        with self.snapshot() as db:
+            return db.execute(Todo._sql(
+                f'WITH actors(name,birth) AS (VALUES {actors}) '
+                f'SELECT 1 FROM actors JOIN {Todo.declared_name} '
+                f'ON {creator}=actors.name AND {birth}=actors.birth '
+                f'WHERE {phase_key}=? AND {ordered}>=? LIMIT 1'),
+                (*parameters, FieldCodec.encode(phase), since),
+            ).fetchone() is not None
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
