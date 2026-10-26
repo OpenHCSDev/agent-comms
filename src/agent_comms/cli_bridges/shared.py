@@ -231,19 +231,16 @@ class GivenBinding(BindingRequest):
         values = {key: value for key, value in vars(arguments).items() if key in keys}
         arguments.base_state = arguments.state
         arguments.state = arguments.state / arguments.binding_thread.thread
-        return cls({Binding.family_discriminator: Binding.declared_name,
-                    **values, **arguments.binding_session.supplied(),
+        return cls({**values, **arguments.binding_session.supplied(),
                     FieldCodec.record_key(BindingAddress, 'bus'): arguments.binding_thread.thread})
 
     def bind(self, db: sqlite3.Connection) -> BindingAddress:
         stored = Binding.select(db)
-        root = self.given[FieldCodec.record_key(BindingAddress, 'root')]
-        start = stored[0].start if stored else Binding.bus_head(root)
-        return FieldCodec.decode(BindingAddress, {
-            'start': FieldCodec.encode(start),
-            **{key: value for key, value in self.given.items()
-               if key != Binding.family_discriminator},
+        defaults = (FieldCodec.encode_fields(stored[0].address()) if stored else {
+            'start': FieldCodec.encode(Binding.bus_head(
+                self.given[FieldCodec.record_key(BindingAddress, 'root')])),
         })
+        return FieldCodec.decode_record(BindingAddress, {**defaults, **self.given})
 
 
 class ResolvedBinding(GivenBinding):
