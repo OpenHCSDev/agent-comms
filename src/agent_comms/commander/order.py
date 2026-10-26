@@ -111,6 +111,7 @@ from agent_comms.todos import (
     StrikeTodo,
     Successor,
     Todo,
+    TodoProblems,
     UnlocatedProblemFinding,
     VerdictAudience,
     VoidStrikeTodo,
@@ -824,7 +825,7 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
 
     def __post_init__(self) -> None:
         if problems := self.argument_problems():
-            raise RecordProblems(problems)
+            raise TodoProblems(problems)
 
     def argument_problems(self) -> dict[str, str]:
         """Members add their cross-field rules; FieldCodec owns their field rules."""

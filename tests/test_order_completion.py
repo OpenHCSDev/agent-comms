@@ -1,6 +1,9 @@
 """One copied-bus command family owns check correction, delivery and closure."""
+import subprocess
+import sys
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -135,6 +138,14 @@ class TestOrderCompletion:
             with pytest.raises(RecordProblems) as refused:
                 main(['done', 'worker', 'P1', '--op'], ctx)
             assert refused.value.problems.keys() >= {'checkout', '--seen.run', '--seen.working'}
+            assert ctx.comms.goals.todos.get('P1') == current
+            result = subprocess.run(
+                [sys.executable, str(Path(sys.executable).with_name('agent-comms-commander')),
+                 '--root', str(ctx.root), 'order', 'done', 'worker', 'P1', '--op'],
+                cwd=ctx.root, capture_output=True, text=True, timeout=30,
+            )
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert all(field in result.stderr for field in ('checkout', '--seen.run', '--seen.working'))
             assert ctx.comms.goals.todos.get('P1') == current
         finally:
             checkout.retire()

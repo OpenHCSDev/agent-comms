@@ -107,7 +107,9 @@ class RefusalBoundary[Suppressed: bool]:
         except MalformedRecord as refused:
             return self.refused(refused)
         except ValueError as refused:
-            return self.refused(MalformedRecord(f"{self.subject}: {refused}"))
+            malformed = MalformedRecord(f"{self.subject}: {refused}")
+            malformed.__cause__ = refused
+            return self.refused(malformed)
 
     @abstractmethod
     def refused(self, error: MalformedRecord) -> Suppressed: ...
