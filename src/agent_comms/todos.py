@@ -5771,21 +5771,32 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
 
     def phases_checked(self, commanders: frozenset[ThreadIncarnation]) -> dict[type[OrderPhase], float]:
-        """When any of these commanders last checked an order serving each phase: one aggregate
-        over the checked orders' declared wire keys, never a decode of every order."""
-        serves = f"""json_extract("order", '$.{FieldCodec.record_key(CheckedProblemOrder, 'serves')}')"""
-        at = (f"""json_extract("order", '$.{FieldCodec.record_key(CheckedProblemOrder, 'at')}"""
+        """The latest checked declaration per phase, including declarations retained by folds.
+
+        Decode the recursive order envelope in SQL, then aggregate only checked declarations;
+        no unrelated JSON object or unbounded Python order history participates.
+        """
+        serves = f"""json_extract(value, '$.{FieldCodec.record_key(CheckedProblemOrder, 'serves')}')"""
+        at = (f"""json_extract(value, '$.{FieldCodec.record_key(CheckedProblemOrder, 'at')}"""
               f""".{FieldCodec.record_key(RecordedEventTime, 'at')}')""")
         if not commanders:
             return {}
         creators = ", ".join("(?, ?)" for _ in commanders)
         with self.snapshot() as db:
             rows = db.execute(
-                f"SELECT {serves}, MAX({at}) FROM {Todo.declared_name} "
-                f"WHERE (creator, creator_created) IN (VALUES {creators}) "
-                f"AND {serves} IS NOT NULL AND {at} IS NOT NULL GROUP BY 1",
+                f'WITH RECURSIVE declarations(value) AS ('
+                f'SELECT "order" FROM {Todo.declared_name} '
+                f'WHERE (creator, creator_created) IN (VALUES {creators}) '
+                f'UNION ALL SELECT json_extract(value, '
+                f"'$.{FieldCodec.record_key(FoldedProblemOrder, 'original')}') "
+                f'FROM declarations WHERE json_extract(value, '
+                f"'$.{ProblemOrder.family_discriminator}')='{FoldedProblemOrder.declared_name}') "
+                f"SELECT COALESCE({serves}, ?), MAX({at}) FROM declarations "
+                f"WHERE json_extract(value, '$.{ProblemOrder.family_discriminator}') "
+                f"IN {CheckedProblemOrder.sql_choices()} AND {at} IS NOT NULL GROUP BY 1",
                 tuple(value for commander in commanders
-                      for value in (commander.name, commander.wire_birth))).fetchall()
+                      for value in (commander.name, commander.wire_birth))
+                + (FieldCodec.encode(UnplannedPhase),)).fetchall()
         return {FieldCodec.decode(type[OrderPhase], phase): at for phase, at in rows}
 
     def units(self, commander: ThreadIncarnation) -> frozenset[ThreadIncarnation]:

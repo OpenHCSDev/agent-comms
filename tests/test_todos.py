@@ -100,6 +100,41 @@ def order(source: SourceRepository):
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
 
 
+@pytest.mark.parametrize('folds', (0, 1, 2))
+def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
+    tmp_path, source_repository, folds,
+):
+    from agent_comms.plan_phases import RetainedStorePhase, UnplannedPhase
+    from agent_comms.todos import FoldedProblemOrder, UnorderedProblemOrder
+
+    store = TodoStore(tmp_path)
+    lead = thread('lead', tmp_path, 1.0)
+    old_lead = thread('lead', tmp_path, 2.0)
+    checked = replace(order(source_repository), serves=RetainedStorePhase)
+    declarations = (
+        (lead, checked),
+        (lead, replace(checked, at=RecordedEventTime(20))),
+        (old_lead, replace(checked, at=RecordedEventTime(900))),
+        (lead, replace(checked, serves=UnplannedPhase, at=RecordedEventTime(30))),
+        (lead, UnorderedProblemOrder()),
+    )
+    for index, (creator, declaration) in enumerate(declarations, start=1):
+        request = store.add_request(creator.incarnation, 'Check phase declarations').id
+        todo = store.create(
+            f'P{index}', RepositoryName.from_wire('example/source'), f'Problem {index}',
+            creator=creator, assigner=creator.incarnation, request=request, owner=creator,
+            generation=GoalId.mint(), review_at=RecordedEventTime(1000), order=checked,
+        )
+        for _ in range(folds):
+            declaration = FoldedProblemOrder(original=declaration, into='elsewhere', why='duplicate')
+        with store.writing() as db:
+            Todo.update(db, where='id=?', parameters=(todo.id,), order=declaration)
+    assert store.phases_checked(frozenset()) == {}
+    assert store.phases_checked(frozenset({lead.incarnation})) == {
+        RetainedStorePhase: 20, UnplannedPhase: 30,
+    }
+
+
 def test_order_factory_preserves_the_callers_directory_without_creating_source(source_repository):
     before = tuple(source_repository.checkout.iterdir())
     planned = order(source_repository)
