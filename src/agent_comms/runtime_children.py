@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import time
 from abc import abstractmethod
-from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager, contextmanager
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -22,7 +22,7 @@ from .child_process import (
 )
 from .declared_family import DeclaredFamily
 from .field_codec import PathText
-from .launch_runtime import CallingThreadUnavailable, LaunchRuntime, ThreadLaunch
+from .launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .store_files import DependentStateTier, SingleFileStore
@@ -122,25 +122,6 @@ class RetiredRuntimeChildren(RuntimeChildren):
         raise ChildRetirementFailed("Cannot launch a child from a retired runtime")
 
 
-@dataclass(frozen=True)
-class RuntimeChildReservation:
-    store: RuntimeChildrenStore
-    children: RuntimeChildren
-    initiator: ChildInitiator
-
-    @classmethod
-    def capture(cls, store: RuntimeChildrenStore) -> RuntimeChildReservation:
-        children = store._read_unlocked()
-        children.require_open()
-        return cls(store, children, ChildInitiator.capture())
-
-    def record(self, identity: ProcessIdentity) -> None:
-        child = RuntimeChild(
-            GroupLeader(identity.pid, identity.start_time), self.initiator, self.store.path.parent
-        )
-        self.store._publish_unlocked(self.children.add(child))
-
-
 @dataclass(frozen=True, slots=True)
 class RuntimeChildrenStore(SingleFileStore, ChildRegistration, CarriedDocument[RuntimeChildren], DependentStateTier):
     """One file at the selected prefix covers children from every bus root."""
@@ -152,21 +133,12 @@ class RuntimeChildrenStore(SingleFileStore, ChildRegistration, CarriedDocument[R
     def empty(self) -> RuntimeChildren:
         return AcceptingRuntimeChildren()
 
-    @classmethod
-    @contextmanager
-    def launching(cls, runtime: LaunchRuntime) -> Iterator[RuntimeChildReservation]:
-        store = cls.at(runtime.prefix)
-        with store.guarded_write():
-            yield RuntimeChildReservation.capture(store)
-
-    @classmethod
-    @asynccontextmanager
-    async def launching_async(
-        cls, runtime: LaunchRuntime
-    ) -> AsyncIterator[RuntimeChildReservation]:
-        store = cls.at(runtime.prefix)
-        async with store.guarded_write_async():
-            yield RuntimeChildReservation.capture(store)
+    def record(self, identity: ProcessIdentity) -> None:
+        child = RuntimeChild(
+            GroupLeader(identity.pid, identity.start_time),
+            ChildInitiator.capture(), self.path.parent,
+        )
+        self.update(lambda children: DocumentChange.to(children.add(child)))
 
     def finished(self, identity: ProcessIdentity) -> None:
         self.update(lambda children: DocumentChange.to(children.finished(identity)))
