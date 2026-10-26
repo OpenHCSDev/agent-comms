@@ -73,10 +73,13 @@ class Ping(DeclaredFamily, affix="Ping"):
         began = self.since.recorded_at("A line")
         return any(subject.disposed(history, began) for subject in self.subjects)
 
+    @abstractmethod
+    def holds(self, history: CommanderHistory) -> bool:
+        """Whether this observation's own condition still holds at its authoritative source."""
+
     def undisposed(self, history: CommanderHistory, cut: float) -> bool:
-        """Waiting on the commander, and not acted on since it began. Only such a line is
-        restated as waiting and locks the verbs."""
-        return self.waits_on_commander(cut) and not self.acted(history)
+        """A still-true condition waiting on the commander, without a recorded action."""
+        return self.waits_on_commander(cut) and self.holds(history) and not self.acted(history)
 
     def waits_on_commander(self, cut: float) -> bool:
         """The commander's to dispose of, began before ``cut``, and about a subject a verb can
@@ -84,8 +87,8 @@ class Ping(DeclaredFamily, affix="Ping"):
         return self.commander_disposes and self.since.before(cut)
 
     def on_board(self, history: CommanderHistory) -> bool:
-        """The commander's to dispose of, and no recorded action has yet."""
-        return self.commander_disposes and not self.acted(history)
+        """A still-true condition the commander has not acted on."""
+        return self.commander_disposes and self.holds(history) and not self.acted(history)
 
     @property
     @abstractmethod
@@ -122,6 +125,14 @@ class RulePing(Ping):
     def commander_disposes(self) -> bool:
         return self.rule.disposes_subjects(self.subjects)
 
+    def holds(self, history: CommanderHistory) -> bool:
+        return any(
+            rule.attention() and rule.observation_key() == self.observation
+            for rule in self.rule.scan_owner().scan_observed(
+                history.comms, history.commander, history.observed, history.frame,
+            )
+        )
+
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
         return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
@@ -143,6 +154,10 @@ class UnitPing(Ping):
     @property
     def commander_disposes(self) -> bool:
         return self.state.disposes_subjects(self.subjects)
+
+    def holds(self, history: CommanderHistory) -> bool:
+        return any(state.attention() and state.observation_key() == self.observation
+                   for state in history.observed)
 
     @classmethod
     def capture(cls, state: UnitState) -> Self:
@@ -177,9 +192,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
         """This packet's lines the commander disposes of, through the same recorded actions the
-        gate reads: a verdict drops its line on the next read, not the next packet."""
-        actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        history = CommanderHistory.read(comms, actors)
+        gate reads: a verdict or a false condition drops its line on the next read."""
+        history = CommanderHistory.read(comms, commander)
         return tuple(ping.board_entry() for ping in self.handled
                      if ping.on_board(history))
 
@@ -191,9 +205,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         """What reaches the session itself once its bridge has put this packet on its board."""
 
     def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
-        """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
-        actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        history = CommanderHistory.read(comms, actors)
+        """Still-true lines older than ``cut`` without a recorded action on their subjects."""
+        history = CommanderHistory.read(comms, commander)
         return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
 
     def require_publication(self, sender: str, registry: RegistrySnapshot,
