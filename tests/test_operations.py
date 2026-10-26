@@ -235,7 +235,7 @@ class TestThreadOps:
 
     def test_presence_uses_configured_model_with_runtime_context(self, wired: Comms) -> None:
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel(DeclaredModel('configured/model')))
+            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel('configured/model'))
         )
         wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
         wired.agents.observe_runtime_info(
@@ -253,7 +253,7 @@ class TestThreadOps:
         assert answer.model == "observed/model"
         assert answer.context_usage == ContextUsage(25, 100)
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel(DeclaredModel('configured/model')))
+            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel('configured/model'))
         )
         answer = wired.configuration.answer("fixer")
         assert answer.model == "configured/model"

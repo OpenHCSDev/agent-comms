@@ -26,7 +26,7 @@ from .acp_extension import (
 )
 
 from .agent_event_updates import AcpEventConsumer
-from .cli_commands import CorrectAnnotationCliCommand
+from agent_comms.cli_verbs.correct_annotation import CorrectAnnotationCliCommand
 from .command import Command
 from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore

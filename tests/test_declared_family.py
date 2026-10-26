@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from types import MappingProxyType
 from abc import abstractmethod
 from dataclasses import dataclass
 
@@ -124,7 +125,7 @@ def test_child_roots_share_behavior_not_membership_and_survive_slots():
 
     left, right = declare(Left), declare(Right)
     assert Behavior.members_with(Behavior) == ()
-    assert Left._family_root is Left and Right._family_root is Right
+    assert Left.family_root is Left and Right.family_root is Right
     assert Left.members_with(Left) == (left,)
     assert Right.members_with(Right) == (right,)
     assert Left.member_named("value") is left and Right.member_named("value") is right
@@ -139,6 +140,19 @@ def test_collisions_fail_without_replacing_owner():
                 return 0
 
     assert SampleFamily.member_named("http_ready") is HTTPReadyCase
+
+
+def test_named_lookup_accepts_a_sealed_registry():
+    class Sealed(DeclaredFamily):
+        pass
+
+    class Member(Sealed):
+        pass
+
+    Sealed.__registry__ = MappingProxyType(dict(Sealed.__registry__))
+    assert Sealed.member_named("member") is Member
+    with pytest.raises(ValueError):
+        Sealed.member_named("missing")
 
 
 def test_independent_families_and_inherited_names_are_derived():

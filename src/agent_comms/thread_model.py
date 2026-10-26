@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from agent_comms.field_codec import SubclassUnion, boundary_decoder
 from agent_comms.native_arguments import NativeArguments, SelectedModel
 from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
@@ -16,7 +17,31 @@ if TYPE_CHECKING:
     from agent_comms.pi_commands import SetModel
 
 
-class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
+class ModelSelection(TextChoice):
+    """A model's spelling and native arguments, shared by saved values and requests."""
+
+    @abstractmethod
+    def native(self, arguments: NativeArguments) -> NativeArguments: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NamedModel(GivenText, ModelSelection):
+    text: str
+
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise ValueError("Thread model cannot be empty.")
+
+    def native(self, arguments: NativeArguments) -> NativeArguments:
+        return arguments.with_model(self.text)
+
+
+class UnselectedModel(AbsentText, ModelSelection):
+    def native(self, arguments: NativeArguments) -> NativeArguments:
+        return arguments
+
+
+class ThreadModel(SubclassUnion, ModelSelection, affix="Model"):
     """A thread's declared model; an undeclared one is observed from its runtime."""
 
     @staticmethod
@@ -43,10 +68,6 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
         return DeclaredModel(text)
 
     @abstractmethod
-    def native(self, arguments: NativeArguments) -> NativeArguments:
-        """The native arguments selecting this model."""
-
-    @abstractmethod
     def applied(self, previous: ThreadModel) -> ThreadModel:
         """An undeclared model takes the previous or observed one; a declared one keeps itself."""
 
@@ -62,16 +83,7 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
 
 
 @dataclass(frozen=True, slots=True)
-class DeclaredModel(GivenText, ThreadModel):
-    text: str
-
-    def __post_init__(self) -> None:
-        if not self.text.strip():
-            raise ValueError("Thread model cannot be empty.")
-
-    def native(self, arguments: NativeArguments) -> NativeArguments:
-        return arguments.with_model(self.text)
-
+class DeclaredModel(NamedModel, ThreadModel):
     def applied(self, previous: ThreadModel) -> DeclaredModel:
         return self
 
@@ -87,10 +99,7 @@ class DeclaredModel(GivenText, ThreadModel):
 
 
 @dataclass(frozen=True, slots=True)
-class UndeclaredModel(AbsentText, ThreadModel):
-    def native(self, arguments: NativeArguments) -> NativeArguments:
-        return arguments
-
+class UndeclaredModel(UnselectedModel, ThreadModel):
     def applied(self, previous: ThreadModel) -> ThreadModel:
         return previous
 
@@ -102,3 +111,17 @@ class UndeclaredModel(AbsentText, ThreadModel):
 
     def qualified_by(self, provider: ProviderChoice) -> UndeclaredModel:
         return self
+
+
+class CatalogSelection:
+    """The model and thinking inputs a catalog reads; absent inputs select no override."""
+
+    __slots__ = ()
+
+    @property
+    def model(self) -> ModelSelection:
+        return UndeclaredModel()
+
+    @property
+    def thinking_level(self) -> type[ThinkingChoice]:
+        return NoThinkingOverride

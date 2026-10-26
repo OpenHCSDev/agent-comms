@@ -8,16 +8,12 @@ import sys
 import pytest
 
 from agent_comms.child_process import NoResidentManager, ResidentManager, SystemdUserManager
-from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.installer.request import InstallRequest
 from agent_comms.commander import standing
 from agent_comms.field_codec import FieldCodec, Id128
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.launch import (
-    InstallLogs,
-    InstallRun,
-    InstallRunning,
-    InstallUnit,
-)
+from agent_comms.installer.launch import InstallRun
+from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
@@ -45,7 +41,7 @@ def systemd(tmp_path, monkeypatch, user_manager):
 def test_spawn_starts_a_unit_whose_request_round_trips(tmp_path, systemd):
     root = tmp_path / "bus"
     root.mkdir()
-    command = InstallCliCommand(checkout=tmp_path / "checkout", to="HEAD")
+    command = InstallRequest(checkout=tmp_path / "checkout", to="HEAD")
     run = InstallRun(command, root, tmp_path / "scratch", "a" * 40)
 
     run.spawn(wait=False)
@@ -84,7 +80,7 @@ def test_the_installed_launcher_hands_its_request_on_stdin(tmp_path):
     stdin with no argument, and the tree it starts must read it there."""
     root = tmp_path / "bus"
     root.mkdir()
-    run = InstallRun(InstallCliCommand(checkout=tmp_path / "checkout", to="HEAD"), root,
+    run = InstallRun(InstallRequest(checkout=tmp_path / "checkout", to="HEAD"), root,
                      tmp_path / "scratch", "a" * 40)
     finished = subprocess.run(
         (sys.executable, "-c", DECODED), input=json.dumps(FieldCodec.encode(run)),
@@ -104,12 +100,12 @@ def test_a_launched_unit_gone_without_a_result_died(tmp_path, systemd):
     run.errors.write_text("Traceback\nBrokenPipeError: [Errno 32]\n\n")
 
     assert logs.launched(repo, "b" * 40) == (run,)
-    assert logs.member(repo, "b" * 40).func is standing.DiedInstallDue
-    assert logs.member(repo, "b" * 40).keywords == {"unit": run}
+    assert standing.InstallDue.member(logs, repo, "b" * 40).func is standing.DiedInstallDue
+    assert standing.InstallDue.member(logs, repo, "b" * 40).keywords == {"unit": run}
     assert run.last_error() == "BrokenPipeError: [Errno 32]"
     run.result.write_text("{}")
-    assert logs.member(repo, "b" * 40).func is standing.LaunchedInstallDue
-    assert logs.member(repo, "c" * 40) is standing.PendingInstallDue
+    assert standing.InstallDue.member(logs, repo, "b" * 40).func is standing.LaunchedInstallDue
+    assert standing.InstallDue.member(logs, repo, "c" * 40) is standing.PendingInstallDue
 
 
 def test_a_died_run_renders_from_the_run_that_selected_it(tmp_path, systemd):
@@ -122,7 +118,7 @@ def test_a_died_run_renders_from_the_run_that_selected_it(tmp_path, systemd):
     logs.record(run.logs, repo, "b" * 40)
     run.result.write_text("")
     run.errors.write_text("Traceback\nBrokenPipeError: [Errno 32]\n")
-    member = logs.member(repo, "b" * 40)
+    member = standing.InstallDue.member(logs, repo, "b" * 40)
     (run.logs / InstallLogs.cause_file).unlink()
 
     due = member(repo, "b" * 40, "0" * 40, 1, 31, logs, core, "a" * 40)
@@ -175,7 +171,7 @@ def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, syst
     core = Repo(checkout=tmp_path / "checkout",
                 github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))
     toad = RepositoryName.from_wire("OpenHCSDev/toad")
-    run = InstallRun(InstallCliCommand(checkout=core.checkout, to="HEAD"), root,
+    run = InstallRun(InstallRequest(checkout=core.checkout, to="HEAD"), root,
                      tmp_path / "scratch", "a" * 40)
     with logs.launching():
         run.spawn(wait=False)
@@ -188,9 +184,9 @@ def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, syst
         None)  # type: ignore[arg-type]
 
     assert logs.launched(toad, "c" * 40) == (run.unit,)
-    assert logs.member(toad, "c" * 40).func is standing.LaunchedInstallDue
+    assert standing.InstallDue.member(logs, toad, "c" * 40).func is standing.LaunchedInstallDue
     assert logs.launched(core.github, "a" * 40) == (run.unit,)
-    assert logs.member(toad, "d" * 40) is standing.PendingInstallDue
+    assert standing.InstallDue.member(logs, toad, "d" * 40) is standing.PendingInstallDue
     assert logs.units() == (run.unit,)
 
 

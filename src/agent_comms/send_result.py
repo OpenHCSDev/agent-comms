@@ -41,3 +41,17 @@ class SendResult:
     @property
     def notices(self) -> tuple[str, ...]:
         return self.correction.notices(self.message.message_id)
+
+from agent_comms.cli_result import CliResult
+from agent_comms.field_codec import FieldCodec
+
+@dataclass(frozen=True)
+class MessageSentResult(CliResult):
+    sent: SendResult
+
+    def to_wire(self) -> object:
+        message_id = self.sent.message.message_id
+        return {'id': message_id, 'message': f'Message {message_id} was sent',
+                'correction': FieldCodec.encode(self.sent.correction),
+                'notices': self.sent.notices}
+

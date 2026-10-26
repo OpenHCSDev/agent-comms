@@ -6,9 +6,9 @@ import asyncio
 import os
 from abc import abstractmethod
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
-from typing import TYPE_CHECKING, ClassVar, Protocol
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import Refused
 
@@ -18,6 +18,8 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_arguments import ConfiguredBinary, InheritedArguments
 from .native_pi import NativePiRpcLaunch
+from .pi_vocabulary import ThinkingChoice
+from .thread_model import CatalogSelection, ThreadModel
 from .pi_commands import (
     GetAvailableThinkingLevels,
     SetModel,
@@ -30,8 +32,6 @@ if TYPE_CHECKING:
     from .active_route import CommsRoute
     from .native_arguments import NativeArguments
     from .native_package import VerifiedNativePackage
-    from .pi_vocabulary import ThinkingChoice
-    from .thread_model import ThreadModel
     from .threads import Thread
 
 
@@ -39,21 +39,11 @@ class InvalidConfigChoice(ValueError):
     """A configured value is not a member of its discovered catalog."""
 
 
-class CatalogSelection(Protocol):
-    """The model and thinking selection read by both draft and running catalogs."""
-
-    @property
-    def model(self) -> ThreadModel: ...
-
-    @property
-    def thinking_level(self) -> type[ThinkingChoice]: ...
-
-
 @dataclass(frozen=True, slots=True)
-class RunningSelection:
+class RunningSelection(CatalogSelection):
     """What a thread runs: its stored choice, otherwise the model its runtime reports."""
-    model: ThreadModel
-    thinking_level: type[ThinkingChoice]
+    model: ThreadModel = field()
+    thinking_level: type[ThinkingChoice] = field()
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,7 +265,7 @@ class ConfigOptions:
 
     async def validate(self, thread: CatalogSelection) -> None:
         """Require every configured value through its owning catalog."""
-        for member in ConfigOption.members_with(CatalogConfigOption):
+        for member in CatalogConfigOption.members_with(CatalogConfigOption):
             option = self.catalog_for(member)
             value = option.current_value(thread)
             if value is not None:

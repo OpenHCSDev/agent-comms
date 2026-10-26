@@ -1,9 +1,10 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
+from agent_comms.send_request import SendRequest
+
 import argparse
 import asyncio
-import builtins
 import io
 import json
 import os
@@ -29,7 +30,6 @@ from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.child_process import (
     AttachedChild,
@@ -39,24 +39,9 @@ from agent_comms.child_process import (
     SpawnedProcess,
     StreamingChildStdio,
 )
-from agent_comms.cli_protocol import (
-    CliArguments,
-    DeliveredOutcome,
-    EmittedOutcome,
-    FilteredOutcome,
-    Outcome,
-    TaggedWire,
-    UnconfirmedOutcome,
-    WatchLine,
-    raise_child_exit,
-)
+from agent_comms.cli_arguments import CliArguments
+from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, FilteredOutcome, Outcome, TaggedWire, UnconfirmedOutcome, WatchLine, raise_child_exit
 from agent_comms.comms import Comms, wire
-from agent_comms.config_options import (
-    CatalogChoice,
-    CatalogConfigOption,
-    CatalogSelection,
-    ConfigOptions,
-)
 from agent_comms.coordination_errors import CoordinationError, DeferredRead
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
@@ -592,135 +577,12 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
         return tuple(offered)
 
 
-@dataclass(frozen=True)
-class TargetField:
-    """The declared field owns parsing, editor hints and requiredness."""
-
-    plan: field_codec.FieldPlan
-    value: object
-
-    @classmethod
-    def of(cls, plan: field_codec.FieldPlan, value: object) -> TargetField:
-        editor = (
-            CatalogTargetField
-            if field_codec.Catalog.single(plan.annotation)
-            else plan.setting(field_codec.Editor, cls)
-        )
-        return editor(plan, value)
-
-    @property
-    def annotation(self) -> object:
-        return self.plan.annotation
-
-    @property
-    def name(self) -> str:
-        return self.plan.key
-
-    @property
-    def multiline(self) -> bool:
-        return self.plan.setting(field_codec.Multiline, False)
-
-    @property
-    def description(self) -> str:
-        return self.plan.description
-
-    @property
-    def editor_default(self) -> object:
-        return self.plan.editor_default(self.value)
-
-    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
-        """An unrestricted field does not declare a finite-choice editor."""
-        return ()
-
-    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> TargetField:
-        return self
-
-    @property
-    def required(self) -> bool:
-        return self.plan.constructor_required
-
-    def value_schema(self) -> dict[str, object]:
-        return FieldCodec.value_schema(self.annotation)
-
-    def json_schema(self) -> dict[str, object]:
-        return {**self.value_schema(), 'multiline': self.multiline,
-                'description': self.description, 'editor_default': self.editor_default}
 
 
-@dataclass(frozen=True)
-class ChoiceTargetField(TargetField):
-    """A prepared finite declaration, from its annotation or configuration catalog."""
-    options: tuple[CatalogChoice, ...] = ()
-
-    @property
-    def editor_declarations(self) -> tuple[object, ...]:
-        return ()
-
-    @property
-    def choices(self) -> tuple[tuple[str, str], ...]:
-        return tuple((choice.name, choice.editor_value) for choice in self.options)
-
-    async def prepare(self, catalogs: ConfigOptions,
-                      selection: CatalogSelection) -> ChoiceTargetField:
-        decoder = field_codec.compile_decoder(self.annotation)
-        options = (CatalogChoice(
-                       name=label, value=decoder.encode_editor(decoder.decode(value)))
-                   for label, value in decoder.editor_choices())
-        return replace(self, options=tuple(options))
-
-    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
-        return (choices(self),)
 
 
-class CatalogTargetField(ChoiceTargetField):
-    @property
-    def catalog(self) -> type[CatalogConfigOption]:
-        return self.plan.setting(field_codec.Catalog, CatalogConfigOption)
-
-    @property
-    def editor_declarations(self) -> tuple[object, ...]:
-        return (self.catalog,)
-
-    async def prepare(self, catalogs: ConfigOptions,
-                      selection: CatalogSelection) -> CatalogTargetField:
-        catalog = catalogs.catalog_for(self.catalog)
-        options = await catalog.display_choices(selection)
-        decoder = field_codec.compile_decoder(self.annotation)
-        return replace(self, options=tuple(CatalogChoice(name=item.name,
-            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
-
-    def value_schema(self) -> dict[str, object]:
-        return {**FieldCodec.value_schema(self.annotation),
-                'configuration': FieldCodec.encode(self.catalog)}
 
 
-@dataclass(frozen=True, kw_only=True)
-class SendRequest(DeclaredOptions):
-    help = "Send to a thread (DM), #channel, or #all"
-    sender: Annotated[str, field_codec.Argument(flags=("--from",))] = ""
-    target: Annotated[str, field_codec.Argument(flags=("--to",))]
-    body: Annotated[str, field_codec.Argument(flags=("--body",))]
-    type: Annotated[
-        builtins.type[messages.MessageKind],
-        field_codec.Editor(ChoiceTargetField),
-        field_codec.Argument(
-            flags=("--type",), options={"choices": messages.SendableMessageKind.names()}
-        ),
-    ] = messages.InfoKind
-    role: Annotated[
-        builtins.type[messages.SendableRole], field_codec.Argument(flags=("--role",))
-    ] = messages.ConversationRole
-    report: Annotated[
-        ReportEvidence,
-        field_codec.Argument(
-            flags=("--report",),
-            options={"help": "Change report fields as a JSON object", "type": FieldCodec.parse},
-        ),
-    ] = NoChangeReport()
-
-    def sent(self, comms: Comms) -> SendResult:
-        return comms.messaging.send(self.sender, self.target, self.body, self.type,
-                                    role=self.role(), report=self.report)
 
 
 @dataclass(frozen=True, kw_only=True)

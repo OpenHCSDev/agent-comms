@@ -8,8 +8,6 @@ from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTo
 from .order_tools import MessagePublished
 
 import dataclasses
-import json
-import sys
 import threading
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -21,44 +19,26 @@ from pydantic import JsonValue
 
 from agent_comms.lifecycle_capability import Active
 
-from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import ListTagEdit, TagEdit
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
 from .channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
-from .cli_commands import (
-    ArchiveCliCommand,
-    CliCommand,
-    DeleteViewCliCommand,
-    ForkCliCommand,
-    HistoryCliCommand,
-    PinChannelCliCommand,
-    PinThreadCliCommand,
-    QueueRestartCliCommand,
-    StartCliCommand,
-    StopCliCommand,
-    ThreadArchivedResult,
-    ThreadCreatedResult,
-    ThreadsCliCommand,
-    ThreadStoppedResult,
-)
-from .cli_result import CliResult, ToolCatalogResult
+from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.delete_view import DeleteViewCliCommand
+from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.cli_verbs.history import HistoryCliCommand
+from agent_comms.cli_verbs.pin_channel import PinChannelCliCommand
+from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
+from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
+from agent_comms.cli_verbs.start import StartCliCommand
+from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.cli_commands import ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult
+from agent_comms.cli_verbs.threads import ThreadsCliCommand
+from .cli_result import CliResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import (
-    Argument,
-    FieldCodec,
-    Normalize,
-    NullMember,
-    SingleFieldValue,
-    SubclassUnion,
-    WireForm,
-    WireName,
-    WireOmitDefault,
-    projected,
-    GoalId,
-)
+from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
@@ -70,7 +50,6 @@ from .input_attempt import UnresolvedInput
 from .message_page import PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
-from .native_tools import NativeRequestTools
 from .owner_lifecycle import OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
@@ -115,7 +94,7 @@ from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLife
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
-from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
+from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .tool_result import ToolResult
 from .work_branches import WorkBranch, WorkBranches
 
@@ -1135,17 +1114,6 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
         return ArchiveCliCommand(name=self.name).apply(comms)
 
 
-@dataclass(frozen=True, kw_only=True)
-class ToolsCliCommand(CliCommand):
-    help = "Emit the shared adapter tool catalog"
-    name: Annotated[
-        ThreadCaller | NoThreadCaller,
-        Normalize(FieldCodec.encode),
-        Argument(flags=("--name",), options={"type": ThreadCaller, "help": "Calling thread"}),
-    ] = NoThreadCaller()
-
-    def apply(self, ctx: Comms) -> ToolCatalogResult:
-        return self.name.catalog(ctx, tuple(NativeRequestTools.catalog()))
 
 
 @dataclass(frozen=True)
@@ -1158,34 +1126,6 @@ class ToolReplyResult(CliResult):
         return self.reply
 
 
-@dataclass(frozen=True, kw_only=True)
-class InvokeCliCommand(CliCommand[ToolReplyResult], declared_name="tool"):
-    help = "Invoke one declared adapter tool, as --from THREAD when given"
-    caller: Annotated[
-        ThreadCaller | NoThreadCaller,
-        Normalize(FieldCodec.encode),
-        Argument(
-            flags=("--from",),
-            options={"type": ThreadCaller, "help": "Calling thread; omit for tools that need no thread"},
-        ),
-    ] = NoThreadCaller()
-    tool: Annotated[str, Argument(flags=("--tool",))]
-    arguments: Annotated[
-        dict[str, object],
-        Argument(
-            flags=("--arguments",),
-            options={"help": "Tool arguments as a JSON object"},
-        ),
-    ] = dataclasses.field(default_factory=dict)
-
-    def argv(self, root: Path) -> tuple[str, ...]:
-        """The CLI boundary owns its module, grammar and argument serialization."""
-        return (sys.executable, '-m', comms_cli.__name__, '--root', str(root),
-                self.declared_name, *self.caller.from_flag(), '--tool', self.tool,
-                '--arguments', json.dumps(self.arguments))
-
-    def apply(self, ctx: Comms) -> ToolReplyResult:
-        return ToolReplyResult(invoke_tool(ctx, self.tool, self.arguments, caller=self.caller))
 
 
 def invoke_tool(

@@ -20,9 +20,9 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 
 if TYPE_CHECKING:
     from .audience_manifest import AudiencedMessage, FrozenRecipient
-    from .catalog_document import CatalogDocument
+    from .catalog_document import CatalogAccess, CatalogDocument
     from .channels import Channel
-    from .cli_commands import CliCommand
+    from .cli_command import CliCommand
     from .cli_result import CliResult
     from .comms import Comms
     from .goal_management import Goals
@@ -50,7 +50,7 @@ class ChannelSelection(ABC):
     needs_catalog: ClassVar[bool] = True
 
     @abstractmethod
-    def channels_for(self, target: str) -> tuple[str | None, ...]: ...
+    def channels_for(self, target: str) -> tuple[SurroundingChannel, ...]: ...
 
     def require_unbound(self) -> None:
         """Ordinary thread actions may ignore one surrounding channel."""
@@ -59,29 +59,42 @@ class ChannelSelection(ABC):
 class SurroundingChannel(SubclassUnion, ChannelSelection, affix="Channel"):
     """The one channel a command line names around its targets, or none: null or the name."""
 
+    def names_for_binding(self) -> tuple[str, ...]:
+        return ()
+
+    def scope(self) -> str:
+        """How a refusal names this channel after its target; no channel adds nothing."""
+        return ""
+
 
 @dataclass(frozen=True)
 class NoChannel(NullMember, SurroundingChannel):
     needs_catalog: ClassVar[bool] = False
 
-    def channels_for(self, target: str) -> tuple[str | None, ...]:
-        return (None,)
+    def channels_for(self, target: str) -> tuple[SurroundingChannel, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True)
 class OneChannel(SingleFieldValue, SurroundingChannel):
     name: str
 
-    def channels_for(self, target: str) -> tuple[str | None, ...]:
+    def channels_for(self, target: str) -> tuple[SurroundingChannel, ...]:
+        return (self,)
+
+    def names_for_binding(self) -> tuple[str, ...]:
         return (self.name,)
+
+    def scope(self) -> str:
+        return f" in {self.name}"
 
 
 @dataclass(frozen=True)
 class PerTargetChannels(ChannelSelection):
     mapping: dict[str, tuple[str, ...]]
 
-    def channels_for(self, target: str) -> tuple[str | None, ...]:
-        return self.mapping.get(target, (None,))
+    def channels_for(self, target: str) -> tuple[SurroundingChannel, ...]:
+        return tuple(OneChannel(name) for name in self.mapping.get(target, ())) or (NoChannel(),)
 
     def require_unbound(self) -> None:
         raise ValueError('This action does not accept per-target channels')
@@ -121,6 +134,10 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         """The selected destination's name, including an unresolved destination."""
         return ", ".join(self.destination_names)
 
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
     @staticmethod
     def named(name: str) -> NamedTarget:
         if not name:
@@ -146,8 +163,8 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
 
     @abstractmethod
     def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: str | None, resolved,
-        *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
+        *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
@@ -160,8 +177,8 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
 
     def contexts(
         self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
-    ) -> tuple[str | None, ...]:
-        return (None,)
+    ) -> tuple[SurroundingChannel, ...]:
+        return (NoChannel(),)
 
 
 class ReplyRoute(ABC):
@@ -205,9 +222,9 @@ class ChannelReply(ReplyRoute):
         return f"substr({column},1,{len(sigil)})={sql_literal(sigil)}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NamedTarget(CommandTarget):
-    name: str
+    name: str = field()
     sigil: ClassVar[str]
     route: ClassVar[ReplyRoute]
     batchable = False
@@ -369,7 +386,7 @@ class ThreadTarget(NamedTarget):
 
     def contexts(
         self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
-    ) -> tuple[str | None, ...]:
+    ) -> tuple[SurroundingChannel, ...]:
         return declaration.selection_channels(channel, self.name)
 
     def available(self, snapshot: RegistrySnapshot) -> bool:
@@ -386,8 +403,8 @@ class ThreadTarget(NamedTarget):
         return ResolvedThread(thread, snapshot.status(thread.name))
 
     def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: str | None, resolved: ResolvedThread,
-        *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedThread,
+        *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]:
         return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
@@ -535,8 +552,8 @@ class ChannelTarget(NamedTarget):
         return ResolvedChannel(channel, members)
 
     def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: str | None, resolved: ResolvedChannel,
-        *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedChannel,
+        *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]:
         return declaration.channel_bindings(comms, resolved, snapshot=snapshot, catalog=catalog)
 
@@ -626,8 +643,8 @@ class ProjectTarget(CommandTarget):
         return self.project
 
     def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: str | None, resolved,
-        *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
+        *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]:
         return declaration.project_bindings(comms, resolved)
 

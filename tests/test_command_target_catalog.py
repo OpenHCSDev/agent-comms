@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
-from agent_comms.cli_commands import OneTarget, TargetBatch
+from agent_comms.cli_command import OneTarget, TargetBatch
 from agent_comms.cli_result import ResultShower
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
@@ -28,13 +28,9 @@ class RecordingShower(ResultShower):
     IncarnationThreadTarget(RecordedThreadIncarnation("first", 1.0)),
 ])
 def test_batch_completed_result_round_trips_with_its_command_result_type(target):
-    from agent_comms.cli_commands import (
-        StopCliCommand,
-        TargetBatchResult,
-        TargetCompleted,
-        TargetFailed,
-        ThreadStoppedResult,
-    )
+    from agent_comms.cli_verbs.stop import StopCliCommand
+    from agent_comms.cli_commands import ThreadStoppedResult
+    from agent_comms.cli_command import TargetBatchResult, TargetCompleted, TargetFailed
     from agent_comms.field_codec import FieldCodec
 
     original = TargetBatchResult((
@@ -61,15 +57,16 @@ def test_batch_completed_result_round_trips_with_its_command_result_type(target)
     (TargetBatch, (CommandTarget.named("ghost"),), False),
 ])
 def test_each_selection_returns_its_own_result(comms, tmp_path, selection, target, resolvable):
-    from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetFailed
+    from agent_comms.cli_verbs.stop import StopCliCommand
+    from agent_comms.cli_command import TargetBatchResult, TargetFailed
     from agent_comms.thread_status import RunningThreadStatus
 
     comms.registry.declare(Thread("first", frozenset(), str(tmp_path)), RunningThreadStatus())
     if selection is OneTarget and not resolvable:
         with pytest.raises(ValueError):
-            StopCliCommand.execute_target(comms, selection(target), {})
+            StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
         return
-    result = StopCliCommand.execute_target(comms, selection(target), {})
+    result = StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
     if selection is OneTarget:
         assert result.stopped == "first"
     else:
@@ -80,9 +77,10 @@ def test_each_selection_returns_its_own_result(comms, tmp_path, selection, targe
 
 
 def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
-    from agent_comms.cli_commands import (
-        ArchiveCliCommand, CliCommand, QueueRestartCliCommand, RestartCliCommand,
-    )
+    from agent_comms.cli_verbs.archive import ArchiveCliCommand
+    from agent_comms.cli_command import CliCommand
+    from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
+    from agent_comms.cli_verbs.restart import RestartCliCommand
     from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
     names = ("first", "second")
@@ -94,10 +92,10 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     assert any(action.declaration is ArchiveCliCommand for action in catalog)
     assert all(action.declaration is not QueueRestartCliCommand for action in catalog)
     with pytest.raises(ValueError, match="single target"):
-        RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {})
+        RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, project=str(tmp_path))
     assert all(comms.registry.status(name) == StoppedThreadStatus() for name in names)
     result = ArchiveCliCommand.execute_target(
-        comms, ArchiveCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, confirmed=True)
+        comms, ArchiveCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, confirmed=True, project=str(tmp_path))
     assert len(result.outcomes) == 2 and result.exit_code() == 0
     assert tuple(outcome.target for outcome in result.outcomes) == tuple(
         CommandTarget.named(name) for name in names)

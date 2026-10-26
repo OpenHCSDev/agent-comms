@@ -9,14 +9,16 @@ orchestration semantics.
 
 from __future__ import annotations
 
+from agent_comms.cli_arguments import CliArgumentParser, CliArguments
+
 import argparse
 import sys
 from collections.abc import Sequence
 from typing import TextIO
 
 from agent_comms.active_route import resolve_comms_route
-from agent_comms.cli_commands import CliCommand
-from agent_comms.cli_protocol import CLI_FAILURES, CliArguments, CoreError
+from agent_comms.cli_failures import CLI_FAILURES
+from agent_comms.cli_protocol import CoreError
 from agent_comms.launch_root import LaunchRoot
 
 
@@ -26,24 +28,12 @@ def _fail(error: BaseException) -> int:
     return 1
 
 
-class CliArgumentParser(argparse.ArgumentParser):
-    """Argument errors use Core's JSON failure boundary, including subcommands."""
-
-    def error(self, message: str) -> None:
-        raise ValueError(message)
-
-
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(arguments: Sequence[str] = ()) -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
-    parser.add_argument(
-        "--root",
-        default=None,
-        help="Explicit Comms root directory (otherwise uses the published active route)",
-    )
-    # Parse the launch option without deciding its root; LaunchRoot owns that choice.
-    parser.add_argument(LaunchRoot.argument, help=argparse.SUPPRESS)
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    for declaration in CliCommand.members_with(CliCommand):
+    parser.add_root_options()
+    selection = CliArgumentParser.command_parsing(arguments)
+    subparsers = parser.add_subparsers(required=True)
+    for declaration in selection.declarations():
         declaration.add_parser(subparsers)
     return parser
 
@@ -51,15 +41,15 @@ def build_parser() -> argparse.ArgumentParser:
 def execute(arguments: Sequence[str], output: TextIO) -> int:
     """Own parsing, root selection and dispatch for every registered command."""
     arguments = list(arguments)
-    args, unknown = build_parser().parse_known_args(arguments, namespace=CliArguments())
+    args, unknown = build_parser(arguments).parse_known_args(arguments, namespace=CliArguments())
     if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
         raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
-    declaration = CliCommand.member_named(args.command)
+    declaration = args.command_declaration
     LaunchRoot.startup(
         arguments,
-        lambda: (LaunchRoot.from_path(args.root) if args.root else declaration.published_launch()),
+        lambda: args.root.resolve(declaration.published_launch),
     )
-    route = resolve_comms_route(args.root)
+    route = resolve_comms_route(args.root.resolve(LaunchRoot.current).path)
     with LaunchRoot.from_path(route.root).selected():
         command = declaration.from_arguments(args)
         return command.execute(route, output)

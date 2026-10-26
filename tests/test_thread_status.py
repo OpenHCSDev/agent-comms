@@ -13,7 +13,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.cli_commands import ConfigureCliCommand
+from agent_comms.cli_verbs.configure import ConfigureCliCommand
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec

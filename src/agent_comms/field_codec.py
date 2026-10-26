@@ -279,7 +279,7 @@ class Normalize(ValueDirective[Callable[[object], object]]):
     pass
 
 
-class EditorFormat(ValueDirective[Callable[[object], object]]):
+class EditorFormat(ValueDirective[Callable[[object], JsonValue]]):
     pass
 
 
@@ -531,7 +531,7 @@ class FieldPlan:
         return self.setting(Normalize, self.value.decode_editor)
 
     @cached_property
-    def editor_formatter(self) -> Callable[[object], object]:
+    def editor_formatter(self) -> Callable[[object], JsonValue]:
         return self.setting(EditorFormat, self.value.encode_editor)
 
     def argument_payload(self, value: object) -> object:
@@ -540,7 +540,7 @@ class FieldPlan:
     def editor_payload(self, value: object) -> object:
         return self.editor_normalizer(value)
 
-    def editor_default(self, value: object) -> object:
+    def editor_default(self, value: object) -> JsonValue:
         return self.editor_formatter(value)
 
     @property
@@ -1022,7 +1022,7 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
 
     editor_annotation = str
 
-    def encode_editor(self, value):
+    def encode_editor(self, value: T) -> str:
         encoded = FieldCodec.encode(value, self.target)
         return json.dumps(encoded)
 
@@ -1388,7 +1388,7 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     @classmethod
     def argument_options(cls, argument: Argument) -> dict[str, object]:
         """The union root offers its members' choices; a member offers only its own."""
-        if cls._family_root is not cls:
+        if cls.family_root is not cls:
             return super().argument_options(argument)
         return ValueDecoder.for_members(cls.members_with(cls)).argument_options(argument)
 
@@ -2620,7 +2620,7 @@ class _TextDecoder(_ExactScalarDecoder[str]):
     def encode(self, value: str) -> str:
         return str(super().encode(value))
 
-    def encode_editor(self, value):
+    def encode_editor(self, value: str) -> str:
         return value
 
     def decode_editor(self, value):
