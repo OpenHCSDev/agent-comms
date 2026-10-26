@@ -29,6 +29,8 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference, SourceGrowth
 from agent_comms.service_passes import ServicePassStore
+from agent_comms.storage_rules import UnitStorage
+from agent_comms.todos import ProgressRead, ProgressSource, StoredHeadReview
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -40,7 +42,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
-        MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, ProgressRead, PullRequest, Todo,
+        MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, PullRequest, Todo,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -237,8 +239,6 @@ class OrderRefusingStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def refusals(cls, goals: Goals, commander: str) -> tuple[str, ...]:
-        from agent_comms.todos import ProgressRead
-
         pulls = ProgressRead(goals.todos.held_for_commander(goals.registry.require(commander).incarnation))
         owners = dict.fromkeys(member.scan_owner() for member in cls.members_with(cls))
         return tuple(rule.line() for owner in owners
@@ -269,6 +269,59 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 
     def broke_after(self, after: float) -> bool:
         return True
+
+
+@dataclass(frozen=True)
+class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
+    """One family scan shares each held unit's storage snapshot between its violations."""
+
+    storage: UnitStorage
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        # Storage reads the filesystem, not the git source an unreadable card failed on:
+        # a unit whose declared home is gone is that card and a missing home.
+        held = frame.holders
+        return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
+
+    @classmethod
+    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
+        registry = comms.registry
+        snapshot = registry.snapshot()
+        members = cls.members_with(cls)
+        found: list[Self] = []
+        for unit in sorted(set(units), key=lambda unit: unit.name):
+            thread = snapshot.require(unit.name)
+            if thread.incarnation != unit:
+                raise ValueError("Observed unit incarnation changed")
+            storage = UnitStorage.read(registry.storage_rule, thread)
+            found.extend(member(storage) for member in members if member.violated(storage))
+        return tuple(found)
+
+    @classmethod
+    @abstractmethod
+    def violated(cls, storage: UnitStorage) -> bool: ...
+
+
+class StorageOverQuota(StorageViolation):
+    @classmethod
+    def violated(cls, storage: UnitStorage) -> bool:
+        return storage.over_cap
+
+    def line(self) -> str:
+        return (f'{self.storage.unit.name} holds {self.storage.quota_text}'
+                f' -> order the cleanup')
+
+
+class StorageHomeMissing(StorageViolation):
+    @classmethod
+    def violated(cls, storage: UnitStorage) -> bool:
+        return storage.missing_home
+
+    def line(self) -> str:
+        return (f'{self.storage.unit.name} declared home {self.storage.home.checkout.path} is missing.'
+                f' who deleted it? -> restore the home checkout')
 
 
 @dataclass(frozen=True)
@@ -735,7 +788,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
             for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
-            if not any(review.verdict.decides() for review in goals.todos.head_reviews(request))
+            if not any(review.verdict.decides() for review in StoredHeadReview.head_reviews(goals.todos, request))
             for rule in cls.for_head(request, due, todos)
         )
 
@@ -779,6 +832,7 @@ class StuckMerge(HeadLine, DatedStandingRule):
     head, naming every block on it."""
     request: PullRequestHead
     blocks: tuple[MergeBlock, ...] = field(compare=False)
+    holders: tuple[ThreadIncarnation, ...] = field(default=(), compare=False)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -788,7 +842,10 @@ class StuckMerge(HeadLine, DatedStandingRule):
     @classmethod
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
         return tuple(
-            cls(request=PullRequestHead(repo, row.number, row.head), blocks=blocks)
+            cls(request=PullRequestHead(repo, row.number, row.head), blocks=blocks,
+                holders=tuple(dict.fromkeys(held.owner_identity
+                    for todo in pulls.linked(repo).get(row.number, ())
+                    for held in todo.current_holder.current_assignments())))
             for repo in goals.registry.snapshot().commander_project.repository_names()
             for row in pulls.open(repo)
             for blocks in (row.stuck(),) if blocks
@@ -800,7 +857,8 @@ class StuckMerge(HeadLine, DatedStandingRule):
     def line(self) -> str:
         return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} has"
                 f" auto-merge armed but {'; '.join(block.what() for block in self.blocks)}. who's fixing it?"
-                f" -> {'; '.join(block.remedy() for block in self.blocks)}")
+                f" -> {'; '.join(block.remedy() for block in self.blocks)}"
+                + (f" at {', '.join(holder.name for holder in self.holders)}" if self.holders else ""))
 
 
 @dataclass(frozen=True)
@@ -1000,8 +1058,6 @@ class BoardDisagrees(UndatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        from agent_comms.todos import ProgressSource
-
         progress = frame.pulls.progress(frame.todos, comms.registry)
         return tuple(
             cls(problem=todo.id, order=todo.order.checked().id, merge=merged.sha)

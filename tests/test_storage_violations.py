@@ -20,14 +20,10 @@ from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import StandingRule
-from agent_comms.storage_rules import (
-    StorageHomeMissing,
-    StorageOverQuota,
-    StorageRule,
-    StorageViolation,
-    UnitStorage,
+from agent_comms.standing_rules import (
+    StandingRule, StorageHomeMissing, StorageOverQuota, StorageViolation,
 )
+from agent_comms.storage_rules import StorageRule, UnitStorage
 from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead, TodoStore
 from agent_comms.ui_model.unit_state import UnitState
 from order_scope_fixture import FIX_SCOPE

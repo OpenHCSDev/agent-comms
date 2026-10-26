@@ -17,6 +17,7 @@ from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.todos import StoredHeadReview
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -67,7 +68,18 @@ class HeadSubject(HeartbeatSubject):
 
     def disposed(self, history: CommanderHistory, since: float) -> bool:
         return any(review.at.since(since) and review.verdict.decides()
-                   for review in history.comms.goals.todos.head_reviews(self.request))
+                   for review in StoredHeadReview.head_reviews(history.comms.goals.todos, self.request))
+
+
+@dataclass(frozen=True)
+class UnlandedHeadSubject(HeadSubject):
+    """Only the forge/Git condition clears this line; reviewing it does not land it."""
+
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
+        return False
+
+    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
+        return False
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import ClassVar, cast
+from tempfile import TemporaryFile
+from time import monotonic
+from typing import BinaryIO, ClassVar, cast
 
 INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
 PREPARATION_SCHEME = "sealed-native-store-v1"
@@ -149,6 +151,40 @@ class GitLaunch(Executable):
             timeout=timeout,
             env=cls.environment(os.environ),
         )
+
+    @classmethod
+    def _pipe(cls, checkout: Path | str, producer: tuple[str, ...], consumer: tuple[str, ...],
+              *, timeout: float = 60, input: bytes = b'') -> subprocess.CompletedProcess[bytes]:
+        """Stream Git output between children; capture only the final, bounded answer."""
+        environment = cls.environment(os.environ)
+        started = monotonic()
+        # Only revision names and diagnostics are spooled. The potentially enormous patch
+        # stream stays in the kernel pipe, and every child is retired on success or failure.
+        with TemporaryFile() as source, TemporaryFile() as errors:
+            source.write(input)
+            source.seek(0)
+            with subprocess.Popen(cls.command(checkout, *producer), stdin=source,
+                                  stdout=subprocess.PIPE, stderr=errors, env=environment) as first:
+                try:
+                    with subprocess.Popen(cls.command(checkout, *consumer), stdin=first.stdout,
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                          env=environment) as last:
+                        cast(BinaryIO, first.stdout).close()
+                        try:
+                            output, error = last.communicate(timeout=timeout)
+                        except BaseException:
+                            last.kill()
+                            last.communicate()
+                            raise
+                    result = first.wait(timeout=max(0, timeout - (monotonic() - started)))
+                except BaseException:
+                    first.kill()
+                    first.wait()
+                    raise
+                if result:
+                    errors.seek(0)
+                    return subprocess.CompletedProcess(first.args, result, b'', errors.read())
+                return subprocess.CompletedProcess(last.args, last.wait(), output, error)
 
 
 def built_tree_pin(manifest: Path) -> str:

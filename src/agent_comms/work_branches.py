@@ -349,6 +349,35 @@ query($owner: String!, $name: String!, $after: String) {
         )
         return BranchComparison(base_head, head, paths)
 
+    def common_commit(self, *commits: str) -> str:
+        return self._git('merge-base', '--octopus', *commits).strip()
+
+    def commits_since(self, head: str, *excluded: str) -> tuple[str, ...]:
+        return tuple(self._git('rev-list', '--no-merges', head,
+                               '--not', *excluded).splitlines())
+
+    def whole_patch_ids(self, base: str, head: str) -> frozenset[str]:
+        """One stable fingerprint of the entire immutable diff, including multi-commit squash."""
+        output = Repo.git_pipeline(self.checkout,
+            ('diff', '--full-index', '--no-color', '--no-renames', '--no-ext-diff',
+             '--no-textconv', base, head),
+            ('patch-id', '--stable'), timeout=self.timeout, input='')
+        return frozenset(line.split()[0] for line in output.splitlines())
+
+    def patch_ids(self, commits: tuple[str, ...]) -> dict[str, frozenset[str]]:
+        """Decode Git's patch fingerprints once; an empty commit has an empty set of patches."""
+        patches: dict[str, frozenset[str]] = {commit: frozenset() for commit in commits}
+        if commits:
+            fingerprints = Repo.git_pipeline(self.checkout,
+                ('diff-tree', '--stdin', '--root', '-r', '-p', '--full-index', '--no-color',
+                 '--no-renames', '--no-ext-diff', '--no-textconv'),
+                ('patch-id', '--stable'), timeout=self.timeout,
+                input=''.join(f'{commit}\n' for commit in commits))
+            for line in fingerprints.splitlines():
+                patch, commit = line.split()
+                patches[commit] = frozenset((patch,))
+        return patches
+
     def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
         """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
         head = difference.head
