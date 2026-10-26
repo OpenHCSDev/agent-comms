@@ -353,9 +353,9 @@ class Thread(ThreadProvenance, CatalogSelection):
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
         return self.ran_in(worktree) or worktree.resolved().path in rule.checkouts_of(self)
 
-    @property
+    @cached_property
     def project_path(self) -> Path:
-        """The physical current project declared by this thread."""
+        """The physical current project, resolved once for this immutable snapshot."""
         return self.worktree.resolved().path
 
     @property

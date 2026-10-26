@@ -87,7 +87,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
         with pytest.raises(error):
             page.selection.basis.acknowledge(
                 comms.bus, comms.registry, comms.root, target,
-                worktree=Checkout(comms.root), through=through,
+                viewer=comms.messaging.user_identity(Checkout(comms.root)), through=through,
             )
     assert first.bus.pending_count(first.messaging.user_identity(Checkout(first.root)).name, CommandTarget.named("peer")) == 1
 
@@ -101,7 +101,7 @@ def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
     with pytest.raises(TranscriptChanged):
         page.selection.basis.acknowledge(
             comms.bus, comms.registry, comms.root, "peer",
-            worktree=Checkout(tmp_path), through=page.newest_seq + 1,
+            viewer=comms.messaging.user_identity(Checkout(tmp_path)), through=page.newest_seq + 1,
         )
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
 
@@ -138,7 +138,8 @@ def test_empty_dm_basis_is_no_op_without_creating_read_ledger(tmp_path: Path):
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     assert page.selection.basis.displayed.tail == EmptyTail()
     page.selection.basis.acknowledge(
-        comms.bus, comms.registry, comms.root, "peer", worktree=Checkout(tmp_path), through=0,
+        comms.bus, comms.registry, comms.root, "peer",
+        viewer=comms.messaging.user_identity(Checkout(tmp_path)), through=0,
     )
     assert not (tmp_path / "read_ledger.json").exists()
 
