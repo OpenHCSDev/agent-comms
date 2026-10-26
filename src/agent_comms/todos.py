@@ -3698,7 +3698,8 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
 class HeadVerdict(HeadReview, declared_name=None):
     """One decision on a PR head, independent of whether an order holds it."""
 
-    def require_merge(self, request: PullRequestHead) -> None:
+    @classmethod
+    def require_merge(cls, request: PullRequestHead) -> None:
         raise TodoError(
             f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
 
@@ -3759,7 +3760,8 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     state = "success"
     verb = "Accepted"
 
-    def require_merge(self, request: PullRequestHead) -> None:
+    @classmethod
+    def require_merge(cls, request: PullRequestHead) -> None:
         """An accepted head may use the owner's admin bypass."""
 
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
