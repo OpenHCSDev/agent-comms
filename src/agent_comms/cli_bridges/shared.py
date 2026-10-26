@@ -56,7 +56,7 @@ from agent_comms.config_options import (
     CatalogSelection,
     ConfigOptions,
 )
-from agent_comms.coordination_errors import CoordinationError
+from agent_comms.coordination_errors import CoordinationError, CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion
@@ -73,6 +73,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
+from agent_comms.store_files import StoreLockBusyError
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_status import ThreadStatus
@@ -479,8 +480,18 @@ class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
     outcome: Annotated[type[Outcome], Column(index=True)]
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
+    @contextmanager
+    def containing_busy(self, bridge: CliBridge) -> Iterator[None]:
+        """Confirmation's exhausted store wait cannot retire the message's transport."""
+        try:
+            yield
+        except (CoordinationReadUnavailable, StoreLockBusyError) as error:
+            bridge.log(f'Message {self.id} remains uncertain; not replayed: {error}')
+
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
-        await self.outcome.finish(bridge, self, outcome)
+        with self.containing_busy(bridge):
+            await self.outcome.finish(bridge, self, outcome)
+            bridge.log(f'{outcome.declared_name}: {self.id} from {self.message.sender}')
 
 
 BridgeOptions = TypeVar("BridgeOptions", bound=Options)
@@ -1239,7 +1250,6 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         result = await message.task.delivered_by(self, message) if conversation else outcome
         delivery, = DeliveryRow.select(self.db, id=message.message_id)
         await delivery.finish(self, result)
-        self.log(f'{result.declared_name}: {message.message_id} from {message.sender}')
 
     async def watch(self) -> None:
         await self.prepare_delivery()

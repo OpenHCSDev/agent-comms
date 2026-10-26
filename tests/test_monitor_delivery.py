@@ -3,6 +3,8 @@ from contextlib import suppress
 import asyncio
 import os
 import socket
+import sqlite3
+from contextlib import closing
 from html import escape
 import json
 
@@ -28,6 +30,8 @@ from agent_comms.cli_bridges.shared import (
     GivenBinding, MONITOR_FRAME,
 )
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.message_reference import BridgeStart, MessageReference
 from agent_comms.runtime_updates import HiddenItem
@@ -125,6 +129,58 @@ def emitted_delivery(bridge):
             delivery.insert(bridge.db)
         return delivery
     return emit
+
+
+@pytest.mark.asyncio
+async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge):
+    """Real SQLite contention on mark_delivered leaves this attempt uncertain only."""
+    first, second = (bridge.comms.messaging.send('peer', 'viewer', body).message
+                     for body in ('first message', 'second message'))
+    path = CoordinationStore.path_in(bridge.comms.root)
+    with Coordination(str(path)):
+        pass
+    left, right = socket.socketpair()
+    peer = MonitorPeer(*await asyncio.open_connection(sock=left))
+    reader, writer = await asyncio.open_connection(sock=right)
+    service = MonitorService(bridge, ProcessIdentity.capture(os.getpid()), lambda: None)
+    async with asyncio.TaskGroup() as tasks:
+        attachment = tasks.create_task(bridge.reader.attach(service, peer))
+        try:
+            async with asyncio.timeout(20):
+                await reader.readline()  # The real attachment's ready response.
+                probe = MONITOR_FRAME.validate_json(await reader.readline())
+                await probe.confirm(bridge, ObservedMonitor('probe', 1.))
+                await bridge.accept(first)
+                line = (await reader.readline()).decode().rstrip('\n')
+                # The store's declared wait expires; no method or error is patched.
+                with closing(sqlite3.connect(path, isolation_level=None)) as held:
+                    held.execute('BEGIN EXCLUSIVE')
+                    try:
+                        for update in notification(line, record_id='busy-first').updates(ClaudeSession()):
+                            await update.observed(bridge)
+                    finally:
+                        held.execute('ROLLBACK')
+                uncertain, = DeliveryRow.select(bridge.db, id=first.message_id)
+                assert uncertain.outcome is EmittedOutcome
+                assert uncertain.monitor == ReceivingMonitor(1)
+                assert not attachment.done()
+                await bridge.accept(second)
+                line = (await reader.readline()).decode().rstrip('\n')
+                for update in notification(line, record_id='healthy-second').updates(ClaudeSession()):
+                    await update.observed(bridge)
+                confirmed, = DeliveryRow.select(bridge.db, id=second.message_id)
+                assert confirmed.monitor == ObservedMonitor('healthy-second', 1792168805.123)
+                assert not attachment.done()
+                # Reopening starts after the journal's latest attempt, never at the
+                # uncertain first message. Its original outcome remains untouched.
+                assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(second.reference)
+                assert DeliveryRow.select(bridge.db, id=first.message_id) == (uncertain,)
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            attachment.cancel()
+            await asyncio.gather(attachment, return_exceptions=True)
+            await peer.close()
 
 
 def test_resume_cursor_reads_seq_and_id_without_decoding_an_old_payload(bridge):

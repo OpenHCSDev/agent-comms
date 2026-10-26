@@ -7,7 +7,8 @@ import sqlite3
 import stat
 import tempfile
 from abc import abstractmethod
-from contextlib import AbstractContextManager, closing, contextmanager, suppress
+from collections.abc import Iterator
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
@@ -115,14 +116,15 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
     ) -> None:
         super().__init__(Path(path))
         self._prepare_private_file()
-        self._connection = self._open_connection(contention)
-        try:
-            self._configure_connection()
-            self._initialize_schema()
-            self._enforce_private_modes()
-        except BaseException:
-            self._connection.close()
-            raise
+        with CoordinationReadUnavailable.checking():
+            self._connection = self._open_connection(contention)
+            try:
+                self._configure_connection()
+                self._initialize_schema()
+                self._enforce_private_modes()
+            except BaseException:
+                self._connection.close()
+                raise
 
     def _open_connection(self, contention: StoreContention) -> sqlite3.Connection:
         return self.writer(self.path, contention, isolation_level=None)
@@ -167,8 +169,10 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
             raise IntegrityViolationError("coordination database must be a regular file")
         return info
 
-    def writing(self) -> AbstractContextManager[sqlite3.Connection]:
-        return StoreWriter.transaction(self, self._connection)
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        with CoordinationReadUnavailable.checking(), StoreWriter.transaction(self, self._connection) as db:
+            yield db
 
     def _enforce_private_modes(self) -> None:
         for candidate in self.files(self.path):
