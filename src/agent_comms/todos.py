@@ -1203,7 +1203,7 @@ class PresentCheckout(ProgressCheckout):
         owned = tuple(f"refs/heads/{branch}"
                       for branch, paths in self.branches.worktrees().items()
                       if any(storage.owns_present_checkout(owner, checkout)
-                             for checkout in (Path(path).resolve() for path in paths)))
+                             for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
     def commits(self, pattern: str, refs: tuple[str, ...],
