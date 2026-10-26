@@ -499,7 +499,6 @@ class UnorderedGoalOrder(GoalOrder):
 class ProblemGoalOrder(GoalOrder):
     """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
 
-    StrikeLimit: ClassVar[int] = 2  # live strikes the commanded unit may take on one problem
     text: ClassVar[str] = "Complete the assigned problems."
 
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:

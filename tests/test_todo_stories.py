@@ -19,7 +19,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     AcceptedVerdict, Assignment, CheckedProblemOrder, DroppedVerdict, EditSendBackVerdict, FailedCheckStrike,
-    LimitReleaseTodo, OrderMessage, PeerAcceptedVerdict, ReleaseTodo, RewrittenVerdict, SendBackStrike,
+    OrderMessage, PeerAcceptedVerdict, ReleaseTodo, RewrittenVerdict, SendBackStrike,
     SendBackVerdict, StoredOrderStory, StrikeReason, StrikeTodo, SupersededVerdict, Todo, TodoCommand,
     VoidStrikeTodo, WordingCorrection,
 )
@@ -88,8 +88,6 @@ def test_story_members_round_trip_in_one_append_only_table(recorded_problem):
                          reason="A later commit rewrote this edit and carries its reviewed lines."),
         SendBackStrike(todo.revision, actor, todo.held(),
                        "The send-back records the miss the repair repeated in its owner."),
-        LimitReleaseTodo(todo.revision, actor, todo.held(), StrikeReason(
-            "The worker took the strike limit on this order, so the task goes to another unit.")),
     )
     assert {type(event) for event in events} >= set(TodoCommand.members_with(StoryEvent))
     with store.writing() as db:

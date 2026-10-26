@@ -302,8 +302,8 @@ def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(hea
     found, = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
     assert found.request.pr == 8
     assert found.line().endswith(
-        ": auto-merge armed but required check debt-src failed; conflicts with its base"
-        " -> fix debt-src at its owner; merge main into it")
+        " has auto-merge armed but required check debt-src failed; conflicts with its base."
+        " who's fixing it? -> fix debt-src at its owner; merge main into it")
     # The age is the heartbeat Ping's to render, from began(); the line names no clock.
     assert found.began() == found.blocks[0].since and found.broke_after(0)
 
