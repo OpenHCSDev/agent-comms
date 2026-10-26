@@ -14,7 +14,10 @@ from agent_comms.slop import CreatedLine, DeclarationDerivation, ExistingLine, O
 from agent_comms.thread_execution import CommanderForkExecution
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoError
-from agent_comms.todos import CommitDelivery
+from agent_comms.todos import (
+    CommitDelivery, MergedListedPullRequest, PullRequestCommit, PullRequestLink,
+)
+from github_fixture import GitHubFixture
 from agent_comms.work_branches import WorkBranches
 from test_order_scopes import assigned
 from test_todos import order
@@ -55,11 +58,17 @@ def test_the_order_file_derives_what_the_order_creates_from_its_citations(source
 
 
 def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
-        comms, source_repository):
+        comms, source_repository, github_cli: GitHubFixture):
     _, current = assigned(comms, source_repository.scope(), source_repository)
-    todo = replace(current, order=replace(current.order, created=(CREATED,)))
+    todo = replace(current, order=replace(current.order, created=(CREATED,),
+                                          pull_requests=(PullRequestLink(current.repo, 1),)))
+    github_cli.configure(todo.repo)
 
     def verified(commit: str):
+        github_cli.put(todo.repo, MergedListedPullRequest(
+            1, 'fix/created', commit, updated='2026-10-25T12:00:00Z', base=WorkBranches.main,
+            reviewable_times=('2026-10-25T12:00:00Z',), merge=PullRequestCommit(commit),
+            merged='2026-10-25T12:00:00Z'))
         delivery = CommitDelivery(commit=commit, delivered_commit=commit,
                                   proof_build=RecordedBuildIdentity(commits=()))
         claims = {MergedClaim(commit): (WorkBranches.main,)}

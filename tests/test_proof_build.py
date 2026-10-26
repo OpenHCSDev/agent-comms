@@ -36,19 +36,24 @@ from agent_comms.todos import (
     CommitDelivery,
     DoneTodoState,
     FileDeliveryEvidence,
+    MergedListedPullRequest,
     OpenTodoState,
     OperationDelivery,
     PendingProblemOrder,
     ProgressRead,
+    PullRequestCommit,
+    PullRequestLink,
     Todo,
     UnmergedListedPullRequest,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.order_tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
+from github_fixture import GitHubFixture
 from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
+from agent_comms.work_branches import WorkBranches
 
 pytest_plugins = ("github_fixture",)
 
@@ -224,7 +229,7 @@ def test_containment_refuses_an_uninstalled_repository(tmp_path, proof_build_che
 
 
 def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
-    tmp_path, proof_build_checkouts
+    tmp_path, proof_build_checkouts, github_cli: GitHubFixture
 ):
     graph = next(
         graph
@@ -248,7 +253,13 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         ),
     )
     checkout = graph.repository.checkout
-    checked, contained, missing = graph.newer, graph.installed, graph.newer
+    checked, contained, missing = graph.installed, graph.installed, graph.newer
+    github_cli.configure(graph.repository.github)
+    for number, commit in ((1, checked), (2, checked), (3, contained), (4, missing)):
+        github_cli.put(graph.repository.github, MergedListedPullRequest(
+            number, f'fix/{number}', commit, updated='2026-10-25T12:00:00Z', base=WorkBranches.main,
+            reviewable_times=('2026-10-25T12:00:00Z',), merge=PullRequestCommit(commit),
+            merged='2026-10-25T12:00:00Z'))
     caller = ThreadCaller("lead")
     works = "Open the installed application and confirm the copied goal keeps its source location."
     artifact = tmp_path / "proof.txt"
@@ -268,7 +279,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
             ),
             (
                 "P4",
-                CommitDelivery(commit=checked, delivered_commit=missing, proof_build=installed),
+                CommitDelivery(commit=missing, delivered_commit=missing, proof_build=installed),
                 DeliveredCommitNotInstalledError,
             ),
         )
@@ -278,6 +289,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                 scope=FIX_SCOPE,
                 owner=FIX_SCOPE.shape.parents[0],
                 check=OrderCheck(checkout, "printf 0", CountCheckResult(0)),
+                pull_requests=(PullRequestLink(graph.repository.github, number),),
                 edits=("Record the copied application proof on its installed build.",),
                 banned=("Do not change the source bus.",),
                 report="Report the actual close result.",
