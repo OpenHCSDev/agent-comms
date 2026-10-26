@@ -15,7 +15,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.errors import RejectedEnforcementError, TodoConflict
 from agent_comms.text_digest import TextDigest
@@ -106,7 +106,7 @@ class RepeatedTodoChange(StaleTodoDecision):
                 f"to revision {self.current.revision}")
 
 
-class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
+class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
     @classmethod
     @abstractmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -726,6 +726,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
         )
 
     @classmethod
+    @abstractmethod
     def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
         return (cls(request, due),)
 
