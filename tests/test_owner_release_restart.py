@@ -89,7 +89,7 @@ service.goals.update_goal(name, BlockedGoalAction(block_reason='Await original i
 arguments = ('--provider','response-local','--model','fixture','--thinking','off',
              '--offline','--no-extensions','--no-skills','--no-context-files',
              '--no-prompt-templates','--no-tools')
-result = service.owners.start(name,
+result, = service.owners.start(name,
     agent_bin=str(Path(sys.executable).with_name('pi-comms-native')), agent_args=arguments)
 print(json.dumps(FieldCodec.encode(result)), flush=True)
 ''', name, str(native.project), str(native.session), str(native_runtime_package.path)), timeout=20,

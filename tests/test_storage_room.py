@@ -37,9 +37,9 @@ async def test_cancelled_waiter_releases_only_its_own_claim(tmp_path):
     comms = copied_root(tmp_path)
     rule = comms.registry.storage_rule
     one, two = (comms.registry.require(name) for name in ('gate-one', 'gate-two'))
-    first = await rule.wait_for_room((BuildRoomWork,), one, comms.root)
+    first = await rule.wait_for_room((BuildRoomWork((one.incarnation,)),), comms.root)
     # Every unmeasured kind calibrates alone while the first holds observed room.
-    pending = asyncio.create_task(rule.wait_for_room((UnitStartRoomWork,), two, comms.root))
+    pending = asyncio.create_task(rule.wait_for_room((UnitStartRoomWork((two.incarnation,)),), comms.root))
     await asyncio.sleep(.1)
     assert not pending.done()
     pending.cancel()
@@ -57,8 +57,8 @@ async def test_committed_release_wakes_a_waiter_without_os_refresh(tmp_path):
     comms = copied_root(tmp_path)
     rule = comms.registry.storage_rule
     one, two = (comms.registry.require(name) for name in ('gate-one', 'gate-two'))
-    first = await rule.wait_for_room((BuildRoomWork,), one, comms.root)
-    waiting = asyncio.create_task(rule.wait_for_room((UnitStartRoomWork,), two, comms.root))
+    first = await rule.wait_for_room((BuildRoomWork((one.incarnation,)),), comms.root)
+    waiting = asyncio.create_task(rule.wait_for_room((UnitStartRoomWork((two.incarnation,)),), comms.root))
     try:
         await asyncio.sleep(0.05)
         assert not waiting.done()
@@ -88,8 +88,8 @@ def test_waiting_sibling_wins_status_without_an_activity_copy(tmp_path):
     thread = comms.registry.require('gate-one')
     ticket = RoomTicket.mint()
     with rule.room_ledger.writing() as db:
-        RoomClaim(ticket, str(comms.root), thread.incarnation,
-            ProcessIdentity.capture(os.getpid()), (TestGateRoomWork,), WaitingRoomPhase(), 0).insert(db)
+        RoomClaim(ticket, str(comms.root), ProcessIdentity.capture(os.getpid()),
+            (TestGateRoomWork((thread.incarnation,)),), WaitingRoomPhase(), 0).insert(db)
     original = comms.agents.activity.current(thread.name)
     observed = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
     assert observed.state == ActivityState.WAITING_FOR_ROOM

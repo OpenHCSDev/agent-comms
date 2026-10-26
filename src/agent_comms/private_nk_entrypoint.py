@@ -31,7 +31,6 @@ from agent_comms.native_session_files import NativeSessionFiles
 if TYPE_CHECKING:
     from .active_route import CommsRoute
     from .launch_runtime import LaunchRuntime
-    from .threads import Thread
 
 
 class RootLaunch(ABC):
@@ -69,7 +68,7 @@ class RootLaunch(ABC):
         self.check()
         return runtime.native_entrypoint
 
-    def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
+    def prepare_owner(self, agent_bin: str, runtime: LaunchRuntime) -> str:
         """Explicit owner launch prepares registry authority, then native tables."""
         from .registration import Registration
 

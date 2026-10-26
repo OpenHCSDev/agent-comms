@@ -108,12 +108,13 @@ class OwnerRestartHandoff:
 
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
-            return lifecycle._launch_owner(
-                thread, self.agent_bin.restarted(lifecycle, source.binary, runtime),
+            owner, = lifecycle._launch_owners(
+                (thread,), self.agent_bin.restarted(lifecycle, source.binary, runtime),
                 self.agent_args.restarted(source.arguments),
                 environment=self.runtime.apply_runtime(source.environment),
                 launch_runtime=runtime,
             )
+            return owner
 
         return self._launch(lifecycle, target)
 
@@ -123,10 +124,10 @@ class OwnerRestartHandoff:
         if any(owner.launch.interpreter != str(runtime.interpreter) for owner in self.owners):
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
-        return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner(
-            thread, source.binary, GivenArguments(source.arguments), environment=source.environment,
+        return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owners(
+            (thread,), source.binary, GivenArguments(source.arguments), environment=source.environment,
             launch_runtime=runtime,
-        ))
+        )[0])
 
     def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:
         if str(lifecycle.root) != self.root:

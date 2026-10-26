@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
@@ -23,6 +24,7 @@ from .child_process import (
     ProcessState,
     SpawnedProcess,
     SynchronousProcess,
+    join_retirement,
 )
 from .cli_result import CliResult
 from .commander_service import CommanderService
@@ -44,6 +46,8 @@ from .native_arguments import (
 )
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
+from .repo import Checkout
+from .storage_room import UnitStartRoomWork
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (
     OwnerBusyRefusal,
@@ -319,32 +323,35 @@ class OwnerLifecycle:
         )
         if thread.process_alive:
             return thread
-        return self._register_owner(thread, identity)
-
-    def _register_owner(
-        self, previous: Thread, identity: ProcessIdentity,
-        initial_input: LaunchInput = LaunchInput(),
-    ) -> Thread:
-        """Reserve one owner and its first input before releasing the child's start gate."""
-        owner, = self.registry.reserve_owners((previous, identity))
-        owned = owner.thread
-        initial_input.record_first_input(partial(
-            InputDispositions(self.root).record, owner=owned.name, target=owned.name,
-            claim_scope=owner.claimed_generation,
-        ))
-        if previous.process_identity.offline():
-            orders = tuple(
-                todo
-                for commander in CommanderService.commanders(self.registry, self.goals)
-                for todo in self.goals.todos.held_by(commander.incarnation, owned.incarnation)
-                if todo.pending and todo.held().owner_identity == owned.incarnation
-            )
-            if orders:
-                identities = ", ".join(sorted({
-                    order.id for todo in orders for order in todo.order.declarations
-                }))
-                self._announce_restart(owned.name, identities)
+        owned, = self._register_owners((thread, identity))
         return owned
+
+    def _register_owners(
+        self, *selected: tuple[Thread, ProcessIdentity],
+        initial_input: LaunchInput = LaunchInput(),
+    ) -> tuple[Thread, ...]:
+        """Reserve the batch before any child receives permission to start."""
+        owners = self.registry.reserve_owners(*selected)
+        commanders = tuple(CommanderService.commanders(self.registry, self.goals))
+        for (previous, _), owner in zip(selected, owners, strict=True):
+            owned = owner.thread
+            initial_input.record_first_input(partial(
+                InputDispositions(self.root).record, owner=owned.name, target=owned.name,
+                claim_scope=owner.claimed_generation,
+            ))
+            if previous.process_identity.offline():
+                orders = tuple(
+                    todo
+                    for commander in commanders
+                    for todo in self.goals.todos.held_by(commander.incarnation, owned.incarnation)
+                    if todo.pending and todo.held().owner_identity == owned.incarnation
+                )
+                if orders:
+                    identities = ", ".join(sorted({
+                        order.id for todo in orders for order in todo.order.declarations
+                    }))
+                    self._announce_restart(owned.name, identities)
+        return tuple(owner.thread for owner in owners)
 
     def _announce_restart(self, name: str, identities: str) -> None:
         """Publish once after the registry's process reservation commits."""
@@ -352,44 +359,89 @@ class OwnerLifecycle:
         self.messaging.send(CommanderService.sender, name,
             f"Restarted holding {identities}; continue them from your branch")
 
+    @contextmanager
+    def _starting(self, threads: Sequence[Thread]) -> Iterator[None]:
+        rule = self.registry.storage_rule
+        pending = tuple(thread for thread in threads if not thread.process_alive)
+        if not pending:
+            yield
+            return
+        for thread in pending:
+            rule.require_allocation(thread)
+
+        async def prepare():
+            reservation = await rule.wait_for_room(
+                (UnitStartRoomWork(tuple(thread.incarnation for thread in pending)),), self.root,
+            )
+            try:
+                async with asyncio.TaskGroup() as tasks:
+                    for thread in pending:
+                        pending_checkout = asyncio.get_running_loop().run_in_executor(
+                            None, Checkout(thread.project_path).prepare,
+                        )
+                        tasks.create_task(join_retirement(pending_checkout))
+            except BaseException:
+                reservation.finish(completed=False)
+                raise
+            return reservation
+
+        reservation = asyncio.run(prepare())
+        try:
+            yield
+        except BaseException:
+            reservation.finish(completed=False)
+            raise
+        else:
+            reservation.finish()
+
     def ensure_owner(
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> Thread:
-        with self.registry.storage_rule.room_for_start(self.registry.require(name), self.root):
+        thread = self.registry.require(name)
+        with self._starting((thread,)):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
             refusal = RelationViolationError("Explicit start is required for a stopped agent.")
             thread.role.require_executable(refusal)
             self.registry.status(thread.name).require_active(str(refusal))
-            return (
-                thread
-                if thread.process_alive
-                else self._launch_owner(thread, agent_bin, agent_args,
-                                                 launch_runtime=LaunchRuntime.running())
+            if thread.process_alive:
+                return thread
+            owner, = self._launch_owners(
+                (thread,), agent_bin, agent_args, launch_runtime=LaunchRuntime.running(),
             )
+            return owner
 
     def start(
-        self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
+        self, *names: str, agent_bin: LaunchBinary = ConfiguredBinary(),
         agent_args: LaunchArguments = InheritedArguments(),
-    ) -> OwnerStartResult:
-        with self.registry.storage_rule.room_for_start(self.registry.require(name), self.root):
-            self.maintenance.assert_open_unlocked()
-            thread = self.registry.require(name)
+    ) -> tuple[OwnerStartResult, ...]:
+        self.maintenance.assert_open_unlocked()
+        snapshot = self.registry.snapshot()
+        selected = {thread.name: thread for name in names for thread in (snapshot.require(name),)}
+        pending = []
+        results = {}
+        for thread in selected.values():
             thread.execution.require_native()
-            status = self.registry.status(thread.name)
+            status = snapshot.status(thread.name)
             refusal = RelationViolationError("Only visible agent threads can be started.")
             thread.role.require_executable(refusal)
             status.require_visible(str(refusal))
             if thread.process_alive:
                 status.require_active("Stopped owner has not exited yet.")
-                return OwnerStartResult(thread.name, thread.require_process().pid, False)
-            owner = self._launch_owner(
-                thread, agent_bin.configured(), agent_args,
-                launch_runtime=LaunchRuntime.running(),
-            )
-            return OwnerStartResult(owner.name, owner.require_process().pid, True)
+                results[thread.name] = OwnerStartResult(thread.name, thread.require_process().pid, False)
+            else:
+                pending.append(thread)
+        if pending:
+            with self._starting(pending):
+                owners = self._launch_owners(
+                    pending, agent_bin.configured(), agent_args,
+                    launch_runtime=LaunchRuntime.running(),
+                )
+                results.update((owner.name, OwnerStartResult(
+                    owner.name, owner.require_process().pid, True)) for owner in owners)
+        return tuple(results[name] for name in selected)
 
     @cached_property
     def launch_authority(self) -> RootLaunch:
@@ -500,37 +552,37 @@ class OwnerLifecycle:
         self.launch_authority.check()
         return self.launch_authority
 
-    def _launch_owner(
+    def _launch_owners(
         self,
-        thread: Thread,
+        threads: Sequence[Thread],
         agent_bin: str,
         agent_args: LaunchArguments = InheritedArguments(),
         *,
         launch_runtime: LaunchRuntime,
         initial_input: LaunchInput = LaunchInput(),
         environment: Mapping[str, str] | None = None,
-    ) -> Thread:
-        # Retire the predecessor while its released declaration is still stopped.
-        # Reserving the replacement PID first destroys that observation.
-        RecoveryMonitorCapability.recover_owners(self, (thread,))
+    ) -> tuple[Thread, ...]:
+        # Retire predecessors before reserving any replacement process identity.
+        RecoveryMonitorCapability.recover_owners(self, threads)
         self.maintenance.assert_open_unlocked()
-        env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()
-        env = launch_runtime.environment(env)
-        agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
-        env = initial_input.launch(thread.launch()).apply(env)
-        env[NativeArguments.binary_key] = agent_bin
-        agent_args.apply(env)
-        with OwnerProcessOutput.open(self.root, thread) as output, SpawnedProcess.launching(
-            (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
-             *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
-            env=env,
-            cwd=thread.worktree,
-            output=output,
-            runtime=launch_runtime,
-            lifetime=OutlivesLauncherLifetime,
-        ) as child:
-            return self._register_owner(thread, child.identity, initial_input)
+        environment = launch_runtime.environment(dict(os.environ if environment is None else environment))
+        agent_bin = self.require_launch_authority().prepare_owner(agent_bin, launch_runtime)
+        selected = []
+        with ExitStack() as launches:
+            for thread in threads:
+                env = initial_input.launch(thread.launch()).apply(environment)
+                env[NativeArguments.binary_key] = agent_bin
+                agent_args.apply(env)
+                output = launches.enter_context(OwnerProcessOutput.open(self.root, thread))
+                child = launches.enter_context(SpawnedProcess.launching(
+                    (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
+                     *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
+                    env=env, cwd=thread.worktree, output=output, runtime=launch_runtime,
+                    lifetime=OutlivesLauncherLifetime,
+                ))
+                selected.append((thread, child.identity))
+            return self._register_owners(*selected, initial_input=initial_input)
 
     def _require_same_stop_owner(self, thread: Thread, claimed_generation: int) -> None:
         snapshot = self.registry.snapshot()

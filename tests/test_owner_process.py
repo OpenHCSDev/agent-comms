@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections import Counter
 from contextlib import AsyncExitStack
 from dataclasses import replace
 from functools import partial
@@ -17,6 +18,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms import native_package
+from agent_comms.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.cli_commands import TargetActionCliCommand
+from agent_comms.private_nk_entrypoint import RootLaunch
+from agent_comms.registry_store import RegistryEdit
+from agent_comms.storage_rules import StorageRule
+from agent_comms.storage_room import RoomClaim
 from agent_comms.turn_failure import FailedTurnResolution
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
@@ -49,11 +56,57 @@ async def native_workers(tmp_path, native_runtime_package, source_programs):
             yield native
 
 
+async def test_start_owners_reserves_all_in_one_registry_edit(tmp_path: Path, native_workers) -> None:
+    comms = wire(native_workers.root)
+    comms.registry.storage_rule = StorageRule(
+        volume=tmp_path, floor_gib=0, memory_gib=0,
+        checkout_base=tmp_path / "checkouts", scratch_base=tmp_path / "scratch",
+    )
+    names = ("batch-one", "batch-two", "batch-three")
+    for name in names:
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    observed = Counter()
+    watched = {
+        RegistryEdit.commit.__code__: "registry_commit",
+        RecoveryMonitorCapability.recover_owners.__func__.__code__: "recover_owners",
+        RootLaunch.prepare_owner.__code__: "prepare_root",
+        asyncio.run.__code__: "run_room",
+    }
+
+    def start():
+        previous = sys.getprofile()
+
+        def record(frame, event, arg):
+            if event == "call" and frame.f_code in watched:
+                observed[watched[frame.f_code]] += 1
+
+        sys.setprofile(record)
+        try:
+            return TargetActionCliCommand(
+                operation="start", target=names, project=str(tmp_path),
+            ).apply(comms)
+        finally:
+            sys.setprofile(previous)
+
+    try:
+        result = await Coordination.run_worker(start)
+        assert result.successful and result.completed_count == len(names)
+        assert observed == {
+            "registry_commit": 1, "recover_owners": 1, "prepare_root": 1, "run_room": 1,
+        }
+        assert all(comms.registry.require(name).process_alive for name in names)
+        assert len({comms.registry.require(name).require_process() for name in names}) == len(names)
+        with comms.registry.storage_rule.room_ledger.snapshot() as db:
+            assert RoomClaim.count(db) == 0
+    finally:
+        await Coordination.run_worker(partial(comms.owners.stop, *names))
+
+
 async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, native_workers) -> None:
     comms = wire(native_workers.root)
     declared = Thread('worker', frozenset(), str(tmp_path), task=GivenThreadText('retained task'))
     comms.registry.declare(declared)
-    first = await Coordination.run_worker(partial(
+    first, = await Coordination.run_worker(partial(
         comms.owners.start, "worker", agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
     ))
     owner = comms.registry.require("worker")
@@ -63,7 +116,8 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
             assert owner.process_alive, "Actual worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
             await asyncio.sleep(0.02)
-        assert (await Coordination.run_worker(partial(comms.owners.start, "worker"))).pid == owner.require_process().pid
+        current, = await Coordination.run_worker(partial(comms.owners.start, "worker"))
+        assert current.pid == owner.require_process().pid
         assert not owner.process_identity.runs_here()
         assert owner.process_identity is not None
         from agent_comms.owner_cutover import PreserveOwnerRuntime
