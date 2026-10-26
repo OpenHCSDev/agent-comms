@@ -100,7 +100,8 @@ def test_goal_changed_compares_goal_snapshots(owner):
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
     original_goal_id = GoalId.mint()
-    from agent_comms.runtime_requests import RuntimeRequest, UpdateGoalRuntimeRequest
+    from agent_comms.owner_connection import RuntimeRequest
+    from agent_comms.runtime_requests import UpdateGoalRuntimeRequest
 
     payload = UpdateGoalRuntimeRequest.proxy_payload("worker", None, {
         "status": PausedGoalAction, "goal_id": original_goal_id, "expected_revision": 7,

@@ -675,7 +675,7 @@ class InputDrain(InputObservation):
                 owner=owner,
                 stop=OwnerStop(self.comms.owners.maintenance),
                 auth_observer=self.runtime.background(configuration.observe_authentication(
-                    session_id, self.sessions.config.publish_configuration,
+                    str(session_id), self.sessions.config.publish_configuration,
                 )),
             )
         owned = self.drained[session_id].owned()

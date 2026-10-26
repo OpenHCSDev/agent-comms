@@ -93,7 +93,9 @@ async def journey(arguments):
     try:
         comms.owners.require_private_launch().prepare_owner(
             comms.registry.require(name), arguments.native_launcher, LaunchRuntime.running())
-        await agent.sessions.start_owner(str(project), name)
+        from delivery_owner_fixture import start_headless_owner
+
+        await start_headless_owner(agent, name, agent.inputs.configuration.launch)
         async with attachment(comms, project, name, env) as (client, observer):
             for outcome in arguments.outcomes:
                 target = project / f'{outcome}.txt'

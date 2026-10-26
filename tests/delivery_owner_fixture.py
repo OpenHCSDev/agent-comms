@@ -6,9 +6,13 @@ from agent_comms.controller import SessionUpdateSink
 from bus_record_fixture import prepare_native_comms
 
 from contextlib import asynccontextmanager
+from dataclasses import replace
+from functools import partial
 
 from agent_comms.acp import CommsAgent
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.coordinator import Coordination
+from agent_comms.owner_launch import RetainedOwnerLaunch
 
 
 class FakeClient(SessionUpdateSink):
@@ -45,6 +49,15 @@ def canonical_agent(comms, **options):
     )
     agent.on_connect(FakeClient())
     return agent
+
+
+async def start_headless_owner(agent: CommsAgent, name: str, launch: RetainedOwnerLaunch) -> None:
+    """Bind an actual local lease with the fixture's original session configuration."""
+    thread = await Coordination.run_worker(partial(agent._comms.owners.acquire_thread, name))
+    entry = (await Coordination.run_worker(partial(agent._comms.registry.entry, name))).entry
+    await agent.sessions.start_owner(replace(
+        launch, process=thread.require_process(), environment=thread.launch().apply(launch.environment),
+    ), entry.owner_identity)
 
 
 async def reply_turn_finished(owner, session):

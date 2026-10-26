@@ -17,7 +17,7 @@ from agent_comms.ui_model.observation import (
     ReadNotifications,
     StopObserving,
 )
-from delivery_owner_fixture import canonical_agent
+from delivery_owner_fixture import canonical_agent, start_headless_owner
 from test_runtime import until
 
 
@@ -30,7 +30,7 @@ async def headless_owner(comms, tmp_path, caplog, native_runtime_package):
         thread = await Coordination.run_worker(
             partial(owner.sessions.declare_thread, str(tmp_path))
         )
-        await owner.sessions.start_owner(str(tmp_path), thread.name)
+        await start_headless_owner(owner, thread.name, owner.inputs.configuration.launch)
         yield owner
     finally:
         await owner.shutdown()
@@ -45,7 +45,8 @@ def observation_children():
 
 async def test_headless_bind_has_no_observation_process(headless_owner, tmp_path):
     session, = headless_owner.sessions.published
-    await headless_owner.sessions.start_owner(str(tmp_path), session)
+    state = headless_owner.inputs.state(session).owned()
+    await headless_owner.sessions.start_owner(state.configuration.launch, state.owner)
     assert headless_owner.sessions.client is None
     assert headless_owner.sessions.require(session) == session
     assert observation_children() == ()
@@ -54,6 +55,7 @@ async def test_headless_bind_has_no_observation_process(headless_owner, tmp_path
 async def test_subscriptions_share_process_and_last_close_joins_it(headless_owner):
     owner = headless_owner
     session, = owner.sessions.published
+    session = owner.sessions.require(session)
     frontend = canonical_agent(owner._comms, auto_wake=False)
     first = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
     second = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
@@ -102,7 +104,7 @@ async def test_broken_pipe_ends_subscription_with_observer_died(headless_owner):
         assert failed_send.value.pid == process.process.pid
         assert process.reads == {}
     finally:
-        process.close()
+        await process.close()
         if not pending.done():
             pending.cancel()
             await asyncio.gather(pending, return_exceptions=True)

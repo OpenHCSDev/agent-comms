@@ -1,41 +1,41 @@
-"""A selection binds each exact process to its own observed interpreter."""
+"""Restart captures the original per-session launch over the real owner socket."""
 
-import os
-import sys
-from contextlib import ExitStack
 from dataclasses import replace
+from functools import partial
 
 import pytest
 
-from agent_comms.child_process import SpawnedProcess
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent, start_headless_owner
 
 
-def test_mixed_interpreters_are_captured_per_owner_and_changes_refused(tmp_path, thread_registration):
-    with ExitStack() as children:
-        threads = {}
+async def test_original_session_launches_share_host_and_refuse_changed_selection(comms, tmp_path, native_runtime_package):
+    agent = canonical_agent(comms, runtime_enabled=True, auto_wake=False)
+    try:
+        expected = {}
         for name in ("older", "current"):
-            python = tmp_path / name / "bin/python"
-            python.parent.mkdir(parents=True)
-            python.symlink_to(sys.executable)
-            environment = dict(os.environ, AGENT_COMMS_THREAD=name,
-                               AGENT_COMMS_AGENT_BIN=str(python))
-            child = SpawnedProcess.launch((str(python), "-c", "import time; time.sleep(60)"),
-                                           env=environment)
-            children.callback(child.close)
-            thread = Thread(
-                name, frozenset(), str(tmp_path), process_identity=child.identity)
-            thread_registration.declare(thread)
-            threads[name] = thread
-        snapshot = thread_registration.snapshot()
-        selections = tuple(OwnerRestartSelection.capture(snapshot, name) for name in threads)
-        assert len({selected.interpreter for selected in selections}) == 2
+            comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+            launch = agent.inputs.configuration.launch
+            original = replace(launch, environment={
+                **launch.environment, "AUTHORED_CREDENTIAL": name,
+            })
+            await start_headless_owner(agent, name, original)
+            expected[name] = agent.inputs.state(name).owned().configuration.launch
+        snapshot = comms.registry.snapshot()
+        selections = tuple(OwnerRestartSelection.capture(snapshot, name) for name in expected)
+        assert len({selected.process for selected in selections}) == 1
         for selected in selections:
-            assert selected.interpreter == str(tmp_path / selected.name / "bin/python")
-            launch = RetainedOwnerLaunch.capture(selected, snapshot)
-            assert launch.interpreter == selected.interpreter
+            launch = await Coordination.run_worker(partial(
+                RetainedOwnerLaunch.capture, selected, snapshot, comms.root))
+            assert launch == expected[selected.name]
+            assert launch.environment["AUTHORED_CREDENTIAL"] == selected.name
             with pytest.raises(RelationViolationError):
-                RetainedOwnerLaunch.capture(replace(selected, interpreter="/wrong/python"), snapshot)
+                await Coordination.run_worker(partial(
+                    RetainedOwnerLaunch.capture, replace(selected, interpreter="/wrong/python"),
+                    snapshot, comms.root))
+    finally:
+        await agent.shutdown()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import asyncio
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import Platform, ProcessIdentity
@@ -12,8 +13,8 @@ from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .registry_document import RegistryEntry, RegistrySnapshot
-from .field_codec import AcpSessionId
-from .owner_connection import ResultRuntimeRequest, RuntimeRequestContext
+from .field_codec import FieldCodec
+from .owner_connection import OwnerConnection, ResultRuntimeRequest, RuntimeRequestContext
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .tool_result import DeclaredReply
 
@@ -21,11 +22,12 @@ if TYPE_CHECKING:
     from .owner_lifecycle import OwnerRestartSelection
     from .runtime import RuntimeServer, SocketClient
     from .threads import Thread
+    from .session_lifecycle import SessionLifecycle
 
 
 @dataclass(frozen=True, slots=True)
-class RetainedOwnerLaunch:
-    """An immutable process observation, not ownership or permission to start work."""
+class RetainedOwnerLaunch(DeclaredReply):
+    """Original session configuration, not ownership or permission to start work."""
 
     process: ProcessIdentity
     interpreter: str
@@ -49,26 +51,26 @@ class RetainedOwnerLaunch:
 
     @classmethod
     def capture(
-        cls, selection: OwnerRestartSelection, snapshot: RegistrySnapshot
+        cls, selection: OwnerRestartSelection, snapshot: RegistrySnapshot, root: Path,
     ) -> RetainedOwnerLaunch:
         thread = selection.require_current(snapshot)
         process = selection.process
         platform = Platform.current()
         platform.require(process)
-        observed_interpreter = process.arguments()[0]
-        if observed_interpreter != selection.interpreter:
+        result = FieldCodec.decode(cls, OwnerConnection.exchange(
+            root, process, ReadOwnerLaunchRuntimeRequest(thread=thread.name, owner=selection.identity),
+        ))
+        if result.process != process or result.interpreter != selection.interpreter:
             raise RelationViolationError("Selected source owner interpreter changed")
-        environment = process.environment()
         platform.require(process)
-        route = launch_runtime.ThreadLaunch.current(environment).name
-        if not environment.get(NativeArguments.binary_key):
+        route = launch_runtime.ThreadLaunch.current(result.environment).name
+        if not result.environment.get(NativeArguments.binary_key):
             raise RelationViolationError("Owner launch configuration cannot be verified")
         # A worker's launch name may have been renamed since exec. The original
         # snapshot owns that relation; a PID or spelling match cannot grant it.
         if snapshot.owner_identity(route) != snapshot.owner_identity(thread.name):
             raise RelationViolationError("Owner launch names another registry incarnation")
         snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
-        result = cls(process, observed_interpreter, environment)
         result.arguments  # Decode/validate malformed shell arguments before any fence.
         return result
 
@@ -92,6 +94,22 @@ class OwnerRetiredReply(DeclaredReply):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ReadOwnerLaunchRuntimeRequest(ResultRuntimeRequest):
+    owner: OwnerIdentity
+
+    def require_owner(self, entry: RegistryEntry) -> Thread:
+        if entry.owner_identity != self.owner:
+            raise RelationViolationError("Launch request's owner lease changed")
+        return super().require_owner(entry)
+
+    async def result(self, ctx: RuntimeRequestContext) -> RetainedOwnerLaunch:
+        state = ctx.server.agent.inputs.state(ctx.session_id).owned()
+        if state.owner != self.owner:
+            raise RelationViolationError("Launch request names another original session")
+        return state.configuration.launch
+
+
+@dataclass(frozen=True, kw_only=True)
 class StartOwnerRuntimeRequest(ResultRuntimeRequest):
     launch: RetainedOwnerLaunch
     owner: OwnerIdentity
@@ -103,7 +121,7 @@ class StartOwnerRuntimeRequest(ResultRuntimeRequest):
             raise RelationViolationError("Start request belongs to another host process")
         if self.thread != self.owner.incarnation.name:
             raise RelationViolationError("Start request names another owner")
-        return RuntimeRequestContext(server, reader, client, AcpSessionId(self.thread), self.thread)
+        return RuntimeRequestContext(server, reader, client, self.thread, self.thread)
 
     async def result(self, ctx: RuntimeRequestContext) -> OwnerAttachedReply:
         await ctx.server.agent.sessions.start_owner(self.launch, self.owner)
@@ -124,8 +142,11 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest):
         return entry.thread
 
     async def result(self, ctx: RuntimeRequestContext) -> OwnerRetiredReply:
-        state = ctx.server.agent.inputs.state(ctx.session_id).owned()
+        return await self.retire(ctx.server.agent.sessions, ctx.session_id)
+
+    async def retire(self, sessions: SessionLifecycle, session_id: str) -> OwnerRetiredReply:
+        state = sessions.effects.inputs.state(session_id).owned()
         if state.owner.incarnation != self.owner.incarnation or state.owner.generation >= self.owner.generation:
             raise RelationViolationError("Stop request does not fence this original session")
-        await ctx.server.agent.sessions.retire_owner(state, self.owner, self.claim)
+        await sessions.retire_owner(state, self.owner, self.claim)
         return OwnerRetiredReply(state.owner)

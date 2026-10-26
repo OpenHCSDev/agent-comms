@@ -144,11 +144,11 @@ class SessionLifecycle:
         """Whether this session is published as the named thread."""
         return session_id in self.published and self.published[AcpSessionId(session_id)].name == name
 
-    def require_owned_session(self, entry: RegistryEntry) -> AcpSessionId:
+    def require_owned_session(self, entry: RegistryEntry) -> str:
         """Resolve an original loaded resource; registration grants no attachment."""
         for session_id, published in self.published.items():
             if entry.matches_name(published.name):
-                return session_id
+                return str(session_id)
         raise Refused.invalid_params({
             "reason": f"Registered owner {entry.thread.name!r} has no loaded ACP session. "
                       "PID registration does not attach a session.",
@@ -253,14 +253,14 @@ class SessionLifecycle:
         session_id = AcpSessionId(thread.name)
         state = await self.bind_owner(
             thread, session_id, ConfigOptions(launch, self.comms.route), owner)
-        self.effects.inputs.ensure_live_drain(session_id)
+        self.effects.inputs.ensure_live_drain(str(session_id))
         key = selected.take_startup_input(launch.environment)
         if key:
             self.runtime.background(self.run_startup_input(state, InputKeyText.decode(key)))
 
     async def run_startup_input(self, state: OwnerSession, key: InputKey) -> None:
         """Consume only the explicitly authorized first input; never scan or replay."""
-        session_id = state.identifier
+        session_id = str(state.identifier)
         async with state.turn_lock:
             async with state.own_turn_task():
                 def capture() -> str:
@@ -429,14 +429,6 @@ class SessionLifecycle:
             for session_id in tuple(self.proxies):
                 await self.retire_proxy(session_id)
 
-    def release_registered_owner(self, name: str) -> None:
-        snapshot = self.comms.registry.snapshot()
-        if snapshot.retired(snapshot.canonical_name(name)):
-            return
-        thread = snapshot.require(name)
-        if thread.process_identity.runs_here() and snapshot.status(thread.name).running:
-            self.comms.owners.stop(thread.name)
-
     async def release_owned(self) -> None:
         """Release every owned thread, then report each release that failed.
 
@@ -453,9 +445,14 @@ class SessionLifecycle:
                 for state in self.effects.inputs.drained.values()
                 for owner in state.executors()
             }
-            for name in names:
+            owners = await Coordination.run_worker(partial(self.comms.owners.fence_stop, *names))
+            requests = await Coordination.run_worker(partial(self.comms.owners.stop_requests, owners))
+            for request in requests:
                 try:
-                    await Coordination.run_worker(partial(self.release_registered_owner, name))
+                    entry = (await Coordination.run_worker(partial(
+                        self.comms.registry.entry, request.thread))).entry
+                    session_id = self.require_owned_session(entry)
+                    await request.retire(self, session_id)
                 except (OSError, ValueError) as error:
                     failures.append(error)
         finally:

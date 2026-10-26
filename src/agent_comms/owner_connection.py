@@ -8,7 +8,7 @@ import os
 import socket
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 from abc import abstractmethod
 from collections.abc import Awaitable
 from dataclasses import dataclass
@@ -18,12 +18,13 @@ from .tool_result import DeclaredReply
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import AcpSessionId, FieldCodec, NullMember
+from .field_codec import FieldCodec, NullMember
 from .jsonl_stream import JsonlStreamReader
 from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .child_process import ProcessIdentity
     from .registry_document import RegistryEntry
     from .thread_identity import OwnerIdentity
@@ -53,7 +54,7 @@ class RuntimeRequestContext:
     server: RuntimeServer
     reader: asyncio.StreamReader
     client: SocketClient
-    session_id: AcpSessionId
+    session_id: str
     name: str
 
     async def send(self, line: OwnerLine) -> None:
@@ -103,7 +104,8 @@ class OwnerConnection:
     @staticmethod
     def wire_request(action: str, thread: str, parameters: dict[str, object]) -> dict[str, object]:
         """The owner decodes the command; transport encodes its one request envelope."""
-        return {"action": action, "thread": thread, **FieldCodec.encode(parameters)}
+        return {"action": action, "thread": thread,
+                **cast(dict[str, object], FieldCodec.encode(parameters))}
 
     @staticmethod
     def exchange(root: Path, process: ProcessIdentity, request: RuntimeRequest) -> object:
@@ -131,7 +133,7 @@ class OwnerConnection:
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return self.wire_request(action, self.session_id, parameters)
 
-    def __init__(self, comms, session_id: str, path: Path):
+    def __init__(self, comms: Comms, session_id: str, path: Path):
         self.session_id = session_id
         self.path = path
         self._comms = comms
@@ -234,7 +236,7 @@ class OwnerConnection:
             finally:
                 self._requests.discard(task)
 
-    async def close(self):
+    async def close(self) -> None:
         self._closed = True
         tasks = tuple(self._requests)
         for task in tasks:

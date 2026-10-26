@@ -23,6 +23,7 @@ from .native_arguments import (
 )
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import (
+    OwnerCompletion,
     OwnerRestartResult,
     OwnerRestartSelection,
 )
@@ -67,13 +68,14 @@ class RetiredOwnerLaunch:
 
     authority: ThreadAuthority
     launch: RetainedOwnerLaunch
+    completion: OwnerCompletion
 
     @classmethod
     def capture_retired(cls, snapshot: RegistrySnapshot, original: Thread,
-                        launch: RetainedOwnerLaunch) -> RetiredOwnerLaunch:
+                        launch: RetainedOwnerLaunch, completion: OwnerCompletion) -> RetiredOwnerLaunch:
         """Capture the original allocations after stopping, without permitting live work."""
         original.require_local_process(launch.process)
-        owner = cls(snapshot.authority(original.name), launch)
+        owner = cls(snapshot.authority(original.name), launch, completion)
         if owner.authority.owner.incarnation != original.incarnation:
             raise RelationViolationError('Retired owner incarnation changed')
         owner.require_current(snapshot)
@@ -87,11 +89,9 @@ class RetiredOwnerLaunch:
         if snapshot.authority(self.name) != self.authority:
             raise RelationViolationError('Retired owner authority changed')
         thread = snapshot.threads[self.name]
-        thread.require_local_process(self.launch.process)
+        self.completion.require_retired(snapshot, thread, self.launch.process)
         thread.turn_record.read().require_idle()
         snapshot.status(self.name).require_stopped()
-        if thread.process_alive:
-            raise RelationViolationError('Original owner survived retirement')
         return thread
 
 
@@ -224,16 +224,13 @@ class FencedOwnerBatch:
         try:
             # Every original shares one grace period instead of waiting in turn.
             self.lifecycle._stop_processes(self.captured)
-            if any(thread.process_alive for thread, _ in self.captured):
-                raise RelationViolationError('Owner survived retirement')
-            self.lifecycle._finish_stopped_owners(self.captured)
             with self.lifecycle.registry.store.guarded_write():
                 snapshot = self.lifecycle.registry.snapshot()
                 releases = self.lifecycle.releases.read_many(
                     tuple(thread.name for thread, _ in self.captured))
                 for (thread, generation), launch in zip(self.captured, self.launches, strict=True):
-                    releases[thread.name].require_stopping_owner(snapshot, thread, generation)
-                    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+                    completion = releases[thread.name].retirement(snapshot, thread, generation)
+                    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch, completion)
                     progress = replace(progress, retired=progress.retired + (owner,))
             # Each original's acquired witness excludes its input before any replacement.
             from .attempt_recovery import RecoveryMonitorCapability
@@ -280,11 +277,23 @@ class ClaimedOwnerBatch:
                 lifecycle.require_restart_idle(thread)
                 captured.append((thread, generation))
             runtime = request.environment(lifecycle)
-            launches = tuple(RetainedOwnerLaunch.capture(
-                cutover.owner_selection(snapshot, thread, request), snapshot,
-            ) for thread, _ in captured)
-            if captured:
-                cutover.require_launch(lifecycle)
+        launches = tuple(RetainedOwnerLaunch.capture(
+            cutover.owner_selection(snapshot, thread, request), snapshot,
+            lifecycle.root,
+        ) for thread, _ in captured)
+        if captured:
+            cutover.require_launch(lifecycle)
+        with lifecycle.registry.store.guarded_write():
+            cutover.require_restart_phase(lifecycle)
+            current = lifecycle.registry.snapshot()
+            request.require_selection(current, threads)
+            cutover.require_selection(current, threads)
+            for thread, generation in captured:
+                snapshot.owner_identity(thread.name).require_current(
+                    current.require(thread.name), current.owner_identity(thread.name).generation,
+                    thread.require_process(),
+                )
+                current.require_stopping_owner(thread, generation)
             authorized = cls(lifecycle, tuple(captured), launches, request, runtime)
             fenced = authorized.fence()
         return fenced.complete(cutover)

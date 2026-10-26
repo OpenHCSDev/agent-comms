@@ -37,10 +37,6 @@ from agent_comms.turn_lease import NoTurnRecord
 from agent_comms.threads import Thread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
-from test_coordinated_runtime import tmp_path as private_root_fixture
-
-# Reuse the existing isolated native-runtime fixture.
-tmp_path = private_root_fixture
 
 
 def start_source_owner(comms, name, runtime: RestoredRuntime):
@@ -108,7 +104,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                             original = None
                             is_triage = requires_answer = False
                         else:
-                            assert len(pending) == 1
+                            assert len(pending) == 1, tuple(
+                                (row.input_id, row.stage.declared_name, row.session_file, str(row.session_id))
+                                for row in pending)
                             original = pending[0]
                             user = next(entry for entry in NativeTranscript(
                                 Path(original.session_file)
@@ -512,11 +510,12 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             assert Path(after.threads["questioner"].runtime.read_key).read_bytes().startswith(saved['questioner'])
     finally:
         await attachment.shutdown()
-        for name in projects:
-            await asyncio.to_thread(comms.owners.stop, name)
-        server.shutdown()
-        server.server_close()
-        serving.join(timeout=2)
+        try:
+            await asyncio.to_thread(comms.owners.stop, *projects)
+        finally:
+            server.shutdown()
+            server.server_close()
+            serving.join(timeout=2)
         assert all(not comms.registry.require(name).process_alive for name in projects)
         if retained_evidence := os.environ.get("AC_NATIVE_ROUNDTRIP_EVIDENCE"):
             evidence = Path(retained_evidence)

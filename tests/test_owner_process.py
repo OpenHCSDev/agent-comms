@@ -18,7 +18,7 @@ import pytest
 
 from agent_comms import native_package
 from agent_comms.turn_failure import FailedTurnResolution
-from agent_comms.child_process import ObservedProcess, SpawnedProcess
+from agent_comms.child_process import NoProcess, ObservedProcess, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordinator import Coordination
@@ -110,6 +110,49 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
         if current.process_alive:
             assert current.process_identity is not None
             ObservedProcess(current.process_identity).stop_sync()
+
+
+async def test_shared_host_restarts_one_session_without_stopping_its_siblings(tmp_path, native_workers):
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.owner_lifecycle import OwnerRestartSelection
+
+    comms = wire(native_workers.root)
+    names = ("shared-a", "shared-b", "shared-c")
+    try:
+        for name in names:
+            comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+            await Coordination.run_worker(partial(
+                comms.owners.start, name,
+                agent_bin=GivenBinary(str(Path(sys.executable).with_name("pi-comms-native").resolve())),
+                agent_args=GivenArguments(("--no-tools",)),
+            ))
+        before = comms.registry.snapshot()
+        host, = {before.require(name).require_process() for name in names}
+        selected = OwnerRestartSelection.capture(before, names[1])
+        original = await Coordination.run_worker(partial(
+            RetainedOwnerLaunch.capture, selected, before, comms.root))
+        result, = await Coordination.run_worker(partial(
+            comms.owners.restart_owners, OwnersNamed((names[1],))))
+        after = comms.registry.snapshot()
+        assert result.previous_pid == result.pid == host.pid
+        assert after.owner_identity(names[1]) != before.owner_identity(names[1])
+        for name in (names[0], names[2]):
+            assert after.authority(name) == before.authority(name)
+        for name in names:
+            assert after.require_active(name).require_process() == host
+        replacement = await Coordination.run_worker(partial(
+            RetainedOwnerLaunch.capture, OwnerRestartSelection.capture(after, names[1]), after, comms.root))
+        assert replacement.environment == original.environment
+        await Coordination.run_worker(partial(comms.owners.stop, names[0]))
+        assert host.alive()
+        assert comms.registry.require(names[0]).process_identity == NoProcess()
+        for name in names[1:]:
+            assert comms.registry.snapshot().require_active(name).require_process() == host
+        await Coordination.run_worker(partial(comms.owners.stop, *names[1:]))
+        assert not host.alive()
+        assert all(comms.registry.require(name).process_identity == NoProcess() for name in names)
+    finally:
+        await Coordination.run_worker(partial(comms.owners.stop, *names))
 
 
 def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None:
@@ -221,7 +264,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         def after_stopped(self, lifecycle):
             assert all(not original.process_alive for original in originals)
             assert all(
-                lifecycle.registry.require(name).process_identity == original.process_identity
+                lifecycle.registry.require(name).process_identity == NoProcess()
                 for name, original in zip(selected, originals, strict=True)
             )
 
@@ -299,7 +342,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
 
             launch = RetainedOwnerLaunch.capture(
                 OwnerRestartSelection.capture(comms.registry.snapshot(), current.name),
-                comms.registry.snapshot())
+                comms.registry.snapshot(), comms.root)
             assert launch.binary == str(target_binary.resolve())
             assert launch.arguments == arguments
             assert launch.environment["BATCH_OWNER_CREDENTIAL"] == credential

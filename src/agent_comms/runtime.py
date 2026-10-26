@@ -53,7 +53,8 @@ from .owner_protocol import (
     UnannouncedOwner,
 )
 from .owner_connection import NoControllerToken, OwnerConnection, OwnerIdentityChangedError, socket_path
-from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
+from .owner_connection import RuntimeRequest
+from .runtime_requests import SubscribeRuntimeRequest
 from .errors import RelationViolationError
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
@@ -356,7 +357,10 @@ class RuntimeServer(SessionUpdateSink):
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = SocketClient(writer)
         try:
-            request = FieldCodec.decode(RuntimeRequest, json.loads(await reader.readline()))
+            line = await reader.readline()
+            if not line:
+                return
+            request = FieldCodec.decode(RuntimeRequest, json.loads(line))
             context = await request.bind(self, reader, client)
             await request.apply(context)
         except SubscriberClosed:
