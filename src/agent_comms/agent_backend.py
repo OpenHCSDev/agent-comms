@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -173,6 +174,9 @@ class TurnInboxItem(ABC):
 
 class TurnInbox(asyncio.Queue[TurnInboxItem]):
     """The live inbox parks its head until the existing observer sees READY."""
+
+    _queue: deque[TurnInboxItem]
+
     def __init__(self):
         super().__init__()
         self.ready = asyncio.Event()

@@ -181,7 +181,7 @@ class QueuedInputFailure(TerminalFailure, declared_name=None):
 
     @classmethod
     def detected(cls, session: NativeSession, transport_ok: bool) -> bool:
-        return transport_ok and session.output.error_message is None and cls.pending(session.inputs)
+        return transport_ok and session.output.clean and cls.pending(session.inputs)
 
     @classmethod
     @abstractmethod
