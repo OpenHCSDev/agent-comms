@@ -12,6 +12,12 @@ from dataclasses import dataclass
 from functools import partial
 
 from agent_comms.reason_codes import GivenReasonCode
+from metaclass_registry.mro_dispatch import (
+    Handler,
+    MroDispatch,
+    Value,
+    handles,
+)
 
 from . import pi_events as pi
 from .agent_events import NativePhaseChanged, PromptAccepted
@@ -30,7 +36,6 @@ from .coordination_tables.attempts import ReplayFact
 from .coordination_tables.executions import ReplayAssessments
 from .coordinator import Coordination
 from .field_codec import InputId
-from .mro_dispatch import Handler, MroDispatch, Value, handles
 from .owner_fence import OwnerFence
 from .turn_failure import TurnFailure
 from .turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase

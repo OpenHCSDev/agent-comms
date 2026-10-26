@@ -2,8 +2,10 @@
 
 from agent_comms.acp_extension import BackendDeliveryFailure, ClaimBlockedFailure
 from agent_comms.errors import HumanClaimBlockedError
-
-from .mro_dispatch import MroDispatch, handles
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
 
 class FailureDecoder(MroDispatch):

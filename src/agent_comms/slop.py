@@ -11,6 +11,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import ClassVar
 
+from metaclass_registry.mro_dispatch import handles
 from pydantic import JsonValue
 
 from agent_comms import skills
@@ -23,7 +24,6 @@ from agent_comms.field_codec import (
     StructuralRepresentation,
     WireValue,
 )
-from agent_comms.mro_dispatch import handles
 
 
 class Derivation(DeclaredFamily, affix="Derivation"):

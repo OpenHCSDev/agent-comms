@@ -10,6 +10,11 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 from . import agent_events as events
 from . import pi_commands as commands
 from . import turn_failure as failures
@@ -18,7 +23,6 @@ from .agent_backend import ClearQueue, InputRequest, SendNow, TurnInbox, TurnInb
 from .field_codec import InputId
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
-from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
 from .pending_requests import PendingRequest
 from .prompt_state import PreparedSession, UnwrittenPrompt

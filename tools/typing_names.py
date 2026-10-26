@@ -9,7 +9,10 @@ import typing
 
 import typing_extensions
 
-from agent_comms.mro_dispatch import MroDispatch, handles
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
 
 class Untyped:

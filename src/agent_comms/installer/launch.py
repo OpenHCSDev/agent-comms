@@ -56,9 +56,12 @@ from agent_comms.installer.upgrade import (
     Upgrade,
     upgrade,
 )
-from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
 
 
 @dataclass

@@ -8,11 +8,15 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, ClassVar
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 from . import agent_events as events
 from . import turn_failure as failures
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily
-from .mro_dispatch import MroDispatch, handles
 from .native_startup import SessionLoad
 
 if TYPE_CHECKING:

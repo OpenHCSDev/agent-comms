@@ -1,5 +1,10 @@
 """Declared owner commands at the ACP boundary; shared behavior is inherited."""
 
+from metaclass_registry.mro_dispatch import (
+    MroDispatch,
+    handles,
+)
+
 from .coordination_errors import Refused
 from acp.schema import PromptRequest, PromptResponse
 
@@ -11,7 +16,6 @@ from .acp_extension import (
     SendNowRequest,
     encode_request,
 )
-from .mro_dispatch import MroDispatch, handles
 
 
 class AcpRequestConsumer(MroDispatch):

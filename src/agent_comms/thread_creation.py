@@ -7,9 +7,10 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Set
 
+from metaclass_registry.mro_dispatch import handles
+
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, FieldRepresentation, WireValue
-from .mro_dispatch import handles
 
 
 class CreationTime(float, WireValue, ABC):
