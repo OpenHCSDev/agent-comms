@@ -3,38 +3,51 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import (
+    Awaitable,
+    Callable,
+)
 from contextlib import AsyncExitStack, ExitStack, aclosing
-from dataclasses import replace
+from dataclasses import (
+    dataclass,
+    replace,
+)
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
-
-from .coordination_errors import Refused
-
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
-from .channel_coding_tools import CodingToolMode
-
-from .input_key import InputKey
-
 from . import agent_events as events
-from .agent_backend import InputContent, TurnDelivery
+from .agent_backend import (
+    InputContent,
+    InputStartListener,
+    TurnInbox,
+)
+from .channel_coding_tools import CodingToolMode
 from .channel_input_batch import InputBatch
-from .coordination_errors import CoordinationError
+from .coordination_errors import CoordinationError, Refused
 from .coordinator import Coordination
 from .field_codec import GoalId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
+from .input_key import InputKey
 from .input_origin import WireInputOrigin
 from .messages import Message
 from .native_failures import NativeRequestFailure
 from .native_input_owner import RegistryOwner
+from .native_tool_call import NativeToolMode
 from .owned_send import OwnedSend
+from .pi_events import (
+    DialogUiRequest,
+    ExtensionUiChoice,
+)
 from .routing import MessageRoute, NoMessageRoute, ScheduledTurn, TurnRouting
+from .send_outcome import SendBoundary
 from .transcript_routes import DisplayText, NoDisplayText
+from .turn_failure import BackendFailed, CoordinationRefused, TurnFailure
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
     OwnerGoalPermission,
@@ -49,11 +62,33 @@ from .turn_input_source import (
 )
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 from .turn_progress import TurnProgress
-from .turn_failure import BackendFailed, CoordinationRefused, TurnFailure
 from .turn_terminal import EndedWithoutResult, TurnTerminal
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
+
+
+@dataclass(frozen=True, kw_only=True)
+class TurnDelivery:
+    """Core's bindings for one turn, handed to the backend that runs it.
+
+    ``inbox`` carries :class:`InputRequest` and :class:`SendNow` records that
+    arrive while the turn runs. Core checks input permission at these boundaries: the
+    backend asks ``send_boundary`` before writing each input or interrupt;
+    ``input_start`` reports that the
+    runtime began an input; ``request_progress`` and ``ui_request`` observe
+    provider progress and answer runtime dialogs.
+    """
+
+    worktree: str
+    environment: dict[str, str]
+    inbox: TurnInbox
+    finish_event: asyncio.Event
+    send_boundary: SendBoundary
+    input_start: InputStartListener
+    request_progress: Callable[..., None]
+    ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
+    tool_mode: NativeToolMode
 
 
 class OwnedTurn:

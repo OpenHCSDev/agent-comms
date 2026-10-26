@@ -1,26 +1,36 @@
 """Scratch is configured; checkout membership is read from Git and the filesystem."""
 
+import runpy
 import shutil
 import subprocess
 from pathlib import Path
-import runpy
 
 import pytest
 
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RecordProblems
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.repo import Checkout, DetachedStart, Repo
+from agent_comms.shell_effects import (
+    CreateCheckoutStorageEffect,
+    RemoveCheckoutStorageEffect,
+    ShellProgram,
+    StorageDenied,
+    StorageEffect,
+    shell_storage_effects,
+)
 from agent_comms.standing_rules import StorageHomeMissing
 from agent_comms.storage_rules import (
-    StorageRoots, StorageRule, StorageProjection, UnassignedThreadStorage, UnitStorage,
+    StorageProjection,
+    StorageRule,
+    UnitStorage,
 )
-from agent_comms.shell_effects import (
-    CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageDenied, ShellProgram,
-    StorageEffect, shell_storage_effects,
+from agent_comms.thread_storage import (
+    StorageRoots,
+    UnassignedThreadStorage,
 )
 from agent_comms.threads import Thread
+from agent_comms.tool_denial import SelectedToolDenied
 
 
 def test_resource_checker_uses_storage_allocation_floor(tmp_path):

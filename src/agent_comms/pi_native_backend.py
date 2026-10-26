@@ -11,10 +11,6 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
-from .coordinator import Coordination
-
-from .native_failures import NativePiUnavailable
-
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -22,6 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
 from agent_comms.pi_payloads import PiOmitted
 
 from .agent_backend import (
@@ -30,20 +27,20 @@ from .agent_backend import (
     Forks,
     InputContent,
     Interrupts,
-    NothingToCompaction,
     NewThreadBackend,
+    NothingToCompaction,
     PlacedCompaction,
     RuntimeLocation,
-    TurnDelivery,
 )
+from .coordinator import Coordination
 from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments
+from .native_failures import NativePiUnavailable
 from .native_fork import (
     RuntimeForkHelper,
     RuntimeForkRequest,
 )
 from .native_pi import NativePiRpcLaunch
-from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .pi_commands import Compact
@@ -54,13 +51,13 @@ from .session_revision import (
     SessionRevisionUnavailable,
 )
 
-
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo
     from .comms import Comms
     from .launch_runtime import LaunchRuntime
     from .native_child import NativeChildState, PiSessionChild
     from .native_session_reopen import NativeSessionIdentity
+    from .owned_turn import TurnDelivery
     from .pi_payloads import StateData
     from .threads import Thread
     from .turn_runner import TurnRunner

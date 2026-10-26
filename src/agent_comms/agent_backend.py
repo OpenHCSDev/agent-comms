@@ -20,32 +20,30 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .field_codec import InputId
+from .image_input import ImageInput
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
-from .send_outcome import SendBoundary
 from .session_revision import NoSessionObservation, SessionObservation
+from .thread_model import ThreadModel
 from .tool_result import DeclaredReply
+from .turn_context import InputContributionCoordinates
 from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from .agent_events import AgentEvent
-    from .image_input import ImageInput
     from .launch_runtime import LaunchRuntime
-    from .native_tool_call import NativeToolMode
-    from .pi_events import DialogUiRequest, ExtensionUiChoice
-    from .thread_model import ThreadModel
+    from .owned_turn import TurnDelivery
     from .threads import Thread
     from .transcript_sources import TranscriptSource
-    from .turn_context import InputContributionCoordinates
     from .turn_runner import TurnRunner
 
 
@@ -323,27 +321,6 @@ class NoInputStartListener(InputStartListener):
 NO_INPUT_START_LISTENER = NoInputStartListener()
 
 
-@dataclass(frozen=True, kw_only=True)
-class TurnDelivery:
-    """Core's bindings for one turn, handed to the backend that runs it.
-
-    ``inbox`` carries :class:`InputRequest` and :class:`SendNow` records that
-    arrive while the turn runs. Core checks input permission at these boundaries: the
-    backend asks ``send_boundary`` before writing each input or interrupt;
-    ``input_start`` reports that the
-    runtime began an input; ``request_progress`` and ``ui_request`` observe
-    provider progress and answer runtime dialogs.
-    """
-
-    worktree: str
-    environment: dict[str, str]
-    inbox: TurnInbox
-    finish_event: asyncio.Event
-    send_boundary: SendBoundary
-    input_start: InputStartListener
-    request_progress: Callable[..., None]
-    ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
-    tool_mode: NativeToolMode
 
 
 class RunsTurns(ABC):

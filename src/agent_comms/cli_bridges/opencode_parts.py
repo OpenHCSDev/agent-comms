@@ -8,8 +8,10 @@ from typing import ClassVar, Literal
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.cli_protocol import Declared, TaggedWire, TextWire, WireHeader
-from agent_comms.field_codec import FieldCodec
-from agent_comms.native_tool_call import ToolCallId
+from agent_comms.field_codec import (
+    FieldCodec,
+    ToolCallId,
+)
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.runtime_updates import (
     CompletedItem,

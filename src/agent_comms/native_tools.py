@@ -6,17 +6,24 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
-from .field_codec import FieldCodec, NullMember, WireContext, WireOmitDefault
-from .native_tool_call import CodingCall, ToolCallId
+from .field_codec import (
+    FieldCodec,
+    NullMember,
+    ToolCallId,
+    WireContext,
+    WireOmitDefault,
+)
+from .native_tool_call import CodingCall
 from .recorded_time import EventTime
 from .shell_effects import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import (
     EditAction,
     EditCall,
     ExecuteAction,
+    GlobalCommsExtension,
     ReadAction,
     ReplacementEdit,
     SearchAction,
@@ -76,27 +83,10 @@ class NativeExecutableTool(NativeToolDeclaration, CodingCall):
         return cls.parse_arguments(arguments, call_id=call_id)
 
 
-class NativeRequestTools:
-    """Core's existing CLI decodes and executes its declared request fields."""
-
-    @classmethod
-    def catalog(cls) -> list[dict[str, object]]:
-        return [tool.schema() for tool in ToolDeclaration.members_with(cls)]
-
-    @classmethod
-    def create_call(
-        cls, call_id: ToolCallId, arguments: dict[str, object]
-    ) -> CoordinationCall:
-        return CoordinationCall(
-            call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
-
-    @classmethod
-    def native_extension(cls, package: Path) -> Path:
-        return package / "agent-comms-extensions/global-agent-comms/index.mjs"
 
 
 @dataclass(frozen=True, kw_only=True)
-class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=None):
+class CoordinationCall(GlobalCommsExtension, NativeExecutableTool, declared_name=None):
     """Core's CLI owns argument decoding; this call owns identity and live events."""
 
     declared_name: str

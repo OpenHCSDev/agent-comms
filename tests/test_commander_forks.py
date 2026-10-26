@@ -16,8 +16,14 @@ from agent_comms.change_report import FileLine
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError, TodoError
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec, GoalId, OrderId
+from agent_comms.field_codec import (
+    FieldCodec,
+    GoalId,
+    OrderId,
+    ToolCallId,
+)
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.backup import StoreBackup
@@ -25,18 +31,16 @@ from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
 )
-from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.errors import RelationViolationError, TodoError
 from agent_comms.todos import (
     PendingProblemOrder,
     ProblemAllocation,
@@ -46,11 +50,11 @@ from agent_comms.todos import (
     Todo,
 )
 from agent_comms.tool_caller import CommanderForkCaller
-from agent_comms_hooks import forks
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.typed_table import HeldBusFile
+from agent_comms_hooks import forks
 from cli_command import commander
 from source_revision_fixture import SourceRepository
 

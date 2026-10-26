@@ -38,8 +38,6 @@ from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
 from .native_arguments import NativeArguments
-from .native_tools import NativeRequestTools
-from .repo import Checkout
 from .pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -51,14 +49,8 @@ from .registration_inheritance import (
     InheritEmpty,
     InheritPrevious,
 )
+from .repo import Checkout
 from .session_file import NoSessionFile, SessionFile
-from .storage_rules import (
-    AssignedStorageRoots,
-    StoragePath,
-    StorageRule,
-    ThreadStorage,
-    UnassignedThreadStorage,
-)
 from .store_files import AtomicFile
 from .task_sources import TaskScope
 from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
@@ -75,15 +67,28 @@ from .thread_identity import (
     UnobservedTools,
 )
 from .thread_model import (
-    CatalogSelection, DeclaredModel, ModelSelection, NamedModel, ThreadModel,
-    UndeclaredModel, UnselectedModel,
+    CatalogSelection,
+    DeclaredModel,
+    ModelSelection,
+    NamedModel,
+    ThreadModel,
+    UndeclaredModel,
+    UnselectedModel,
+)
+from .thread_storage import (
+    AssignedStorageRoots,
+    StoragePath,
+    ThreadStorage,
+    UnassignedThreadStorage,
 )
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .tool_declaration import NativeRequestTools
 from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
+    from .storage_rules import StorageRule
 
 
 @dataclass(frozen=True)

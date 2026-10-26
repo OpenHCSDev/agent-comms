@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import asyncio
 import json
 import os
@@ -16,21 +15,28 @@ import pytest
 
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeClaim
-from agent_comms.field_codec import AssignmentId, ClaimId, FieldCodec, InputId, MessageId, TurnId
+from agent_comms.field_codec import (
+    AssignmentId,
+    ClaimId,
+    FieldCodec,
+    InputId,
+    MessageId,
+    ToolCallId,
+    TurnId,
+)
+from agent_comms.native_runtime_input import AcknowledgedSlot, ConsumedSlot, SelectedToolSlot
 from agent_comms.native_tool_call import (
     CodingCall,
     DuplicateToolCallIdentity,
     OwnerToolConnection,
-    ToolCallId,
 )
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
-from agent_comms.native_runtime_input import AcknowledgedSlot, ConsumedSlot, SelectedToolSlot
 from agent_comms.storage_room import NoRoomNeeded
+from agent_comms.tool_denial import SelectedToolDenied
 
 
 @pytest.fixture

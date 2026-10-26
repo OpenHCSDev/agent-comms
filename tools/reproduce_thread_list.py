@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import argparse
 import faulthandler
 import json
@@ -13,9 +12,9 @@ from pathlib import Path
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.comms import wire
-from agent_comms.storage_rules import StorageRoots
 from agent_comms.thread_management import GivenDirectory
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.thread_storage import StorageRoots
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarUnreadable

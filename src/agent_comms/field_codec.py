@@ -1945,6 +1945,16 @@ class ThreadLookup(Id128):
     pass
 
 
+class ToolCallId(NominalText):
+    """A provider's own tool call identity, spelled exactly as the provider sends it
+    (OpenAI Responses joins ``call_...|fc_...``). Only equality is defined; slots hash it.
+    """
+
+
+class ToolCallIdText(NominalSpelling[ToolCallId]):
+    spelling = re.compile(r"\S{1,256}")
+
+
 class InputId(Id128):
     pass
 

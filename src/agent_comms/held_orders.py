@@ -6,14 +6,16 @@ from dataclasses import dataclass
 from textwrap import shorten
 from typing import TYPE_CHECKING
 
+from agent_comms.threads import Thread
+from agent_comms.todos import Todo
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from agent_comms.comms import Comms
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.threads import Thread
-    from agent_comms.todos import Todo, TodoStore
+    from agent_comms.todos import TodoStore
 
 
 @dataclass(frozen=True)

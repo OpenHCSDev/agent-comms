@@ -15,17 +15,21 @@ from functools import cached_property
 from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import (
+    MalformedRecord,
+    ToolCallId,
+)
 from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_tool_call import ToolCallId
 from agent_comms.repo import GitCommandError
-from agent_comms.standing_rules import FamilyScan, StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
+from agent_comms.threads import Thread
 from agent_comms.todos import (
     MergedProgress,
     NoCommitProgress,
@@ -39,9 +43,7 @@ from agent_comms.turn_digests import LastTurns, TurnDigestRead
 from agent_comms.work_branches import WorkBranchError
 
 if TYPE_CHECKING:
-    from agent_comms.comms import Comms
     from agent_comms.heartbeat_frame import HeartbeatFrame
-    from agent_comms.threads import Thread
 
 
 class UnitClock(DeclaredFamily, affix="Clock"):

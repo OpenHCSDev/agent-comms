@@ -6,28 +6,48 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.change_report import FileLine
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, MessageId, OrderId
+from agent_comms.errors import MissingSourceLine, TodoError
+from agent_comms.field_codec import (
+    FieldCodec,
+    MessageId,
+    OrderId,
+    ToolCallId,
+)
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_story import FleetStory, OrderStory
-from agent_comms.repository_name import RepositoryName
+from agent_comms.order_tools import (
+    CommsChangeProblemTool,
+    CommsFleetStoryTool,
+    CommsOrderStoryTool,
+    CommsOrderTool,
+    CommsTodoCreateTool,
+    CommsVerdictsTool,
+    CommsVerdictTool,
+)
 from agent_comms.recorded_time import EventTime, RecordedEventTime
-from agent_comms.errors import TodoConflict, TodoError
+from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.repository_name import RepositoryName
+from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AcceptedVerdict, DoneTodoState, EditSendBackVerdict, JudgedCall, OrderMessage, OrderVerdict,
-    ReleaseTodo, SendBackVerdict, StrikeReason,
-    StrikeTodo, UnorderedProblemOrder, WithdrawTodo,
+    AcceptedVerdict,
+    DoneTodoState,
+    EditSendBackVerdict,
+    JudgedCall,
+    OrderMessage,
+    OrderVerdict,
+    ReleaseTodo,
+    SendBackVerdict,
+    StrikeReason,
+    StrikeTodo,
+    UnorderedProblemOrder,
+    WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.change_report import FileLine
-from agent_comms.errors import MissingSourceLine
-from agent_comms.order_tools import CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool, CommsVerdictsTool
-from test_todos import order
 from source_revision_fixture import SourceRepository
-from agent_comms.threads import Thread
-from agent_comms.registry_document import RegisteredCommanderProject
+from test_todos import order
 
 
 def board_read(tool, comms, caller, thread="lead"):

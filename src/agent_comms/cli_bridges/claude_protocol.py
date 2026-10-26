@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import ClassVar, Literal, Self
+from typing import Literal, Self
 from xml.etree import ElementTree
 
 from pydantic import (
@@ -16,9 +16,20 @@ from pydantic import (
 )
 
 from agent_comms.agent_events import TranscriptModelUsage
-from agent_comms.cli_protocol import Declared, OpenWire, TaggedWire, TextWire, TimestampedWire, WireHeader
-from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
-from agent_comms.native_tool_call import ToolCallId
+from agent_comms.cli_protocol import (
+    Declared,
+    OpenWire,
+    TaggedWire,
+    TextWire,
+    TimestampedWire,
+    WireHeader,
+)
+from agent_comms.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    ToolCallId,
+)
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (

@@ -9,37 +9,33 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
-from .field_codec import FieldCodec, InputId, MalformedRecord, NominalSpelling, NominalText, SlotId
+from .field_codec import (
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    SlotId,
+    ToolCallId,
+)
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
-from .storage_room import NoRoomNeeded
-from .storage_rules import StorageProjection, StorageRule
+from .storage_room import NoRoomNeeded, RoomReservation
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .native_tool_transport import UnboundToolTransport
     from .envelope_claim_transitions import FileClaimPath
-    from .storage_room import RoomReservation
-    from .threads import Thread
-    from .shell_effects import StorageEffect
+    from .native_tool_transport import UnboundToolTransport
     from .pi_payloads import PiToolResult
+    from .shell_effects import StorageEffect
     from .turn_goal_permission import TurnGoalPermission
 
 
-class ToolCallId(NominalText):
-    """A provider's own tool call identity, spelled exactly as the provider sends it
-    (OpenAI Responses joins ``call_...|fc_...``). Only equality is defined; slots hash it.
-    """
 
 
-class ToolCallIdText(NominalSpelling[ToolCallId]):
-    spelling = re.compile(r"\S{1,256}")
 
 
 class ToolNotExecuting(SelectedToolDenied):
@@ -288,11 +284,6 @@ class CodingCall(NativeToolCall):
         """A call without executable effects needs no room."""
         return ()
 
-    def decide_storage(self, rule: StorageRule, thread: Thread) -> tuple[StorageEffect, ...]:
-        """Judge this call's declared effects once, shared by execution and observation."""
-        effects = self.storage_effects(Path(thread.worktree))
-        StorageProjection(rule, thread).check(effects)
-        return effects
 
     def commit_terminal(
         self, is_error: bool, coordination_path: Path, input_id: InputId, round_number: int

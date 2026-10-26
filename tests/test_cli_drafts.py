@@ -1,17 +1,27 @@
 """The shared owner reconstructs prefixes, not the CLI decoders or the database."""
 import pytest
 
-from agent_comms.native_tool_call import ToolCallId
-from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
-from agent_comms.runtime_updates import (
-    ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
-    FinishedTurn, ParagraphDraft, StartedItem, TextDraft, ToolDraft, TurnEnded,
-)
+from agent_comms.field_codec import ToolCallId
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.runtime_updates import (
+    ActiveItem,
+    AllTurnsEnded,
+    AppendDraftItem,
+    CompletedItem,
+    DraftAccumulator,
+    FinishedItem,
+    FinishedTurn,
+    ParagraphDraft,
+    StartedItem,
+    TextDraft,
+    ToolDraft,
+    TurnEnded,
+)
+from agent_comms.tool_calls import ToolCall
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
 from agent_comms.transcript_sources import NoDraft
-from agent_comms.tool_calls import ToolCall
+from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from test_codex_items import _output
 
 
@@ -229,6 +239,7 @@ def test_capture_requires_a_real_recorded_timestamp(invalid):
 @pytest.mark.parametrize('invalid', [True, '0', 1.5])
 def test_wire_start_decoder_keeps_strict_integer_input(invalid):
     from pydantic import ValidationError
+
     from agent_comms.cli_bridges.codex_protocol import ItemEntry
 
     with pytest.raises(ValidationError):

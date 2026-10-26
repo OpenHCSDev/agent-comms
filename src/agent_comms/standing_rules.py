@@ -6,6 +6,7 @@ files are declared in ``agent_comms.commander.standing`` until those files move 
 
 from __future__ import annotations
 
+import argparse
 import time
 from abc import abstractmethod
 from collections import Counter
@@ -17,34 +18,48 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 from agent_comms.declared_family import DeclaredFamily, RegisteredFamily
-from agent_comms.field_codec import FieldCodec, OrderId
+from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.errors import RejectedEnforcementError, TodoConflict
-from agent_comms.text_digest import TextDigest
-from agent_comms.recorded_time import EventTime, RecordedEventTime
-from agent_comms.repository_name import RepositoryName
+from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
-    AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
+    AnswerSubject,
+    HeadSubject,
+    HeartbeatSubject,
+    UnitSubject,
 )
 from agent_comms.held_orders import HeldOrders
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.work_branches import BranchDifference, SourceGrowth
-from agent_comms.service_passes import ServicePassStore
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
+from agent_comms.recorded_time import EventTime, RecordedEventTime
+from agent_comms.repository_name import RepositoryName
+from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
-from agent_comms.todos import MergeBlock, ProgressRead, ProgressSource, StoredHeadReview
+from agent_comms.text_digest import TextDigest
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.todos import (
+    HeadVerdict,
+    MergeBlock,
+    ProgressRead,
+    ProgressSource,
+    StoredHeadReview,
+)
+from agent_comms.work_branches import BranchDifference, SourceGrowth
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
-    from agent_comms.commander.order import CommanderVerb
     from agent_comms.comms import Comms
+    from agent_comms.goal_management import Goals
     from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.todos import (
-        OrderClaim, OwnerRequest, PresentCheckout, PullRequest, Todo, TodoStore,
+        OrderClaim,
+        OwnerRequest,
+        PresentCheckout,
+        PullRequest,
+        Todo,
+        TodoStore,
     )
-    from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
 
@@ -108,6 +123,48 @@ class RepeatedTodoChange(StaleTodoDecision):
                 f"to revision {self.current.revision}")
 
 
+class ClearingVerb(DeclaredVerb, declared_name=None):
+    """A declared action owns the standing rules it clears and the hints they render."""
+
+    clears: ClassVar[tuple[type[StandingRule], ...]] = ()
+
+    def __init_subclass__(cls, **options: object) -> None:
+        """A verb names the owed answers it clears; each rule's hint is rendered from them."""
+        super().__init_subclass__()
+        for rule in vars(cls).get("clears", ()):
+            rule.cleared_by(cls)
+
+    @classmethod
+    def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
+        """Ordinary verbs do not select a head verdict."""
+        return True
+
+    def resolves_claim(self, unit: str, problem: str) -> bool:
+        """Ordinary messages and actions do not judge a delivery claim."""
+        return False
+
+    @classmethod
+    def commands(cls, values: Mapping[str, str]) -> tuple[str, ...]:
+        """The commands its parser exposes, filled from this line's observed arguments.
+
+        A parameter variant with no parser contributes no second command. Required review
+        prose remains the reviewer's, not something the board can manufacture.
+        """
+        verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
+        cls.add_parser(verbs)
+        commands = []
+        for parser in verbs.choices.values():
+            placeholder = parser._get_formatter()._format_args
+            words = [cls.tool(), cls.declared_name]
+            for action in parser._actions:
+                if action.dest in values:
+                    words += [*action.option_strings[:1], values[action.dest]]
+                elif action.required and not action.option_strings:
+                    words.append(placeholder(action, action.dest))
+            commands.append(' '.join(words))
+        return tuple(commands)
+
+
 class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
     @classmethod
     @abstractmethod
@@ -120,7 +177,7 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
 
-    clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
+    clearing_verbs: ClassVar[tuple[type[ClearingVerb], ...]] = ()
 
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
@@ -145,7 +202,7 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         return cls.commander_disposes and bool(subjects)
 
     @classmethod
-    def cleared_by(cls, verb: type[CommanderVerb]) -> None:
+    def cleared_by(cls, verb: type[ClearingVerb]) -> None:
         """A verb declaring that it clears this rule joins the action its line prints."""
         cls.clearing_verbs = (*vars(cls).get("clearing_verbs", ()), verb)
 
@@ -153,7 +210,7 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         """The verb arguments this line knows, by argument name."""
         return {}
 
-    def review_allowed(self, verb: type[CommanderVerb]) -> bool:
+    def review_allowed(self, verb: type[ClearingVerb]) -> bool:
         """Ordinary lines retain every verb that declares it clears them."""
         return True
 
@@ -583,7 +640,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
 
-    def blocks(self, reached: frozenset[str], action: CommanderVerb,
+    def blocks(self, reached: frozenset[str], action: ClearingVerb,
                answered: tuple[OwedAnswer, ...]) -> bool:
         """An owed message refuses only an action that answers nothing: an answer to any open
         message is progress and is never refused, so the others it leaves owed only warn."""
@@ -688,7 +745,7 @@ class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
 
     todo: Todo = field(kw_only=True, compare=False)
 
-    def review_allowed(self, verb: type[CommanderVerb]) -> bool:
+    def review_allowed(self, verb: type[ClearingVerb]) -> bool:
         return verb.review_allowed(self.todo.order.checked().review_verdicts())
 
     def command_values(self) -> Mapping[str, str]:

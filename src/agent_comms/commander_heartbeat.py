@@ -20,12 +20,11 @@ from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import StandingRule
 from agent_comms.threads import Thread
-from agent_comms.todos import ProgressRead
+from agent_comms.todos import ProgressRead, Todo
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.todos import Todo
 
 
 @dataclass(frozen=True)

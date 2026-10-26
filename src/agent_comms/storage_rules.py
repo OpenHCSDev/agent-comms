@@ -5,26 +5,18 @@ import json
 import math
 import shutil
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
-
-from pydantic import JsonValue
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     FieldCodec,
-    FieldRepresentation,
     GoalId,
     MalformedRecord,
-    NullMember,
-    PathText,
-    RecordMember,
-    SubclassUnion,
 )
 from agent_comms.locked_store import DurableFile
 from agent_comms.problem_number import ProblemNumber
@@ -35,76 +27,26 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import WorkBranches
 
 from .shell_effects import StorageDenied, StorageEffect
+from .thread_storage import (
+    StoragePath,
+    StorageRoots,
+)
+from .threads import Thread
 
 if TYPE_CHECKING:
     from agent_comms.registration import Registration
-    from agent_comms.threads import Thread
     from agent_comms.todos import Todo, TodoStore
 
-StoragePath = Annotated[Path, PathText]
+    from .native_tool_call import CodingCall
 
 
-class ThreadStorage(SubclassUnion, affix="ThreadStorage"):
-    """A thread's storage roots: the ones its registry assigned, or none assigned yet."""
-
-    @abstractmethod
-    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
-        """The roots thread ``name`` holds under ``rule``."""
-
-    @abstractmethod
-    def stored(self) -> StorageRoots:
-        """The roots a registry row records."""
 
 
-@dataclass(frozen=True, slots=True)
-class StorageRoots(RecordMember, ThreadStorage):
-    scratch: StoragePath
-
-    def __post_init__(self) -> None:
-        if not self.scratch.is_absolute():
-            raise ValueError("Storage scratch requires an absolute path.")
-
-    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
-        return self
-
-    def stored(self) -> StorageRoots:
-        return self
-
-    @property
-    def allocation_name(self) -> str:
-        """The name the registry gave this thread's storage at registration. Its checkouts
-        carry it, so a renamed thread still owns the work it allocated."""
-        return self.scratch.name
 
 
-@dataclass(frozen=True, slots=True)
-class UnassignedThreadStorage(NullMember, ThreadStorage):
-    """A thread not yet declared; its registry assigns its roots at declaration."""
-
-    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
-        return rule.initial_roots(name)
-
-    def stored(self) -> StorageRoots:
-        raise RelationViolationError(
-            "A thread is stored only after its registry assigned its storage roots."
-        )
 
 
-class AssignedStorageRoots(FieldRepresentation):
-    """A stored thread holds the roots its registry assigned at registration, so its
-    stored form is StorageRoots; only an unregistered thread in memory has none."""
 
-    @classmethod
-    def decode(cls, value: object) -> StorageRoots:
-        return FieldCodec.decode(StorageRoots, value)
-
-    @classmethod
-    def encode(cls, value: object) -> object:
-        return FieldCodec.encode(cast(ThreadStorage, value).stored())
-
-    @classmethod
-    def schema(cls) -> dict[str, JsonValue]:
-        return FieldCodec.record_schema(StorageRoots)
 
 
 @dataclass(frozen=True)
@@ -330,7 +272,7 @@ class StorageRule(RoomAllocation, DurableFile):
             for path in present:
                 if not storage.owns(Checkout(path)):
                     self.deny(f'{path} is not a registered Git checkout of {owner.name}')
-                work = OrderCheckoutWork(path, owner)
+                work = OrderCheckoutWork(path, owner.incarnation)
                 if work.read_checkout().holds_work:
                     found.append(work)
         return tuple(found)
@@ -469,9 +411,9 @@ class StorageRule(RoomAllocation, DurableFile):
 
 @dataclass(frozen=True)
 class OrderCheckoutWork(WorkBranches):
-    """An owned order checkout uses the existing Git-work reader, not another Git policy."""
+    """An order checkout records its owner's identity, not its unrelated live state."""
 
-    owner: Thread
+    owner: ThreadIncarnation
 
 
 @dataclass(frozen=True)
@@ -526,6 +468,12 @@ class StorageProjection:
     @cached_property
     def storage(self) -> UnitStorage:
         return UnitStorage.read(self.rule, self.thread)
+
+    def check_call(self, call: CodingCall) -> tuple[StorageEffect, ...]:
+        """Check the call's declared effects against this same lazy owner snapshot."""
+        effects = call.storage_effects(Path(self.thread.worktree))
+        self.check(effects)
+        return effects
 
     def check(self, effects: Sequence[StorageEffect]) -> None:
         """Preflight every effect of one call against this one snapshot."""

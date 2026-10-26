@@ -1,53 +1,61 @@
 import json
-
-from conftest import transcript_records
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
-from typing_extensions import TypeForm
-from pydantic import JsonValue
 
 import pytest
-
-from agent_comms.native_tool_call import ToolCallId
-from agent_comms.transcript_events import ToolStartTranscript
-from agent_comms.turn_item import NativeItemId
+from pydantic import JsonValue
+from typing_extensions import TypeForm
 
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
     DeclaredWireType,
     FieldCodec,
+    FlagDirective,
     Id128,
     Id128Text,
-    InputId,
     InlineRecord,
+    InputId,
     JsonShapeFamily,
     JsonShapeMember,
     MalformedRecord,
     MessageId,
     NullMember,
     PathText,
-    projected,
-    RecordMember,
     RecordedTimestamp,
+    RecordMember,
     RootId,
     SnapshotExclude,
     SubclassUnion,
     TextRepresentation,
     ThreadLookup,
     TimestampText,
+    ToolCallId,
     TurnId,
     ValueDecoder,
-    WireValue,
-    FlagDirective,
     WireAbsentNone,
     WireContext,
     WireInline,
     WireName,
     WireNonNull,
     WireTransient,
+    WireValue,
+    projected,
 )
-from agent_comms.messages import ConversationRole, InfoKind, MembershipConversationRole, MembershipNoticeRole, Message, MessageRole, NoticeRole, JoinedMembership, LeftMembership
+from agent_comms.messages import (
+    ConversationRole,
+    InfoKind,
+    JoinedMembership,
+    LeftMembership,
+    MembershipConversationRole,
+    MembershipNoticeRole,
+    Message,
+    MessageRole,
+    NoticeRole,
+)
+from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.turn_item import NativeItemId
+from conftest import transcript_records
 
 
 @pytest.mark.parametrize("error,expected_type,expected_text", [

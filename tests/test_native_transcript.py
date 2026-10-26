@@ -5,9 +5,12 @@ from dataclasses import fields
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    ToolCallId,
+)
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
-from agent_comms.native_tool_call import ToolCallId
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.transcript_events import (

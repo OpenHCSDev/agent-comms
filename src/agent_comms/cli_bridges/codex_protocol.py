@@ -22,8 +22,12 @@ from pydantic import (
 from agent_comms.cli_protocol import Declared, TaggedWire, TextWire
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
-from agent_comms.field_codec import FieldCodec, MessageId, boundary_decoder
-from agent_comms.native_tool_call import ToolCallId
+from agent_comms.field_codec import (
+    FieldCodec,
+    MessageId,
+    ToolCallId,
+    boundary_decoder,
+)
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.runtime_updates import (

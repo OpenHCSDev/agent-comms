@@ -3,16 +3,31 @@
 from __future__ import annotations
 
 import json
+from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, MalformedRecord, NullMember, WireName
-from .native_tool_call import ToolCallId
+from .field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NullMember,
+    ToolCallId,
+    WireName,
+)
 from .recorded_time import EventTime
 from .tool_denial import SelectedToolDenied
 from .tool_results import NoToolDiff
+
+
+class GlobalCommsExtension:
+    """Requests and their executing calls load the same packaged extension."""
+
+    @classmethod
+    def native_extension(cls, package: Path) -> Path:
+        return package / "agent-comms-extensions/global-agent-comms/index.mjs"
 
 
 def one_line(text: str, limit: int) -> str:
@@ -80,8 +95,9 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def _member_declarations(cls):
-        # These existing owners share this registry; imports acquire declarations.
-        from . import native_tools, tools
+        # The existing request owner also acquires its order-tool declarations.
+        # Registry reads must not depend on an unrelated command import cycle.
+        from . import tools  # noqa: F401 - acquire the declaration owner
 
         return super()._member_declarations()
 
@@ -142,6 +158,19 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     def result_diff(cls, result, ok):
         """Opaque metadata cannot invent edit evidence."""
         return NoToolDiff()
+
+
+class NativeRequestTools(GlobalCommsExtension, ToolDeclaration, declared_name=None):
+    """Schema-bearing request declarations form the native catalog."""
+
+    @classmethod
+    @abstractmethod
+    def schema(cls) -> dict[str, object]:
+        """The declaration supplies the schema exposed to native clients."""
+
+    @classmethod
+    def catalog(cls) -> list[dict[str, object]]:
+        return [tool.schema() for tool in cls.members_with(cls)]
 
 
 @dataclass(frozen=True)

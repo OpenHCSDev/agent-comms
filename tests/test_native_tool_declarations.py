@@ -13,8 +13,10 @@ import agent_comms.agent_events as events
 from agent_comms.acp import SdkSessionConnection
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
-from agent_comms.native_tool_call import ToolCallId
+from agent_comms.field_codec import (
+    FieldCodec,
+    ToolCallId,
+)
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import (
     EditAction,
@@ -148,9 +150,9 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.native_tool_call import CodingCall
     from agent_comms.native_tools import (
         NativeExecutableTool,
-        NativeRequestTools,
         NativeToolDeclaration,
     )
+    from agent_comms.tool_declaration import NativeRequestTools
     from agent_comms.tool_request import ToolRequest
     from agent_comms.tools import CommsSendTool
 

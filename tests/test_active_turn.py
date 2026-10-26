@@ -1,13 +1,16 @@
 import os
 import time
+
 from agent_comms.activity import (
     Activity,
     ActivityState,
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.field_codec import TurnId
-from agent_comms.native_tool_call import ToolCallId
+from agent_comms.field_codec import (
+    ToolCallId,
+    TurnId,
+)
 from agent_comms.threads import Thread
 from agent_comms.turn_phase import (
     CompactionPhase,

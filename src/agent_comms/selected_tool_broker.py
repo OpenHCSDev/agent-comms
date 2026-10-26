@@ -23,14 +23,19 @@ from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import FieldCodec, InputId, MalformedRecord, SlotId
+from .field_codec import (
+    FieldCodec,
+    InputId,
+    MalformedRecord,
+    SlotId,
+    ToolCallId,
+)
 from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
 from .native_tool_call import (
-    SelectedToolBusy,
     NativeToolCall,
     NativeToolMode,
-    ToolCallId,
+    SelectedToolBusy,
 )
 from .native_tool_transport import (
     NativeToolRound,

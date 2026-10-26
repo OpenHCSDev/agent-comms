@@ -10,7 +10,7 @@ from agent_comms.channels import (
     ViewPredicate,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.native_tools import NativeRequestTools
+from agent_comms.tool_declaration import NativeRequestTools
 
 
 @pytest.mark.parametrize(
