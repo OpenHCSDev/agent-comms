@@ -61,7 +61,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     ]
     turn_generation: Annotated[int, Column(check="turn_generation>0")]
     goal_revision: Annotated[int, Column(check="goal_revision>=0")]
-    turn_id: Annotated[TurnId, Column(unique=True, check="length(turn_id)=32")]
+    turn_id: Annotated[TurnId, Column(unique=True)]
     failure: type[TurnFailure]
 
     def __post_init__(self) -> None:

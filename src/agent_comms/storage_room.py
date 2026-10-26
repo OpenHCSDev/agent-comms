@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from sqlite3 import Connection
 from typing import Annotated, ClassVar
 
 from .activity import ActivityState
@@ -20,8 +21,18 @@ from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import RoomTicket
 from .repo import Checkout
+from .store_files import StoreContention
 from .thread_identity import ThreadIncarnation
-from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
+from .typed_table import (
+    Column,
+    DurableTables,
+    JsonStorage,
+    RuntimeWriter,
+    StoreRows,
+    TypedStore,
+    TypedTable,
+    WriterOwnedFile,
+)
 from .watched import ChangeSignal, FileSource
 
 
@@ -107,10 +118,29 @@ class RoomClaim(RoomLedgerRows, TypedTable):
 
 
 @dataclass(frozen=True)
-class RoomLedger(DurableStore):
+class RoomLedger(TypedStore, DurableTables, RuntimeWriter):
     root: Path
     filename = "work_room.sqlite3"
     tables = RoomLedgerRows
+
+    @classmethod
+    def _open_reader(cls, path: Path, contention: StoreContention) -> Connection:
+        """Carry this host-owned file before its first snapshot; then prohibit writes."""
+        connection = cls.writer(
+            path.resolve().as_uri() + "?mode=rw", contention,
+            isolation_level=None, uri=True,
+        )
+        try:
+            cls.install_schema(connection, WriterOwnedFile())
+            return cls._configure_reader(connection)
+        except BaseException:
+            connection.close()
+            raise
+
+    @classmethod
+    def schema_change(cls, path: Path) -> WriterOwnedFile:
+        """The host-wide ledger is carried under its writer lock, outside any one bus."""
+        return WriterOwnedFile()
 
     def dead_claims(self):
         # Dead/replaced processes cannot hold room, but are never replayed.

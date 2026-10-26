@@ -124,17 +124,7 @@ class ResponseObligation(
     )
     published_message_id: ClassVar[Generated] = Generated(
         Annotated[MessageId, WireName("receipt_message_id")],
-        Column(
-            record_key=True,
-            generated="json_extract(lifecycle, '$.message_id')",
-            check=(
-                "\n"
-                "        receipt_message_id IS NULL OR length(receipt_message_id)"
-                " BETWEEN 1 AND 256\n"
-                "    "
-            ),
-            nullable=True,
-        ),
+        Column(record_key=True, generated="json_extract(lifecycle, '$.message_id')", nullable=True),
     )
     publication_seq: ClassVar[Generated] = Generated(
         Annotated[int, WireName("receipt_seq")],

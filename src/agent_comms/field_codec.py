@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
-from enum import Enum
+from enum import Enum, IntFlag
 from functools import cache, cached_property, lru_cache, partial, reduce
 from operator import or_
 from pathlib import Path
@@ -869,6 +869,10 @@ class DecoderPlan(ABC):
 
     target: object
 
+    def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        """Stored-value predicates; the SQL owner quotes its column and constants."""
+        return ()
+
     @property
     def accepts_null(self) -> bool:
         return False
@@ -1060,6 +1064,12 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     representation: type[FieldRepresentation[T]]
     structural: ValueDecoder[T]
 
+    def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        return (
+            *self.representation.sql_checks(column, quote),
+            *self.wire_structure.sql_checks(column, quote),
+        )
+
     @property
     def wire_structure(self) -> DecoderPlan:
         return self.representation.wire_structure(self.structural)
@@ -1140,6 +1150,11 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
 
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
     decoder: ClassVar[type[_RepresentedDecoder]] = _RepresentedDecoder
+
+    @classmethod
+    def sql_checks(cls, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        """Constraints on a stored column, already quoted by its SQL owner."""
+        return ()
 
     @classmethod
     def for_value(cls, value: object) -> type[FieldRepresentation]:
@@ -1647,6 +1662,10 @@ class TextRepresentation[V](FieldRepresentation[V]):
         return compile_decoder(str)
 
     @classmethod
+    def sql_checks(cls, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        return (f"{column} IS NULL OR typeof({column}) = 'text'",)
+
+    @classmethod
     def decode(cls, value: object) -> V:
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cls.from_text(FieldCodec.decode(str, value))
@@ -1715,8 +1734,21 @@ class HexDigits(SpelledText):
     digits: ClassVar[int]
 
     @classmethod
+    def minimum_digits(cls) -> int:
+        """Fixed-width spellings use their declared width at both ends."""
+        return cls.digits
+
+    @classmethod
     def repetition(cls) -> str:
-        return str(cls.digits)
+        minimum = cls.minimum_digits()
+        return str(cls.digits) if minimum == cls.digits else f"{minimum},{cls.digits}"
+
+    @classmethod
+    def sql_checks(cls, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        return (*super().sql_checks(column, quote),
+                f"length({column}) BETWEEN {cls.minimum_digits()} AND {cls.digits}",
+                f"{column} NOT GLOB '*[^0-9a-f]*'",
+                f"instr({column}, char(0)) = 0")
 
     def __init_subclass__(cls, **options: object) -> None:
         super().__init_subclass__(**options)
@@ -1802,7 +1834,15 @@ class BoundedText(TextRepresentation[str], ValidatedScalar):
     max_length: ClassVar[int] = 4096
 
     @classmethod
+    def sql_checks(cls, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        return (*super().sql_checks(column, quote),
+                f"instr({column}, char(0)) = 0",
+                f"length({column}) BETWEEN 1 AND {cls.max_length}")
+
+    @classmethod
     def from_text(cls, value: str) -> str:
+        if "\0" in value:
+            raise MalformedRecord(f"{cls.__name__} cannot contain NUL")
         if not value or len(value) > cls.max_length:
             raise MalformedRecord(f"{cls.__name__} is nonempty and at most {cls.max_length} long")
         return value
@@ -2040,11 +2080,10 @@ class GitCommitText(HexDigits):
     """A git commit, abbreviated to no fewer than seven digits."""
 
     digits = 40
-    minimum_digits: ClassVar[int] = 7
 
     @classmethod
-    def repetition(cls) -> str:
-        return f"{cls.minimum_digits},{cls.digits}"
+    def minimum_digits(cls) -> int:
+        return 7
 
 
 class Projected(property):
@@ -2530,6 +2569,10 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
 
     __slots__ = ()
 
+    def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        choices = ", ".join(quote(value) for _, value in self.editor_choices())
+        return (f"{column} IN ({choices})",)
+
     def argument_options(self, argument: Argument) -> dict[str, object]:
         return {"choices": [self.argument_text(value) for _, value in self.editor_choices()]}
 
@@ -2617,6 +2660,9 @@ class _NullDecoder(_ExactScalarDecoder[None]):
     __slots__ = ()
     annotations = (type(None),)
     json_type = "null"
+
+    def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        return (f"{column} IS NULL",)
 
 
 class _TextDecoder(_ExactScalarDecoder[str]):
@@ -2814,6 +2860,16 @@ class _LiteralDecoder[T](_ChoiceDecoder[T]):
 class UnionDecoder[T](_ContextDecoder[T]):
     origins = (Union, types.UnionType)
     alternatives: tuple[ValueDecoder[T], ...]
+
+    def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        alternatives = tuple(
+            alternative.sql_checks(column, quote) for alternative in self.alternatives
+        )
+        if not all(alternatives):
+            return ()
+        return (" OR ".join(
+            "(" + " AND ".join(f"({check})" for check in checks) + ")"
+            for checks in alternatives),)
 
     @property
     def accepts_null(self) -> bool:
@@ -3325,6 +3381,7 @@ class _RecordDecoder[T](_ContextDecoder[T]):
 
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(_ChoiceDecoder[Enum]):
+    origins = (Enum,)
     target: type[Enum]
     value_plan: ValueDecoder[object]
 
@@ -3342,6 +3399,16 @@ class _EnumDecoder(_ChoiceDecoder[Enum]):
     def decode(self, data):
         with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target(data)
+
+
+class _IntFlagDecoder(_EnumDecoder):
+    """Declared flags support combinations beyond their individually named values."""
+
+    __slots__ = ()
+    origins = (IntFlag,)
+
+    def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        return ()
 
 
 @overload
@@ -3394,8 +3461,6 @@ def _member_decoder(target: object) -> ValueDecoder[object]:
     """A concrete record, enum or scalar, after any family tag is removed."""
     if isinstance(target, type) and is_dataclass(target):
         return _RecordDecoder(target)
-    if isinstance(target, type) and issubclass(target, Enum):
-        return _EnumDecoder.from_annotation(target, ())
     if isinstance(target, type) and issubclass(target, BaseModel):
         return _PydanticDecoder(target)
     raise TypeError(f"Unsupported JSON type: {target}")

@@ -1,14 +1,18 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
+import json
 import sqlite3
 from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
+from enum import Enum, IntFlag
 from time import perf_counter
-from typing import Annotated, ClassVar, Type
+from typing import Annotated, ClassVar, Literal, Type
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord, NullMember
+from agent_comms.field_codec import (
+    AttemptId, BoundedText, FieldCodec, GitCommitText, GoalId, Id128Text, MalformedRecord, NoAttemptId, NullMember,
+)
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
@@ -19,6 +23,7 @@ from agent_comms.typed_table import (
     Generated,
     Index,
     IntegerStorage,
+    JsonStorage,
     SqlStorage,
     SqlValue,
     SQLiteSchemaObject,
@@ -50,6 +55,100 @@ class TableChildRow(TypedTable):
     @classmethod
     def references(cls):
         return (ForeignKey(columns=("parent", "parent_count"), target=TableParentRow, target_columns=("key", "count")),)
+
+
+def test_spelled_text_family_is_enforced_by_sqlite():
+    @dataclass(frozen=True)
+    class SpelledTextRow(TypedTable):
+        key: Annotated[str, Id128Text, Column(primary_key=True)]
+        label: Annotated[str, BoundedText]
+        plain: str
+        optional: GoalId | None = None
+        attempt: AttemptId | NoAttemptId = field(default_factory=NoAttemptId)
+
+    with sqlite3.connect(":memory:") as db:
+        SpelledTextRow.create(db)
+        statement = f'INSERT INTO "{SpelledTextRow.declared_name}" VALUES (?, ?, ?, ?, ?)'
+        key = "a" * Id128Text.digits
+        db.execute(statement, (key, "identity", "", None, None))
+        assert SpelledTextRow.select(db) == [SpelledTextRow(key, "identity", "")]
+        db.execute(f'DELETE FROM "{SpelledTextRow.declared_name}"')
+        for malformed in ("P5:0", key.upper(), key[:-1], key + "a", key + "\0not-hex"):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (malformed, "identity", "", None, None))
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (key, "identity", "", malformed, None))
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (key, "identity", "", None, malformed))
+        for malformed in ("", "x" * (BoundedText.max_length + 1),
+                          "\0" + "x" * BoundedText.max_length, "\0", "x\0y"):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (key, malformed, "", None, None))
+            with pytest.raises(MalformedRecord):
+                FieldCodec.decode(Annotated[str, BoundedText], malformed)
+        db.execute(statement, (key, "λ" * BoundedText.max_length, "", key, key))
+
+
+def test_sqlite_uses_declared_choices_and_inherited_spelling():
+    class Flavor(str, Enum):
+        FIRST = "don't"
+        SECOND = "λ"
+
+    class Access(IntFlag):
+        READ = 1
+        WRITE = 2
+
+    class InheritedCommit(GitCommitText):
+        pass
+
+    @dataclass(frozen=True)
+    class DeclaredChoicesRow(TypedTable):
+        key: Annotated[str, Column(primary_key=True)]
+        commit: Annotated[str, InheritedCommit]
+        flavor: Flavor
+        optional: Literal["left", "right"] | None
+        access: Access
+        kind: type[MessageKind]
+        label: Literal["alpha", "o'brien"]
+
+    record = DeclaredChoicesRow(
+        "row", "a" * 7, Flavor.FIRST, None, Access.READ | Access.WRITE, InfoKind, "o'brien",
+    )
+    with sqlite3.connect(":memory:") as db:
+        DeclaredChoicesRow.create(db)
+        record.insert(db)
+        assert DeclaredChoicesRow.select(db) == [record]
+        DeclaredChoicesRow.delete(db)
+        statement = f'INSERT INTO "{DeclaredChoicesRow.declared_name}" VALUES (?, ?, ?, ?, ?, ?, ?)'
+        values = ("row", "a" * 7, "don't", None, 3, InfoKind.declared_name, "o'brien")
+        for position, malformed in ((1, "a" * 6), (2, "bogus"), (3, "bogus"),
+                                    (5, "bogus"), (6, "bogus")):
+            refused = (*values[:position], malformed, *values[position + 1:])
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, refused)
+        db.execute(statement, values)
+        assert DeclaredChoicesRow.select(db) == [record]
+
+
+def test_spelling_checks_follow_json_storage_and_reject_bytes_in_exact_storage():
+    @dataclass(frozen=True)
+    class StoredSpellingRow(TypedTable):
+        key: Annotated[int, Column(primary_key=True)]
+        exact: Annotated[GoalId, Column(storage=ExactStorage)]
+        json_value: Annotated[GoalId, Column(storage=JsonStorage)]
+
+    value = "a" * Id128Text.digits
+    with sqlite3.connect(":memory:") as db:
+        StoredSpellingRow.create(db)
+        statement = f'INSERT INTO "{StoredSpellingRow.declared_name}" VALUES (?, ?, ?)'
+        db.execute(statement, (1, value, json.dumps(value)))
+        assert StoredSpellingRow.select(db) == [StoredSpellingRow(1, GoalId(value), GoalId(value))]
+        for malformed in (value.encode(), value.upper(), value[:-1]):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (2, malformed, json.dumps(value)))
+        for malformed in (json.dumps(value.upper()), json.dumps(value[:-1]), json.dumps(32)):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (2, value, malformed))
 
 
 def test_required_row_distinguishes_absence_from_duplicate_results():
