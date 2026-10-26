@@ -73,6 +73,7 @@ async def _accept_visible_deliveries(
         # assert that any native input was consumed.
         with (
             NativeBoundary(bus) as boundary,
+            boundary.current(),
             bus.bus.reading() as source,
             resource.session.writing() as db,
         ):

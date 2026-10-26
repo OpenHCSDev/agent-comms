@@ -4703,7 +4703,8 @@ class ClaimOrder(TodoCommand):
                 target=target.selected_name(boundary.registry),
             )
             prepared = replace(self, claim=replace(self.claim, message=message))
-            return super(ClaimOrder, prepared).record(goals, problem)
+            with boundary.current():
+                return super(ClaimOrder, prepared).record(goals, problem)
 
     def changed(self, current: Todo) -> Todo:
         current.state.require_open(current)

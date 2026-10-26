@@ -122,7 +122,8 @@ class CursorOwner(RegistryOwner):
                 state = self.state(store.session._connection)
             coverage = sources.since(state, source_reads=source_reads)
             proof = coverage.proof
-            with store.session.boundary(bus) as boundary, store.session.writing() as db:
+            with (store.session.boundary(bus) as boundary, boundary.current(),
+                  store.session.writing() as db):
                 coverage.source_prefix.require_current(bus.bus)
                 self.require_live(bus, boundary.registry, "Current cursor owner or namespace changed")
                 self.require_participant(store, "Current cursor recipient generation changed")
