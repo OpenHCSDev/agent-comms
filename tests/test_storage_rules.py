@@ -13,8 +13,9 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.repo import Checkout, CheckoutStart, DetachedStart, GitTreeEntry, KeptBranchStart, NewBranchStart, Repo
+from agent_comms.standing_rules import StorageOverQuota
 from agent_comms.storage_rules import (
-    CheckoutClaim, StorageRoots, StorageRule, StorageOverQuota, StorageProjection, UnassignedThreadStorage, UnitStorage,
+    CheckoutClaim, StorageRoots, StorageRule, StorageProjection, UnassignedThreadStorage, UnitStorage,
 )
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageDenied, ShellProgram,

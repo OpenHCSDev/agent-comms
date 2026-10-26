@@ -26,6 +26,7 @@ from agent_comms.channels import AnyChannel
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from agent_comms.message_page import InboxPage, MessagePageRequest, PageBounds
@@ -68,7 +69,7 @@ class HeldBusWrite:
         return asyncio.run(comms.bus.when_open(operation))
 
 
-class WatchPass[Observed](ABC):
+class Watch(DeclaredFamily, ABC):
     """Observe, then apply the result while the bus is open.
 
     A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
@@ -79,6 +80,13 @@ class WatchPass[Observed](ABC):
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
             await comms.bus.when_open(partial(self.watch_pass, opened_wire))
+
+    @abstractmethod
+    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
+
+
+class WatchPass[Observed](Watch):
+    """The pass owns its observed value; the scheduler only needs Watch.run."""
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:

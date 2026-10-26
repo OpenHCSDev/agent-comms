@@ -63,6 +63,12 @@ def main():
             # gh --jq returns the typed projection, not the raw GraphQL envelope.
             print(json.dumps({f"p{number}": data["requests"][number]["listed"]
                               for _, number in selections}))
+        elif 'updated: updatedAt }' in query:
+            projection = arguments[arguments.index('--jq') + 1]
+            since = re.search(r'\.updated >= "([^"]+)"', projection).group(1)
+            rows = [{'number': entry['listed']['number'], 'updated': entry['listed']['updated']}
+                    for entry in data['requests'].values() if entry['listed']['updated'] >= since]
+            print(json.dumps({'rows': rows, 'page_info': {'hasNextPage': False, 'endCursor': None}}))
         elif "pullRequests(" in query:
             print(json.dumps({"data": {"repository": {"pullRequests": {
                 "nodes": [{"number": entry["listed"]["number"],

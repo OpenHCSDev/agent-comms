@@ -544,6 +544,9 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
 
+    def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
+        return ()
+
     @abstractmethod
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]: ...
 
@@ -596,7 +599,14 @@ class RegisteredCommanderProject(CommanderProject):
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         """Each selected GitHub repository once, however many checkouts point at it."""
-        return tuple(dict.fromkeys(repo.github for repo in Repo.candidates(self.repos, name)))
+        return tuple(repo.github for repo in self.unique_repositories(name))
+
+    def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
+        """The first configured checkout owns each forge identity, without a wire round trip."""
+        selected: dict[RepositoryName, Repo] = {}
+        for repo in Repo.candidates(self.repos, name):
+            selected.setdefault(repo.github, repo)
+        return tuple(selected.values())
 
     def require(self) -> RegisteredCommanderProject:
         return self
