@@ -29,6 +29,7 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack, ExitStack, a
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
+from types import TracebackType
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
 from agent_comms.acp_extension import (
@@ -1418,7 +1419,10 @@ class ObservationProcess(AbstractAsyncContextManager):
             self._resources.enter_context(acquisition.pop_all())
         self._reader = AsyncExitStack()
 
-    async def __aexit__(self, *exc) -> None:
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None,
+        exc: BaseException | None, trace: TracebackType | None,
+    ) -> None:
         await self.close()
 
     def start_receiving(
