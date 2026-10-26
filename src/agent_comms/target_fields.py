@@ -1,5 +1,3 @@
-"""Declaration-owned CLI operation and its required dependencies."""
-
 from __future__ import annotations
 
 from pydantic import JsonValue
@@ -45,7 +43,7 @@ class TargetField:
         return self.plan.description
 
     @property
-    def editor_default(self) -> object:
+    def editor_default(self) -> JsonValue:
         return self.plan.editor_default(self.value)
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:

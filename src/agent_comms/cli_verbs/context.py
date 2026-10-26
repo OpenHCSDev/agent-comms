@@ -1,22 +1,28 @@
-"""The context CLI entrypoint and option decoder."""
+"""The context verb owns its option selection."""
 from __future__ import annotations
 import argparse
 from dataclasses import dataclass
-from agent_comms.cli_context import CurrentContextCliCommand
-from agent_comms.cli_verbs.diff_context import DiffContextCliCommand
-from agent_comms.cli_verbs.imported_context import ImportedContextCliCommand
-from agent_comms.cli_verbs.turn_context import TurnContextCliCommand
-from agent_comms.cli_verbs.turn_diff_context import TurnDiffContextCliCommand
+from typing import ClassVar, Self
+from agent_comms.cli_context import CurrentContextCliCommand, ContextSelection
 
 @dataclass(frozen=True, kw_only=True)
 class ContextCliCommand(CurrentContextCliCommand):
+    context_imported: ClassVar[bool] = False
+    context_diff: ClassVar[bool] = False
+    context_turn: ClassVar[bool] = False
+
     @classmethod
-    def from_arguments(cls, args: argparse.Namespace) -> ContextCliCommand:
-        if args.imported:
-            if "turn" in vars(args) or args.diff:
-                raise ValueError("--imported cannot be combined with --turn or --diff")
-            return ImportedContextCliCommand(thread=args.thread)
-        if "turn" in vars(args):
-            command = TurnDiffContextCliCommand if args.diff else TurnContextCliCommand
-            return command(thread=args.thread, turn=args.turn)
-        return (DiffContextCliCommand if args.diff else cls)(thread=args.thread)
+    def selection_key(cls) -> ContextSelection:
+        return ContextSelection(cls.context_imported, cls.context_diff, cls.context_turn)
+
+    @classmethod
+    def selected_arguments(cls, args: argparse.Namespace) -> Self:
+        return cls(thread=args.thread)
+
+    @classmethod
+    def from_arguments(cls, args: argparse.Namespace) -> Self:
+        turn = "turn" in vars(args)
+        if args.imported and (turn or args.diff):
+            raise ValueError("--imported cannot be combined with --turn or --diff")
+        selected = cls.member_selected(ContextSelection(args.imported, args.diff, turn))
+        return selected.selected_arguments(args)

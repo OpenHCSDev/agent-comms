@@ -1,5 +1,3 @@
-"""Declaration-owned CLI operation and its required dependencies."""
-
 from __future__ import annotations
 
 from typing import Self

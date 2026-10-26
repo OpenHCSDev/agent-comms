@@ -1,5 +1,3 @@
-"""Declaration-owned CLI operation and its required dependencies."""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -10,7 +8,7 @@ from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_result import CliResult, ResultShower
 from agent_comms.command import Command
 from agent_comms.comms import Comms
-from agent_comms.config_options import ConfigOptions
+from agent_comms.config_options import CatalogSelection, ConfigOptions
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec, RecordMember, WireValue
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
@@ -24,15 +22,13 @@ from typing import Annotated, Self
 
 from agent_comms.channel_targets import OneChannel, ResolvedChannel, ResolvedThread
 from agent_comms.declared_verb import DeclaredCommand
-from agent_comms.declared_family import UnknownFamilyMember
-from metaclass_registry.discovery import import_module_preserving_root_logging
+from agent_comms.declared_family import ModuleMembers
 from agent_comms.field_codec import FieldPlan, TargetBound
 from agent_comms.launch_root import LaunchRoot
 from inspect import iscoroutinefunction, signature
 from types import get_original_bases
 from typing import TYPE_CHECKING, TextIO, cast, get_args, get_origin
 import os
-import importlib.util
 
 if TYPE_CHECKING:
     from agent_comms.active_route import CommsRoute
@@ -66,33 +62,13 @@ class CliExecution[Answer: CliResult = CliResult](Command[Comms, Answer]):
 
 @dataclass(frozen=True, kw_only=True)
 class CliCommand[Answer: CliResult = CliResult](
+    ModuleMembers,
     DeclaredCommand,
     CliExecution[Answer],
+    CatalogSelection,
     affix="CliCommand",
     discovery_package="agent_comms.cli_verbs",
 ):
-    @staticmethod
-    def module_stem(name: str) -> str:
-        """The CLI spelling and its importable Python module share one derivation."""
-        return name.replace("-", "_")
-
-    @classmethod
-    def validate_module_name(cls) -> None:
-        actual = cls.__module__.rpartition(".")[2]
-        expected = cls.module_stem(cls.declared_name)
-        if actual != expected:
-            raise TypeError(f"{cls.__qualname__} declares {cls.declared_name!r}; "
-                            f"its module stem must be {expected!r}, not {actual!r}")
-
-    @classmethod
-    def _prepare_member(cls, name: object) -> None:
-        selected = FieldCodec.decode(str, name)
-        package = FieldCodec.decode(str, cls._family_root.__registry_config__.discovery_package)
-        module = f"{package}.{cls.module_stem(selected)}"
-        if importlib.util.find_spec(module) is None:
-            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}")
-        import_module_preserving_root_logging(module)
-
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
         result = TargetCompleted(batch.target, self, self.apply(comms))
         batch.outcomes.append((batch.position, result))
@@ -240,13 +216,14 @@ class CliCommand[Answer: CliResult = CliResult](
             return self.run(comms, output)
 
     @classmethod
-    def editor_arguments(cls, values: Mapping[str, JsonValue]) -> dict[str, object]:
+    def editor_arguments(cls, values: Mapping[str, object]) -> dict[str, object]:
         return FieldCodec.editor_arguments(cls, values)
 
     def confirmation(self) -> str:
         return ''
 
-    def selection_confirmation(self, commands: tuple[CliCommand, ...]) -> str:
+    @classmethod
+    def selection_confirmation[C: CliCommand](cls: type[C], commands: tuple[C, ...]) -> str:
         return '\n'.join(dict.fromkeys(warning for command in commands
                                       if (warning := command.confirmation())))
 
@@ -255,10 +232,9 @@ class CliCommand[Answer: CliResult = CliResult](
             raise ValueError(self.confirmation())
         return self
 
-    def edited(self, arguments: dict[str, object]) -> Self:
+    def edited(self, arguments: Mapping[str, object]) -> Self:
         bound = {
-            entry.key
-            for entry in FieldCodec.argument_fields(type(self))
+            entry.key for entry in FieldCodec.argument_fields(type(self))
             if entry.setting(TargetBound, False)
         }
         if bound & arguments.keys():
@@ -267,16 +243,14 @@ class CliCommand[Answer: CliResult = CliResult](
         if arguments.keys() - editable:
             raise ValueError("Parameters not offered by this target command cannot be overridden")
         encoded = FieldCodec.encode(self)
-        return type(self).from_payload(
-            {
-                **{key: encoded[key] for key in bound & encoded.keys()},
-                type(self).family_discriminator: FieldCodec.encode(type(self)),
-                **arguments,
-            }
-        )
+        return type(self).from_payload({
+            **{key: encoded[key] for key in bound & encoded.keys()},
+            type(self).family_discriminator: FieldCodec.encode(type(self)),
+            **arguments,
+        })
 
     @classmethod
-    def execute_target(cls, comms: Comms, target: TargetSelection, arguments: dict[str, object],
+    def execute_target(cls, comms: Comms, target: TargetSelection, arguments: Mapping[str, object],
                        *, confirmed: bool = False,
                        channel: ChannelSelection = NoChannel(),
                        project: str) -> CliResult:
@@ -315,10 +289,10 @@ class TargetAction:
         groups: dict[type[CliCommand], list[CliCommand]] = {}
         for command in self.bound:
             groups.setdefault(type(command), []).append(command)
-        return '\n'.join(filter(None, (commands[0].selection_confirmation(tuple(commands))
-                                       for commands in groups.values())))
+        return '\n'.join(filter(None, (declaration.selection_confirmation(tuple(commands))
+                                       for declaration, commands in groups.items())))
 
-    def edited(self, arguments: Mapping[str, JsonValue]) -> TargetAction:
+    def edited(self, arguments: Mapping[str, object]) -> TargetAction:
         return replace(self, bound=tuple(command.edited(type(command).editor_arguments(arguments))
                                         for command in self.bound))
 
@@ -365,7 +339,7 @@ class TargetCompleted(Successful, TargetOutcome, RecordMember):
         return StartedOwner(self.target.display_name())
 
     @classmethod
-    def from_wire(cls, data: JsonValue) -> Self:
+    def from_wire(cls, data: object) -> Self:
         record = FieldCodec.decode(dict[str, JsonValue], data)
         command = FieldCodec.decode(CliCommand, record["command"])
         return FieldCodec.decode_record(cls, record, field_types={"result": command.result_type()})
@@ -447,7 +421,7 @@ class TargetSelection(ABC):
         return member
 
     @abstractmethod
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object],
             *, confirmed: bool, channel: ChannelSelection, project: str,
             snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
         """Bind, authorize and apply the declaration on this selection."""
@@ -461,7 +435,7 @@ class OneTarget(TargetSelection):
         if len(self.targets) != 1:
             raise ValueError('This action requires a single target')
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object], *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
@@ -497,7 +471,7 @@ class TargetBatch(TargetSelection):
     def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
         return member.catalog_declaration()
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object], *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments: Mapping[str, object], *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
         declaration.require_batch()
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
                               if member.catalog_declaration() is declaration)
@@ -550,7 +524,7 @@ class TargetBatch(TargetSelection):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
 
-class AppliedTogether:
+class AppliedTogether(CliCommand):
     """A command whose bindings in one target batch are applied as one operation."""
 
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
@@ -566,7 +540,7 @@ class TargetEdit(Command[Comms, CliResult]):
     """Accepted editor values use the declared field and current bound command."""
     declaration: type[CliCommand]
     target: TargetSelection
-    arguments: dict[str, JsonValue]
+    arguments: Mapping[str, object]
     confirmed: bool = False
     channel: ChannelSelection = NoChannel()
     project: str = field(default_factory=os.getcwd)

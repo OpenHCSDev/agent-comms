@@ -1,11 +1,8 @@
-"""Declaration-owned CLI operation and its required dependencies."""
-
 from __future__ import annotations
 
 from agent_comms.channel_management import KeepThreadsTagDisposition
 from agent_comms.channel_management import TagChangeResult
 from agent_comms.channel_management import TagDisposition
-from agent_comms.cli_command import CliCommand
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_support.exact_tag import ExactTagCliCommand
 from agent_comms.comms import Comms
@@ -34,10 +31,11 @@ class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, declared_name="de
         bool, TargetBound(), Argument(flags=("--confirmed",))
     ] = False
 
-    def confirmation(self):
+    def confirmation(self) -> str:
         return self.disposition.confirmation(self.name)
 
-    def selection_confirmation(self, commands: tuple[CliCommand, ...]) -> str:
+    @classmethod
+    def selection_confirmation[C: DeleteTagCliCommand](cls: type[C], commands: tuple[C, ...]) -> str:
         groups: dict[TagDisposition, list[str]] = {}
         for command in commands:
             groups.setdefault(command.disposition, []).append(command.name)

@@ -6,7 +6,7 @@ from agent_comms.cli_commands import RecordedContextManifests
 from agent_comms.comms import Comms
 from itertools import takewhile
 
-from agent_comms.cli_context import SelectedContextCliCommand
+from agent_comms.cli_support.context_option import SelectedContextCliCommand
 
 class TurnContextCliCommand(SelectedContextCliCommand):
     def apply(self, ctx: Comms) -> RecordedContextManifests:

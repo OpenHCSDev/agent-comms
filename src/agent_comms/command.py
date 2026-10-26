@@ -3,14 +3,14 @@
 from abc import ABC, abstractmethod
 from typing import Self
 
-from pydantic import JsonValue
+from collections.abc import Mapping
 
 from .field_codec import FieldCodec
 
 
 class Command[Context, Result](ABC):
     @classmethod
-    def from_payload(cls, payload: dict[str, JsonValue]) -> Self:
+    def from_payload(cls, payload: Mapping[str, object]) -> Self:
         return FieldCodec.decode(cls, payload)
 
     @abstractmethod

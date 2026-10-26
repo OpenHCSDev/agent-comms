@@ -134,6 +134,10 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         """The selected destination's name, including an unresolved destination."""
         return ", ".join(self.destination_names)
 
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
     @staticmethod
     def named(name: str) -> NamedTarget:
         if not name:
@@ -218,9 +222,9 @@ class ChannelReply(ReplyRoute):
         return f"substr({column},1,{len(sigil)})={sql_literal(sigil)}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NamedTarget(CommandTarget):
-    name: str
+    name: str = field()
     sigil: ClassVar[str]
     route: ClassVar[ReplyRoute]
     batchable = False

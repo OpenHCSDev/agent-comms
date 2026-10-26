@@ -135,7 +135,18 @@ class DeclaredOrder(ABC):
         raise ValueError(f"{member.__name__} has no {cls.__name__} rank base")
 
 
-class DeclaredFamily(ABC, metaclass=FamilyMeta):
+class FamilyOwner(ABC):
+    """The nominal family root and the name declared by each of its members."""
+
+    declared_name: ClassVar[str]
+    _family_root: ClassVar[type[DeclaredFamily]]
+
+    @classmethod
+    def family_root(cls) -> type[DeclaredFamily]:
+        return cls._family_root
+
+
+class DeclaredFamily(FamilyOwner, ABC, metaclass=FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
     Declare a root with ``affix=\"Scope\"`` (or omit it for unstripped names).
@@ -147,9 +158,7 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
     the existing registry acquires those declarations on decode or schema reads.
     """
 
-    declared_name: ClassVar[str]
     family_discriminator: ClassVar[str] = "kind"
-    _family_root: ClassVar[type[DeclaredFamily]]
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
     __registry_config__: ClassVar[RegistryConfig]
@@ -262,15 +271,47 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
             if issubclass(member, cls) and issubclass(member, capability)
         )
 
-    @classmethod
-    def family_root(cls) -> type[DeclaredFamily]:
-        """The nominal root recorded when this declaration was constructed."""
-        return cls._family_root
 
     @classmethod
     def declared_position(cls) -> int:
         root = cls.family_root()
         return root.members_with(root).index(cls)
+
+
+class ModuleMembers(FamilyOwner, MroDispatch):
+    """A family whose declared names select exactly one Python module each."""
+
+    @handles(str)
+    @staticmethod
+    def named_module(name: str) -> str:
+        return name
+
+    @handles(object)
+    @staticmethod
+    def invalid_module_name(name: object) -> str:
+        raise UnknownFamilyMember(f"A declared module name must be text: {name!r}")
+
+    @staticmethod
+    def module_stem(name: str) -> str:
+        return name.replace("-", "_")
+
+    @classmethod
+    def validate_module_name(cls) -> None:
+        actual = cls.__module__.rpartition(".")[2]
+        expected = cls.module_stem(cls.declared_name)
+        if actual != expected:
+            raise TypeError(f"{cls.__qualname__} declares {cls.declared_name!r}; "
+                            f"its module stem must be {expected!r}, not {actual!r}")
+
+    @classmethod
+    def _prepare_member(cls, name: object) -> None:
+        selected: str = cls.handler_for(type(name))(name)
+        package = cls.family_root().__registry_config__.discovery_package
+        package_module: ModuleType = import_module_preserving_root_logging(package)
+        stem = cls.module_stem(selected)
+        if stem not in {info.name for info in pkgutil.iter_modules(package_module.__path__)}:
+            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}")
+        import_module_preserving_root_logging(f"{package}.{stem}")
 
 
 class RegisteredFamily(DeclaredFamily):

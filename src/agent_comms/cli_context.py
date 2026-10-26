@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import CoreContextInspection
 from agent_comms.cli_commands import CoreSegmentText
@@ -23,7 +22,6 @@ from agent_comms.turn_context import NextContextTurn
 from agent_comms.turn_context import TurnContext
 from collections.abc import Iterator
 from dataclasses import dataclass
-from itertools import dropwhile
 from typing import Annotated
 import argparse
 import asyncio
@@ -84,21 +82,8 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
         return asyncio.run(inspect())
 
 
-class ContextOptionCliCommand(CurrentContextCliCommand):
-    @classmethod
-    def add_parser[P: argparse.ArgumentParser](cls, subparsers: argparse._SubParsersAction[P]) -> None:
-        """These commands are selected by the context parser's options."""
-
-    @abstractmethod
-    def apply(self, ctx: Comms) -> CliResult:
-        """Inspect the context selected at the CLI boundary."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class SelectedContextCliCommand(ContextOptionCliCommand):
-    turn: int
-
-    def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
-        return dropwhile(lambda manifest: not manifest.turn.matches_generation(self.turn),
-                         super().manifests(ctx))
-
+@dataclass(frozen=True)
+class ContextSelection:
+    imported: bool = False
+    diff: bool = False
+    turn: bool = False
