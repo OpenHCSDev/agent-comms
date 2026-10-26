@@ -128,7 +128,7 @@ class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
         if not fence.includes(sent):
             raise RelationViolationError("Native release predates the sending claim_scope")
         if snapshot.claim_generation(current.name) == acknowledgement.after:
-            if not acknowledgement.current(snapshot, current, acknowledgement.before):
+            if not acknowledgement.current(snapshot.entry(current.name), current, acknowledgement.before):
                 raise RelationViolationError("Native release differs from its stopped declaration")
 
     def recovery_stop_reason(self) -> type[PiStopReason]:

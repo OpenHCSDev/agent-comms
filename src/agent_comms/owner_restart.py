@@ -232,7 +232,7 @@ class FencedOwnerBatch:
                 releases = self.lifecycle.releases.read_many(
                     tuple(thread.name for thread, _ in self.captured))
                 for (thread, generation), launch in zip(self.captured, self.launches, strict=True):
-                    releases[thread.name].require_stopping_owner(snapshot, thread, generation)
+                    releases[thread.name].require_stopping_owner(snapshot.entry(thread.name), thread, generation)
                     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
                     progress = replace(progress, retired=progress.retired + (owner,))
             # Each original's acquired witness excludes its input before any replacement.

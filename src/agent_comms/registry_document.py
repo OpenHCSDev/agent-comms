@@ -1068,6 +1068,18 @@ class RegistryEntry:
     def owner_identity(self) -> OwnerIdentity:
         return OwnerIdentity(self.thread.incarnation, self.owner_generation)
 
+    def require_stopping_owner(self, expected: Thread, claim_scope: int) -> None:
+        """A fenced stop targets this exact birth, process and input claim."""
+        current = self.thread
+        if current.incarnation != expected.incarnation:
+            raise RelationViolationError("Stopping owner incarnation changed")
+        expected.role.require_executable(RelationViolationError("Stopping owner was not an agent"))
+        current.role.require_executable(RelationViolationError("Stopping owner is not an agent"))
+        if current.process_identity != expected.process_identity:
+            raise RelationViolationError("Stopping owner process changed")
+        if self.claimed_generation != claim_scope:
+            raise RelationViolationError("Stopping owner claim_scope changed")
+
 
 @SnapshotValue.required
 @dataclass(frozen=True, slots=True)
@@ -1108,6 +1120,18 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     def claim_generation(self, name: str) -> int:
         """The allocated input generation follows this registry's alias lineage."""
         return self._claimed_generations[self.canonical_name(name)]
+
+    def entry(self, name: str) -> RegistryEntry:
+        """Project one entry from this already acquired immutable cut."""
+        thread = self.require(name)
+        return RegistryEntry(
+            thread=thread,
+            status=self.status(thread.name),
+            last_seen=self.last_seen[thread.name],
+            owner_generation=self.owner_generations[thread.name],
+            claimed_generation=self.claim_generation(thread.name),
+            names=self.names_for(thread.name),
+        )
 
     @property
     def known_names(self) -> tuple[str, ...]:
@@ -1241,18 +1265,3 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
         """A read attachment retains its owner lease across startup, not across restart."""
         thread = self.require_active(owner.incarnation.name)
         owner.require_current(thread, self.owner_generations[thread.name], process)
-
-    def require_stopping_owner(self, expected: Thread, claim_scope: int) -> None:
-        """A fenced stop may target a stopped owner, but never a later birth/lease."""
-        try:
-            current = self.threads[expected.name]
-        except KeyError as error:
-            raise RelationViolationError("Stopping owner was removed") from error
-        if current.incarnation != expected.incarnation:
-            raise RelationViolationError("Stopping owner incarnation changed")
-        expected.role.require_executable(RelationViolationError("Stopping owner was not an agent"))
-        current.role.require_executable(RelationViolationError("Stopping owner is not an agent"))
-        if current.process_identity != expected.process_identity:
-            raise RelationViolationError("Stopping owner process changed")
-        if self.claim_generation(expected.name) != claim_scope:
-            raise RelationViolationError("Stopping owner claim_scope changed")

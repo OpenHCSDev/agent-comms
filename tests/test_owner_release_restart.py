@@ -199,7 +199,8 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     snapshot = comms.registry.snapshot()
     assert snapshot.statuses[declared.name].stopped
     assert snapshot.threads[declared.name].process_identity == NoProcess()
-    assert comms.owners.releases.read_many((declared.name,))[declared.name].current(snapshot, declared, generation)
+    assert comms.owners.releases.read_many((declared.name,))[declared.name].current(
+        comms.registry.store.read_entry(declared.name).entry, declared, generation)
 
     waiting = comms.registry.declare(Thread('waiting', frozenset(), str(tmp_path)))
     before = comms.registry.snapshot().claim_generation(waiting.name)
@@ -208,7 +209,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
         new_owner=True,
     )
     with pytest.raises(RelationViolationError):
-        comms.registry.snapshot().require_stopping_owner(waiting, before)
+        comms.registry.store.read_entry(waiting.name).entry.require_stopping_owner(waiting, before)
 
 
 def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
@@ -220,7 +221,8 @@ def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
     comms.owners.stop("worker")
     snapshot = comms.registry.snapshot()
     acknowledgement = comms.owners.releases.read_many(("worker",))["worker"]
-    assert acknowledgement.current(snapshot, original, acknowledgement.before)
+    assert acknowledgement.current(comms.registry.store.read_entry(original.name).entry,
+                                   original, acknowledgement.before)
     assert snapshot.statuses["worker"].stopped
 
 

@@ -44,7 +44,7 @@ from .native_arguments import (
 )
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistryEntry, RegistrySnapshot
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerGenerationChangedRefusal,
@@ -158,7 +158,7 @@ class OwnerStartResult(CliResult, ToolResult):
 class OwnerRelease(ABC):
     """An exact release or its absence; neither grants permission to replay."""
     @abstractmethod
-    def current(self, snapshot, expected, claim_scope) -> bool: ...
+    def current(self, entry: RegistryEntry, expected: Thread, claim_scope: int) -> bool: ...
     @abstractmethod
     def matches(self, expected) -> bool: ...
     @abstractmethod
@@ -170,12 +170,12 @@ class OwnerRelease(ABC):
         source.sent_owner_claimed_generation.require_release(release, snapshot, current)
         return release
 
-    def require_stopping_owner(self, snapshot: RegistrySnapshot, thread: Thread,
+    def require_stopping_owner(self, entry: RegistryEntry, thread: Thread,
                                claimed_generation: int) -> None:
-        if self.current(snapshot, thread, claimed_generation):
+        if self.current(entry, thread, claimed_generation):
             return
         try:
-            snapshot.require_stopping_owner(thread, claimed_generation)
+            entry.require_stopping_owner(thread, claimed_generation)
         except RelationViolationError as error:
             raise RelationViolationError(
                 f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
@@ -183,7 +183,7 @@ class OwnerRelease(ABC):
 
 
 class NoRelease(OwnerRelease):
-    def current(self, snapshot, expected, claim_scope) -> bool:
+    def current(self, entry: RegistryEntry, expected: Thread, claim_scope: int) -> bool:
         return False
 
     def matches(self, expected) -> bool:
@@ -218,12 +218,11 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
         if self.before <= 0 or self.after <= self.before:
             raise ValueError("Owner release requires an advanced claim_scope and a closed turn")
 
-    def current(self, snapshot: RegistrySnapshot, expected: Thread, claim_scope: int) -> bool:
+    def current(self, entry: RegistryEntry, expected: Thread, claim_scope: int) -> bool:
         if self.before != claim_scope or not self.matches(expected):
             return False
-        if not self.incarnation().current(snapshot) or not self.matches(snapshot.require(self.name)):
-            return False
-        return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
+        return (self.matches(entry.thread) and self.after == entry.claimed_generation
+                and entry.status.stopped)
 
     def require_owner_loss(self, snapshot, owner_identity):
         """Attest only this recorded owner's release and dead process.
@@ -453,14 +452,14 @@ class OwnerLifecycle:
     def _stop_selection(self, name: str) -> tuple[Thread, int] | None:
         """Settle an owner that needs no signal, or capture the one that does."""
         with self.registry.store.guarded_write():
-            snapshot = self.registry.snapshot()
-            thread = self.registry.require(name)
+            entry = self.registry.store.read_entry(name).entry
+            thread = entry.thread
             thread.role.require_executable(
                 RelationViolationError("Only agent threads can be stopped.")
             )
-            if snapshot.status(thread.name).settle_local_stop(self, thread):
+            if entry.status.settle_local_stop(self, thread):
                 return None
-            return thread, snapshot.claim_generation(thread.name)
+            return thread, entry.claimed_generation
 
     def _settle_local_owner(self, thread: Thread) -> None:
         """Settle this process under the caller's existing stop-selection lock."""
@@ -528,25 +527,25 @@ class OwnerLifecycle:
             return self._register_owner(thread, child.identity, initial_input)
 
     def _require_same_stop_owner(self, thread: Thread, claimed_generation: int) -> None:
-        snapshot = self.registry.snapshot()
+        entry = self.registry.store.read_entry(thread.name).entry
         # Voluntary release advances the input generation and marks STOPPED before Python
         # finishes shutting down. Its exact acknowledgement preserves the signaled
         # incarnation; it does not prove OS exit or authorize a replacement PID.
         release = self.releases.read_many((thread.name,))[thread.name]
-        release.require_stopping_owner(snapshot, thread, claimed_generation)
+        release.require_stopping_owner(entry, thread, claimed_generation)
 
     def _finish_stopped_owners(self, owners: Sequence[tuple[Thread, int]]) -> None:
         if not owners:
             return
         with self.registry.store.editing() as edit:
-            snapshot = edit.original.snapshot
             releases = self.releases.read_many(tuple(thread.name for thread, _ in owners))
             retiring = []
             for thread, generation in owners:
+                entry = edit.document.entry(thread.name)
                 release = releases[thread.name]
-                if release.current(snapshot, thread, generation):
+                if release.current(entry, thread, generation):
                     continue  # The original owner durably acknowledged its own release.
-                release.require_stopping_owner(snapshot, thread, generation)
+                release.require_stopping_owner(entry, thread, generation)
                 retiring.append((thread, generation))
                 edit.document.unregister(thread.name)
             edit.commit()

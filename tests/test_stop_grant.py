@@ -113,7 +113,7 @@ def test_registry_stop_orders_real_native_grant_and_preserves_input(live_input, 
     after = comms.registry.snapshot().claim_generation(owner.name)
     assert after > before
     release = comms.owners.releases.read_many((owner.name,))[owner.name]
-    assert release.current(comms.registry.snapshot(), owner, before)
+    assert release.current(comms.registry.store.read_entry(owner.name).entry, owner, before)
     with Coordination(source.root / "coordination.sqlite3") as store:
         original = NativeRuntimeInput.require(store.session._connection, input_id=source.input_id)
         assert original.sent_owner_claimed_generation.matches(before) is (not stop_first)
