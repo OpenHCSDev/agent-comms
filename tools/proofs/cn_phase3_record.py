@@ -41,7 +41,8 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderDoneTool, CommsTodoCreateTool, CommsVerdictTool
 from agent_comms.tool_request import ToolRequest
-from agent_comms.turn_digests import OrderEditsRead, TurnsSince
+from agent_comms.storage_rules import StorageRule
+from agent_comms.turn_digests import EditWorkplaces, OrderEditsRead, TurnsSince
 
 CHECKOUT = Path(__file__).resolve().parents[2]
 ROOT = Path.home() / ".cache" / "agent-scratch" / "pi-cn-phase3" / "record-plane"
@@ -135,7 +136,8 @@ def record(session: Path) -> None:
     todo = comms.goals.todos.get("P1")
     since = todo.order.checked().at.recorded_at("An order")
     calls = OrderEditsRead(
-        ROOT, comms.registry.require(worker.name), TurnsSince(since), todo
+        ROOT, worker, TurnsSince(since), todo,
+        EditWorkplaces.of(StorageRule.load(ROOT), worker, (todo,)),
     ).read()
     if not calls:
         raise RuntimeError("No actual native edit call followed the order; do not invent one")

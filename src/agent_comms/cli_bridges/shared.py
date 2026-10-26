@@ -86,6 +86,7 @@ from agent_comms.typed_table import (
     ExpressionIndex,
     TableSchema,
     TypedRow,
+    StoredColumnCarry,
     TypedTable,
     WriterOwnedFile,
     WriterOwnedResource,
@@ -341,15 +342,15 @@ class BindingIdentity(SessionBinding):
 class Binding(BindingIdentity, BridgeStateTable, TypedTable):
     dropped_fields = ('bus',)
 
-    @classmethod
-    def carry_columns(cls, db: sqlite3.Connection) -> None:
+    @staticmethod
+    def carry_columns(row: type[TypedTable], db: sqlite3.Connection) -> None:
         """Replace the old address with its registered incarnation before dropping it."""
-        if 'bus' in cls.stored_columns(db):
-            if 'owner' in cls.stored_columns(db):
+        if 'bus' in row.stored_columns(db):
+            if 'owner' in row.stored_columns(db):
                 raise RelationViolationError('Binding stores both an address and an owner')
-            table = f'"{cls.declared_name}"'
+            table = f'"{row.declared_name}"'
             cases: list[str] = []
-            (owner_column,) = cls._fields_named(('owner',))
+            (owner_column,) = row._fields_named(('owner',))
             for root, bus in db.execute(f'SELECT root, bus FROM {table}'):
                 try:
                     owner = Registration(RegistryFile.path_in(Path(root))).require(bus).incarnation
@@ -364,8 +365,8 @@ class Binding(BindingIdentity, BridgeStateTable, TypedTable):
                 cases.append(f'WHEN root = {stored_root} AND bus = {stored_bus} '
                              f'THEN {encoded_owner}')
             expression = 'CASE ' + ' '.join(cases) + ' END' if cases else 'NULL'
-            cls.rebuild(db, {'owner': expression})
-        super().carry_columns(db)
+            row.rebuild(db, {'owner': expression})
+        StoredColumnCarry.carry_columns(row, db)
 
     @staticmethod
     def bus_head(root: str) -> BridgePosition:
