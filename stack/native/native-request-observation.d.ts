@@ -52,9 +52,8 @@ export declare class NativeRequestObservation {
 }
 export declare function observeStream<T>(options: { onRequestProgress?: RequestObserver } | undefined,
     events: AsyncIterable<T>, transport: string): AsyncGenerator<T>;
-export declare class NativeIteratorObservation {
-    constructor(transport: string);
+/** Only observeStream supplies this already-started, read-only source. */
+declare class NativeIteratorObservation {
+    private constructor();
     snapshot(now?: bigint): IteratorTiming;
-    events<T>(options: { onRequestProgress?: RequestObserver } | undefined,
-              events: AsyncIterable<T>): AsyncGenerator<T>;
 }

@@ -79,7 +79,7 @@ export class NativeRequestObservation {
  * No event payloads are inspected or retained. A snapshot includes the open
  * interval, so a stalled next() or consumer is visible before stream closure.
  */
-export class NativeIteratorObservation {
+class NativeIteratorObservation {
     constructor(transport) {
         this.streamId = randomUUID();
         this.transport = transport;
