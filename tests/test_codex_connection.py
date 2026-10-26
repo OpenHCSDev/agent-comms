@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import aiohttp
 import pytest
 
-from agent_comms.cli_bridges.codex import CodexConnection
+from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import Capabilities, ClientInfo, Initialize
 
 

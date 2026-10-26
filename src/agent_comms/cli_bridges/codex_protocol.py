@@ -288,7 +288,7 @@ class RpcError(WireModel):
 
 
 if TYPE_CHECKING:
-    from .codex import CodexConnection
+    from .codex_connection import CodexConnection
 
 
 class RpcReply(WireModel, ABC):
