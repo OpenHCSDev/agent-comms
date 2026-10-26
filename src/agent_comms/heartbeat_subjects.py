@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Mapping, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MessageId
@@ -19,15 +20,35 @@ from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarna
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.todos import Todo
+
+
+@dataclass(frozen=True)
+class CommanderHistory:
+    """One reader's immutable order history, shared by every subject it evaluates."""
+
+    comms: Comms
+    orders: Mapping[ThreadIncarnation, tuple[Todo, ...]]
+
+    @classmethod
+    def read(cls, comms: Comms, actors: frozenset[str]) -> Self:
+        snapshot = comms.registry.snapshot()
+        identities = frozenset(snapshot.require(actor).incarnation for actor in actors)
+        return cls(comms, MappingProxyType({
+            actor: comms.goals.todos.history_for_commander(actor) for actor in identities
+        }))
+
+    @property
+    def actors(self) -> frozenset[str]:
+        return frozenset(actor.name for actor in self.orders)
 
 
 @dataclass(frozen=True)
 class HeartbeatSubject(DeclaredFamily, affix="Subject"):
 
     @abstractmethod
-    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
-        """Whether Core recorded an action on this subject at or after ``since``; ``actors`` are
-        the names the commander and its forks publish under."""
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
+        """Whether Core recorded an action on this subject at or after ``since``."""
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         """Whether a verb touching ``acted`` acts on this subject."""
@@ -42,9 +63,9 @@ class HeartbeatSubject(DeclaredFamily, affix="Subject"):
 class UnitSubject(HeartbeatSubject):
     unit: ThreadIncarnation
 
-    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
-        return any(message.timestamp >= since for message in comms.bus.bus.latest_addressed(
-            actors, comms.registry.snapshot().names_for(self.unit.name),
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
+        return any(message.timestamp >= since for message in history.comms.bus.bus.latest_addressed(
+            history.actors, history.comms.registry.snapshot().names_for(self.unit.name),
         ))
 
 
@@ -52,9 +73,9 @@ class UnitSubject(HeartbeatSubject):
 class HeadSubject(HeartbeatSubject):
     request: PullRequestHead
 
-    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
         return any(review.at.since(since) and review.verdict.decides()
-                   for review in comms.goals.todos.head_reviews(self.request))
+                   for review in history.comms.goals.todos.head_reviews(self.request))
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         """The line is about the pull request: a verdict on any of its heads acts on it, the
@@ -71,8 +92,8 @@ class PassSubject(HeartbeatSubject):
 
     commander: RecordedThreadIncarnation
 
-    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
-        return ServicePassStore.at(comms.root).read().completed_since(self.commander, since)
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
+        return ServicePassStore.at(history.comms.root).read().completed_since(self.commander, since)
 
 
 @dataclass(frozen=True)
@@ -81,6 +102,6 @@ class AnswerSubject(HeartbeatSubject):
 
     message: MessageId
 
-    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
         """The answer clears the owed message itself, so the line leaves the next packet."""
         return False

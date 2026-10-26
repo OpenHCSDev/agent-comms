@@ -11,7 +11,7 @@ from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
-from agent_comms.heartbeat_subjects import HeadSubject, UnitSubject
+from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, UnitSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
     HeadReviewTimerUp, IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule,
@@ -280,10 +280,10 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
 
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
-    assert not subject.disposed(comms, frozenset(), since)
+    assert not subject.disposed(CommanderHistory.read(comms, frozenset()), since)
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     assert owed() == []
-    assert subject.disposed(comms, frozenset(), since)
+    assert subject.disposed(CommanderHistory.read(comms, frozenset()), since)
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
 
