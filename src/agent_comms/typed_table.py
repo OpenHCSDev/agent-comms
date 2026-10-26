@@ -743,6 +743,9 @@ class SQLiteSchemaDifference:
     stored: str | None
     declared: str | None
 
+    def __str__(self) -> str:
+        return f"{self.name}: stored {self.stored or 'nothing'}; declared {self.declared or 'nothing'}"
+
 
 @dataclass(frozen=True)
 class SQLiteDatabase(TypedRow):
@@ -1055,9 +1058,8 @@ class HeldBusFile(SchemaChange):
     path: Path
 
     def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
-        if schema.schema_differs(db):
-            raise schema.schema_error(
-                f"{self.path} differs from {schema.__name__}; "
+        schema.require_declared(
+            db, f"{self.path} differs from {schema.__name__}; "
                 f"agent-comms {self.carry_verb} carries it")
 
     def require(self) -> None:
@@ -1136,11 +1138,26 @@ class TableSchema(ABC):
         return SQLiteTableName.stored(db)
 
     @classmethod
+    def schema_differences(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        return SQLiteSchemaObject.differences(cls.stored_schema(db, sharing), cls.declared_schema())
+
+    @classmethod
     def schema_differs(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
-        return bool(SQLiteSchemaObject.differences(
-            cls.stored_schema(db, sharing), cls.declared_schema()))
+        return bool(cls.schema_differences(db, sharing))
+
+    @classmethod
+    def require_declared(
+        cls, db: sqlite3.Connection, subject: str,
+        sharing: tuple[type[TypedTable], ...] = (),
+    ) -> None:
+        """Refuse a stored schema that differs, naming every object whose stored SQL differs."""
+        if cls.schema_differs(db, sharing):
+            raise cls.schema_error(
+                f"{subject}: " + " | ".join(map(str, cls.schema_differences(db, sharing))))
 
     @classmethod
     def changed_families(
@@ -1168,8 +1185,7 @@ class TableSchema(ABC):
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> None:
         """Readers use only the declared schema, whichever kind of file this is."""
-        if cls.schema_differs(db, sharing):
-            raise cls.schema_error(f"{cls.__name__} differs from its declaration")
+        cls.require_declared(db, f"{cls.__name__} differs from its declaration", sharing)
 
     @classmethod
     def require_installed(cls, db: sqlite3.Connection) -> None:
@@ -1275,6 +1291,14 @@ class ComposedSchemas:
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
         return any(cls.changed_families(db, sharing))
+
+    @classmethod
+    def schema_differences(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        rows = (*cls.schema_rows(), *sharing)
+        return tuple(difference for family in cls.changed_families(db, sharing)
+                     for difference in family.schema_differences(db, rows))
 
     @classmethod
     def changed_families(
@@ -1770,6 +1794,18 @@ class DerivedTables(TableSchema):
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
         return bool(cls.changed_rows(db, sharing))
+
+    @classmethod
+    def schema_differences(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        """Each changed row's SQL differences; a row whose SQL matches changed its producer."""
+        return tuple(
+            difference for row in cls.changed_rows(db, sharing)
+            for difference in SQLiteSchemaObject.differences(
+                TypedTable.objects_of(db, (row,), sharing), row.schema_objects(),
+            ) or (SQLiteSchemaDifference(
+                row.declared_name, "rows of an earlier producer", "rows of its producer"),))
 
     @classmethod
     def changed_rows(
