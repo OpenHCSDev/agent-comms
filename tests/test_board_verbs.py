@@ -20,7 +20,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.todos import (
-    Assignment, ClaimOrder, DeliveredProblemOrder, OrderHeadReview, OrderClaim,
+    Assignment, ClaimOrder, DeliveredProblemOrder, NoHeadOrder, OrderHeadReview, OrderClaim,
     OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
     PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StoredHeadReview, StrikeReason, UnderReviewHeadVerdict, VerdictReason,
 )
@@ -247,3 +247,18 @@ def test_released_work_can_be_judged_and_delivered_without_a_holder(
     assert type(delivered.order) is DeliveredProblemOrder
     assert delivered.order.delivery.delivered == first
     assert delivered.current_holder.current_assignments() == ()
+
+
+
+def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_review):
+    """The delivery line names one head; only a decided verdict on that head retires it."""
+    comms, request, claim, _ = board_review
+    claim()
+    lead = comms.registry.require("lead").incarnation
+    opened, = DeliveryAwaitingJudgement.opened(comms, "lead")
+    assert opened.request == request
+    NoHeadOrder().record_review(comms.goals, replace(request, head="f" * 40),
+                                ReviewedHeadVerdict(REASON), lead)
+    assert DeliveryAwaitingJudgement.opened(comms, "lead") == (opened,)
+    NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), lead)
+    assert DeliveryAwaitingJudgement.opened(comms, "lead") == ()

@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
-        MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, PullRequest, Todo,
+        MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, PullRequest, Todo, TodoStore,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -140,6 +140,10 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
 
     def review_allowed(self, verb: type[CommanderVerb]) -> bool:
         """Ordinary lines retain every verb that declares it clears them."""
+        return True
+
+    def undecided(self, store: TodoStore) -> bool:
+        """Whether no recorded decision answers this line; only a head verdict can."""
         return True
 
     def clearing_commands(self) -> str:
@@ -566,8 +570,9 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         requests = comms.goals.todos.open_requests(snapshot.require(commander).incarnation)
         held = scan.holders
         with comms.bus.bus.reading() as source:
-            return tuple(rule for member in cls.members_with(cls)
-                         for rule in member.read_open(source, snapshot, held, commander, requests))
+            opened = tuple(rule for member in cls.members_with(cls)
+                           for rule in member.read_open(source, snapshot, held, commander, requests))
+        return tuple(rule for rule in opened if rule.undecided(comms.goals.todos))
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
@@ -649,6 +654,16 @@ class HeldOrderDue(HolderLine, DatedStandingRule, declared_name=None):
 
 class HeadReviewRule(StandingRule, declared_name=None):
     """A head verdict can answer this rule's review request."""
+
+    request: PullRequestHead
+
+    @staticmethod
+    def decided(store: TodoStore, request: PullRequestHead) -> bool:
+        """A recorded verdict on exactly this head answers it; a reviewing mark still owes one."""
+        return any(review.verdict.decides() for review in StoredHeadReview.head_reviews(store, request))
+
+    def undecided(self, store: TodoStore) -> bool:
+        return not self.decided(store, self.request)
 
 
 @dataclass(frozen=True)
@@ -788,7 +803,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
             for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
-            if not any(review.verdict.decides() for review in StoredHeadReview.head_reviews(goals.todos, request))
+            if not cls.decided(goals.todos, request)
             for rule in cls.for_head(request, due, todos)
         )
 
