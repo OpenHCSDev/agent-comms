@@ -28,13 +28,8 @@ class RecordingShower(ResultShower):
     IncarnationThreadTarget(RecordedThreadIncarnation("first", 1.0)),
 ])
 def test_batch_completed_result_round_trips_with_its_command_result_type(target):
-    from agent_comms.cli_commands import (
-        StopCliCommand,
-        TargetBatchResult,
-        TargetCompleted,
-        TargetFailed,
-        ThreadStoppedResult,
-    )
+    from agent_comms.cli_verbs.stop import StopCliCommand
+    from agent_comms.cli_commands import TargetBatchResult, TargetCompleted, TargetFailed, ThreadStoppedResult
     from agent_comms.field_codec import FieldCodec
 
     original = TargetBatchResult((
@@ -61,7 +56,8 @@ def test_batch_completed_result_round_trips_with_its_command_result_type(target)
     (TargetBatch, (CommandTarget.named("ghost"),), False),
 ])
 def test_each_selection_returns_its_own_result(comms, tmp_path, selection, target, resolvable):
-    from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetFailed
+    from agent_comms.cli_verbs.stop import StopCliCommand
+    from agent_comms.cli_commands import TargetBatchResult, TargetFailed
     from agent_comms.thread_status import RunningThreadStatus
 
     comms.registry.declare(Thread("first", frozenset(), str(tmp_path)), RunningThreadStatus())
@@ -80,9 +76,10 @@ def test_each_selection_returns_its_own_result(comms, tmp_path, selection, targe
 
 
 def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
-    from agent_comms.cli_commands import (
-        ArchiveCliCommand, CliCommand, QueueRestartCliCommand, RestartCliCommand,
-    )
+    from agent_comms.cli_verbs.archive import ArchiveCliCommand
+    from agent_comms.cli_command import CliCommand
+    from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
+    from agent_comms.cli_verbs.restart import RestartCliCommand
     from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
     names = ("first", "second")

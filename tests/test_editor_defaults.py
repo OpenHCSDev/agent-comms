@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from agent_comms.cli_commands import ForkCliCommand
+from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, ThinkingLevelField
 from agent_comms.read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment

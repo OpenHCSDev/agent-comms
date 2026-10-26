@@ -2,7 +2,9 @@
 
 import pytest
 
-from agent_comms.cli_commands import ForkCliCommand, OneTarget, PinThreadCliCommand, TargetBatch
+from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.cli_commands import OneTarget, TargetBatch
+from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
 from agent_comms.channel_targets import CommandTarget
 
 
@@ -24,7 +26,8 @@ def test_empty_target_input_is_refused():
 
 
 def test_one_cli_name_for_a_batch_command_is_a_batch():
-    from agent_comms.cli_commands import StartCliCommand, StopCliCommand
+    from agent_comms.cli_verbs.start import StartCliCommand
+    from agent_comms.cli_verbs.stop import StopCliCommand
 
     for declaration in (StartCliCommand, StopCliCommand):
         selected = declaration.selected_targets(CommandTarget.arguments(('alpha',), '/p'))

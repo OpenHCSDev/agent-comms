@@ -7,7 +7,7 @@ from contextlib import closing
 import shutil
 from pathlib import Path
 
-from agent_comms.cli_commands import StopCliCommand
+from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction

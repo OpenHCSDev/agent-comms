@@ -9,14 +9,18 @@ orchestration semantics.
 
 from __future__ import annotations
 
+from agent_comms.cli_arguments import CliArgumentParser
+
 import argparse
 import sys
 from collections.abc import Sequence
 from typing import TextIO
 
 from agent_comms.active_route import resolve_comms_route
-from agent_comms.cli_commands import CliCommand
-from agent_comms.cli_protocol import CLI_FAILURES, CliArguments, CoreError
+from agent_comms.cli_command import CliCommand
+from agent_comms.cli_failures import CLI_FAILURES
+from agent_comms.cli_arguments import CliArguments
+from agent_comms.cli_protocol import CoreError
 from agent_comms.launch_root import LaunchRoot
 
 
@@ -26,11 +30,6 @@ def _fail(error: BaseException) -> int:
     return 1
 
 
-class CliArgumentParser(argparse.ArgumentParser):
-    """Argument errors use Core's JSON failure boundary, including subcommands."""
-
-    def error(self, message: str) -> None:
-        raise ValueError(message)
 
 
 def build_parser() -> argparse.ArgumentParser:

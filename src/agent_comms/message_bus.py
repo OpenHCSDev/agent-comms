@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from agent_comms.activity_clocks import ActivityClocks
-import asyncio
 import inspect
 from abc import ABC, abstractmethod
 from collections.abc import (
@@ -61,12 +60,6 @@ if TYPE_CHECKING:
     from agent_comms.threads import Thread
 
 
-class HeldBusWrite:
-    """A CLI process's publication waits out maintenance on its own loop, never retrying a
-    write; a service's worker thread refuses at the store's write guard instead."""
-
-    def write_when_open[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
-        return asyncio.run(comms.bus.when_open(operation))
 
 
 class Watch(DeclaredFamily, ABC):

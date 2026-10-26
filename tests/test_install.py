@@ -173,7 +173,7 @@ def _harnessless_home(directory: Path, monkeypatch) -> Path:
 
 def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(private_directory, monkeypatch):
     # The laptop's install failed its last step: the flag default named this machine's commander.
-    from agent_comms.cli_commands import InstallCliCommand
+    from agent_comms.cli_verbs.install import InstallCliCommand
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
@@ -192,7 +192,7 @@ def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(privat
 def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
     private_directory, monkeypatch, flags,
 ):
-    from agent_comms.cli_commands import InstallCliCommand
+    from agent_comms.cli_verbs.install import InstallCliCommand
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
@@ -207,7 +207,7 @@ def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
 def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     private_directory, monkeypatch,
 ):
-    from agent_comms.cli_commands import InstallCliCommand
+    from agent_comms.cli_verbs.install import InstallCliCommand
 
     root = (private_directory / "wire").resolve()
     root.mkdir(mode=0o700)

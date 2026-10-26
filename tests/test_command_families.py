@@ -8,7 +8,7 @@ import pytest
 from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.cli import build_parser, main
-from agent_comms.cli_commands import CliCommand
+from agent_comms.cli_command import CliCommand
 from agent_comms.comms import wire
 from agent_comms.history_result import (
     ChannelHistoryPageResult,

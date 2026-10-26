@@ -12,7 +12,7 @@ import pytest
 
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import Send
-from agent_comms.cli_commands import CliCommand
+from agent_comms.cli_command import CliCommand
 
 
 @pytest.fixture

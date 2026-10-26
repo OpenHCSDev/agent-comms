@@ -22,13 +22,11 @@ from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.activity import ActivityStore
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.cli_commands import (
-    CliCommand,
-    PlannedReconcileCliCommand,
-    PlannedStoresResult,
-    ReadBackCliCommand,
-    ReconcileStoresCliCommand,
-)
+from agent_comms.cli_command import CliCommand
+from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
+from agent_comms.cli_commands import PlannedStoresResult
+from agent_comms.cli_verbs.read_back import ReadBackCliCommand
+from agent_comms.cli_verbs.reconcile_stores import ReconcileStoresCliCommand
 from agent_comms.cli_bridges.codex import CodexBridge
 from agent_comms.cli_bridges.shared import BridgeDeliveryStore, BridgeStateTable
 from agent_comms.coordination_database import CoordinationStore

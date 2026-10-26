@@ -31,7 +31,7 @@ def main() -> None:
         print('\n'.join(lines), file=sys.stdout if asked else sys.stderr)
         sys.exit(0 if asked else 2)
     from agent_comms.active_route import ActiveRoute, resolve_comms_route
-    from agent_comms.cli_protocol import CLI_FAILURES
+    from agent_comms.cli_failures import CLI_FAILURES
     from agent_comms.launch_root import LaunchRoot
     from .order import Commander
 

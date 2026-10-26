@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import builtins
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping
@@ -26,7 +25,7 @@ from pydantic import (
 from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
-from .coordination_errors import CommandFailure, CoordinationReadUnavailable
+from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .field_codec import TimestampText
@@ -41,7 +40,6 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import BindingThread, CliBridge, DeliveryRow
 
 
-CLI_FAILURES = (ValueError, OSError, CommandFailure)
 
 
 async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
@@ -50,9 +48,6 @@ async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
     raise ChildProcessError(f"Core watch ended, exit {child.returncode}\n{reason}\n{tail}")
 
 
-class CliArguments(argparse.Namespace):
-    command: str
-    binding_thread: BindingThread
 
 
 class TimestampedWire(WireModel):
