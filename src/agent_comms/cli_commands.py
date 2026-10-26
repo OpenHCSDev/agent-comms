@@ -13,7 +13,6 @@ import json
 import os
 import re
 import shlex
-import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -195,7 +194,7 @@ from .thread_model import ThreadModel
 from .thread_status import ThreadStatus
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
-from .todos import HeadVerdict, StoredHeadReview, Todo
+from .todos import StoredHeadReview, Todo
 from .head_review import PullRequestHead
 from .tool_result import ToolResult
 from .turn_context import (
@@ -1084,15 +1083,10 @@ class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-
                 raise ToolRefusedError("Only a bound commander session may use a reviewed merge bypass.")
         heads = []
         for simple in ShellCommand.split(self.bash):
-            try:
-                targets = (bypass.target() for bypass in QueueBypass.matching(simple))
-                requests = tuple(PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
-                                 for target in targets)
-            except (ValueError, OSError, subprocess.SubprocessError) as error:
-                raise ToolRefusedError(f"Cannot read pinned merge target: {error}") from error
-            for request in requests:
-                reviews = StoredHeadReview.head_reviews(ctx.goals.todos, request)
-                (type(reviews[0].verdict) if reviews else HeadVerdict).require_merge(request)
+            for bypass in QueueBypass.matching(simple):
+                target = bypass.target()
+                request = PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
+                StoredHeadReview.current_verdict(ctx.goals.todos, request).require_merge(request)
                 heads.append(request)
         return MergeReviewResult(tuple(heads))
 

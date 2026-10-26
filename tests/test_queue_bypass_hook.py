@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.todos import ReviewedHeadVerdict, RejectedHeadVerdict
 from agent_comms.shell_commands import ShellCommand
-from agent_comms_hooks.queue_bypass import MergeTarget, QueueBypass
+from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 from test_head_review import ACCEPTED, REASON, invoke, opened
 
@@ -86,7 +86,7 @@ def test_merge_target_uses_the_executables_options(command, github_cli):
 ])
 def test_merge_target_refuses_an_absent_ambiguous_or_shadowed_pin(command, github_cli):
     simple, = ShellCommand.split(command.format(head="a" * 40))
-    with pytest.raises((ValueError, subprocess.SubprocessError)):
+    with pytest.raises(MergeTargetUnreadable):
         bypass, = QueueBypass.matching(simple)
         bypass.target()
 

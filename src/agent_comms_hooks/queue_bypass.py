@@ -9,18 +9,79 @@ Ordinary Bash calls stay standard-library-only; only a merge invokes Core's read
 
 from __future__ import annotations
 
+import getopt
 import re
 import subprocess
 import sys
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
 from importlib.metadata import entry_points
-from typing import ClassVar
+from typing import ClassVar, Self
 from urllib.parse import unquote, urlsplit
 
-from agent_comms.shell_commands import Gh, Parameters, ShellCommand
+from agent_comms.errors import ToolRefusedError
+from agent_comms.shell_commands import Program, ShellCommand
 from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook, HookRecord, HookRefused
 from agent_comms_hooks.watch import WatchClaim
+
+
+class MergeTargetUnreadable(HookRefused, ToolRefusedError):
+    """A merge command that does not name exactly one reviewed head."""
+
+
+class Gh(Program):
+    """GitHub's executable owns command selection, option aliases and arity."""
+
+    def options(self, command: ShellCommand) -> tuple[Parameters, list[str]]:
+        try:
+            help_text = subprocess.run(
+                (command.words[0], "help", "--", *command.args), check=True,
+                capture_output=True, text=True, timeout=10,
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as error:
+            raise MergeTargetUnreadable(f"{self.name} could not declare its options: {error}") from error
+        short, long = [], []
+        aliases: dict[str, str] = {}
+        for declaration in re.finditer(
+            r"^  (?:-(\S), |    )?--([\w-]+)(?: ([^\s]+))? {2,}", help_text, re.MULTILINE,
+        ):
+            alias, name, argument = declaration.groups()
+            long.append(name + ("=" if argument else ""))
+            if alias:
+                short.append(alias + (":" if argument else ""))
+                aliases["-" + alias] = "--" + name
+        if not long:
+            raise MergeTargetUnreadable(f"{self.name} declared no readable command options.")
+        try:
+            options, selectors = getopt.gnu_getopt(command.args, "".join(short), long)
+        except getopt.GetoptError as error:
+            raise MergeTargetUnreadable(f"Unsupported {self.name} command option: {error}") from error
+        values = Parameters()
+        for flag, value in options:
+            values[aliases.get(flag, flag)].append(value)
+        return values, selectors
+
+
+class Parameters(defaultdict[str, list[str]]):
+    """Named command values, preserving duplicates and owning required-value cardinality."""
+
+    def __init__(self) -> None:
+        super().__init__(list)
+
+    def one(self, name: str) -> str:
+        if len(self[name]) != 1:
+            raise MergeTargetUnreadable(f"A merge bypass requires exactly one {name} value.")
+        return self[name][0]
+
+    def fields(self, *names: str) -> Self:
+        parameters = type(self)()
+        for name in names:
+            for field in self[name]:
+                key, _, value = field.partition("=")
+                parameters[key].append(value)
+        return parameters
+
 
 GH = Gh("gh")
 
@@ -96,15 +157,11 @@ class AdminMerge(QueueBypass):
         return cls.admin_flag in options
 
     def target(self) -> MergeTarget:
-        options, selectors = self.options, self.selectors
-        try:
-            options.one(self.admin_flag)
-            repository = options.one(self.repo_flag)
-            head = options.one(self.head_flag)
-            selector, = selectors
-            return MergeTarget(repository=repository, number=int(selector), head=head)
-        except ValueError as error:
-            raise ValueError(f"Admin merge requires one PR number, {self.repo_flag} and {self.head_flag} HEAD.") from error
+        self.options.one(self.admin_flag)
+        if len(self.selectors) != 1 or not self.selectors[0].isdecimal():
+            raise MergeTargetUnreadable("Admin merge requires one PR number.")
+        return MergeTarget(repository=self.options.one(self.repo_flag),
+                           number=int(self.selectors[0]), head=self.options.one(self.head_flag))
 
 
 class ApiMerge(QueueBypass):
@@ -126,20 +183,15 @@ class ApiMerge(QueueBypass):
         return any(map(cls.endpoint, selectors))
 
     def target(self) -> MergeTarget:
-        options, selectors = self.options, self.selectors
-        if self.input_flag in options:
-            raise ValueError(f"A merge bypass requires a literal sha body field, not {self.input_flag}.")
-        selector, = selectors
-        try:
-            matched, = self.endpoint(selector)
-        except ValueError as error:
-            raise ValueError("A merge bypass requires one explicit repos/OWNER/REPO/pulls/N/merge endpoint.") from error
-        fields = options.fields(*self.field_flags)
-        try:
-            head = fields.one("sha")
-        except ValueError as error:
-            raise ValueError("A merge bypass requires exactly one literal sha=HEAD body field.") from error
-        return MergeTarget.decode({**matched.groupdict(), "head": head})
+        if self.input_flag in self.options:
+            raise MergeTargetUnreadable(
+                f"A merge bypass requires a literal sha body field, not {self.input_flag}.")
+        endpoints = tuple(match for selector in self.selectors for match in self.endpoint(selector))
+        if len(self.selectors) != 1 or len(endpoints) != 1:
+            raise MergeTargetUnreadable(
+                "A merge bypass requires one explicit repos/OWNER/REPO/pulls/N/merge endpoint.")
+        head = self.options.fields(*self.field_flags).one("sha")
+        return MergeTarget.decode({**endpoints[0].groupdict(), "head": head})
 
 
 class QueueBypassGuard(BashRefusal):
@@ -156,10 +208,7 @@ class QueueBypassGuard(BashRefusal):
     @classmethod
     def reasons_for(cls, hook: ClaudeToolHook) -> tuple[str, ...]:
         command = Bash.decode(hook.tool_input).command
-        try:
-            reasons = cls.reasons(command)
-        except (ValueError, OSError, subprocess.SubprocessError) as error:
-            raise HookRefused(f"Cannot read merge command: {error}") from error
+        reasons = cls.reasons(command)
         if not reasons or not hook.parts.exists():
             return reasons
         bindings = WatchClaim(hook.session_id).state().bindings()
@@ -176,7 +225,7 @@ class QueueBypassGuard(BashRefusal):
             except (OSError, subprocess.TimeoutExpired) as error:
                 raise HookRefused(f"Core's merge-verdict reader failed: {error}") from error
             if checked.returncode:
-                return (checked.stderr.strip() or checked.stdout.strip(),)
+                return (checked.stdout.strip(),)
         return ()
 
 

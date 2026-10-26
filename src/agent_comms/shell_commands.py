@@ -5,12 +5,8 @@ Standard library only, because every hook imports it on every tool call.
 
 from __future__ import annotations
 
-import getopt
 import io
-import re
 import shlex
-import subprocess
-from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import groupby
@@ -68,55 +64,6 @@ class Program:
 
     def runs(self, command: ShellCommand) -> bool:
         return command.program in (self.name, *self.aliases)
-
-
-class Gh(Program):
-    """GitHub's executable owns command selection, option aliases and arity."""
-
-    def options(self, command: ShellCommand) -> tuple[Parameters, list[str]]:
-        help_text = subprocess.run(
-            (command.words[0], "help", "--", *command.args), check=True,
-            capture_output=True, text=True, timeout=10,
-        ).stdout
-        short, long = [], []
-        aliases: dict[str, str] = {}
-        for declaration in re.finditer(
-            r"^  (?:-(\S), |    )?--([\w-]+)(?: ([^\s]+))? {2,}", help_text, re.MULTILINE,
-        ):
-            alias, name, argument = declaration.groups()
-            long.append(name + ("=" if argument else ""))
-            if alias:
-                short.append(alias + (":" if argument else ""))
-                aliases["-" + alias] = "--" + name
-        if not long:
-            raise ValueError(f"{self.name} declared no readable command options.")
-        try:
-            options, selectors = getopt.gnu_getopt(command.args, "".join(short), long)
-        except getopt.GetoptError as error:
-            raise ValueError(f"Unsupported {self.name} command option: {error}") from error
-        values = Parameters()
-        for flag, value in options:
-            values[aliases.get(flag, flag)].append(value)
-        return values, selectors
-
-
-class Parameters(defaultdict[str, list[str]]):
-    """Named command values, preserving duplicates and owning required-value cardinality."""
-
-    def __init__(self) -> None:
-        super().__init__(list)
-
-    def one(self, name: str) -> str:
-        value, = self[name]
-        return value
-
-    def fields(self, *names: str) -> Self:
-        parameters = type(self)()
-        for name in names:
-            for field in self[name]:
-                key, _, value = field.partition("=")
-                parameters[key].append(value)
-        return parameters
 
 
 @dataclass(frozen=True)

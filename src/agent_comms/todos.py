@@ -3830,8 +3830,10 @@ class HeadVerdict(HeadReview, declared_name=None):
 
     @classmethod
     def require_merge(cls, request: PullRequestHead) -> None:
-        raise TodoError(
-            f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
+        """Only a verdict that allows integration lets the owner's admin bypass merge."""
+        if not cls.allows_integration():
+            raise TodoError(
+                f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
 
     def reviewed(self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation,
                  order: HeadReviewOrder) -> HeadReviewed:
@@ -3923,10 +3925,6 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     def allows_integration(cls) -> bool:
         return True
 
-    @classmethod
-    def require_merge(cls, request: PullRequestHead) -> None:
-        """An accepted head may use the owner's admin bypass."""
-
     def landing(self, current: OpenPullRequestHead) -> MergeArm:
         """Accepting the current head means landing it: arm it, pinned to that head."""
         return current.arm()
@@ -4005,6 +4003,10 @@ class SupersededHeadVerdict(DecidedHeadVerdict):
 
 
 @dataclass(frozen=True)
+class UnrecordedHeadVerdict(HeadVerdict, declared_name=None):
+    """No decision is recorded on this exact head."""
+
+
 class UnderReviewHeadVerdict(HeadVerdict):
     state = "pending"
 
@@ -4273,6 +4275,12 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
         """An indexed exact-head lookup, newest committed verdict first."""
         with store.snapshot() as db:
             return cls.head_reviews_among(db, (request,))[request]
+
+    @classmethod
+    def current_verdict(cls, store: TodoStore, request: PullRequestHead) -> type[HeadVerdict]:
+        """The newest committed verdict on this exact head, or the unrecorded one."""
+        reviews = cls.head_reviews(store, request)
+        return type(reviews[0].verdict) if reviews else UnrecordedHeadVerdict
 
     @classmethod
     def head_reviews_among(cls, db: sqlite3.Connection, requests: Iterable[PullRequestHead]) -> dict[PullRequestHead, tuple[HeadReviewRecord, ...]]:
