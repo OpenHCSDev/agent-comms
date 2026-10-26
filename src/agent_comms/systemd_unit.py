@@ -37,5 +37,13 @@ class AgentsSlice(SystemdUnit):
         return f"[Slice]\nCPUQuota={(count - cls.reserved) * 100}%\nCPUWeight=50\n"
 
     @classmethod
+    def require_current(cls) -> None:
+        """Require the actual kernel placement, not a requested launch flag."""
+        paths = (Path(line.split(":", 2)[2])
+                 for line in Path("/proc/self/cgroup").read_text().splitlines())
+        if not any(cls.unit in path.parts for path in paths):
+            raise RuntimeError(f"Integration must run inside {cls.unit}")
+
+    @classmethod
     def run_prefix(cls) -> tuple[str, ...]:
         return ("systemd-run", "--user", "--quiet", "--collect", f"--slice={cls.unit}")
