@@ -19,7 +19,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
 from .input_disposition import InputDispositions
 from .registration import Registration
-from .registry_document import DEFAULT_ROSTER, RosterVisibility
+from .registry_document import DEFAULT_ROSTER, RegistrySnapshot, RosterVisibility
 from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
 from .thread_execution import ConversationPreparation
@@ -31,8 +31,6 @@ from .view_unread import transcript_read_state
 if TYPE_CHECKING:
     from .registry_provenance import DeletedThread
     from .historical_views import HistoricalThread, HistorySource
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
 from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 
 from .agent_activity import AgentActivity
@@ -72,7 +70,7 @@ from .presentation import (
     WireRevision,
 )
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
-from .threads import current_thread
+from .threads import Thread, current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
