@@ -50,8 +50,12 @@ from agent_comms.coordination_errors import (
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import HistorySource
+from agent_comms.history_views import RetiredViews
+from agent_comms.message_reference import MessageReference
 from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow
-from agent_comms.presentation import NoRevision, ReadState, WireRevision
+from agent_comms.presentation import (
+    CoordinationSnapshot, MessageNotification, NoRevision, ReadState, WireRevision,
+)
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
@@ -64,6 +68,9 @@ from agent_comms.revision_views import (
     StatusView,
     StoresView,
 )
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_presentation import ThreadPresentation
+from agent_comms.transcripts import TranscriptCursor, TranscriptReadIdentity
 from agent_comms.ui_model.delivery import ReadDeliveryView
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
@@ -79,15 +86,8 @@ if TYPE_CHECKING:
     from concurrent.futures import Future
     from multiprocessing.connection import Connection
 
-    from agent_comms.acp_extension import GoalSnapshotReply
-    from agent_comms.comms import Comms
-    from agent_comms.history_views import RetiredViews
-    from agent_comms.message_reference import MessageReference
-    from agent_comms.presentation import CoordinationSnapshot, MessageNotification
     from agent_comms.runtime import RuntimeConnection
-    from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.thread_presentation import ThreadPresentation
-    from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
+    from agent_comms.transcripts import TranscriptRead
 
 
 class ObservationRequest(ABC):
