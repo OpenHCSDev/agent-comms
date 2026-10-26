@@ -1,6 +1,7 @@
 """Publication rules use a real Git repository, shared frame, stores and forge subprocess."""
 
 import time
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -47,10 +48,33 @@ def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
                                  ' lost closed heads there are unknown')
 
     watch = ClosedPullRequestWatch()
-    watch.pass_body(comms, watch.observe(comms))
+    watch.watch_pass(lambda: nullcontext(comms))
     lost, pending = rules(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans))
     assert {rule.request.pr for rule in lost} == {7}
     assert source.github not in {rule.repo for rule in pending}
+
+
+def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed_source):
+    comms, github, _ = head_bus
+    source = reviewed_source
+    stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    tree = source.git(source.checkout, 'rev-parse', 'main^{tree}').strip()
+    unrelated = source.git(source.checkout, 'commit-tree', tree,
+                           '-m', 'Independent history, no parent').strip()
+    for number, head in ((7, source.branch_commit), (10, unrelated)):
+        github.put(source.github, ClosedListedPullRequest(
+            number, f'closed/{number}', head, updated=stamp, closed_at=stamp,
+            base='main', reviewable_times=(stamp,)))
+    watch = ClosedPullRequestWatch()
+    watch.watch_pass(lambda: nullcontext(comms))
+    frame = HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
+    rules = {rule.request.pr: rule for rule in
+             ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
+    assert set(rules) == {7, 10}
+    assert 'holds 1 commits main lacks' in rules[7].line()
+    assert 'has unrelated Git history: 1 commits cannot be compared with main' in rules[10].line()
+    assert frame.closed.unscanned == ()
+    assert FieldCodec.decode(RulePing, FieldCodec.encode(RulePing.capture(rules[10]))) == RulePing.capture(rules[10])
 
 
 def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_source):
@@ -93,7 +117,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     plans = CommanderHeartbeat()
 
     def capture():
-        watch.pass_body(comms, watch.observe(comms))
+        watch.watch_pass(lambda: nullcontext(comms))
         return HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans)
 
     frame = capture()

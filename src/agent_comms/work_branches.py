@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property, lru_cache
@@ -21,7 +22,7 @@ from pydantic.alias_generators import to_camel
 
 from .code_lines import CodeLines
 from .declared_family import DeclaredFamily
-from .field_codec import PathText, projected
+from .field_codec import GitCommitText, PathText, projected
 from .repo import GitCommandError, Repo
 from .repository_name import RepositoryName
 from .wire_models import WireModel
@@ -32,6 +33,39 @@ if TYPE_CHECKING:
 
 class WorkBranchError(ValueError):
     """The checkout or the forge could not answer."""
+
+
+class CommitBase(DeclaredFamily):
+    """A head's relationship to main, decoded once from Git's parent graph."""
+
+    def shared(self) -> tuple[str, ...]:
+        return ()
+
+    def ancestor(self, head: str) -> bool:
+        return False
+
+    @abstractmethod
+    def description(self, count: int) -> str: ...
+
+
+@dataclass(frozen=True)
+class SharedCommitBase(CommitBase):
+    commit: Annotated[str, GitCommitText]
+
+    def shared(self) -> tuple[str, ...]:
+        return (self.commit,)
+
+    def ancestor(self, head: str) -> bool:
+        return self.commit == head
+
+    def description(self, count: int) -> str:
+        return f'holds {count} commits main lacks'
+
+
+@dataclass(frozen=True)
+class UnrelatedCommitBase(CommitBase):
+    def description(self, count: int) -> str:
+        return f'has unrelated Git history: {count} commits cannot be compared with main'
 
 
 class BranchLink(DeclaredFamily, affix="BranchLink"):
@@ -349,8 +383,31 @@ query($owner: String!, $name: String!, $after: String) {
         )
         return BranchComparison(base_head, head, paths)
 
-    def common_commit(self, *commits: str) -> str:
-        return self._git('merge-base', '--octopus', *commits).strip()
+    def common_bases(self, main: str, heads: tuple[str, ...]) -> Mapping[str, CommitBase]:
+        """One graph read, independent answers: an unrelated head cannot sink its siblings.
+
+        Children precede parents in Git's topological order. The earliest reachable main
+        ancestor is therefore a best common ancestor, including in a criss-cross graph.
+        """
+        parents = {commit: tuple(ancestors)
+                   for line in self._git('rev-list', '--topo-order', '--parents',
+                                         main, *heads).splitlines()
+                   for commit, *ancestors in (line.split(),)}
+        ranks = {commit: rank for rank, commit in enumerate(parents)}
+        main_history: set[str] = set()
+        pending = [main]
+        while pending:
+            commit = pending.pop()
+            if commit not in main_history:
+                main_history.add(commit)
+                pending.extend(parents[commit])
+        bases: dict[str, tuple[str, ...]] = {}
+        for commit, ancestors in reversed(parents.items()):
+            candidates = ((commit,) if commit in main_history else
+                          tuple(base for parent in ancestors for base in bases[parent]))
+            bases[commit] = tuple(sorted(candidates, key=ranks.__getitem__)[:1])
+        return {head: next((SharedCommitBase(base) for base in bases[head]),
+                           UnrelatedCommitBase()) for head in heads}
 
     def commits_since(self, head: str, *excluded: str) -> tuple[str, ...]:
         return tuple(self._git('rev-list', '--no-merges', head,
