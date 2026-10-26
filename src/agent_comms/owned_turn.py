@@ -208,7 +208,7 @@ class OwnedTurn:
     def prepare_prompt(self, batch: InputBatch):
         self.worktree = str(self.thread.project_directory())
         self.env_extra = self.thread.native_environment(
-            self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree
+            self.runner.comms.root, self.runner.comms.registry.snapshot(), self.thread.worktree
         )
         from .turn_context import (
             AutomaticTitleSegment,

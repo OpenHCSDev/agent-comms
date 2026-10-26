@@ -401,7 +401,7 @@ class Thread(ThreadProvenance, CatalogSelection):
         if not self.restart_candidates(status):
             raise RelationViolationError("Restart requires another live owner")
 
-    def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
+    def native_environment(self, root, snapshot, worktree: Checkout) -> dict[str, str]:
         """Project this captured owner through the original native binding."""
         from .runtime_requests import ProjectRuntimeRequest
 

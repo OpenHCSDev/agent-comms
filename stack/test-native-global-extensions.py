@@ -71,7 +71,7 @@ def main(fixture: Path):
                     storage_roots=StorageRoots(root / "scratch"),
                     process_identity=ProcessIdentity.capture(os.getpid()))
     thread = comms.registry.declare(thread)
-    environment.update(thread.native_environment(comms.root, comms.registry.snapshot(), str(project)))
+    environment.update(thread.native_environment(comms.root, comms.registry.snapshot(), Checkout(project)))
     spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/test-native-import-rpc.py")
     isolation = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(isolation)
