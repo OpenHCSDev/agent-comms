@@ -20,6 +20,6 @@ override-dependencies = [
 
 [tool.uv.sources]
 agent-comms = { path = "..", editable = true }
-batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", branch = "main" }
-textual = { git = "https://github.com/OpenHCSDev/textual.git", branch = "main" }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", branch = "work/unit-installer--P785--toad" }
+textual = { git = "https://github.com/OpenHCSDev/textual.git", branch = "work/unit-p785--P785--textual" }
 ui-theme = { git = "https://github.com/OpenHCSDev/ui-theme.git", branch = "main" }
