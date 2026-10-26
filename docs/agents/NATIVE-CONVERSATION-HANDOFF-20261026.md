@@ -5,7 +5,52 @@ Written by `comms-commander-2`. These are observations, not a declaration that
 all the work is finished. Source, installation and a working live conversation
 are separate results.
 
-## Start here
+## Current status — 26 October 2026, after the paired upgrade
+
+This header supersedes the original next steps below. The rest of this document
+is the historical handoff snapshot; its exact-head test and source receipts are
+preserved, not claims about the current build.
+
+- [#3480](https://github.com/OpenHCSDev/agent-comms/pull/3480) is **merged** at
+  `0054945a5aaf42d35396207e847b60aa744a4633`, from corrected source head
+  `e9b6941acf66d397f1783ff51e459bf286e068d9`. The inherited queue typing and
+  existing `TurnOutput.clean` corrections passed six non-skipped hosted checks;
+  smoke/install rehearsal were skipped. The historical **38-test result belongs
+  only to `0a58d2d60`**, not automatically to the corrected or installed build.
+- [#3484](https://github.com/OpenHCSDev/agent-comms/pull/3484) is **merged** at
+  `d9ef01241af2f2bb95e7a464f5cdc1c43fb22e0d`: preserve previous compaction history
+  and stop a pending original prompt after cancellation. The earlier suspected
+  summary-loss branch is no longer merely an unreproduced lead.
+- [#3486](https://github.com/OpenHCSDev/agent-comms/pull/3486) is **merged** at
+  `2e4aba13f3b0dd77f09fb1b6c9278e44e37ba586`: allow Send now safely through
+  active automatic compaction. These repairs do **not** establish the cause of
+  the separate approximately 50-second provider/stream interval.
+- `codex-latency` accepted the handoff with its `channel_notifications` worker
+  and owns the continuing history/start/compaction repairs. There is no parallel
+  compaction implementation here. Gaming `codex-greentext` owns separate
+  CLI/model/import work; the old pending `claude-code` review contact below is
+  historical, not a request to start another review of #3480.
+- The current runtime link was independently read as
+  `core-b1a8007f0-lock-7759b8e649381bf6`. Installer message 1588 reports the batch
+  completed in **57.1 seconds / 100 phases**, no pending carries, two changed
+  store reconciliations and all seven stopped owners restarted. `codex-latency`
+  confirms this batch includes #3480/#3484/#3486. This is installation evidence,
+  not proof of the fresh configured-provider/UI journey. An already-open user
+  Toad window can still be running the old `cbb` build; it was not killed.
+- `codex-latency` reports **4/4 paired native qualification journeys passed**
+  before installation: stopped saved-tab Start with fresh DM/reply/return,
+  identical-answer reconnect, busy hidden two-tool-round history, and a copied
+  fork's fresh DM/reply/return/reopen. Those are that owner's results, not a new
+  test run by this document's author. The separate installed saved-tab → fresh
+  copied-agent DM → configured-provider reply → tab-return check remains with
+  `comms-commander-2` and is pending at this update.
+
+No new diagnosis or tests were run for this documentation update. Do not replay
+original failed/UNKNOWN inputs to qualify the upgrade.
+
+---
+
+## Original handoff: start here (historical)
 
 1. Review [PR #3480](https://github.com/OpenHCSDev/agent-comms/pull/3480).
    Its input/response repairs are implemented and have passed 38 targeted tests,
