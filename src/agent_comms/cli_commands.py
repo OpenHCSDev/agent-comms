@@ -36,7 +36,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.message_bus import HeldBusWrite
 from agent_comms_hooks.queue_bypass import QueueBypass
-from agent_comms_hooks.shell import ShellCommand
+from agent_comms.shell_commands import ShellCommand
 from agent_comms_hooks.watch import WatchClaim
 
 from .active_route import (
@@ -195,7 +195,7 @@ from .thread_model import ThreadModel
 from .thread_status import ThreadStatus
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
-from .todos import HeadVerdict, Todo
+from .todos import HeadVerdict, StoredHeadReview, Todo
 from .head_review import PullRequestHead
 from .tool_result import ToolResult
 from .turn_context import (
@@ -1091,7 +1091,7 @@ class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-
             except (ValueError, OSError, subprocess.SubprocessError) as error:
                 raise ToolRefusedError(f"Cannot read pinned merge target: {error}") from error
             for request in requests:
-                reviews = ctx.goals.todos.head_reviews(request)
+                reviews = StoredHeadReview.head_reviews(ctx.goals.todos, request)
                 (type(reviews[0].verdict) if reviews else HeadVerdict).require_merge(request)
                 heads.append(request)
         return MergeReviewResult(tuple(heads))
