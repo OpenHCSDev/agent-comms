@@ -58,7 +58,7 @@ class NativeToolDeclaration(ToolDeclaration):
     @classmethod
     def from_call(cls, name: str, arguments: object, *, call_id: ToolCallId) -> CodingCall:
         decoded = FieldCodec.decode(dict[str, object], arguments)
-        return cls.field_value(name).create_call(call_id, decoded)
+        return cls.member_named(name).create_call(call_id, decoded)
 
 
 @dataclass(frozen=True)

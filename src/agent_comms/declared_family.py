@@ -191,14 +191,14 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
         """Ordinary families may group several declarations in one module."""
 
     @classmethod
-    def _prepare_member(cls, name: object) -> None:
+    def _named_member(cls, name: object) -> type[DeclaredFamily]:
         cls._member_declarations()
+        return cls.__registry__[cast(Hashable, name)]
 
     @classmethod
     def member_named(cls, name: object) -> type[Self]:
-        cls._prepare_member(name)
         try:
-            member = dict.__getitem__(cast(dict[object, type[DeclaredFamily]], cls.__registry__), name)
+            member = cls._named_member(name)
         except (KeyError, TypeError):
             raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):
@@ -225,15 +225,6 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
     @classmethod
     def names(cls) -> tuple[str, ...]:
         return tuple(member.declared_name for member in cls.members_with(cls))
-
-    @classmethod
-    def field_value(cls, value) -> type[Self]:
-        """Coerce one declared selector spelling to its member class."""
-        if isinstance(value, type) and issubclass(value, cls):
-            return value
-        from .field_codec import FieldCodec
-
-        return FieldCodec.decode(type[cls], value)
 
     @classmethod
     def sql_choices(cls) -> str:
@@ -290,7 +281,7 @@ class ModuleMembers(FamilyMember):
                             f"its module stem must be {expected!r}, not {actual!r}")
 
     @classmethod
-    def _prepare_member(cls, name: object) -> None:
+    def _named_member(cls, name: object) -> type[DeclaredFamily]:
         from .field_codec import FieldCodec, MalformedRecord
 
         try:
@@ -303,6 +294,7 @@ class ModuleMembers(FamilyMember):
         if stem not in {info.name for info in pkgutil.iter_modules(package_module.__path__)}:
             raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}")
         import_module_preserving_root_logging(f"{package}.{stem}")
+        return dict.__getitem__(cls.family_root.__registry__, selected)
 
 
 class RegisteredFamily(DeclaredFamily):

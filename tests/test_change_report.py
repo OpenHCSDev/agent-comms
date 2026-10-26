@@ -186,9 +186,11 @@ class TestKindDeclarations:
             stored.report.require_references_exist(OrderRoots(Path(), NoCommanderProject()))
 
     def test_kind_selector_resolves_once(self):
+        from agent_comms.field_codec import FieldCodec
+
         assert MessageKind.member_named("change-report") is ChangeReportKind
-        assert MessageKind.field_value("alert") is AlertKind
-        assert MessageKind.field_value(AlertKind) is AlertKind
+        assert FieldCodec.decode(type[MessageKind], "alert") is AlertKind
+        assert FieldCodec.decode_resolved(type[MessageKind], AlertKind) is AlertKind
 
     def test_file_line_scans_references_from_text(self):
         references = FileLine.scan("see src/a.py:12, org.py:3, `/home/ts/a.py:9` and plain seq:7",

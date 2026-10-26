@@ -1542,7 +1542,7 @@ class DeclaredSpellings:
         call.__name__ for call in (getattr, setattr, hasattr, delattr, __import__,
                                    importlib.import_module))
     selecting_calls: typing.ClassVar[frozenset[str]] = frozenset(
-        call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value))
+        call.__name__ for call in (DeclaredFamily.member_named,))
     kind_spelling: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z_][\w.-]*")
     class_word: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+")
     package_marker: typing.ClassVar[str] = Path(importlib.__file__).name

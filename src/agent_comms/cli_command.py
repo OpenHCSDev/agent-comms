@@ -19,7 +19,7 @@ from agent_comms.target_fields import TargetField
 from dataclasses import dataclass, field, replace
 from pydantic import JsonValue
 from collections.abc import Mapping
-from typing import Annotated, Self
+from typing import Annotated, Generic, Self, TypeVar
 
 from agent_comms.channel_targets import OneChannel, ResolvedChannel, ResolvedThread
 from agent_comms.declared_verb import DeclaredCommand
@@ -61,12 +61,16 @@ class CliExecution[Answer: CliResult = CliResult](Command[Comms, Answer]):
                             f"CliExecution.execute{signature(CliExecution.execute)}")
 
 
+Answer = TypeVar("Answer", bound=CliResult, covariant=True, default=CliResult)
+
+
 @dataclass(frozen=True, kw_only=True)
-class CliCommand[Answer: CliResult = CliResult](
+class CliCommand(
     ModuleMembers,
     DeclaredCommand,
     CliExecution[Answer],
     CatalogSelection,
+    Generic[Answer],
     affix="CliCommand",
     discovery_package="agent_comms.cli_verbs",
 ):
