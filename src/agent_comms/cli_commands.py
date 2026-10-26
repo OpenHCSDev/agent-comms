@@ -1084,12 +1084,13 @@ class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-
                 raise ToolRefusedError("Only a bound commander session may use a reviewed merge bypass.")
         heads = []
         for simple in ShellCommand.split(self.bash):
-            for bypass in QueueBypass.matching(simple):
-                try:
-                    target = bypass.target()
-                    request = PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
-                except (ValueError, OSError, subprocess.SubprocessError) as error:
-                    raise ToolRefusedError(f"Cannot read pinned merge target: {error}") from error
+            try:
+                targets = (bypass.target() for bypass in QueueBypass.matching(simple))
+                requests = tuple(PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
+                                 for target in targets)
+            except (ValueError, OSError, subprocess.SubprocessError) as error:
+                raise ToolRefusedError(f"Cannot read pinned merge target: {error}") from error
+            for request in requests:
                 reviews = ctx.goals.todos.head_reviews(request)
                 (type(reviews[0].verdict) if reviews else HeadVerdict).require_merge(request)
                 heads.append(request)

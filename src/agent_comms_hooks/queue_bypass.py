@@ -18,11 +18,11 @@ from importlib.metadata import entry_points
 from typing import ClassVar
 from urllib.parse import unquote, urlsplit
 
-from agent_comms.shell_commands import Program, ShellCommand
+from agent_comms.shell_commands import Gh, Parameters, ShellCommand
 from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook, HookRecord, HookRefused
 from agent_comms_hooks.watch import WatchClaim
 
-GH = Program("gh")
+GH = Gh("gh")
 
 
 @dataclass(frozen=True)
@@ -38,18 +38,23 @@ class MergeTarget(HookRecord):
 class QueueBypass(ABC):
     """One external merge command and its decoded merge target."""
 
-    command: ShellCommand
+    options: Parameters
+    selectors: tuple[str, ...]
     reason: ClassVar[str]
     prefix: ClassVar[tuple[str, ...]]
 
     @classmethod
-    def merges(cls, args: list[str]) -> bool:
+    def possible(cls, args: list[str]) -> bool:
         words = iter(args)
-        return all(word in words for word in cls.prefix) and cls.selects(args)
+        return all(word in words for word in cls.prefix) and cls.mentions(args)
+
+    @classmethod
+    def mentions(cls, args: list[str]) -> bool:
+        return True
 
     @classmethod
     @abstractmethod
-    def selects(cls, args: list[str]) -> bool: ...
+    def selected(cls, options: Parameters, selectors: tuple[str, ...]) -> bool: ...
 
     @abstractmethod
     def target(self) -> MergeTarget: ...
@@ -58,8 +63,15 @@ class QueueBypass(ABC):
     def matching(cls, command: ShellCommand) -> tuple[QueueBypass, ...]:
         if not GH.runs(command):
             return ()
-        return tuple(member(command) for member in cls.__subclasses__()
-                     if member.merges(command.args))
+        candidates = tuple(member for member in cls.__subclasses__()
+                           if member.possible(command.args))
+        if not candidates:
+            return ()
+        options, selectors = GH.options(command)
+        return tuple(member(options, tuple(selectors[len(member.prefix):]))
+                     for member in candidates
+                     if tuple(selectors[:len(member.prefix)]) == member.prefix
+                     and member.selected(options, tuple(selectors[len(member.prefix):])))
 
     @classmethod
     def found(cls, command: ShellCommand) -> tuple[str, ...]:
@@ -71,19 +83,27 @@ class AdminMerge(QueueBypass):
 
     reason = "`gh pr merge --admin` bypasses required checks."
     prefix = ("pr", "merge")
+    admin_flag: ClassVar[str] = "--admin"
+    head_flag: ClassVar[str] = "--match-head-commit"
+
     @classmethod
-    def selects(cls, args: list[str]) -> bool:
-        return any(arg.partition("=")[0] == "--admin" for arg in args)
+    def mentions(cls, args: list[str]) -> bool:
+        return any(arg.partition("=")[0] == cls.admin_flag for arg in args)
+
+    @classmethod
+    def selected(cls, options: Parameters, selectors: tuple[str, ...]) -> bool:
+        return cls.admin_flag in options
 
     def target(self) -> MergeTarget:
-        options, selectors = self.command.options(self.prefix)
+        options, selectors = self.options, self.selectors
         try:
-            repository, = options.get("--repo", ())
-            head, = options.get("--match-head-commit", ())
+            options.one(self.admin_flag)
+            repository = options.one("--repo")
+            head = options.one(self.head_flag)
             selector, = selectors
             return MergeTarget(repository=repository, number=int(selector), head=head)
         except ValueError as error:
-            raise ValueError("Admin merge requires one PR number, --repo and --match-head-commit HEAD.") from error
+            raise ValueError(f"Admin merge requires one PR number, --repo and {self.head_flag} HEAD.") from error
 
 
 class ApiMerge(QueueBypass):
@@ -99,24 +119,21 @@ class ApiMerge(QueueBypass):
         return tuple(cls.path.finditer(unquote(urlsplit(value).path).rstrip("/")))
 
     @classmethod
-    def selects(cls, args: list[str]) -> bool:
-        return any(map(cls.endpoint, args))
+    def selected(cls, options: Parameters, selectors: tuple[str, ...]) -> bool:
+        return any(map(cls.endpoint, selectors))
 
     def target(self) -> MergeTarget:
-        options, selectors = self.command.options(self.prefix)
-        if options.get("--input", ()):
+        options, selectors = self.options, self.selectors
+        if "--input" in options:
             raise ValueError("A merge bypass requires a literal sha body field, not --input.")
         selector, = selectors
         try:
             matched, = self.endpoint(selector)
         except ValueError as error:
             raise ValueError("A merge bypass requires one explicit repos/OWNER/REPO/pulls/N/merge endpoint.") from error
-        fields: dict[str, list[str]] = {}
-        for field in (*options.get("--raw-field", ()), *options.get("--field", ())):
-            name, _, value = field.partition("=")
-            fields.setdefault(name, []).append(value)
+        fields = Parameters.from_fields((*options["--raw-field"], *options["--field"]))
         try:
-            head, = fields.get("sha", ())
+            head = fields.one("sha")
         except ValueError as error:
             raise ValueError("A merge bypass requires exactly one literal sha=HEAD body field.") from error
         return MergeTarget.decode({**matched.groupdict(), "head": head})
@@ -138,7 +155,7 @@ class QueueBypassGuard(BashRefusal):
         command = Bash.decode(hook.tool_input).command
         try:
             reasons = cls.reasons(command)
-        except ValueError as error:
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
             raise HookRefused(f"Cannot read merge command: {error}") from error
         if not reasons or not hook.parts.exists():
             return reasons

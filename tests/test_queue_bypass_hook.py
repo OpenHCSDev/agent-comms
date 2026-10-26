@@ -60,6 +60,7 @@ def test_queue_merges_and_reads_pass(command):
     "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --match-head-commit {head} -A author@example.com",
     "gh pr merge -A author@example.com 7 --admin --repo=OpenHCSDev/agent-comms --match-head-commit={head}",
     "gh pr --repo OpenHCSDev/agent-comms merge 7 --admin --match-head-commit {head}",
+    "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --body api --subject repos/OpenHCSDev/agent-comms/pulls/7/merge --match-head-commit {head}",
     "gh api -X PUT repos/OpenHCSDev/agent-comms/pulls/7/merge -f sha={head}",
     "gh api https://api.github.com/repos/OpenHCSDev/agent-comms/pulls/7/merge?x=y --method PUT --field sha={head}",
 ])
@@ -85,9 +86,18 @@ def test_merge_target_uses_the_executables_options(command, github_cli):
 ])
 def test_merge_target_refuses_an_absent_ambiguous_or_shadowed_pin(command, github_cli):
     simple, = ShellCommand.split(command.format(head="a" * 40))
-    bypass, = QueueBypass.matching(simple)
-    with pytest.raises(ValueError):
+    with pytest.raises((ValueError, subprocess.SubprocessError)):
+        bypass, = QueueBypass.matching(simple)
         bypass.target()
+
+
+@pytest.mark.parametrize("command", [
+    "gh pr merge 7 --subject --admin -R OpenHCSDev/agent-comms",
+    "gh api repos/OpenHCSDev/agent-comms/pulls/7 --input repos/OpenHCSDev/agent-comms/pulls/7/merge",
+])
+def test_option_data_does_not_select_a_merge_family(command, github_cli):
+    simple, = ShellCommand.split(command)
+    assert QueueBypass.matching(simple) == ()
 
 
 def test_commander_admin_and_api_merges_require_the_pinned_recorded_ok(

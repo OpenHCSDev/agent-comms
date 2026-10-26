@@ -10,6 +10,7 @@ import io
 import re
 import shlex
 import subprocess
+from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import groupby
@@ -69,6 +70,55 @@ class Program:
         return command.program in (self.name, *self.aliases)
 
 
+class Gh(Program):
+    """GitHub's executable owns command selection, option aliases and arity."""
+
+    def options(self, command: ShellCommand) -> tuple[Parameters, list[str]]:
+        help_text = subprocess.run(
+            (command.words[0], "help", "--", *command.args), check=True,
+            capture_output=True, text=True, timeout=10,
+        ).stdout
+        short, long = [], []
+        aliases: dict[str, str] = {}
+        for declaration in re.finditer(
+            r"^  (?:-(\S), |    )?--([\w-]+)(?: ([^\s]+))? {2,}", help_text, re.MULTILINE,
+        ):
+            alias, name, argument = declaration.groups()
+            long.append(name + ("=" if argument else ""))
+            if alias:
+                short.append(alias + (":" if argument else ""))
+                aliases["-" + alias] = "--" + name
+        if not long:
+            raise ValueError(f"{self.name} declared no readable command options.")
+        try:
+            options, selectors = getopt.gnu_getopt(command.args, "".join(short), long)
+        except getopt.GetoptError as error:
+            raise ValueError(f"Unsupported {self.name} command option: {error}") from error
+        values = Parameters()
+        for flag, value in options:
+            values[aliases.get(flag, flag)].append(value)
+        return values, selectors
+
+
+class Parameters(defaultdict[str, list[str]]):
+    """Named command values, preserving duplicates and owning required-value cardinality."""
+
+    def __init__(self) -> None:
+        super().__init__(list)
+
+    def one(self, name: str) -> str:
+        value, = self[name]
+        return value
+
+    @classmethod
+    def from_fields(cls, values: Iterable[str]) -> Self:
+        parameters = cls()
+        for field in values:
+            name, _, value = field.partition("=")
+            parameters[name].append(value)
+        return parameters
+
+
 @dataclass(frozen=True)
 class ShellCommand:
     """One simple command: its words after any leading `NAME=value` assignments, so its
@@ -105,35 +155,6 @@ class ShellCommand:
         for words in shell_commands(command):
             for simple in cls.of(words):
                 yield from simple.run_commands()
-
-    def options(self, prefix: tuple[str, ...]) -> tuple[dict[str, list[str]], list[str]]:
-        """Decode aliases and arity from the executable; keep every occurrence by long name."""
-        help_text = subprocess.run(
-            (self.words[0], *prefix, "--help"), check=True, capture_output=True,
-            text=True, timeout=10,
-        ).stdout
-        short, long = [], []
-        aliases: dict[str, str] = {}
-        for declaration in re.finditer(
-            r"^  (?:-(\S), |    )?--([\w-]+)(?: ([^\s]+))? {2,}", help_text, re.MULTILINE,
-        ):
-            alias, name, argument = declaration.groups()
-            long.append(name + ("=" if argument else ""))
-            if alias:
-                short.append(alias + (":" if argument else ""))
-                aliases["-" + alias] = "--" + name
-        if not long:
-            raise ValueError(f"{self.program} declared no readable command options.")
-        try:
-            options, selectors = getopt.gnu_getopt(self.args, "".join(short), long)
-        except getopt.GetoptError as error:
-            raise ValueError(f"Unsupported {self.program} command option: {error}") from error
-        if tuple(selectors[:len(prefix)]) != prefix:
-            raise ValueError(f"The decoded command is not {' '.join(prefix)}.")
-        values: dict[str, list[str]] = {}
-        for flag, value in options:
-            values.setdefault(aliases.get(flag, flag), []).append(value)
-        return values, selectors[len(prefix):]
 
     def run_commands(self) -> Iterator[Self]:
         """This command and every command it runs: a `-c` string, or the command a runner
