@@ -30,6 +30,7 @@ from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesT
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.change_report import NoChangeReport, ReportEvidence
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.child_process import (
     AttachedChild,
     OutlivesLauncherLifetime,
@@ -337,6 +338,33 @@ class BindingIdentity(SessionBinding):
 
 @dataclass(frozen=True)
 class Binding(BindingIdentity, BridgeStateTable, TypedTable):
+    dropped_fields = ('bus',)
+
+    @classmethod
+    def carry_columns(cls, db: sqlite3.Connection) -> None:
+        """Replace the old address with its registered incarnation before dropping it."""
+        if 'bus' in cls.stored_columns(db):
+            if 'owner' in cls.stored_columns(db):
+                raise RelationViolationError('Binding stores both an address and an owner')
+            table = f'"{cls.declared_name}"'
+            cases: list[str] = []
+            (owner_column,) = cls._fields_named(('owner',))
+            for root, bus in db.execute(f'SELECT root, bus FROM {table}'):
+                try:
+                    owner = Registration(RegistryFile.path_in(Path(root))).require(bus).incarnation
+                except UnregisteredThreadError as error:
+                    path = db.execute('PRAGMA database_list').fetchone()[2]
+                    raise RelationViolationError(
+                        f'{path}: cannot bind unregistered reader {bus!r} in {root}'
+                    ) from error
+                quoted = tuple(db.execute('SELECT quote(?), quote(?), quote(?)',
+                    (root, bus, owner_column.encode(owner))).fetchone())
+                stored_root, stored_bus, encoded_owner = quoted
+                cases.append(f'WHEN root = {stored_root} AND bus = {stored_bus} '
+                             f'THEN {encoded_owner}')
+            expression = 'CASE ' + ' '.join(cases) + ' END' if cases else 'NULL'
+            cls.rebuild(db, {'owner': expression})
+        super().carry_columns(db)
 
     @staticmethod
     def bus_head(root: str) -> BridgePosition:

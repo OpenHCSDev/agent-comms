@@ -1121,9 +1121,7 @@ class TableSchema(ABC):
         Other table differences are refused with the rows untouched."""
         for row in cls.schema_rows():
             row.take_previous_name(db)
-            StoredColumnCarry.drop_declared_fields(row, db)
-            StoredColumnCarry.derive_missing_fields(row, db)
-            StoredColumnCarry.derive_relaxed_fields(row, db)
+            row.carry_columns(db)
             if SQLiteColumnShape.only_constraints_differ(db, row):
                 row.rebuild(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
@@ -1951,6 +1949,13 @@ class TypedTable(
     indexes live on the same row declaration. SQL predicates contain trusted
     source expressions; values always use bound parameters.
     """
+
+    @classmethod
+    def carry_columns(cls, db: sqlite3.Connection) -> None:
+        """Carry the row's declared field changes before its schema is checked."""
+        StoredColumnCarry.drop_declared_fields(cls, db)
+        StoredColumnCarry.derive_missing_fields(cls, db)
+        StoredColumnCarry.derive_relaxed_fields(cls, db)
 
     family_discriminator: ClassVar[str] = "row"
     unique: ClassVar[tuple[tuple[str, ...], ...]] = ()
