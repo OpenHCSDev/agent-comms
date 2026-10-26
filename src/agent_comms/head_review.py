@@ -90,7 +90,7 @@ class PullRequestHead:
         """Compare the PR's patch, never the unrelated changes in its base tree.
 
         Verbatim patch IDs preserve Python indentation and whitespace in literals.
-        The existing Git reader shares one base-head read and admits missing objects.
+        The existing Git reader shares one base-head read and fetches missing objects.
         """
         base_head, = reader.remote_heads("origin", f"refs/heads/{base}")
         reader.require_commits("origin", base_head, self.head)
