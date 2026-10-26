@@ -18,7 +18,7 @@ from .tool_result import DeclaredReply
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember
+from .field_codec import AcpSessionId, FieldCodec, NullMember
 from .jsonl_stream import JsonlStreamReader
 from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
@@ -54,8 +54,13 @@ class RuntimeRequestContext:
     server: RuntimeServer
     reader: asyncio.StreamReader
     client: SocketClient
-    session_id: str
+    session: AcpSessionId
     name: str
+
+    @property
+    def session_id(self) -> str:
+        """The ACP transport's text representation of the original session."""
+        return str(self.session)
 
     async def send(self, line: OwnerLine) -> None:
         await self.client.send(line)

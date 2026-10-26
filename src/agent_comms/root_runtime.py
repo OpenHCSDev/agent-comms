@@ -160,7 +160,7 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
         observed = self.read().available_host(self.path.parent, runtime)
         if observed.alive():
             return observed.require("Recorded worker host has no process")
-        # Admission may wait; hold no root or registry writer while acquiring it.
+        # Wait for memory without holding either writer.
         # Re-read under the writer before launch so concurrent starters share one host.
         with room_for_start():
             with self.guarded_write():

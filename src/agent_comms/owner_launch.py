@@ -13,7 +13,7 @@ from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .registry_document import RegistryEntry, RegistrySnapshot
-from .field_codec import FieldCodec
+from .field_codec import AcpSessionId, FieldCodec
 from .owner_connection import OwnerConnection, ResultRuntimeRequest, RuntimeRequestContext
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .tool_result import DeclaredReply
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .runtime import RuntimeServer, SocketClient
     from .threads import Thread
     from .session_lifecycle import SessionLifecycle
+    from .input_drain import OwnerSession
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,7 +122,7 @@ class StartOwnerRuntimeRequest(ResultRuntimeRequest):
             raise RelationViolationError("Start request belongs to another host process")
         if self.thread != self.owner.incarnation.name:
             raise RelationViolationError("Start request names another owner")
-        return RuntimeRequestContext(server, reader, client, self.thread, self.thread)
+        return RuntimeRequestContext(server, reader, client, AcpSessionId(self.thread), self.thread)
 
     async def result(self, ctx: RuntimeRequestContext) -> OwnerAttachedReply:
         await ctx.server.agent.sessions.start_owner(self.launch, self.owner)
@@ -142,10 +143,10 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest):
         return entry.thread
 
     async def result(self, ctx: RuntimeRequestContext) -> OwnerRetiredReply:
-        return await self.retire(ctx.server.agent.sessions, ctx.session_id)
+        state = ctx.server.agent.inputs.state(ctx.session_id).owned()
+        return await self.retire(ctx.server.agent.sessions, state)
 
-    async def retire(self, sessions: SessionLifecycle, session_id: str) -> OwnerRetiredReply:
-        state = sessions.effects.inputs.state(session_id).owned()
+    async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:
         if state.owner.incarnation != self.owner.incarnation or state.owner.generation >= self.owner.generation:
             raise RelationViolationError("Stop request does not fence this original session")
         await sessions.retire_owner(state, self.owner, self.claim)

@@ -144,11 +144,11 @@ class SessionLifecycle:
         """Whether this session is published as the named thread."""
         return session_id in self.published and self.published[AcpSessionId(session_id)].name == name
 
-    def require_owned_session(self, entry: RegistryEntry) -> str:
+    def require_owned_session(self, entry: RegistryEntry) -> AcpSessionId:
         """Resolve an original loaded resource; registration grants no attachment."""
         for session_id, published in self.published.items():
             if entry.matches_name(published.name):
-                return str(session_id)
+                return session_id
         raise Refused.invalid_params({
             "reason": f"Registered owner {entry.thread.name!r} has no loaded ACP session. "
                       "PID registration does not attach a session.",
@@ -451,8 +451,8 @@ class SessionLifecycle:
                 try:
                     entry = (await Coordination.run_worker(partial(
                         self.comms.registry.entry, request.thread))).entry
-                    session_id = self.require_owned_session(entry)
-                    await request.retire(self, session_id)
+                    state = self.effects.inputs.state(self.require_owned_session(entry)).owned()
+                    await request.retire(self, state)
                 except (OSError, ValueError) as error:
                     failures.append(error)
         finally:
