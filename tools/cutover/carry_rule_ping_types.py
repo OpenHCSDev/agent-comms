@@ -16,30 +16,28 @@ from agent_comms.locked_store import RootFile
 from agent_comms.messages import Message
 from agent_comms.task_attachments.commander_pings import RulePing
 
-# The paths of the stored rule pings without a rule in one task document.
-UNTYPED = ("SELECT fullkey FROM json_tree({task}) WHERE type = 'object'"
-           " AND json_extract(value, '$.kind') = :kind AND json_type(value, :rule) IS NULL")
-
-
 class RulePingTypes(Carry):
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (Bus,)
+    predicate: ClassVar[str] = "json_type(value, :rule) IS NULL"
 
     def carry(self, *, apply: bool) -> Carried:
         table = Message.table
         column = FieldCodec.field_plan(table, "task")
         names = {"kind": RulePing.declared_name, "rule": f"$.{FieldCodec.record_key(RulePing, 'rule')}"}
+        selected = ("SELECT fullkey FROM json_tree({task}) WHERE type = 'object'"
+                    " AND json_extract(value, '$.kind') = :kind AND " + self.predicate)
         rewritten = []
         changed = 0
         for path in self.input_files():
             with closing(Bus.read_snapshot(path)) as db:
                 stored = db.execute(table._sql(
                     f'SELECT {{seq}}, {{task}} FROM "{table.declared_name}"'
-                    f" WHERE EXISTS ({UNTYPED.format(task='{task}')})"), names).fetchall()
+                    f" WHERE EXISTS ({selected.format(task='{task}')})"), names).fetchall()
                 updates: list[tuple[object, int]] = []
                 for seq, task in stored:
                     # Later array elements go first, so each removal leaves the earlier paths valid.
                     paths = [found for found, in db.execute(
-                        UNTYPED.format(task=":task") + " ORDER BY id DESC", {**names, "task": task})]
+                        selected.format(task=":task") + " ORDER BY id DESC", {**names, "task": task})]
                     kept, = db.execute(f"SELECT json_remove(?{', ?' * len(paths)})",
                                        (task, *paths)).fetchone()
                     updates.append((kept, seq))
