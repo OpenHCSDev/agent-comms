@@ -99,7 +99,9 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def _member_declarations(cls):
-        # These existing owners share this registry; imports acquire declarations.
+        # The existing request owner also acquires its order-tool declarations.
+        # Registry reads must not depend on an unrelated command import cycle.
+        from . import tools  # noqa: F401 - acquire the declaration owner
 
         return super()._member_declarations()
 

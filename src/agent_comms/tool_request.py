@@ -21,6 +21,7 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
     SingleFieldValue,
+    ToolCallId,
     WireChoices,
     WireName,
 )
