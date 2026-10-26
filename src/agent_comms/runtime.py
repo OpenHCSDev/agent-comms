@@ -233,6 +233,7 @@ class RuntimeServer(SessionUpdateSink):
     def __init__(self, agent: CommsAgent):
         self.agent = agent
         self.server: asyncio.Server | None = None
+        self.listener = socket.socket(socket.AF_UNIX)
         self.clients = SessionClients(self)
         # Set only while handling a prompt on this particular attachment.
         # Never publish this bearer to ACP metadata, the transcript or other sockets.
@@ -261,14 +262,23 @@ class RuntimeServer(SessionUpdateSink):
         if not task.cancelled() and (error := task.exception()) is not None:
             _LOG.error("Owner work %s failed", task.get_name(), exc_info=error)
 
+    def inherit_listener(self, descriptor: int) -> None:
+        """Adopt the launcher's already-bound socket, not another readiness flag."""
+        self.listener.close()
+        self.listener = socket.socket(fileno=descriptor)
+
     async def start(self) -> None:
         if self.server is not None:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            address = self._resources.enter_context(PrivateSocketRole.address(self.path))
+            if not self.listener.getsockname():
+                address = self._resources.enter_context(PrivateSocketRole.address(self.path))
+                self.listener.bind(str(address))
+            self.listener.listen()
+            self.listener.setblocking(False)
             self.server = await asyncio.start_unix_server(
-                self.handle, path=address, limit=8 * 1024 * 1024
+                self.handle, sock=self.listener, limit=8 * 1024 * 1024
             )
         except BaseException:
             self._resources.close()
@@ -376,7 +386,14 @@ class RuntimeServer(SessionUpdateSink):
             self.server.close()
             await self.server.wait_closed()
             self.path.unlink(missing_ok=True)
+        self.listener.close()
         self._resources.close()
+
+    def retire_session(self, session_id: str) -> None:
+        for client in tuple(self.clients.get(session_id, ())):
+            client.disconnected()
+            client.writer.close()
+            self.clients.disconnect(client)
 
 
 def present_session(metadata: dict[str, object], session_id: str) -> dict[str, object]:

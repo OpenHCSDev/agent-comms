@@ -278,8 +278,8 @@ async def test_runner_obtains_one_backend_per_session_from_the_thread_declaratio
             await agent.sessions.bind_owned(thread, name)
         session = agent.inputs.state("session").owned()
         other = agent.inputs.state("other").owned()
-        assert agent.inputs.state("attachment").owned_sessions("attachment") == ()
-        assert session.owned_sessions("session") == ("session",)
+        assert agent.inputs.state("attachment").executors() == ()
+        assert session.executors() == (session,)
         assert session.configuration is other.configuration is agent.inputs.configuration
         assert session.stop is not other.stop
         thread = comms.registry.require("session")

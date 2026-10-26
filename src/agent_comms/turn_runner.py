@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     from . import pi_events as pi
     from .comms import Comms
     from .coordinated_runtime import SelectedExecution
-    from .input_drain import DrainTurn, InputDrain
+    from .input_drain import DrainTurn, InputDrain, OwnerSession
     from .session_lifecycle import SessionLifecycle
 
 
@@ -436,10 +436,15 @@ class TurnRunner:
         ).run()
 
     async def close(self) -> None:
-        """Cancel every turn; each settles from the runner's owner stop (finish_goals)."""
+        await self.close_sessions(tuple(
+            owner for state in self.inputs.drained.values() for owner in state.executors()
+        ))
+
+    async def close_sessions(self, owners: tuple[OwnerSession, ...]) -> None:
+        """Retire only these sessions; sibling turns and native children keep running."""
         tasks = {
-            session_id: state.retire_turn_task()
-            for session_id, state in self.inputs.drained.items()
+            owner.identifier: owner.retire_turn_task()
+            for owner in owners
         }
         await asyncio.gather(*(task.stop() for task in tasks.values()))
         # A relay-only turn never created a backend, so it has no runtime work to stop.
@@ -448,9 +453,8 @@ class TurnRunner:
               for session_id, task in tasks.items() if session_id in self.persistent_backends),
             return_exceptions=True,
         )
-        for persistent in self.persistent_backends.values():
-            await persistent.close_idle()
-        self.persistent_backends.clear()
+        for session_id in self.persistent_backends.keys() & tasks.keys():
+            await self.persistent_backends.pop(session_id).close_idle()
 
 
 def parse_target(text: str) -> tuple[str, str]:

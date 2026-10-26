@@ -6,7 +6,7 @@ import asyncio
 import os
 from abc import abstractmethod
 from collections import Counter
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -14,12 +14,12 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 
 from .coordination_errors import Refused
 
-from .active_route import resolve_comms_route
 from .bus import Bus
 from .declared_family import DeclaredFamily
-from .launch_root import LaunchRoot
-from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .native_arguments import ConfiguredBinary, InheritedArguments
+from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .child_process import ProcessIdentity
+from .owner_launch import RetainedOwnerLaunch
+from .native_arguments import LaunchArguments, LaunchBinary, NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .pi_commands import (
     GetAvailableModels,
@@ -31,9 +31,9 @@ from .watched import FileSource
 
 if TYPE_CHECKING:
     from .session_config_options import SessionConfigOptions
+    from .field_codec import AcpSessionId
 
     from .active_route import CommsRoute
-    from .native_arguments import NativeArguments
     from .native_package import VerifiedNativePackage
     from .pi_vocabulary import ThinkingChoice
     from .registry_document import RegistrySnapshot
@@ -224,8 +224,8 @@ class ModelCatalog(DeclaredFamily, affix="ModelCatalog"):
     variable: ClassVar[str] = "AGENT_COMMS_AGENT_MODELS"
 
     @classmethod
-    def configured(cls) -> ModelCatalog:
-        values = tuple(value.strip() for value in os.environ.get(cls.variable, "").split(",")
+    def configured(cls, environment: Mapping[str, str] = os.environ) -> ModelCatalog:
+        values = tuple(value.strip() for value in environment.get(cls.variable, "").split(",")
                        if value.strip())
         return SpecifiedModels(values) if values else DiscoveredModels()
 
@@ -260,12 +260,25 @@ class DiscoveredModels(ModelCatalog):
 class ConfigOptions:
     """Own one launch's settings and declared model and thinking catalogs."""
 
-    agent_bin: str
-    agent_args: NativeArguments
-    configuration: RestartEnvironment
+    launch: RetainedOwnerLaunch
     route: CommsRoute
-    models: ModelCatalog = field(default_factory=ModelCatalog.configured)
     catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = field(default_factory=dict, init=False)
+
+    @property
+    def agent_bin(self) -> str:
+        return self.launch.binary
+
+    @cached_property
+    def agent_args(self) -> NativeArguments:
+        return NativeArguments.parse(self.launch.arguments)
+
+    @property
+    def configuration(self) -> RestartEnvironment:
+        return self.launch.configuration
+
+    @cached_property
+    def models(self) -> ModelCatalog:
+        return ModelCatalog.configured(self.launch.environment)
 
     @cached_property
     def package(self) -> VerifiedNativePackage:
@@ -275,17 +288,20 @@ class ConfigOptions:
         )
 
     @classmethod
-    def configured(cls) -> ConfigOptions:
-        """Catalogs of the native binary, arguments and environment this process is configured with."""
-        command = ConfiguredBinary().configured()
-        configuration = RestartEnvironment.inherit(os.environ)
-        return cls(
-            command, InheritedArguments().configured(), configuration,
-            resolve_comms_route(LaunchRoot.current().path),
-        )
+    def configured(
+        cls, agent_bin: LaunchBinary, agent_args: LaunchArguments, *, route: CommsRoute,
+    ) -> ConfigOptions:
+        """Capture this ingress once; a host never lends its environment to another owner."""
+        environment = dict(os.environ)
+        environment[NativeArguments.binary_key] = agent_bin.configured(environment)
+        agent_args.apply(environment)
+        return cls(RetainedOwnerLaunch(
+            ProcessIdentity.capture(os.getpid()), str(LaunchRuntime.running().interpreter),
+            environment,
+        ), route)
 
     async def observe_authentication(
-        self, session_id: str, publish: Callable[[str], Awaitable[None]],
+        self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[None]],
     ) -> None:
         """The session retires this configuration's watch with its other producers."""
         async with aclosing(Bus.watch_sources(FileSource(self.configuration.native_config / "auth.json"))) as observations:
@@ -297,6 +313,7 @@ class ConfigOptions:
     ) -> dict[str, str]:
         """Project this launch's configuration with the exact registered owner binding."""
         return {
+            **ThreadLaunch.strip(dict(self.launch.environment)),
             **self.configuration.encode(),
             **thread.native_environment(self.route.root, snapshot, worktree),
         }

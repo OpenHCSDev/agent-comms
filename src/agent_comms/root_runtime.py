@@ -2,18 +2,25 @@
 
 from __future__ import annotations
 
+import socket
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, TextIO
 
 from .bus import Bus
+from .child_process import NoProcess, OutlivesLauncherLifetime, ProcessIdentity, ProcessState, SpawnedProcess
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import PathText
+from .field_codec import PathText, WireOmitDefault
 from .launch_runtime import LaunchRuntime
 from .locked_store import LockedStore, RegistryFile, RollbackRetained
 from .maintenance_barrier import MaintenanceBarrier
+from .owner_connection import socket_path
+from .private_path import FileIdentity, PrivateSocketRole
+from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .store_files import DependentStateTier, SingleFileStore
 
 
@@ -59,9 +66,32 @@ class Succession(Attachment):
         )
 
 
+class RootHost(DeclaredFamily, affix="RootHost"):
+    def observed(self, root: Path) -> ProcessState:
+        return NoProcess()
+
+
+@dataclass(frozen=True)
+class NoRootHost(RootHost):
+    pass
+
+
+@dataclass(frozen=True)
+class RecordedRootHost(RootHost):
+    process: ProcessIdentity
+    bus: RecordedBus
+
+    def observed(self, root: Path) -> ProcessState:
+        # A copied store cannot borrow the source root's live process.
+        if not self.bus.matches(RecordedBusIdentity.capture(Bus.path_in(root))):
+            return NoProcess()
+        return self.process
+
+
 @dataclass(frozen=True)
 class RootRuntime:
     prefix: Annotated[Path, PathText]
+    host: Annotated[RootHost, WireOmitDefault()] = NoRootHost()
 
     def runtime(self) -> LaunchRuntime:
         return LaunchRuntime.at_prefix(self.prefix)
@@ -82,7 +112,7 @@ class RootRuntime:
 
     @classmethod
     def publish(cls, root: Path, runtime: LaunchRuntime) -> None:
-        RootRuntimeStore.at(root).replace(cls(runtime.prefix))
+        RootRuntimeStore.at(root).publish_runtime(runtime)
 
 
 @dataclass(frozen=True)
@@ -96,6 +126,44 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
 
     def empty(self) -> RootRuntime:
         raise FileNotFoundError(self.path)
+
+    def acquire_host(
+        self, runtime: LaunchRuntime, command: tuple[str, ...], *,
+        environment: Mapping[str, str], cwd: str,
+        output: Callable[[], AbstractContextManager[TextIO]],
+    ) -> ProcessIdentity:
+        """Publish the root's one host while its existing exec gate is still closed."""
+        with self.guarded_write():
+            current = self._read_unlocked()
+            if current.prefix != runtime.prefix:
+                raise ForeignRuntimeError("A foreign runtime cannot launch this root's host")
+            observed = current.host.observed(self.path.parent)
+            if observed.alive():
+                return observed.require("Recorded worker host has no process")
+            with output() as capture, socket.socket(socket.AF_UNIX) as listener:
+                with SpawnedProcess.launching(
+                    (*command, "--listener-fd", str(listener.fileno())),
+                    env=environment, cwd=cwd, output=capture, runtime=runtime,
+                    pass_fds=(listener.fileno(),), lifetime=OutlivesLauncherLifetime,
+                ) as child:
+                    path = socket_path(self.path.parent, child.identity.pid)
+                    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    with PrivateSocketRole.address(path) as address:
+                        listener.bind(str(address))
+                    listener.listen()
+                    bus = RecordedBus(FileIdentity.from_stat(Bus.path_in(self.path.parent).stat()))
+                    self._publish_unlocked(replace(current, host=RecordedRootHost(child.identity, bus)))
+                    return child.identity
+
+    def publish_runtime(self, runtime: LaunchRuntime) -> None:
+        self.owner(runtime)
+        with self.guarded_write():
+            current = self._read_unlocked()
+            if current.prefix == runtime.prefix:
+                return
+            if current.host.observed(self.path.parent).alive():
+                raise ForeignRuntimeError("Retire the root's worker host before changing runtime")
+            self._publish_unlocked(RootRuntime(runtime.prefix))
 
     def owner(self, creator: LaunchRuntime) -> RootRuntime:
         try:

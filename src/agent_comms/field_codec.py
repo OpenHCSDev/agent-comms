@@ -1855,6 +1855,10 @@ class TimestampText(TextRepresentation[RecordedTimestamp]):
         return recorded
 
 
+class AcpSessionId(NominalText):
+    """A local ACP attachment/execution identifier, not a native Pi journal ID."""
+
+
 class Id128(NominalText):
     """A 128-bit identity; subclasses declare the kind it belongs to."""
 

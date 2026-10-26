@@ -23,8 +23,8 @@ import os
 import re
 import sys
 import time
-from collections.abc import Iterator, Sequence
-from contextlib import AsyncExitStack, contextmanager
+from collections.abc import AsyncIterator, Iterator, Sequence
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -191,8 +191,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         self.inputs = InputDrain(
             comms, self.sessions, self._runtime, self, auto_wake,
-            ConfigOptions(agent_bin.configured(), agent_args.configured(),
-                          RestartEnvironment.inherit(os.environ), comms.route),
+            ConfigOptions.configured(agent_bin, agent_args, route=comms.route),
         )
         self.turns.bind(self.sessions, self.inputs)
         # A preplanned write is valid only while its original ACP controller
@@ -529,6 +528,22 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             thread=thread_name, owner=snapshot.owner_identity(thread_name),
         ).schedule()
         return 1
+
+    def stop_all(self) -> None:
+        """Request every executing session's own stop; attachments have no execution."""
+        for state in self.inputs.drained.values():
+            state.request_stop()
+
+    @asynccontextmanager
+    async def host(self, listener_fd: int) -> AsyncIterator[None]:
+        """One host owns its inherited listener and all session cleanup."""
+        try:
+            self._runtime.inherit_listener(listener_fd)
+            await self._runtime.start()
+            yield
+        finally:
+            self.stop_all()
+            await self.shutdown()
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""

@@ -38,14 +38,14 @@ from .comms import Comms
 from .session_config_options import SessionConfigOptions
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
+from .field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .registry_document import RegistryEntry
 from .runtime import RuntimeProxy, RuntimeServer
 from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
 from .session_effects import SessionEffects
 from .session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan
-from .thread_identity import AcpThreadRole
+from .thread_identity import AcpThreadRole, OwnerIdentity
 from .thread_model import ThreadModel
 from .thread_status import ActiveThreadPresence
 from .thread_text import NoThreadText, ThreadText
@@ -55,6 +55,7 @@ from .transcript_updates import TranscriptReplay
 
 if TYPE_CHECKING:
     from .acp import SdkSessionConnection
+    from .config_options import ConfigOptions
 
 
 class SessionLifecycle:
@@ -174,9 +175,18 @@ class SessionLifecycle:
         return thread
 
     async def bind_owned(self, thread: Thread, session_id: str) -> None:
+        owner = (await Coordination.run_worker(partial(
+            self.comms.registry.entry, thread.name,
+        ))).entry.owner_identity
+        await self.bind_owner(thread, AcpSessionId(session_id), self.effects.inputs.configuration, owner)
+
+    async def bind_owner(
+        self, thread: Thread, session_id: AcpSessionId,
+        configuration: ConfigOptions, owner: OwnerIdentity,
+    ) -> None:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
-        self.effects.inputs.acquire_owner(session_id)
+        self.effects.inputs.acquire_owner(session_id, configuration, owner)
         self.bindings[session_id] = thread.name
         self.titles[session_id] = thread.name
         self.worktrees[session_id] = thread.worktree
@@ -219,7 +229,12 @@ class SessionLifecycle:
         not launch catalog children only to discard their answer.
         """
         # Retain execution before loading so a failed bind still releases it.
-        self.effects.inputs.acquire_owner(session_id)
+        owner = (await Coordination.run_worker(partial(
+            self.comms.registry.entry, session_id,
+        ))).entry.owner_identity
+        self.effects.inputs.acquire_owner(
+            AcpSessionId(session_id), self.effects.inputs.configuration, owner,
+        )
         thread = await self._acquire_loaded(cwd, session_id)
         if not thread.process_identity.runs_here():
             raise RelationViolationError(
@@ -385,9 +400,9 @@ class SessionLifecycle:
         failures: list[Exception] = []
         try:
             names = {
-                self.bindings.get(owned_id, owned_id)
-                for session_id, state in self.effects.inputs.drained.items()
-                for owned_id in state.owned_sessions(session_id)
+                self.bindings.get(owner.identifier, owner.identifier)
+                for state in self.effects.inputs.drained.values()
+                for owner in state.executors()
             }
             for name in names:
                 try:

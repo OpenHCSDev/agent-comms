@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from .child_process import ProcessIdentity
     from .registry_document import RegistryEntry
     from .thread_identity import OwnerIdentity
+    from .runtime_requests import RuntimeRequest
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -41,6 +43,29 @@ class OwnerConnection:
     def wire_request(action: str, thread: str, parameters: dict[str, object]) -> dict[str, object]:
         """The owner decodes the command; transport encodes its one request envelope."""
         return {"action": action, "thread": thread, **FieldCodec.encode(parameters)}
+
+    @staticmethod
+    def exchange(root: Path, process: ProcessIdentity, request: RuntimeRequest) -> object:
+        """A synchronous lifecycle call uses the same declared request and reply codec.
+
+        Lifecycle calls already run on a coordination worker. Submitting their
+        socket preparation back to that same executor would deadlock it.
+        The launcher binds the inherited listener before publishing the host;
+        there is no readiness polling and no retry after dispatch.
+        """
+        with PrivateSocketRole.address(socket_path(root, process.pid)) as address:
+            with socket.socket(socket.AF_UNIX) as connection:
+                if not process.alive():
+                    raise ConnectionError("Worker host exited before request dispatch")
+                connection.connect(str(address))
+                if not process.alive():
+                    raise ConnectionError("Worker host exited before request dispatch")
+                connection.sendall((json.dumps(request.to_wire()) + "\n").encode())
+                with connection.makefile("rb") as response:
+                    line = response.readline()
+                if not line:
+                    raise OwnerReplyLostError("Worker host disconnected after dispatch; outcome unknown")
+                return OwnerLine.read(line).reply()
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return self.wire_request(action, self.session_id, parameters)
