@@ -59,6 +59,7 @@ def test_queue_merges_and_reads_pass(command):
 @pytest.mark.parametrize("command", [
     "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --match-head-commit {head} -A author@example.com",
     "gh pr merge -A author@example.com 7 --admin --repo=OpenHCSDev/agent-comms --match-head-commit={head}",
+    "gh pr --repo OpenHCSDev/agent-comms merge 7 --admin --match-head-commit {head}",
     "gh api -X PUT repos/OpenHCSDev/agent-comms/pulls/7/merge -f sha={head}",
     "gh api https://api.github.com/repos/OpenHCSDev/agent-comms/pulls/7/merge?x=y --method PUT --field sha={head}",
 ])
@@ -71,12 +72,16 @@ def test_merge_target_uses_the_executables_options(command, github_cli):
 
 @pytest.mark.parametrize("command", [
     "gh pr merge 7 --admin -R OpenHCSDev/agent-comms",
+    "gh pr --repo OpenHCSDev/agent-comms merge 7 --admin",
+    "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --repo OpenHCSDev/agent-comms --match-head-commit {head}",
+    "gh pr --subject merge other --admin -R OpenHCSDev/agent-comms --match-head-commit {head}",
     "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --subject --match-head-commit={head}",
     "gh pr merge 7 --admin -R OpenHCSDev/agent-comms -A --match-head-commit={head}",
     "gh pr merge 7 --admin -R OpenHCSDev/agent-comms --unknown-option --match-head-commit={head}",
     "gh api repos/OpenHCSDev/agent-comms/pulls/7/merge -X PUT",
     "gh api repos/OpenHCSDev/agent-comms/pulls/7/merge -f sha={head} --input body.json",
     "gh api repos/OpenHCSDev/agent-comms/pulls/7/merge -f sha={head} -f sha={head}",
+    "gh api repos/OpenHCSDev/agent-comms/pulls/7/merge -f sha={head} --field sha={head}",
 ])
 def test_merge_target_refuses_an_absent_ambiguous_or_shadowed_pin(command, github_cli):
     simple, = ShellCommand.split(command.format(head="a" * 40))

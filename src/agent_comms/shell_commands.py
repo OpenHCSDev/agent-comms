@@ -106,13 +106,14 @@ class ShellCommand:
             for simple in cls.of(words):
                 yield from simple.run_commands()
 
-    def options(self, prefix: tuple[str, ...]) -> tuple[list[tuple[str, str]], list[str]]:
-        """The executable declares option arity; consumers select only their own values."""
+    def options(self, prefix: tuple[str, ...]) -> tuple[dict[str, list[str]], list[str]]:
+        """Decode aliases and arity from the executable; keep every occurrence by long name."""
         help_text = subprocess.run(
             (self.words[0], *prefix, "--help"), check=True, capture_output=True,
             text=True, timeout=10,
         ).stdout
         short, long = [], []
+        aliases: dict[str, str] = {}
         for declaration in re.finditer(
             r"^  (?:-(\S), |    )?--([\w-]+)(?: ([^\s]+))? {2,}", help_text, re.MULTILINE,
         ):
@@ -120,12 +121,19 @@ class ShellCommand:
             long.append(name + ("=" if argument else ""))
             if alias:
                 short.append(alias + (":" if argument else ""))
+                aliases["-" + alias] = "--" + name
         if not long:
             raise ValueError(f"{self.program} declared no readable command options.")
         try:
-            return getopt.gnu_getopt(self.args[len(prefix):], "".join(short), long)
+            options, selectors = getopt.gnu_getopt(self.args, "".join(short), long)
         except getopt.GetoptError as error:
             raise ValueError(f"Unsupported {self.program} command option: {error}") from error
+        if tuple(selectors[:len(prefix)]) != prefix:
+            raise ValueError(f"The decoded command is not {' '.join(prefix)}.")
+        values: dict[str, list[str]] = {}
+        for flag, value in options:
+            values.setdefault(aliases.get(flag, flag), []).append(value)
+        return values, selectors[len(prefix):]
 
     def run_commands(self) -> Iterator[Self]:
         """This command and every command it runs: a `-c` string, or the command a runner

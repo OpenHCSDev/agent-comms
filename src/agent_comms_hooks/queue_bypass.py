@@ -44,7 +44,8 @@ class QueueBypass(ABC):
 
     @classmethod
     def merges(cls, args: list[str]) -> bool:
-        return args[:len(cls.prefix)] == list(cls.prefix) and cls.selects(args[len(cls.prefix):])
+        words = iter(args)
+        return all(word in words for word in cls.prefix) and cls.selects(args)
 
     @classmethod
     @abstractmethod
@@ -70,8 +71,6 @@ class AdminMerge(QueueBypass):
 
     reason = "`gh pr merge --admin` bypasses required checks."
     prefix = ("pr", "merge")
-    head_flag: ClassVar[str] = "--match-head-commit"
-
     @classmethod
     def selects(cls, args: list[str]) -> bool:
         return any(arg.partition("=")[0] == "--admin" for arg in args)
@@ -79,12 +78,12 @@ class AdminMerge(QueueBypass):
     def target(self) -> MergeTarget:
         options, selectors = self.command.options(self.prefix)
         try:
-            repository, = (value for flag, value in options if flag in ("-R", "--repo"))
-            head, = (value for flag, value in options if flag == self.head_flag)
+            repository, = options.get("--repo", ())
+            head, = options.get("--match-head-commit", ())
             selector, = selectors
             return MergeTarget(repository=repository, number=int(selector), head=head)
         except ValueError as error:
-            raise ValueError(f"Admin merge requires one PR number, --repo and {self.head_flag} HEAD.") from error
+            raise ValueError("Admin merge requires one PR number, --repo and --match-head-commit HEAD.") from error
 
 
 class ApiMerge(QueueBypass):
@@ -93,11 +92,11 @@ class ApiMerge(QueueBypass):
     reason = "`gh api .../pulls/N/merge` bypasses required checks."
     prefix = ("api",)
     path: ClassVar[re.Pattern[str]] = re.compile(
-        r"/?repos/(?P<repository>[^/\s]+/[^/\s]+)/pulls/(?P<number>\d+)/merge")
+        r"\A/?repos/(?P<repository>[^/\s]+/[^/\s]+)/pulls/(?P<number>\d+)/merge\Z")
 
     @classmethod
-    def endpoint(cls, value: str) -> re.Match[str] | None:
-        return cls.path.fullmatch(unquote(urlsplit(value).path).rstrip("/"))
+    def endpoint(cls, value: str) -> tuple[re.Match[str], ...]:
+        return tuple(cls.path.finditer(unquote(urlsplit(value).path).rstrip("/")))
 
     @classmethod
     def selects(cls, args: list[str]) -> bool:
@@ -105,16 +104,19 @@ class ApiMerge(QueueBypass):
 
     def target(self) -> MergeTarget:
         options, selectors = self.command.options(self.prefix)
-        if any(flag == "--input" for flag, _ in options):
+        if options.get("--input", ()):
             raise ValueError("A merge bypass requires a literal sha body field, not --input.")
         selector, = selectors
-        matched = self.endpoint(selector)
-        if matched is None:
-            raise ValueError("A merge bypass requires one explicit repos/OWNER/REPO/pulls/N/merge endpoint.")
-        fields = (value.partition("=") for flag, value in options
-                  if flag in ("-f", "--raw-field", "-F", "--field"))
         try:
-            head, = (value for name, _, value in fields if name == "sha")
+            matched, = self.endpoint(selector)
+        except ValueError as error:
+            raise ValueError("A merge bypass requires one explicit repos/OWNER/REPO/pulls/N/merge endpoint.") from error
+        fields: dict[str, list[str]] = {}
+        for field in (*options.get("--raw-field", ()), *options.get("--field", ())):
+            name, _, value = field.partition("=")
+            fields.setdefault(name, []).append(value)
+        try:
+            head, = fields.get("sha", ())
         except ValueError as error:
             raise ValueError("A merge bypass requires exactly one literal sha=HEAD body field.") from error
         return MergeTarget.decode({**matched.groupdict(), "head": head})
