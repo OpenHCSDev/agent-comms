@@ -18,6 +18,7 @@ from agent_comms.todos import (
     OrderClaim,
     OrderCompletion,
     OrderProgress,
+    TodoProblems,
     PlainText,
     ProgressRead,
     HeadReviewed,
@@ -205,7 +206,7 @@ class HeadVerdictTool:
                                           self.operation.preparation_fix):
                 preparations.append(PreparedHeadReview(current, self.operation.subject(comms.goals, current)))
         if problems:
-            raise RecordProblems(problems)
+            raise TodoProblems(problems)
         order, = orders
         actor, = actors
         prepared, = preparations

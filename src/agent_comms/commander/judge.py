@@ -364,10 +364,9 @@ class RoastText(WordedText):
 
     @classmethod
     def problems(cls, value: str) -> dict[str, str]:
-        problems = super().problems(value)
-        if not re.search(r'\bbecause\b', value):
-            problems['because'] = str(cls.refusal()) + '; fix: explain the defect with because'
-        return problems | {
+        because = ({} if re.search(r'\bbecause\b', value)
+                   else {'because': str(cls.refusal()) + '; fix: explain the defect with because'})
+        return super().problems(value) | because | {
             'blunt': refused + '; fix: name why the work is stupid, not a gentle suggestion'
             for refused in BluntText.wording_refusal(value)}
 
