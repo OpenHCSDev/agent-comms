@@ -304,8 +304,7 @@ class RuntimeServer(SessionUpdateSink):
         def bound() -> bool:
             return _expected_client is _UNBOUND_PUBLICATION_CLIENT or (
                 self.agent.sessions.client is _expected_client
-                and session_id in self.agent.sessions.published
-                and self.agent.sessions.require(session_id) == _expected_thread
+                and self.agent.sessions.binds(session_id, _expected_thread)
             )
 
         def sockets_bound() -> bool:

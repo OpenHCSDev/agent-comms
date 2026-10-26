@@ -140,6 +140,10 @@ class SessionLifecycle:
             raise Refused.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
         return self.published[AcpSessionId(session_id)].name
 
+    def binds(self, session_id: str, name: str) -> bool:
+        """Whether this session is published as the named thread."""
+        return session_id in self.published and self.published[AcpSessionId(session_id)].name == name
+
     def require_owned_session(self, entry: RegistryEntry) -> AcpSessionId:
         """Resolve an original loaded resource; registration grants no attachment."""
         for session_id, published in self.published.items():
@@ -298,8 +302,7 @@ class SessionLifecycle:
         await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
-            session_id in self.published
-            and self.published[AcpSessionId(session_id)].name == thread.name
+            self.binds(session_id, thread.name)
             and thread.process_identity.runs_here()
             and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name)))
                 .items_with(ActiveThreadPresence, thread)
