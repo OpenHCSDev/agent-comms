@@ -23,14 +23,16 @@ from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.owner_requests import NewestOpenRequest
-from agent_comms.progress_claims import MergedClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     AcceptedVerdict,
-    CommitDelivery,
     FixScope,
     FixShape,
+    NoDeliveryEvidence,
     PendingProblemOrder,
+    PullRequestLink,
+    PullRequests,
+    RecordPullRequest,
     ReleaseTodo,
     StrikeReason,
     StrikeTodo,
@@ -205,15 +207,22 @@ def record(session: Path) -> None:
     todo.require_released_order(worker.incarnation, released.generation)
 
 
-def deliver(problem: str, delivered: str, checked: str) -> None:
+def deliver(problem: str, pull_request: int) -> None:
     create_order(problem)
+    comms = wire(ROOT)
+    todo = comms.goals.todos.get(problem)
+    cli("record-lead", CommsChangeProblemTool(problem=problem, operation=RecordPullRequest(
+        todo.revision, comms.registry.require('record-lead').incarnation,
+        PullRequestLink(todo.repo, pull_request), todo.held().generation)))
+    todo = comms.goals.todos.get(problem)
+    delivery = PullRequests((todo,)).merged_delivery(todo, CHECKOUT, NoDeliveryEvidence())
     cli(
         "record-lead",
         CommsOrderDoneTool(
             problem=problem,
             order_id=f"record-order-{problem}",
-            delivery=CommitDelivery(commit=checked, delivered_commit=delivered),
-            claims=(MergedClaim(delivered),),
+            delivery=delivery,
+            claims=delivery.done_claims(todo.order.checked()),
         ),
     )
 
@@ -230,10 +239,9 @@ if __name__ == "__main__":
     record_parser.set_defaults(action=lambda args: record(args.session))
     delivery_parser = steps.add_parser(deliver.__name__)
     delivery_parser.add_argument("--problem", required=True)
-    delivery_parser.add_argument("--delivered", required=True)
-    delivery_parser.add_argument("--checked", required=True)
+    delivery_parser.add_argument("--pull-request", required=True, type=int)
     delivery_parser.set_defaults(
-        action=lambda args: deliver(args.problem, args.delivered, args.checked)
+        action=lambda args: deliver(args.problem, args.pull_request)
     )
     args = parser.parse_args()
     args.action(args)

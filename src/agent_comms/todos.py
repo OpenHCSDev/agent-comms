@@ -300,7 +300,6 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
         order = todo.order.checked()
         check = order.check
         for each in (check, *order.deletes.checks):
-            await self.require_source(each)
             each.result.require(await self.checked(each, registry.storage_rule.checkout_base))
         revision = self.source_revision()
         for line in order.created:
@@ -319,9 +318,6 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
         return MainRevision()
 
     @abstractmethod
-    async def require_source(self, check): ...
-
-    @abstractmethod
     async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult: ...
 
     @abstractmethod
@@ -329,10 +325,8 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RecordedCommitDelivery(BranchPointCheck, CheckedDelivery, declared_name="commit"):
-    """A delivery recorded before checked and delivered commits were told apart.
-
-    Its one commit is both facts; Core refuses new deliveries of this kind."""
+class CommitSourceDelivery(BranchPointCheck, CheckedDelivery, declared_name=None):
+    """Shared checked-tree behavior; each wire member owns its delivered source identity."""
     commit: str
 
     def __post_init__(self) -> None:
@@ -345,11 +339,11 @@ class RecordedCommitDelivery(BranchPointCheck, CheckedDelivery, declared_name="c
 
     def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
         super().done_claims(order)
-        return (MergedClaim(self.delivered),)
+        return (MergedClaim(self.commit),)
 
     @property
-    def delivered(self) -> str:
-        return self.commit
+    @abstractmethod
+    def delivered(self) -> str: ...
 
     @property
     def work(self) -> str:
@@ -357,10 +351,10 @@ class RecordedCommitDelivery(BranchPointCheck, CheckedDelivery, declared_name="c
 
     @property
     def installation_commits(self) -> tuple[str, ...]:
-        return (self.delivered,)
+        return (self.commit,)
 
     def merged_commits(self, repo: Repo) -> tuple[str, ...]:
-        return (self.delivered,) if repo.contains(self.delivered, "origin/main") else ()
+        return (self.commit,) if repo.contains(self.commit, "origin/main") else ()
 
     def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
         if self.commit != self.delivered:
@@ -369,9 +363,6 @@ class RecordedCommitDelivery(BranchPointCheck, CheckedDelivery, declared_name="c
 
     def source_revision(self) -> SourceRevision:
         return CommitRevision(self.commit)
-
-    async def require_source(self, check: OrderCheck) -> None:
-        raise TodoError("A commit delivery names the unit's delivered commit and the checked one.")
 
     async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
         return await asyncio.to_thread(check.at, self.commit, check.directory, checkout_base)
@@ -383,33 +374,39 @@ class RecordedCommitDelivery(BranchPointCheck, CheckedDelivery, declared_name="c
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
-    """The check runs on ``commit``; ``delivered_commit`` is the unit's pushed ancestor of it."""
+class RecordedCommitDelivery(CommitSourceDelivery, declared_name="commit"):
+    """A stored delivery with one commit for both identities; no new writes use this form."""
+
+    @property
+    def delivered(self) -> str:
+        return self.commit
+
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> CheckedDelivery:
+        raise TodoError("A commit delivery names the unit's delivered commit and the checked one.")
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommitDelivery(CommitSourceDelivery, declared_name="delivered_commit"):
+    """The PR records ``delivered_commit`` as its head and ``commit`` as its merged tree."""
     delivered_commit: str
 
     @property
     def delivered(self) -> str:
         return self.delivered_commit
 
-    async def require_source(self, check: OrderCheck) -> None:
-        delivered = (await asyncio.to_thread(
-            Repo.git, check.directory, "rev-parse", f"{self.delivered}^{{commit}}")).strip()
-        base = await asyncio.to_thread(Repo.git, check.directory, "merge-base", self.delivered,
-                                       self.commit)
-        if base.strip() != delivered:
-            raise TodoError(
-                f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
-
     def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
-        return (*claims, MergedClaim(self.delivered))
+        return (*claims, MergedClaim(self.commit))
 
     async def verified(
         self, todo: Todo, registry: Registration,
         verified_claims: dict[ProgressClaim, tuple[str, ...]],
     ) -> OrderDelivery:
-        branches = verified_claims[MergedClaim(self.delivered)]
-        verified = await super().verified(todo, registry, verified_claims)
+        branches = verified_claims[MergedClaim(self.commit)]
         merge = await self.merge_state(todo, registry, branches)
+        verified = await super().verified(todo, registry, verified_claims)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
                                      at=verified.at, evidence=self.evidence, merge=merge,
                                      proof_build=verified.proof_build)
@@ -419,18 +416,19 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
     ) -> DeliveryMerge:
         """Observe integration, not merely publication, at the time of completion.
 
-        Git proves ordinary merges to main. The order's merged PR also proves squash merges
-        and names a non-main target. Otherwise the pushed source must still have an open link,
-        whose owner is WorkBranches, not a second branch policy in the delivery tool.
+        The PR's head and merge commit prove both merge styles and name the target.
+        Unmerged work checks its exact pushed tree and keeps WorkBranches' open-link policy.
         """
         check = todo.order.checked().check
-        if WorkBranches.main in branches:
-            return MainDeliveryMerge()
         requests = await asyncio.to_thread(PullRequests((todo,)).listed,
                                            todo.repo, MergedListedPullRequest, todo)
         for request in requests:
-            for merge in await request.delivery_merges(self, check):
+            for merge in request.delivery_merges(self):
                 return merge
+        if self.commit != self.delivered:
+            raise TodoError(
+                f"No merged pull request links delivered head {self.delivered} "
+                f"to checked commit {self.commit}.")
         linked = await asyncio.to_thread(
             WorkBranches(check.directory).read, registry.snapshot())
         sources = tuple(sorted(branch.name for branch in linked
@@ -440,11 +438,6 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
                 f"Delivered commit {self.delivered} is not merged and has no branch linked "
                 "to an open PR or issue.")
         return UnmergedDeliveryMerge(sources)
-
-    async def contains(self, check: OrderCheck, head: str) -> bool:
-        if head == self.delivered:
-            return True
-        return await asyncio.to_thread(Repo.descends, check.directory, self.delivered, head)
 
 
 class DeliveryMerge(DeclaredFamily, affix="DeliveryMerge"):
@@ -499,9 +492,6 @@ class OperationDelivery(FreshMainCheck, CheckedDelivery):
     @property
     def line(self) -> str:
         return "operation checked"
-
-    async def require_source(self, check):
-        pass
 
     async def checked(self, check: OrderCheck, checkout_base: Path) -> ChildResult:
         return await check.run()
@@ -599,8 +589,7 @@ class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
     def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
         raise TodoError(f"Pull request {self.number} is not merged; done checks the merged tree.")
 
-    async def delivery_merges(self, delivery: CommitDelivery,
-                              check: OrderCheck) -> tuple[DeliveryMerge, ...]:
+    def delivery_merges(self, delivery: CommitDelivery) -> tuple[DeliveryMerge, ...]:
         return ()
 
 
@@ -640,16 +629,14 @@ class MergedPullRequest(PullRequest):
             yield self.merge
 
     def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
-        """The merged tree is the delivered tree; the request's first commit is the unit's work."""
+        """GitHub owns which pushed head produced the checked merge, for every merge style."""
         Repo.git(repo, "fetch", "-q", "origin", self.base, f"refs/pull/{self.number}/head")
-        for first in Repo.git(repo, "rev-list", "--first-parent", "--reverse",
-                              f"{self.merge}^1..{self.head}").split():
-            return CommitDelivery(commit=self.merge, delivered_commit=first, evidence=evidence)
-        raise TodoError(f"Pull request {self.number} adds no commit to {self.base}.")
+        return CommitDelivery(commit=self.merge, delivered_commit=self.head, evidence=evidence)
 
-    async def delivery_merges(self, delivery: CommitDelivery,
-                              check: OrderCheck) -> tuple[DeliveryMerge, ...]:
-        if not await delivery.contains(check, self.head):
+    def delivery_merges(self, delivery: CommitDelivery) -> tuple[DeliveryMerge, ...]:
+        if self.head != delivery.delivered:
+            return ()
+        if self.merge != delivery.commit:
             return ()
         return (MainDeliveryMerge() if self.base == WorkBranches.main
                 else BranchDeliveryMerge(self.base, self.merge),)
