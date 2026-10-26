@@ -2182,7 +2182,10 @@ class TypedTable(
                 + (", WITHOUT ROWID" if cls.without_rowid else ""))
 
     @classmethod
+    @cache
     def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        """The table's declared SQL: a function of its class alone, built once per class.
+        Every snapshot compares the stored schema against it."""
         statements = {cls.declared_name: cls._table_sql(if_not_exists=if_not_exists)}
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._columns if item.column.index

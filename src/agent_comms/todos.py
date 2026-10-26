@@ -5770,12 +5770,23 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
 
-    def serving_phase(self, commander: ThreadIncarnation, phase: type[OrderPhase]) -> tuple[Todo, ...]:
-        """This commander's orders serving ``phase``; a folded order serves its original's."""
-        return self._select(
-            "creator=? AND creator_created=? AND ? IN "
-            "(json_extract(\"order\",'$.serves'), json_extract(\"order\",'$.original.serves'))",
-            (commander.name, commander.wire_birth, FieldCodec.encode(phase)))
+    def phases_checked(self, commanders: frozenset[ThreadIncarnation]) -> dict[type[OrderPhase], float]:
+        """When any of these commanders last checked an order serving each phase: one aggregate
+        over the checked orders' declared wire keys, never a decode of every order."""
+        serves = f"""json_extract("order", '$.{FieldCodec.record_key(CheckedProblemOrder, 'serves')}')"""
+        at = (f"""json_extract("order", '$.{FieldCodec.record_key(CheckedProblemOrder, 'at')}"""
+              f""".{FieldCodec.record_key(RecordedEventTime, 'at')}')""")
+        if not commanders:
+            return {}
+        creators = ", ".join("(?, ?)" for _ in commanders)
+        with self.snapshot() as db:
+            rows = db.execute(
+                f"SELECT {serves}, MAX({at}) FROM {Todo.declared_name} "
+                f"WHERE (creator, creator_created) IN (VALUES {creators}) "
+                f"AND {serves} IS NOT NULL AND {at} IS NOT NULL GROUP BY 1",
+                tuple(value for commander in commanders
+                      for value in (commander.name, commander.wire_birth))).fetchall()
+        return {FieldCodec.decode(type[OrderPhase], phase): at for phase, at in rows}
 
     def units(self, commander: ThreadIncarnation) -> frozenset[ThreadIncarnation]:
         """The threads this commander gives orders to: everyone who holds or held one of its
