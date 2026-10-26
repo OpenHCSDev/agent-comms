@@ -306,7 +306,7 @@ class CatalogQuery(NativeQuery):
     ) -> PiResponseData:
         async with self.catalog(agent_bin, arguments, root=root, package=package) as child:
             response = await self.exchange(child)
-            return response.success.require_data(response)
+            return response.require_data()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -343,8 +343,6 @@ class SettingCommand(CatalogQuery):
     @abstractmethod
     def result_type(self) -> type[events.SettingChangeResult]: ...
 
-    error_message: ClassVar[str]
-
     async def configure(
         self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage, worktree: Path,
         root: Path | str | None = None,
@@ -359,23 +357,18 @@ class SettingCommand(CatalogQuery):
             response = await self.exchange(child)
             response.success.require_success(response)
             state = await GetState().exchange(child)
-            return state.success.require_data(state)
+            return state.require_data()
 
-    @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
-        yield cls.result_type(
-            id=response.id,
-            ok=response.success.success_value,
-            error=response.error.text_or(cls.error_message),
-        )
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        return (self.result_type(id=response.id, ok=True),)
+
+    def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        return (self.result_type(id=response.id, ok=False, error=response.error.require()),)
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetModel(SettingCommand):
     result_type = events.ModelChanged
-    error_message = "Model change failed"
     provider: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
     model_id: Annotated[
         str | PiOmitted, WireOmitDefault(), WireName("modelId")
@@ -385,7 +378,6 @@ class SetModel(SettingCommand):
 @dataclass(frozen=True, kw_only=True)
 class SetThinkingLevel(SettingCommand):
     result_type = events.ThinkingChanged
-    error_message = "Thinking level change failed"
     level: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
 
 

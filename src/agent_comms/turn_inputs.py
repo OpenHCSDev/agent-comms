@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import pi_commands as commands
@@ -31,8 +31,6 @@ if TYPE_CHECKING:
 class NoCurrentItem(TurnInboxItem):
     """No dequeued operation remains with the forwarding task."""
 
-    has_work: ClassVar[bool] = False
-
     def return_to(self, inbox: TurnInbox) -> None:
         pass
 
@@ -51,9 +49,13 @@ class InputForwarding(MroDispatch):
         return not self.uncertain
 
     @property
+    def unwritten_inputs(self) -> tuple[InputId, ...]:
+        """Accepted user inputs that have not crossed the native write boundary."""
+        return self.current.carried_inputs + self.queue.ready_inputs
+
+    @property
     def unresolved(self) -> bool:
-        # A turn cannot report success while an accepted operation still needs forwarding.
-        return self.current.has_work or bool(self.pending) or self.queue.has_ready_work
+        return bool(self.pending or self.unwritten_inputs)
 
     @property
     def settled(self) -> bool:

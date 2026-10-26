@@ -119,7 +119,7 @@ class ReadingStats(RequestedStats):
     async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:
         if not all(entry.future.done() for entry in self.pending):
             return
-        snapshots = tuple(entry.future.result().success.require_data(entry.future.result())
+        snapshots = tuple(entry.future.result().require_data()
                           for entry in self.pending)
         if any(snapshot.session_busy for snapshot in snapshots):
             # Already-written inputs can start another native run. The next
