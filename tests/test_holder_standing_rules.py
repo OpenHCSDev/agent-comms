@@ -337,6 +337,15 @@ def publish(comms, sender, target, timestamp, *, answers=()):
     )
 
 
+def test_an_order_rule_observation_compares_its_cited_repositories(held_bus):
+    """An order's scope cites FileLines whose repository is a declared family: the
+    observation key compares it, so a rule holding the order keys without crashing."""
+    first, second = (held_bus.goals.todos.get(problem) for problem in ("P1", "P2"))
+    assert HolderGone(first).observation_key() == HolderGone(
+        held_bus.goals.todos.get("P1")).observation_key()
+    assert HolderGone(first).observation_key() != HolderGone(second).observation_key()
+
+
 def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown(held_bus):
     blocked_holder(held_bus)
     goal = held_bus.registry.require("worker").goal.require()

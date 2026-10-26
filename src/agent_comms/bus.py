@@ -54,7 +54,6 @@ from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import (
     DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
 )
-from agent_comms.store_files import StoreGuard
 from agent_comms.typed_table import (
     CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
     SQLiteDatabase, WalStore,
@@ -483,8 +482,8 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class StoredBusReader(StoreGuard, BusReader):
-    """File-backed readers share opening and retirement; held snapshots need neither."""
+class StoredBusReader(BusReader):
+    """File-backed readers use SQLite snapshots; held snapshots need no connection."""
 
     @property
     @abstractmethod
@@ -493,7 +492,7 @@ class StoredBusReader(StoreGuard, BusReader):
 
     @contextmanager
     def observing(self) -> Iterator[sqlite3.Connection]:
-        with self.attached(self.path, lambda: SQLiteFile.opened_reader(self.path)) as db:
+        with SQLiteFile.opened_reader(self.path) as db:
             yield db
 
 

@@ -15,8 +15,8 @@ from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
-from agent_comms.registry_store import RegistryStore, UncachedRegistry
-from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
+from agent_comms.registry_store import RegistryStore
+from agent_comms.store_files import AtomicFile, ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.threads import Thread
 from agent_comms.thread_text import GivenThreadText
 
@@ -64,19 +64,25 @@ def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_
     document = registration.store.read()
     raw = json.loads(registration.store.path.read_text())
     for name in ("renamed", "owner", "other"):
-        assert RegistryDocument.entry_from_wire(raw, name) == document.entry(name)
-    # Another process's write leaves this process without a decoded revision.
-    registration.store.cache.entry = UncachedRegistry()
+        assert registration.entry(name).entry == document.entry(name)
+    # An external replacement, not a patched cache, starts another revision.
+    AtomicFile(registration.store.path).write_text(json.dumps(raw))
     read = registration.entry("owner")
     assert read.entry == document.entry("renamed") and read.entry.thread.name == "renamed"
     assert read.revision == registration.store.revision_unlocked()
+    reopened = Registration(registration.store.path)
+    assert reopened.entry("owner").entry.thread is read.entry.thread
+    snapshot = reopened.snapshot()
+    assert snapshot.threads["renamed"] is read.entry.thread
+    assert reopened.snapshot() is snapshot
     # Another thread's malformed declaration is not this thread's entry.
     raw["threads"]["other"]["created_at"] = "not a time"
-    assert RegistryDocument.entry_from_wire(raw, "renamed") == document.entry("renamed")
+    AtomicFile(registration.store.path).write_text(json.dumps(raw))
+    assert registration.entry("renamed").entry == document.entry("renamed")
     with pytest.raises(RelationViolationError):
-        RegistryDocument.entry_from_wire(raw, "other")
+        registration.entry("other")
     with pytest.raises(UnregisteredThreadError):
-        RegistryDocument.entry_from_wire(raw, "missing")
+        registration.entry("missing")
 
 
 def test_a_document_field_without_a_thread_slice_is_refused_at_definition():

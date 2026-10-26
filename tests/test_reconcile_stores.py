@@ -441,3 +441,30 @@ def test_an_opening_refuses_a_drifted_store_and_reconcile_stores_carries_it(priv
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert str(path.relative_to(root)) in json.loads(completed.stdout)["rewritten"]
     GoalAttemptStore.at(path.parent)
+
+
+def test_a_dropped_closed_scan_column_is_named_by_the_refusal_and_carried(tmp_path):
+    """Install of #3458: the closed scan stopped storing `oldest`. The refusal names the
+    table and both shapes, and the reconcile drops the declared column, keeping the row."""
+    from agent_comms.todos import StoredClosedRepository, TodoStore
+
+    with TodoStore(tmp_path).writing():
+        pass
+    path = TodoStore.path_in(tmp_path)
+    table = StoredClosedRepository.declared_name
+    with closing(sqlite3.connect(path)) as db, db:
+        db.execute(f'DROP TABLE "{table}"')
+        db.execute(f'CREATE TABLE "{table}" ("repo" TEXT NOT NULL, "main" TEXT NOT NULL, '
+                   '"oldest" TEXT NOT NULL, "observed_at" REAL NOT NULL, '
+                   'PRIMARY KEY ("repo")) STRICT')
+        db.execute(f'INSERT INTO "{table}" VALUES (?, ?, ?, 1.0)',
+                   ("OpenHCSDev/agent-comms", "a" * 40, "b" * 40))
+    with closing(sqlite3.connect(path)) as db, pytest.raises(
+            RelationViolationError, match=f'{table}: stored .*"oldest"'):
+        TodoStore.require_schema(db)
+    with maintenance_held(tmp_path):
+        assert TodoStore.reconcile_at(path)
+    with closing(sqlite3.connect(path)) as db:
+        TodoStore.require_schema(db)
+        assert db.execute(f'SELECT repo, main FROM "{table}"').fetchall() == [
+            ("OpenHCSDev/agent-comms", "a" * 40)]

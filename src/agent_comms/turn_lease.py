@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .activity import ObservedActivity
 from .channel_targets import CommandTarget
 from .child_process import ProcessIdentity, ProcessState
-from .coordination_session import NativeBoundary
+from .coordination_session import NativeCapture
 from .bus_tables import MessageIdentitySource
 from .errors import RelationViolationError
 from .field_codec import (
@@ -386,7 +386,7 @@ class NoTurnLease(NullMember, TurnLease):
     def answered_inputs(
         self, messaging: Messaging, owner: Thread, target: str,
     ) -> tuple[MessageReference, ...]:
-        with NativeBoundary(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
+        with NativeCapture(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
             snapshot = boundary.registry
             route = CommandTarget.named(target)
             conversation = route.conversation_key(
@@ -441,7 +441,7 @@ class TurnLeaseFence(TurnFence, TurnLease):
         self, messaging: Messaging, owner: Thread, target: str,
     ) -> tuple[MessageReference, ...]:
         inputs = InputDispositions(messaging.root).in_turn(self.turn_id)
-        with NativeBoundary(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
+        with NativeCapture(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
             return inputs.answered_by(
                 self, source, boundary.registry, target, privacy=boundary.privacy,
             )

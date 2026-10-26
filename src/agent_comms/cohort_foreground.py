@@ -32,7 +32,7 @@ async def _accept_visible_deliveries(
     text alone cannot identify the group receiving private input.
     """
     def accept(resource: Coordination) -> None:
-        with NativeBoundary(bus) as boundary, bus.bus.reading() as source:
+        with resource.session.capture(bus) as boundary, bus.bus.reading() as source:
             boundary.privacy.require_root(root_id, IdentityConflict("native namespace changed"))
             with resource.session.read():
                 db = resource.session._connection

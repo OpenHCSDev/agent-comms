@@ -106,7 +106,6 @@ class PrivateObservation(PrivateObservationState):
             lookup, after=self.source_prefix.through_seq, limit=1, descending=False))
 
     async def drain(self, inputs, session_id: str, root_id: RootId) -> int:
-        await DeliveredInput.recover_interrupted(inputs, session_id, root_id)
         return await inputs.effects._drain_private_nk(session_id, root_id)
 
 
@@ -191,11 +190,17 @@ class InputObservation(ABC):
             and not turn_live
         )
 
+    async def begin_observation(
+        self, state: DrainedSession, entry: RegistryEntry,
+    ) -> RegistryEntry:
+        return entry
+
     async def observe(self, session_id: str) -> None:
         initial = await self._own_entry(session_id)
-        bus = self.comms.bus.bus
-        lookup = initial.entry.thread.incarnation.require_recorded().lookup
         state = self.state(session_id)
+        entry = await self.begin_observation(state, initial.entry)
+        bus = self.comms.bus.bus
+        lookup = entry.thread.incarnation.require_recorded().lookup
         state.forget_observation()
         sources = tuple(FileSource(path) for path in (
             *bus.source_paths(self.comms.root), *CoordinationStore.source_paths(self.comms.root),
@@ -610,6 +615,21 @@ class OwnerSession(DrainedSession):
 
 
 class InputDrain(InputObservation):
+    async def begin_observation(
+        self, state: DrainedSession, entry: RegistryEntry,
+    ) -> RegistryEntry:
+        # A restarted observer may inherit a reservation whose live rollback
+        # died with its owner. Live delivery failures restore their exact
+        # reservation through DeliveredInput._restore_unplaced.
+        async with drain_failures(self.comms, entry.thread.name, entry.owner_identity):
+            await DeliveredInput.recover_interrupted(
+                self, state, entry, self.comms.owners.require_private_launch().wire_root_id,
+            )
+        # Recovery suspends; derive the observer's identity from the current row.
+        return (await Coordination.run_worker(partial(
+            self.comms.registry.entry, entry.thread.name,
+        ))).entry
+
     def owns_execution(self, session_id: str, owner: Thread) -> bool:
         """An attached turn can take follow-ups; a predecessor cannot."""
         return (

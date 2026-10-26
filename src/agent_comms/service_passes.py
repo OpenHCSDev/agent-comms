@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
 from .locked_store import DocumentChange, DurableFile, LockedStore
+from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
@@ -26,9 +27,15 @@ class ServicePasses:
     commander_completed: dict[RecordedThreadIncarnation, float] = field(default_factory=dict)
     """Last observation completed for each commander, including quiet observations."""
 
+    def heartbeat_completed_at(self, commander: RecordedThreadIncarnation) -> EventTime:
+        """The original completion clock, or its declared unrecorded state."""
+        if commander in self.commander_completed:
+            return RecordedEventTime(self.commander_completed[commander])
+        return UnrecordedEventTime()
+
     def completed_since(self, commander: RecordedThreadIncarnation, since: float) -> bool:
         """A pass for this commander completed at or after ``since``."""
-        return commander in self.commander_completed and self.commander_completed[commander] >= since
+        return self.heartbeat_completed_at(commander).since(since)
 
 
 @dataclass(frozen=True, slots=True)

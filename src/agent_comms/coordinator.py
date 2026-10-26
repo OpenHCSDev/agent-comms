@@ -11,7 +11,7 @@ from contextlib import AbstractContextManager, ExitStack, asynccontextmanager
 from contextvars import ContextVar
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Self, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
 
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
@@ -95,6 +95,7 @@ STANDALONE_ROUTE: Final = StandaloneRoute()
 
 
 class Coordination(ExecutionStore, AttemptStore):
+    watch_period: ClassVar[float] = 60
     session_type = NativeCoordinationSession
     _worker: ContextVar[CoordinationRoute] = ContextVar(
         "coordination_worker",
@@ -143,9 +144,10 @@ class Coordination(ExecutionStore, AttemptStore):
             if isinstance(outcome, Exception):
                 logging.error("Service worker pass failed: %s", name, exc_info=outcome)
                 await cls.run_worker(partial(passes.failed, name, outcome))
+                await cls.run_worker(partial(watch.failed, opened_wire, outcome))
             else:
                 await cls.run_worker(partial(passes.passed, name))
-            await asyncio.sleep(60)
+            await asyncio.sleep(cls.watch_period)
 
     @classmethod
     async def run_async(
