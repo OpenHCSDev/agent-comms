@@ -22,8 +22,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--root', type=Path, metavar='ROOT')
     options, argv = parser.parse_known_args(sys.argv[1:])
-    modules = (import_module(f'{package.__name__}.{m.name}') for m in pkgutil.iter_modules(package.__path__) if m.name != 'cli')
-    tools = {tool_name(module.__name__): module for module in modules if hasattr(module, 'main')}
+    modules = {
+        tool_name(f'{package.__name__}.{info.name}'): f'{package.__name__}.{info.name}'
+        for info in pkgutil.iter_modules(package.__path__) if info.name != 'cli'
+    }
+    chosen = (modules[argv[0]],) if argv and argv[0] in modules else modules.values()
+    loaded = (import_module(module) for module in chosen)
+    tools = {tool_name(module.__name__): module for module in loaded if hasattr(module, 'main')}
     if not argv or argv[0] not in tools:
         lines = [f'usage: agent-comms-commander {{{",".join(sorted(tools))}}} ARGS...', '']
         lines += [f'  {name:<11} {tools[name].__doc__.splitlines()[0]}'

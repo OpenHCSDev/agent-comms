@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from .field_codec import MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
+from .typed_table import TypedRow
 
 if TYPE_CHECKING:
     from .read_basis import ReadCursor
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class MessageReference(ProjectionSource):
+class MessageReference(TypedRow, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
