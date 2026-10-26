@@ -1,6 +1,7 @@
 """Source-bound historical display values. These carry no delivery authority."""
 
 from __future__ import annotations
+from agent_comms.repo import Checkout
 
 import json
 import shutil
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .presentation import BusPresentation, WireRevision
     from .registry_document import RegistrySnapshot
+    from .threads import Thread
 
 
 class HistoryView(ABC):
@@ -136,21 +138,21 @@ class ConversationHistoryView:
     @classmethod
     def revision(cls, views: HistoryViews, target: NamedTarget,
                  earlier: ConversationObservation,
-                 *, worktree: str) -> ConversationRevision:
+                 *, worktree: Checkout) -> ConversationRevision:
         return earlier.capture(
             views.revision(), partial(cls._read_revision, views, target, worktree))
 
     @classmethod
     def _read_revision(cls, views: HistoryViews, target: NamedTarget,
-                       worktree: str) -> ConversationRevision:
-        worktree = str(Path(worktree).resolve())
-        viewer = views.messaging.user_identity(worktree).name
+                       worktree: Checkout) -> ConversationRevision:
+        viewer = views.messaging.user_identity(worktree)
         with views.registry.store.reading(views.channels.catalog):
             snapshot = views.registry.store.read_snapshot_unlocked()
             stores = views.revision()
             return ConversationRevision(
                 stores, cls._selection(
-                    views, snapshot, views.channels.catalog._read_unlocked(), viewer, target, worktree,
+                    views, snapshot, views.channels.catalog._read_unlocked(),
+                    snapshot.require(viewer.name), target, worktree,
                     FileRevision.capture(views.bus.history.path),
                 ),
             )
@@ -158,7 +160,7 @@ class ConversationHistoryView:
     @classmethod
     @abstractmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: NamedTarget, worktree: str,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> DisplayIdentity: ...
 
     def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
@@ -180,12 +182,12 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: NamedTarget, worktree: str,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> ChannelDisplayIdentity:
         with views.bus.opened_activity() as activity:
             channel = catalog.require_channel(target.selected_name(snapshot), activity)
         return ChannelDisplayIdentity(
-            viewer=snapshot.require(viewer).incarnation,
+            viewer=viewer.incarnation,
             bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
             scope=channel.display_scope(snapshot), history_revision=history_revision,
         )
@@ -209,11 +211,11 @@ class DMHistory(HistoryView):
 
 @dataclass(frozen=True, slots=True)
 class DMDisplayHistory(ConversationHistoryView, DMHistory):
-    worktree: str
+    worktree: Checkout
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: NamedTarget, worktree: str,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> DMDisplayIdentity:
         name = target.selected_name(snapshot)
         try:
@@ -224,9 +226,9 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         return DMDisplayIdentity(
             root_identity=(root.st_dev, root.st_ino),
             bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
-            worktree=worktree, requested_peer=target.name,
-            viewer=snapshot.require(viewer).incarnation, peer=peer,
-            scope=DMDisplayScope.capture(viewer, name, snapshot), history_revision=history_revision,
+            project_path=worktree.resolved().path, requested_peer=target.name,
+            viewer=viewer.incarnation, peer=peer,
+            scope=DMDisplayScope.capture(viewer.name, name, snapshot), history_revision=history_revision,
         )
 
     @property
@@ -244,10 +246,9 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
             bus,
             presentation.registry,
             bus.bus.path.parent,
-            self.first,
+            snapshot.require(self.first),
             self.second,
-            worktree=self.worktree,
-            bounds=bounds,
+            worktree=self.worktree, bounds=bounds,
         )
 
 

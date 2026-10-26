@@ -1,3 +1,5 @@
+
+from agent_comms.repo import Checkout
 """Commander replies select metadata, not message bodies or every registry row."""
 
 import os
@@ -52,7 +54,7 @@ def test_commander_verb_answers_under_five_seconds(
     names = tuple(f"worker-{index}" for index in range(500))
     for index, name in enumerate((*names, "lead", CommanderService.sender)):
         comms.registry.declare(Thread(
-            name, frozenset({"comms"}), str(tmp_path / name),
+            name, frozenset({"comms"}), Checkout(tmp_path / name),
             created_at=10000.0 + index, execution=ExternalThreadExecution,
             model=DeclaredModel("anthropic/claude-opus-4-6"),
         ))
@@ -91,7 +93,7 @@ def test_commander_verb_answers_under_five_seconds(
 def reply_history(comms: Comms, tmp_path: Path) -> tuple[Comms, tuple[MessageReference, ...]]:
     comms.channels.create_tag("comms")
     for index, name in enumerate(("lead", "sender", "other")):
-        comms.registry.declare(Thread(name, frozenset({"comms"}), str(tmp_path / name),
+        comms.registry.declare(Thread(name, frozenset({"comms"}), Checkout(tmp_path / name),
                                       created_at=10000.0 + index))
     originals = (
         Message("sender", "#comms", "channel", InfoKind, seq=1, timestamp=30000.0),

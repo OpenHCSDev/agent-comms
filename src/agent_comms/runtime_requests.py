@@ -7,6 +7,8 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
+from .repo import Checkout
+
 import asyncio
 import json
 from abc import abstractmethod
@@ -67,7 +69,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ProjectReply(DeclaredReply):
-    worktree: str
+    worktree: Checkout
 
 
 @dataclass(frozen=True)
@@ -496,7 +498,7 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
 class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
     label: ModelLabel
     answer: type[SpanAnswer]
-    worktree: str
+    worktree: Checkout
 
     async def result(self, ctx):
         segment = await self.selected_segment(ctx)

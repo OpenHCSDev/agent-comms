@@ -6,6 +6,8 @@ they never authorize a native send, restore a queue, or replay an UNKNOWN input.
 
 from __future__ import annotations
 
+from .repo import Checkout
+
 from .native_output import NativeOutputScope
 
 from abc import abstractmethod
@@ -639,7 +641,7 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
     thread: ThreadIncarnation
     wire_root: str
     owner: ProcessIdentity
-    worktree: str
+    worktree: Checkout
     model: str
     thinking_level: str | None
     title: str

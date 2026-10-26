@@ -129,7 +129,7 @@ class SessionConfigOptions:
         )
         state = await command.configure(
             configuration.launch.binary, arguments.argv, package=configuration.package,
-            worktree=Path(thread.worktree), root=self.comms.root,
+            worktree=thread.worktree.path, root=self.comms.root,
             configuration=configuration.launch.configuration,
         )
         model = state.model.thread_model().require_reported()

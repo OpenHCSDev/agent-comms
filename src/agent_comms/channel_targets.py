@@ -13,6 +13,7 @@ from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredT
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
+from .repo import Checkout
 from .response_policy import DirectPolicy, MentionedPolicy
 from .thread_identity import ThreadIncarnation
 from .typed_table import sql_literal
@@ -148,7 +149,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         return ChannelTarget(name) if ChannelTarget.names_channel(name) else ThreadTarget(name)
 
     @staticmethod
-    def arguments(names: tuple[str, ...], project: str) -> tuple[CommandTarget, ...]:
+    def arguments(names: tuple[str, ...], project: Checkout) -> tuple[CommandTarget, ...]:
         return tuple(CommandTarget.named(name) for name in names) or (ProjectTarget(project),)
 
     @property
@@ -164,7 +165,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
     @abstractmethod
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
-        *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
@@ -276,7 +277,7 @@ class NamedTarget(CommandTarget):
     ) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def mark_view_read(self, views: HistoryViews, worktree: str) -> None: ...
+    def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None: ...
 
     def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return self.name
@@ -404,7 +405,7 @@ class ThreadTarget(NamedTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedThread,
-        *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]:
         return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
@@ -459,7 +460,7 @@ class ThreadTarget(NamedTarget):
     ) -> tuple[str, ...]:
         return (self.selected_name(snapshot),)
 
-    def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
+    def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None:
         views.mark_thread_user_read(self.name, worktree=worktree)
 
 
@@ -553,9 +554,9 @@ class ChannelTarget(NamedTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedChannel,
-        *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]:
-        return declaration.channel_bindings(comms, resolved, snapshot=snapshot, catalog=catalog)
+        return declaration.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender: Message | None = None):
         from .channels import BuiltinChannelView
@@ -616,7 +617,7 @@ class ChannelTarget(NamedTarget):
         return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
-    def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
+    def mark_view_read(self, views: HistoryViews, worktree: Checkout) -> None:
         from .presentation import ReadAll
 
         views.presentation.mark_channel_read(
@@ -626,14 +627,14 @@ class ChannelTarget(NamedTarget):
 
 @dataclass(frozen=True)
 class ProjectTarget(CommandTarget):
-    project: str
+    project: Checkout
 
     def display_name(self) -> str:
-        return self.project
+        return str(self.project)
 
     @property
     def name(self) -> str:
-        return self.project
+        return str(self.project)
 
     @property
     def destination_names(self) -> tuple[str, ...]:
@@ -644,7 +645,7 @@ class ProjectTarget(CommandTarget):
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
-        *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[C, ...]:
         return declaration.project_bindings(comms, resolved)
 

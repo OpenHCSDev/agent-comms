@@ -30,6 +30,7 @@ from agent_comms.response_acknowledgement import (
 from agent_comms.typed_table import Column, Generated, sql_literal
 
 from .field_codec import FieldCodec, MessageId, ThreadLookup
+from .repo import Checkout
 from .read_basis import RepliesDisplayScope
 from .wake_policy import RecipientDecision
 
@@ -190,7 +191,7 @@ class HumanOrigin(OwnerVoiceOrigin):
 
     sender: str
     created_at: float
-    worktree: str
+    worktree: Checkout
 
     @classmethod
     def of(cls, user: Thread) -> HumanOrigin:

@@ -6,6 +6,8 @@ cancels one turn and kills one acquired scratch native child. Never replays inpu
 """
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
+
 import argparse
 import asyncio
 import json
@@ -84,7 +86,7 @@ async def journey(arguments):
     comms = wire(root)
     name = 'scratch-sleeper'
     comms.registry.declare(replace(Thread(
-        name, frozenset(), str(project), model=DeclaredModel(arguments.model), thinking_level=HighThinkingLevel),
+        name, frozenset(), Checkout(project), model=DeclaredModel(arguments.model), thinking_level=HighThinkingLevel),
         storage_roots=StorageRoots(scratch=stage)))
     agent = CommsAgent(comms, agent_bin=GivenBinary(arguments.native_launcher),
                        agent_args=GivenArguments(('--offline', '--no-skills', '--no-context-files', '--no-prompt-templates',)),

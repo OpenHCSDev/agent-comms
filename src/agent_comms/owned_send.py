@@ -142,7 +142,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
             snapshot = boundary.registry
             self.verify(store, turn, snapshot)
             owner = snapshot.require(self.owner_name)
-            canonical = resource.normalized(Path(owner.worktree))
+            canonical = resource.normalized(owner.worktree.path)
             scope = NativeClaim(owner_claimed_generation=self.claim_generation,
                                 operation_id=slot, turn_id=self.turn,
                                 input_id=turn.command.input_id)

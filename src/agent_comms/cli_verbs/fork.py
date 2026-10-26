@@ -9,6 +9,7 @@ from agent_comms.thread_execution import NativeOwnerCommand
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_management import GivenTags
 from agent_comms.threads import Thread
+from agent_comms.repo import Checkout
 from dataclasses import dataclass
 from typing import Annotated
 from typing import Self
@@ -23,7 +24,7 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
     ]
 
     @classmethod
-    def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
         return ()
 
     @classmethod

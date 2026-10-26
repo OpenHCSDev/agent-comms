@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainVa
 from .coordination_errors import CommandFailure
 from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
 
@@ -345,8 +345,8 @@ class KeptBranchStart(CheckoutStart):
 
 
 @dataclass(frozen=True)
-class Checkout:
-    """A working tree of one of our repositories, ready to run.
+class Checkout(SingleFieldValue, PresentMember):
+    """A recorded working tree of one of our repositories.
 
     Its pinned submodules (the refactor-audit catalog) belong to the tree, and `git worktree
     add` leaves them empty even with submodule.recurse set, so every tree is added, prepared
@@ -355,7 +355,28 @@ class Checkout:
     path: Path
 
     @classmethod
-    def present(cls, *paths: Path) -> tuple[Path, ...]:
+    def from_wire(cls, data: object) -> Self:
+        return cls(cls.path_from_input(FieldCodec.decode(str, data)))
+
+    @staticmethod
+    def path_from_input(path: Path | str) -> Path:
+        """Keep empty input distinct from Path(''), which silently means the cwd."""
+        if path == "":
+            raise ValueError("Project path must not be empty")
+        return Path(path)
+
+    def resolved(self, *, strict: bool = False) -> Self:
+        """Resolve this recorded path without imposing launch qualification."""
+        return type(self)(self.path.expanduser().resolve(strict=strict))
+
+    def __fspath__(self) -> str:
+        return str(self.path)
+
+    def __str__(self) -> str:
+        return str(self.path)
+
+    @classmethod
+    def git_roots(cls, *paths: Path) -> tuple[Path, ...]:
         """The given paths that are Git working trees, decided as Git decides: a `.git` file
         links a worktree, a `.git` folder holds HEAD. A plain or empty-`.git` folder is none."""
         return tuple(path for path in paths
@@ -367,9 +388,17 @@ class Checkout:
         return cls.prepared(Path(path))
 
     @classmethod
+    def checked(cls, path: Path | str) -> Self:
+        """Resolve a supplied project and require a Git checkout, never the shell's cwd."""
+        checkout = cls(cls.path_from_input(path)).resolved(strict=True)
+        if not cls.git_roots(checkout.path):
+            raise ValueError(f"Project {checkout.path} is not a Git checkout")
+        return checkout
+
+    @classmethod
     def prepared(cls, path: Path) -> Self:
         """Prepare this checkout's pinned submodules before handing it to a consumer."""
-        checkout = cls(path)
+        checkout = cls.checked(path)
         checkout.prepare()
         return checkout
 
@@ -412,6 +441,14 @@ class Checkout:
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )
         Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
+
+
+class LaunchCheckout(Checkout):
+    """A project qualified for a new launch, not a historical filesystem promise."""
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls.checked(FieldCodec.decode(str, data))
 
 
 class ScratchCheckout(Checkout):

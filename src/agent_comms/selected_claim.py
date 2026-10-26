@@ -166,7 +166,7 @@ def publish_selected_resource_claim(
             registry, owner,
         ),
     ):
-        resource = resource_path.normalized(Path(owner.worktree))
+        resource = resource_path.normalized(owner.worktree.path)
         return comms.bus.publisher._publish_acquisition_unlocked(
             registry,
             owner,
@@ -265,10 +265,10 @@ def write_selected_claimed_file(
                                      scoped.session.writing) as (_, owner),
             comms.bus.bus.writing() as db,
         ):
-            normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
+            normalized = ExistingFileClaim(Path(claimed.resource)).normalized(owner.worktree.path)
             if claimed.resource_scope != claim_scope or BusSnapshot.from_connection(db).resource_owner(normalized) != claimed:
                 raise IdentityConflict("Selected write has no current exact resource claim")
-            with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):
+            with _opened_selected_file(owner.worktree.path, normalized) as (fd, stable):
                 os.ftruncate(fd, 0)
                 view = memoryview(contents)
                 while view:

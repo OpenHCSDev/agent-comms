@@ -2,6 +2,7 @@
 publications refuse while held (test_connector.test_publishing_tool_held_mid_call_refuses_at_once)."""
 
 
+from agent_comms.repo import Checkout
 import asyncio
 import os
 import sqlite3
@@ -54,7 +55,7 @@ def test_refusal_writer_keeps_registry_permission_until_its_sql_write_finishes(p
 def held_bus(tmp_path):
     comms = wire(tmp_path)
     for name in ('sender', 'recipient'):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
     assert comms.bus.inbox('recipient').page.messages == ()
     barrier = comms.owners.maintenance
     hold = barrier.begin(MaintenanceOperator.current())
@@ -74,7 +75,7 @@ def assert_published_once(comms):
 
 @pytest.mark.parametrize('arguments', (
     ('send', '--from', 'sender'),
-    ('user-send',),
+    ('user-send', '--worktree', '{project}'),
 ))
 async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
     comms = held_bus
@@ -82,7 +83,8 @@ async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / 'src'))
     child = await asyncio.create_subprocess_exec(
         sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root),
-        *arguments, '--to', 'recipient', '--body', 'held publication',
+        *(argument.format(project=comms.root) for argument in arguments),
+        '--to', 'recipient', '--body', 'held publication',
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env)
     completed = asyncio.create_task(child.communicate())
     try:

@@ -1,6 +1,8 @@
 """Core's error declaration controls encoding and read-watch recovery."""
 from __future__ import annotations
+from pathlib import Path
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import sys
@@ -190,7 +192,7 @@ async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
 
     comms = canonical_goal_wire(root)
     for name in ("a", "b"):
-        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
     sent = comms.messaging.send("a", "b", "crosses").message
     async with aclosing(comms.watch("b", acknowledgment=ExplicitWatchAcknowledgment)) as watched:
         async with asyncio.timeout(5):
@@ -204,7 +206,7 @@ def test_given_binding_fields_override_the_stored_binding(tmp_path, comms):
     """A partial binding takes each missing field from the stored one; a field absent from
     both is refused by name, and a changed field still claims another conversation."""
     for name in ('viewer', 'other-viewer'):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
     with Binding.open(tmp_path) as db:
         with pytest.raises(RecordProblems, match='bus_thread'):
             GivenBinding({'root': str(comms.root)}).bind(db)

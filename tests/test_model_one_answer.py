@@ -1,3 +1,5 @@
+
+from agent_comms.repo import Checkout
 """The model menu and the coordination footer give one answer for a running thread."""
 
 import pytest
@@ -31,7 +33,7 @@ def test_keep_request_preserves_the_existing_model_and_chosen_request_replaces_i
     from agent_comms.field_codec import FieldCodec
     from agent_comms.threads import ModelChoice, Thread
 
-    thread = Thread('worker', frozenset(), str(tmp_path), model=DeclaredModel('test/one'))
+    thread = Thread('worker', frozenset(), Checkout(tmp_path), model=DeclaredModel('test/one'))
     assert FieldCodec.decode(ModelChoice, None).configured(thread) is thread
     updated = FieldCodec.decode(ModelChoice, 'test/two').configured(thread)
     assert updated.model == DeclaredModel('test/two')

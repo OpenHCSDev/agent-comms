@@ -1,5 +1,7 @@
 """An unfinished observation cannot keep a real sidebar from being answered."""
 
+from agent_comms.repo import Checkout
+from pathlib import Path
 from dataclasses import replace
 from itertools import count
 from multiprocessing import Pipe
@@ -46,7 +48,7 @@ async def test_observation_pass_advances_each_interest_once(comms):
     with client, observer:
         service = ObservationService(comms, observer)
         endless = EndlessReading(ObserveThreads(frozenset()))
-        sidebar = SidebarReading(ObserveSidebar(str(comms.root.parent), True, True))
+        sidebar = SidebarReading(ObserveSidebar(Checkout(comms.root.parent), True, True))
         service.interest.observations = {EndlessReading: endless, SidebarReading: sidebar}
         revision = comms.views.revision()
         try:
@@ -100,7 +102,7 @@ class CountReads:
 
 
 @pytest.mark.parametrize('member,interest,own_field,unrelated_field', [
-    (SidebarReading, ObserveSidebar('worktree', True, True), 'bus_seq', 'commander_frames'),
+    (SidebarReading, ObserveSidebar(Checkout(Path('worktree')), True, True), 'bus_seq', 'commander_frames'),
     (CommanderHudReading, ObserveCommanderHud(), 'commander_frames', 'bus_seq'),
     (NotificationReading, ObserveNotifications(frozenset()), 'reads', 'commander_frames'),
     (ThreadReading, ObserveThreads(frozenset()), 'bus_seq', 'commander_frames'),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
+
 from agent_comms.cli_command import CliCommand
 
 from typing import Self
@@ -30,7 +32,7 @@ class PinChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-
         return PinThreadCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return (cls(name=resolved.channel.name, pinned=not resolved.channel.pinned),) if resolved.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:

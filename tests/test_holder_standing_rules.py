@@ -1,6 +1,8 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
+from pathlib import Path
 
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
@@ -98,7 +100,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     outsider = tmp_path / 'outsider-checkout'
     source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))
     declare_test_bus(comms, channels=('comms',), threads=tuple(
-        Thread(name=name, tags=frozenset({'comms'}), worktree=str(worktree))
+        Thread(name=name, tags=frozenset({'comms'}), worktree=Checkout(worktree))
         for name, worktree in (('lead', source.checkout), ('worker', source.checkout),
                                ('outsider', outsider))
     ))
@@ -138,7 +140,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
 
 
 def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
-    reader = comms.messaging.user_identity(str(tmp_path))
+    reader = comms.messaging.user_identity(Checkout(tmp_path))
     before = comms.registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError, match="Only agent threads can be stopped"):
         comms.owners.stop(reader.name)
@@ -508,7 +510,7 @@ def test_latest_answer_retains_the_original_response_eligibility(
     held_bus, target, body, role, human, eligible,
 ):
     now = time.time()
-    user = held_bus.messaging.user_identity(str(held_bus.root)) if human else None
+    user = held_bus.messaging.user_identity(Checkout(held_bus.root)) if human else None
     sender = user.name if user else "worker"
     origin = HumanOrigin.of(user) if user else AgentOrigin()
     original = held_bus.bus.publisher.publish_ordinary(

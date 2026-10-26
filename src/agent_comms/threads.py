@@ -197,7 +197,7 @@ class ThreadProvenance:
 
     name: str = field(kw_only=False)
     tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
-    worktree: str = field(kw_only=False)
+    worktree: Checkout = field(kw_only=False)
     created_at: Annotated[CreationTime, CreationSeconds, WireRequired()]
     session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoSessionFile
@@ -233,8 +233,6 @@ class ThreadProvenance:
         object.__setattr__(self, "created_at", FieldCodec.decode(
             Annotated[CreationTime, CreationSeconds], self.created_at))
         self.require_name(self.incarnation.name)
-        if not self.worktree:
-            raise ValueError("Thread worktree cannot be empty.")
         for tag in self.tags:
             Tag.validate(tag)
 
@@ -293,7 +291,7 @@ class Thread(ThreadProvenance, CatalogSelection):
     # Projects this conversation ran in before its current one: a saved session
     # resumes from them and a started turn finishes in one of them.
     earlier_projects: Annotated[
-        tuple[StoragePath, ...],
+        tuple[Checkout, ...],
         RegistrationPolicy(InheritPrevious),
         WireOmitDefault(),
     ] = field(default=(), kw_only=True)
@@ -357,32 +355,32 @@ class Thread(ThreadProvenance, CatalogSelection):
             for location, _ in parent.runtime.history_locations(parent, registry, visited):
                 yield location, True
 
-    def contains_worktree(self, worktree: str, rule: StorageRule) -> bool:
+    def contains_worktree(self, worktree: Checkout, rule: StorageRule) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
-        return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
+        return self.ran_in(worktree) or worktree.resolved().path in rule.checkouts_of(self)
 
-    @property
+    @cached_property
     def project_path(self) -> Path:
-        """The physical current project declared by this thread."""
-        return Path(self.worktree).expanduser().resolve()
+        """The physical current project, resolved once for this immutable snapshot."""
+        return self.worktree.resolved().path
 
     @property
     def home_checkouts(self) -> tuple[Path, ...]:
         """The current project when it is a Git checkout; a unit that has not yet run
         `agent-comms checkout add` from a plain directory such as its home holds none."""
-        return Checkout.present(self.project_path)
+        return Checkout.git_roots(self.project_path)
 
-    def ran_in(self, worktree: str) -> bool:
+    def ran_in(self, worktree: Checkout) -> bool:
         """The current project or one this conversation moved away from."""
-        selected = Path(worktree).expanduser().resolve()
-        return selected == self.project_path or selected in self.earlier_projects
+        selected = worktree.resolved()
+        return selected == self.worktree.resolved() or selected in self.earlier_projects
 
-    def moved_to_project(self, project: str) -> Thread:
+    def moved_to_project(self, project: Checkout) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
-        earlier = self.project_path
-        current = Path(project).expanduser().resolve()
+        earlier = self.worktree.resolved()
+        current = project.resolved()
         return replace(
-            self, worktree=project,
+            self, worktree=current,
             earlier_projects=tuple(dict.fromkeys(
                 path for path in (*self.earlier_projects, earlier) if path != current
             )),
@@ -405,13 +403,13 @@ class Thread(ThreadProvenance, CatalogSelection):
         if not self.restart_candidates(status):
             raise RelationViolationError("Restart requires another live owner")
 
-    def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
+    def native_environment(self, root, snapshot) -> dict[str, str]:
         """Project this captured owner through the original native binding."""
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
         return {
-            **replace(self.launch(), worktree=worktree, managed=True).encode(),
+            **replace(self.launch(), managed=True).encode(),
             **project.environment(root),
         }
 

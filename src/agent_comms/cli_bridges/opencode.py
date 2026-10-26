@@ -8,6 +8,8 @@ from dataclasses import dataclass
 import os
 import sqlite3
 from pathlib import Path
+
+from agent_comms.repo import Checkout
 from typing import AsyncIterator, ClassVar, Self
 from urllib.parse import quote
 
@@ -214,13 +216,13 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions]):
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--server', required=True, help='HTTP address of the running OpenCode TUI/server')
-        parser.add_argument('--directory', type=Path, default=Path.cwd(), help='OpenCode session working directory')
+        parser.add_argument('--directory', type=Path, required=True, help='OpenCode session working directory')
 
     def session_process(self) -> ProcessIdentity:
         return ProcessIdentity.capture(self.options.pid)
 
-    async def session_worktree(self) -> Path:
-        return self.options.directory
+    async def session_worktree(self) -> Checkout:
+        return Checkout(self.options.directory)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         async with self.connection() as connection:

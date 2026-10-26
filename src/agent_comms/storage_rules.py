@@ -301,7 +301,7 @@ class StorageRule(RoomAllocation, DurableFile):
         candidates = (home, *self.checkout_paths(thread))
         checkouts = {home}
         listed: set[Path] = set()
-        for repository in Checkout.present(*candidates):
+        for repository in Checkout.git_roots(*candidates):
             if repository in listed:
                 continue
             entries = WorkBranches(repository).read_checkout().worktrees()
@@ -471,7 +471,7 @@ class StorageProjection:
 
     def check_call(self, call: CodingCall) -> tuple[StorageEffect, ...]:
         """Check the call's declared effects against this same lazy owner snapshot."""
-        effects = call.storage_effects(Path(self.thread.worktree))
+        effects = call.storage_effects(self.thread.worktree.path)
         self.check(effects)
         return effects
 

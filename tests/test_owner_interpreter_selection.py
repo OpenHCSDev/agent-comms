@@ -1,3 +1,5 @@
+
+from agent_comms.repo import Checkout
 """Restart captures the original per-session launch over the real owner socket."""
 
 from dataclasses import replace
@@ -18,7 +20,7 @@ async def test_original_session_launches_share_host_and_refuse_changed_selection
     try:
         expected = {}
         for name in ("older", "current"):
-            comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+            comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
             launch = agent.inputs.configuration.launch
             original = replace(launch, environment={
                 **launch.environment, "AUTHORED_CREDENTIAL": name,

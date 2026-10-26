@@ -375,9 +375,7 @@ class ThreadArgument:
 
 @dataclass(frozen=True, kw_only=True)
 class WorktreeArgument:
-    worktree: Annotated[str, Argument(flags=("--worktree",))] = (
-        dataclasses.field(default_factory=os.getcwd)
-    )
+    worktree: Annotated[Checkout, Argument(flags=("--worktree",))]
 
 
 @dataclass(frozen=True)

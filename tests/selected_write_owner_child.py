@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 from pathlib import Path
+from agent_comms.repo import Checkout
 
 from agent_comms.active_route import ActiveRoute
 from agent_comms.comms import wire

@@ -1,3 +1,5 @@
+
+from agent_comms.repo import Checkout
 """Counting a listing uses its captured identities, not a borrowed registry lock."""
 
 import multiprocessing
@@ -58,7 +60,7 @@ def test_thread_listing_counts_outside_the_registry_lock(
 ) -> None:
     comms.channels.create_tag("team")
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), Checkout(tmp_path)))
     comms.messaging.send("sender", "recipient", "Count this captured delivery")
     context = multiprocessing.get_context("spawn")
     start, done = context.Event(), context.Event()
@@ -86,13 +88,13 @@ def test_thread_listing_counts_frozen_deliveries_and_human_history(
 ) -> None:
     comms.channels.create_tag("team")
     comms.registry.declare(Thread(
-        "old-sender", frozenset({"team"}), str(tmp_path), created_at=9000.0,
+        "old-sender", frozenset({"team"}), Checkout(tmp_path), created_at=9000.0,
     ))
     comms.messaging.send("old-sender", "#team", "History before either viewer joined")
     for birth, name, role in ((10000.0, "human", UserThreadRole),
                               (10001.0, "agent", AgentThreadRole)):
         comms.registry.declare(Thread(
-            name, frozenset({"team"}), str(tmp_path), created_at=birth, role=role,
+            name, frozenset({"team"}), Checkout(tmp_path), created_at=birth, role=role,
         ))
     with comms.registry.store.editing() as edit:
         edit.document.rename("old-sender", "sender")

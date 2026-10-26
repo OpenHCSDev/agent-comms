@@ -6,6 +6,7 @@ import multiprocessing
 import os
 from functools import partial
 
+from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.coordinator import Coordination

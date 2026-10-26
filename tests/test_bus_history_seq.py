@@ -1,6 +1,7 @@
 """Bus history uses sequence keys; Pi session cursors remain byte positions."""
 
 
+from agent_comms.repo import Checkout
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -78,7 +79,7 @@ def test_scoped_page_rows_and_edges_share_the_admitted_cut(tmp_path, traversal):
 def test_archived_database_pages_read_only(tmp_path):
     live = channel_bus(tmp_path / "live")
     registry = Registration(RegistryFile.path_in(live.bus.path.parent))
-    registry.declare(Thread("author", frozenset({"history"}), str(tmp_path)))
+    registry.declare(Thread("author", frozenset({"history"}), Checkout(tmp_path)))
     source = HistoryArchive(Bus.path_in(tmp_path / "reader")).attach(live.bus.path.parent)
     archive = Path(source.root)
     archived = MessageBus(archive, Registration(RegistryFile.path_in(archive)), Publisher)
@@ -112,7 +113,7 @@ def test_message_identity_lookup_preserves_missing_and_ambiguous_refusal(tmp_pat
 
 def test_origins_check_message_identity_inside_actual_writer_transaction(tmp_path):
     messages = channel_bus(tmp_path / "source")
-    origin = HumanOrigin("author", 1, str(tmp_path))
+    origin = HumanOrigin("author", 1, Checkout(tmp_path))
     message = Message("author", "#history", "one human send", InfoKind)
     with messages.bus.writing() as db:
         source = BusSnapshot.from_connection(db)
@@ -135,7 +136,7 @@ def test_user_identity_is_created_once_under_the_registry_owner(tmp_path):
     root = messages.bus.path.parent
     clients = tuple(wire(root).messaging for _ in range(2))
     with ThreadPoolExecutor(max_workers=2) as executor:
-        users = tuple(executor.map(lambda client: client.user_identity(str(root)), clients))
+        users = tuple(executor.map(lambda client: client.user_identity(Checkout(root)), clients))
     assert users[0].incarnation == users[1].incarnation
     registered = tuple(clients[0].registry.user_thread().existing())
     assert len(registered) == 1 and registered[0].incarnation == users[0].incarnation

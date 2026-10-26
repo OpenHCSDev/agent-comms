@@ -1,5 +1,6 @@
 """Saved audience retirement retains addressed history, never routing authority."""
 
+from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 import json
@@ -50,7 +51,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     Bus.install(Bus.path_in(tmp_path))
     comms = wire(tmp_path)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
-        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(tags), Checkout(tmp_path)))
     original = saved_catalog(tmp_path)
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)
@@ -83,7 +84,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     for send in (
         lambda: comms.messaging.send("other", "#engineering", "blocked").message.message_id,
         lambda: comms.messaging.send_user_message(
-            CommandTarget.named('#engineering'), "blocked", worktree=str(tmp_path)
+            CommandTarget.named('#engineering'), "blocked", worktree=Checkout(tmp_path)
         ),
     ):
         with pytest.raises(ValueError):
@@ -112,9 +113,9 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
     )
     before = comms.bus.bus.revision()
     with pytest.raises(ValueError):
-        comms.messaging.send_user_message(CommandTarget.named('#team-view'), "blocked", worktree=str(comms.root))
+        comms.messaging.send_user_message(CommandTarget.named('#team-view'), "blocked", worktree=Checkout(comms.root))
     assert comms.bus.bus.revision() == before
-    comms.messaging.send_user_message(CommandTarget.named('#team'), "exact", worktree=str(comms.root))
+    comms.messaging.send_user_message(CommandTarget.named('#team'), "exact", worktree=Checkout(comms.root))
     comms.channels.update_tags("bob", remove=frozenset({"team"}))
     rows = read_history(comms, "#team")
     assert [row.body for row in rows if not isinstance(row.role, Membership)] == ["exact"]

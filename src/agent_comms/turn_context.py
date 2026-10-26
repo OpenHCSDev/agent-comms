@@ -33,6 +33,7 @@ from .goals import Goal, NoGoal
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
+from .repo import Checkout
 from .thread_identity import ThreadIncarnation, TurnIdentity
 from .tool_result import DeclaredReply
 from .turn_item import NativeItemId, PiRequestKey
@@ -1112,7 +1113,7 @@ class CoordinationSegment(InstructionSegment):
     response_instruction: InstructionFile
     owner: ThreadIncarnation
     parent: str | None
-    project: str
+    project: Checkout
     peers: tuple[PeerState, ...]
 
     @classmethod
@@ -1138,7 +1139,7 @@ class CoordinationSegment(InstructionSegment):
             response_instruction=self.response_instruction.content,
             name=self.owner.name,
             parent=self.parent,
-            project=self.project,
+            project=str(self.project.path),
             peers=FieldCodec.compact(FieldCodec.encode(self.peers)),
         )
 

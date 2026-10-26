@@ -5,6 +5,7 @@ manifest whose declaration name is intentionally unavailable in this reader.
 """
 
 
+from agent_comms.repo import Checkout
 from agent_comms.context_store import UNREAD_CONTEXT
 import asyncio
 import pickle
@@ -58,7 +59,7 @@ class ReadRecordedContext(ReadRequest):
 
 
 def saved_row(comms):
-    owner = Thread('saved', frozenset(), str(comms.root.parent), created_at=17003.0)
+    owner = Thread('saved', frozenset(), Checkout(comms.root.parent), created_at=17003.0)
     comms.registry.declare(owner)
     comms.contexts.record_after(UNREAD_CONTEXT, manifest(owner))
     with comms.contexts.snapshot() as db:
@@ -194,7 +195,7 @@ class PreparingStage(SidebarReadStage):
     StaleRevision("source moved"),
 ])
 def test_sidebar_prepares_once_then_publishes_and_keeps_real_rows(comms, cause):
-    request = ObserveSidebar(str(comms.root.parent), True, True)
+    request = ObserveSidebar(Checkout(comms.root.parent), True, True)
     revision = comms.views.revision()
     reading = SidebarReading(request)
     reading.stage = stage = PreparingStage(cause)
@@ -225,7 +226,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
     try:
         await readable(process)
         process.results()
-        process.request(ObserveSidebar(str(comms.root.parent), True, True))
+        process.request(ObserveSidebar(Checkout(comms.root.parent), True, True))
         async with asyncio.timeout(30):
             while True:
                 await readable(process)

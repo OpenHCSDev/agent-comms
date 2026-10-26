@@ -27,6 +27,7 @@ from agent_comms.field_codec import (
     WireOmitDefault,
 )
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.repo import Checkout
 from agent_comms.thread_text import (
     AbsentText,
     GivenText,
@@ -407,7 +408,7 @@ class ThreadLaunch(EnvironmentRecord):
     """
 
     name: Annotated[str, WireName("AGENT_COMMS_THREAD")]
-    worktree: Annotated[str, WireName("PI_WORKTREE")]
+    worktree: Annotated[Checkout, WireName("PI_WORKTREE")]
     tags: Annotated[
         frozenset[str],
         TagListText,
@@ -441,11 +442,12 @@ class ThreadLaunch(EnvironmentRecord):
 
     @classmethod
     def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:
-        """Decode this process's launch; an unset worktree is the working directory."""
+        """Decode the explicitly declared calling thread and project."""
         values = cls.inherited(environment)
         if not values.get(cls.variable("name")):
             raise CallingThreadUnavailable(f"Calling thread requires {cls.variable('name')}.")
-        values.setdefault(cls.variable("worktree"), os.getcwd())
+        if not values.get(cls.variable("worktree")):
+            raise CallingThreadUnavailable(f"Calling thread requires {cls.variable('worktree')}.")
         return FieldCodec.decode(cls, values)
 
     @classmethod

@@ -467,7 +467,7 @@ class RetainedNative(ChildNative):
         return EmptyNative()
 
     async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
-        if thread.project_resume_due or self.child.key[0].cwd != Path(thread.worktree):
+        if thread.project_resume_due or self.child.key[0].cwd != thread.worktree.path:
             self.child.forget_context()
         if not self.current or self.identity.session_file != thread.runtime.read_key:
             return context

@@ -1,3 +1,5 @@
+
+from agent_comms.repo import Checkout
 """Unread counts retain identity and role rules without per-row Python callbacks."""
 
 import sqlite3
@@ -40,11 +42,11 @@ def test_pending_counts_need_no_python_callback(
     roles = (UserThreadRole, LaterThreadRole) + (AgentThreadRole,) * (len(names) - 2)
     for index, (name, role) in enumerate(zip(names, roles, strict=True)):
         comms.registry.declare(Thread(
-            name, frozenset({"comms"}), str(tmp_path / name),
+            name, frozenset({"comms"}), Checkout(tmp_path / name),
             created_at=10000.0 + index,
             role=role,
         ))
-    comms.registry.declare(Thread("old-sender", frozenset({"comms"}), str(tmp_path / "sender"),
+    comms.registry.declare(Thread("old-sender", frozenset({"comms"}), Checkout(tmp_path / "sender"),
                                   created_at=20000.0, role=UserThreadRole))
     with comms.registry.store.editing() as edit:
         edit.document.rename("old-sender", "sender")

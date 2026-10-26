@@ -20,6 +20,7 @@ from .shared import SessionBinding, IncomingFrame, TranscriptBridge, Options, ru
 from agent_comms.runtime_updates import (
     EarlierPublishedPage, OfferedToolsObserved, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
 )
+from agent_comms.repo import Checkout
 from agent_comms.thread_identity import UnreportedTools
 from .codex_connection import CodexConnection
 from .codex_protocol import (
@@ -82,11 +83,11 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
                 '3i', peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i')))
         return ProcessIdentity.capture(pid)
 
-    async def session_worktree(self) -> Path:
+    async def session_worktree(self) -> Checkout:
         async with CodexConnection.open(self.socket) as codex:
             resumed = ResumedThread.model_validate(await codex.call(
                 ResumeThread(threadId=self.thread)))
-            return Path(resumed.thread.cwd)
+            return Checkout.from_wire(resumed.thread.cwd)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         async with CodexConnection.open(self.socket) as codex:
