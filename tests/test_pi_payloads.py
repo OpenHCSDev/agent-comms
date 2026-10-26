@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
@@ -31,6 +31,28 @@ from agent_comms.thread_model import DeclaredModel, UndeclaredModel
 
 def decode(record):
     return PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+
+
+@pytest.mark.parametrize("role, matches", (("user", True), ("assistant", False)))
+def test_only_user_messages_match_native_input(role: str, matches: bool):
+    native_id = InputId.mint()
+    event = decode({
+        "type": "message_start",
+        "message": {
+            "role": role, "content": [{"type": "text", "text": "following"}],
+            "inputId": str(native_id),
+        },
+    })
+    assert event.message.matches_input("following", native_id) is matches
+    assert not event.message.matches_input("different", native_id)
+    assert not event.message.matches_input("following", InputId.mint())
+
+
+@pytest.mark.parametrize("state", (None, {}, {"isStreaming": False}, {"isCompacting": False}))
+def test_idle_proof_requires_reported_native_state(state):
+    event = decode({"type": "response", "command": "get_state", "success": True, "data": state})
+    with pytest.raises(ValueError):
+        event.success.proves_idle(event)
 
 
 def test_single_external_member_is_derived_and_requires_one_provided_case():
@@ -70,7 +92,7 @@ def test_selected_command_decodes_original_native_error_envelope(command):
                     "success": False, "error": "Selected preparation source changed"})
     assert isinstance(event, Response)
     assert event.command is PiCommand.member_named(command)
-    assert event.refused and isinstance(event.data, MissingData)
+    assert not event.success.success_value and isinstance(event.data, MissingData)
     assert event.rejection_details() == {"command": command, "id": "original",
         "success": False, "error": "Selected preparation source changed"}
 
@@ -122,6 +144,7 @@ def test_command_owns_response_schema_and_unknown_data_stays_opaque():
         {
             "type": "response",
             "command": "get_state",
+            "success": True,
             "data": {
                 "sessionId": "sid",
                 "model": {"provider": "p", "id": "m", "contextWindow": 1000},
@@ -135,7 +158,8 @@ def test_command_owns_response_schema_and_unknown_data_stays_opaque():
     unknown = decode({"type": "future_notice", "nested": [True, 7]})
     assert isinstance(unknown, UnknownPiEvent)
     assert unknown.payload == {"type": "future_notice", "nested": [True, 7]}
-    response = decode({"type": "response", "command": "future_command", "data": [7, "opaque"]})
+    response = decode({"type": "response", "command": "future_command", "success": True,
+                       "data": [7, "opaque"]})
     assert isinstance(response.data, UnknownData) and response.data.payload == [7, "opaque"]
 
 
@@ -211,6 +235,7 @@ def test_malformed_known_authority_fields_fail_at_boundary(record):
 def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     record = {
         "type": "prompt",
+        "inputId": "1" * 32,
         "message": "see",
         "ownerTools": {"path": "/unused/test-tool-socket", "token": "test-token"},
         "images": [{"type": "image", "data": "YWJj", "mimeType": "image/png"}],

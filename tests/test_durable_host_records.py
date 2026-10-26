@@ -84,15 +84,15 @@ def test_result_kind_is_bound_to_its_pending_command():
     async def journey():
         channel = PiRpcChannel(asyncio.StreamReader(), event_type=DurablePiEvent)
         command = CompactDurable(id=RequestId(PiRequestKey('9')))
-        future = channel.track(command)
+        receipt = channel.track(command)
         with pytest.raises((TypeError, ValueError)):
             decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
                     'success': True, 'data': {'tokens': 0, 'window': None}})
-        assert not future.done()
+        assert not receipt.future.done()
         error = decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
                         'success': False, 'error': 'failed'})
         assert channel.correlate(error) == command
-        assert (await future).error == ReportedText('failed')
+        assert (await receipt.response()).error == ReportedText('failed')
         with pytest.raises(MalformedRecord):
             channel.correlate(error)
     asyncio.run(journey())

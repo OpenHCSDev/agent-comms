@@ -10,7 +10,7 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from .pending_requests import PendingRequests
+from .pending_requests import PendingRequest, PendingRequests
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -74,12 +74,12 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     async def request(self, command, child):
         if self._read_task is None:
             return await command.exchange(child, strict=True, on_event=self.event_type.unowned_event)
-        async with command.pending_response(child) as future:
-            await asyncio.wait((future, self._read_task), return_when=asyncio.FIRST_COMPLETED)
-            response = future.result() if future.done() else self._read_task.result()
-            if response is None:
-                raise EOFError('Pi child ended before its response')
-            return response
+        pending = await child.send_request(command)
+        await asyncio.wait((pending.future, self._read_task), return_when=asyncio.FIRST_COMPLETED)
+        response = pending.future.result() if pending.future.done() else self._read_task.result()
+        if response is None:
+            raise EOFError('Pi child ended before its response')
+        return response
 
     async def converted(self):
         while (event := await self.next_event()) is not None:
@@ -106,9 +106,9 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
             return None
         return self.decode_record(raw, strict=strict, max_bytes=max_bytes, event_type=self.event_type)
 
-    def track(self, command: PiCommand) -> asyncio.Future[Response]:
-        """Expose the same pending response to the request's lifecycle owner."""
-        return command.id.track_in(self.pending, type(command), command)
+    def track[Command: PiCommand](self, command: Command) -> PendingRequest[Command]:
+        """Share the original request and reply with its lifecycle owner."""
+        return command.id.track_in(self.pending, command.response_type(), command)
 
     @staticmethod
     def command_bytes(command: PiCommand) -> bytes:

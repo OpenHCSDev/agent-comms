@@ -9,8 +9,7 @@ from __future__ import annotations
 import re
 import typing
 from abc import abstractmethod
-from asyncio import Future
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from decimal import Decimal
 from typing import (
@@ -84,9 +83,9 @@ from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
-    from .backend import TurnSession
+    from .backend import NativeSession, TurnSession
     from .native_entries import TranscriptProjection
-    from .pending_requests import PendingRequests
+    from .pending_requests import PendingRequest, PendingRequests
     from .pi_commands import PiCommand
     from .pi_events import AutoRetryEnd, Response
     from .routing import Routing
@@ -195,13 +194,10 @@ class RequestId(PiReported[PiRequestKey]):
 
     value: PiRequestKey
 
-    def track_in(
-        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
-    ) -> Future[Response]:
+    def track_in[Command: PiCommand](
+        self, pending: PendingRequests, owner: type[PiCommand], command: Command,
+    ) -> PendingRequest[Command]:
         return pending.add(owner, self.value, request=command)
-
-    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
-        pending.discard(owner, self.value)
 
     def take_from(
         self, pending: PendingRequests, owner: type[PiCommand], response: Response,
@@ -213,13 +209,10 @@ class RequestId(PiReported[PiRequestKey]):
 class AnonymousRequest(PiOmitted):
     """The record carried no id; its response is matched by command family alone."""
 
-    def track_in(
-        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
-    ) -> Future[Response]:
+    def track_in[Command: PiCommand](
+        self, pending: PendingRequests, owner: type[PiCommand], command: Command,
+    ) -> PendingRequest[Command]:
         return pending.add(owner, PiRequestKey.fresh(), request=command)
-
-    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
-        """The anonymous entry is keyed by a private token nobody else holds."""
 
     def take_from(
         self, pending: PendingRequests, owner: type[PiCommand], response: Response,
@@ -819,6 +812,9 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
         """The tool calls this message makes, in the order it makes them."""
         return tuple(call for part in self.parts for call in part.tool_calls())
 
+    def matches_input(self, text: str, native_id: InputId | PiOmitted) -> bool:
+        return False
+
     def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
         return ()
 
@@ -966,7 +962,7 @@ class UserMessage(PiMessage):
     def preserve_evidence(self, raw: Mapping[str, object]) -> Self:
         return replace(self, content=self.content.preserve_evidence(raw.get("content")))
 
-    def matches_input(self, text, native_id):
+    def matches_input(self, text: str, native_id: InputId | PiOmitted) -> bool:
         # An omitted input id matches an omitted prompt id, as it always has.
         return self.text == text and self.input_id.value_or(PiOmitted()) == native_id
 
@@ -1165,8 +1161,18 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
     def session_busy(self) -> bool:
         return False
 
-    def require_payload(self):
+    def require_payload(self) -> PiResponseData:
         return self
+
+    def require_state(self) -> StateData:
+        """Only Pi's session-state reply answers a state query."""
+        raise ValueError(f"{type(self).__name__} is not Pi's session state")
+
+    def native_updates(self, session: NativeSession) -> Iterable[AgentEvent]:
+        return ()
+
+    def cleared_inputs(self, requested: tuple[InputId, ...]) -> tuple[InputId, ...]:
+        return ()
 
     def conflicts_attestation(self, attestation) -> bool:
         return False
@@ -1182,7 +1188,7 @@ class QueueClearedData(PiResponseData):
 
     input_ids: Annotated[tuple[InputId, ...], WireName("inputIds")]
 
-    def require_requested(self, requested: tuple[InputId, ...]) -> tuple[InputId, ...]:
+    def cleared_inputs(self, requested: tuple[InputId, ...]) -> tuple[InputId, ...]:
         if len(set(self.input_ids)) != len(self.input_ids) or not set(self.input_ids) <= set(requested):
             raise ValueError("Native clear returned duplicate or unrequested input IDs")
         return self.input_ids
@@ -1195,7 +1201,7 @@ class EmptyData(PiResponseData):
 class MissingData(ExternalNullMember, PiResponseData):
     """An omitted/null native payload is not a successful data observation."""
 
-    def require_payload(self):
+    def require_payload(self) -> typing.Never:
         raise ValueError("Native response has no data")
 
 
@@ -1241,6 +1247,9 @@ class NativeSessionSnapshot(PiPayload):
 
 @dataclass(frozen=True)
 class StateData(NativeSessionSnapshot, PiResponseData):
+    def require_state(self) -> StateData:
+        return self
+
     native_input_proof_capability: Annotated[
         PiField[str | PiOmitted], WireName("nativeInputProofCapability")
     ] = PiOmitted()
@@ -1265,6 +1274,12 @@ class StateData(NativeSessionSnapshot, PiResponseData):
         PiField[ReportedFlag | PiOmitted], WireName("isCompacting")
     ] = PiOmitted()
 
+    def native_updates(self, session: NativeSession) -> Iterable[AgentEvent]:
+        session.native.attestation = session.native.attestation.observe(self)
+        session.active_session_file = self.session_file.text_or(session.active_session_file)
+        self.model.context_window.observe_size(session.usage)
+        yield self.agent_info(session)
+
     def agent_info(self, session):
         """Project this actual native state, not a later usage-only observation."""
         from .agent_events import AgentInfo
@@ -1278,7 +1293,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
 
     @property
     def session_busy(self) -> bool:
-        return self.is_streaming.value_or(False) or self.is_compacting.value_or(False)
+        return self.is_streaming.require() or self.is_compacting.require()
 
 
 @dataclass(frozen=True)
@@ -1286,6 +1301,13 @@ class SessionStatsData(NativeSessionSnapshot, PiResponseData):
     context_usage: Annotated[
         PiField[ReportedContextUsage | PiOmitted], WireName("contextUsage")
     ] = PiOmitted()
+
+    def native_updates(self, session: NativeSession) -> Iterable[AgentEvent]:
+        for context in self.context_usage.present():
+            context.token_total.confirm(session.usage)
+            if not session.native.attestation.uncertain:
+                context.context_window.update_size(session.usage)
+        yield session.context_info()
 
 
 @dataclass(frozen=True)

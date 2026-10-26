@@ -58,7 +58,7 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
-from .prompt_state import UnwrittenPrompt
+from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
@@ -190,11 +190,14 @@ class FinishSignal(ABC):
         return NoFinishSignal() if event is None else EventFinishSignal(event)
 
     @abstractmethod
-    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]: ...
+    def waiters(self) -> tuple[asyncio.Task[bool], ...]: ...
+
+    def consumed(self) -> None:
+        pass
 
 
 class NoFinishSignal(FinishSignal):
-    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]:
+    def waiters(self) -> tuple[asyncio.Task[bool], ...]:
         return ()
 
 
@@ -202,8 +205,11 @@ class NoFinishSignal(FinishSignal):
 class EventFinishSignal(FinishSignal):
     event: asyncio.Event
 
-    def waiters(self, *, settling: bool) -> tuple[asyncio.Task[bool], ...]:
-        return () if settling else (asyncio.create_task(self.event.wait()),)
+    def waiters(self) -> tuple[asyncio.Task[bool], ...]:
+        return (asyncio.create_task(self.event.wait()),)
+
+    def consumed(self) -> None:
+        self.event.clear()
 
 
 NO_FINISH_SIGNAL = NoFinishSignal()
@@ -216,7 +222,7 @@ class NativeSession(MroDispatch, ABC):
 
     @property
     @abstractmethod
-    def prompt_type(self):
+    def prompt_type(self) -> type[QueuedOperation]:
         """Each concrete native operation declares whether it sends input."""
 
     def __init__(
@@ -247,14 +253,13 @@ class NativeSession(MroDispatch, ABC):
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup
         self.inputs = InputForwarding(steering_queue if steering_queue is not None else TurnInbox())
-        self.prompt_state = self.prompt_type()
+        self.prompt_state: PromptState = self.prompt_type()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
         self.output = TurnOutput()
         self.rejected_signal = asyncio.Event()
         self.rejected_commands: list[events.InputRefused] = []
         self.explicit_interrupt = False
-        self.settlement_count = 0
         self.started_during_abort: list[events.FollowingInputStarted] = []
         self.finished = self.skip = False
 
@@ -278,15 +283,11 @@ class NativeSession(MroDispatch, ABC):
 
     async def agent_settled(self, event: pi.AgentSettled) -> tuple[events.AgentEvent, ...]:
         """Settling asks Pi for the turn's statistics before the turn reports itself finished."""
-        self.settlement_count += 1
-        if self.inputs.pending:
-            self.skip = True
-            return ()
+        await self.native.stop_forwarding()
         self.prompt_state = self.prompt_state.settle(event)
-        if not self.stats.requested:
-            self.watchdog.progress()
-            self.watchdog.phase = SettlingStatsPhase()
-            await self.stats.request(self)
+        self.watchdog.progress()
+        self.watchdog.phase = SettlingStatsPhase()
+        await self.stats.request(self)
         return ()
 
     def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
@@ -310,6 +311,8 @@ class NativeSession(MroDispatch, ABC):
         for update in await self.apply_native_event(event):
             yield update
         self.watchdog.transition(event)
+        async for update in self.stats.settle(self):
+            yield update
         for update in self.native_phase_changes(previous):
             yield update
 
@@ -346,12 +349,10 @@ class NativeSession(MroDispatch, ABC):
 
     def permits_live_status(self) -> bool:
         """Only tracked, live input may publish an informational package acknowledgement."""
-        if self.stats.requested:
-            return False
-        return self.prompt_state.permits_extension_ui(self)
+        return self.stats.permits_live_status(self)
 
     async def abort_stalled_rpc(self) -> None:
-        await self.native.finish_input()
+        await self.finish_input()
         abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
         try:
             remaining = max(0.0, abort_deadline - self.loop.time())
@@ -445,7 +446,7 @@ class NativeSession(MroDispatch, ABC):
                                 await error.refuse(self)
                                 break
                             if self.native.attestation.observed:
-                                self.inputs.queue.begin(self.prompt_state)
+                                self.inputs.queue.begin(self.prompt_type())
                                 self.ensure_input_forwarding()
                         async for event in self.payload.consume(self):
                             yield event
@@ -453,10 +454,6 @@ class NativeSession(MroDispatch, ABC):
                             break
                         if self.skip:
                             continue
-                        async for event in self.stats.settle(self):
-                            yield event
-                        if self.finished:
-                            break
                     self.finished = False
                     await self.retain_or_close()
                     await self.finish_diagnostics()
@@ -544,9 +541,14 @@ class NativeSession(MroDispatch, ABC):
         self.active_session_file = self.launch.session.session_file
         self.watchdog.reading()
 
+    async def finish_input(self) -> None:
+        """Retire snapshot work before the input transport it borrows."""
+        await self.stats.close()
+        await self.native.finish_input()
+
     async def retain_or_close(self) -> None:
         self.tool_socket.assert_complete()
-        await self.native.finish_input()
+        await self.finish_input()
         retention = SessionRetention.from_optional(self.native.attestation.identity)
         if self.prompt_state.permits_retention(self):
             self.native.sensitive_diagnostics = self.output.sensitive

@@ -15,7 +15,7 @@ from .native_arguments import SelectedModel
 from .native_failures import NativePiUnavailable
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
+    from .backend import NativeSession
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_failure_observation import FailedTurnObservation
     from .turn_output import TurnOutput
@@ -101,7 +101,7 @@ class TerminalFailure(TurnFailure):
 
     @classmethod
     @abstractmethod
-    def detected(cls, session: TurnSession, transport_ok: bool) -> bool: ...
+    def detected(cls, session: NativeSession, transport_ok: bool) -> bool: ...
 
     @classmethod
     def explanation(cls, output: TurnOutput) -> str:
@@ -112,7 +112,7 @@ class InputMissing(TerminalFailure):
     default_text = "Pi RPC run ended without this prompt's user message start."
 
     @classmethod
-    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
+    def detected(cls, session: NativeSession, transport_ok: bool) -> bool:
         return not session.prompt_state.started and bool(
             transport_ok or session.inputs.uncertain or session.output.failure_text
         )
@@ -167,7 +167,7 @@ class FinalStopMissing(TerminalFailure):
     default_text = "Pi RPC run ended without an authoritative final assistant stop."
 
     @classmethod
-    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
+    def detected(cls, session: NativeSession, transport_ok: bool) -> bool:
         return transport_ok and not session.output.final_assistant_stop
 
     @classmethod
@@ -176,10 +176,10 @@ class FinalStopMissing(TerminalFailure):
 
 
 class QueuedInputMissing(TerminalFailure):
-    default_text = "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
+    default_text = "Pi RPC run ended before a queued input started; that input did not run."
 
     @classmethod
-    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
+    def detected(cls, session: NativeSession, transport_ok: bool) -> bool:
         return transport_ok and session.output.error_message is None and session.inputs.unresolved
 
 

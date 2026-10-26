@@ -1,89 +1,135 @@
-"""Statistics settlement derives from the channel's actual pending responses."""
+"""Native settlement stops forwarding, joins prompt replies and proves the child idle."""
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator, Collection
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
-
-from agent_comms.pi_payloads import RequestId
 
 from . import agent_events as events
 from . import pi_commands as commands
+from . import turn_failure as failures
 from . import turn_phase as phases
-from .turn_item import PiRequestKey
+from .pending_requests import PendingRequest
 
 if TYPE_CHECKING:
-    from .backend import NativeSession
-    from .pi_events import Response
+    from .backend import FinishSignal, NativeSession
+    from .turn_watchdog import ProgressWatchdog, TurnWait
 
 
-@dataclass
 class StatsRequest:
-    _pending: tuple[asyncio.Future[Response], ...] = field(default=(), repr=False)
-    generation: int = 0
-    settlement_count: int = 0
+    """No native settlement observation is waiting for its snapshot."""
 
-    @property
-    def requested(self) -> bool:
-        return bool(self._pending)
+    def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:
+        return active
+
+    def finish_waiters(self, signal: FinishSignal) -> tuple[asyncio.Task[bool], ...]:
+        return signal.waiters()
+
+    def permits_live_status(self, session: NativeSession) -> bool:
+        return session.prompt_state.permits_extension_ui(session)
 
     @property
     def complete(self) -> bool:
-        return self.requested and all(
-            future.done() and not future.cancelled() and future.result().succeeded
-            for future in self._pending
-        )
+        return False
 
     @property
-    def failed(self) -> bool:
-        return any(
-            future.cancelled() or future.done() and not future.result().succeeded
-            for future in self._pending
-        )
-
-    @property
-    def busy(self) -> bool:
-        return any(
-            future.done()
-            and not future.cancelled()
-            and future.result().data.session_busy
-            for future in self._pending
-        )
+    def tasks(self) -> tuple[asyncio.Task[ReadingStats], ...]:
+        return ()
 
     async def request(self, session: NativeSession) -> None:
-        if self.requested:
-            return
-        self.generation = session.inputs.generation
-        self.settlement_count = session.settlement_count
-        requests = (
-            commands.GetState(id=RequestId(PiRequestKey.fresh())),
-            commands.GetSessionStats(
-                id=RequestId(PiRequestKey.fresh())
-            ),
+        # A newer native settlement replaces an older in-flight snapshot. Its
+        # reply, not a copied event counter, determines the current operation.
+        await self.close()
+        session.stats = RequestingStats(asyncio.create_task(self._request(session)))
+
+    @staticmethod
+    async def _request(session: NativeSession) -> ReadingStats:
+        # Forwarding has stopped. No get_state query may overtake an input still
+        # in async prompt preflight; join its original RPC acknowledgement first.
+        await session.native.reader.pending.before_settlement()
+        pending = (
+            session.native.send(commands.GetState()),
+            session.native.send(commands.GetSessionStats()),
         )
-        self._pending = tuple(session.native.send(command) for command in requests)
         await session.native.drain()
+        return ReadingStats(pending)
+
+    def advance_if_done(self, session: NativeSession, completed: Collection[object]) -> bool:
+        return False
+
+    async def close(self) -> None:
+        pass
+
+    def expired(self, session: NativeSession) -> None:
+        session.output.record_failure(failures.BackendFailed(
+            "Pi did not finish its native settlement snapshot."
+        ))
 
     async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:
-        if not (self.complete or self.failed):
+        return
+        yield
+
+
+class RequestedStats(StatsRequest):
+    """A native settlement snapshot is in flight or retained as its evidence."""
+
+    def finish_waiters(self, signal: FinishSignal) -> tuple[asyncio.Task[bool], ...]:
+        return ()
+
+    def permits_live_status(self, session: NativeSession) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class RequestingStats(RequestedStats):
+    task: asyncio.Task[ReadingStats]
+
+    @property
+    def tasks(self) -> tuple[asyncio.Task[ReadingStats], ...]:
+        return (self.task,)
+
+    def advance_if_done(self, session: NativeSession, completed: Collection[object]) -> bool:
+        if self.task not in completed:
+            return False
+        session.stats = self.task.result()
+        return True
+
+    async def close(self) -> None:
+        self.task.cancel()
+        await asyncio.gather(self.task, return_exceptions=True)
+
+
+@dataclass(frozen=True)
+class ReadingStats(RequestedStats):
+    pending: tuple[PendingRequest[commands.GetState], PendingRequest[commands.GetSessionStats]]
+
+    def wait_for(self, watchdog: ProgressWatchdog, active: TurnWait) -> TurnWait:
+        # Only the metadata replies use the short snapshot wait. A prompt still
+        # in preflight keeps its active input/model/UI wait in RequestingStats.
+        return watchdog.poll_wait
+
+    @property
+    def complete(self) -> bool:
+        return all(entry.future.done() and not entry.future.cancelled()
+                   and entry.future.result().success.proves_idle(entry.future.result())
+                   for entry in self.pending)
+
+    async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:
+        if not all(entry.future.done() for entry in self.pending):
             return
-        await asyncio.sleep(0)
-        queued = session.inputs.queue.has_ready_work
-        if not self.failed and (
-            self.busy
-            or session.inputs.pending
-            or queued
-            or session.inputs.generation != self.generation
-        ):
-            self._pending = ()
+        snapshots = tuple(entry.future.result().success.require_data(entry.future.result())
+                          for entry in self.pending)
+        if any(snapshot.session_busy for snapshot in snapshots):
+            # Already-written inputs can start another native run. The next
+            # agent_settled observation owns its snapshot; do not poll the model.
+            session.stats = StatsRequest()
             session.watchdog.phase = phases.ModelWaitPhase()
-            if (
-                session.settlement_count > self.settlement_count or queued
-            ) and not session.inputs.pending:
-                await self.request(session)
-            session.skip = True
+            session.ensure_input_forwarding()
             return
+        # A proved idle child cannot start an input it still owes Core.
+        # Report that UNKNOWN immediately, rather than manufacture model wait.
+        session.prompt_state.validate_terminal(session, transport_ok=True)
         yield events.StreamSettled()
         session.finish_request()

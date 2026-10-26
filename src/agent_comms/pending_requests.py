@@ -13,30 +13,32 @@ if TYPE_CHECKING:
     from .pi_commands import PiCommand
     from .pi_events import Response
 
-@dataclass
-class PendingRequest:
+@dataclass(frozen=True)
+class PendingRequest[Command: PiCommand]:
     future: asyncio.Future[Response]
-    request: PiCommand
+    request: Command
+
+    async def response(self) -> Response:
+        """A consumer may stop waiting without cancelling the native reply."""
+        return await asyncio.shield(self.future)
 
 
 class PendingRequests(Sealed):
     """One future per nominal result family and request identity."""
 
     def __init__(self) -> None:
-        self._pending: dict[tuple[type[PiCommand], PiRequestKey], PendingRequest] = {}
+        self._pending: dict[tuple[type[PiCommand], PiRequestKey], PendingRequest[PiCommand]] = {}
 
-    def add(
-        self, result_type: type[PiCommand], request_id: PiRequestKey, *, request: PiCommand
-    ) -> asyncio.Future[Response]:
+    def add[Command: PiCommand](
+        self, result_type: type[PiCommand], request_id: PiRequestKey, *, request: Command
+    ) -> PendingRequest[Command]:
         key = (result_type, request_id)
         if key in self._pending:
             raise ValueError(f"Request already pending: {request_id}")
         future: asyncio.Future[Response] = asyncio.get_running_loop().create_future()
-        self._pending[key] = PendingRequest(future, request)
-        return future
-
-    def discard(self, result_type: type[PiCommand], request_id: PiRequestKey) -> None:
-        self._pending.pop((result_type, request_id), None)
+        pending = PendingRequest(future, request)
+        self._pending[key] = pending
+        return pending
 
     def take(
         self, result_type: type[PiCommand], request_id: PiRequestKey, value: Response,
@@ -48,6 +50,13 @@ class PendingRequests(Sealed):
         if not pending.future.done():
             pending.future.set_result(value)
         return pending.request
+
+    async def before_settlement(self) -> None:
+        """Join written commands whose declared preflight can precede native work."""
+        await asyncio.gather(*(
+            pending.request.before_settlement(pending)
+            for pending in tuple(self._pending.values())
+        ))
 
     def cancel_all(self) -> None:
         for pending in self._pending.values():

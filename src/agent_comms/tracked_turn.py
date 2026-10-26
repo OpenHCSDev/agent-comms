@@ -45,7 +45,7 @@ from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from .selected_session import SelectedSession
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
-from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait
+from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait, TurnWaitExpired
 
 if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
@@ -374,7 +374,7 @@ class TrackedTurnSession(TurnSession):
 
     async def retain_or_close(self) -> None:
         """Let the session keep a verified idle child; close any other child."""
-        await self.native.finish_input()
+        await self.finish_input()
         retention = SessionRetention.from_optional(self.native.attestation.identity)
         # An input written but never started may still run in the child; it is not idle.
         self.retainable = self.retainable and self.inputs.settled
@@ -393,6 +393,10 @@ class TrackedTurnSession(TurnSession):
                 if not self.rejected_commands:
                     break  # Otherwise the read was only woken to report a refused input.
             event = PiRpcChannel.decode_record(raw, strict=True) if raw else None
+        except TurnWaitExpired as expired:
+            async for update in expired.wait.expire(self):
+                await self.observe_event(update)
+            raise NativePiUnavailable(self.output.declared_failure.text) from expired
         except MalformedRecord as error:
             raise NativePiUnavailable(
                 f"Native Pi RPC record is invalid or incomplete; {type(error).__name__}: {error}"
@@ -540,13 +544,6 @@ class TrackedTurnSession(TurnSession):
                 self.context_commit.require(),
                 evidence=source_reads.for_source(self.active_session_file),
             ))
-
-    async def agent_settled(self, event: pi.AgentSettled) -> tuple[AgentEvent, ...]:
-        # Pi runs an input it was handed before settling; the turn ends after that run.
-        if self.inputs.all_written_started:
-            with self.startup.measurements.operation("native_agent_settled"):
-                self.finish_request()
-        return ()
 
     async def invalidate_identity(self) -> tuple[AgentEvent, ...]:
         # A tracked turn has no authority to recover a session another command replaced.

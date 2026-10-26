@@ -17,6 +17,7 @@ from .native_attestation import NativeAttestation, PendingAttestation
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
+from .pending_requests import PendingRequest
 from .pi_events import PiEvent
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
@@ -145,13 +146,19 @@ class PiChild:
     forwarding: InputForwarder = field(default_factory=NoInputForwarder, init=False, repr=False)
     _close_job: asyncio.Task[RetirementState] | None = field(default=None, init=False, repr=False)
 
-    def send(self, command: PiCommand) -> asyncio.Future:
-        future = self.reader.track(command)
+    def send[Command: PiCommand](self, command: Command) -> PendingRequest[Command]:
+        pending = self.reader.track(command)
         self.proc.send(self.reader.command_bytes(command))
-        return future
+        return pending
 
     async def drain(self) -> None:
         await self.proc.drain()
+
+    async def send_request[Command: PiCommand](self, command: Command) -> PendingRequest[Command]:
+        """A written request belongs to the channel until its reply or retirement."""
+        pending = self.send(command)
+        await self.drain()
+        return pending
 
     async def send_fenced(
         self, command: PiCommand, boundary: Callable[[], AbstractContextManager[None]],
@@ -183,9 +190,7 @@ class PiChild:
             raise RuntimeError('Pi child has retired')
         async with self.failures():
             response = await self.reader.request(command, self)
-        if not response.succeeded:
-            raise RuntimeError(response.error.value_or("Pi gave no error text"))
-        return response.data.require_payload()
+        return response.success.require_data(response)
 
     @property
     def retirement_result(self) -> RetirementState:
@@ -209,12 +214,16 @@ class PiChild:
     def forward_input(self, operation: Callable[[], Coroutine[None, None, None]]) -> None:
         self.forwarding = self.forwarding.start(operation)
 
-    async def finish_input(self) -> None:
-        """Retire this input's ingress without retiring a retained idle child."""
-        await self.reader.finish_input()
-        await self.transport.aclose()
+    async def stop_forwarding(self) -> None:
+        """Stop forwarding before proving the native child idle; keep reading replies."""
         forwarding, self.forwarding = self.forwarding, NoInputForwarder()
         await forwarding.finish()
+
+    async def finish_input(self) -> None:
+        """Retire this input's ingress without retiring a retained idle child."""
+        await self.stop_forwarding()
+        await self.reader.finish_input()
+        await self.transport.aclose()
 
     async def shutdown(self, *, graceful: bool = False) -> ChildOutcome:
         """Join the one gateway, ingress, process, pipe and resource retirement.
@@ -401,8 +410,9 @@ class BorrowedNative(SuccessorNative):
     ) -> PiResponseData:
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        async with request.pending_response(self.child) as response:
-            return (await response).data.require_payload()
+        pending = await self.child.send_request(request)
+        received = await pending.response()
+        return received.success.require_data(received)
 
 @dataclass
 class RetainedNative(ChildNative):

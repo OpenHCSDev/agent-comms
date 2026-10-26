@@ -8,34 +8,40 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
-
-from agent_comms.pi_payloads import RequestId
+from typing import TYPE_CHECKING, ClassVar
 
 from . import agent_events as events
 from . import pi_commands as commands
+from . import turn_failure as failures
+from .acp_failure import UnrecordedFailureSource
 from .agent_backend import ClearQueue, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
 from .field_codec import InputId
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
+from .pending_requests import PendingRequest
 from .prompt_state import PreparedSession, UnwrittenPrompt
-from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import NativeSession, TurnSession
     from .pi_events import MessageStart, Response
 
 
+class NoCurrentItem(TurnInboxItem):
+    """No dequeued operation remains with the forwarding task."""
+
+    has_work: ClassVar[bool] = False
+
+    def return_to(self, inbox: TurnInbox) -> None:
+        pass
+
+
 @dataclass
 class InputForwarding(MroDispatch):
     queue: TurnInbox = field(default_factory=TurnInbox)
-    pending: dict[InputId, InputRequest] = field(default_factory=dict)
-    accepted: set[InputId] = field(default_factory=set)
-    changed: asyncio.Event = field(default_factory=asyncio.Event)
-    current: TurnInboxItem | None = None
-    generation: int = 0
+    pending: dict[InputId, PendingRequest[commands.FollowingPrompt]] = field(default_factory=dict)
+    current: TurnInboxItem = field(default_factory=NoCurrentItem)
     started: bool = False
     uncertain: bool = False
 
@@ -46,31 +52,29 @@ class InputForwarding(MroDispatch):
 
     @property
     def unresolved(self) -> bool:
-        return self.current is not None or bool(self.pending) or self.queue.has_ready_work
-
-    @property
-    def all_written_started(self) -> bool:
-        """The child holds no input it has not started yet."""
-        return (not self.pending and not (self.current and self.current.carried_inputs)
-                and self.queue.all_written_started)
+        # A turn cannot report success while an accepted operation still needs forwarding.
+        return self.current.has_work or bool(self.pending) or self.queue.has_ready_work
 
     @property
     def settled(self) -> bool:
         return not self.uncertain and not self.unresolved
 
-    def acknowledge(self, response: Response) -> None:
-        if response.succeeded:
-            for item in self.pending.values():
-                if item.input_id in response.id.present():
-                    self.accepted.add(item.input_id)
-        self.changed.set()
-
     def retire(self, native_id: InputId) -> InputRequest:
         """Remove one exact native identity from the sole pending index."""
-        item = self.pending.pop(native_id)
-        self.accepted.discard(item.input_id)
-        self.changed.set()
-        return item
+        return self.pending.pop(native_id).request.input
+
+    def rejected(
+        self, native_id: InputId, response: Response, session: TurnSession,
+    ) -> tuple[events.AgentEvent, ...]:
+        """Retire the live write, preserve its durable UNKNOWN, and report the actual refusal."""
+        item = self.retire(native_id)
+        failure = failures.PromptSendFailed(
+            f"Following input {item.input_id} was rejected: {response.error.require()}"
+        )
+        session.output.record_failure(failure)
+        session.rejected_commands.append(events.FollowingInputRefused(id=item.input_id))
+        session.rejected_signal.set()
+        return (session.output.error(failure.text, source=UnrecordedFailureSource()),)
 
     async def forward(self, session: NativeSession) -> None:
         # Inputs that wait through one tool batch reach the model together,
@@ -79,13 +83,19 @@ class InputForwarding(MroDispatch):
         while True:
             self.current = await self.queue.get()
             try:
-                # An inbox item performs one operation. PreparedSession must not
-                # also run its UnwrittenPrompt ancestor and send a prompt.
+                # An inbox item performs one operation, not every matching base handler.
                 handler = next(self.handlers_for(self.current))
                 if not await handler(self.current, session):
                     return
+            except asyncio.CancelledError:
+                self.current.return_to(self.queue)
+                raise
             finally:
-                self.current = None
+                self.release_current()
+
+    def release_current(self) -> None:
+        """The inbox, native channel or send decision now owns this operation."""
+        self.current = NoCurrentItem()
 
     @handles(TurnInboxItem)
     async def unhandled(self, item: TurnInboxItem, session: NativeSession) -> bool:
@@ -112,9 +122,7 @@ class InputForwarding(MroDispatch):
         identity = session.native.attestation.require_identity()
         session.launch.session.attest(identity)
         if (
-            state.is_streaming.value_or(True)
-            or state.is_compacting.value_or(True)
-            or not state.pending_message_count.matches(0)
+            state.session_busy or not state.pending_message_count.matches(0)
         ):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")
         session.active_session_file = identity.session_file
@@ -124,40 +132,37 @@ class InputForwarding(MroDispatch):
     async def write(self, session: NativeSession, *written: commands.PiCommand) -> None:
         for command in written:
             session.native.send(command)
+        self.release_current()
         await session.native.drain()
 
     async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[InputId, ...]:
         """A native prompt acknowledgement proves it reached the child's queue."""
         selected = frozenset(input_ids)
-        while True:
-            self.changed.clear()
-            candidates = tuple(
-                key for key, entry in self.pending.items() if entry.input_id in selected
-            )
-            if not candidates or all(
-                self.pending[key].input_id in self.accepted for key in candidates
-            ):
-                return candidates
-            await self.changed.wait()
+        candidates = {
+            key: entry for key, entry in self.pending.items()
+            if entry.request.input.input_id in selected
+        }
+        await asyncio.gather(*(entry.response() for entry in candidates.values()))
+        return tuple(key for key in candidates if key in self.pending)
 
     @handles(ClearQueue)
     async def clear_queue(self, item: ClearQueue, session: TurnSession) -> bool:
         command = commands.ClearQueue(input_ids=await self.queued(item.input_ids))
         if not command.input_ids:
             return True
-        async with command.pending_response(session.native) as future:
-            response = await future
-        if not response.succeeded:
-            raise RuntimeError(
-                f"Native queue clear failed: {response.error.value_or('Pi gave no error text')}"
-            )
-        for native_id in response.data.require_payload().require_requested(command.input_ids):
+        await self.write(session, command)
+        return True
+
+    def cleared(
+        self, requested: tuple[InputId, ...], response: Response, session: TurnSession,
+    ) -> None:
+        """The native reply owns removal, even after the forwarding task retires."""
+        for native_id in response.data.require_payload().cleared_inputs(requested):
             removed = self.retire(native_id)
             session.rejected_commands.append(events.InputCleared(
                 id=removed.input_id, native_id=native_id, text=removed.content.text,
             ))
         session.rejected_signal.set()
-        return True
 
     @handles(UseSettings)
     async def use_settings(self, item: UseSettings, session: TurnSession) -> bool:
@@ -176,7 +181,7 @@ class InputForwarding(MroDispatch):
         candidates = await self.queued(item.input_ids)
         if not candidates:
             return True
-        first = self.pending[candidates[0]]
+        first = self.pending[candidates[0]].request.input
         async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_running(
                 session.send_boundary.send_interrupt, first.input_id,
@@ -192,8 +197,8 @@ class InputForwarding(MroDispatch):
         public_id = item.input_id
         native_id = InputId.mint()
         text = item.content.text
-        command = commands.Prompt(
-            id=RequestId(PiRequestKey(public_id)),
+        command = commands.FollowingPrompt(
+            input=item,
             input_id=native_id,
             message=text,
             images=item.content.images,
@@ -204,9 +209,7 @@ class InputForwarding(MroDispatch):
         def write():
             if command.images:
                 session.output.sensitive = True
-            session.native.send(command)
-            self.pending[native_id] = item
-            self.generation += 1
+            self.pending[native_id] = session.native.send(command)
 
         async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_running(
@@ -224,15 +227,17 @@ class InputForwarding(MroDispatch):
         self, session: TurnSession, payload: MessageStart,
     ) -> tuple[InputId] | tuple[()]:
         message = payload.message
-        if not message.user or not message.input_id.reported:
-            return ()
-        native_id = message.input_id.require()
-        entry = self.pending.get(native_id)
-        if entry is None or message.text != entry.content.text:
-            return ()
-        public_id = entry.input_id
-        if not session.input_start.following(public_id, native_id, entry.content.text):
-            return ()
-        self.retire(native_id)
-        self.started = True
-        return (public_id,)
+        for native_id in message.input_id.present():
+            if native_id not in self.pending:
+                return ()
+            command = self.pending[native_id].request
+            if not message.matches_input(command.message, native_id):
+                return ()
+            entry = command.input
+            public_id = entry.input_id
+            if not session.input_start.following(public_id, native_id, entry.content.text):
+                return ()
+            self.retire(native_id)
+            self.started = True
+            return (public_id,)
+        return ()

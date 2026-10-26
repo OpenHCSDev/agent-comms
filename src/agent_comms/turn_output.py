@@ -17,7 +17,7 @@ from .acp_failure import (
 from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
+    from .backend import NativeSession
     from .pi_payloads import AssistantMessage, PiDiagnostic
 
 
@@ -121,12 +121,12 @@ class TurnOutput:
         if self.failure and stderr.strip() and not self.sensitive:
             self.failure = self.failure.with_startup_diagnostics(stderr.strip())
 
-    def done(self, session: TurnSession, stderr: str) -> Iterator[events.AgentEvent]:
+    def done(self, session: NativeSession, stderr: str) -> Iterator[events.AgentEvent]:
         # Output checks turn permission and child ownership; it grants neither.
         transport_ok = not self.failure_text and (
             session.native_session.child_state.retained or session.native.proc.returncode == 0
         )
-        self.settle(session, transport_ok)
+        session.prompt_state.validate_terminal(session, transport_ok)
         success = transport_ok and self.clean and session.inputs.settled
         terminal = events.Done(
             text=self.terminal_text(success, stderr, session.native.proc.returncode),
@@ -149,15 +149,10 @@ class TurnOutput:
             yield self.error(terminal.text, source=self._failed_message_source)
         yield terminal
 
-    def settle(self, session: TurnSession, transport_ok: bool) -> None:
-        for cause in failures.TurnFailure.members_with(failures.TerminalFailure):
-            if cause.detected(session, transport_ok):
-                self.record_failure(cause(cause.explanation(self)))
-
-    def permits_retention(self, session: TurnSession) -> bool:
+    def permits_retention(self, session: NativeSession) -> bool:
         # Called only after the native lifecycle has proved the child idle. Apply
         # declaration-owned terminal evidence before handing the child back.
-        self.settle(session, transport_ok=True)
+        session.prompt_state.validate_terminal(session, transport_ok=True)
         return self.clean
 
     def terminal_text(self, success: bool, stderr: str, returncode: int | None) -> str:

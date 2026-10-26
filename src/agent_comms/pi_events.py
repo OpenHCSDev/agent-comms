@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
@@ -11,9 +11,10 @@ from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
+from .field_codec import DeclaredWireType, FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
+from .native_failures import NativePiUnavailable
 from .native_tool_call import ToolCallId
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
@@ -46,6 +47,7 @@ from .tool_declaration import ToolDeclaration
 
 if TYPE_CHECKING:
     from .backend import TurnSession
+    from .native_attestation import NativeAttestation
 
 
 @dataclass(frozen=True)
@@ -124,6 +126,10 @@ class PiEvent(OpenPayload, affix=""):
 
     def responds_to(self, request: PiCommand) -> bool:
         return False
+
+    def responses_to(self, request: PiCommand) -> tuple[Response, ...]:
+        """Unsolicited events supply no reply to a correlated request."""
+        return ()
 
     def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
         on_event(self)
@@ -314,7 +320,6 @@ class RetryAttemptEvent(NativePiEvent, declared_name=None):
 class AutoRetryStart(RetryAttemptEvent, DurablePiEvent, starts=phases.ProviderRetryPhase):
     def prepare_retry(self, session: TurnSession) -> None:
         session.output.final_assistant_stop = False
-        session.watchdog.prompt_accepted = True
 
 
 class NativeRetryStart(AutoRetryStart):
@@ -668,38 +673,74 @@ class MessageUpdate(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
         return self.assistant_message_event.events()
 
 
+@dataclass(frozen=True)
+class ResponseOutcome(DeclaredFamily, DeclaredWireType, affix="ResponseOutcome"):
+    """Decode Pi's success flag once into the outcome that owns its behavior."""
+
+    wire_type = bool
+    success_value: ClassVar[bool]
+    payload_field: ClassVar[FieldPlan]
+
+    @classmethod
+    def selection_key(cls) -> bool:
+        return cls.success_value
+
+    @classmethod
+    def from_wire(cls, value: object) -> ResponseOutcome:
+        return cls.member_selected(FieldCodec.decode(bool, value))()
+
+    def to_wire(self) -> bool:
+        return self.success_value
+
+    @classmethod
+    def excluded_fields(cls) -> set[str]:
+        keys = {member.payload_field.key
+                for member in ResponseOutcome.members_with(ResponseOutcome)}
+        return keys - {cls.payload_field.key}
+
+    @classmethod
+    def validate_payload(cls, error: ReportedText | PiOmitted) -> None:
+        pass
+
+    def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
+        return False
+
+    def proves_idle(self, response: Response) -> bool:
+        return False
+
+    def require_success(self, response: Response) -> None:
+        """Success need not carry data: native acknowledgement commands omit it."""
+
+    def require_data(self, response: Response) -> PiResponseData:
+        self.require_success(response)
+        return response.data.require_payload()
+
+    @abstractmethod
+    def apply_command(
+        self, command: PiCommand, response: Response, session: TurnSession,
+    ) -> Iterable[events.AgentEvent]: ...
+
+
 @dataclass(frozen=True, kw_only=True)
 class Response(NativePiEvent, DurablePiEvent):
     command: type[PiCommand] = UnknownCommand
     data: PiResponseData = field(default_factory=MissingData)
     error: ReportedText | PiOmitted = PiOmitted()
     id: PiRequestId = AnonymousRequest()
-    success: ReportedFlag | PiOmitted = PiOmitted()
+    success: ResponseOutcome
 
     @classmethod
     def decode_fields(cls, value, decoded):
         command = FieldCodec.field_plan(cls, "command")
         owner = (PiCommand.response_owner(value[command.key])
                  if command.key in value else cls.command)
-        owner.validate_response(value, cls)
+        outcome = FieldCodec.field_plan(cls, "success").read(value)
+        error = FieldCodec.field_plan(cls, "error").read(value)
+        owner.validate_response(value, cls, outcome, error)
         return super().decode_fields(value, dict(
-            decoded, command=owner,
+            decoded, command=owner, success=outcome, error=error,
             data=owner.decode_response_data(value.get("data")),
         ))
-
-    @classmethod
-    def outcome(cls, record: Mapping[str, object]) -> type[ResponseOutcome]:
-        return ResponseOutcome.from_record(record)
-
-    @property
-    def succeeded(self) -> bool:
-        """Pi reported success; an omitted success is not one."""
-        return self.success.value_or(False)
-
-    @property
-    def refused(self) -> bool:
-        """Pi reported failure outright, as opposed to leaving success out."""
-        return not self.success.value_or(True)
 
     async def deliver_to(self, channel) -> None:
         channel.correlate(self)
@@ -708,7 +749,10 @@ class Response(NativePiEvent, DurablePiEvent):
         channel.correlate(self)
 
     def responds_to(self, request: PiCommand) -> bool:
-        return self.id == request.id and self.command is type(request)
+        return self.id == request.id and self.command is request.response_type()
+
+    def responses_to(self, request: PiCommand) -> tuple[Response, ...]:
+        return (self,) if self.responds_to(request) else ()
 
     def rejection_details(self) -> dict:
         """Private diagnostic projection, excluding response data and prompt content."""
@@ -729,42 +773,37 @@ class Response(NativePiEvent, DurablePiEvent):
             yield event
 
 
-class ResponseOutcome(DeclaredFamily, affix="ResponseOutcome"):
-    """Each declared outcome owns its selected payload and validation."""
-
-    success_value: ClassVar[bool]
-    payload_field: ClassVar[FieldPlan]
-
-    @classmethod
-    def from_record(cls, record: Mapping[str, object]) -> type[ResponseOutcome]:
-        success = FieldCodec.decode(bool, record.get("success"))
-        member, = (member for member in cls.members_with(cls)
-                   if member.success_value == success)
-        return member
-
-    @classmethod
-    def excluded_fields(cls) -> set[str]:
-        keys = {member.payload_field.key
-                for member in ResponseOutcome.members_with(ResponseOutcome)}
-        return keys - {cls.payload_field.key}
-
-    @classmethod
-    def validate_payload(cls, record: Mapping[str, object]) -> None:
-        pass
-
-
 class SucceededResponseOutcome(ResponseOutcome):
     success_value = True
     payload_field = FieldCodec.field_plan(Response, "data")
+
+    def proves_idle(self, response: Response) -> bool:
+        return not self.require_data(response).session_busy
+
+    def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
+        return data.conflicts_attestation(attestation)
+
+    def apply_command(
+        self, command: PiCommand, response: Response, session: TurnSession,
+    ) -> Iterable[events.AgentEvent]:
+        return command.accepted(response, session)
 
 
 class FailedResponseOutcome(ResponseOutcome):
     success_value = False
     payload_field = FieldCodec.field_plan(Response, "error")
 
+    def require_success(self, response: Response) -> None:
+        raise NativePiUnavailable(response.error.require())
+
     @classmethod
-    def validate_payload(cls, record: Mapping[str, object]) -> None:
-        FieldCodec.decode(str, record[cls.payload_field.key])
+    def validate_payload(cls, error: ReportedText | PiOmitted) -> None:
+        error.require()
+
+    def apply_command(
+        self, command: PiCommand, response: Response, session: TurnSession,
+    ) -> Iterable[events.AgentEvent]:
+        return command.rejected(response, session)
 
 
 class SteeringInterruptCompleted(NativePiEvent):
@@ -859,9 +898,6 @@ class ToolExecutionStart(
 
     def convert(self):
         return (events.ToolStart.from_call(self.tool_id, self.tool_label, self.args),)
-
-    async def act(self, session: TurnSession) -> None:
-        session.watchdog.prompt_accepted = True
 
 
 @dataclass(frozen=True, kw_only=True)

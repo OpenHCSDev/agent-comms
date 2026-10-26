@@ -13,8 +13,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from pydantic import JsonValue
 
 from . import agent_events as events
-from . import turn_phase as phases
-from .agent_backend import StreamingInputPolicy
+from . import turn_failure as failures
+from .acp_failure import UnrecordedFailureSource
+from .agent_backend import InputRequest, StreamingInputPolicy
 from .child_process import BoundedRun
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
@@ -24,6 +25,7 @@ from .field_codec import (
     WireAbsentNone,
     WireName,
     WireOmitDefault,
+    WireTransient,
 )
 from .image_input import ImageInput
 from .native_failures import NativePiUnavailable
@@ -40,6 +42,7 @@ from .pi_payloads import (
     PiRequestId,
     PiResponseData,
     QueueClearedData,
+    ReportedText,
     RequestId,
     SessionStatsData,
     SessionSwitchData,
@@ -52,17 +55,20 @@ from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .pi_events import Response
+    from .pi_events import Response, ResponseOutcome
+    from .pending_requests import PendingRequest
 
 
 class SessionSnapshot:
     """Reports the bound session identity before metadata projection."""
 
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        return response.data.require_payload().native_updates(session)
+
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
-        return bool(
-            response.succeeded
-            and response.data.conflicts_attestation(session.native.attestation)
+        return response.success.conflicts_attestation(
+            response.data, session.native.attestation,
         ) or super().invalidates_identity(response, session)
 
 
@@ -91,26 +97,26 @@ class PiCommand(DeclaredFamily):
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return False
 
-    @asynccontextmanager
-    async def pending_response(self, child):
-        channel = child.reader
-        future = child.send(self)
-        try:
-            await child.drain()
-            yield future
-        finally:
-            self.id.release_from(channel.pending, type(self))
-            future.cancel()
-
     async def exchange(self, child, *, strict=False, max_bytes=None, on_event=lambda event: None):
         channel = child.reader
-        async with self.pending_response(child) as future:
-            while not future.done():
-                event = await channel.receive(strict=strict, max_bytes=max_bytes)
-                if event is None:
-                    raise EOFError('Pi RPC ended before the requested response')
-                event.correlate_or_deliver(channel, on_event)
-            return future.result()
+        pending = await child.send_request(self)
+        while not pending.future.done():
+            event = await channel.receive(strict=strict, max_bytes=max_bytes)
+            if event is None:
+                raise EOFError('Pi RPC ended before the requested response')
+            event.correlate_or_deliver(channel, on_event)
+        return pending.future.result()
+
+    async def before_settlement(self, pending: PendingRequest[PiCommand]) -> None:
+        """Ordinary metadata replies cannot start another native model run."""
+
+    @classmethod
+    def response_type(cls) -> type[PiCommand]:
+        """The external command family; private request roles inherit its wire identity."""
+        return cls
+
+    def record_tag(self) -> dict[str, str]:
+        return {self.family_discriminator: self.response_type().declared_name}
 
     def to_rpc(self) -> dict[str, JsonValue]:
         data = FieldCodec.encode(self)
@@ -139,27 +145,41 @@ class PiCommand(DeclaredFamily):
         return cls.response_payload.decode_external(value, {})
 
     @staticmethod
-    def validate_response(record: Mapping[str, object], response: type[Response]) -> None:
-        pass
+    def validate_response(
+        record: Mapping[str, object], response: type[Response],
+        outcome: ResponseOutcome, error: ReportedText | PiOmitted,
+    ) -> None:
+        outcome.validate_payload(error)
 
-    @classmethod
     def on_response(
-        cls, response: Response, session: TurnSession
+        self, response: Response, session: TurnSession,
     ) -> Iterable[events.AgentEvent]:
+        return response.success.apply_command(self, response, session)
+
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         return ()
+
+    def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        failure = failures.BackendFailed(
+            f"Native {self.response_type().declared_name} refused: {response.error.require()}"
+        )
+        session.output.record_failure(failure)
+        return (session.output.error(failure.text, source=UnrecordedFailureSource()),)
 
 
 class ExactResponse:
     """A selected operation's response contains exactly its declared success or error envelope."""
 
     @staticmethod
-    def validate_response(record: Mapping[str, object], response: type[Response]) -> None:
-        outcome = response.outcome(record)
+    def validate_response(
+        record: Mapping[str, object], response: type[Response],
+        outcome: ResponseOutcome, error: ReportedText | PiOmitted,
+    ) -> None:
         expected = {key for _, key in FieldCodec.record_fields(response)} | {response.wire_tag}
         expected.difference_update(outcome.excluded_fields())
         if set(record) != expected:
             raise MalformedRecord("Unexpected selected response envelope")
-        outcome.validate_payload(record)
+        outcome.validate_payload(error)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -173,9 +193,7 @@ class UnknownCommand(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class Prompt(PiCommand):
-    input_id: Annotated[
-        InputId | PiOmitted, WireOmitDefault(), WireName("inputId")
-    ] = PiOmitted()
+    input_id: Annotated[InputId, WireName("inputId")]
     message: Annotated[str, WireOmitDefault()] = None
     # Pi never receives an empty image list: no images and omission are one value.
     images: Annotated[tuple[ImageInput, ...], WireOmitDefault()] = ()
@@ -192,21 +210,40 @@ class Prompt(PiCommand):
     ] = None
 
     @classmethod
+    def response_type(cls) -> type[PiCommand]:
+        return Prompt
+
+    async def before_settlement(self, pending: PendingRequest[PiCommand]) -> None:
+        # Both original and following prompts can still be in async preflight.
+        await pending.response()
+
     def on_response(
-        cls, response: Response, session: TurnSession
+        self, response: Response, session: TurnSession,
     ) -> Iterable[events.AgentEvent]:
-        if response.id == session.command.id:
-            session.watchdog.progress()
-            if response.succeeded:
-                session.prompt_state = session.prompt_state.acknowledge(response)
-                session.watchdog.prompt_accepted = True
-                session.watchdog.phase = phases.ModelWaitPhase()
-                yield events.PromptAccepted()
-            else:
-                yield from session.reject_prompt(response)
-                return
-        else:
-            session.inputs.acknowledge(response)
+        session.watchdog.progress()
+        return super().on_response(response, session)
+
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        session.prompt_state = session.prompt_state.acknowledge(response)
+        session.watchdog.accepted()
+        return (events.PromptAccepted(),)
+
+    def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        return session.reject_prompt(response)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FollowingPrompt(Prompt, declared_name=None):
+    """A following input shares Pi's prompt wire shape, not the original input's effects."""
+
+    input: Annotated[InputRequest, WireTransient()]
+
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        # PendingRequest already records this acknowledgement.
+        return ()
+
+    def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        return session.inputs.rejected(self.input_id, response, session)
 
 
 class NativeQuery(PiCommand):
@@ -221,33 +258,9 @@ class NativeQuery(PiCommand):
 class GetState(SessionSnapshot, NativeQuery):
     response_payload = StateData
 
-    @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
-        if response.succeeded:
-            state = response.data.require_payload()
-            session.native.attestation = session.native.attestation.observe(state)
-            session.active_session_file = state.session_file.text_or(session.active_session_file)
-            state.model.context_window.observe_size(session.usage)
-            yield state.agent_info(session)
-
-
 @dataclass(frozen=True, kw_only=True)
 class GetSessionStats(SessionSnapshot, NativeQuery):
     response_payload = SessionStatsData
-
-    @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
-        if response.succeeded:
-            for context in response.data.require_payload().context_usage.present():
-                context.token_total.confirm(session.usage)
-                if not session.native.attestation.uncertain:
-                    context.context_window.update_size(session.usage)
-            yield session.context_info()
-
 
 # Seconds for one metadata child to start and answer. An idle Pi boot answers in 6-7 s, so
 # 10 s timed out `fork --model` on a loaded host (CI, a machine running tests).
@@ -293,9 +306,7 @@ class CatalogQuery(NativeQuery):
     ) -> PiResponseData:
         async with self.catalog(agent_bin, arguments, root=root, package=package) as child:
             response = await self.exchange(child)
-            if response.succeeded:
-                return response.data.require_payload()
-            raise NativePiUnavailable(response.error.text_or("Native catalog query was refused"))
+            return response.success.require_data(response)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -315,12 +326,10 @@ class Abort(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class InterruptSteering(PiCommand):
-    @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
+    def rejected(
+        self, response: Response, session: TurnSession,
     ) -> Iterable[events.AgentEvent]:
-        if response.refused:
-            yield events.Error(text=response.error.text_or("Send now was refused"))
+        return (events.Error(text=response.error.require()),)
 
     input_ids: Annotated[
         list[InputId] | PiOmitted, WireOmitDefault(), WireName("inputIds")
@@ -348,14 +357,9 @@ class SettingCommand(CatalogQuery):
         catalog = self.catalog(agent_bin, arguments, package=package, worktree=worktree, root=root)
         async with catalog as child:
             response = await self.exchange(child)
-            if not response.succeeded:
-                raise NativePiUnavailable(response.error.text_or(self.error_message))
+            response.success.require_success(response)
             state = await GetState().exchange(child)
-            if not state.succeeded:
-                raise NativePiUnavailable(
-                    state.error.text_or("Native configuration was not reported")
-                )
-            return state.data.require_payload()
+            return state.success.require_data(state)
 
     @classmethod
     def on_response(
@@ -363,7 +367,7 @@ class SettingCommand(CatalogQuery):
     ) -> Iterable[events.AgentEvent]:
         yield cls.result_type(
             id=response.id,
-            ok=response.succeeded,
+            ok=response.success.success_value,
             error=response.error.text_or(cls.error_message),
         )
 
@@ -398,6 +402,14 @@ class ClearQueue(PiCommand):
 
     response_payload = QueueClearedData
     input_ids: Annotated[tuple[InputId, ...], WireName("inputIds")]
+
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        session.inputs.cleared(self.input_ids, response, session)
+        return ()
+
+    def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        session.finish_request()
+        return super().rejected(response, session)
 
 
 @dataclass(frozen=True, kw_only=True)

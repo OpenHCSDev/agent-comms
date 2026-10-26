@@ -60,12 +60,8 @@ if TYPE_CHECKING:
     from .turn_progress import TurnProgress
 
 
-class AgentEvent(ABC):
-    """Identity and data for one observation made by the backend."""
-
-    @abstractmethod
-    def __init__(self) -> None:
-        """Concrete dataclass declarations supply their own payload constructor."""
+class AgentEvent:
+    """Identity and data for one observation, with its constructor owned by its dataclass."""
 
     def require_preparation_success(self) -> None:
         pass

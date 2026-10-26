@@ -124,21 +124,16 @@ class ModelWait(TurnWait):
         super().__init__(budget)
 
     def diagnosis(self, session: TurnSession) -> str:
-        watchdog = session.watchdog
-        stalled = watchdog.phase.stalled(watchdog.prompt_accepted)
+        stalled = session.watchdog.phase.stalled()
         return f"{stalled.stall_reason}: phase={stalled.declared_name}"
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         await session.abort_stalled_rpc()
         for started in session.started_during_abort:
             yield started
-        session.output.record_failure(
-            failures.ModelStalled(
-                f"Model produced no RPC progress for {self.budget:g} seconds."
-                if watchdog.prompt_accepted
-                else f"Pi did not accept the prompt within {self.budget:g} seconds."
-            )
-        )
+        session.output.record_failure(failures.ModelStalled(
+            session.watchdog.phase.stalled().stall_message(self.budget)
+        ))
         async for event in super().expire(session):
             yield event
 
@@ -160,6 +155,11 @@ class PollWait(UnchargedWait, TurnWait):
 
     def timeout(self) -> float:
         return 5.0
+
+    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.stats.expired(session)
+        async for event in super().expire(session):
+            yield event
 
 
 class UnboundedWait(UnchargedWait, TurnWait):
@@ -183,7 +183,6 @@ class ProgressWatchdog(MroDispatch):
         self.model_wait = model_wait.fresh()
         self.poll_wait = PollWait()
         self.unbounded_wait = UnboundedWait()
-        self.prompt_accepted = False
         self.phase: phases.TurnPhase = phases.PromptAcceptancePhase()
 
     def launching(self, clock: Callable[[], float], session_file: str | None) -> None:
@@ -213,13 +212,16 @@ class ProgressWatchdog(MroDispatch):
         self.model_wait.restart()
         self.input_wait.restart()
 
-    @handles(phases.AcceptsPrompt)
-    def accept_prompt(self, event: PiEvent, session: TurnSession) -> None:
-        self.prompt_accepted = True
-        if event.invalidates_stop:
-            session.output.final_assistant_stop = False
+    def accepted(self) -> None:
+        """The declared phase is the acceptance fact, not a parallel boolean."""
         self.progress()
         self.phase = self.phase.model_progress()
+
+    @handles(phases.AcceptsPrompt)
+    def accept_prompt(self, event: PiEvent, session: TurnSession) -> None:
+        if event.invalidates_stop:
+            session.output.final_assistant_stop = False
+        self.accepted()
 
     def transition(self, event: PiEvent) -> None:
         self.phase = event.on(self.phase)
@@ -227,45 +229,51 @@ class ProgressWatchdog(MroDispatch):
     def wait_for(self, session: TurnSession) -> TurnWait:
         if session.awaiting_native_attestation:
             return self.preflight_wait
-        if session.stats.requested:
-            return self.poll_wait
+        active = self.phase.model_wait(self.model_wait, self.unbounded_wait)
         if session.prompt_state.awaiting_start and not self.phase.pauses_input_clock:
-            return self.input_wait
-        return self.phase.model_wait(self.model_wait, self.unbounded_wait)
+            active = self.input_wait
+        return session.stats.wait_for(self, active)
 
     async def read(self, session: TurnSession) -> bytes:
         if session.rejected_signal.is_set():
             return b"\n"
         read_task = asyncio.create_task(session.native.reader.readline())
         reject_task = asyncio.create_task(session.rejected_signal.wait())
-        finish_tasks = session.finish_signal.waiters(settling=session.stats.requested)
+        finish_tasks = session.stats.finish_waiters(session.finish_signal)
         tasks = {read_task, reject_task, *finish_tasks}
         forwarding = session.native.forwarding
-        observed = tasks.union(forwarding.tasks)
-        wait = self.wait_for(session)
         try:
-            with wait.charge(self.clock):
-                done, _ = await asyncio.wait(
-                    observed, timeout=wait.timeout(), return_when=asyncio.FIRST_COMPLETED
-                )
-            if not done:
-                # Let an already-ready pipe continuation retire before expiry;
-                # this does not permit another provider wait or new input.
-                await asyncio.sleep(0)
-                done = {task for task in observed if task.done()}
-            if not done:
-                raise wait.expired(session)
-            if await forwarding.finish_if_done(session.native, done):
-                return b""
-            if read_task in done:
-                return read_task.result()
-            if done.intersection(finish_tasks):
-                read_task.cancel()
-                await asyncio.gather(read_task, return_exceptions=True)
-                if session.awaiting_native_attestation:
+            while True:
+                observed = tasks.union(forwarding.tasks, session.stats.tasks)
+                wait = self.wait_for(session)
+                with wait.charge(self.clock):
+                    done, _ = await asyncio.wait(
+                        observed, timeout=wait.timeout(), return_when=asyncio.FIRST_COMPLETED
+                    )
+                if not done:
+                    # Retire an already-ready pipe continuation, never extend a provider wait.
+                    await asyncio.sleep(0)
+                    done = {task for task in observed if task.done()}
+                if not done:
+                    raise wait.expired(session)
+                if await forwarding.finish_if_done(session.native, done):
                     return b""
-                await session.stats.request(session)
-            return b"\n"
+                advanced = session.stats.advance_if_done(session, done)
+                if read_task in done:
+                    return read_task.result()
+                if advanced:
+                    # Keep this exact read alive while the snapshot starts;
+                    # an internal task completion is not a fabricated RPC line.
+                    continue
+                if done.intersection(finish_tasks):
+                    session.finish_signal.consumed()
+                    read_task.cancel()
+                    await asyncio.gather(read_task, return_exceptions=True)
+                    if session.awaiting_native_attestation:
+                        return b""
+                    await session.native.stop_forwarding()
+                    await session.stats.request(session)
+                return b"\n"
         finally:
             for pending in tasks:
                 if not pending.done():
