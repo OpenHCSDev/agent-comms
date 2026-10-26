@@ -62,6 +62,9 @@ if TYPE_CHECKING:
 class SessionSnapshot:
     """Reports the bound session identity before metadata projection."""
 
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        return response.data.require_payload().native_updates(session)
+
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return response.success.conflicts_attestation(
@@ -255,25 +258,9 @@ class NativeQuery(PiCommand):
 class GetState(SessionSnapshot, NativeQuery):
     response_payload = StateData
 
-    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
-        state = response.data.require_payload()
-        session.native.attestation = session.native.attestation.observe(state)
-        session.active_session_file = state.session_file.text_or(session.active_session_file)
-        state.model.context_window.observe_size(session.usage)
-        yield state.agent_info(session)
-
-
 @dataclass(frozen=True, kw_only=True)
 class GetSessionStats(SessionSnapshot, NativeQuery):
     response_payload = SessionStatsData
-
-    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
-        for context in response.data.require_payload().context_usage.present():
-            context.token_total.confirm(session.usage)
-            if not session.native.attestation.uncertain:
-                context.context_window.update_size(session.usage)
-        yield session.context_info()
-
 
 # Seconds for one metadata child to start and answer. An idle Pi boot answers in 6-7 s, so
 # 10 s timed out `fork --model` on a loaded host (CI, a machine running tests).

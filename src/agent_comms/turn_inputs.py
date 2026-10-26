@@ -142,7 +142,7 @@ class InputForwarding(MroDispatch):
         self, requested: tuple[InputId, ...], response: Response, session: TurnSession,
     ) -> None:
         """The native reply owns removal, even after the forwarding task retires."""
-        for native_id in response.data.require_payload().require_requested(requested):
+        for native_id in response.data.require_payload().cleared_inputs(requested):
             removed = self.retire(native_id)
             session.rejected_commands.append(events.InputCleared(
                 id=removed.input_id, native_id=native_id, text=removed.content.text,
@@ -212,18 +212,17 @@ class InputForwarding(MroDispatch):
         self, session: TurnSession, payload: MessageStart,
     ) -> tuple[InputId] | tuple[()]:
         message = payload.message
-        if not message.user or not message.input_id.reported:
-            return ()
-        native_id = message.input_id.require()
-        if native_id not in self.pending:
-            return ()
-        command = self.pending[native_id].request
-        if not message.matches_input(command.message, native_id):
-            return ()
-        entry = command.input
-        public_id = entry.input_id
-        if not session.input_start.following(public_id, native_id, entry.content.text):
-            return ()
-        self.retire(native_id)
-        self.started = True
-        return (public_id,)
+        for native_id in message.input_id.present():
+            if native_id not in self.pending:
+                return ()
+            command = self.pending[native_id].request
+            if not message.matches_input(command.message, native_id):
+                return ()
+            entry = command.input
+            public_id = entry.input_id
+            if not session.input_start.following(public_id, native_id, entry.content.text):
+                return ()
+            self.retire(native_id)
+            self.started = True
+            return (public_id,)
+        return ()

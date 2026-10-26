@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
@@ -31,6 +31,28 @@ from agent_comms.thread_model import DeclaredModel, UndeclaredModel
 
 def decode(record):
     return PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+
+
+@pytest.mark.parametrize("role, matches", (("user", True), ("assistant", False)))
+def test_only_user_messages_match_native_input(role: str, matches: bool):
+    native_id = InputId.mint()
+    event = decode({
+        "type": "message_start",
+        "message": {
+            "role": role, "content": [{"type": "text", "text": "following"}],
+            "inputId": str(native_id),
+        },
+    })
+    assert event.message.matches_input("following", native_id) is matches
+    assert not event.message.matches_input("different", native_id)
+    assert not event.message.matches_input("following", InputId.mint())
+
+
+@pytest.mark.parametrize("state", (None, {}, {"isStreaming": False}, {"isCompacting": False}))
+def test_idle_proof_requires_reported_native_state(state):
+    event = decode({"type": "response", "command": "get_state", "success": True, "data": state})
+    with pytest.raises(ValueError):
+        event.success.proves_idle(event)
 
 
 def test_single_external_member_is_derived_and_requires_one_provided_case():

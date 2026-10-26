@@ -778,7 +778,7 @@ class SucceededResponseOutcome(ResponseOutcome):
     payload_field = FieldCodec.field_plan(Response, "data")
 
     def proves_idle(self, response: Response) -> bool:
-        return not response.data.session_busy
+        return not self.require_data(response).session_busy
 
     def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
         return data.conflicts_attestation(attestation)

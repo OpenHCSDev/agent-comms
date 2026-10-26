@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
@@ -15,11 +14,8 @@ if TYPE_CHECKING:
     from .pi_events import AgentSettled, InputCommitted, MessageStart, Response
 
 
-class PromptState(ABC):
-    @property
-    @abstractmethod
-    def acknowledged(self) -> bool: ...
-
+class PromptState:
+    acknowledged = False
     awaiting_start = False
     started = False
 
@@ -52,16 +48,12 @@ class PromptState(ABC):
 
 
 class UnacknowledgedPrompt(PromptState):
-    acknowledged = False
-
     def acknowledge(self, response):
         return AcknowledgedPrompt(response)
 
 
 class QueuedOperation(PromptState, TurnInboxItem):
     """An initial native operation can be placed in the turn inbox."""
-
-    acknowledged = False
 
 
 class UnwrittenPrompt(QueuedOperation):
