@@ -1005,6 +1005,9 @@ class Install[Rehearsed: Rehearsal](ABC):
             print(f"install: {installed.runtime.prefix.name} cannot write its bus "
                   f"({died.outcome.summary}); {staged.runtime.prefix.name} drives this install",
                   file=sys.stderr)
+            # The root refuses every runtime but its recorded owner, so the driver owns it;
+            # a rolled-back install publishes the outgoing runtime again.
+            RootRuntime.publish(root, staged.runtime)
             report.starting(mode.destination(cls.initial_writer(root, staged)), target)
             return staged
 
