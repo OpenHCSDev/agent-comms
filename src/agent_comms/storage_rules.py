@@ -31,7 +31,7 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
-from agent_comms.storage_room import RoomAllocation
+from agent_comms.storage_room import RoomAllocation, RoomNeed
 from agent_comms.work_branches import WorkBranches
 
 from .shell_effects import StorageDenied, StorageEffect
@@ -280,6 +280,9 @@ class StorageRule(RoomAllocation, DurableFile):
     def load(cls, root: Path) -> Self:
         path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
+
+    def room_floor(self) -> RoomNeed:
+        return RoomNeed(int(self.memory_gib * 2**30), int(self.floor_gib * 2**30))
 
     def initial_roots(self, name: str) -> StorageRoots:
         return StorageRoots(self.scratch_base / name)

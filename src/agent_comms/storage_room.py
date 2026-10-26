@@ -43,7 +43,10 @@ class RoomWork(DeclaredFamily, affix="RoomWork"):
     def measured_needs(self, db: sqlite3.Connection, root: str) -> tuple[RoomNeed, ...]:
         return tuple(self.estimate(peak.need) for peak in WorkPeak.select(db, work=type(self)))
 
-    def admitted(self, db: sqlite3.Connection, root: str) -> None:
+    def floor(self, rule: RoomAllocation) -> RoomNeed:
+        return rule.room_floor()
+
+    def consume(self, db: sqlite3.Connection, root: str) -> None:
         pass
 
 
@@ -56,6 +59,9 @@ class TestGateRoomWork(RoomWork):
 
 
 class UnitStartRoomWork(RoomWork):
+    def floor(self, rule: RoomAllocation) -> RoomNeed:
+        return RoomNeed(disk=rule.room_floor().disk)
+
     def measured_needs(self, db: sqlite3.Connection, root: str) -> tuple[RoomNeed, ...]:
         released = tuple(peak for owner in self.owners
                          for peak in StoppedOwnerPeak.select(db, root=root, owner=owner))
@@ -63,7 +69,7 @@ class UnitStartRoomWork(RoomWork):
             return (sum((peak.need for peak in released), RoomNeed()),)
         return super().measured_needs(db, root)
 
-    def admitted(self, db: sqlite3.Connection, root: str) -> None:
+    def consume(self, db: sqlite3.Connection, root: str) -> None:
         for owner in self.owners:
             StoppedOwnerPeak.delete(db, root=root, owner=owner)
 
@@ -165,7 +171,7 @@ class RoomLedger(DurableStore):
         previous_owner, = RoomClaim.dropped_fields
         if previous_owner in RoomClaim.stored_columns(db):
             # Carry the old claim's complete membership before dropping its column.
-            # No claim or process authority is discarded, including a live holder.
+            # All rows and process identities survive, including live holders.
             db.execute(RoomClaim._sql(
                 f'UPDATE "{RoomClaim.declared_name}" SET {{work}} = '
                 '(SELECT json_group_array(json_object(?, member.value, ?, '
@@ -298,7 +304,7 @@ class MeasuredRoomReservation(RoomReservation):
 
 
 @dataclass(frozen=True)
-class RoomAllocation:
+class RoomAllocation(ABC):
     """StorageRule's admission and measurement behavior, shared by all callers."""
     proc: Annotated[Path, PathText] = Path('/proc')
     work_kinds: ClassVar[type[RoomWork]] = RoomWork
@@ -313,8 +319,9 @@ class RoomAllocation:
     def free_room(self):
         return RoomNeed(self.memory_available_bytes(), int(self.free_gib() * 2**30))
 
-    def room_floor(self):
-        return RoomNeed(disk=int(self.floor_gib * 2**30))
+    @abstractmethod
+    def room_floor(self) -> RoomNeed:
+        """The rule declares its ordinary-work thresholds."""
 
     @contextmanager
     def stopping(self, root: Path, owners: tuple[Thread, ...]) -> Iterator[None]:
@@ -348,24 +355,27 @@ class RoomAllocation:
             held = RoomNeed()
             for other in RoomClaim.select(db):
                 held += other.phase.held
-            spare = free.remaining(self.room_floor() + held)
+            floor = RoomNeed()
+            for work in claim.work:
+                floor = floor.peak(work.floor(self))
+            spare = free.remaining(floor + held)
             peaks = tuple(work.measured_needs(db, claim.root) for work in claim.work)
             # An unmeasured run calibrates alone. It reserves the observed spare
             # room, never a typed-in estimate and never zero alongside another run.
             if not all(peaks):
-                if held != RoomNeed() or not self.room_floor().fits(free):
+                if held != RoomNeed() or not floor.fits(free):
                     return False
                 need = spare
             else:
                 need = RoomNeed()
                 for measured in peaks:
                     need += sum(measured, RoomNeed())
-                if not (need + self.room_floor() + held).fits(free):
+                if not (need + floor + held).fits(free):
                     return False
             RoomClaim.update(db, where='{ticket}=?', parameters=(ticket,),
                              phase=HoldingRoomPhase(need))
             for work in claim.work:
-                work.admitted(db, claim.root)
+                work.consume(db, claim.root)
             return True
 
     async def wait_for_room(
