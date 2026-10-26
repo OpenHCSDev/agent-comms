@@ -21,6 +21,7 @@ from agent_comms.phase_evidence import (
     OwnClassChecksAbsent,
     ParentsShared,
     PathsAbsent,
+    DocumentPatternPresent,
     PatternAbsent,
     PatternPresent,
     PhaseEvidence,
@@ -402,3 +403,18 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
     assert not reading.holds(unreadable)
     assert reading.describe(unreadable).startswith("unknown (GitHub is down)")
     assert unreadable not in reading.following(()).reads
+
+
+def test_document_landing_evidence_reads_main_without_counting_quoted_source(tmp_path):
+    document = "plans/OWNER-ASKS-PLAN.md"
+    landing = "- page_quarter_scroll landed: OpenHCSDev/toad@" + "a" * 40
+    reading = main_of(tmp_path, {document: landing + "\n", "src/example.md": "guarded_read()\n"})
+    evidence = DocumentPatternPresent(r"^- page_quarter_scroll landed: OpenHCSDev/toad@[0-9a-f]{40}$", (document,))
+    (tmp_path / document).write_text("changed worktree\n")
+    assert reading.holds(evidence)
+    assert reading.holds(PatternAbsent(r"guarded_read\("))
+    assert not reading.holds(DocumentPatternPresent("missing landing", (document,)))
+    git(tmp_path, "add", document)
+    git(tmp_path, "commit", "-qm", "remove landing")
+    git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
+    assert not PlanReading((), MainTree.of(reading.main.repo)).holds(evidence)

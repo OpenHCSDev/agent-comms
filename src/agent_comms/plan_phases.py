@@ -37,6 +37,7 @@ from agent_comms.phase_evidence import (
     ParentsShared,
     ParityEvidence,
     PathsAbsent,
+    DocumentPatternPresent,
     PatternAbsent,
     PatternPresent,
     PhaseEvidence,
@@ -197,7 +198,7 @@ class ToadAskPhase(OwnerAsksPhase, declared_name=None):
 
     @classmethod
     def phase_evidence(cls) -> PhaseEvidence:
-        return PatternPresent(
+        return DocumentPatternPresent(
             rf"^- {cls.declared_name} landed: OpenHCSDev/toad@[0-9a-f]{{40}}$",
             (OwnerAsksPlan.document,),
         )
