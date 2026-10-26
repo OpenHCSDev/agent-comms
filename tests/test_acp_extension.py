@@ -38,7 +38,7 @@ from agent_comms.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.context_reading import UnmeasuredContext
-from agent_comms.field_codec import ClaimId, InputId, MessageId, RootId, TurnId
+from agent_comms.field_codec import AssignmentId, ClaimId, InputId, MessageId, RootId, TurnId
 from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import McpLiveAcknowledgement
@@ -58,6 +58,22 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     queue_scope = LiveQueueScope(
         session_id="pilot", claimed_identity=owner, owner=ProcessIdentity(123, 1),
     )
+    from agent_comms.acp_extension import NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
+    from agent_comms.native_output import AssistantOutput, NativeRecordLocation
+    from agent_comms.native_session_reopen import PiSessionId
+    from agent_comms.turn_item import NativeItemId
+    from agent_comms.transcript_sources import AssignedSourceIdentity
+    from agent_comms.transcripts import NativeCommittedPrefix
+    from agent_comms.native_transcript import PresentSessionCut
+    from agent_comms.private_path import FileRevision
+    sample_path = tmp_path / "session.jsonl"
+    sample_path.write_text("{}\n")
+    committed = NativeCommittedPrefix(
+        NativeRecordLocation(PiSessionId("session"), str(tmp_path / "session.jsonl"),
+                             NativeItemId("entry"), 1, 3),
+        PresentSessionCut(FileRevision.from_stat(sample_path.stat()), 3),
+        AssignedSourceIdentity(read.identity.root, read.identity.thread.incarnation),
+    )
     samples = (
         ContextAnnotatedUpdate(
             ContextManifest(owner.incarnation, NextContextTurn(), (), "source-codec-control"),
@@ -65,7 +81,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         ),
         RequestFailedUpdate(ACPFailure.from_detail(-32603, "The usage limit has been reached")),
         PromptCancelledUpdate(None),
-        SelectedWriteAcceptedUpdate(ClaimId("c" * 32), 1, "claim"),
+        SelectedWriteAcceptedUpdate(ClaimId("c" * 32), 1, AssignmentId("d" * 32)),
         CursorAdvancedUpdate(
             CursorEnvelope(
                 LiveCursorScope(
@@ -99,6 +115,8 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         TranscriptSnapshotUpdate(read.read(), read.identity),
         TranscriptDraftUpdate(read.identity, None),
         InputDeliveryChangedUpdate(),
+        NativeOutputCommittedUpdate(committed, AssistantOutput()),
+        NativeRoundCommittedUpdate(committed),
         McpClientAcknowledgementUpdate(
             TurnId.mint(), McpLiveAcknowledgement(
                 1, "pi-mcp-client", InputId("a" * 32), "running", "turn", ()
