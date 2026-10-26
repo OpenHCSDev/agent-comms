@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -59,6 +64,26 @@ class CommanderObservation:
 
 class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                          WatchPass[tuple[CommanderObservation, ...]]):
+
+    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        try:
+            super().watch_pass(opened_wire)
+        except Exception as error:
+            # Detect the outage through the ordinary bus, then preserve the failed pass.
+            try:
+                with opened_wire() as comms:
+                    self.register(comms.registry)
+                    for thread in self.commanders(comms.registry, comms.goals):
+                        comms.bus.publisher.publish_ordinary(
+                            Message(sender=self.sender, target=thread.name,
+                                    body=f"Heartbeat pass failed: {type(error).__name__}: {error}",
+                                    type=InfoKind, role=ConversationRole()),
+                            origin=AgentOrigin(), destination=ThreadTarget(thread.name),
+                        )
+            except Exception as notification_error:
+                error.add_note(
+                    f"Outage message failed: {type(notification_error).__name__}: {notification_error}")
+            raise
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
         return tuple(

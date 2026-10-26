@@ -4,6 +4,7 @@ import json
 import os
 import pickle
 import time
+from contextlib import nullcontext
 from dataclasses import replace
 
 import pytest
@@ -61,6 +62,27 @@ def beat(comms, rules=(), *, states=()):
         comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states))
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     CommanderHeartbeat().pass_body(comms, (frame,))
+
+
+def test_failed_heartbeat_pass_messages_commander_and_still_raises(notification_bus):
+    failure = RuntimeError("forced heartbeat pass failure")
+
+    class BrokenHeartbeat(CommanderHeartbeat, declared_name=None):
+        def observe(self, comms):
+            raise failure
+
+    comms = notification_bus
+    assert "lead" in {thread.name for thread in BrokenHeartbeat.commanders(comms.registry, comms.goals)}
+    with pytest.raises(RuntimeError) as raised:
+        BrokenHeartbeat().watch_pass(lambda: nullcontext(comms))
+    assert raised.value is failure
+    page = MessagePageRequest(DMDisplayScope.capture(
+        CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
+    )).read_opened(comms.bus.bus)
+    notices = tuple(message for message in page.messages if str(failure) in message.body)
+    assert len(notices) == 1
+    assert notices[0].sender == CommanderHeartbeat.sender
+    assert notices[0].target == "lead"
 
 
 def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
