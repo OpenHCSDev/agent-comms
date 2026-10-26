@@ -5,6 +5,7 @@ import shlex
 import time
 from contextlib import chdir
 from dataclasses import replace
+from inspect import isabstract
 
 import pytest
 
@@ -16,7 +17,7 @@ from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.head_review import HeadReviewOrder
 from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp
+from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.todos import (
     Assignment, ClaimOrder, DeliveredProblemOrder, OrderHeadReview, OrderClaim,
@@ -25,8 +26,9 @@ from agent_comms.todos import (
 )
 
 from test_held_problem_orders import merge_two_commit_fix
+from test_commander_notifications import beat, notifications
 
-pytest_plugins = ("test_head_review", "test_held_problem_orders")
+pytest_plugins = ("test_head_review", "test_held_problem_orders", "test_commander_notifications")
 
 REASON = VerdictReason("The existing class owns this behavior without another copy")
 ROAST = "This is stupid because the same decision is written twice instead of belonging to its existing class."
@@ -119,7 +121,28 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
         assert_review_preconditions(delivery, comms, request)
 
 
-def test_head_review_timer_ping_round_trips_through_field_codec(board_review):
+def test_standing_rule_declarations_are_encodable_or_abstract():
+    members = StandingRule.members_with(StandingRule)
+    assert members
+    for member in members:
+        encoded = FieldCodec.encode(member, type[StandingRule])
+        assert FieldCodec.decode(type[StandingRule], encoded) is member
+
+    pending = [StandingRule]
+    seen = set()
+    while pending:
+        declaration = pending.pop()
+        if declaration in seen:
+            continue
+        seen.add(declaration)
+        pending.extend(declaration.__subclasses__())
+        if declaration.declared_name is None:
+            assert isabstract(declaration), declaration.__name__
+            with pytest.raises(TypeError, match=declaration.__name__):
+                declaration()
+
+
+def test_head_review_timer_ping_round_trips_through_field_codec(board_review, notification_bus):
     comms, request, _, link = board_review
     todo = link()
     timer = HeadReviewTimerUp(
@@ -129,6 +152,10 @@ def test_head_review_timer_ping_round_trips_through_field_codec(board_review):
     decoded = FieldCodec.decode(RulePing, FieldCodec.encode(ping))
     assert decoded == ping
     assert decoded.rule is HeadReviewTimerUp
+    assert notification_bus is comms
+    beat(comms, (timer,))
+    published, = notifications(comms)
+    assert ping in published.task.handled
 
 
 def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_review):
@@ -158,7 +185,7 @@ def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
 
 
-def test_claim_link_survives_two_sendbacks_and_released_review_changes_no_goal(board_review):
+def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal(board_review):
     comms, request, claim, _ = board_review
     original = claim()
     previous = original.held()
@@ -168,6 +195,9 @@ def test_claim_link_survives_two_sendbacks_and_released_review_changes_no_goal(b
         SendBackStrike(current.revision, current.creator_identity, current.held(),
                        StrikeReason(ROAST).text, RecordedEventTime(time.time()),
                        evidence=(current.order.owner,)).record(comms.goals, current.id)
+    current = comms.goals.todos.get(original.id)
+    ReleaseTodo(current.revision, current.creator_identity, current.held(), StrikeReason(
+        "The commander explicitly releases this order after reviewing its work")).record(comms.goals, current.id)
     released = comms.goals.todos.get(original.id)
     assert released.current_holder.current_assignments() == ()
     assert released.order.holds_head(request)
@@ -200,11 +230,9 @@ def test_released_work_can_be_judged_and_delivered_without_a_holder(
     previous = todo.held()
     RecordPullRequest(todo.revision, todo.creator_identity,
                       PullRequestLink(todo.repo, 42), previous.generation).record(ctx.comms.goals, todo.id)
-    for _ in range(2):
-        current = store.get(todo.id)
-        SendBackStrike(current.revision, current.creator_identity, current.held(), ROAST,
-                       RecordedEventTime(time.time()), evidence=(current.order.owner,)).record(
-                           ctx.comms.goals, todo.id)
+    current = store.get(todo.id)
+    ReleaseTodo(current.revision, current.creator_identity, current.held(), StrikeReason(
+        "The commander explicitly releases this order after reviewing its work")).record(ctx.comms.goals, todo.id)
     _, first, _ = merge_two_commit_fix(cited_source, tmp_path / "bin", 42)
     current = store.get(todo.id)
     request = ctx.comms.goals.todos.resolve_order(ctx.incarnation, previous.owner, todo.id)

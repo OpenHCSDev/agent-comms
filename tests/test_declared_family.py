@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError
 
-from agent_comms.declared_family import DeclaredFamily, DeclaredOrder
+from agent_comms.declared_family import DeclaredFamily, DeclaredOrder, RegisteredFamily
 
 
 class SampleFamily(DeclaredFamily, affix="Case"):
@@ -60,6 +60,30 @@ def test_explicit_unnamed_concrete_state_uses_existing_registry_exclusion():
     assert SampleFamily.names() == ("http_ready", "external-v1")
     with pytest.raises(ValueError):
         SampleFamily.member_named("unnamed")
+
+
+@pytest.mark.parametrize("slots", (False, True))
+@pytest.mark.parametrize("frozen", (False, True))
+def test_registered_family_constructs_only_declared_members(slots: bool, frozen: bool):
+    class Family(RegisteredFamily, affix="Case"):
+        pass
+
+    @dataclass(slots=slots, frozen=frozen)
+    class NamedCase(Family):
+        value: int
+
+    @dataclass(slots=slots, frozen=frozen)
+    class UnnamedCase(Family, declared_name=None):
+        value: int
+
+    class DerivedCase(UnnamedCase):
+        pass
+
+    assert NamedCase(3).value == 3
+    assert DerivedCase(4).value == 4
+    for declaration, arguments in ((Family, ()), (UnnamedCase, (3,))):
+        with pytest.raises(TypeError, match=declaration.__name__):
+            declaration(*arguments)
 
 
 def test_slots_root_keeps_its_declared_affix():
