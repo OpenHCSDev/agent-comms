@@ -77,7 +77,9 @@ def test_every_registered_command_runs_through_dispatcher_with_parser_defaults(t
         timeout=180,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
-    assert json.loads(result.stdout) == list(CliCommand.names())
+    # Selected imports may register a verb before full discovery. Every declaration
+    # must still execute exactly once, regardless of either process's import order.
+    assert sorted(json.loads(result.stdout)) == sorted(CliCommand.names())
 
 
 def _exercise_registered_commands(directory: Path) -> None:

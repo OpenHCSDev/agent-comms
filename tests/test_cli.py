@@ -465,7 +465,7 @@ class TestSelectedTargetActions:
             PerTargetChannels({"alpha": ("#team",), "beta": ("#other",)}), project=str(tmp_path),
         )
         catalog = {action.declaration.declared_name: action for action in actions}
-        assert set(catalog) == {"start", "stop", "archive", "pin-thread", "read-target", "delete-tag"}
+        assert set(catalog) == {"start", "stop", "restore-owner", "archive", "pin-thread", "read-target", "delete-tag"}
         assert len(catalog["pin-thread"].bound) == 3
         assert not catalog["pin-thread"].editable_fields
         assert catalog["archive"].confirmation.startswith("Archive #team?")
