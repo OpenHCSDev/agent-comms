@@ -48,7 +48,7 @@ from agent_comms.host_services.connector import (
 )
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.launch import InstallUnit
+from agent_comms.installer.logs import InstallUnit
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime

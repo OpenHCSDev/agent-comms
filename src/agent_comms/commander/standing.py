@@ -13,7 +13,6 @@ from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommsTag
 from agent_comms import commander
-from agent_comms.installer.request import InstallRequest
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
@@ -24,7 +23,7 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, HeartbeatSubject, PassSubject
 from agent_comms.held_orders import HeldOrders
-from agent_comms.installer import launch as installer_launch
+from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
 from agent_comms.installer.interpreter_operation import LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.message_bus import WatchPass
@@ -109,7 +108,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
     installed: str
     merges: tuple[UninstalledMerge, ...] = field(compare=False)
     landing: tuple[UnmergedListedPullRequest, ...] = field(compare=False)
-    logs: installer_launch.InstallLogs = field(compare=False)
+    logs: InstallLogs = field(compare=False)
     core: Repo = field(compare=False)
     target: str = field(compare=False)
     headline: ClassVar[str] = "INSTALL DUE"
@@ -129,7 +128,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
-        logs = installer_launch.InstallLogs(comms.root)
+        logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
         for repo in repos:
             repo.git(repo.checkout, "fetch", "-q", "origin", "main")
@@ -172,13 +171,16 @@ class PendingInstallDue(InstallDue):
     def launch(self, comms: Comms) -> str:
         """Every repository's merge installs the same Core target, so a run of that target
         already going is this merge's launch too; any other run is waited out."""
+        from agent_comms.installer.launch import InstallRun
+        from agent_comms.installer.request import InstallRequest
+
         command = InstallRequest(checkout=self.core.checkout, to=self.target,
                                  project=self.core.checkout)
         try:
             with self.logs.launching():
-                run = installer_launch.InstallRun.start(command, comms.root, LauncherPhase())
+                run = InstallRun.start(command, comms.root, LauncherPhase())
                 run.spawn(wait=False)
-        except installer_launch.InstallRunning as running:
+        except InstallRunning as running:
             for unit in running.installing(self.target):
                 self.logs.record(unit.logs, self.repo, self.main)
             return str(running)
@@ -191,7 +193,7 @@ class RunInstallDue(InstallDue, declared_name=None):
     """A merge whose launched run selected this member; the run rides along so its
     rendering reads the unit that selected it, not a second look at the logs."""
 
-    unit: installer_launch.InstallUnit = field(compare=False, kw_only=True)
+    unit: InstallUnit = field(compare=False, kw_only=True)
 
 
 class LaunchedInstallDue(RunInstallDue):

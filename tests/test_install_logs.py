@@ -3,7 +3,7 @@
 import os
 
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.launch import InstallLogs
+from agent_comms.installer.logs import InstallLogs
 
 
 def test_a_new_install_keeps_only_as_many_log_directories_as_backups(tmp_path):

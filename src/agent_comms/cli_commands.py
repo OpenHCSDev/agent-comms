@@ -1822,7 +1822,8 @@ class InstallCliCommand(InstallRequest, CliCommand, declared_name=InstallRequest
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """The bus may be unreadable by this runtime, or absent, until the target's own
         source has carried or created it, so nothing opens it here."""
-        from agent_comms.installer.launch import InstallLogs, InstallRun
+        from agent_comms.installer.launch import InstallRun
+        from agent_comms.installer.logs import InstallLogs
 
         with InstallLogs(route.root).launching():
             run = InstallRun.start(self, route.root, ProcessLauncherPhase())
