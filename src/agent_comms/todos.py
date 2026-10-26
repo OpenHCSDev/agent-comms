@@ -89,7 +89,6 @@ from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_tool_call import ToolCallId
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
@@ -2726,11 +2725,6 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
                      traced: FileLine | NoSourceReference) -> None:
         """Collect field refusals before recording any part of this document."""
         problems = document.problems_found(clean)
-        try:
-            context.comms.registry.storage_rule.require_quota(context.comms.registry.require(unit))
-        except SelectedToolDenied as quota:
-            problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch '
-                            'before it gets new work')
         problems.extend(self.assignment_refusals(
             context, document, unit, group, listed, target, traced))
         problems.extend(self.source_refusals(context, document, traced))

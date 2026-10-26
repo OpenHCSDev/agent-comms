@@ -1,6 +1,5 @@
 """Scratch is configured; checkout membership is read from Git and the filesystem."""
 
-from dataclasses import replace
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,10 +11,10 @@ from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.repo import Checkout, CheckoutStart, DetachedStart, GitTreeEntry, KeptBranchStart, NewBranchStart, Repo
-from agent_comms.standing_rules import StorageHomeMissing, StorageOverQuota
+from agent_comms.repo import Checkout, DetachedStart, Repo
+from agent_comms.standing_rules import StorageHomeMissing
 from agent_comms.storage_rules import (
-    CheckoutClaim, StorageRoots, StorageRule, StorageProjection, UnassignedThreadStorage, UnitStorage,
+    StorageRoots, StorageRule, StorageProjection, UnassignedThreadStorage, UnitStorage,
 )
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageDenied, ShellProgram,
@@ -92,7 +91,7 @@ def checkout_comms(tmp_path: Path) -> Comms:
     return comms
 
 
-def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(
+def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_parent(
         checkout_comms: Comms, tmp_path: Path):
     comms = checkout_comms
     rule = comms.registry.storage_rule
@@ -102,35 +101,26 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(
     other = comms.registry.declare(Thread('other', frozenset(), str(tmp_path)))
     assert rule.checkouts_of(thread) == (home, old)
     storage = UnitStorage.read(rule, thread)
-    rule = replace(rule, scratch_cap_gib=storage.held_gib + 192 / 2**20)
-    comms.registry.storage_rule = rule
     scratch = rule.roots_of(thread).scratch
     scratch.mkdir(parents=True)
     (scratch / 'payload').write_bytes(b's' * 128 * 2**10)
     (old / 'payload').write_bytes(b'c' * 128 * 2**10)
     storage = UnitStorage.read(rule, thread)
-    measured = storage.held_gib
-    assert storage.home == CheckoutClaim(Checkout(home))
-    assert storage.extra_checkouts == (CheckoutClaim(Checkout(old)),)
+    assert storage.home == Checkout(home)
+    assert storage.extra_checkouts == (Checkout(old),)
     assert storage.adding(Checkout(home)) == storage
     assert rule.owns_present_checkout(thread, home)
     assert not rule.owns_present_checkout(other, old)
     with pytest.raises(StorageDenied):
         StorageProjection(rule, other).check((
             CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
-    with pytest.raises(StorageDenied) as refusal:
-        StorageProjection(rule, thread).check((
-            CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
-    assert f'{measured:g}' in str(refusal.value)
-    assert f'{rule.scratch_cap_gib:g}' in str(refusal.value)
-    assert StorageOverQuota.violated(storage)
-    assert f'{measured:g}' in StorageOverQuota(storage).line()
+    StorageProjection(rule, thread).check((
+        CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
     StorageProjection(rule, thread).check((RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
     assert rule.checkouts_of(thread) == (home,)
     StorageProjection(rule, thread).check((
         CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
-    assert not StorageOverQuota.violated(UnitStorage.read(rule, thread))
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
@@ -145,82 +135,20 @@ def test_three_small_checkouts_are_admitted(checkout_comms: Comms):
         Checkout.add(thread.project_path, path, start)
     storage = UnitStorage.read(rule, thread)
     assert len(storage.extra_checkouts) == 3
-    storage.require_quota()
 
 
-def test_non_git_home_is_not_charged_and_nested_roots_are_counted_once(
-        checkout_comms: Comms, tmp_path: Path):
-    rule = checkout_comms.registry.storage_rule
-    thread = checkout_comms.registry.require('worker')
-    checkout = thread.project_path
-    nested = checkout / 'nested'
-    Checkout.add(checkout, nested, DetachedStart('HEAD'))
-    scratch = checkout / 'scratch'
-    scratch.mkdir()
-    (scratch / 'payload').write_bytes(b'scratch')
-    alias = tmp_path / 'alias'
-    alias.symlink_to(checkout, target_is_directory=True)
-    thread = replace(thread, worktree=str(tmp_path), storage_roots=StorageRoots(scratch))
-    storage = UnitStorage(rule, thread.incarnation, rule.roots_of(thread), CheckoutClaim(Checkout(tmp_path)), tuple(
-        CheckoutClaim(Checkout(path)) for path in (checkout, nested, alias)))
-    (tmp_path / 'unrelated-user-data').write_bytes(b'user' * 2**16)
-    before = storage.held_gib
-    assert before == rule.tree_gib(checkout)
-    (nested / 'new-data').write_bytes(b'new' * 2**10)
-    assert storage.held_gib == before
-    assert storage.adding(Checkout(checkout)).held_gib == rule.tree_gib(checkout)
-    assert storage.removing(Checkout(alias)).held_gib == rule.tree_gib(checkout)
-
-
-@pytest.mark.parametrize('start', [DetachedStart('HEAD'), NewBranchStart('new', 'HEAD'), KeptBranchStart('kept')])
-def test_uncreated_checkout_reserves_its_tracked_start_bytes(checkout_comms: Comms, start: CheckoutStart):
-    rule = checkout_comms.registry.storage_rule
-    thread = checkout_comms.registry.require('worker')
-    home = thread.project_path
-    (home / 'payload').write_bytes(b'p' * 128 * 2**10)
-    Repo.git(home, 'add', 'payload')
-    Repo.git(home, 'commit', '-q', '-m', 'tracked payload')
-    Repo.git(home, 'branch', 'kept')
-    storage = UnitStorage.read(rule, thread)
-    assert storage.held_gib == rule.tree_gib(home)
-    rule = replace(rule, scratch_cap_gib=storage.held_gib + 64 / 2**20)
-    proposed = rule.order_checkout(rule.roots_of(thread), 'P1')
-    assert not proposed.exists()
-    projection = StorageProjection(rule, thread)
-    with pytest.raises(StorageDenied):
-        projection.check((CreateCheckoutStorageEffect(proposed, Repo.of(home), start),))
-    assert projection.storage.anticipated_gib == 128 / 2**20
-    assert not proposed.exists()
-
-
-def test_projected_checkout_reservations_follow_checkout_membership(checkout_comms: Comms):
+def test_projected_checkout_membership_follows_add_and_remove(checkout_comms: Comms):
     rule = checkout_comms.registry.storage_rule
     thread = checkout_comms.registry.require('worker')
     storage = UnitStorage.read(rule, thread)
-    first = CheckoutClaim(Checkout(rule.order_checkout(rule.roots_of(thread), 'P1')),
-                          anticipated_bytes=128 * 2**20)
-    second = CheckoutClaim(Checkout(rule.order_checkout(rule.roots_of(thread), 'P2')),
-                           anticipated_bytes=64 * 2**20)
-    single = storage.adding(first.checkout, first.anticipated_bytes)
-    assert single.removing(first.checkout).anticipated_gib == storage.anticipated_gib
-    assert single.removing(first.checkout).adding(first.checkout, first.anticipated_bytes) == single
-    both = single.adding(second.checkout, second.anticipated_bytes)
-    assert both.removing(first.checkout).anticipated_gib == second.anticipated_bytes / 2**30
-    assert both.adding(first.checkout, first.anticipated_bytes).anticipated_gib == both.anticipated_gib
-    assert single.adding(first.checkout, second.anticipated_bytes).anticipated_gib == second.anticipated_bytes / 2**30
-
-
-@pytest.mark.parametrize('line,expected', [
-    ('100644 blob object-id 17\tpath with spaces', 17),
-    ('160000 commit object-id -\tsubmodule', 0),
-])
-def test_git_tree_entry_decodes_payload_by_object_kind(line: str, expected: int):
-    assert GitTreeEntry.bytes_from(line) == expected
-
-
-def test_git_blob_with_missing_size_does_not_disappear_from_the_budget():
-    with pytest.raises(ValueError):
-        GitTreeEntry.bytes_from('100644 blob object-id -\tbroken')
+    first = Checkout(rule.order_checkout(rule.roots_of(thread), 'P1'))
+    second = Checkout(rule.order_checkout(rule.roots_of(thread), 'P2'))
+    single = storage.adding(first)
+    assert single.removing(first) == storage
+    assert single.adding(first) == single
+    both = single.adding(second)
+    assert both.removing(first).extra_checkouts == (second,)
+    assert both.adding(first) == both
 
 
 def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path):
@@ -239,7 +167,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     comms.registry.storage_rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch')
     thread = comms.registry.declare(Thread('worker', frozenset(), str(project_link)))
     assert thread.project_path == current
-    assert UnitStorage.read(comms.registry.storage_rule, thread).home == CheckoutClaim(Checkout(current))
+    assert UnitStorage.read(comms.registry.storage_rule, thread).home == Checkout(current)
     with pytest.raises(StorageDenied):
         StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((
             RemoveCheckoutStorageEffect(project_link.resolve()),))
@@ -306,6 +234,5 @@ def test_storage_violation_observation_key_resolves_every_compared_field(checkou
     thread = comms.registry.require('worker')
     storage = UnitStorage.read(comms.registry.storage_rule, thread)
     assert storage.unit == thread.incarnation
-    assert StorageHomeMissing(storage).observation_key() != StorageOverQuota(storage).observation_key()
-    assert StorageOverQuota(storage).observation_key() == StorageOverQuota(
+    assert StorageHomeMissing(storage).observation_key() == StorageHomeMissing(
         UnitStorage.read(comms.registry.storage_rule, thread)).observation_key()

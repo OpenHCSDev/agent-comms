@@ -323,23 +323,13 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
     def violated(cls, storage: UnitStorage) -> bool: ...
 
 
-class StorageOverQuota(StorageViolation):
-    @classmethod
-    def violated(cls, storage: UnitStorage) -> bool:
-        return storage.over_cap
-
-    def line(self) -> str:
-        return (f'{self.storage.unit.name} holds {self.storage.quota_text}'
-                f' -> order the cleanup')
-
-
 class StorageHomeMissing(StorageViolation):
     @classmethod
     def violated(cls, storage: UnitStorage) -> bool:
         return storage.missing_home
 
     def line(self) -> str:
-        return (f'{self.storage.unit.name} declared home {self.storage.home.checkout.path} is missing.'
+        return (f'{self.storage.unit.name} declared home {self.storage.home.path} is missing.'
                 f' who deleted it? -> restore the home checkout')
 
 

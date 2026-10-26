@@ -306,45 +306,11 @@ class PinnedSubmodule:
         self.path.mkdir(parents=True)
 
 
-class GitTreeEntry(DeclaredFamily, affix="TreeEntry"):
-    """Decode the object kinds emitted by recursive ls-tree, once at Git's boundary."""
-
-    @classmethod
-    def bytes_from(cls, line: str) -> int:
-        _mode, kind, _object_id, size, _path = line.split(None, 4)
-        return cls.member_named(kind).payload_bytes(size)
-
-    @classmethod
-    @abstractmethod
-    def payload_bytes(cls, size: str) -> int: ...
-
-
-class BlobTreeEntry(GitTreeEntry):
-    @classmethod
-    def payload_bytes(cls, size: str) -> int:
-        return int(size)
-
-
-class CommitTreeEntry(GitTreeEntry):
-    @classmethod
-    def payload_bytes(cls, size: str) -> int:
-        return 0
-
-
 class CheckoutStart(DeclaredFamily, affix="CheckoutStart"):
     """The declared way a tree starts, selected before it is added and prepared."""
 
     @abstractmethod
     def worktree_arguments(self, path: Path) -> tuple[str, ...]: ...
-
-    @property
-    @abstractmethod
-    def reference(self) -> str: ...
-
-    def tracked_bytes(self, repository: Path) -> int:
-        """Decode Git's tracked payload sizes before creating the working tree."""
-        listing = Repo.git(repository, 'ls-tree', '-r', '-l', self.reference)
-        return sum(map(GitTreeEntry.bytes_from, listing.splitlines()))
 
     @classmethod
     def of(cls, repository: Path, branch: str, base: str) -> CheckoutStart:
@@ -357,10 +323,6 @@ class CheckoutStart(DeclaredFamily, affix="CheckoutStart"):
 class DetachedStart(CheckoutStart):
     revision: str
 
-    @property
-    def reference(self) -> str:
-        return self.revision
-
     def worktree_arguments(self, path: Path) -> tuple[str, ...]:
         return ("--detach", "-q", str(path), self.revision)
 
@@ -370,10 +332,6 @@ class NewBranchStart(CheckoutStart):
     branch: str
     base: str
 
-    @property
-    def reference(self) -> str:
-        return self.base
-
     def worktree_arguments(self, path: Path) -> tuple[str, ...]:
         return ("-q", "-b", self.branch, str(path), self.base)
 
@@ -381,10 +339,6 @@ class NewBranchStart(CheckoutStart):
 @dataclass(frozen=True)
 class KeptBranchStart(CheckoutStart):
     branch: str
-
-    @property
-    def reference(self) -> str:
-        return self.branch
 
     def worktree_arguments(self, path: Path) -> tuple[str, ...]:
         return ("-q", str(path), self.branch)
