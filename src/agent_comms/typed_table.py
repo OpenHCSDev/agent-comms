@@ -2827,6 +2827,7 @@ class WalStore(StoreWriter, StoreLockFile):
     @contextmanager
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Open one private writer and apply the file's declared WAL policy."""
+        self.store.require_maintenance_open()
         # Never open/close an extra descriptor for an existing SQLite inode:
         # doing so can release another connection's process-wide fcntl locks.
         try:

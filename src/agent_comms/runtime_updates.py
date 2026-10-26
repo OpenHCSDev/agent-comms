@@ -41,6 +41,10 @@ class DraftAccumulator:
 
     started_at: EventTime
 
+    def staged(self) -> Self:
+        """Share accumulators whose operations do not mutate their stored value."""
+        return self
+
     def restarted(self, replacement: DraftAccumulator) -> DraftAccumulator:
         return replacement
 
@@ -120,6 +124,9 @@ class TextDraft(PresentableDraft):
             started_at, event_type, {index: [text] for index, text in enumerate(parts)}, position
         )
 
+    def staged(self) -> Self:
+        return replace(self, sections={index: parts.copy() for index, parts in self.sections.items()})
+
     def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
         self.sections.setdefault(update.section, []).append(update.text)
         return self.snapshot(update.turn_id, update.item_id)
@@ -155,7 +162,7 @@ class ClosedDraft(DraftAccumulator):
         return ()
 
 
-@dataclass(frozen=True)
+@dataclass
 class ThreadOutput(activity.ThreadOutput):
     """Where a CLI's output lands in Core: finished items and current activity."""
 
@@ -182,17 +189,25 @@ class ThreadOutput(activity.ThreadOutput):
             update.publish(self)
         pending.clear()
 
+    def staged(self) -> Self:
+        return replace(self, drafts={key: draft.staged() for key, draft in self.drafts.items()})
+
+    def commit(self, staged: Self) -> None:
+        self.drafts = staged.drafts
+
     def publish_batch(self, updates: list[RuntimeUpdate]) -> None:
+        staged = self.staged()
         pending: list[RuntimeUpdate] = []
         for update in updates:
-            update.accumulate_into(self, pending)
-        self.publish_pending(pending)
+            update.accumulate_into(staged, pending)
+        staged.publish_pending(pending)
+        self.commit(staged)
 
     def draft(self, key: TurnItem) -> DraftAccumulator:
         return self.drafts.get(key, NO_PREFIX)
 
     def start_item(self, update: StartedItem) -> tuple[RuntimeUpdate, ...]:
-        current = self.draft(update.key).restarted(update.accumulator)
+        current = self.draft(update.key).restarted(update.accumulator.staged())
         self.drafts[update.key] = current
         return current.started(update)
 
@@ -220,13 +235,22 @@ class ThreadOutput(activity.ThreadOutput):
         return self.transcript.incarnation.name
 
 
-@dataclass(frozen=True)
+@dataclass
 class ReplyingThreadOutput(ThreadOutput):
     """The last finished assistant item replies to this turn's confirmed deliveries."""
 
     messaging: Messaging = field(kw_only=True)
     reply_targets: set[str] = field(default_factory=set)
     pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
+
+    def staged(self) -> Self:
+        return replace(super().staged(), reply_targets=self.reply_targets.copy(),
+                       pending=self.pending.copy())
+
+    def commit(self, staged: Self) -> None:
+        super().commit(staged)
+        self.reply_targets = staged.reply_targets
+        self.pending = staged.pending
 
     @classmethod
     def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:

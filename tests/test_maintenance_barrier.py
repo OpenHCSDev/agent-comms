@@ -20,6 +20,7 @@ from agent_comms.maintenance_barrier import (
     DrainingPhase,
     InstallingPhase,
     MaintenanceBarrier,
+    MaintenanceHeldError,
     MaintenanceHolder,
     MaintenanceOperator,
     MaintenancePhase,
@@ -381,14 +382,15 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     comms = wire(tmp_path)
     comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
+    prefix = TextDraft.from_parts(
+        AssistantTranscript, ("prefix",), RecordedEventTime(1.0), NativeItemId("item")
+    )
     updates = [
         StartedItem(
             turn_turn_id,
             NativeItemId("item"),
             ModelWaitPhase("Replying"),
-            TextDraft.from_parts(
-                AssistantTranscript, ("prefix",), RecordedEventTime(1.0), NativeItemId("item")
-            ),
+            prefix,
         ),
         AppendDraftItem(turn_turn_id, NativeItemId("item"), " once"),
     ]
@@ -401,6 +403,9 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
                 await asyncio.shield(pending)
         assert output.drafts == {}
         assert not output.transcript.path.exists()
+        assert prefix.events == (
+            AssistantTranscript("prefix", timestamp=1.0, position=NativeItemId("item")),
+        )
     finally:
         barrier.clear(hold)
     await asyncio.wait_for(pending, 3)
@@ -427,7 +432,10 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     gate = MaintenanceBarrier(comms.registry.store.path)
     hold = gate.begin(MaintenanceOperator.current())
     monkeypatch.delenv(HOLDER_NONCE, raising=False)
-    with pytest.raises(RelationViolationError):
+    with pytest.raises(MaintenanceHeldError):
+        with comms.registry.store.editing():
+            pytest.fail("Maintenance yielded an editor before refusing its write")
+    with pytest.raises(MaintenanceHeldError):
         comms.registry.declare(requested)
     assert comms.registry.store.path.read_bytes() == before
     with CoordinationSession(str(CoordinationSession.path_in(tmp_path))) as session:

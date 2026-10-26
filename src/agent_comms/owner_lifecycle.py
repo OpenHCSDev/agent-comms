@@ -311,7 +311,6 @@ class OwnerLifecycle:
     def acquire_thread(self, name: str) -> Thread:
         """Bind only this calling process; stored birth time is signal authority."""
         identity = ProcessIdentity.capture(os.getpid())
-        self.maintenance.assert_open_unlocked()
         thread = self.registry.require(name)
         thread.execution.require_native()
         thread.role.require_executable(
@@ -357,7 +356,6 @@ class OwnerLifecycle:
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> Thread:
         with self.registry.storage_rule.room_for_start(self.registry.require(name), self.root):
-            self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
             refusal = RelationViolationError("Explicit start is required for a stopped agent.")
@@ -375,7 +373,6 @@ class OwnerLifecycle:
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> OwnerStartResult:
         with self.registry.storage_rule.room_for_start(self.registry.require(name), self.root):
-            self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
             status = self.registry.status(thread.name)
@@ -512,7 +509,6 @@ class OwnerLifecycle:
         # Retire the predecessor while its released declaration is still stopped.
         # Reserving the replacement PID first destroys that observation.
         RecoveryMonitorCapability.recover_owners(self, (thread,))
-        self.maintenance.assert_open_unlocked()
         env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()
         env = launch_runtime.environment(env)
