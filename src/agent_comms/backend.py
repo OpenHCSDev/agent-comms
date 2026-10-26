@@ -254,7 +254,6 @@ class NativeSession(MroDispatch, ABC):
         self.rejected_signal = asyncio.Event()
         self.rejected_commands: list[events.InputRefused] = []
         self.explicit_interrupt = False
-        self.settlement_count = 0
         self.started_during_abort: list[events.FollowingInputStarted] = []
         self.finished = self.skip = False
 
@@ -278,15 +277,11 @@ class NativeSession(MroDispatch, ABC):
 
     async def agent_settled(self, event: pi.AgentSettled) -> tuple[events.AgentEvent, ...]:
         """Settling asks Pi for the turn's statistics before the turn reports itself finished."""
-        self.settlement_count += 1
-        if self.inputs.pending:
-            self.skip = True
-            return ()
+        await self.native.stop_forwarding()
         self.prompt_state = self.prompt_state.settle(event)
-        if not self.stats.requested:
-            self.watchdog.progress()
-            self.watchdog.phase = SettlingStatsPhase()
-            await self.stats.request(self)
+        self.watchdog.progress()
+        self.watchdog.phase = SettlingStatsPhase()
+        await self.stats.request(self)
         return ()
 
     def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
@@ -310,6 +305,8 @@ class NativeSession(MroDispatch, ABC):
         for update in await self.apply_native_event(event):
             yield update
         self.watchdog.transition(event)
+        async for update in self.stats.settle(self):
+            yield update
         for update in self.native_phase_changes(previous):
             yield update
 
@@ -351,7 +348,7 @@ class NativeSession(MroDispatch, ABC):
         return self.prompt_state.permits_extension_ui(self)
 
     async def abort_stalled_rpc(self) -> None:
-        await self.native.finish_input()
+        await self.finish_input()
         abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
         try:
             remaining = max(0.0, abort_deadline - self.loop.time())
@@ -453,10 +450,6 @@ class NativeSession(MroDispatch, ABC):
                             break
                         if self.skip:
                             continue
-                        async for event in self.stats.settle(self):
-                            yield event
-                        if self.finished:
-                            break
                     self.finished = False
                     await self.retain_or_close()
                     await self.finish_diagnostics()
@@ -544,9 +537,14 @@ class NativeSession(MroDispatch, ABC):
         self.active_session_file = self.launch.session.session_file
         self.watchdog.reading()
 
+    async def finish_input(self) -> None:
+        """Retire snapshot work before the input transport it borrows."""
+        await self.stats.close()
+        await self.native.finish_input()
+
     async def retain_or_close(self) -> None:
         self.tool_socket.assert_complete()
-        await self.native.finish_input()
+        await self.finish_input()
         retention = SessionRetention.from_optional(self.native.attestation.identity)
         if self.prompt_state.permits_retention(self):
             self.native.sensitive_diagnostics = self.output.sensitive

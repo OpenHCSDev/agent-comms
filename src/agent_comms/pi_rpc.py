@@ -10,7 +10,7 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from .pending_requests import PendingRequests
+from .pending_requests import PendingRequest, PendingRequests
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -106,9 +106,9 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
             return None
         return self.decode_record(raw, strict=strict, max_bytes=max_bytes, event_type=self.event_type)
 
-    def track(self, command: PiCommand) -> asyncio.Future[Response]:
-        """Expose the same pending response to the request's lifecycle owner."""
-        return command.id.track_in(self.pending, type(command), command)
+    def track[Command: PiCommand](self, command: Command) -> PendingRequest[Command]:
+        """Share the original request and receipt with its lifecycle owner."""
+        return command.id.track_in(self.pending, command.response_type(), command)
 
     @staticmethod
     def command_bytes(command: PiCommand) -> bytes:

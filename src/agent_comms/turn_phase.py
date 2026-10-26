@@ -126,8 +126,11 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
 
-    def stalled(self, accepted: bool) -> TurnPhase:
-        return self if accepted else PromptAcceptancePhase()
+    def stalled(self) -> TurnPhase:
+        return self
+
+    def stall_message(self, budget: float) -> str:
+        return f"Model produced no RPC progress for {budget:g} seconds."
 
     def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
         TurnPhaseOutput(agents, lease).enter(self)
@@ -141,6 +144,9 @@ class PromptAcceptancePhase(TurnPhase):
     activity_state = ActivityState.STARTING
     stall_reason = "prompt_acceptance_timeout"
     label = "Waiting for input start"
+
+    def stall_message(self, budget: float) -> str:
+        return f"Pi did not accept the prompt within {budget:g} seconds."
 
 
 class PreparingPhase(TurnPhase):
@@ -249,5 +255,5 @@ class ToolRunningPhase(StallExempt, NoModelWait, Excursion):
     def tool_ended(self, tool_id: ToolCallId) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
         return replace(self, tools=retained) if retained else ModelWaitPhase()
-    def stalled(self, accepted: bool) -> TurnPhase:
-        return ModelWaitPhase().stalled(accepted)
+    def stalled(self) -> TurnPhase:
+        return ModelWaitPhase()

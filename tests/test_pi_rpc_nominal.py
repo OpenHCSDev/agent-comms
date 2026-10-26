@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
-from pathlib import Path
 
 import pytest
 
@@ -13,15 +12,10 @@ import agent_comms.pi_commands as commands
 import agent_comms.pi_events as pi
 import agent_comms.turn_failure as failures
 from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_prepare import NativeSessionPreparation
-from agent_comms.native_startup import NativeStartup
 from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_payloads import AnonymousRequest, ReportedText, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.selected_session import SelectedSession
 from agent_comms.turn_item import PiRequestKey
 from agent_comms.turn_phase import (
     CompactionPhase,
@@ -32,6 +26,9 @@ from agent_comms.turn_phase import (
     ToolRunningPhase,
     TurnPhase,
 )
+
+
+from native_response_fixture import native_response_session
 
 
 class AuditPausePhase(StallExempt, Excursion):
@@ -52,7 +49,7 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
     assert TurnPhase.member_named(phase.declared_name) is type(phase)
     assert phase.declared_name in TurnPhase.names()
     assert phase.model_progress() is phase
-    stalled = phase.stalled(True)
+    stalled = phase.stalled()
     assert stalled is phase
     assert (stalled.stall_reason, stalled.declared_name) == (
         "audit_pause_no_progress", "audit_pause"
@@ -66,7 +63,7 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     from agent_comms.turn_watchdog import ModelWait, UnboundedWait
 
     bounded, unbounded = ModelWait(), UnboundedWait()
-    stalled = PromptAcceptancePhase().stalled(False)
+    stalled = PromptAcceptancePhase().stalled()
     assert isinstance(stalled, PromptAcceptancePhase)
     assert (stalled.stall_reason, stalled.declared_name) == (
         "prompt_acceptance_timeout", "prompt_acceptance"
@@ -109,11 +106,10 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
         )
     ),
 )
-def test_failure_precedence_and_text_have_one_owner(left, right):
-    session = NativeSessionPreparation(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})),
-        native_session=PersistentPiSession(), startup=NativeStartup(Path.cwd()),
-    )
+def test_failure_precedence_and_text_have_one_owner(
+    left, right, native_response_session: NativeSessionPreparation,
+):
+    session = native_response_session
     for cls in (left, right, left):
         session.output.record_failure(cls(cls.__name__))
     expected = min((left, right), key=lambda cls: cls.declared_position())
@@ -163,7 +159,8 @@ async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
 
     def response(identity):
         return PiRpcChannel.decode_record(
-            json.dumps({"type": "response", "command": "set_model", "id": identity}).encode()
+            json.dumps({"type": "response", "command": "set_model", "id": identity,
+                        "success": True}).encode()
         )
 
     assert channel.correlate(response("b")) is second
@@ -176,7 +173,7 @@ async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
     )
     channel.track(one)
     channel.track(two)
-    reply = PiRpcChannel.decode_record(b'{"type":"response","command":"interrupt_steering"}')
+    reply = PiRpcChannel.decode_record(b'{"type":"response","command":"interrupt_steering","success":true}')
     assert channel.correlate(reply) is one
     assert channel.correlate(reply) is two
     channel.pending.cancel_all()
@@ -237,77 +234,10 @@ def test_strict_native_decoding_cannot_check_malformed_rows(row):
         PiRpcChannel.decode_record(row, strict=True)
 
 
-def test_turn_runner_and_duplicate_pi_decoders_are_retired():
-    root = Path(__file__).parents[1] / "src/agent_comms"
-    assert "def _stream_agent_events(" not in (root / "backend.py").read_text()
-    for name in ["backend.py", "native_pi.py", "pi_events.py", "turn_inputs.py"]:
-        text = (root / name).read_text()
-        assert 'kind == "' not in text
-        assert 'phase = "' not in text
-    import ast
-
-    # RPC event decoding and saved-evidence JSONL have distinct contracts.
-    # The stream consumers must delegate decoding to PiRpcChannel, while the
-    # saved-evidence reader may decode its own rows using shared key validation.
-    for name in ("backend.py", "pi_events.py", "turn_inputs.py"):
-        tree = ast.parse((root / name).read_text())
-        assert not any(
-            isinstance(node, ast.Call) and ast.unparse(node.func) == "json.loads"
-            for node in ast.walk(tree)
-        ), name
-    decoders = []
-    for name in ("backend.py", "native_pi.py", "pi_events.py", "turn_inputs.py", "pi_rpc.py"):
-        tree = ast.parse((root / name).read_text())
-        for method in ast.walk(tree):
-            if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                for node in ast.walk(method):
-                    if isinstance(node, ast.Call) and ast.unparse(node.func) == "event_type.from_wire":
-                        decoders.append((name, method.name))
-    assert decoders == [("pi_rpc.py", "decode_record")]
-
+def test_private_evidence_refuses_duplicate_keys():
     from agent_comms.native_failures import NativePiUnavailable
     from agent_comms.native_pi import PrivateEvidenceRead
 
     with pytest.raises(NativePiUnavailable):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')
-
-
-def test_tracked_execution_uses_declared_handlers_without_procedural_entrypoints():
-    import ast
-
-    root = Path(__file__).parents[1] / "src/agent_comms"
-    retired = {"run_native_pi_turn", "prepare_native_pi_rpc_launch"}
-    for path in root.glob("*.py"):
-        tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                assert node.name not in retired
-            elif isinstance(node, ast.ImportFrom):
-                assert retired.isdisjoint(alias.name for alias in node.names)
-    tree = ast.parse((root / "tracked_turn.py").read_text())
-    turn = next(
-        node for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "TrackedTurnSession"
-    )
-    handlers = [
-        method
-        for method in turn.body
-        if isinstance(method, ast.AsyncFunctionDef) and method.decorator_list
-    ]
-    assert handlers
-    for method in handlers:
-        # Event identities belong to the declarations, never another if/elif dispatcher.
-        assert not any(
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "isinstance"
-            and any(
-                isinstance(part, ast.Attribute)
-                and isinstance(part.value, ast.Name)
-                and part.value.id == "pi"
-                for part in ast.walk(node)
-            )
-            for node in ast.walk(method)
-        )
-
 

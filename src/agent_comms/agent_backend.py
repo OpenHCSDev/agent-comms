@@ -183,10 +183,6 @@ class TurnInbox(asyncio.Queue[TurnInboxItem]):
         """Only an open inbox can give queued work to the running turn."""
         return self.ready.is_set() and not self.empty()
 
-    @property
-    def all_written_started(self):
-        return not any(item.carried_inputs for item in self._queue)
-
     def begin(self, item: TurnInboxItem) -> None:
         self._queue.appendleft(item)
         self._wakeup_next(self._getters)

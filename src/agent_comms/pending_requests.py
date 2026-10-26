@@ -13,27 +13,32 @@ if TYPE_CHECKING:
     from .pi_commands import PiCommand
     from .pi_events import Response
 
-@dataclass
-class PendingRequest:
+@dataclass(frozen=True)
+class PendingRequest[Command: PiCommand]:
     future: asyncio.Future[Response]
-    request: PiCommand
+    request: Command
+
+    async def response(self) -> Response:
+        """A consumer may stop waiting without cancelling the native receipt."""
+        return await asyncio.shield(self.future)
 
 
 class PendingRequests(Sealed):
     """One future per nominal result family and request identity."""
 
     def __init__(self) -> None:
-        self._pending: dict[tuple[type[PiCommand], PiRequestKey], PendingRequest] = {}
+        self._pending: dict[tuple[type[PiCommand], PiRequestKey], PendingRequest[PiCommand]] = {}
 
-    def add(
-        self, result_type: type[PiCommand], request_id: PiRequestKey, *, request: PiCommand
-    ) -> asyncio.Future[Response]:
+    def add[Command: PiCommand](
+        self, result_type: type[PiCommand], request_id: PiRequestKey, *, request: Command
+    ) -> PendingRequest[Command]:
         key = (result_type, request_id)
         if key in self._pending:
             raise ValueError(f"Request already pending: {request_id}")
         future: asyncio.Future[Response] = asyncio.get_running_loop().create_future()
-        self._pending[key] = PendingRequest(future, request)
-        return future
+        pending = PendingRequest(future, request)
+        self._pending[key] = pending
+        return pending
 
     def discard(self, result_type: type[PiCommand], request_id: PiRequestKey) -> None:
         self._pending.pop((result_type, request_id), None)

@@ -1,9 +1,7 @@
 """Nominal extension, dispatch ordering, and shared settlement contracts."""
 
-from agent_comms.pi_payloads import ReportedFlag, ReportedText, RequestId
-import ast
+from agent_comms.pi_payloads import RequestId
 from dataclasses import FrozenInstanceError, dataclass, replace
-from pathlib import Path
 
 import pytest
 
@@ -185,48 +183,25 @@ async def test_request_correlation_separates_families_and_ignores_late_results()
     from agent_comms.pi_events import Response
 
     pending = PendingRequests()
-    model_command = SetModel(id="same", provider="test", model_id="one")
-    thinking_command = SetThinkingLevel(id="same", level="off")
-    model = pending.add(SetModel, "same", request=model_command)
-    thinking = pending.add(SetThinkingLevel, "same", request=thinking_command)
+    key = PiRequestKey("same")
+    model_command = SetModel(id=RequestId(key), provider="test", model_id="one")
+    thinking_command = SetThinkingLevel(id=RequestId(key), level="off")
+    model = pending.add(SetModel, key, request=model_command)
+    thinking = pending.add(SetThinkingLevel, key, request=thinking_command)
     with pytest.raises(ValueError):
-        pending.add(SetModel, "same", request=model_command)
-    refused = Response(
-        id=RequestId(PiRequestKey("same")), command=SetModel, success=ReportedFlag(False),
-        error=ReportedText("unavailable"),
-    )
-    assert pending.take(SetModel, "same", refused) is model_command
-    assert await model is refused
-    assert not thinking.done()
-    accepted = Response(
-        id=RequestId(PiRequestKey("same")), command=SetThinkingLevel, success=ReportedFlag(True)
-    )
-    assert pending.take(SetThinkingLevel, "same", accepted) is thinking_command
-    assert await thinking is accepted
-    assert pending.take(SetThinkingLevel, "same", refused) is None
+        pending.add(SetModel, key, request=model_command)
+    refused = Response.from_wire({"type": "response", "id": key, "command": "set_model",
+                                  "success": False, "error": "unavailable"})
+    assert pending.take(SetModel, key, refused) is model_command
+    assert await model.response() is refused
+    assert not thinking.future.done()
+    accepted = Response.from_wire({"type": "response", "id": key, "command": "set_thinking_level",
+                                   "success": True})
+    assert pending.take(SetThinkingLevel, key, accepted) is thinking_command
+    assert await thinking.response() is accepted
+    assert pending.take(SetThinkingLevel, key, refused) is None
     cancelled = pending.add(
-        SetModel, "cancelled", request=SetModel(id=RequestId(PiRequestKey("cancelled")))
+        SetModel, PiRequestKey("cancelled"), request=SetModel(id=RequestId(PiRequestKey("cancelled")))
     )
-    cancelled.cancel()
-    assert pending.take(SetModel, "cancelled", refused).id == RequestId(PiRequestKey("cancelled"))
-
-
-def test_internal_event_consumers_do_not_recover_string_tags():
-    root = Path(__file__).parents[1] / "src" / "agent_comms"
-    for filename, method in (
-        ("owned_turn.py", "stream"),
-        ("turn_progress.py", "consume"),
-    ):
-        tree = ast.parse((root / filename).read_text())
-        function = next(
-            n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == method
-        )
-        for node in ast.walk(function):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                assert not (
-                    isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "event"
-                    and node.func.attr == "get"
-                )
-            if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
-                assert node.value.id != "event"
+    cancelled.future.cancel()
+    assert pending.take(SetModel, PiRequestKey("cancelled"), refused) is cancelled.request

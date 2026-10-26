@@ -122,6 +122,7 @@ def test_command_owns_response_schema_and_unknown_data_stays_opaque():
         {
             "type": "response",
             "command": "get_state",
+            "success": True,
             "data": {
                 "sessionId": "sid",
                 "model": {"provider": "p", "id": "m", "contextWindow": 1000},
@@ -135,7 +136,8 @@ def test_command_owns_response_schema_and_unknown_data_stays_opaque():
     unknown = decode({"type": "future_notice", "nested": [True, 7]})
     assert isinstance(unknown, UnknownPiEvent)
     assert unknown.payload == {"type": "future_notice", "nested": [True, 7]}
-    response = decode({"type": "response", "command": "future_command", "data": [7, "opaque"]})
+    response = decode({"type": "response", "command": "future_command", "success": True,
+                       "data": [7, "opaque"]})
     assert isinstance(response.data, UnknownData) and response.data.payload == [7, "opaque"]
 
 

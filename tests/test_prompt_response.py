@@ -1,18 +1,29 @@
 """Prompt command ids, declared image wire values and their single response result."""
+import asyncio
 import base64
+import json
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.agent_backend import FollowUpInputPolicy, InputContent, InputRequest, TurnInbox
+from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.pi_commands import PiCommand, Prompt
+from agent_comms.pi_commands import FollowingPrompt, PiCommand, Prompt
 from agent_comms.pi_payloads import AnonymousRequest, RequestId
+from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.turn_inputs import InputForwarding
+from agent_comms.pi_events import Response
+from agent_comms.turn_failure import PromptSendFailed
+from agent_comms.agent_events import FollowingInputRefused
+from agent_comms.native_session_prepare import NativeSessionPreparation
+from native_response_fixture import native_response_session
 from agent_comms.turn_item import PiRequestKey
 
 
 def prompt(**options):
-    return Prompt(message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64), **options)
+    return Prompt(message="hello", input_id=InputId.mint(),
+                  owner_tools=OwnerToolConnection("/unused", "a" * 64), **options)
 
 
 def test_images_use_the_declared_pi_tag_for_encoding_and_decoding():
@@ -53,3 +64,81 @@ def test_anonymous_wire_command_keeps_its_anonymous_id():
     assert decoded.id == AnonymousRequest()
     assert decoded.to_rpc() == raw
     assert prompt().id and prompt().id != prompt().id
+
+
+@pytest.fixture
+def following() -> FollowingPrompt:
+    item = InputRequest(input_id=InputId.mint(), content=InputContent(text="following"),
+                        when_busy=FollowUpInputPolicy)
+    command = FollowingPrompt(input=item, message=item.content.text, input_id=InputId.mint(),
+                              owner_tools=OwnerToolConnection("/unused", "a" * 64),
+                              streaming_behavior=item.when_busy)
+    return command
+
+
+@pytest.mark.parametrize("success", (True, False))
+async def test_following_receipt_keeps_its_command_without_a_second_acceptance_store(
+    following: FollowingPrompt, success: bool,
+):
+    wire = following.to_rpc()
+    assert wire["type"] == "prompt"
+    assert wire["id"] == following.require_id()
+    assert wire["inputId"] == following.input_id
+    assert "input" not in wire
+    channel = PiRpcChannel(asyncio.StreamReader())
+    receipt = channel.track(following)
+    forwarding = InputForwarding()
+    forwarding.pending[following.input_id] = receipt
+    reply = {"type": "response", "command": "prompt", "id": wire["id"], "success": success}
+    if not success:
+        reply["error"] = "explicit preflight rejection"
+    response = channel.decode_record(json.dumps(reply).encode())
+    assert channel.correlate(response) is following
+    await forwarding.responses()
+    assert await receipt.response() is response
+    assert response.succeeded is success
+    assert forwarding.retire(following.input_id) is following.input
+    assert forwarding.settled
+
+
+async def test_cancelling_a_receipt_waiter_does_not_cancel_the_native_receipt(following: FollowingPrompt):
+    channel = PiRpcChannel(asyncio.StreamReader())
+    receipt = channel.track(following)
+    waiter = asyncio.create_task(receipt.response())
+    await asyncio.sleep(0)
+    waiter.cancel()
+    await asyncio.gather(waiter, return_exceptions=True)
+    assert not receipt.future.cancelled()
+    channel.pending.cancel_all()
+
+
+async def test_explicit_following_rejection_retires_only_its_transient_write(
+    following: FollowingPrompt, native_response_session: NativeSessionPreparation,
+):
+    session = native_response_session
+    channel = PiRpcChannel(asyncio.StreamReader())
+    receipt = channel.track(following)
+    session.inputs.pending[following.input_id] = receipt
+    response = Response.from_wire({
+        "type": "response", "command": "prompt", "id": following.require_id(),
+        "success": False, "error": "native preflight refused",
+    })
+    assert channel.correlate(response) is following
+    updates = tuple(following.on_response(response, session))
+    assert updates
+    assert session.output.failure == PromptSendFailed(
+        f"Following input {following.input.input_id} was rejected: native preflight refused"
+    )
+    assert not session.inputs.pending
+    assert session.rejected_commands == [FollowingInputRefused(id=following.input.input_id)]
+    assert session.rejected_signal.is_set()
+    assert await receipt.response() is response
+
+
+def test_unwritten_core_inbox_is_not_native_pending_work(following: FollowingPrompt):
+    inbox = TurnInbox()
+    inbox.put_nowait(following.input)
+    forwarding = InputForwarding(inbox)
+    assert inbox.ready
+    assert not forwarding.unresolved
+    assert forwarding.settled

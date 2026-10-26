@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 import typing
 from abc import abstractmethod
-from asyncio import Future
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, replace
 from decimal import Decimal
@@ -86,7 +85,7 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .backend import TurnSession
     from .native_entries import TranscriptProjection
-    from .pending_requests import PendingRequests
+    from .pending_requests import PendingRequest, PendingRequests
     from .pi_commands import PiCommand
     from .pi_events import AutoRetryEnd, Response
     from .routing import Routing
@@ -195,9 +194,9 @@ class RequestId(PiReported[PiRequestKey]):
 
     value: PiRequestKey
 
-    def track_in(
-        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
-    ) -> Future[Response]:
+    def track_in[Command: PiCommand](
+        self, pending: PendingRequests, owner: type[PiCommand], command: Command,
+    ) -> PendingRequest[Command]:
         return pending.add(owner, self.value, request=command)
 
     def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
@@ -213,9 +212,9 @@ class RequestId(PiReported[PiRequestKey]):
 class AnonymousRequest(PiOmitted):
     """The record carried no id; its response is matched by command family alone."""
 
-    def track_in(
-        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
-    ) -> Future[Response]:
+    def track_in[Command: PiCommand](
+        self, pending: PendingRequests, owner: type[PiCommand], command: Command,
+    ) -> PendingRequest[Command]:
         return pending.add(owner, PiRequestKey.fresh(), request=command)
 
     def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:

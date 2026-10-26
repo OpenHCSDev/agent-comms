@@ -43,7 +43,7 @@ from agent_comms.pi_payloads import (
 )
 from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
 from agent_comms.turn_output import TurnOutput
-from agent_comms.turn_phase import AcceptsPrompt, ModelWaitPhase
+from agent_comms.turn_phase import AcceptsPrompt, ModelWaitPhase, PromptAcceptancePhase
 from agent_comms.turn_watchdog import ModelWait, ProgressWatchdog
 
 
@@ -389,15 +389,14 @@ def test_accepts_prompt_dispatch_restarts_progress_without_accepting_unowned_eve
     session = WatchdogSession()
     unowned = PiEvent.from_wire({"type": "queue_update", "pending": 1})
     watchdog.dispatch_sync(unowned, session)
-    assert not watchdog.prompt_accepted
+    assert watchdog.phase == PromptAcceptancePhase()
     assert session.output.final_assistant_stop
     assert watchdog.model_wait.elapsed == watchdog.input_wait.elapsed == 2.0
     accepted = PiEvent.from_wire({"type": "agent_start"})
     watchdog.dispatch_sync(accepted, session)
-    assert watchdog.prompt_accepted
+    assert watchdog.phase == ModelWaitPhase()
     assert not session.output.final_assistant_stop
     assert watchdog.model_wait.elapsed == watchdog.input_wait.elapsed == 0.0
-    assert isinstance(watchdog.phase, ModelWaitPhase)
 
 
 @pytest.mark.parametrize("family, record", [
