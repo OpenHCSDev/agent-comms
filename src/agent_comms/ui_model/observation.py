@@ -1494,10 +1494,10 @@ class ObservationProcess(AbstractAsyncContextManager):
                 waiter.set_exception(error)
 
     async def readable(self) -> None:
-        """Readiness admits one packet, not a blocking read in a UI callback."""
+        """Readiness admits one packet; receiving it is worker work."""
         loop = asyncio.get_running_loop()
         descriptor = self.connection.fileno()
-        ready = loop.create_future()
+        ready: asyncio.Future[None] = loop.create_future()
 
         def available() -> None:
             loop.remove_reader(descriptor)
@@ -1515,8 +1515,8 @@ class ObservationProcess(AbstractAsyncContextManager):
     ) -> None:
         """Read and unpickle one complete packet off-loop; settle it on this loop.
 
-        There is no second reader or results queue. Retirement joins an admitted
-        receive even if cancellation arrives halfway through a packet.
+        Admit the next packet only after its predecessor is delivered.
+        Retirement joins an admitted read even when cancelled partway through.
         """
         try:
             while True:
