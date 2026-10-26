@@ -34,6 +34,9 @@ from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, Started
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.message_bus import HeldBusWrite
+from agent_comms_hooks.queue_bypass import QueueBypass
+from .shell_commands import ShellCommand
+from agent_comms_hooks.watch import WatchClaim
 
 from .active_route import (
     ActiveRoute,
@@ -191,7 +194,8 @@ from .thread_model import ThreadModel
 from .thread_status import ThreadStatus
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
-from .todos import Todo
+from .todos import HeadVerdict, Todo
+from .head_review import PullRequestHead
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,
@@ -642,6 +646,11 @@ class AcknowledgedResult(CliResult):
 
 
 @dataclass(frozen=True)
+class MergeReviewResult(CliResult):
+    heads: tuple[PullRequestHead, ...]
+
+
+@dataclass(frozen=True)
 class WhoResult(CliResult):
     who: tuple[Annotated[ThreadView, WireForm], ...]
 
@@ -1051,6 +1060,36 @@ class CliCommand[Answer: CliResult = CliResult](
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-review"):
+    """Read the existing exact-head verdict for a commander session's merge command."""
+
+    help = "Read Core's recorded decision for the current admin/API merge head"
+    session: Annotated[str, Argument(flags=("--session",))]
+    bash: Annotated[str, Argument(flags=("--bash",))]
+
+    def apply(self, ctx: Comms) -> MergeReviewResult:
+        bindings = tuple(binding for binding in WatchClaim(self.session).state().bindings()
+                         if Path(binding.root) == ctx.root)
+        if not bindings:
+            raise ToolRefusedError("The commander session has no recorded binding to this bus; no verdict can be read.")
+        snapshot = ctx.registry.snapshot()
+        for binding in bindings:
+            subject = snapshot.require(binding.bus)
+            if not any(subject.incarnation == commander.incarnation
+                       for commander in snapshot.commander_project.commanders(snapshot)):
+                raise ToolRefusedError("Only a bound commander session may use a reviewed merge bypass.")
+        heads = []
+        for simple in ShellCommand.split(self.bash):
+            for bypass in QueueBypass.matching(simple):
+                target = bypass.target()
+                request = PullRequestHead.at(RepositoryName.from_wire(target.repository), target.number)
+                reviews = ctx.goals.todos.head_reviews(request)
+                (type(reviews[0].verdict) if reviews else HeadVerdict).require_merge(request)
+                heads.append(request)
+        return MergeReviewResult(tuple(heads))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -475,11 +475,19 @@ class BranchRule:
 
 
 @dataclass(frozen=True)
-class RulesetGates(PhaseEvidence):
-    """Main requires HeadReview's exact status and no actor can bypass that rule.
+class BypassActor:
+    """A GitHub ruleset actor, decoded once by its declared identity fields."""
 
-    GitHub's rules change without a main commit, so read them once per reading,
-    never cache them by main's commit. Both bypass modes can skip a direct gate.
+    actor_type: str
+    actor_id: int
+
+
+@dataclass(frozen=True)
+class RulesetGates(PhaseEvidence):
+    """Main requires HeadReview's exact status; only the owner's admin role may bypass.
+
+    The bypass hook demands a recorded verdict on that head. GitHub rules change
+    without a main commit, so read them once per reading, not per main commit.
     """
 
     def retained(self, previous: MainTree, current: MainTree) -> bool:
@@ -489,7 +497,12 @@ class RulesetGates(PhaseEvidence):
     rules_query: ClassVar[str] = (
         "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context]}]"
     )
-    bypass_query: ClassVar[str] = ".bypass_actors | isempty(.[])"
+    owner_bypass: ClassVar[BypassActor] = BypassActor("RepositoryRole", 5)
+    bypass_query: ClassVar[str] = (
+        ".bypass_actors | map({"
+        + ", ".join(entry.key for entry in FieldCodec.argument_fields(BypassActor))
+        + "})"
+    )
 
     def holds(self, reading: PlanReading) -> bool:
         main = reading.main
@@ -498,16 +511,17 @@ class RulesetGates(PhaseEvidence):
             self.api(main, f"rules/branches/{main.branch}", self.rules_query),
         )
         return any(
-            self.unskipped(main, rule.ruleset)
+            self.owner_only_bypass(main, rule.ruleset)
             for rule in rules
             if rule.requires(HeadReview.context)
         )
 
-    def unskipped(self, main: MainTree, ruleset: int) -> bool:
-        return FieldCodec.decode(
-            bool,
+    def owner_only_bypass(self, main: MainTree, ruleset: int) -> bool:
+        actors = FieldCodec.decode(
+            tuple[BypassActor, ...],
             self.api(main, f"rulesets/{ruleset}", self.bypass_query),
         )
+        return all(actor == self.owner_bypass for actor in actors)
 
     @staticmethod
     def api(main: MainTree, path: str, query: str) -> object:
@@ -519,7 +533,8 @@ class RulesetGates(PhaseEvidence):
     def describe(self) -> str:
         return (
             f"an active rule on {MainTree.branch} requires {HeadReview.context} directly"
-            " and no actor of its ruleset can bypass it"
+            " and only the owner's admin role can bypass it; the hook refuses that bypass"
+            " without a recorded ok verdict on the head"
         )
 
 
