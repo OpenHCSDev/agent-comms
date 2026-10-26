@@ -174,7 +174,7 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
                 # Reopening starts after the journal's latest attempt, never at the
                 # uncertain first message. Its original outcome remains untouched.
                 assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(second.reference)
-                assert DeliveryRow.select(bridge.db, id=first.message_id) == (uncertain,)
+                assert DeliveryRow.select(bridge.db, id=first.message_id) == [uncertain]
         finally:
             writer.close()
             await writer.wait_closed()
