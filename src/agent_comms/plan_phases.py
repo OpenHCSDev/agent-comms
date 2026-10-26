@@ -19,6 +19,7 @@ from agent_comms.pi_events import PiEvent
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.thread_identity import BirthlessIncarnation
 from agent_comms.tool_calls import CliToolArguments
+from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.phase_evidence import (
     AllEvidence,
@@ -230,7 +231,7 @@ class ReviewQueuePhase(CommanderNativePhase):
     after = (RecordPlanePhase,)
     evidence = AllEvidence((
         ClassDeclared("HeadReviewRecord", ("src/agent_comms/todos.py",)),
-        ClassDeclared("QueueBypassGuard", ("src/agent_comms_hooks/queue_bypass.py",)),
+        ClassDeclared(QueueBypassGuard.__name__, ("src/agent_comms_hooks/queue_bypass.py",)),
         RulesetGates(),
     ))
 

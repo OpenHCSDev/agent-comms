@@ -172,6 +172,10 @@ class Bash(HookRecord):
     command: str
 
 
+class HookRefused(Exception):
+    """An owned hook refusal, rendered as a denial rather than a hook crash."""
+
+
 class BashRefusal(ClaudeToolHookProgram, ABC):
     """A program that refuses a Bash command before it runs, for every reason it finds;
     each member says only what it refuses and why."""
@@ -205,7 +209,10 @@ class BashRefusal(ClaudeToolHookProgram, ABC):
         hook = ClaudeToolHook.read()
         if not cls.binds(hook):
             return
-        reasons = cls.reasons_for(hook)
+        try:
+            reasons = cls.reasons_for(hook)
+        except HookRefused as refused:
+            reasons = (str(refused),)
         if reasons:
             hook.respond(
                 permissionDecision="deny",
