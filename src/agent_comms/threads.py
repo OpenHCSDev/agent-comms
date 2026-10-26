@@ -368,7 +368,7 @@ class Thread(ThreadProvenance, CatalogSelection):
     def home_checkouts(self) -> tuple[Path, ...]:
         """The current project when it is a Git checkout; a unit that has not yet run
         `agent-comms checkout add` from a plain directory such as its home holds none."""
-        return Checkout.present(self.project_path)
+        return Checkout.git_roots(self.project_path)
 
     def ran_in(self, worktree: Checkout) -> bool:
         """The current project or one this conversation moved away from."""

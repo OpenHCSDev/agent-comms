@@ -376,7 +376,7 @@ class Checkout(SingleFieldValue, PresentMember):
         return str(self.path)
 
     @classmethod
-    def present(cls, *paths: Path) -> tuple[Path, ...]:
+    def git_roots(cls, *paths: Path) -> tuple[Path, ...]:
         """The given paths that are Git working trees, decided as Git decides: a `.git` file
         links a worktree, a `.git` folder holds HEAD. A plain or empty-`.git` folder is none."""
         return tuple(path for path in paths
@@ -391,7 +391,7 @@ class Checkout(SingleFieldValue, PresentMember):
     def checked(cls, path: Path | str) -> Self:
         """Resolve a supplied project and require a Git checkout, never the shell's cwd."""
         checkout = cls(cls.path_from_input(path)).resolved(strict=True)
-        if not cls.present(checkout.path):
+        if not cls.git_roots(checkout.path):
             raise ValueError(f"Project {checkout.path} is not a Git checkout")
         return checkout
 

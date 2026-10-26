@@ -301,7 +301,7 @@ class StorageRule(RoomAllocation, DurableFile):
         candidates = (home, *self.checkout_paths(thread))
         checkouts = {home}
         listed: set[Path] = set()
-        for repository in Checkout.present(*candidates):
+        for repository in Checkout.git_roots(*candidates):
             if repository in listed:
                 continue
             entries = WorkBranches(repository).read_checkout().worktrees()

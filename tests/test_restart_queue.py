@@ -87,7 +87,7 @@ async def test_restore_owner_keeps_blocked_goal_unchanged(
     blocked = comms.goals.update_goal(
         'worker', BlockedGoalAction(block_reason='Await an explicit owner retry'))
     command = TargetActionCliCommand(
-        operation=RestoreOwnerCliCommand.declared_name, target=('worker',), project=str(tmp_path))
+        operation=RestoreOwnerCliCommand.declared_name, target=('worker',), project=Checkout(tmp_path))
     result = await asyncio.to_thread(command.apply, comms)
     decoded = FieldCodec.decode(TargetBatchResult, FieldCodec.encode(result))
     assert decoded.exit_code() == 0
