@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -176,8 +177,12 @@ class WatchClaim:
             self.state().enrol(self, record)
 
 
-class WatchState:
+class WatchState(ABC):
     """The claim state owns connection, shutdown, enrolment and discovery."""
+
+    @abstractmethod
+    def rearm(self, launch: Callable[[], None]) -> None:
+        """Whether this state needs the enrolled session's existing launcher."""
 
     def connect(self, serve: Callable[[], Serve],
                 request: Callable[[Serve], SessionRequest]) -> None:
@@ -217,7 +222,8 @@ class WatchState:
 
 
 class UnclaimedWatch(WatchState):
-    pass
+    def rearm(self, launch: Callable[[], None]) -> None:
+        raise NoSessionBridge('Enroll this session before starting its Monitor')
 
 
 @dataclass(frozen=True)
@@ -248,6 +254,10 @@ class RecordedWatch(WatchState):
 
 
 class LiveWatch(RecordedWatch):
+    def rearm(self, launch: Callable[[], None]) -> None:
+        """The kernel-held bridge is already serving; do not launch another."""
+        return
+
     def board(self) -> tuple[str, ...]:
         """The bridge derives the current board; a failed read is a hook failure."""
         return SessionBoard.asked(self.claim.socket_path).lines
@@ -280,4 +290,5 @@ class LiveWatch(RecordedWatch):
 
 
 class LapsedWatch(RecordedWatch):
-    pass
+    def rearm(self, launch: Callable[[], None]) -> None:
+        launch()
