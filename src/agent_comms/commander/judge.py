@@ -41,7 +41,6 @@ from agent_comms.comms import Comms
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import (
     Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems,
-    SelectingArgumentDefault,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
@@ -427,15 +426,9 @@ class VerdictVerb(JudgeVerb):
     def argument_problems(self) -> dict[str, str]:
         """Every refusal this verdict's own arguments earn, before anything is read or written;
         each member adds its own to its parents'."""
-        return self.selection_problems()
+        return super().argument_problems() | self.selection_problems()
 
     def subject(self, ctx: order.Commander) -> ReviewSubject:
-        """One refusal lists every argument problem, so one run fixes them all."""
-        if problems := self.argument_problems():
-            raise RecordProblems(problems)
-        return self.selected_subject(ctx)
-
-    def selected_subject(self, ctx: order.Commander) -> ReviewSubject:
         return EditReview(self.ids)
 
     def run(self, ctx: order.Commander) -> None:
@@ -466,7 +459,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
                 '--pr', 'review a PR with --pr, or omit --head and --repo')
         return {}
 
-    def selected_subject(self, ctx: order.Commander) -> ReviewSubject:
+    def subject(self, ctx: order.Commander) -> ReviewSubject:
         return ReviewSubject.from_options(self, ctx)
 
     def order_link(self, todo: Todo) -> OrderLink:
@@ -694,13 +687,13 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
 class SlopBackVerb(BackVerb):
     """A slop send-back: the defect is a fact restated outside its declaration, so it carries
     the formal statement. `back` parses its options; it has no subcommand of its own."""
-    pattern: Annotated[str, Argument(flags=("--slop",), default=SelectingArgumentDefault(), options={
+    pattern: Annotated[str, Argument(flags=("--slop",), options={
         "help": "slop only: pattern ID from the pinned refactor-audit catalog"})]
-    fact: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+    fact: Annotated[str, Argument(options={
         "help": "slop only: the required fact, 4+ words"})]
-    derive: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+    derive: Annotated[str, Argument(options={
         "help": "slop only: " + "|".join(Derivation.names())})]
-    by: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+    by: Annotated[str, Argument(options={
         "help": "slop only: PATH:LINE of the declaration that owns it"})]
 
     @classmethod

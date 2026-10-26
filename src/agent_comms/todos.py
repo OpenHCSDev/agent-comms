@@ -79,6 +79,7 @@ from agent_comms.field_codec import (
     MessageId,
     NullMember,
     OrderId,
+    RecordProblems,
     SingleFieldValue,
     SubclassUnion,
     ToolCallId,
@@ -206,6 +207,28 @@ class FileDeliveryEvidence(DeliveryEvidence):
         run.require_artifact(self.path)
 
 
+class EvidenceRequirements:
+    """Shared evidence checks for a source request and its resolved delivery."""
+
+    def evidence_problems(self, evidence: DeliveryEvidence, run: OrderRun) -> dict[str, str]:
+        problems: dict[str, str] = {}
+        with RecordProblems.collecting(
+            problems, '--seen.run', 'supply --seen FILE with the application evidence'):
+            evidence.require_run(run)
+        return problems
+
+
+class WorkingEvidence(EvidenceRequirements):
+    """An operation's working claim always needs a real artifact, even for a mechanical run."""
+
+    def evidence_problems(self, evidence: DeliveryEvidence, run: OrderRun) -> dict[str, str]:
+        problems = super().evidence_problems(evidence, run)
+        with RecordProblems.collecting(
+            problems, '--seen.working', 'supply --seen FILE or --screenshot FILE for the working claim'):
+            evidence.artifact()
+        return problems
+
+
 class FreshMainCheck:
     """Undelivered work is checked against fetched main, independent of the local branch."""
 
@@ -230,9 +253,54 @@ class BranchPointCheck:
         raise TodoError(f"{self.work_commit} was not built on {WorkBranches.main}.")
 
 
+class OrderCompletion(DeclaredFamily, affix="Delivery"):
+    """A completion request owns one pass over its rules before recording a delivery.
+
+    Recorded delivery values already resolve to themselves. The command's source request
+    is a sibling, not a fake checked delivery or an extra validation pass.
+    """
+
+    @abstractmethod
+    def preparation_problems(self, todo: Todo) -> dict[str, str]: ...
+
+    @abstractmethod
+    def resolved_delivery(self, todo: Todo) -> OrderDelivery: ...
+
+    def completion_claims(self, delivery: OrderDelivery, order: CheckedProblemOrder,
+                          supplied: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
+        return supplied
+
+    def operation(self, todo: Todo, actor: ThreadIncarnation, comms: Comms,
+                  order_id: OrderId, claims: tuple[ProgressClaim, ...]) -> DeliverTodo:
+        todo.require_commander(actor)
+        todo.state.require_open(todo)
+        order = todo.order.checked()
+        order.require_delivery(order_id)
+        problems = self.preparation_problems(todo)
+        with RecordProblems.collecting(
+            problems, 'checkout', 'remove the order checkout with agent-comms checkout remove'):
+            UnitStorage.read(
+                comms.registry.storage_rule,
+                comms.registry.require(todo.holder_state.previous_assignment().owner),
+            ).require_retired(todo.id)
+        if problems:
+            raise RecordProblems(problems)
+        delivery = self.resolved_delivery(todo)
+        verified = order.scope.verified_claims(
+            delivery, self.completion_claims(delivery, order, claims), comms,
+            order.check.directory)
+        return DeliverTodo(todo.revision, actor, delivery, order_id, verified_claims=verified)
+
+
 @dataclass(frozen=True, kw_only=True)
-class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
+class OrderDelivery(OrderCompletion, StoryEvent, declared_name=None):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    def preparation_problems(self, todo: Todo) -> dict[str, str]:
+        return {}
+
+    def resolved_delivery(self, todo: Todo) -> OrderDelivery:
+        return self
 
     def unobserved(self) -> OrderDelivery:
         """The delivered work without the observations of the proof that recorded it."""
@@ -290,7 +358,7 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CheckedDelivery(OrderDelivery, declared_name=None):
+class CheckedDelivery(EvidenceRequirements, OrderDelivery, declared_name=None):
     """Implementation deliveries share source checks and installed-build evidence."""
 
     evidence: Annotated[DeliveryEvidence, WireOmitDefault()] = field(
@@ -307,9 +375,8 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     def closing_artifact(self) -> str:
         return self.evidence.artifact()
 
-    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
-        self.evidence.require_run(order.run)
-        return super().done_claims(order)
+    def preparation_problems(self, todo: Todo) -> dict[str, str]:
+        return self.evidence_problems(self.evidence, todo.order.checked().run)
 
     @property
     def installation_build(self) -> BuildIdentity:
@@ -364,7 +431,6 @@ class CommitSourceDelivery(BranchPointCheck, CheckedDelivery, declared_name=None
         return self.delivered
 
     def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
-        super().done_claims(order)
         return (MergedClaim(self.commit),)
 
     @property
@@ -510,9 +576,8 @@ class CheckedCommitDelivery(CommitDelivery):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OperationDelivery(FreshMainCheck, CheckedDelivery):
+class OperationDelivery(WorkingEvidence, FreshMainCheck, CheckedDelivery):
     def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
-        super().done_claims(order)
         return (WorkingClaim(self.evidence.artifact()),)
 
     @property
@@ -2203,7 +2268,7 @@ class FixShape:
             location.require_class(roots, revision)
 
 
-class DeliverySource(DeclaredFamily, affix="DeliverySource"):
+class DeliverySource(EvidenceRequirements, DeclaredFamily, affix="DeliverySource"):
     """The command's decoded source, before a commit reference is resolved in its repository."""
 
     @abstractmethod
@@ -2211,6 +2276,33 @@ class DeliverySource(DeclaredFamily, affix="DeliverySource"):
 
     def require_report(self) -> None:
         raise TodoError("Triage returns --seen REPORT, not a commit or operation.")
+
+
+@dataclass(frozen=True)
+class SourceCompletion(OrderCompletion, declared_name=None):
+    """The command's undecided source and evidence; only the resolved delivery is recorded."""
+
+    source: DeliverySource
+    screenshot: str
+    seen: str
+
+    @cached_property
+    def evidence(self) -> DeliveryEvidence:
+        path = self.seen or self.screenshot
+        return FileDeliveryEvidence(path) if path else NoDeliveryEvidence()
+
+    def preparation_problems(self, todo: Todo) -> dict[str, str]:
+        order = todo.order.checked()
+        return order.scope.completion_problems(order.run, self)
+
+    def resolved_delivery(self, todo: Todo) -> OrderDelivery:
+        order = todo.order.checked()
+        delivery: OrderDelivery = order.scope.delivery(todo, order.check.directory, self)
+        return delivery
+
+    def completion_claims(self, delivery: OrderDelivery, order: CheckedProblemOrder,
+                          supplied: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
+        return delivery.done_claims(order)
 
 
 @dataclass(frozen=True)
@@ -2241,22 +2333,28 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     ) -> dict[ProgressClaim, tuple[str, ...]]: ...
 
     @abstractmethod
-    def delivery(self, todo: Todo, repo: Path, source: DeliverySource,
-                 screenshot: str, seen: str) -> Delivery: ...
+    def completion_problems(self, run: OrderRun, request: SourceCompletion) -> dict[str, str]: ...
+
+    @abstractmethod
+    def delivery(self, todo: Todo, repo: Path, request: SourceCompletion) -> Delivery: ...
 
     @abstractmethod
     def completed(self, todo: Todo, delivery: Delivery) -> Todo: ...
 
 
 class TriageScope(OrderScope[ReportDelivery]):
-    def delivery(self, todo: Todo, repo: Path, source: DeliverySource,
-                 screenshot: str, seen: str) -> ReportDelivery:
-        source.require_report()
-        if screenshot:
-            raise TodoError("Triage returns --seen REPORT, not a screenshot.")
-        if not seen:
-            raise TodoError("A triage order needs --seen REPORT.")
-        return ReportDelivery(report=Path(seen).read_text())
+    def completion_problems(self, run: OrderRun, request: SourceCompletion) -> dict[str, str]:
+        problems: dict[str, str] = {}
+        with RecordProblems.collecting(problems, '--op', 'omit --op for a triage report'):
+            request.source.require_report()
+        if request.screenshot:
+            problems['--screenshot'] = 'Triage returns a report; fix: use --seen REPORT, not --screenshot.'
+        if not request.seen:
+            problems['--seen'] = 'A triage order needs a report; fix: supply --seen REPORT.'
+        return problems
+
+    def delivery(self, todo: Todo, repo: Path, request: SourceCompletion) -> ReportDelivery:
+        return ReportDelivery(report=Path(request.seen).read_text())
 
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
@@ -2280,11 +2378,11 @@ class TriageScope(OrderScope[ReportDelivery]):
 class FixScope(OrderScope[CheckedDelivery]):
     shape: FixShape
 
-    def delivery(self, todo: Todo, repo: Path, source: DeliverySource,
-                 screenshot: str, seen: str) -> CheckedDelivery:
-        path = seen or screenshot
-        evidence = FileDeliveryEvidence(path) if path else NoDeliveryEvidence()
-        return source.delivery(todo, repo, evidence)
+    def completion_problems(self, run: OrderRun, request: SourceCompletion) -> dict[str, str]:
+        return request.source.evidence_problems(request.evidence, run)
+
+    def delivery(self, todo: Todo, repo: Path, request: SourceCompletion) -> CheckedDelivery:
+        return request.source.delivery(todo, repo, request.evidence)
 
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         self.shape.require_references(roots, revision)
@@ -4804,9 +4902,6 @@ class DeliverTodo(TodoOperation, declared_name=None):
 
     def prepare(self, goals, current):
         self.require_current(current)
-        UnitStorage.read(
-            goals.registry.storage_rule, goals.registry.require(current.holder_state.previous_assignment().owner),
-        ).require_retired(current.id)
         verified = self.delivery.verified(current, goals.registry, self.verified_claims)
         try:
             delivered = asyncio.run(verified)

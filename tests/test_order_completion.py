@@ -5,9 +5,11 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.build_identity import RecordedBuildIdentity
-from agent_comms.commander.order import main
+from agent_comms.commander.order import Commander, main
 from agent_comms.commander.standing import HolderGone
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.field_codec import RecordProblems
+from agent_comms.repo import Checkout, DetachedStart
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun
@@ -19,7 +21,9 @@ from agent_comms.todos import (
     MergedProblemOrder,
     OperationDelivery,
     ProgressRead,
+    ProblemOrder,
     PullRequestLink,
+    Todo,
     ReportDelivery,
     ReportedProblemOrder,
     TriageScope,
@@ -32,7 +36,7 @@ pytest_plugins = ('test_todos', 'test_held_problem_orders')
 
 class TestOrderCompletion:
     @staticmethod
-    def record(ctx, order):
+    def record(ctx: Commander, order: ProblemOrder) -> Todo:
         store = ctx.comms.goals.todos
         current = store.get('P1')
         with store.writing() as connection:
@@ -115,6 +119,25 @@ class TestOrderCompletion:
         assert isinstance(closed.order, ReportedProblemOrder)
         assert closed.order.delivery.report == report.read_text()
         assert closed.assignment is None
+
+    def test_done_reports_missing_run_and_existing_checkout_together(
+        self, held_commander: Commander,
+    ) -> None:
+        ctx = held_commander
+        original = ctx.comms.goals.todos.get('P1')
+        current = self.record(ctx, replace(original.order, run=ApplicationOrderRun(
+            'The application displays the completed work and keeps its evidence visible')))
+        rule = ctx.comms.registry.storage_rule
+        worker = ctx.comms.registry.require('worker')
+        path = rule.order_checkout(rule.roots_of(worker), current.id)
+        checkout = Checkout.add(ctx.repos[0].checkout, path, DetachedStart('HEAD'))
+        try:
+            with pytest.raises(RecordProblems) as refused:
+                main(['done', 'worker', 'P1', '--op'], ctx)
+            assert refused.value.problems.keys() >= {'checkout', '--seen.run', '--seen.working'}
+            assert ctx.comms.goals.todos.get('P1') == current
+        finally:
+            checkout.retire()
 
     def test_operation_done_keeps_its_existing_evidence(self, held_commander):
         ctx = held_commander
