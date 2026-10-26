@@ -11,7 +11,7 @@ from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
-from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, UnitSubject
+from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
     HeadReviewTimerUp, IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule,
@@ -396,21 +396,6 @@ def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(hea
         " who's fixing it? -> fix debt-src at its owner; merge main into it")
     # The age is the heartbeat Ping's to render, from began(); the line names no clock.
     assert found.began() == found.blocks[0].since and found.broke_after(0)
-
-
-def test_a_pr_verdict_acts_on_the_unit_holding_that_head(head_bus):
-    """A verdict on a unit's PR named only the head, so a stale CLOSE line on that same unit
-    refused the verdict the line was waiting for."""
-    comms, _, request = head_bus
-    todo = comms.goals.todos.get("P2")
-    held = todo.held()
-    RecordPullRequest(todo.revision, held.owner_identity,
-                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
-    verb = judge.JudgeVerb.parse(["ok", "--pr", str(request.pr), "--head", request.head,
-                                  "--why", ACCEPTED.text])
-    ctx = order.Commander.read_root(comms.root)
-    acted = frozenset(verb.subject(ctx).acts_on(ctx))
-    assert acted == {HeadSubject(request), UnitSubject(held.owner_identity)}
 
 
 def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):

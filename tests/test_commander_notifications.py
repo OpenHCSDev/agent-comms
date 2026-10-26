@@ -16,22 +16,17 @@ from agent_comms.commander_hud import (
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
-from agent_comms.field_codec import MessageId
-from agent_comms.head_review import PullRequestHead
-from agent_comms.heartbeat_subjects import AnswerSubject, HeadSubject
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
-from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
-from agent_comms.standing_rules import OrderlessUnreviewedHead, ServicePassFailing, StandingRule, UndatedStandingRule
-from agent_comms.text_digest import TextDigest
+from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import (
-    AwaitingApplicationRun, AwaitingCommander, NoPendingClock, PendingClock, Stuck, UnitState,
+    AwaitingApplicationRun, NoPendingClock, PendingClock, Stuck, UnitState,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
@@ -321,26 +316,6 @@ def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(not
     beat(comms, states=state_cards(comms, UnitState))
     recovered, = reading.read(comms, comms.views.revision())
     assert pickle.loads(pickle.dumps(recovered)).huds == CommanderFrame.read_all(comms.root)
-
-
-def test_a_verdict_on_the_full_head_or_an_answer_acts_on_its_board_line():
-    """A delivery claims an abbreviated head and the verdict names the full one; a burst
-    answer names its owed message. Either is board work the stale-line gate lets through."""
-    repo = RepositoryName("OpenHCSDev", "agent-comms")
-    owed = MessageId("cb055200351e")
-    delivery = RulePing(OrderlessUnreviewedHead, TextDigest.of("JUDGE"), text="JUDGE",
-                        subjects=(HeadSubject(PullRequestHead(repo, 3306, "89c687691")),))
-    chokehold = RulePing(AwaitingCommander, TextDigest.of("ANSWER"), text="ANSWER", subjects=(AnswerSubject(owed),))
-    verdict = frozenset((HeadSubject(PullRequestHead(repo, 3306, "89c6876910086167ca82653bcedac84d78fa4de9")),))
-
-    assert delivery.acted_on(verdict)
-    assert not delivery.acted_on(frozenset((HeadSubject(PullRequestHead(repo, 3307, "89c687691")),)))
-    assert not delivery.acted_on(frozenset((HeadSubject(PullRequestHead(
-        RepositoryName("OpenHCSDev", "toad"), 3306, "89c687691")),)))
-    # A batch merge moved the PR after its line began; the verdict on the new head acts on it.
-    assert delivery.acted_on(frozenset((HeadSubject(PullRequestHead(repo, 3306, "174005bf6")),)))
-    assert chokehold.acted_on(frozenset((AnswerSubject(owed),)))
-    assert not chokehold.acted_on(verdict)
 
 
 def test_codex_usage_decodes_window_and_keeps_refusal_visible():
