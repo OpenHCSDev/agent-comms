@@ -33,13 +33,13 @@ from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import AcpSessionId, FieldCodec, NullMember, WireName, WireValue, GoalId
+from .field_codec import AcpSessionId, FieldCodec, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
-from .owner_connection import OwnerConnection, ResultRuntimeRequest, RuntimeRequest, RuntimeRequestContext
+from .owner_connection import NoControllerToken, OwnerConnection, ResultRuntimeRequest, RuntimeRequest, RuntimeRequestContext
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import LiveThreadOwnerBinding
@@ -143,7 +143,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 
         return {
             "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
-            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
+            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(FieldCodec.encode(self)),
         }
 
     def require_original(self, entry):
@@ -208,11 +208,6 @@ class FreshSubscribeRuntimeRequest(SubscribeRuntimeRequest):
             yield
 
 
-@dataclass(frozen=True, slots=True)
-class NoControllerToken(NullMember):
-    """The prompt came from no attached controller; no subscriber answers its dialogs."""
-
-
 @dataclass(frozen=True, kw_only=True)
 class PromptRuntimeRequest(ResultRuntimeRequest):
     request: PromptRequest
@@ -222,7 +217,7 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, object]
+        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
     ) -> dict[str, object]:
         return super().proxy_payload(
             thread, controller_token, {"controllerToken": controller_token, **parameters}

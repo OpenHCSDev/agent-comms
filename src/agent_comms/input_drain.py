@@ -291,7 +291,7 @@ class InputObservation(ABC):
             root_id,
             self.auto_wake,
             self.sessions.runtime_enabled,
-            self.sessions.bindings.get(session_id),
+            self.sessions.published.get(AcpSessionId(session_id)),
             self.state(session_id).turn_open(),
             self.state(session_id).turn_task.busy,
             participant,
@@ -724,7 +724,7 @@ class InputDrain(InputObservation):
         try:
             owner, claim_scope = await Coordination.run_worker(partial(
                 self.comms.registry.live_owner_with_claim,
-                self.sessions.bindings.get(session_id, session_id),
+                self.sessions.require(session_id) if session_id in self.sessions.published else session_id,
             ))
         except (RelationViolationError, UnregisteredThreadError):
             # The unavailable observation carries no local queue authority.

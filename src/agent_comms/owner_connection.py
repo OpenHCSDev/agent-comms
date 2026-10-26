@@ -8,18 +8,17 @@ import os
 import socket
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, ClassVar
 from abc import abstractmethod
 from collections.abc import Awaitable
 from dataclasses import dataclass
-from pydantic import JsonValue
 from .command import Command
 from .declared_family import DeclaredFamily
 from .tool_result import DeclaredReply
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec
+from .field_codec import AcpSessionId, FieldCodec, NullMember
 from .jsonl_stream import JsonlStreamReader
 from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
@@ -44,12 +43,17 @@ class OwnerReplyLostError(RuntimeError, ConnectionError):
     """The owner disconnected after dispatch; a mutating request remains uncertain."""
 
 
+@dataclass(frozen=True, slots=True)
+class NoControllerToken(NullMember):
+    """The prompt came from no attached controller; no subscriber answers its dialogs."""
+
+
 @dataclass(frozen=True)
 class RuntimeRequestContext:
     server: RuntimeServer
     reader: asyncio.StreamReader
     client: SocketClient
-    session_id: str
+    session_id: AcpSessionId
     name: str
 
     async def send(self, line: OwnerLine) -> None:
@@ -60,23 +64,12 @@ class RuntimeRequestContext:
 class RuntimeRequest(
     DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"
 ):
+    family_discriminator: ClassVar[str] = "action"
     thread: str
 
     @classmethod
-    def from_wire(cls, payload: object) -> Self:
-        values = FieldCodec.decode(dict[str, JsonValue], payload)
-        if "kind" in values:
-            raise ValueError("Unknown runtime request field: kind")
-        values["kind"] = values.pop("action", None)
-        return cls.from_payload(values)
-
-    def to_wire(self) -> dict[str, object]:
-        payload = FieldCodec.encode(self)
-        return {"action": payload.pop("kind"), **payload}
-
-    @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, object]
+        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
     ) -> dict[str, object]:
         return OwnerConnection.wire_request(cls.declared_name, thread, parameters)
 
@@ -128,7 +121,7 @@ class OwnerConnection:
                 connection.connect(str(address))
                 if not process.alive():
                     raise ConnectionError("Worker host exited before request dispatch")
-                connection.sendall((json.dumps(request.to_wire()) + "\n").encode())
+                connection.sendall((json.dumps(FieldCodec.encode(request)) + "\n").encode())
                 with connection.makefile("rb") as response:
                     line = response.readline()
                 if not line:

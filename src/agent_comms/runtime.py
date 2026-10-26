@@ -41,7 +41,7 @@ from acp.schema import (
 from .controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller, SessionUpdateSink,
 )
-from .field_codec import MalformedRecord, WireName
+from .field_codec import AcpSessionId, FieldCodec, MalformedRecord, WireName
 from .owner_protocol import (
     ClientLine,
     IncompatibleOwnerError,
@@ -52,7 +52,7 @@ from .owner_protocol import (
     OwnerUpdate,
     UnannouncedOwner,
 )
-from .owner_connection import OwnerConnection, OwnerIdentityChangedError, socket_path
+from .owner_connection import NoControllerToken, OwnerConnection, OwnerIdentityChangedError, socket_path
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .errors import RelationViolationError
 from .coordination_errors import CoordinationError, IdentityConflict
@@ -304,7 +304,8 @@ class RuntimeServer(SessionUpdateSink):
         def bound() -> bool:
             return _expected_client is _UNBOUND_PUBLICATION_CLIENT or (
                 self.agent.sessions.client is _expected_client
-                and self.agent.sessions.bindings.get(session_id) == _expected_thread
+                and session_id in self.agent.sessions.published
+                and self.agent.sessions.require(session_id) == _expected_thread
             )
 
         def sockets_bound() -> bool:
@@ -356,7 +357,7 @@ class RuntimeServer(SessionUpdateSink):
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = SocketClient(writer)
         try:
-            request = RuntimeRequest.from_wire(json.loads(await reader.readline()))
+            request = FieldCodec.decode(RuntimeRequest, json.loads(await reader.readline()))
             context = await request.bind(self, reader, client)
             await request.apply(context)
         except SubscriberClosed:
@@ -389,7 +390,7 @@ class RuntimeServer(SessionUpdateSink):
         self.listener.close()
         self._resources.close()
 
-    def retire_session(self, session_id: str) -> None:
+    def retire_session(self, session_id: AcpSessionId) -> None:
         for client in tuple(self.clients.get(session_id, ())):
             client.disconnected()
             client.writer.close()
@@ -408,8 +409,8 @@ class RuntimeConnection(OwnerConnection):
     """ACP attachments select declared request behavior and their controller token."""
 
     @property
-    def controller_token(self):
-        return None
+    def controller_token(self) -> str | NoControllerToken:
+        return NoControllerToken()
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return RuntimeRequest.member_named(action).proxy_payload(
@@ -442,11 +443,11 @@ class RuntimeProxy(RuntimeConnection):
         self.agent = agent
         self.writer: asyncio.StreamWriter | None = None
         self.task: asyncio.Task[None] | None = None
-        self._controller_token: str | None = None
+        self._controller_token: str | NoControllerToken = NoControllerToken()
         self._permission_tasks: dict[str, asyncio.Task[None]] = {}
 
     @property
-    def controller_token(self):
+    def controller_token(self) -> str | NoControllerToken:
         return self._controller_token
 
     async def subscribe(
@@ -464,11 +465,7 @@ class RuntimeProxy(RuntimeConnection):
         try:
             writer.write(
                 (
-                    json.dumps(
-                        subscription(
-                            thread=self.session_id,
-                        ).to_wire()
-                    )
+                    json.dumps(FieldCodec.encode(subscription(thread=self.session_id)))
                     + "\n"
                 ).encode()
             )
@@ -564,7 +561,7 @@ class RuntimeProxy(RuntimeConnection):
                 # Record it before this subscription dies.
                 _LOG.exception("Owner update stream failed (session=%s)", self.session_id)
                 raise
-            self._controller_token = None
+            self._controller_token = NoControllerToken()
             await self.close_permissions()
             if self.writer is not None:
                 self.writer.close()
@@ -586,7 +583,7 @@ class RuntimeProxy(RuntimeConnection):
 
     async def close(self) -> None:
         self._closed = True
-        self._controller_token = None
+        self._controller_token = NoControllerToken()
         if self.writer is not None:
             self.writer.close()
         if self.task is not None:

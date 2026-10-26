@@ -9,6 +9,8 @@ import pytest
 from acp import RequestError
 from acp.schema import TextContentBlock
 
+from agent_comms.field_codec import AcpSessionId
+from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
@@ -43,7 +45,7 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation
     thread = Thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
-    agent.sessions.bindings["beta"] = "beta"
+    agent.sessions.published[AcpSessionId("beta")] = PublishedSession.of(thread)
     owner, claimed_generation = comms.registry.live_owner_with_claim("beta")
     return comms, agent, owner.incarnation.require_recorded(), claimed_generation
 

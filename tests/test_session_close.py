@@ -1,4 +1,5 @@
 """Scoped attachment retirement through original stores, sockets and ACP routing."""
+from agent_comms.owner_connection import NoControllerToken
 from agent_comms.controller import SessionUpdateSink
 
 import asyncio
@@ -80,8 +81,8 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
         assert not permissions[1].done()
         assert comms.registry.require("alpha").require_process() == retained_owner
         assert retained_owner.alive() and comms.registry.status("alpha").running
-        assert owner.sessions.bindings == {"alpha": "alpha", "beta": "beta"}
-        assert other.sessions.proxies["alpha"].controller_token is not None
+        assert {session: published.name for session, published in owner.sessions.published.items()} == {"alpha": "alpha", "beta": "beta"}
+        assert other.sessions.proxies["alpha"].controller_token != NoControllerToken()
         assert owner._runtime.is_controller("beta", selected["beta"])
         await owner._runtime.publish_update(session_id="beta", update=SessionInfoUpdate(
             session_update="session_info_update", title="Still attached"))

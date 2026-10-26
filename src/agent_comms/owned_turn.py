@@ -377,7 +377,7 @@ class OwnedTurn:
         permit_cleanup.push_async_callback(Coordination.run_worker, permits.close)
         if not await Coordination.run_worker(self.authorize):
             return False
-        self.runner.sessions.bindings[self.session_id] = self.thread_name
+        await self.runner.sessions.sync_identity(self.session_id)
         if not await Coordination.run_worker(partial(self.begin, resources, permits)):
             return False
         self.open_stream(resources, permits)

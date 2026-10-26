@@ -79,13 +79,13 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     "parameters",
     [
         {"action": "subscribe"},
-        PromptRuntimeRequest(
+        FieldCodec.encode(PromptRuntimeRequest(
             thread="alias",
             request=PromptRequest(
                 session_id="alias", prompt=[TextContentBlock(type="text", text="hello")]
             ),
             controller_token="secret",
-        ).to_wire(),
+        )),
         {"action": "cancel"},
         {"action": "set_config_option", "config_id": "model", "value": "test/model"},
         {"action": "compact", "instructions": "focus"},
@@ -104,16 +104,16 @@ def test_runtime_wire_format_round_trip(parameters):
     if "goal_id" in parameters and parameters["goal_id"] is None:
         parameters = {**parameters, "goal_id": str(goal_id)}
     payload = {"thread": "alias", **parameters}
-    request = RuntimeRequest.from_wire(payload)
-    encoded = request.to_wire()
+    request = FieldCodec.decode(RuntimeRequest, payload)
+    encoded = FieldCodec.encode(request)
     assert {key: encoded[key] for key in payload} == payload
     assert "kind" not in encoded
-    assert RuntimeRequest.from_wire(encoded) == request
+    assert FieldCodec.decode(RuntimeRequest, encoded) == request
     invalid = {**FieldCodec.encode(request), "futureExtension": {"yes": True}}
     with pytest.raises(ValueError) as declared:
         FieldCodec.decode(type(request), invalid)
     with pytest.raises(type(declared.value)) as refused:
-        RuntimeRequest.from_wire({**payload, "futureExtension": {"yes": True}})
+        FieldCodec.decode(RuntimeRequest, {**payload, "futureExtension": {"yes": True}})
     assert str(refused.value) == str(declared.value)
 
 
@@ -133,13 +133,11 @@ def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(param
     if "goal_id" in parameters and parameters["goal_id"] is None:
         parameters = {**parameters, "goal_id": str(goal_id)}
     payload = {"thread": "owner", **parameters}
-    values = dict(payload)
-    action = values.pop("action")
-    declaration = RuntimeRequest.member_named(action)
+    declaration = RuntimeRequest.member_named(payload["action"])
     with pytest.raises(ValueError) as declared:
-        FieldCodec.decode(declaration, {"kind": action, **values})
+        FieldCodec.decode(declaration, payload)
     with pytest.raises(type(declared.value)) as refused:
-        RuntimeRequest.from_wire(payload)
+        FieldCodec.decode(RuntimeRequest, payload)
     assert str(refused.value) == str(declared.value)
 
 

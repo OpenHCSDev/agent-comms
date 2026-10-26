@@ -114,8 +114,9 @@ class TurnRunner:
         return self.inputs.state(session_id).turn_task.busy or self.turn_state(session_id).active.phase.busy
 
     def turn_state(self, session_id: str) -> TurnState:
-        name = self.sessions.bindings.get(session_id)
-        return self.comms.registry.require(name).turn_state if name is not None else TurnState()
+        if session_id not in self.sessions.published:
+            return TurnState()
+        return self.comms.registry.require(self.sessions.require(session_id)).turn_state
 
     def owns_turn(self, session_id: str, turn_id: TurnId) -> bool:
         state = self.turn_state(session_id)
@@ -131,10 +132,10 @@ class TurnRunner:
             )
 
     async def observe_compaction(self, session_id: str, event) -> None:
-        name = self.sessions.bindings.get(session_id)
-        if name is None:
+        if session_id not in self.sessions.published:
             return
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        thread = await Coordination.run_worker(partial(
+            self.comms.registry.require, self.sessions.require(session_id)))
         for lease in thread.turn_lease.held():
             await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
 
@@ -236,13 +237,13 @@ class TurnRunner:
         if session_id in self.sessions.proxies:
             await self.sessions.proxies[session_id].request("cancel")
             return
-        name = self.sessions.bindings.get(session_id)
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
-        if thread is not None:
+        names = (self.sessions.require(session_id),) if session_id in self.sessions.published else ()
+        for name in names:
+            thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
             await Coordination.run_worker(partial(self.pause_active_goal, thread))
         async def cancelling() -> None:
             leases = ()
-            if name:
+            for name in names:
                 current = await Coordination.run_worker(partial(self.comms.registry.require, name))
                 leases = current.turn_lease.held()
             for lease in leases:

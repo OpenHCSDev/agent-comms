@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import os
 from functools import partial
 from pathlib import Path
@@ -63,6 +64,19 @@ if TYPE_CHECKING:
     from .input_drain import OwnerSession
 
 
+@dataclass(frozen=True)
+class PublishedSession:
+    """The thread metadata a session last published, derived from its Thread."""
+
+    name: str
+    title: ThreadText
+    worktree: str
+
+    @classmethod
+    def of(cls, thread: Thread) -> PublishedSession:
+        return cls(thread.name, thread.title, thread.worktree)
+
+
 class SessionLifecycle:
     def __init__(
         self,
@@ -73,11 +87,8 @@ class SessionLifecycle:
     ):
         self.comms = comms
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
-        self.bindings: dict[str, str] = {}
+        self.published: dict[AcpSessionId, PublishedSession] = {}
         self.client: SdkSessionConnection | None = None
-        self.titles: dict[str, str] = {}
-        self.display_titles: dict[str, ThreadText] = {}
-        self.worktrees: dict[str, str] = {}
         self.proxies: dict[str, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
@@ -125,15 +136,14 @@ class SessionLifecycle:
         raise Refused.method_not_found("session/close")
 
     def require(self, session_id: str) -> str:
-        name = self.bindings.get(session_id)
-        if name is None:
+        if session_id not in self.published:
             raise Refused.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
-        return name
+        return self.published[AcpSessionId(session_id)].name
 
-    def require_owned_session(self, entry: RegistryEntry) -> str:
+    def require_owned_session(self, entry: RegistryEntry) -> AcpSessionId:
         """Resolve an original loaded resource; registration grants no attachment."""
-        for session_id, name in self.bindings.items():
-            if entry.matches_name(name):
+        for session_id, published in self.published.items():
+            if entry.matches_name(published.name):
                 return session_id
         raise Refused.invalid_params({
             "reason": f"Registered owner {entry.thread.name!r} has no loaded ACP session. "
@@ -183,21 +193,19 @@ class SessionLifecycle:
         owner = (await Coordination.run_worker(partial(
             self.comms.registry.entry, thread.name,
         ))).entry.owner_identity
-        configuration = self.effects.inputs.state(session_id).configuration_for(self.effects.inputs.configuration)
-        await self.bind_owner(thread, AcpSessionId(session_id), configuration, owner)
+        await self.bind_owner(thread, AcpSessionId(session_id), self.effects.inputs.configuration, owner)
 
     async def bind_owner(
         self, thread: Thread, session_id: AcpSessionId,
         configuration: ConfigOptions, owner: OwnerIdentity,
-    ) -> None:
+    ) -> OwnerSession:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
-        self.effects.inputs.acquire_owner(session_id, configuration, owner)
-        self.bindings[session_id] = thread.name
-        self.titles[session_id] = thread.name
-        self.worktrees[session_id] = thread.worktree
+        state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
+        self.published[session_id] = PublishedSession.of(thread)
         if self.runtime_enabled:
             await self.runtime.start()
+        return state
 
     async def new_session(self, request: NewSessionRequest) -> NewSessionResponse:
         self.reject_foreign_mcp(request)
@@ -239,9 +247,8 @@ class SessionLifecycle:
         if not entry.matches_name(selected.name):
             raise RelationViolationError("Owner environment names another thread")
         session_id = AcpSessionId(thread.name)
-        configuration = ConfigOptions(launch, self.comms.route)
-        state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
-        await self.bind_owner(thread, session_id, state.configuration, owner)
+        state = await self.bind_owner(
+            thread, session_id, ConfigOptions(launch, self.comms.route), owner)
         self.effects.inputs.ensure_live_drain(session_id)
         key = selected.take_startup_input(launch.environment)
         if key:
@@ -279,10 +286,7 @@ class SessionLifecycle:
                     state.configuration.launch.process, claim.claimed_generation,
                 ))
                 self.config.stop_observing_configuration(state.identifier)
-                self.bindings.pop(state.identifier, None)
-                self.titles.pop(state.identifier, None)
-                self.display_titles.pop(state.identifier, None)
-                self.worktrees.pop(state.identifier, None)
+                del self.published[state.identifier]
                 self.effects.inputs.end_session(state.identifier)
             except BaseException as error:
                 state.retired.set_exception(error)
@@ -294,7 +298,8 @@ class SessionLifecycle:
         await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
-            self.bindings.get(session_id) == thread.name
+            session_id in self.published
+            and self.published[AcpSessionId(session_id)].name == thread.name
             and thread.process_identity.runs_here()
             and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name)))
                 .items_with(ActiveThreadPresence, thread)
@@ -358,15 +363,10 @@ class SessionLifecycle:
                 or not entry.status.running
             ):
                 await self.effects.turns.close_idle_backend(session_id, thread)
-            self.bindings[session_id] = name
-            if (
-                self.titles.get(session_id) != name
-                or self.display_titles.get(session_id) != thread.title
-                or self.worktrees.get(session_id) != thread.worktree
-            ):
+            current = PublishedSession.of(thread)
+            if self.published[AcpSessionId(session_id)] != current:
                 await self.publish_metadata(session_id, title=thread.title)
-                self.titles[session_id], self.display_titles[session_id] = name, thread.title
-                self.worktrees[session_id] = thread.worktree
+                self.published[AcpSessionId(session_id)] = current
             return name
 
     @boundary_decoder

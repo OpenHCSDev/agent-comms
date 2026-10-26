@@ -8,6 +8,7 @@ import sqlite3
 
 import pytest
 
+from agent_comms.owner_connection import NoControllerToken
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
@@ -60,7 +61,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
         assert "SQLITE_BUSY" in text
         assert "SELECT name FROM sqlite_master LIMIT 1" in text
         assert str(database) in text
-        assert proxy.task is None and proxy.controller_token is None
+        assert proxy.task is None and proxy.controller_token == NoControllerToken()
         assert not owner._runtime.clients.get(thread.name)
         assert not (comms.root / "input_dispositions.sqlite3").exists()
         assert not (comms.root / "native-sessions").exists()
@@ -121,7 +122,7 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(
             with pytest.raises(MalformedRecord):
                 await proxy.subscribe()
             await finished
-        assert proxy._controller_token is None
+        assert proxy._controller_token == NoControllerToken()
         assert proxy.task is None
         assert proxy.writer.is_closing()
     finally:

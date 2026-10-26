@@ -450,7 +450,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                                 receipt_seen.set()
                             if isinstance(fact, TurnChangedUpdate):
                                 thread = owner._comms.registry.require(
-                                    owner.sessions.bindings[session_id]
+                                    owner.sessions.require(session_id)
                                 )
                                 observed = fact.state.active.observed_turn(
                                     fact.state.finished, thread.turn_identity,
@@ -576,7 +576,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
                     for fact in decode_updates(row["update"].get("_meta")):
                         if isinstance(fact, TurnChangedUpdate):
                             thread = owner._comms.registry.require(
-                                owner.sessions.bindings[session_id]
+                                owner.sessions.require(session_id)
                             )
                             observed = fact.state.active.observed_turn(
                                 fact.state.finished, thread.turn_identity,
