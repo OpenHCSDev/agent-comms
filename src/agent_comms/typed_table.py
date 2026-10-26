@@ -83,7 +83,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
-    StoreBusy, StoreLockFile,
+    StoreLockFile,
 )
 
 if TYPE_CHECKING:
@@ -2984,7 +2984,7 @@ class TypedStore(WalStore, TableSchema):
     def snapshot(self) -> Iterator[sqlite3.Connection]:
         """Read a committed store, or its declared empty schema before its first write."""
         with self.committed_or_empty(
-            type(self), lambda: self.opened_reader(self.path, StoreBusy())
+            type(self), lambda: self.opened_reader(self.path)
         ) as connection:
             self.require_schema(connection)
             yield connection
