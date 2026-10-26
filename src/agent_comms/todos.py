@@ -1469,7 +1469,7 @@ class CheckoutReads:
     def progress_checkout(self, path: Path) -> ProgressCheckout:
         """The checkout at path, or a retired one that holds no history: this read alone
         turns the filesystem's answer into the progress family."""
-        if Checkout.present(path):
+        if Checkout.git_roots(path):
             return self.checkout(path)
         return MissingCheckout(path)
 
@@ -1536,9 +1536,9 @@ class ProgressSource(PullRequestSource):
         storage = registry.storage_rule
         owned = storage.checkout_paths(owner)
         candidates = (todo.order.checked().check.directory, *owned)
-        path = next(iter(Checkout.present(*candidates)), next(iter(owned), candidates[0]))
+        path = next(iter(Checkout.git_roots(*candidates)), next(iter(owned), candidates[0]))
         checkout = pulls.progress_checkout(path)
-        worktrees = tuple(pulls.checkout(path) for path in Checkout.present(*owned))
+        worktrees = tuple(pulls.checkout(path) for path in Checkout.git_roots(*owned))
         try:
             return cls.capture(todo, pulls, checkout, worktrees, storage, owner)
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
