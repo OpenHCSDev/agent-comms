@@ -83,7 +83,7 @@ from .field_codec import ClaimId, FieldCodec, MalformedRecord, RootId
 from .image_inputs import prompt_images
 from .input_drain import InputDrain
 from .config_options import ConfigOptions
-from .launch_runtime import RestartEnvironment
+from .owner_launch import RetainedOwnerLaunch
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot
 from .message_bus import MessageBus
@@ -191,7 +191,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         self.inputs = InputDrain(
             comms, self.sessions, self._runtime, self, auto_wake,
-            ConfigOptions.configured(agent_bin, agent_args, route=comms.route),
+            ConfigOptions(RetainedOwnerLaunch.configured(agent_bin, agent_args), comms.route),
         )
         self.turns.bind(self.sessions, self.inputs)
         # A preplanned write is valid only while its original ACP controller

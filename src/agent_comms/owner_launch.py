@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
 from . import launch_runtime
-from .native_arguments import InheritedArguments, NativeArguments
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:
@@ -26,6 +27,18 @@ class RetainedOwnerLaunch:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "configuration", launch_runtime.RestartEnvironment.inherit(self.environment))
+
+    @classmethod
+    def configured(
+        cls, binary: LaunchBinary = ConfiguredBinary(),
+        arguments: LaunchArguments = InheritedArguments(),
+    ) -> RetainedOwnerLaunch:
+        """Capture a process ingress once, before its configuration is shared by reference."""
+        environment = dict(os.environ)
+        environment[NativeArguments.binary_key] = binary.configured(environment)
+        arguments.apply(environment)
+        return cls(ProcessIdentity.capture(os.getpid()),
+                   str(launch_runtime.LaunchRuntime.running().interpreter), environment)
 
     @classmethod
     def capture(

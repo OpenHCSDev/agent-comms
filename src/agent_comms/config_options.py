@@ -14,12 +14,13 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 
 from .coordination_errors import Refused
 
+from .active_route import resolve_comms_route
+from .launch_root import LaunchRoot
 from .bus import Bus
 from .declared_family import DeclaredFamily
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
-from .child_process import ProcessIdentity
+from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .owner_launch import RetainedOwnerLaunch
-from .native_arguments import LaunchArguments, LaunchBinary, NativeArguments
+from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .pi_commands import (
     GetAvailableModels,
@@ -288,17 +289,9 @@ class ConfigOptions:
         )
 
     @classmethod
-    def configured(
-        cls, agent_bin: LaunchBinary, agent_args: LaunchArguments, *, route: CommsRoute,
-    ) -> ConfigOptions:
-        """Capture this ingress once; a host never lends its environment to another owner."""
-        environment = dict(os.environ)
-        environment[NativeArguments.binary_key] = agent_bin.configured(environment)
-        agent_args.apply(environment)
-        return cls(RetainedOwnerLaunch(
-            ProcessIdentity.capture(os.getpid()), str(LaunchRuntime.running().interpreter),
-            environment,
-        ), route)
+    def configured(cls) -> ConfigOptions:
+        """The CLI ingress's catalog; hosted owners supply their original launch directly."""
+        return cls(RetainedOwnerLaunch.configured(), resolve_comms_route(LaunchRoot.current().path))
 
     async def observe_authentication(
         self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[None]],

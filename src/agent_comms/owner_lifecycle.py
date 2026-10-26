@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Annotated
 from .active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from .child_process import (
+    NoProcess,
     ObservedProcess,
     OutlivesLauncherLifetime,
     Platform,
@@ -25,6 +26,10 @@ from .child_process import (
     SynchronousProcess,
 )
 from .cli_result import CliResult
+from .declared_family import DeclaredFamily
+from .owner_connection import OwnerConnection
+from .owner_launch import RetainedOwnerLaunch
+from .root_runtime import RootRuntimeStore
 from .commander_service import CommanderService
 from .diagnostics import OwnerProcessOutput
 from .errors import RelationViolationError
@@ -208,11 +213,47 @@ class OwnerReleaseStoreRows(StoreRows):
     """The tables of OwnerReleaseStore; each row declares itself one."""
 
 
+class OwnerCompletion(DeclaredFamily, affix="OwnerCompletion"):
+    @abstractmethod
+    def require_loss(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> None: ...
+
+    def matches_current(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> bool:
+        return release.matches(snapshot.require(release.name))
+
+
+@dataclass(frozen=True)
+class ProcessExitedOwnerCompletion(OwnerCompletion):
+    def require_loss(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> None:
+        if release.require_process().alive():
+            raise RelationViolationError("Released native owner process is still alive")
+        current = snapshot.require(release.name)
+        if release.matches(current):
+            snapshot.status(current.name).require_inactive("Released native process is still the registry owner")
+        if snapshot.claim_generation(current.name) == release.after and not release.matches(current):
+            raise RelationViolationError("Native release process differs from its original declaration")
+
+
+@dataclass(frozen=True)
+class SessionRetiredOwnerCompletion(OwnerCompletion):
+    owner: OwnerIdentity
+
+    def require_loss(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> None:
+        if self.owner.incarnation != release.incarnation():
+            raise RelationViolationError("Retired session belongs to another incarnation")
+        if snapshot.owner_identity(release.name).generation <= self.owner.generation:
+            raise RelationViolationError("Retired session still holds its original owner lease")
+
+    def matches_current(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> bool:
+        self.require_loss(snapshot, release)
+        return release.incarnation().current(snapshot)
+
+
 @dataclass(frozen=True)
 class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, TypedTable):
     name: Annotated[str, Column(primary_key=True)]
     before: int
     after: int
+    completion: Annotated[OwnerCompletion, Column()] = ProcessExitedOwnerCompletion()
 
     def __post_init__(self) -> None:
         if self.before <= 0 or self.after <= self.before:
@@ -221,7 +262,7 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
     def current(self, snapshot: RegistrySnapshot, expected: Thread, claim_scope: int) -> bool:
         if self.before != claim_scope or not self.matches(expected):
             return False
-        if not self.incarnation().current(snapshot) or not self.matches(snapshot.require(self.name)):
+        if not self.incarnation().current(snapshot) or not self.completion.matches_current(snapshot, self):
             return False
         return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
 
@@ -235,20 +276,11 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
             raise RelationViolationError("Released native owner incarnation changed")
         current = snapshot.require(self.name)
         owner_identity.require_recorded_owner(current)
-        process = self.require_process()
-        if process.alive():
-            raise RelationViolationError("Released native owner process is still alive")
-        if self.matches(current):
-            snapshot.status(current.name).require_inactive(
-                "Released native process is still the registry owner")
+        self.completion.require_loss(snapshot, self)
         actual = snapshot.claimed_identity(current.name)
         released = ClaimedIdentity(self.incarnation(), self.after)
         if not actual.includes(released):
             raise RelationViolationError("Native release claim_scope regressed")
-        if actual == released and not self.matches(current):
-            raise RelationViolationError(
-                "Native release process differs from its original declaration"
-            )
         return self
 
 
@@ -280,6 +312,16 @@ class OwnerReleaseStore(ThreadOwnedState, DurableStore):
                 OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth,
                                      thread.process_identity, before,
                                      snapshot.claim_generation(thread.name)).upsert(db)
+
+    def record_session(
+        self, snapshot: RegistrySnapshot, original: Thread, before: int, owner: OwnerIdentity,
+    ) -> None:
+        original.turn_record.read().require_idle()
+        with self.writing() as db:
+            OwnerReleaseEvidence(
+                original.name, original.incarnation.wire_birth, original.process_identity,
+                before, snapshot.claim_generation(original.name), SessionRetiredOwnerCompletion(owner),
+            ).upsert(db)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         with self.writing() as db:
@@ -551,6 +593,24 @@ class OwnerLifecycle:
                 edit.document.unregister(thread.name)
             edit.commit()
             self.releases.record(edit.original.snapshot, retiring)
+
+    def complete_session(
+        self, owner: OwnerIdentity, expected: OwnerIdentity, process: ProcessIdentity, before: int,
+    ) -> None:
+        """Called only after the session's producers, turn and native child have joined."""
+        with self.registry.store.editing() as edit:
+            snapshot = edit.original.snapshot
+            entry = snapshot.entry(expected.incarnation.name)
+            if entry.owner_identity != expected or entry.thread.process_identity != process:
+                raise RelationViolationError("Owner changed before completed session release")
+            if owner.incarnation != expected.incarnation or owner.generation > expected.generation:
+                raise RelationViolationError("Completed session names another owner lease")
+            original = entry.thread
+            original.turn_record.read().require_idle()
+            edit.document.unregister(original.name)
+            edit.document.detach_process(original.name, process)
+            edit.commit()
+            self.releases.record_session(edit.original.snapshot, original, before, owner)
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""

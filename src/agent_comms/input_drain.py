@@ -471,6 +471,9 @@ class DrainedSession:
     def owned(self) -> OwnerSession:
         raise RelationViolationError("This session has not acquired local execution")
 
+    def configuration_for(self, ingress: ConfigOptions) -> ConfigOptions:
+        return ingress
+
     def executors(self) -> tuple[OwnerSession, ...]:
         return ()
 
@@ -587,9 +590,14 @@ class OwnerSession(DrainedSession):
     owner: OwnerIdentity = field(kw_only=True)
     stop: OwnerStop = field(kw_only=True)
     auth_observer: asyncio.Task[None] = field(kw_only=True)
+    retirement_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    retired: asyncio.Future[None] = field(default_factory=asyncio.Future)
 
     def owned(self) -> OwnerSession:
         return self
+
+    def configuration_for(self, ingress: ConfigOptions) -> ConfigOptions:
+        return self.configuration
 
     def executors(self) -> tuple[OwnerSession, ...]:
         return (self,)

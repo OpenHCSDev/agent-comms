@@ -936,6 +936,13 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.advance_claim(name)
         self.threads[name] = thread.without_turn()
 
+    def detach_process(self, name: str, process: ProcessIdentity) -> None:
+        """A completed session releases its binding, not the root host's physical process."""
+        thread = self.require(name)
+        if thread.process_identity != process:
+            raise RelationViolationError("Session process changed before retirement")
+        self.threads[thread.name] = replace(thread, process_identity=NoProcess())
+
     def archive(self, name: str) -> None:
         name = self.require(name).name
         self.status(name).withdraw_owner(self.owners, name)

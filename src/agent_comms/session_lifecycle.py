@@ -35,6 +35,11 @@ from .acp_extension import (
 )
 from .child_process import join_retirement
 from .comms import Comms
+from .config_options import ConfigOptions
+from .input_key import InputKey, InputKeyText
+from .launch_runtime import ThreadLaunch
+from .owner_launch import RetainedOwnerLaunch
+from .turn_input_source import NoTurnAcceptance
 from .session_config_options import SessionConfigOptions
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -45,7 +50,7 @@ from .runtime import RuntimeProxy, RuntimeServer
 from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
 from .session_effects import SessionEffects
 from .session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan
-from .thread_identity import AcpThreadRole, OwnerIdentity
+from .thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity
 from .thread_model import ThreadModel
 from .thread_status import ActiveThreadPresence
 from .thread_text import NoThreadText, ThreadText
@@ -55,7 +60,7 @@ from .transcript_updates import TranscriptReplay
 
 if TYPE_CHECKING:
     from .acp import SdkSessionConnection
-    from .config_options import ConfigOptions
+    from .input_drain import OwnerSession
 
 
 class SessionLifecycle:
@@ -178,7 +183,8 @@ class SessionLifecycle:
         owner = (await Coordination.run_worker(partial(
             self.comms.registry.entry, thread.name,
         ))).entry.owner_identity
-        await self.bind_owner(thread, AcpSessionId(session_id), self.effects.inputs.configuration, owner)
+        configuration = self.effects.inputs.state(session_id).configuration_for(self.effects.inputs.configuration)
+        await self.bind_owner(thread, AcpSessionId(session_id), configuration, owner)
 
     async def bind_owner(
         self, thread: Thread, session_id: AcpSessionId,
@@ -221,28 +227,70 @@ class SessionLifecycle:
         self.config.start_menu(session_id, self.runtime)
         return response
 
-    async def start_owner(self, cwd: str, session_id: str) -> None:
-        """Take a headless owner's session; no ACP consumer awaits a load response.
-
-        Configuration choices and metadata belong to a consumer's load or
-        subscription, which discovers them on demand. The owner process does
-        not launch catalog children only to discard their answer.
-        """
-        # Retain execution before loading so a failed bind still releases it.
-        owner = (await Coordination.run_worker(partial(
-            self.comms.registry.entry, session_id,
-        ))).entry.owner_identity
-        self.effects.inputs.acquire_owner(
-            AcpSessionId(session_id), self.effects.inputs.configuration, owner,
-        )
-        thread = await self._acquire_loaded(cwd, session_id)
-        if not thread.process_identity.runs_here():
-            raise RelationViolationError(
-                f"Headless owner {os.getpid()} did not acquire {thread.name!r}; "
-                f"it belongs to {thread.process_identity}"
-            )
-        await self._bind_loaded(thread, session_id)
+    async def start_owner(self, launch: RetainedOwnerLaunch, owner: OwnerIdentity) -> None:
+        """Attach the reserved lease using that owner's original launch, not the host ingress."""
+        if not launch.process.runs_here():
+            raise RelationViolationError("The launch does not name this worker host")
+        selected = ThreadLaunch.current(launch.environment)
+        entry = (await Coordination.run_worker(partial(
+            self.comms.registry.entry, owner.incarnation.name,
+        ))).entry
+        thread = entry.require_owner_process(owner, launch.process)
+        if not entry.matches_name(selected.name):
+            raise RelationViolationError("Owner environment names another thread")
+        session_id = AcpSessionId(thread.name)
+        configuration = ConfigOptions(launch, self.comms.route)
+        state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
+        await self.bind_owner(thread, session_id, state.configuration, owner)
         self.effects.inputs.ensure_live_drain(session_id)
+        key = selected.take_startup_input(launch.environment)
+        if key:
+            self.runtime.background(self.run_startup_input(state, InputKeyText.decode(key)))
+
+    async def run_startup_input(self, state: OwnerSession, key: InputKey) -> None:
+        """Consume only the explicitly authorized first input; never scan or replay."""
+        session_id = state.identifier
+        async with state.turn_lock:
+            async with state.own_turn_task():
+                def capture():
+                    snapshot = self.comms.registry.snapshot()
+                    thread = snapshot.require(state.owner.incarnation.name)
+                    row = self.effects.inputs.dispositions.lookup(key)
+                    if not row.queued_for(thread.incarnation, snapshot.claim_generation(thread.name), row.source_text):
+                        raise RelationViolationError("Startup input no longer belongs to this owner claim_scope")
+                    return row
+                row = await Coordination.run_worker(capture)
+                await self.effects.inputs.emit_input_delivery_changed(session_id)
+                await self.effects.turns.run_agent_turn(
+                    session_id, session_id, row.source_text, acceptance=NoTurnAcceptance(),
+                    original_keys=(key,), original_owner_input=True,
+                )
+
+    async def retire_owner(self, state: OwnerSession, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
+        async with state.retirement_lock:
+            if state.retired.done():
+                await state.retired
+                return
+            try:
+                state.request_stop()
+                self.runtime.retire_session(state.identifier)
+                await self.effects.inputs.close_sessions((state,))
+                await self.effects.turns.close_sessions((state,))
+                await Coordination.run_worker(partial(
+                    self.comms.owners.complete_session, state.owner, expected,
+                    state.configuration.launch.process, claim.generation,
+                ))
+                self.config.stop_observing_configuration(state.identifier)
+                self.bindings.pop(state.identifier, None)
+                self.titles.pop(state.identifier, None)
+                self.display_titles.pop(state.identifier, None)
+                self.worktrees.pop(state.identifier, None)
+                self.effects.inputs.end_session(state.identifier)
+            except BaseException as error:
+                state.retired.set_exception(error)
+                raise
+            else:
+                state.retired.set_result(None)
 
     async def _acquire_loaded(self, cwd: str, session_id: str) -> Thread:
         await Coordination.run_worker(self.comms.owners.require_private_launch)
