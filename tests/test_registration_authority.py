@@ -167,6 +167,8 @@ def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
     registry.prepare_native_root()
     leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     record, lease = leased.turn_record, leased.require_turn_lease()
+    if operation == 'sidebar':
+        wire(tmp_path).goals.open_goal_store().create_goal(leased.goal.id)
     entered = threading.Event()
 
     def access():
