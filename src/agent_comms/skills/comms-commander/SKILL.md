@@ -13,7 +13,7 @@ Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlli
 
 **Five things, in this order, every tick:**
 1. **Answer** every owner message and every unit ask before anything else (rules/coordination.md).
-2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll.
+2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll. Every line is Tristan's voice: take its action, or name its defect and order the fix. Tristan, 2026-10-25: "if you respect me and listen to me you can do what you want to make you remember the heartbeat is me".
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
 4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
 5. **Dispatch from the main loop; units implement, Claude forks diagnose, shape and review.** Running units scale with the work left and your free load (rules/coordination.md).
@@ -25,7 +25,8 @@ Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `c
 ## Start of session, and after every compaction
 
 - **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/commander/indictment.md`, every file in `src/agent_comms/commander/rules/` (each fact has one owner there; this skill does not restate them), and the index of the pinned refactor-audit catalog (`src/agent_comms/skills/refactor-audit/references/patterns/README.md`); read a rung file when an order or roast cites one of its pattern IDs. The session hook supplies them at every start and compaction from their declared sources. A summary or memory note is a paraphrase that drifts and never counts.
-- **Memory files point at this skill; they never restate its rules.**
+- **Memory holds only Tristan's own words and the commander's dated failures; every rule lives here or in rules/.** Tristan, 2026-10-25: "your memory is there to humble you, the rules and tools hone you."
+- Arm `agent-comms-claude-bridge watch` under Monitor exactly, with no pipe or filter, and re-arm it on every expiry and after every install or restore. A buffering filter holds the probe line and deadlocks delivery silently (2026-10-23), and a watch dead since an outage left owner messages unread for 13 hours (2026-10-19). A broken bridge breaks only the push; the tick still pulls `comms_hud` itself.
 
 Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `comms_turns` reads a selected unit's recorded turns; `comms_order_work` reads its tool calls since an order. Neither replaces the heartbeat, and no other poll is kept beside it.
 
@@ -82,7 +83,7 @@ Priority: the owner's latest message; a broken install, lost or replayed input, 
 
 Read the heartbeat's unit cards in their urgency order. Each `UnitState` member owns its classification and default action. Use the selected unit's newest turn, tool calls, relevant chats and diff to judge its current work and next decision against its order. Intervene on an evidenced wrong trajectory before waiting for a delivery; send back added slop with the result it violates. Review timers are item timers: when one comes up, read that unit's situation; the clock supplies attention, never a verdict (rules/deadlines.md).
 
-One line per unit touched, then the next unit.
+One line per unit touched, then the next unit. Every turn longer than a couple of seconds ends by rotating one unit, oldest untouched first and his own blocked work before that: read its diff, log and status, then send the next step or a verdict. Tristan, 2026-10-25: "rotate should be the first reflex at the end of a turn that lasts more than 2 seconds".
 
 - **Handling an event is never where the turn ends; the next unit's state is.** Every wait is prep: pre-read the files the next order touches.
 - **A unit records its delivery, not just a chat report:** the unit calls the native `comms_order_deliver` tool as itself. Core stores Claimed and answers the commander. Only the holder may claim; the commander uses `order done UNIT PROBLEM` to accept it (Core checks the order's merged PR at its merge commit and records the PR's first commit; `--op` for an operation), or sends it back with corrected instructions. Claimed orders are not reissued on restart.
@@ -100,7 +101,7 @@ rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md
 - **Compliance is not evidence, and neither is the unit's proof.** Judge the diff, then rerun the proof or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target hit by the cheapest route; pair it with a behaviour check and read how the number moved.
 - **An edit already judged is marked, not re-reviewed.** An unjudged edit whose PR head already carries your verdict, or that a later judged commit supersedes, is marked in one call the tick the head verdict lands. Tristan, 2026-10-24: "let's not turn it into ceremony the heart beat is your friend. its there to say 'you did do this right?' if you didn't you do it and mark judged and its already done, u just mark judged too."
 - **Undisclosed assumptions are false claims.** An assumption found in the diff that the report's `Assumed:` list left out is a strike.
-- **Strikes** (rules/send-backs-and-strikes.md owns when): `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT PROBLEM` only after reading the diff that meets the order.
+- **Strikes** (rules/send-backs-and-strikes.md owns when; the board's `Scrutinize` line owns the action): `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT PROBLEM` only after reading the diff that meets the order.
 - **Work lives on main or on a branch with a linked PR.** `comms_work_branches` lists unlinked work (no standing rule reports it yet); each branch goes to its owner.
 
 ## Merging

@@ -42,6 +42,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     CoreActsStandingRule,
     DatedStandingRule,
+    HeadReviewRule,
     IndependentStandingRule,
     OwedAnswer,
     ReasonedStandingRule,
@@ -377,7 +378,7 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule):
+class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule, HeadReviewRule):
     """A holder's delivery needs a verdict or a replacement order, never a chat reply."""
 
     problem: str
@@ -505,7 +506,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[UnownedWheelSpin, ...]:
         return cls.scan_orders(comms, commander, frame, frame.pulls)
 
     @classmethod
@@ -534,12 +535,10 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
                 if unit.incarnation not in owners] if unowned else []
         found = []
         for todo in unowned:
-            for unit in idle:
-                if not todo.strikes_against(unit.incarnation):
-                    idle.remove(unit)
-                    found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
-                        ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
-                    break
+            if idle:
+                unit = idle.pop(0)
+                found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
+                    ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,
                 *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))
@@ -735,6 +734,27 @@ class UnitDeaf(InboxUnavailable):
         return (f"UNDEAFEN {self.unit}: it has read none of its inbox since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
                 " waits undelivered -> read its drain diagnostic and fix that owner")
+
+
+@dataclass(frozen=True)
+class Scrutinize(IndependentStandingRule, UndatedStandingRule):
+    threshold: ClassVar[int] = 2
+    holder: Assignment
+    todo: Todo
+    count: int
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        actor = comms.registry.require(commander).incarnation
+        return tuple(cls(held, todo, count)
+                     for todo in comms.goals.todos.held_for_commander(actor)
+                     for held in todo.current_holder.current_assignments()
+                     for count in (todo.strikes_against(held.owner_identity),)
+                     if count >= cls.threshold)
+
+    def line(self) -> str:
+        return (f"SCRUTINIZE {self.holder.owner} {self.todo.id}: {self.count} strikes"
+                " -> read the unit's trail and diff, name the cause, and order the fix to the cause")
 
 
 @dataclass(frozen=True)
