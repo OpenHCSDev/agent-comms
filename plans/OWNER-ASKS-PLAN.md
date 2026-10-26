@@ -27,6 +27,7 @@ Each phase and its evidence on `origin/main` are declared in `src/agent_comms/pl
 Phase evidence reads only the plan repository's `origin/main`, and Toad's tree is not in it. Until an evidence kind reads another repository's main, a Toad phase is done when the Toad PR has merged and its merge commit is recorded here as a line of its own, in the list below, starting with a dash, the phase name, the word `landed:`, and `OpenHCSDev/toad@` followed by the full 40-character merge SHA. The pattern is declared once, on `ToadAskPhase`.
 
 Landed:
+- page_quarter_scroll landed: OpenHCSDev/toad@24badf03f60e829abd3ed3383262ef7db669ccca
 
 ### Latency and memory asks
 
