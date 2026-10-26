@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from ..exporting import AuthoredSourceScope, FullLimit, WireExportBoundary, WireTranscriptExporter
+from ..exporting import AuthoredSourceScope, FullLimit, WireExportBoundary, WireExportProvenance, WireTranscriptExporter
 from ..retained_task_facts import RetainedTaskFacts
 from ..turn_context import ContextSegment, OwnerProvenance, WireProvenance
 
@@ -38,7 +38,7 @@ class RetainedSegment(ContextSegment):
                                   facts=self.retained),
                     export_scope="current authored declarations only; never goal, unpinned input, native artifact or failure state")
 
-    def export(self, destination: Path | str, *, overwrite: bool = False):
+    def export(self, destination: Path | str, *, overwrite: bool = False) -> WireExportProvenance:
         """Publish this immutable read's selection through the original writer."""
         from ..retained_context import RetainedFormat
 

@@ -75,7 +75,7 @@ if TYPE_CHECKING:
 PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
     "agent_start", "agent_end", "agent_settled", "native_operation_error",
     "turn_start", "turn_end",
-    "message_start", "message_update", "message_end",
+    "message_start", "message_update", "message_end", "native_output_committed",
     "tool_execution_start", "tool_execution_update", "tool_execution_end",
     "input_committed", "context_committed", "turn_context_observed", "model_request_progress",
     "queue_update", "entry_appended", "session_info_changed", "thinking_level_changed",

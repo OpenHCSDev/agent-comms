@@ -127,7 +127,7 @@ class WorkingMemoryAnnotations:
                 raise ValueError("Classifier request disposition changed before refusal")
             AnnotationRequestsRow.update(db, where="id=?", parameters=(original.id,), outcome=outcome)
 
-    def correct(self, original: ModelLabel, answer, author, registry):
+    def correct(self, original: ModelLabel, answer, author, registry) -> HumanLabel:
         registry.require(author.resolved(registry).name).role.require_user(
             RelationViolationError("A label correction requires the original human sender")
         )

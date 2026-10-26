@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_failure_observation import FailedTurnObservation
     from .turn_output import TurnOutput
+    from .turn_inputs import InputForwarding
 
 
 @dataclass(frozen=True)
@@ -175,12 +176,32 @@ class FinalStopMissing(TerminalFailure):
         return output.failure_text or output.error_message or cls.default_text
 
 
-class QueuedInputMissing(TerminalFailure):
-    default_text = "Pi RPC run ended before a queued input started; that input did not run."
+class QueuedInputFailure(TerminalFailure, declared_name=None):
+    """A clean native terminal still needs evidence for each queued user input."""
 
     @classmethod
     def detected(cls, session: NativeSession, transport_ok: bool) -> bool:
-        return transport_ok and session.output.error_message is None and session.inputs.unresolved
+        return transport_ok and session.output.clean and cls.pending(session.inputs)
+
+    @classmethod
+    @abstractmethod
+    def pending(cls, inputs: InputForwarding) -> bool: ...
+
+
+class QueuedInputMissing(QueuedInputFailure):
+    default_text = "Pi RPC run ended with a written input that never started; delivery is uncertain."
+
+    @classmethod
+    def pending(cls, inputs: InputForwarding) -> bool:
+        return bool(inputs.pending)
+
+
+class QueuedInputNotSent(QueuedInputFailure):
+    default_text = "Pi RPC run ended before a queued user input was written to the native child."
+
+    @classmethod
+    def pending(cls, inputs: InputForwarding) -> bool:
+        return bool(inputs.unwritten_inputs)
 
 
 class ModelStalled(TurnFailure):

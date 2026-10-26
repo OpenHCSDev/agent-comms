@@ -32,6 +32,18 @@ class LaunchSelection(ABC):
             previous.install()
 
 
+class LaunchRequest(ABC):
+    """An explicit root or a request to use the command's published root."""
+
+    @abstractmethod
+    def resolve(self, published: Callable[[], LaunchRoot]) -> LaunchRoot: ...
+
+
+class DefaultLaunch(LaunchRequest):
+    def resolve(self, published: Callable[[], LaunchRoot]) -> LaunchRoot:
+        return published()
+
+
 class UnstartedLaunch(LaunchSelection):
     """A process with no selected root; startup must run before use."""
 
@@ -40,7 +52,7 @@ class UnstartedLaunch(LaunchSelection):
 
 
 @dataclass(frozen=True)
-class LaunchRoot(LaunchSelection):
+class LaunchRoot(LaunchSelection, LaunchRequest):
     """A process's selected root travels in its arguments, never its environment."""
 
     path: Annotated[Path, PathText]
@@ -62,6 +74,9 @@ class LaunchRoot(LaunchSelection):
         return cls._current.require()
 
     def require(self) -> LaunchRoot:
+        return self
+
+    def resolve(self, published: Callable[[], LaunchRoot]) -> LaunchRoot:
         return self
 
     def arguments(self) -> tuple[str, str]:

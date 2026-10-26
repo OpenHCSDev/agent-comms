@@ -8,7 +8,7 @@ import pytest
 from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.cli import build_parser, main
-from agent_comms.cli_commands import CliCommand
+from agent_comms.cli_command import CliCommand
 from agent_comms.comms import wire
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
@@ -37,7 +37,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
 
     def parse(args):
         options = parser.parse_args(args)
-        return CliCommand.member_named(options.command).from_arguments(options)
+        return options.command_declaration.from_arguments(options)
 
     register = parse(["register", "--name", "a", "--worktree", "/wt", "--tags", "x, y,x"])
     assert register.name == "a" and register.tags == frozenset({"x", "y"})
@@ -72,7 +72,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     assert explicit.agent_args == GivenArguments(("--label", "two words"))
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/next pi")
     fresh = build_parser().parse_args(["restart", "--all"])
-    assert CliCommand.member_named(fresh.command).from_arguments(fresh).agent_bin == ConfiguredBinary()
+    assert fresh.command_declaration.from_arguments(fresh).agent_bin == ConfiguredBinary()
 
 
 @pytest.mark.parametrize(

@@ -24,7 +24,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, GitRecord, PackageRecord
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
-from agent_comms.installer.launch import InstallLogs
+from agent_comms.installer.logs import InstallLogs
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim

@@ -148,7 +148,7 @@ class Messaging:
         return self._pin_constraint(recipient, subject, NativeInputConstraintPin,
                                     worktree=worktree, scope=scope, change=change)
 
-    def approve_annotations(self, recipient, subject, *, worktree, per_hour, segments):
+    def approve_annotations(self, recipient, subject, *, worktree, per_hour, segments) -> Message:
         return self._pin_constraint(recipient, subject, AnnotationDisclosureGrant,
             worktree=worktree, scope=CurrentTaskScopeSelection(), change=OriginalTaskChange(),
             per_hour=per_hour, segments=segments)

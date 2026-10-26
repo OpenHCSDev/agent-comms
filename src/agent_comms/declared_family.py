@@ -5,7 +5,7 @@ from __future__ import annotations
 import pkgutil
 import re
 from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import Hashable, Iterable, Mapping
+from collections.abc import Hashable, Iterable
 from functools import cache
 from types import ModuleType
 from typing import ClassVar, Self, cast
@@ -41,7 +41,7 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
     ) -> FamilyMeta:
         family_bases = FamilyBases.of(bases)
         roots = {
-            base._family_root
+            base.family_root
             for base in family_bases
             if base is not DeclaredFamily
         }
@@ -58,11 +58,18 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         if is_root:
             # slots dataclasses recreate the root without its class-header keywords.
             namespace["_family_affix"] = affix if affix is not None else namespace.get("_family_affix", "")
-            namespace["__registry__"] = (
+            registry = namespace["__registry__"] = (
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )
             namespace["declared_name"] = None
+            config = namespace["__registry_config__"] = RegistryConfig(
+                registry_dict=registry,
+                key_attribute="declared_name",
+                skip_if_no_key=True,
+                discovery_package=discovery_package,
+            )
         elif root is not None:
+            config = root.__registry_config__
             stem = name.removesuffix(root._family_affix) if root._family_affix else name
             derived = declared_words(stem)
             # A slots dataclass recreates its declaration with the derived name in its namespace.
@@ -71,28 +78,16 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
             )
             if namespace["declared_name"] == "":
                 raise TypeError("A family member must have a nonempty name.")
-        config = (
-            RegistryConfig(
-                registry_dict=(
-                    namespace["__registry__"]
-                    if is_root
-                    else cast(type[DeclaredFamily], root).__registry__
-                ),
-                key_attribute="declared_name",
-                skip_if_no_key=True,
-                discovery_package=discovery_package,
-            )
-            if is_root or root is not None
-            else None
-        )
+        else:
+            config = None
         cls: type[DeclaredFamily] = super().__new__(
             mcs, name, bases, namespace, registry_config=config, **class_options
         )
         if is_root:
-            cls._family_root = cls
+            cls.family_root = cls
         else:
             for family_root in roots:
-                cls._family_root = family_root
+                cls.family_root = family_root
         return cast(FamilyMeta, cls)
 
     @staticmethod
@@ -101,6 +96,7 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         replaces: object = None,
     ) -> type | None:
         # Check constructed declarations; lazy discovery cannot run inside class construction.
+        cls.validate_module_name()
         cls.validate_selection(dict.values(config.registry_dict))
         return AutoRegisterMeta._register_class(cls, key, config, replaces=replaces)
 
@@ -139,7 +135,14 @@ class DeclaredOrder(ABC):
         raise ValueError(f"{member.__name__} has no {cls.__name__} rank base")
 
 
-class DeclaredFamily(ABC, metaclass=FamilyMeta):
+class FamilyMember(ABC):
+    """The nominal family root and the name declared by each of its members."""
+
+    declared_name: ClassVar[str]
+    family_root: ClassVar[type[DeclaredFamily]]
+
+
+class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
     Declare a root with ``affix=\"Scope\"`` (or omit it for unstripped names).
@@ -151,11 +154,10 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
     the existing registry acquires those declarations on decode or schema reads.
     """
 
-    declared_name: ClassVar[str]
     family_discriminator: ClassVar[str] = "kind"
-    _family_root: ClassVar[type[DeclaredFamily]]
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
+    __registry_config__: ClassVar[RegistryConfig]
 
     def __init_subclass__(
         cls,
@@ -185,10 +187,18 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
         return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}
 
     @classmethod
-    def member_named(cls, name: object) -> type[Self]:
+    def validate_module_name(cls) -> None:
+        """Ordinary families may group several declarations in one module."""
+
+    @classmethod
+    def _named_member(cls, name: object) -> type[DeclaredFamily]:
         cls._member_declarations()
+        return cls.__registry__[cast(Hashable, name)]
+
+    @classmethod
+    def member_named(cls, name: object) -> type[Self]:
         try:
-            member = cast(Mapping[object, type[DeclaredFamily]], cls.__registry__)[name]
+            member = cls._named_member(name)
         except (KeyError, TypeError):
             raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):
@@ -215,15 +225,6 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
     @classmethod
     def names(cls) -> tuple[str, ...]:
         return tuple(member.declared_name for member in cls.members_with(cls))
-
-    @classmethod
-    def field_value(cls, value) -> type[Self]:
-        """Coerce one declared selector spelling to its member class."""
-        if isinstance(value, type) and issubclass(value, cls):
-            return value
-        from .field_codec import FieldCodec
-
-        return FieldCodec.decode(type[cls], value)
 
     @classmethod
     def sql_choices(cls) -> str:
@@ -257,15 +258,43 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
             if issubclass(member, cls) and issubclass(member, capability)
         )
 
-    @classmethod
-    def family_root(cls) -> type[DeclaredFamily]:
-        """The nominal root recorded when this declaration was constructed."""
-        return cls._family_root
 
     @classmethod
     def declared_position(cls) -> int:
-        root = cls.family_root()
+        root = cls.family_root
         return root.members_with(root).index(cls)
+
+
+class ModuleMembers(FamilyMember):
+    """A family whose declared names select exactly one Python module each."""
+
+    @staticmethod
+    def module_stem(name: str) -> str:
+        return name.replace("-", "_")
+
+    @classmethod
+    def validate_module_name(cls) -> None:
+        actual = cls.__module__.rpartition(".")[2]
+        expected = cls.module_stem(cls.declared_name)
+        if actual != expected:
+            raise TypeError(f"{cls.__qualname__} declares {cls.declared_name!r}; "
+                            f"its module stem must be {expected!r}, not {actual!r}")
+
+    @classmethod
+    def _named_member(cls, name: object) -> type[DeclaredFamily]:
+        from .field_codec import FieldCodec, MalformedRecord
+
+        try:
+            selected = FieldCodec.decode(str, name)
+        except MalformedRecord as error:
+            raise UnknownFamilyMember(f"A declared module name must be text: {name!r}") from error
+        package = cls.family_root.__registry_config__.discovery_package
+        package_module: ModuleType = import_module_preserving_root_logging(package)
+        stem = cls.module_stem(selected)
+        if stem not in {info.name for info in pkgutil.iter_modules(package_module.__path__)}:
+            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}")
+        import_module_preserving_root_logging(f"{package}.{stem}")
+        return dict.__getitem__(cls.family_root.__registry__, selected)
 
 
 class RegisteredFamily(DeclaredFamily):
@@ -275,7 +304,7 @@ class RegisteredFamily(DeclaredFamily):
         # Construction uses declarations already registered by FamilyMeta. Discovery
         # must not run here: it may itself be constructing another family member.
         if dict.get(cls.__registry__, cls.declared_name) is not cls:
-            raise TypeError(f"{cls.__name__} is not a registered {cls.family_root().__name__} member")
+            raise TypeError(f"{cls.__name__} is not a registered {cls.family_root.__name__} member")
         return super().__new__(cls)
 
 

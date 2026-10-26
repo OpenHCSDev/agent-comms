@@ -105,7 +105,7 @@ def test_native_source_publication_retains_captured_configuration(tmp_path):
     comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/old')))
     original = comms.agents.begin_turn("owner", TurnId('353fe4ec44fe236b973ecec2489ac459'))
     comms.threads.set_thread_configuration(
-            comms.registry.require('owner'), NextTurnConfiguration(model=ChosenModel(DeclaredModel('test/next'))))
+            comms.registry.require('owner'), NextTurnConfiguration(model=ChosenModel('test/next')))
     original.require_snapshot(comms.registry.snapshot(), "The claimed turn keeps its configuration")
     selected = comms.registry.attach_native_session(original, str(tmp_path / "saved.jsonl"))
     assert selected.thread.model == DeclaredModel("test/old")

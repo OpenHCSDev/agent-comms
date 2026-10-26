@@ -152,7 +152,7 @@ class OwnerStartResult(CliResult, ToolResult):
     launched: bool
 
     def reconnect_targets(self) -> tuple[str, ...]:
-        return (self.thread,) if self.launched else ()
+        return (self.thread,)
 
 
 class OwnerRelease(ABC):

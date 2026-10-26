@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from contextlib import redirect_stdout
 
 import pytest
 
 from agent_comms.bus import Bus
+from agent_comms.cli import main
 from agent_comms.cli_bridges.shared import Send
-from agent_comms.cli_commands import CliCommand
+from agent_comms.cli_command import CliCommand
 
 
 @pytest.fixture
@@ -57,29 +60,6 @@ def test_every_registered_command_runs_through_dispatcher_with_parser_defaults(t
     # Install fails with Git's own error as one JSON result before any installation.
     home = tmp_path / "home"
     home.mkdir()
-    worker = r"""
-import io
-import json
-import sys
-from contextlib import redirect_stdout
-from pathlib import Path
-from agent_comms.bus import Bus
-from agent_comms.cli import main
-from agent_comms.cli_commands import CliCommand
-
-visited = []
-for declaration in CliCommand.members_with(CliCommand):
-    output = io.StringIO()
-    root = Path(sys.argv[1]) / declaration.declared_name
-    Bus.install(Bus.path_in(root))
-    arguments = ['--root', str(root), declaration.declared_name]
-    with redirect_stdout(output):
-        code = main(arguments)
-    assert code in (0, 1)
-    json.loads(output.getvalue())
-    visited.append(declaration.declared_name)
-print(json.dumps(visited))
-"""
     env = {
         **os.environ,
         "HOME": str(home),
@@ -89,7 +69,7 @@ print(json.dumps(visited))
         "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
     }
     result = subprocess.run(
-        [sys.executable, "-c", worker, str(tmp_path)],
+        [sys.executable, str(Path(__file__)), str(tmp_path)],
         cwd=home,
         env=env,
         capture_output=True,
@@ -97,7 +77,24 @@ print(json.dumps(visited))
         timeout=180,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
-    assert json.loads(result.stdout) == list(CliCommand.names())
+    # Selected imports may register a verb before full discovery. Every declaration
+    # must still execute exactly once, regardless of either process's import order.
+    assert sorted(json.loads(result.stdout)) == sorted(CliCommand.names())
+
+
+def _exercise_registered_commands(directory: Path) -> None:
+    visited = []
+    for declaration in CliCommand.members_with(CliCommand):
+        output = io.StringIO()
+        root = directory / declaration.declared_name
+        Bus.install(Bus.path_in(root))
+        arguments = ['--root', str(root), declaration.declared_name]
+        with redirect_stdout(output):
+            code = main(arguments)
+        assert code in (0, 1)
+        json.loads(output.getvalue())
+        visited.append(declaration.declared_name)
+    print(json.dumps(visited))
 
 
 def test_bridge_first_mro_is_refused_before_command_registration():
@@ -131,3 +128,7 @@ def test_real_send_publishes_and_history_retains_it(tmp_path, isolated_cli):
     assert code == 0
     entries = history["everything"]
     assert any(entry["id"] == sent["id"] and entry["text"] == body for entry in entries)
+
+
+if __name__ == "__main__":
+    _exercise_registered_commands(Path(sys.argv[1]))

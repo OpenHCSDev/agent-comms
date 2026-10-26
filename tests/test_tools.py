@@ -15,7 +15,7 @@ class TestToolCatalog:
         from pathlib import Path
         from agent_comms.pi_vocabulary import ServiceTier
         from agent_comms.native_arguments import NativeArguments
-        from agent_comms.tools import ToolsCliCommand
+        from agent_comms.cli_verbs.tools import ToolsCliCommand
         from agent_comms.tool_caller import ThreadCaller
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))

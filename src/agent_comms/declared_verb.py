@@ -32,7 +32,9 @@ class DeclaredCommand(DeclaredOptions, DeclaredFamily):
     def add_parser[P: argparse.ArgumentParser](
         cls, subparsers: argparse._SubParsersAction[P]
     ) -> None:
-        cls.add_arguments(subparsers.add_parser(cls.declared_name, help=cls.help))
+        parser = subparsers.add_parser(cls.declared_name, help=cls.help)
+        cls.add_arguments(parser)
+        parser.set_defaults(command_declaration=cls)
 
 
 class DeclaredVerb(DeclaredCommand, affix="Verb"):

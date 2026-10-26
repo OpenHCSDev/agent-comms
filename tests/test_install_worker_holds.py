@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import StartCliCommand, StopCliCommand
+from agent_comms.cli_verbs.start import StartCliCommand
+from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.field_codec import ClaimId, FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (

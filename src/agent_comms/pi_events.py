@@ -13,6 +13,7 @@ from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
 from .field_codec import DeclaredWireType, FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
+from .native_output import NativeOutputLocation, NativeRecordLocation
 from .native_pi import NativePiOperationFailed
 from .native_failures import NativePiUnavailable
 from .native_tool_call import ToolCallId
@@ -139,6 +140,12 @@ class NativePiEvent(PiEvent, declared_name=None):
     pass
 
 
+@dataclass(frozen=True)
+class NativeOutputCommitted(NativePiEvent, NativeOutputLocation):
+    def convert(self) -> Iterable[events.AgentEvent]:
+        yield events.NativeOutputCommitted(self)
+
+
 class DurablePiEvent(PiEvent, declared_name=None):
     @staticmethod
     def unowned_event(event):
@@ -176,8 +183,14 @@ class TurnStart(Opaque, NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True)
-class TurnEnd(Opaque, NativePiEvent, DurablePiEvent):
-    """Pi ends one model round. Settlement comes from agent_end / agent_settled."""
+class TurnEnd(NativePiEvent, DurablePiEvent):
+    """Pi ends one model round after its original tool results are persisted."""
+
+    round_committed: Annotated[NativeRecordLocation | PiOmitted, WireName("roundCommitted")] = PiOmitted()
+
+    def convert(self) -> Iterable[events.AgentEvent]:
+        for location in self.round_committed.present():
+            yield events.NativeRoundCommitted(location)
 
 
 @dataclass(frozen=True)
@@ -754,6 +767,10 @@ class Response(NativePiEvent, DurablePiEvent):
     def responses_to(self, request: PiCommand) -> tuple[Response, ...]:
         return (self,) if self.responds_to(request) else ()
 
+    def require_data(self) -> PiResponseData:
+        """Expose this response's payload only after its outcome accepts it."""
+        return self.success.require_data(self)
+
     def rejection_details(self) -> dict:
         """Private diagnostic projection, excluding response data and prompt content."""
         return {
@@ -778,7 +795,7 @@ class SucceededResponseOutcome(ResponseOutcome):
     payload_field = FieldCodec.field_plan(Response, "data")
 
     def proves_idle(self, response: Response) -> bool:
-        return not self.require_data(response).session_busy
+        return not response.require_data().session_busy
 
     def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
         return data.conflicts_attestation(attestation)

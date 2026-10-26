@@ -124,7 +124,7 @@ async def test_stalled_real_native_run_records_phase_failure_instead_of_name_err
         assert len(native.starts) == 1
 
 
-async def test_agent_settled_returns_an_unwritten_inflight_steer_and_reports_it_unstarted(
+async def test_agent_settled_returns_an_unwritten_inflight_steer_and_reports_not_sent(
     tmp_path: Path, native_runtime_package: VerifiedNativePackage, steering_input: InputRequest,
 ):
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
@@ -143,7 +143,7 @@ async def test_agent_settled_returns_an_unwritten_inflight_steer_and_reports_it_
                 await wait_for(lambda: inbox.has_ready_work)
             result = await task
             assert not result[-1].ok
-            assert result[-1].reason_code == "queued_input_missing"
+            assert result[-1].reason_code == "queued_input_not_sent"
             assert inbox.get_nowait() is steering_input
             assert native.provider.posts == 1 and len(native.starts) == 1
             assert not native.persistent.child_state.retained
@@ -215,7 +215,7 @@ async def test_cancelled_pipe_drain_does_not_requeue_an_already_written_steer(
                 inbox.put_nowait(following)
                 await wait_for(lambda: bool(running.inputs.pending))
                 assert not running.native.forwarding.tasks[0].done()
-                assert not running.inputs.current.has_work
+                assert not running.inputs.unwritten_inputs
                 finish.set()
                 await wait_for(original_forwarder.done)
                 assert inbox.empty()

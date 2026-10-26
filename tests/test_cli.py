@@ -11,12 +11,13 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.channel_targets import CommandTarget, PerTargetChannels
+from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels
+from agent_comms.catalog_document import NoCatalog
 from agent_comms.cli import main
 from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_model import UndeclaredModel
-from agent_comms.cli_commands import CommandSelectionChanged
+from agent_comms.cli_command import CommandSelectionChanged
 from agent_comms.lifecycle_capability import Successful
 from conftest import installed_comms
 from agent_comms.threads import Thread
@@ -322,7 +323,9 @@ class TestSelectedTargetActions:
         return comms
 
     def test_catalog_absent_view_actor_has_no_backend_actions(self, tmp_path):
-        from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, TargetEdit
+        from agent_comms.cli_verbs.archive import ArchiveCliCommand
+        from agent_comms.cli_command import CliCommand
+        from agent_comms.cli_command import TargetEdit
         from agent_comms.errors import UnregisteredThreadError
         from agent_comms.thread_status import StoppedThreadStatus
 
@@ -345,9 +348,10 @@ class TestSelectedTargetActions:
         import os
         from dataclasses import replace
         from agent_comms.child_process import ProcessIdentity
-        from agent_comms.cli_commands import (
-            CliCommand, QueueRestartCliCommand, RestartCliCommand, StopCliCommand,
-        )
+        from agent_comms.cli_command import CliCommand
+        from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
+        from agent_comms.cli_verbs.restart import RestartCliCommand
+        from agent_comms.cli_verbs.stop import StopCliCommand
         from agent_comms.restart_scope import OneOwner
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -370,17 +374,17 @@ class TestSelectedTargetActions:
             with pytest.raises(ValueError):
                 RestartCliCommand.execute_target(
                     comms, RestartCliCommand.selected_targets((CommandTarget.named('alpha'),)),
-                    arguments)
+                    arguments, project=str(tmp_path))
         explicit = RestartCliCommand(name=OneOwner('alpha'), agent_bin=GivenBinary('/operator/native'),
                                       agent_args=GivenArguments(('--no-extensions',)))
         from agent_comms.cli import build_parser
         options = build_parser().parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
             '--agent-args=--no-extensions'])
-        parsed = CliCommand.member_named(options.command).from_arguments(options)
+        parsed = options.command_declaration.from_arguments(options)
         assert parsed == explicit
         assert StopCliCommand.help == 'Stop process'
-        assert not QueueRestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
+        assert not QueueRestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus(), NoChannel(), catalog=NoCatalog())
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
             comms.registry.store.path,
@@ -392,14 +396,16 @@ class TestSelectedTargetActions:
             ),
         )
         assert QueueRestartCliCommand.thread_bindings(comms,
-            replace(owner, turn_record=record, turn_generation=busy.generation), status)
+            replace(owner, turn_record=record, turn_generation=busy.generation), status, NoChannel(), catalog=NoCatalog())
         assert not QueueRestartCliCommand.thread_bindings(comms,
-            replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status)
+            replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status, NoChannel(), catalog=NoCatalog())
         assert not QueueRestartCliCommand.thread_bindings(comms,
-            replace(owner, execution=ExternalThreadExecution), status)
+            replace(owner, execution=ExternalThreadExecution), status, NoChannel(), catalog=NoCatalog())
 
     def test_tag_batch_requires_each_confirmation_before_removing_any_tag(self, tmp_path):
-        from agent_comms.cli_commands import CliCommand, DeleteTagCliCommand, TargetEdit
+        from agent_comms.cli_command import CliCommand
+        from agent_comms.cli_verbs.delete_tag import DeleteTagCliCommand
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         selected = ('#team', '#other')
@@ -423,7 +429,9 @@ class TestSelectedTargetActions:
 
     def test_tag_batch_preserves_active_refusal_and_mixed_target_outcomes(self, tmp_path):
         from agent_comms.channel_management import ArchiveThreadsTagDisposition, TagDisposition
-        from agent_comms.cli_commands import CliCommand, DeleteTagCliCommand, TargetEdit
+        from agent_comms.cli_command import CliCommand
+        from agent_comms.cli_verbs.delete_tag import DeleteTagCliCommand
+        from agent_comms.cli_command import TargetEdit
         from agent_comms.field_codec import compile_decoder
         from agent_comms.thread_status import RunningThreadStatus
 
@@ -449,7 +457,7 @@ class TestSelectedTargetActions:
         assert comms.registry.require('beta').tags == frozenset({'other'})
 
     def test_catalog_projects_mixed_operations_and_original_editor_fields(self, tmp_path):
-        from agent_comms.cli_commands import CliCommand
+        from agent_comms.cli_command import CliCommand
 
         comms = self.declared(tmp_path)
         actions = CliCommand.target_catalog(
@@ -457,7 +465,7 @@ class TestSelectedTargetActions:
             PerTargetChannels({"alpha": ("#team",), "beta": ("#other",)}), project=str(tmp_path),
         )
         catalog = {action.declaration.declared_name: action for action in actions}
-        assert set(catalog) == {"start", "stop", "archive", "pin-thread", "read-target", "delete-tag"}
+        assert set(catalog) == {"start", "stop", "restore-owner", "archive", "pin-thread", "read-target", "delete-tag"}
         assert len(catalog["pin-thread"].bound) == 3
         assert not catalog["pin-thread"].editable_fields
         assert catalog["archive"].confirmation.startswith("Archive #team?")
@@ -506,7 +514,8 @@ class TestSelectedTargetActions:
         assert comms.channels.catalog.read() == catalog
 
     def test_channel_stop_deduplicates_selected_member(self, tmp_path):
-        from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetEdit
+        from agent_comms.cli_verbs.stop import StopCliCommand
+        from agent_comms.cli_command import TargetBatchResult, TargetEdit
         from agent_comms.thread_status import RunningThreadStatus
 
         comms = self.declared(tmp_path)
@@ -522,7 +531,7 @@ class TestSelectedTargetActions:
 
     def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):
         from agent_comms.child_process import NoProcess
-        from agent_comms.cli_commands import StartCliCommand
+        from agent_comms.cli_verbs.start import StartCliCommand
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_identity import UserThreadRole
         from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
@@ -539,14 +548,15 @@ class TestSelectedTargetActions:
         catalog = comms.channels.catalog.read()
         target = ChannelTarget("#team")
         commands = StartCliCommand.bindings(
-            comms, target, snapshot=snapshot, catalog=catalog,
+            comms, target, NoChannel(), snapshot=snapshot, catalog=catalog,
             resolved=target.resolve(snapshot, comms.bus.require_channel))
         assert tuple(command.name for command in commands) == ("alpha",)
         assert all(comms.registry.require(name).process_identity == NoProcess()
                    for name in ("alpha", "external", "archived", "human"))
 
     def test_mixed_pins_keep_each_rows_original_channel(self, tmp_path):
-        from agent_comms.cli_commands import PinThreadCliCommand, TargetEdit
+        from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         before = {name: comms.registry.require(name).tags for name in ("alpha", "beta")}
@@ -560,7 +570,10 @@ class TestSelectedTargetActions:
         assert {name: comms.registry.require(name).tags for name in before} == before
 
     def test_same_owner_memberships_pin_independently_and_archive_once(self, tmp_path):
-        from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, PinThreadCliCommand, TargetEdit
+        from agent_comms.cli_verbs.archive import ArchiveCliCommand
+        from agent_comms.cli_command import CliCommand
+        from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         comms.channels.update_tags("alpha", add=frozenset({"other"}))
@@ -586,7 +599,9 @@ class TestSelectedTargetActions:
         assert result.outcomes[0].result.archived == "alpha"
 
     def test_missing_membership_reports_failure_without_losing_other_pin(self, tmp_path):
-        from agent_comms.cli_commands import CliCommand, PinThreadCliCommand, TargetEdit
+        from agent_comms.cli_command import CliCommand
+        from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         comms.channels.update_tags("alpha", add=frozenset({"other"}))
@@ -605,7 +620,8 @@ class TestSelectedTargetActions:
         assert document.pinned_threads("#other") == {"alpha"}
 
     def test_mixed_read_marks_human_views_without_advancing_executor_delivery(self, tmp_path):
-        from agent_comms.cli_commands import ReadTargetCliCommand, TargetEdit
+        from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
+        from agent_comms.cli_command import TargetEdit
         from native_unread_fixture import completed_snapshot
         from agent_comms.ui_model.unread import ReplyUnread
 
@@ -637,7 +653,10 @@ class TestSelectedTargetActions:
         assert comms.bus.pending_count('beta', CommandTarget.named('#team')) == 1
 
     def test_catalog_and_execution_keep_missing_and_single_only_targets_truthful(self, tmp_path):
-        from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, ForkCliCommand, TargetEdit
+        from agent_comms.cli_verbs.archive import ArchiveCliCommand
+        from agent_comms.cli_command import CliCommand
+        from agent_comms.cli_verbs.fork import ForkCliCommand
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         actions = CliCommand.target_catalog(comms, CliCommand.selected_targets((CommandTarget.named('missing'), CommandTarget.named('alpha'))), project=str(tmp_path))
@@ -652,10 +671,10 @@ class TestSelectedTargetActions:
 
 def test_result_kind_decides_exit_code_and_navigation_targets():
     from agent_comms.child_process import NoProcess
-    from agent_comms.cli_commands import (
-        NewThreadCliCommand, StartCliCommand, TargetBatchResult, TargetCompleted,
-        TargetFailed, ThreadCreatedResult, ThreadStoppedResult,
-    )
+    from agent_comms.cli_verbs.new import NewThreadCliCommand
+    from agent_comms.cli_verbs.start import StartCliCommand
+    from agent_comms.cli_commands import ThreadCreatedResult, ThreadStoppedResult
+    from agent_comms.cli_command import TargetBatchResult, TargetCompleted, TargetFailed
     from agent_comms.owner_lifecycle import OwnerStartResult
 
     launched = OwnerStartResult("alpha", 11, True)
@@ -665,8 +684,8 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
         TargetCompleted(CommandTarget.named("beta"), StartCliCommand(name="beta"), attached),
         TargetFailed(CommandTarget.named("gamma"), "ValueError", "gone"),
     ))
-    assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ()
-    assert batch.reconnect_targets() == ("alpha",)
+    assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ("beta",)
+    assert batch.reconnect_targets() == ("alpha", "beta")
     assert batch.completed_count == 2
     assert TargetBatchResult(batch.outcomes[:1]).completed_count == 1
     assert TargetBatchResult(batch.outcomes[-1:]).completed_count == 0

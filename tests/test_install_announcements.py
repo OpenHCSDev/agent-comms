@@ -8,7 +8,9 @@ import pytest
 
 from agent_comms.channel_targets import CommsTag
 from agent_comms.cli import build_parser
-from agent_comms.cli_commands import BusReadBack, CliCommand, HistoryCliCommand
+from agent_comms.cli_commands import BusReadBack
+from agent_comms.cli_command import CliCommand
+from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.registry_document import NoCommanderProject
 from agent_comms.repo import GitCommandError

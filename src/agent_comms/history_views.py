@@ -277,7 +277,7 @@ class HistoryViews:
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
 
-    def retained_context(self, name: str):
+    def retained_context(self, name: str) -> RetainedSegment:
         """Project authored context and its export boundary from one captured bus read."""
         snapshot = self.registry.snapshot()
         owner = snapshot.require(name)

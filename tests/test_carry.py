@@ -13,7 +13,8 @@ import pytest
 from debt_ratchet import UncarriedRecordFormat, git
 
 from agent_comms.locked_store import LiveFilesRequest
-from agent_comms.cli_commands import StopCliCommand, TargetBatchResult
+from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.cli_command import TargetBatchResult
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused

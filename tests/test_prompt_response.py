@@ -9,7 +9,7 @@ from agent_comms.agent_backend import FollowUpInputPolicy, InputContent, InputRe
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.pi_commands import ClearQueue, FollowingPrompt, GetSessionStats, GetState, PiCommand, Prompt
+from agent_comms.pi_commands import ClearQueue, FollowingPrompt, GetSessionStats, GetState, PiCommand, Prompt, SettingCommand
 from agent_comms.pi_payloads import AnonymousRequest, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_inputs import InputForwarding
@@ -99,6 +99,24 @@ async def test_following_receipt_keeps_its_command_without_a_second_acceptance_s
     assert response.success.success_value is success
     assert forwarding.retire(following.input_id) is following.input
     assert forwarding.settled
+
+
+@pytest.mark.parametrize("command_type", SettingCommand.members_with(SettingCommand))
+@pytest.mark.parametrize("success", (True, False))
+def test_settings_use_the_shared_response_outcome(
+    command_type: type[SettingCommand], success: bool,
+    native_response_session: NativeSessionPreparation,
+):
+    command = command_type()
+    reply = {"type": "response", "command": command.declared_name,
+             "id": command.require_id(), "success": success}
+    error = None if success else "explicit settings refusal"
+    if not success:
+        reply["error"] = error
+    response = PiRpcChannel.decode_record(json.dumps(reply).encode())
+    assert tuple(command.on_response(response, native_response_session)) == (
+        command.result_type(id=response.id, ok=success, error=error),
+    )
 
 
 @pytest.mark.parametrize("reverse", (False, True))

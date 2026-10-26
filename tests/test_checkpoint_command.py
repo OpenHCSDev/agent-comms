@@ -5,9 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import (
-    CheckpointCliCommand, CleanCheckpoint, PushUnknownCheckpoint, PushedCheckpoint, RefusedCheckpoint,
-)
+from agent_comms.cli_verbs.checkpoint import CheckpointCliCommand
+from agent_comms.cli_commands import CleanCheckpoint, PushUnknownCheckpoint, PushedCheckpoint, RefusedCheckpoint
 from bus_record_fixture import context_comms
 from agent_comms.threads import Thread
 from fixture_git import ENVIRONMENT

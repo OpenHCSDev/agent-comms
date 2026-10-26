@@ -10,7 +10,7 @@ import pytest
 from agent_comms.locked_store import LiveFilesRequest, RetainedCopyRequest
 from agent_comms.channel_targets import ChannelTarget, CommandTarget
 from agent_comms.cli import build_parser
-from agent_comms.cli_commands import PlannedReconcileCliCommand
+from agent_comms.cli_verbs.planned_reconcile import PlannedReconcileCliCommand
 from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.backup import StoreBackup

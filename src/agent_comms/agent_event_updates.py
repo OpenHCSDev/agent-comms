@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
@@ -21,6 +22,8 @@ from . import agent_events as events
 from .acp_extension import (
     CompactionChangedUpdate,
     McpClientAcknowledgementUpdate,
+    NativeOutputCommittedUpdate,
+    NativeRoundCommittedUpdate,
     PromptCancelledUpdate,
     TextRouteUpdate,
     encode_updates,
@@ -41,8 +44,11 @@ from .tool_results import tool_result_content
 from .transcript_updates import TranscriptUpdate
 
 if TYPE_CHECKING:
+    from .acp_extension import AgentCommsUpdate
     from .controller import SessionUpdateSink
+    from .native_output import NativeRecordLocation
     from .routing import MessageRoute, NoMessageRoute
+    from .transcripts import NativeCommittedPrefix
     from .turn_effects import TurnEffects
 
 
@@ -94,6 +100,38 @@ class AcpEventConsumer(MroDispatch):
         return AgentMessageChunk(
             session_update="agent_message_chunk",
             content=TextContentBlock(type="text", text=text),
+        )
+
+    @handles(events.NativeOutputCommitted)
+    async def native_output_committed(self, event: events.NativeOutputCommitted) -> None:
+        await self.publish_native_commit(
+            event.location, partial(NativeOutputCommittedUpdate, output=event.location.output)
+        )
+
+    @handles(events.NativeRoundCommitted)
+    async def native_round_committed(self, event: events.NativeRoundCommitted) -> None:
+        await self.publish_native_commit(event.location, NativeRoundCommittedUpdate)
+
+    async def publish_native_commit(
+        self,
+        location: NativeRecordLocation,
+        update: Callable[[NativeCommittedPrefix], AgentCommsUpdate],
+    ) -> None:
+        sessions = self.agent.sessions
+        identity = await Coordination.run_worker(
+            partial(
+                sessions.comms.transcripts.capture_native_output,
+                sessions.require(self.session_id),
+                location,
+            )
+        )
+        await self.client.publish_update(
+            session_id=self.session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(update(identity)),
+            ),
         )
 
     @handles(events.GoalChanged)

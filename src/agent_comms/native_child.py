@@ -190,7 +190,7 @@ class PiChild:
             raise RuntimeError('Pi child has retired')
         async with self.failures():
             response = await self.reader.request(command, self)
-        return response.success.require_data(response)
+        return response.require_data()
 
     @property
     def retirement_result(self) -> RetirementState:
@@ -412,7 +412,7 @@ class BorrowedNative(SuccessorNative):
         # pending response instead of starting a competing reader.
         pending = await self.child.send_request(request)
         received = await pending.response()
-        return received.success.require_data(received)
+        return received.require_data()
 
 @dataclass
 class RetainedNative(ChildNative):

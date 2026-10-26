@@ -7,11 +7,9 @@ from pathlib import Path
 
 import agent_comms.commander as package
 from agent_comms.active_route import ActiveRoute, resolve_comms_route
-from agent_comms.cli_protocol import CLI_FAILURES
+from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.launch_root import LaunchRoot
-
-from .order import Commander
-
+from agent_comms.commander.order import Commander
 
 def tool_name(module: str) -> str:
     """The tool a module of this package is: its name, with dashes."""
@@ -36,6 +34,7 @@ def main() -> None:
         asked = argv[:1] in (['-h'], ['--help'])
         print('\n'.join(lines), file=sys.stdout if asked else sys.stderr)
         sys.exit(0 if asked else 2)
+
     try:
         # Every comms process selects its root once at startup, as the comms CLI does.
         LaunchRoot.startup(argv, lambda: (LaunchRoot.from_path(options.root) if options.root
