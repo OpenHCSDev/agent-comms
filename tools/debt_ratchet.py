@@ -1818,14 +1818,30 @@ class BroadSwallow(CleanChangedLines, BroadExceptDefault):
 
     @staticmethod
     def carries(handler: ast.ExceptHandler) -> bool:
-        """The bound error is passed into a class constructor: a typed outcome, not a swallow."""
+        """Keep a typed outcome or hand the original failure to a reporting owner.
+
+        A reporting method must run unconditionally and cannot turn the error into
+        a returned default. Formatting the exception for a log is not this transfer.
+        """
         match handler:
             case ast.ExceptHandler(name=str(bound)):
-                return any(
+                constructed = any(
                     isinstance(name, ast.Name) and name.id == bound
                     for child in ast.walk(handler)
                     for argument in BroadSwallow.constructor_arguments(child)
                     for name in ast.walk(argument))
+                returns_value = any(
+                    isinstance(node, ast.Return) and node.value is not None
+                    and not (isinstance(node.value, ast.Constant) and node.value.value is None)
+                    for node in ast.walk(handler))
+                reported = any(
+                    isinstance(argument, ast.Name) and argument.id == bound
+                    for statement in handler.body
+                    if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call)
+                    and isinstance(statement.value.func, ast.Attribute)
+                    for argument in (*statement.value.args,
+                                     *(keyword.value for keyword in statement.value.keywords)))
+                return constructed or (reported and not returns_value)
         return False
 
     @staticmethod

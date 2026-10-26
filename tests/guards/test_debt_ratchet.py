@@ -1378,6 +1378,24 @@ def test_broad_handler_carrying_its_error_into_a_typed_outcome_is_not_a_swallow(
     assert BroadSwallow.count(source, "read.py") == 2
 
 
+@pytest.mark.parametrize(('handler', 'expected'), (
+    ('self.show_error(error, "Change directory")\n        return', 0),
+    ('self.show_error(error, "Change directory")', 0),
+    ('self.show_error(error=error)\n        return None', 0),
+    ('self.show_error(str(error))\n        return', 1),
+    ('self.show_error(error)\n        return False', 1),
+    ('if visible: self.show_error(error)\n        return', 1),
+    ('self.show_error(other)\n        return', 1),
+    ('def later(): self.show_error(error)\n        return', 1),
+))
+def test_broad_handler_transfers_original_error_without_a_success_default(handler, expected):
+    source = ('def change(self):\n'
+              '    try: qualify()\n'
+              '    except (OSError, ValueError) as error:\n'
+              f'        {handler}\n').encode()
+    assert BroadSwallow.count(source, 'project.py') == expected
+
+
 def test_field_spelling_rosters_count_loops_not_declarations():
     source = b"""fields = ("path", "file_path", "filePath")\nfor key in ("path", "file_path", "filePath"):\n    value = data[key]\nvalue = next(data[key] for key in ("path", "file_path", "filePath") if key in data)\n"""
     assert ForeignFieldSpellings.count(source, "read.py") == 2
