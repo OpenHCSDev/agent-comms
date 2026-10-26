@@ -111,7 +111,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     review.invoke(comms, review.arguments, caller=ThreadCaller('lead'))
     assert set(scan(capture())) == {lost, old_lost}
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(lost.began()))
-    assert not ping.acted(CommanderHistory.read(comms, frozenset(('lead',))))
+    assert not ping.acted(CommanderHistory.read(comms, "lead", rules=(), observed=()))
     assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
 
     verdict = judge.SupersededVerb(by='P2', why='The replacement includes the useful work and deliberately drops this obsolete implementation.').head_operation()

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Mapping, Self
 
@@ -23,41 +22,30 @@ from agent_comms.todos import StoredHeadReview
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.heartbeat_frame import HeartbeatFrame
+    from agent_comms.standing_rules import StandingRule
     from agent_comms.todos import Todo
     from agent_comms.ui_model.unit_state import UnitState
 
 
 @dataclass(frozen=True)
 class CommanderHistory:
-    """One board read's order history and current conditions, never retained between reads."""
+    """One beat's order history and the conditions its capture already read."""
 
     comms: Comms
     orders: Mapping[ThreadIncarnation, tuple[Todo, ...]]
-    commander: str
     actors: frozenset[str]
+    rules: tuple[StandingRule, ...]
+    observed: tuple[UnitState, ...]
 
     @classmethod
-    def read(cls, comms: Comms, commander: str) -> Self:
+    def read(cls, comms: Comms, commander: str, *,
+             rules: tuple[StandingRule, ...], observed: tuple[UnitState, ...]) -> Self:
         snapshot = comms.registry.snapshot()
         actors = CommanderService.actors(snapshot, commander)
         identities = frozenset(snapshot.require(actor).incarnation for actor in actors)
         return cls(comms, MappingProxyType({
             actor: comms.goals.todos.history_for_commander(actor) for actor in identities
-        }), commander, actors)
-
-    @cached_property
-    def frame(self) -> HeartbeatFrame:
-        from agent_comms.heartbeat_frame import HeartbeatFrame
-        from agent_comms.todos import ProgressRead
-
-        return HeartbeatFrame.capture(self.comms, self.commander, ProgressRead(), self.comms.plans)
-
-    @cached_property
-    def observed(self) -> tuple[UnitState, ...]:
-        from agent_comms.ui_model.unit_state import UnitState
-
-        return UnitState.current(self.comms, self.commander, self.frame)
+        }), actors, rules, observed)
 
 
 @dataclass(frozen=True)
@@ -83,8 +71,7 @@ class HeadSubject(HeartbeatSubject):
     request: PullRequestHead
 
     def disposed(self, history: CommanderHistory, since: float) -> bool:
-        return any(review.at.since(since) and review.verdict.decides()
-                   for review in StoredHeadReview.head_reviews(history.comms.goals.todos, self.request))
+        return StoredHeadReview.decided(history.comms.goals.todos, self.request)
 
 
 @dataclass(frozen=True)

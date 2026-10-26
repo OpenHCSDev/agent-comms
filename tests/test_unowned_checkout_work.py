@@ -40,6 +40,7 @@ from agent_comms.standing_rules import (
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason, StrikeTodo, Todo,
@@ -183,7 +184,8 @@ def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
     lead = c.registry.require('lead')
     hud = CommanderHud(lead.incarnation, (), (), OverloadDegradation.from_orders((), 0, 0), (),
                        CodexUsage(UnreadableUsage(reason='not requested')))
-    CommanderHeartbeat().pass_body(c, (CommanderObservation(lead, (), rules, (), hud),))
+    history = CommanderHistory.read(c, lead.name, rules=rules, observed=())
+    CommanderHeartbeat().pass_body(c, (CommanderObservation(lead, (), rules, (), hud, history),))
 
 
 def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bus):

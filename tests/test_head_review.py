@@ -8,6 +8,7 @@ import pytest
 
 
 from agent_comms.commander import judge, order
+from agent_comms.commander_heartbeat import CommanderObservation
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
@@ -18,15 +19,16 @@ from agent_comms.standing_rules import (
     ReviewTimerUp, StuckMerge,
 )
 from agent_comms.errors import ToolRefusedError
+from agent_comms.task_attachments.commander_pings import CommanderNotice, RulePing, UnitPing
 from agent_comms.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth, WorkBranches
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
+    CarriedHeadVerdict, ClosedListedPullRequest, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
-    StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
+    StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason, WithdrawTodo,
 )
 from source_revision_fixture import SourceRepository
 
@@ -181,7 +183,7 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     pulls.carry_reviews(comms.goals, request.repo)
     assert pulls.open(request.repo)[0].has_head_review
     assert StoredHeadReview.head_reviews(comms.goals.todos, moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
-    assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls)
+    assert StoredHeadReview.decided(comms.goals.todos, moved)
     carried_posts = tuple(call for call in github.calls() if f"statuses/{merged}" in call[1])
     assert len(carried_posts) == 1
     assert f"description=carried from {request.head[:9]}: same change" in carried_posts[0]
@@ -254,7 +256,9 @@ def test_review_timer_up_with_open_head_builds(held_bus, github_cli, reviewed_so
                               comms.goals, todo.id)
     frame = HeartbeatFrame.capture(comms, "lead", ProgressRead(()))
     assert HeadReviewTimerUp.scan_owner() is ReviewTimerUp
-    found, = ReviewTimerUp.broken(comms, "lead", observed=(), frame=frame)
+    found, = ReviewTimerUp.broken(
+        comms, "lead", observed=(), frame=frame,
+        history=CommanderHistory.read(comms, "lead", rules=(), observed=()))
     assert found.problem == "P3"
     assert found.holder == todo.held().owner_identity
     assert found.order == todo.order.checked().id
@@ -275,15 +279,16 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
     subject, since = HeadSubject(request), time.time() - 1
 
     def owed() -> list[PullRequestHead]:
-        return [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(
-            comms.goals, "lead", ProgressRead(()))]
+        opened = OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+        history = CommanderHistory.read(comms, "lead", rules=opened, observed=())
+        return [rule.request for rule in OrderlessUnreviewedHead.current_lines(opened, history)]
 
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
-    assert not subject.disposed(CommanderHistory.read(comms, frozenset()), since)
+    assert not subject.disposed(CommanderHistory.read(comms, "lead", rules=(), observed=()), since)
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     assert owed() == []
-    assert subject.disposed(CommanderHistory.read(comms, frozenset()), since)
+    assert subject.disposed(CommanderHistory.read(comms, "lead", rules=(), observed=()), since)
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
 
@@ -417,9 +422,62 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
         RecordPullRequest(todo.revision, held.owner_identity,
                           PullRequestLink(ready.repo, number), held.generation).record(comms.goals, todo.id)
     ordered = (comms.goals.todos.get("P2"),)
-    found = {rule.request.pr: rule.line()
+    found = {rule.request.pr: rule
              for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), (), ordered)}
-    assert 11 not in found
-    assert found[9].startswith(f"{ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")
-    assert "idle 60 min" in found[9] and found[9].endswith(" -> land or supersede it")
-    assert "idle 0 min" in found[7] and found[7].endswith(" -> merge main into it")
+    assert set(found) == {7, 9}
+    assert found[9].holders == ()
+    assert found[9].request.head == "c" * 40
+    assert found[9].blocks == ()
+    assert found[9].began() <= time.time()
+    assert found[7].request == ready
+    assert found[7].blocks == (ConflictMergeBlock(fresh),)
+    assert found[7].began() <= time.time()
+
+
+def test_board_rechecks_closed_and_disarmed_heads_without_a_disposing_action(head_bus):
+    comms, github, ready = head_bus
+    stamp = datetime.fromtimestamp(time.time() - 3600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    github.put(ready.repo, UnmergedListedPullRequest(
+        8, "fix/armed", ready.head, stamp, "main", armed_times=(stamp,),
+        merge_blocks=(FailedCheckMergeBlock(stamp, "debt-src"),)))
+    opened(github, comms.registry.snapshot().commander_project.require().repos[0], 9, ready.head)
+    pulls = ProgressRead()
+    rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls),
+             *StuckMerge.scan_pulls(comms.goals, pulls))
+    pings = tuple(replace(RulePing.capture(rule), since=RecordedEventTime(time.time()))
+                  for rule in rules)
+    packet = CommanderNotice(comms.registry.require("lead").incarnation, pings)
+    history = CommanderHistory.read(comms, "lead", rules=rules, observed=())
+    assert packet.board(history) == tuple(ping.board_entry() for ping in pings)
+    github.put(ready.repo, ClosedListedPullRequest(
+        ready.pr, "fix/head-7", ready.head, stamp, "main", closed_at=stamp))
+    github.put(ready.repo, DraftListedPullRequest(
+        8, "fix/armed", ready.head, stamp, "main"))
+    remaining = tuple(ping.board_entry() for ping, rule in zip(pings, rules, strict=True)
+                      if rule.request.pr == 9)
+    assert len(remaining) == 1
+    pulls = ProgressRead()
+    current = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls),
+               *StuckMerge.scan_pulls(comms.goals, pulls))
+    history = CommanderHistory.read(comms, "lead", rules=current, observed=())
+    assert all(not ping.acted(history) for ping in pings)
+    assert packet.board(history) == remaining
+
+
+def test_board_rechecks_a_withdrawn_units_order_without_an_answer(head_bus):
+    comms, _, _ = head_bus
+    history = CommanderObservation.read(comms, comms.registry.require("lead")).history
+    worker = comms.registry.require("worker").incarnation
+    state, = (state for state in history.observed if state.unit == worker)
+    assert state.attention()
+    ping = replace(UnitPing.capture(state), since=RecordedEventTime(time.time()))
+    packet = CommanderNotice(comms.registry.require("lead").incarnation, (ping,))
+    assert packet.board(history) == (ping.board_entry(),)
+    lead = comms.registry.require("lead").incarnation
+    for todo in comms.goals.todos.held_by(lead, worker):
+        WithdrawTodo(todo.revision, lead,
+                     todo.held(), "The order was sent in error").record(comms.goals, todo.id)
+    history = CommanderObservation.read(comms, comms.registry.require("lead")).history
+    assert not ping.acted(history)
+    assert packet.board(history) == ()
+    assert packet.undisposed(history, time.time() + 1) == ()

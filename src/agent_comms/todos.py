@@ -4249,6 +4249,11 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
             return cls.head_reviews_among(db, (request,))[request]
 
     @classmethod
+    def decided(cls, store: TodoStore, request: PullRequestHead) -> bool:
+        """The latest decision on exactly this head; reviewing does not decide it."""
+        return any(review.verdict.decides() for review in cls.head_reviews(store, request))
+
+    @classmethod
     def head_reviews_among(cls, db: sqlite3.Connection, requests: Iterable[PullRequestHead]) -> dict[PullRequestHead, tuple[HeadReviewRecord, ...]]:
         """The caller's snapshot owns both prepared heads and their exact-head decisions."""
         return {request: tuple(row.record for row in cls.select(

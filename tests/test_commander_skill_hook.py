@@ -15,34 +15,24 @@ import pytest
 
 from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
-from agent_comms.heartbeat_subjects import UnitSubject
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
-from agent_comms.commander.standing import PlanIdle
-from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.plan_phases import BusWriterPhase
-from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, OrderId
+from agent_comms.field_codec import FieldCodec
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
-from agent_comms.commander.spinning import SpinningUnit
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import OrderlessUnreviewedHead, ReviewTimerUp
-from agent_comms.text_digest import TextDigest
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
+from agent_comms.standing_rules import OrderlessUnreviewedHead
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
-from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
+from agent_comms_hooks.board import BoardEntry, SessionBoard, UnexpectedBoardReply
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.skill import CommanderStart
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
-from test_commander_notifications import beat, lead_hud
+from test_commander_notifications import beat
 from test_head_review import ACCEPTED, invoke
 
 pytest_plugins = ("test_head_review", "test_commander_notifications")
@@ -153,10 +143,7 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
     record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
-    worker = RecordedThreadIncarnation("worker", 1.0)
-    rules = (*OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(())),
-             ReviewTimerUp("P1", worker, "order-P1", RecordedEventTime(1000.0)),
-             SpinningUnit("P2", worker, 92))
+    rules = OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead())
     beat(comms, rules)
     beat(comms, rules)
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
@@ -167,6 +154,7 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
         board = tool_call(hook, server, comms, db, time.time())
         assert len(board) == len(rules)
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+        beat(comms, ())
         assert [line for line in tool_call(hook, server, comms, db, time.time())
                 if f"--pr {request.pr} --head {request.head}" in line] == []
 
@@ -185,88 +173,28 @@ def test_board_read_failure_is_a_typed_hook_failure(tmp_path):
     assert caught.value.__cause__ is not None
 
 
-def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_bus, tmp_path, monkeypatch):
-    comms = notification_bus
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", "home")
-    hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
-    claim = WatchClaim(hook.session_id)
-    claim.path.parent.mkdir(parents=True)
-    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
-    reading = HeartbeatFrame.capture(comms, "lead", ProgressRead()).plan
-    beat(comms, (PlanIdle(BusWriterPhase, reading),))
-    phase_name = f"{BusWriterPhase.plan.declared_name}/{BusWriterPhase.declared_name}"
-    lead = comms.registry.require("lead").incarnation
-    request = comms.goals.todos.add_request(lead, "Start the ready bus writer phase").id
-    original = comms.goals.todos.get("P1").order.checked()
-    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
-          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
-        server.bind(str(claim.socket_path))
-        server.listen()
-        server.settimeout(5)
-        before = tool_call(hook, server, comms, db, time.time())
-        assert sum(phase_name in line for line in before) == 1
-        comms.goals.update_goal("worker", CreateProblemGoalAction(
-            problem="P3", commander="lead", request=request, assigner=lead,
-            repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
-            text="Start the ready bus writer phase", review_at=RecordedEventTime(time.time() + 3600),
-            order=replace(original, id=OrderId.mint(), serves=BusWriterPhase,
-                          at=RecordedEventTime(time.time())),
-        ))
-        after = tool_call(hook, server, comms, db, time.time())
-        assert sum(phase_name in line for line in after) == 0
-        assert not after
-
-
-def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus, tmp_path, monkeypatch):
-    """Real packets, bridge delivery journal and session socket; no hook-side state."""
-    comms = notification_bus
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", "home")
-    hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
-    claim = WatchClaim(hook.session_id)
-    claim.path.parent.mkdir(parents=True)
-    record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
-    lead = comms.registry.require("lead").incarnation
-    worker = comms.registry.require("worker").incarnation
+def test_the_board_prints_changes_once_then_an_unchanged_count(tmp_path):
+    """Delivery consumes current BoardEntry values, not invented Core conditions."""
     began = time.time()
-    first = RulePing(SpinningUnit, TextDigest.of("first"), text="Read worker P1",
-                     subjects=(UnitSubject(worker),), since=RecordedEventTime(began))
-    second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
-                      subjects=(UnitSubject(worker),), since=RecordedEventTime(began))
-    hud = lead_hud(comms)
-    CommanderDecisions(lead, (first, second), (first, second), ()).send(comms, began + 90, hud)
-    with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
-          socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
-        server.bind(str(claim.socket_path))
-        server.listen()
-        server.settimeout(5)
-        assert tool_call(hook, server, comms, db, began + 90) == (
-            "BOARD: Read worker P1 (seen for 1 min)",
-            "BOARD: Review worker P2 (seen for 1 min)",
-        )
-        assert tool_call(hook, server, comms, db, began + 91) == (
-            "BOARD: 2 unchanged (oldest: Read worker P1, seen 1 min)",
-        )
-        changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
-        CommanderDecisions(lead, (changed, second), (changed,), ()).send(comms, began + 92, hud)
-        assert tool_call(hook, server, comms, db, began + 92) == (
-            "BOARD: Read worker P1 (seen for 0 min)",
-            "BOARD: 1 unchanged (oldest: Review worker P2, seen 1 min)",
-        )
-        # A fresh packet does not reset delivery, and the answer window rings only once.
-        CommanderDecisions(lead, (changed, second), (), ()).send(comms, began + 93, hud)
-        alarm = began + AwaitingCommander.seconds
-        assert tool_call(hook, server, comms, db, alarm + 1) == (
-            "BOARD: Review worker P2 (seen for 5 min)",
-            "BOARD: 1 unchanged (oldest: Read worker P1, seen 3 min)",
-        )
-        assert tool_call(hook, server, comms, db, alarm + 2) == (
-            "BOARD: 2 unchanged (oldest: Review worker P2, seen 5 min)",
-        )
-        assert DeliveredBoardContent.count(db) == 2
-        CommanderDecisions(lead, (), (), ()).send(comms, alarm + 3, hud)
-        assert tool_call(hook, server, comms, db, alarm + 3) == ()
+    alarm = began + AwaitingCommander.seconds
+    first = BoardEntry("first", "Read worker P1", began, alarm)
+    second = BoardEntry("second", "Review worker P2", began, alarm)
+    with Binding.open(tmp_path / "delivery") as db:
+        entries = (first, second)
+        assert DeliveredBoardContent.deliver(db, entries, began + 90).lines == (
+            SessionBoard.presented(entries, (), began + 90).lines)
+        assert DeliveredBoardContent.deliver(db, entries, began + 91).lines == (
+            SessionBoard.presented((), entries, began + 91).lines)
+        first = replace(first, content="changed", since=began + 90, alarm_at=alarm + 90)
+        entries = (first, second)
+        assert DeliveredBoardContent.deliver(db, entries, began + 92).lines == (
+            SessionBoard.presented((first,), (second,), began + 92).lines)
+        assert DeliveredBoardContent.deliver(db, entries, alarm + 1).lines == (
+            SessionBoard.presented((second,), (first,), alarm + 1).lines)
+        assert DeliveredBoardContent.deliver(db, entries, alarm + 2).lines == (
+            SessionBoard.presented((), (second, first), alarm + 2).lines)
+        assert DeliveredBoardContent.count(db) == len(entries)
+        assert DeliveredBoardContent.deliver(db, (), alarm + 3).lines == ()
         assert DeliveredBoardContent.count(db) == 0
 
 

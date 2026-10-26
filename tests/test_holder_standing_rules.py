@@ -40,6 +40,7 @@ from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.held_orders import HeldOrders
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey
@@ -245,8 +246,10 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
 
 def unanswered(comms):
     frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    states = UnitState.current(comms, "lead", frame)
     return UnitAskUnanswered.broken(
-        comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
+        comms, "lead", observed=states, frame=frame,
+        history=CommanderHistory.read(comms, "lead", rules=(), observed=states))
 
 
 def blocked_holder(comms):
@@ -301,8 +304,10 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     comms.registry.declare(Thread("worker", frozenset({"comms"}), worker.worktree))
 
     frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    states = UnitState.current(comms, "lead", frame)
     broken = StandingRule.broken(
-        comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
+        comms, "lead", observed=states, frame=frame,
+        history=CommanderHistory.read(comms, "lead", rules=(), observed=states))
     gone = {rule.todo.id: rule.line() for rule in broken if isinstance(rule, HolderGone)}
     assert set(gone) == {"P1", "P2", "P3"}
     assert "order withdraw P1" in gone["P1"] and "order close P2" in gone["P2"]
@@ -748,7 +753,8 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_r
     states = UnitState.current(held_bus, "lead", frame)
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
     assert blocked not in StandingRule.broken(
-        held_bus, "lead", observed=states, frame=frame)
+        held_bus, "lead", observed=states, frame=frame,
+        history=CommanderHistory.read(held_bus, "lead", rules=(), observed=states))
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):

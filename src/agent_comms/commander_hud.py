@@ -27,7 +27,6 @@ from agent_comms.todos import OrderProgress, ProgressRead, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import UnitClock, UnitState
-from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms_hooks.board import BoardEntry
 
 if TYPE_CHECKING:
@@ -260,10 +259,9 @@ class CommanderHud(ToolResult):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
-        packet = CommanderUpdate.latest(comms, owner)
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, CodexUsage.read(), packet.board(comms, commander) if packet else ())
+                   forks, CodexUsage.read())
 
     def rows(self) -> tuple[HudRow, ...]:
         """Committed board order, actionable cards, live phases, then folded quiet units."""
@@ -308,16 +306,23 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
         raise FileNotFoundError(self.path)
 
     @classmethod
-    def replace_all(cls, root: Path, huds: tuple[CommanderHud, ...]) -> None:
-        """Write one frame per commander; a commander no longer beating loses its frame."""
-        written = set()
-        for hud in huds:
-            frame = cls(cls.path_in(root, lookup=str(hud.commander.require_recorded().lookup)))
-            frame.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            frame._publish_unlocked(hud)
-            written.add(frame.path)
+    def publish(cls, root: Path, hud: CommanderHud) -> Path:
+        """Publish this commander's checked frame before its packet wakes a reader."""
+        frame = cls(cls.path_in(root, lookup=str(hud.commander.require_recorded().lookup)))
+        frame.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        frame._publish_unlocked(hud)
+        return frame.path
+
+    @classmethod
+    def prune(cls, root: Path, written: set[Path]) -> None:
+        """Only a completed beat retires commanders it no longer observes."""
         for stale in cls.matching_in(root) - written:
             stale.unlink(missing_ok=True)
+
+    @classmethod
+    def replace_all(cls, root: Path, huds: tuple[CommanderHud, ...]) -> None:
+        """Write one frame per commander; a commander no longer beating loses its frame."""
+        cls.prune(root, {cls.publish(root, hud) for hud in huds})
 
     @classmethod
     def read_all(cls, root: Path) -> tuple[CommanderHud, ...]:
