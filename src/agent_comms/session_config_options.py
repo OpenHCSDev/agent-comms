@@ -17,13 +17,14 @@ from acp.schema import (ConfigOptionUpdate, SessionConfigOptionSelect,
 from .agent_backend import UseSettings
 from .bus import Bus
 from .child_process import join_retirement
-from .config_options import (CatalogConfigOption, CatalogSelection, ConfigOption,
+from .config_options import (CatalogConfigOption,
                              ConfigOptions, InvalidConfigChoice)
 from .coordinator import Coordination
 from .field_codec import FieldCodec
 from .launch_runtime import RestartEnvironment
 from .native_failures import NativePiUnavailable
 from .threads import ChosenModel, NextTurnConfiguration
+from .thread_model import CatalogSelection
 from .watched import FileSource
 
 if TYPE_CHECKING:
@@ -84,7 +85,7 @@ class SessionConfigOptions(ConfigOptions):
     async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
         """Present the shared catalogs through this session's ACP schema."""
         return [await self.describe(self.catalog_for(member), thread)
-                for member in ConfigOption.members_with(CatalogConfigOption)]
+                for member in CatalogConfigOption.members_with(CatalogConfigOption)]
 
     async def _publish(
         self, session_id: str,
@@ -143,7 +144,7 @@ class SessionConfigOptions(ConfigOptions):
             NativePiUnavailable("Native configuration did not report a thinking level"))
         await Coordination.run_worker(partial(
             self.comms.threads.set_thread_configuration, thread, NextTurnConfiguration(
-                model=ChosenModel(model), thinking_level=level,
+                model=ChosenModel(model.text), thinking_level=level,
             ),
         ))
 

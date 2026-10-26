@@ -74,7 +74,10 @@ from .thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
-from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
+from .thread_model import (
+    CatalogSelection, DeclaredModel, ModelSelection, NamedModel, ThreadModel,
+    UndeclaredModel, UnselectedModel,
+)
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
@@ -130,20 +133,18 @@ class KeptSetting(NextTurnSetting):
         return thread
 
 
-class ModelChoice(NextTurnSetting, SubclassUnion, affix="Model"):
+class ModelChoice(NextTurnSetting, SubclassUnion, ModelSelection, affix="Model"):
     pass
 
 
 @dataclass(frozen=True, slots=True)
-class ChosenModel(SingleFieldValue, ModelChoice):
-    model: DeclaredModel
-
+class ChosenModel(NamedModel, ModelChoice):
     def configured(self, thread: Thread) -> Thread:
-        return replace(thread, model=self.model)
+        return replace(thread, model=DeclaredModel(self.text))
 
 
 @dataclass(frozen=True, slots=True)
-class KeptModel(NullMember, KeptSetting, ModelChoice):
+class KeptModel(UnselectedModel, KeptSetting, ModelChoice):
     pass
 
 
@@ -257,7 +258,7 @@ class ThreadCatalog(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance):
+class Thread(ThreadProvenance, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
 
     parent: ThreadParent = field(default_factory=NoParent)

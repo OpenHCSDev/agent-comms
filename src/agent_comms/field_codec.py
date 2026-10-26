@@ -1022,7 +1022,7 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
 
     editor_annotation = str
 
-    def encode_editor(self, value: T) -> JsonValue:
+    def encode_editor(self, value: T) -> str:
         encoded = FieldCodec.encode(value, self.target)
         return json.dumps(encoded)
 
@@ -1388,7 +1388,7 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     @classmethod
     def argument_options(cls, argument: Argument) -> dict[str, object]:
         """The union root offers its members' choices; a member offers only its own."""
-        if cls._family_root is not cls:
+        if cls.family_root is not cls:
             return super().argument_options(argument)
         return ValueDecoder.for_members(cls.members_with(cls)).argument_options(argument)
 

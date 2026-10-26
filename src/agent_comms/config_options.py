@@ -18,8 +18,8 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_arguments import ConfiguredBinary, InheritedArguments
 from .native_pi import NativePiRpcLaunch
-from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
-from .thread_model import ThreadModel, UndeclaredModel
+from .pi_vocabulary import ThinkingChoice
+from .thread_model import CatalogSelection, ThreadModel
 from .pi_commands import (
     GetAvailableThinkingLevels,
     SetModel,
@@ -37,20 +37,6 @@ if TYPE_CHECKING:
 
 class InvalidConfigChoice(ValueError):
     """A configured value is not a member of its discovered catalog."""
-
-
-class CatalogSelection:
-    """Catalog inputs default to no model or thinking override; members declare their values."""
-
-    __slots__ = ()
-
-    @property
-    def model(self) -> ThreadModel:
-        return UndeclaredModel()
-
-    @property
-    def thinking_level(self) -> type[ThinkingChoice]:
-        return NoThinkingOverride
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,7 +265,7 @@ class ConfigOptions:
 
     async def validate(self, thread: CatalogSelection) -> None:
         """Require every configured value through its owning catalog."""
-        for member in ConfigOption.members_with(CatalogConfigOption):
+        for member in CatalogConfigOption.members_with(CatalogConfigOption):
             option = self.catalog_for(member)
             value = option.current_value(thread)
             if value is not None:

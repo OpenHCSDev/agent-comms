@@ -8,7 +8,8 @@ from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_result import CliResult, ResultShower
 from agent_comms.command import Command
 from agent_comms.comms import Comms
-from agent_comms.config_options import CatalogSelection, ConfigOptions
+from agent_comms.config_options import ConfigOptions
+from agent_comms.thread_model import CatalogSelection
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec, RecordMember, WireValue
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner

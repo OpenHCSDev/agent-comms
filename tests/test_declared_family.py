@@ -124,7 +124,7 @@ def test_child_roots_share_behavior_not_membership_and_survive_slots():
 
     left, right = declare(Left), declare(Right)
     assert Behavior.members_with(Behavior) == ()
-    assert Left._family_root is Left and Right._family_root is Right
+    assert Left.family_root is Left and Right.family_root is Right
     assert Left.members_with(Left) == (left,)
     assert Right.members_with(Right) == (right,)
     assert Left.member_named("value") is left and Right.member_named("value") is right

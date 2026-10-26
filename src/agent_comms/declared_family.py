@@ -41,7 +41,7 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
     ) -> FamilyMeta:
         family_bases = FamilyBases.of(bases)
         roots = {
-            base._family_root
+            base.family_root
             for base in family_bases
             if base is not DeclaredFamily
         }
@@ -84,10 +84,10 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
             mcs, name, bases, namespace, registry_config=config, **class_options
         )
         if is_root:
-            cls._family_root = cls
+            cls.family_root = cls
         else:
             for family_root in roots:
-                cls._family_root = family_root
+                cls.family_root = family_root
         return cast(FamilyMeta, cls)
 
     @staticmethod
@@ -135,18 +135,14 @@ class DeclaredOrder(ABC):
         raise ValueError(f"{member.__name__} has no {cls.__name__} rank base")
 
 
-class FamilyOwner(ABC):
+class FamilyMember(ABC):
     """The nominal family root and the name declared by each of its members."""
 
     declared_name: ClassVar[str]
-    _family_root: ClassVar[type[DeclaredFamily]]
-
-    @classmethod
-    def family_root(cls) -> type[DeclaredFamily]:
-        return cls._family_root
+    family_root: ClassVar[type[DeclaredFamily]]
 
 
-class DeclaredFamily(FamilyOwner, ABC, metaclass=FamilyMeta):
+class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
     Declare a root with ``affix=\"Scope\"`` (or omit it for unstripped names).
@@ -274,22 +270,12 @@ class DeclaredFamily(FamilyOwner, ABC, metaclass=FamilyMeta):
 
     @classmethod
     def declared_position(cls) -> int:
-        root = cls.family_root()
+        root = cls.family_root
         return root.members_with(root).index(cls)
 
 
-class ModuleMembers(FamilyOwner, MroDispatch):
+class ModuleMembers(FamilyMember):
     """A family whose declared names select exactly one Python module each."""
-
-    @handles(str)
-    @staticmethod
-    def named_module(name: str) -> str:
-        return name
-
-    @handles(object)
-    @staticmethod
-    def invalid_module_name(name: object) -> str:
-        raise UnknownFamilyMember(f"A declared module name must be text: {name!r}")
 
     @staticmethod
     def module_stem(name: str) -> str:
@@ -305,8 +291,13 @@ class ModuleMembers(FamilyOwner, MroDispatch):
 
     @classmethod
     def _prepare_member(cls, name: object) -> None:
-        selected: str = cls.handler_for(type(name))(name)
-        package = cls.family_root().__registry_config__.discovery_package
+        from .field_codec import FieldCodec, MalformedRecord
+
+        try:
+            selected = FieldCodec.decode(str, name)
+        except MalformedRecord as error:
+            raise UnknownFamilyMember(f"A declared module name must be text: {name!r}") from error
+        package = cls.family_root.__registry_config__.discovery_package
         package_module: ModuleType = import_module_preserving_root_logging(package)
         stem = cls.module_stem(selected)
         if stem not in {info.name for info in pkgutil.iter_modules(package_module.__path__)}:
@@ -321,7 +312,7 @@ class RegisteredFamily(DeclaredFamily):
         # Construction uses declarations already registered by FamilyMeta. Discovery
         # must not run here: it may itself be constructing another family member.
         if dict.get(cls.__registry__, cls.declared_name) is not cls:
-            raise TypeError(f"{cls.__name__} is not a registered {cls.family_root().__name__} member")
+            raise TypeError(f"{cls.__name__} is not a registered {cls.family_root.__name__} member")
         return super().__new__(cls)
 
 
