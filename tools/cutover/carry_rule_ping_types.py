@@ -26,7 +26,7 @@ class RulePingTypes(Carry):
 
     def carry(self, *, apply: bool) -> Carried:
         table = Message.table
-        column, = table._fields_named(("task",))
+        column = FieldCodec.field_plan(table, "task")
         names = {"kind": RulePing.declared_name, "rule": f"$.{FieldCodec.record_key(RulePing, 'rule')}"}
         rewritten = []
         changed = 0
