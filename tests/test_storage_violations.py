@@ -35,22 +35,25 @@ from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize(
-    "has_home,extra_count,expected",
+    "has_home,extra_count,cap_gib,expected",
     [
-        (False, 0, {StorageHomeMissing}),
-        (True, 3, {StorageOverQuota}),
-        (False, 3, {StorageHomeMissing, StorageOverQuota}),
-        (True, 1, set()),
-        (False, 1, {StorageHomeMissing}),
+        (False, 0, 3, {StorageHomeMissing}),
+        (True, 3, 0, {StorageOverQuota}),
+        (False, 3, 0, {StorageHomeMissing, StorageOverQuota}),
+        (True, 1, 3, set()),
+        (False, 1, 3, {StorageHomeMissing}),
+        (True, 3, 3, set()),
     ],
     ids=("home-missing-only", "quota-only", "quota-and-home-missing",
-         "declared-home-with-order-checkout", "gone-declared-home-with-order-checkout"),
+         "declared-home-with-order-checkout", "gone-declared-home-with-order-checkout",
+         "three-checkouts-under-byte-cap"),
 )
 def test_storage_family_reads_once_and_renders_each_broken_fact(
     tmp_path: Path,
     configured_repository,
     has_home: bool,
     extra_count: int,
+    cap_gib: float,
     expected: set[type[StorageViolation]],
 ) -> None:
     storage_case_goal_id = GoalId.mint()
@@ -93,7 +96,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "storage.json").write_text(
-        json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
+        json.dumps(FieldCodec.encode(StorageRule(checkout_base=base, scratch_cap_gib=cap_gib)))
     )
     comms = wire(root)
     lead = comms.registry.declare(Thread("lead", frozenset(), str(repository)))
@@ -153,7 +156,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     assert {type(violation) for violation in found} == expected
     assert len(reads) == len(held_reads) == 1
     assert all(violation.storage is reads[0] for violation in found)
-    assert reads[0].home == home
+    assert reads[0].home.checkout.path == home
     assert len(reads[0].extra_checkouts) == extra_count
     assert reads[0].missing_home is not has_home
     assert not (base / "worker").exists()
