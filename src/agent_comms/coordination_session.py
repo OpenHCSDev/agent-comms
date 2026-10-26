@@ -20,6 +20,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
+from agent_comms.private_path import FileRevision
 from agent_comms.store_files import (
     DEFAULT_STORE_CONTENTION, StoreContention,
 )
@@ -31,6 +32,51 @@ if TYPE_CHECKING:
 def system_clock() -> int:
     """The coordination session's default millisecond clock."""
     return time.time_ns() // 1_000_000
+
+
+class NativeCapture(ExitStack, StoredBusReader):
+    """Copy a native decision's registry cut, then release it before decoding."""
+
+    def __init__(self, bus: MessageBus) -> None:
+        super().__init__()
+        self.bus = bus
+        self.measurements = PublicationMeasurements()
+
+    @property
+    def path(self) -> Path:
+        return self.bus.bus.path
+
+    def __enter__(self) -> Self:
+        try:
+            self.activity = self.activity_clocks()
+            store = self.bus._registry.store
+            with self.measurements.operation("file_exclusion"), self.read_guard(store.path):
+                self.privacy = store.private_guard_unlocked()
+                source = store._capture_unlocked()
+                self.registry_revision = source.revision, FileRevision.capture(store.guard_path)
+            with self.measurements.operation("registry_snapshot"):
+                self.registry = store._decode_snapshot(source)
+            return self
+        except BaseException:
+            self.close()
+            raise
+
+
+class NativeBoundary(NativeCapture):
+    """A detached decision copy whose writes verify the captured registry revision."""
+
+    @contextmanager
+    def current(self) -> Iterator[None]:
+        """Exclude registry writers for one write made from this decision's copy.
+
+        A registry write after the copy refuses the write, naming the change.
+        """
+        store = self.bus._registry.store
+        with self.read_guard(store.path):
+            if store.revision_unlocked() != self.registry_revision:
+                raise StaleFence(
+                    "native registry revision changed after this decision read it")
+            yield
 
 
 class CoordinationSession(CoordinationStore):
@@ -46,6 +92,17 @@ class CoordinationSession(CoordinationStore):
         if type(now) is not int or now < 0:
             raise ValueError("coordinator clock must return a nonnegative integer millisecond")
         return max(now, floor)
+
+    def capture(self, bus: MessageBus) -> NativeCapture:
+        """Return a detached read, never a publication permission."""
+        return self._boundary(bus, NativeCapture)
+
+    def _boundary[Boundary: NativeCapture](
+        self, bus: MessageBus, boundary_type: type[Boundary],
+    ) -> Boundary:
+        if bus.bus.path.parent.resolve() != self.path.parent.resolve():
+            raise IntegrityViolationError("native boundary belongs to another coordinator")
+        return boundary_type(bus)
 
     @classmethod
     def _begin_transaction(cls, connection: sqlite3.Connection) -> None:
@@ -82,50 +139,6 @@ class CoordinationSession(CoordinationStore):
                     db.execute("ROLLBACK")
 
 
-class NativeBoundary(ExitStack, StoredBusReader):
-    """One native decision's bus cut and registry revision.
-
-    The registry guard is held only to copy the revision, never for the
-    decision's lifetime: a write made from the copy runs under ``current``.
-    """
-
-    def __init__(self, bus: MessageBus) -> None:
-        super().__init__()
-        self.bus = bus
-        self.measurements = PublicationMeasurements()
-
-    @property
-    def path(self) -> Path:
-        return self.bus.bus.path
-
-    def __enter__(self) -> Self:
-        try:
-            self.activity = self.activity_clocks()
-            store = self.bus._registry.store
-            with (self.measurements.operation("file_exclusion"), self.read_guard(store.path),
-                  self.measurements.operation("registry_snapshot")):
-                self.privacy = store.private_guard_unlocked()
-                self.registry = store.read_snapshot_unlocked()
-                self.registry_revision = store.revision_unlocked()
-            return self
-        except BaseException:
-            self.close()
-            raise
-
-    @contextmanager
-    def current(self) -> Iterator[None]:
-        """Exclude registry writers for one write made from this decision's copy.
-
-        A registry write after the copy refuses the write, naming the change.
-        """
-        store = self.bus._registry.store
-        with self.read_guard(store.path):
-            if store.revision_unlocked() != self.registry_revision:
-                raise StaleFence(
-                    "native registry revision changed after this decision read it")
-            yield
-
-
 class NativeCoordinationSession(CoordinationSession):
     """Native sessions declare their bus boundary, independent of file existence."""
 
@@ -141,9 +154,7 @@ class NativeCoordinationSession(CoordinationSession):
         )
 
     def boundary(self, bus: MessageBus) -> NativeBoundary:
-        if bus.bus.path.parent.resolve() != self.path.parent.resolve():
-            raise IntegrityViolationError("native boundary belongs to another coordinator")
-        return NativeBoundary(bus)
+        return self._boundary(bus, NativeBoundary)
 
     @contextmanager
     def settlement(
