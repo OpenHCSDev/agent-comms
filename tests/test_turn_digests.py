@@ -13,7 +13,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.shared import Binding, Options, Serve, Watch
+from agent_comms.cli_bridges.shared import Binding, Options, Serve, StoredBinding, Watch
 from agent_comms.comms import wire
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.context_store import ContextEntry
@@ -202,13 +202,15 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     state = tmp_path / 'state'
     store = Binding.open(state)
     db = store.__enter__()
-    binding = Binding(str(comms.root), 'claude', 'session', Binding.bus_head(str(comms.root)))
+    binding = Binding(root=str(comms.root), owner=comms.registry.require('claude').incarnation,
+                      thread='session', start=Binding.bus_head(str(comms.root)))
     with pytest.raises(ValueError):
         Watch().transcript_source()
     operation = Serve(owner=ProcessIdentity.capture(os.getpid()), transcript=path)
-    bridge = ClaudeBridge(Options(operation, binding, state, state.parent), binding, db)
+    bridge = ClaudeBridge(Options(operation, StoredBinding(), state, state.parent), binding.address(), db)
 
     async def publish():
+        await operation.prepare(bridge)
         task = asyncio.create_task(bridge.publish_transcript())
         source = comms.transcripts.external('claude')
         try:

@@ -326,8 +326,6 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
         with self.guarded_write():
-            # Refuse before an editor can prepare participants or journal a registration.
-            self.require_maintenance_open()
             original = self.read_revision_unlocked()
             original.document.purpose.require_write()
             yield RegistryEdit(self, original.document.copy(), original)
@@ -353,7 +351,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         for revision in FileRevision.capture(self.path).revisions():
             self.cache.entry = RegistryRevision(revision, document.copy(), raw)
 
-    def _replace_unlocked(self, text: str) -> None:
+    def _write_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer.
         self.cache.entry = UncachedRegistry()
         self.private_guard_unlocked().write(self.path, text)

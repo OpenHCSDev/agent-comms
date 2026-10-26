@@ -177,8 +177,7 @@ class DeliveredOutcome(FilteredOutcome):
     async def record(cls, bridge: CliBridge, delivery: DeliveryRow) -> None:
         await bridge.comms.bus.when_open(partial(
             bridge.comms.bus.mark_delivered, bridge.binding.bus, (delivery.message.reference,)))
-        with bridge.db:
-            delivery.upsert(bridge.db)
+        await super().record(bridge, delivery)
 
 
 class EmittedOutcome(UnconfirmedOutcome):

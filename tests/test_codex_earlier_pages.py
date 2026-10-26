@@ -7,15 +7,15 @@ import pytest
 from aiohttp import web
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
-from agent_comms.cli_bridges.shared import Binding, Watch
-from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.cli_protocol import EarlierItems, WATCH_LINE
+from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
+from agent_comms.cli_protocol import WATCH_LINE, EarlierItems
 from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
+from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
+from conftest import installed_comms
 
 
 def entry(name, timestamp):
@@ -65,11 +65,13 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
     watching = asyncio.create_task(transcript.watch_requests(
         lambda row: frames.put_nowait(EarlierItems.from_row(row))))
     try:
-        binding = Binding(str(comms.root), 'cli', 'thread', Binding.bus_head(str(comms.root)))
+        binding = Binding(root=str(comms.root), owner=comms.registry.require('cli').incarnation,
+                          thread='thread', start=Binding.bus_head(str(comms.root)))
         with Binding.open(tmp_path / 'bridge') as db:
             options = CodexOptions(
-                Watch(), binding, tmp_path / 'bridge', tmp_path, str(socket_path))
-            bridge = CodexBridge(options, binding, db)
+                Watch(), StoredBinding(), tmp_path / 'bridge', tmp_path, str(socket_path))
+            bridge = CodexBridge(options, binding.address(), db)
+            await options.operation.prepare(bridge)
             output = ThreadOutput(transcript, comms.agents)
             output.publish_batch([update async for update in bridge.history()])
             assert seen == [None]
