@@ -82,7 +82,7 @@ class CodingToolOwner(ABC):
             owner = self.comms.registry.require(self.owner_name)
             resource = call.allowed_claim()
             if resource is not None:
-                canonical = resource.normalized(Path(owner.worktree))
+                canonical = resource.normalized(owner.worktree.path)
                 self.claims[canonical] = self.claim_resource(
                     store, turn, resource, FieldCodec.decode(ClaimId, slot))
 

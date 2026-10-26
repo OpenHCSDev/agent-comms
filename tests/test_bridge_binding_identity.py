@@ -1,3 +1,5 @@
+
+from agent_comms.repo import Checkout
 """An enrolled address becomes a registered reader without changing its journal."""
 from dataclasses import replace
 
@@ -24,7 +26,7 @@ from agent_comms.threads import Thread
     (Watch(), frozenset()),
 ])
 async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path, operation, tags):
-    comms.registry.declare(Thread('commander', frozenset({'comms'}), str(tmp_path)))
+    comms.registry.declare(Thread('commander', frozenset({'comms'}), Checkout(tmp_path)))
     state = tmp_path / 'journal'
     address = BindingAddress(root=str(comms.root), bus='new-reader', thread='session',
                              start=Binding.bus_head(str(comms.root)))
@@ -57,7 +59,7 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         # A reused address is not the old reader, even in the same bus root.
         comms.registry.unregister('renamed-reader')
         comms.registry.remove('renamed-reader')
-        comms.registry.declare(Thread('renamed-reader', frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread('renamed-reader', frozenset(), Checkout(tmp_path)))
         replacement = replace(address, bus='renamed-reader', thread='other-session')
         bridge = ClaudeBridge(bridge.options, replacement, db)
         with pytest.raises(ValueError, match='another Core/CLI conversation'):

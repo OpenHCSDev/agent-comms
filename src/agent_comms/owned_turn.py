@@ -241,11 +241,8 @@ class OwnedTurn:
         return self.goal_permit.prepare_launch(permits, self.runner.comms.goals.open_goal_store())
 
     def prepare_prompt(self, batch: InputBatch):
-        self.worktree = (
-            self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
-        )
         self.env_extra = self.runner.inputs.state(self.session_id).owned().configuration.native_environment(
-            self.thread, self.runner.comms.registry.snapshot(), self.worktree
+            self.thread, self.runner.comms.registry.snapshot()
         )
         from .turn_context import (
             AutomaticTitleSegment,
@@ -383,7 +380,7 @@ class OwnedTurn:
 
         delivery = TurnDelivery(
             tool_mode=CodingToolMode(sender),
-            worktree=self.worktree,
+            worktree=str(self.thread.project_path),
             environment=self.env_extra,
             inbox=self.following.inbox,
             finish_event=self.finish_event,

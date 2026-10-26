@@ -1,5 +1,6 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
+from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 import sqlite3
@@ -90,7 +91,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     message = comms.messaging.send_user_message(CommandTarget.named('#team'), 'Independent saved original',
-                                               worktree=str(tmp_path))
+                                               worktree=Checkout(tmp_path))
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)
     wire_before = comms.bus.bus.revision()
@@ -244,7 +245,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
     comms.registry.unregister("renamed")
     comms.registry.remove("renamed")
-    comms.registry.declare(Thread('renamed', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('renamed', frozenset(), Checkout(tmp_path)))
     with pytest.raises(StaleRevision):
         comms.transcripts.bind_page_read("renamed", identity)
 

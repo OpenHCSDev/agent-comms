@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import os
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from functools import cached_property
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import Refused
@@ -48,8 +49,16 @@ class InvalidConfigChoice(ValueError):
 @dataclass(frozen=True, slots=True)
 class RunningSelection(CatalogSelection):
     """What a thread runs: its stored choice, otherwise the model its runtime reports."""
+    thread: Thread
     model: ThreadModel = field()
-    thinking_level: type[ThinkingChoice] = field()
+
+    @property
+    def thinking_level(self) -> type[ThinkingChoice]:
+        return self.thread.thinking_level
+
+    @property
+    def project_path(self) -> Path:
+        return self.thread.project_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +95,7 @@ class CatalogConfigOption(ConfigOption):
 
     def __init__(self, owner: ConfigOptions):
         self.owner = owner
-        self.catalogs: dict[tuple[str, ...], asyncio.Task[list[CatalogChoice]]] = {}
+        self.catalogs: dict[tuple[Path, tuple[str, ...]], asyncio.Task[list[CatalogChoice]]] = {}
         self.waiters: Counter[asyncio.Task[list[CatalogChoice]]] = Counter()
         self.auth: tuple[int, int] | None = None
         self.lock = asyncio.Lock()
@@ -95,8 +104,8 @@ class CatalogConfigOption(ConfigOption):
     def current_auth(self) -> bool:
         return self.auth == self.owner.launch.configuration.auth_revision()
 
-    def cache_key(self, thread: CatalogSelection) -> tuple[str, ...]:
-        return thread.model.native(self.owner.agent_args).argv
+    def cache_key(self, thread: CatalogSelection) -> tuple[Path, tuple[str, ...]]:
+        return (thread.project_path, thread.model.native(self.owner.agent_args).argv)
 
     async def choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
         async with self.lock:
@@ -167,11 +176,11 @@ class ModelConfigOption(CatalogConfigOption):
     def current_value(self, thread: CatalogSelection) -> str | None:
         return thread.model.otherwise(None)
 
-    def cache_key(self, thread: CatalogSelection) -> tuple[str, ...]:
-        return self.owner.agent_args.argv
+    def cache_key(self, thread: CatalogSelection) -> tuple[Path, tuple[str, ...]]:
+        return (thread.project_path, self.owner.agent_args.argv)
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
-        return await self.owner.models.choices(self.owner)
+        return await self.owner.models.choices(self.owner, thread.project_path)
 
     async def apply(
         self, owner: SessionConfigOptions, thread: Thread, value: str
@@ -196,6 +205,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
             thread.model.native(self.owner.agent_args).argv,
             self.owner.route.root,
             package=self.owner.package, configuration=self.owner.launch.configuration,
+            worktree=thread.project_path,
         )
         levels = [member.declared_name for member in data.levels]
         return [CatalogChoice(value=level, name=level.title()) for level in levels]
@@ -219,28 +229,28 @@ class ModelCatalog(DeclaredFamily, affix="ModelCatalog"):
                        if value.strip())
         return SpecifiedModels(values) if values else DiscoveredModels()
 
-    async def choices(self, owner: ConfigOptions) -> list[CatalogChoice]:
+    async def choices(self, owner: ConfigOptions, worktree: Path) -> list[CatalogChoice]:
         return [CatalogChoice(value=value, name=value)
-                for value in dict.fromkeys(await self.qualified(owner))]
+                for value in dict.fromkeys(await self.qualified(owner, worktree))]
 
     @abstractmethod
-    async def qualified(self, owner: ConfigOptions) -> tuple[str, ...]: ...
+    async def qualified(self, owner: ConfigOptions, worktree: Path) -> tuple[str, ...]: ...
 
 
 @dataclass(frozen=True)
 class SpecifiedModels(ModelCatalog):
     values: tuple[str, ...]
 
-    async def qualified(self, owner: ConfigOptions) -> tuple[str, ...]:
+    async def qualified(self, owner: ConfigOptions, worktree: Path) -> tuple[str, ...]:
         return self.values
 
 
 @dataclass(frozen=True)
 class DiscoveredModels(ModelCatalog):
-    async def qualified(self, owner: ConfigOptions) -> tuple[str, ...]:
+    async def qualified(self, owner: ConfigOptions, worktree: Path) -> tuple[str, ...]:
         data = await GetAvailableModels().discover(
             owner.launch.binary, owner.agent_args.argv, owner.route.root, package=owner.package,
-            configuration=owner.launch.configuration,
+            configuration=owner.launch.configuration, worktree=worktree,
         )
         return tuple(text for model in data.models if model.provider and model.id
                      for text in model.thread_model().texts())
@@ -283,13 +293,13 @@ class ConfigOptions:
                 await publish(str(session_id))
 
     def native_environment(
-        self, thread: Thread, snapshot: RegistrySnapshot, worktree: str,
+        self, thread: Thread, snapshot: RegistrySnapshot,
     ) -> dict[str, str]:
         """Project this launch's configuration with the exact registered owner binding."""
         return {
             **ThreadLaunch.strip(dict(self.launch.environment)),
             **self.launch.configuration.encode(),
-            **thread.native_environment(self.route.root, snapshot, worktree),
+            **thread.native_environment(self.route.root, snapshot),
         }
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
+from .repo import Checkout
 from .thread_execution import ExternalThreadExecution
 from .threads import Thread
 
@@ -22,7 +23,7 @@ class ServiceSender:
                 Thread(
                     cls.sender,
                     frozenset(),
-                    str(registry.store.path.parent),
+                    Checkout(registry.store.path.parent),
                     execution=ExternalThreadExecution,
                 )
             )

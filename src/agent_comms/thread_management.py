@@ -20,6 +20,7 @@ from .native_entries import ImportedSessionWriter
 from .native_session_files import NativeSessionFiles
 from .registration import Registration
 from .relationships import RelationshipStore
+from .repo import Checkout, LaunchCheckout
 from .thread_execution import NativeThreadExecution
 from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state
@@ -146,7 +147,7 @@ class NewThreadSpec:
     """Prepare the session, then register the thread under its registry lock."""
 
     name: str
-    project: str
+    project: LaunchCheckout
     model: ThreadModel
     thinking_level: ThinkingLevelField
     task: LaunchInput = field(default_factory=LaunchInput)
@@ -156,14 +157,14 @@ class NewThreadSpec:
     def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
-    def declaration(self, project: str, registry: Registration) -> Thread:
+    def declaration(self, registry: Registration) -> Thread:
         return Thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
-                      worktree=project, model=self.model, thinking_level=self.thinking_level)
+                      worktree=self.project, model=self.model, thinking_level=self.thinking_level)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
-        project = Path(self.project).expanduser().resolve(strict=True)
-        thread = self.declaration(str(project), threads.registry)
+        project = self.project.path
+        thread = self.declaration(threads.registry)
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
         with threads.registry.store.guarded_write():
@@ -185,7 +186,7 @@ class ForkSpec(NewThreadSpec):
 
     def child(self, parent: Thread, runtime: RuntimeLocation, threads: ThreadManagement) -> Thread:
         saved = RegistrySessionLocation.from_path(runtime.read_key, threads.root)
-        return replace(self.declaration(self.project, threads.registry),
+        return replace(self.declaration(threads.registry),
                        parent=ForkedParent(parent.name), tags=self.tags.for_child(parent.tags),
                        backend=parent.backend, session_file=saved)
 
@@ -252,7 +253,7 @@ class ThreadManagement:
         thread = model.configured(Thread(
             name,
             tags,
-            str(project),
+            Checkout(project),
             session_file=RegistrySessionLocation.from_path(session_path, self.root),
             title=snapshot.title,
         ))
@@ -285,7 +286,7 @@ class ThreadManagement:
         with self.registry.store.guarded_write():
             current = self.registry.snapshot().require(name)
             current.execution.require_external()
-            self._write_imported_session(session_path, snapshot, Path(current.worktree))
+            self._write_imported_session(session_path, snapshot, current.worktree.path)
             rehomed = replace(
                 current, execution=NativeThreadExecution, process_identity=NO_PROCESS,
                 session_file=RegistrySessionLocation.from_path(session_path, self.root),
@@ -311,7 +312,7 @@ class ThreadManagement:
         wanted: str,
         *,
         tags: frozenset[str],
-        worktree: str,
+        worktree: Checkout,
         process: ProcessState = NO_PROCESS,
         model: ThreadModel = UndeclaredModel(),
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
@@ -350,7 +351,7 @@ class ThreadManagement:
             thread = self.registry.require(name)
             target = Path(path).expanduser()
             if not target.is_absolute():
-                target = Path(thread.worktree) / target
+                target = thread.worktree.path / target
             try:
                 target = target.resolve(strict=True)
             except (OSError, RuntimeError) as error:
@@ -362,7 +363,7 @@ class ThreadManagement:
             if current == previous:
                 return ProjectChangeResult(thread.name, previous, current, False)
             self.registry.register(
-                thread.moved_to_project(current), self.registry.status(thread.name),
+                thread.moved_to_project(Checkout(target)), self.registry.status(thread.name),
             )
             return ProjectChangeResult(thread.name, previous, current, True)
 
@@ -440,8 +441,8 @@ class ThreadManagement:
     def running_selection(self, name: str) -> RunningSelection:
         thread = self.registry.require(name)
         return RunningSelection(
+            thread,
             thread.model.applied(self.agents.agent_info_of(thread.name).model),
-            thread.thinking_level,
         )
 
     def resolve_thread_model(

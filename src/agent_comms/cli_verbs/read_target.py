@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
+
 from agent_comms.channel_targets import SurroundingChannel
 
 from agent_comms.catalog_document import CatalogAccess
@@ -17,8 +19,6 @@ from dataclasses import dataclass
 from dataclasses import replace
 from typing import Annotated
 from typing import Self
-import dataclasses
-import os
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -28,18 +28,18 @@ class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-targ
         str, TargetBound(), Argument(flags=("--target",))
     ]
     worktree: Annotated[
-        str, TargetBound(), Argument(flags=("--worktree",))
-    ] = dataclasses.field(default_factory=os.getcwd)
+        Checkout, TargetBound(), Argument(flags=("--worktree",))
+    ]
 
     @classmethod
     def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
-        return (cls(target=thread.name),)
+        return (cls(target=thread.name, worktree=thread.worktree),)
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
-        return (cls(target=resolved.channel.name),)
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
+        return (cls(target=resolved.channel.name, worktree=project),)
 
-    def for_editor(self, comms: Comms, target: str, project: str) -> Self:
+    def for_editor(self, comms: Comms, target: str, project: Checkout) -> Self:
         return replace(self, worktree=project)
 
     def apply(self, ctx: Comms) -> TargetReadResult:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_comms.repo import Checkout
+
 from typing import Self
 
 from agent_comms.catalog_document import CatalogAccess
@@ -16,7 +18,7 @@ class DeleteViewCliCommand(NamedCliCommand, declared_name="delete-view"):
     help = "Delete saved view"
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return resolved.channel.delete_view_bindings(cls)
 
     def confirmation(self) -> str:

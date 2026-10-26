@@ -1,4 +1,5 @@
 
+from agent_comms.repo import Checkout
 import asyncio
 import sys
 from dataclasses import replace
@@ -31,7 +32,7 @@ async def test_real_stopped_owner_with_large_checkout_starts_through_shared_agen
     comms.registry.storage_rule = replace(
         comms.registry.storage_rule, volume=tmp_path, floor_gib=0, memory_gib=0)
     declared = RegistrySessionLocation.from_path(str(source), comms.root)
-    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=declared))
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=declared))
     comms.registry.unregister("worker")
     try:
         result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"}, caller=NoThreadCaller())
@@ -51,7 +52,7 @@ def test_start_and_allocating_tools_keep_the_real_free_space_floor(tmp_path, mon
     assert rule.floor_gib == 10
     monkeypatch.setattr(StorageRule, "free_gib", lambda self: 9.9)
     comms = wire(tmp_path / "wire")
-    thread = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    thread = comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
     with pytest.raises(StorageDenied, match="10 GiB free"):
         with rule.room_for_start(thread, comms.root):
             pytest.fail("A stopped owner must not start below the volume floor")

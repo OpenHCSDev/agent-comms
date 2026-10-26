@@ -55,6 +55,7 @@ from .thread_identity import AcpThreadRole, ClaimedIdentity, OwnerIdentity
 from .thread_model import ThreadModel
 from .thread_status import ActiveThreadPresence
 from .thread_text import NoThreadText, ThreadText
+from .repo import Checkout
 from .threads import Thread
 from .transcript_updates import TranscriptReplay
 
@@ -70,7 +71,7 @@ class PublishedSession:
 
     name: str
     title: ThreadText
-    worktree: str
+    worktree: Checkout
 
     @classmethod
     def of(cls, thread: Thread) -> PublishedSession:
@@ -166,12 +167,14 @@ class SessionLifecycle:
                 }
             )
 
+    @boundary_decoder
     def declare_thread(self, cwd: str) -> Thread:
-        """Register the participant before choosing which process executes it."""
+        """Decode the ACP directory and register before choosing its executor."""
+        checkout = FieldCodec.decode(Checkout, cwd)
         thread = self.comms.threads.claim_thread(
-            Path(cwd).name,
+            checkout.path.name,
             tags=frozenset({"acp"}),
-            worktree=cwd,
+            worktree=checkout,
             model=ThreadModel.selected_by(self.effects.inputs.configuration.agent_args),
             thinking_level=self.effects.inputs.configuration.agent_args.thinking,
             auto_title_pending=True,
@@ -184,7 +187,7 @@ class SessionLifecycle:
         """An owning ACP lifecycle acquires its calling process after publication."""
         return self.comms.owners.acquire_thread(thread.name)
 
-    def validated_thread(self, cwd: str, session_id: str) -> Thread:
+    def validated_thread(self, cwd: Checkout, session_id: str) -> Thread:
         thread = self.comms.registry.require(session_id)
         thread.execution.require_native()
         if not thread.contains_worktree(cwd, self.comms.registry.storage_rule):
@@ -227,7 +230,7 @@ class SessionLifecycle:
     async def load_session(self, request: LoadSessionRequest) -> LoadSessionResponse:
         self.reject_foreign_mcp(request)
         session_id = request.session_id
-        thread = await self._acquire_loaded(request.cwd, request.session_id)
+        thread = await self._acquire_loaded(FieldCodec.decode(Checkout, request.cwd), request.session_id)
         if not thread.process_identity.runs_here():
             return await self.attach_owner(thread, session_id)
         await self._bind_loaded(thread, session_id)
@@ -298,7 +301,7 @@ class SessionLifecycle:
             else:
                 state.retired.set_result(None)
 
-    async def _acquire_loaded(self, cwd: str, session_id: str) -> Thread:
+    async def _acquire_loaded(self, cwd: Checkout, session_id: str) -> Thread:
         await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
@@ -501,7 +504,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         self.reject_foreign_mcp(request)
         session_id = request.session_id
         thread = await Coordination.run_worker(
-            partial(self.validated_thread, request.cwd, request.session_id)
+            partial(self.validated_thread, FieldCodec.decode(Checkout, request.cwd), request.session_id)
         )
         return await self._attach_requested_session(
             thread,

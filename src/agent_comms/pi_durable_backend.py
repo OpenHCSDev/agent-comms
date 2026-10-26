@@ -228,10 +228,10 @@ class PiDurableBackend(AgentBackend, Compacts):
                 with ExitStack() as resources:
                     lock = resources.enter_context(thread.writable_runtime.writer_claim.claimed())
                     child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
-                        cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
+                        cwd=thread.worktree.path, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
                 async with child.failures():
                     model = thread.model.set_model(SetModel)
-                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
+                    await child.request(Open(str(path), str(thread.worktree), model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
                     await child.request(Resume())
                 self.child = child
             return self.child

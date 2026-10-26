@@ -9,6 +9,7 @@ import sys
 from contextlib import closing, contextmanager
 from dataclasses import replace
 from pathlib import Path
+from agent_comms.repo import Checkout
 
 import pytest
 
@@ -651,7 +652,7 @@ def test_human_refusal_rolls_back_the_header(tmp_path, bus):
             f'CREATE TRIGGER refuse_message BEFORE INSERT ON "{Message.table.declared_name}" '
             "BEGIN SELECT RAISE(ABORT, 'refused'); END"
         )
-    origin = HumanOrigin("author", 1, str(tmp_path))
+    origin = HumanOrigin("author", 1, Checkout(tmp_path))
     with pytest.raises(HumanSendRefusedError, match="was not sent") as failed:
         origin.append(
             bus,
@@ -668,7 +669,7 @@ def test_human_refusal_rolls_back_the_header(tmp_path, bus):
 def test_notification_failure_carries_the_committed_message(tmp_path, bus):
     marker, = bus.source_paths(bus.path.parent)
     marker.mkdir(parents=True)
-    origin = HumanOrigin("author", 1, str(tmp_path))
+    origin = HumanOrigin("author", 1, Checkout(tmp_path))
     with pytest.raises(CommittedMessageError) as failed:
         origin.append(
             bus,
@@ -694,7 +695,7 @@ def test_human_programming_failure_propagates_after_rollback(tmp_path, bus):
         raise failure
 
     with pytest.raises(RuntimeError) as failed:
-        HumanOrigin("author", 1, str(tmp_path)).append(bus, build)
+        HumanOrigin("author", 1, Checkout(tmp_path)).append(bus, build)
     assert failed.value is failure
     with closing(sqlite3.connect(bus.path)) as db:
         assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))

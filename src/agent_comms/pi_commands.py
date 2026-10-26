@@ -304,10 +304,10 @@ class CatalogQuery(NativeQuery):
 
     async def discover(
         self, agent_bin: str, arguments: Sequence[str], root: Path,
-        *, package: VerifiedNativePackage, configuration: RestartEnvironment,
+        *, package: VerifiedNativePackage, configuration: RestartEnvironment, worktree: Path,
     ) -> PiResponseData:
         async with self.catalog(
-            agent_bin, arguments, root=root, worktree=root,
+            agent_bin, arguments, root=root, worktree=worktree,
             package=package, configuration=configuration,
         ) as child:
             response = await self.exchange(child)

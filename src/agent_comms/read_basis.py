@@ -6,6 +6,7 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 """
 
 from __future__ import annotations
+from agent_comms.repo import Checkout
 
 from .bus_tables import AwaitingAnswerSource
 
@@ -20,14 +21,14 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self, TextIO
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
 
 from .activity_clocks import ActivityClocks, ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from .field_codec import FieldCodec, NullMember, PathText, SingleFieldValue, SubclassUnion
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
@@ -154,7 +155,7 @@ class ChannelDisplayIdentity(DisplayIdentity):
 class DMDisplayIdentity(DisplayIdentity):
     root_identity: tuple[int, int]
     bus_identity: RecordedBusIdentity
-    worktree: str
+    project_path: Annotated[Path, PathText]
     requested_peer: str
     peer: ThreadIncarnation
     scope: DMDisplayScope
@@ -172,7 +173,7 @@ class SelectedDisplay(ABC):
     def identity(self) -> DisplayIdentity | NoDisplaySelection: ...
 
     @abstractmethod
-    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: str) -> None: ...
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None: ...
 
     def select(self, page: MessagePage, sequences: Collection[int]) -> MessagePage:
         selected = frozenset(sequences)
@@ -193,7 +194,7 @@ class NoDisplaySelection(SelectedDisplay):
     def identity(self):
         return self
 
-    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: str) -> None:
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         raise DMPaintedBoundChanged()
 
     def select_evidence(self, selected: frozenset[int]) -> Self:
@@ -208,7 +209,7 @@ class ChannelSelection(SelectedDisplay):
     def identity(self):
         return self.scope.identity(self.history_revision)
 
-    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: str) -> None:
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         from .presentation import ReadThrough
 
         views.presentation.mark_channel_read(
@@ -229,10 +230,10 @@ class DMSelection(SelectedDisplay):
     def identity(self):
         return self.basis.identity(self.history_revision)
 
-    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: str) -> None:
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         self.basis.acknowledge(
             views.bus, views.registry, views.root, self.basis.requested_peer,
-            worktree=worktree, through=page.newest_seq,
+            viewer=views.messaging.user_identity(worktree), through=page.newest_seq,
         )
 
     def select_evidence(self, selected: frozenset[int]) -> Self:
@@ -249,7 +250,7 @@ class HistoricalSelection(SelectedDisplay):
         return DisplayIdentity(viewer=self.displayed.displayed.viewer_identity,
                                history_revision=self.history_revision)
 
-    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: str) -> None:
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         self.displayed.acknowledge(views.bus.history, views.registry)
 
     def select_evidence(self, selected: frozenset[int]) -> Self:
@@ -680,7 +681,7 @@ class DMDisplayBasis:
 
     root: str
     root_identity: tuple[int, int]
-    worktree: str
+    project_path: Annotated[Path, PathText]
     requested_peer: str
     viewer_identity: ThreadIncarnation
     viewer_names: frozenset[str]
@@ -696,10 +697,9 @@ class DMDisplayBasis:
         bus: MessageBus,
         registry: Registration,
         root: Path,
-        viewer: str,
+        viewer: Thread,
         peer: ThreadTarget,
         *,
-        worktree: str,
         bounds: PageBounds,
     ) -> MessagePage:
         """Fetch a bounded human DM page and its immutable identity/read basis.
@@ -708,7 +708,7 @@ class DMDisplayBasis:
         that the corresponding inbound tail was contiguous and visibly painted.
         """
         snapshot = registry.snapshot()
-        viewer_name = snapshot.canonical_name(viewer)
+        viewer_name = snapshot.canonical_name(viewer.name)
         peer_name = peer.selected_name(snapshot)
         scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
         viewer_thread = snapshot.threads[viewer_name]
@@ -723,7 +723,7 @@ class DMDisplayBasis:
         basis = cls(
             root=str(root.resolve()),
             root_identity=(root_info.st_dev, root_info.st_ino),
-            worktree=str(Path(worktree).resolve()),
+            project_path=viewer_thread.project_path,
             requested_peer=peer.name,
             viewer_identity=viewer_thread.incarnation,
             viewer_names=viewer_names,
@@ -742,7 +742,7 @@ class DMDisplayBasis:
     def identity(self, history_revision: FileObservation) -> DMDisplayIdentity:
         return DMDisplayIdentity(
             root_identity=self.root_identity, bus_identity=self.bus_identity,
-            worktree=self.worktree, requested_peer=self.requested_peer,
+            project_path=self.project_path, requested_peer=self.requested_peer,
             viewer=self.viewer_identity, peer=self.peer_identity,
             scope=DMDisplayScope(self.viewer_names, self.peer_names),
             history_revision=history_revision,
@@ -763,7 +763,7 @@ class DMDisplayBasis:
         root: Path,
         peer: str,
         *,
-        worktree: str,
+        viewer: Thread,
         through: int,
     ) -> None:
         """CAS one painted human DM tail, never a global/executor ACK.
@@ -778,7 +778,7 @@ class DMDisplayBasis:
         with registry.store.guarded_write():
             snapshot = registry.store.read_snapshot_unlocked()
             self.validate_for(
-                root, worktree, peer, through, snapshot,
+                root, snapshot.require(viewer.name), peer, through, snapshot,
                 RecordedBusIdentity.capture(bus.bus.path), user,
             )
             self.displayed.tail.mark(bus.reads, self.displayed, through)
@@ -786,16 +786,16 @@ class DMDisplayBasis:
     def validate_for(
         self,
         root: Path,
-        worktree: str,
+        viewer: Thread,
         peer: str,
         through: int,
         snapshot: RegistrySnapshot,
         bus_identity: RecordedBusIdentity,
         user: UserThreadLookup[Thread],
     ) -> None:
-        if (self.root, self.worktree, self.requested_peer) != (
+        if (self.root, self.project_path, self.requested_peer) != (
             str(root.resolve()),
-            str(Path(worktree).resolve()),
+            viewer.project_path,
             peer,
         ):
             raise DMScopeChanged("Painted DM read belongs to a different root, worktree or peer.")

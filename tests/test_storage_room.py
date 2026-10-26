@@ -1,5 +1,6 @@
 """Measured admission, not estimates; the claim also owns displayed waiting."""
 
+from agent_comms.repo import Checkout
 import asyncio
 import os
 import shutil
@@ -28,7 +29,7 @@ def test_host_ledger_writer_carries_old_schema_and_preserves_peaks_and_claims(tm
     peak = WorkPeak(BuildRoomWork, RoomNeed(memory=1234, disk=5678))
     claim = RoomClaim(
         RoomTicket.mint(), str(tmp_path / "bus"),
-        Thread("owner", frozenset(), str(tmp_path), created_at=42.0).incarnation,
+        Thread("owner", frozenset(), Checkout(tmp_path), created_at=42.0).incarnation,
         ProcessIdentity.capture(os.getpid()), (BuildRoomWork,), WaitingRoomPhase(), 1.0,
     )
     with sqlite3.connect(ledger.path) as db:
@@ -54,7 +55,7 @@ def test_host_ledger_writer_carries_old_schema_and_preserves_peaks_and_claims(tm
 def copied_root(tmp_path):
     original = wire(tmp_path / 'original')
     for name in ('gate-one', 'gate-two'):
-        original.registry.declare(Thread(name, frozenset(), str(tmp_path),
+        original.registry.declare(Thread(name, frozenset(), Checkout(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     root = tmp_path / 'copied'
     shutil.copytree(original.root, root)

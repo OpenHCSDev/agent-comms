@@ -471,7 +471,7 @@ class StorageProjection:
 
     def check_call(self, call: CodingCall) -> tuple[StorageEffect, ...]:
         """Check the call's declared effects against this same lazy owner snapshot."""
-        effects = call.storage_effects(Path(self.thread.worktree))
+        effects = call.storage_effects(self.thread.worktree.path)
         self.check(effects)
         return effects
 

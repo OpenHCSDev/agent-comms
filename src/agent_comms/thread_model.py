@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.field_codec import SubclassUnion, boundary_decoder
@@ -117,6 +118,8 @@ class CatalogSelection:
     """The model and thinking inputs a catalog reads; absent inputs select no override."""
 
     __slots__ = ()
+
+    project_path: Path
 
     @property
     def model(self) -> ModelSelection:

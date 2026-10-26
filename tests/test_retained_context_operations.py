@@ -1,5 +1,7 @@
 """One original human-source workflow through the public CLI and file effects."""
+from pathlib import Path
 
+from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 
@@ -39,7 +41,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     saved_source(saved)
     goal = Goal("Original task goal, not an exported human constraint", original_goal_id,
         published_seq=0, revision=7)
-    owner = comms.registry.declare(Thread('reader', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), comms.root), goal=goal))
+    owner = comms.registry.declare(Thread('reader', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), comms.root), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
@@ -65,8 +67,8 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
 
 
 def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
-    owner = comms.registry.declare(Thread('recipient', frozenset(), str(comms.root)))
-    other = comms.registry.declare(Thread('unaddressed', frozenset(), str(comms.root)))
+    owner = comms.registry.declare(Thread('recipient', frozenset(), Checkout(comms.root)))
+    other = comms.registry.declare(Thread('unaddressed', frozenset(), Checkout(comms.root)))
     wording = "Never replay UNKNOWN.\nPreserve exact λ /source/owned bytes."
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     original_prefix = read_history(comms)
@@ -80,7 +82,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
 
     source = reference(FieldCodec.encode(original.reference))
     code, pinned = command("pin-constraint", owner.name, "--source", source,
-                           "--worktree", owner.worktree)
+                           "--worktree", str(owner.worktree))
     assert code == 0
     pin = reference(pinned["pin"])
     snapshot = comms.views.retained_context(owner.name)
@@ -99,7 +101,8 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     assert code == 1 and destination.read_bytes() == artifact
     assert not list(comms.root.glob(".AGENTS-export.md.*.tmp"))
     before_refusal = read_history(comms)
-    code, refused = command("pin-constraint", other.name, "--source", source)
+    code, refused = command("pin-constraint", other.name, "--source", source,
+                            "--worktree", str(other.worktree))
     assert code == 1 and "did not receive" in refused["error"]
     assert read_history(comms) == before_refusal
     code, empty = command("export-retained", other.name, "--output", str(comms.root / "other.md"))
@@ -108,7 +111,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
 
     replacement = "Keep only the human's corrected /source/new instruction."
     code, revised = command("supersede-constraint", owner.name, "--source", pin,
-                            "--body", replacement, "--worktree", owner.worktree)
+                            "--body", replacement, "--worktree", str(owner.worktree))
     assert code == 0
     code, exported = command("export-retained", owner.name, "--output", str(destination), "--overwrite")
     assert code == 0 and exported["exported_messages"] == 1
@@ -117,7 +120,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     current = comms.views.retained_context(owner.name)
     assert wording.replace("\n", "\\n") in current.text() and replacement in current.text()
     code, dropped = command("drop-constraint", owner.name, "--source", pin,
-                            "--worktree", owner.worktree)
+                            "--worktree", str(owner.worktree))
     assert code == 0
     code, exported = command("export-retained", owner.name, "--output", str(destination), "--overwrite")
     assert code == 0 and exported["exported_messages"] == 0
@@ -156,7 +159,7 @@ async def original_input_consumer_journey(tmp_path, command):
         claim_scope=origin.claimed_identity.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
-    other = comms.registry.declare(Thread('unaddressed', frozenset(), origin.project))
+    other = comms.registry.declare(Thread('unaddressed', frozenset(), Checkout(Path(origin.project))))
 
     def invoke(*args):
         result = command(comms.root, args)

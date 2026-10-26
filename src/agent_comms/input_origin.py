@@ -14,6 +14,7 @@ from .field_codec import RootId
 from .goals import GoalCheckpoint
 from .input_key import InputKey, InputKeyText
 from .message_reference import MessageReference
+from .repo import Checkout
 from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
 
@@ -121,7 +122,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
 
     root_id: RootId
     author: HumanOrigin
-    project: str
+    project: Checkout
     goal: GoalCheckpoint
 
     @classmethod

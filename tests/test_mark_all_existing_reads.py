@@ -1,4 +1,5 @@
 """Whole-bus marks must also cover conversations that already have read evidence."""
+from agent_comms.repo import Checkout
 from dataclasses import replace
 
 from agent_comms.read_basis import NamedViewer
@@ -7,7 +8,7 @@ from test_read_ledger import prepared
 
 def test_mark_all_after_partial_reads_preserves_next_unread_message(tmp_path):
     comms = prepared(tmp_path)
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     first = comms.messaging.send('alice', '#team', 'already painted').message
     comms.messaging.send('bob', '#team', 'not painted').message
     page = comms.views.channel_display_page('#team', viewer=NamedViewer(viewer))
@@ -15,11 +16,11 @@ def test_mark_all_after_partial_reads_preserves_next_unread_message(tmp_path):
     scope = selection.scope
     page = replace(page, selection=replace(selection, scope=replace(
         scope, displayed=scope.displayed.select({first.seq}))))
-    comms.views.mark_page_read(page, worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#team'].count == 1
-    comms.views.mark_user_view_read('#any', worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#team'].count == 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#any'].count == 0
+    comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread['#team'].count == 1
+    comms.views.mark_user_view_read('#any', worktree=Checkout(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread['#team'].count == 0
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread['#any'].count == 0
     comms.messaging.send('alice', '#team', 'after the whole-bus cut')
-    counts = comms.views.viewer_snapshot(str(tmp_path)).channel_unread
+    counts = comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread
     assert counts['#team'].count == counts['#any'].count == 1

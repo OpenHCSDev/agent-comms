@@ -1,5 +1,7 @@
 """Input decoding supplies behavior-bearing selections to command execution."""
 
+from agent_comms.repo import Checkout
+from pathlib import Path
 import pytest
 
 from agent_comms.cli_verbs.fork import ForkCliCommand
@@ -30,5 +32,5 @@ def test_one_cli_name_for_a_batch_command_is_a_batch():
     from agent_comms.cli_verbs.stop import StopCliCommand
 
     for declaration in (StartCliCommand, StopCliCommand):
-        selected = declaration.selected_targets(CommandTarget.arguments(('alpha',), '/p'))
+        selected = declaration.selected_targets(CommandTarget.arguments(('alpha',), Checkout(Path('/p'))))
         assert type(selected) is TargetBatch

@@ -136,7 +136,7 @@ class SelectedExistingFileWrite(NoSelectedTools):
         raise IdentityConflict("Selected write has conflicting authority")
 
     def prepare(self, thread: Thread) -> SelectedAction:
-        worktree = Path(thread.worktree).absolute()
+        worktree = thread.worktree.path.absolute()
         normalized = self.resource.normalized(worktree)
         try:
             Path(normalized).relative_to(worktree)

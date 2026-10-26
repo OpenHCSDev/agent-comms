@@ -126,7 +126,7 @@ class ClaimWrites(Publisher):
         for incarnation, records in groupby(ordered, key=lambda claim: claim.incarnation):
             recorded = tuple(records)
             owner = boundary.registry.require(recorded[0].owner)
-            worktree = Path(owner.worktree).absolute()
+            worktree = owner.worktree.path.absolute()
             for offset in range(0, len(recorded), ClaimTransition.max_resources):
                 released = recorded[offset:offset + ClaimTransition.max_resources]
                 paths = (Path(claim.resource) for claim in released)
@@ -205,7 +205,7 @@ class InitialWrites(Publisher):
             # The kind owns its own validation; one publication check, before
             # any sequence reservation, refusing with what is missing.
             message.type.require_publishable(
-                message, OrderRoots(Path(sender_thread.worktree), snapshot.commander_project))
+                message, OrderRoots(sender_thread.worktree.path, snapshot.commander_project))
             origin.require_sender(message, sender_thread, snapshot)
             target, message, names = target.initial_delivery(
                 sender, message, snapshot, require_channel)

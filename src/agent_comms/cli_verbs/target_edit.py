@@ -17,4 +17,4 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
         declaration = CliCommand.member_named(self.operation)
         return TargetEdit(declaration,
                           declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,
-                          self.confirmed, self.channel, self.project).apply(ctx)
+                          self.confirmed, self.channel, project=self.project).apply(ctx)
