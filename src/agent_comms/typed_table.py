@@ -83,7 +83,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
-    StoreBusy, StoreLockFile,
+    StoreLockFile,
 )
 
 if TYPE_CHECKING:
@@ -604,9 +604,8 @@ class TypedRow(SqlProjection):
         return frozenset()
 
     @classmethod
-    def _positions(cls, cursor: sqlite3.Cursor,
+    def _positions(cls, names: tuple[str, ...],
                    extra: Mapping[str, str] = types.MappingProxyType({})) -> dict[str, int]:
-        names = cls.result_columns(cursor)
         if not names:
             raise ValueError("Typed read requires a result set")
         projection = {**cls.column_projection(), **extra}
@@ -632,7 +631,7 @@ class TypedRow(SqlProjection):
     def iterate(cls, cursor: sqlite3.Cursor) -> Generator[Self]:
         """Stream strictly decoded rows; close this iterator to release its query."""
         try:
-            positions = cls._positions(cursor)
+            positions = cls._positions(cls.result_columns(cursor))
             for row in cursor:
                 yield cls._decode_row(row, positions)
         finally:
@@ -649,7 +648,7 @@ class TypedRow(SqlProjection):
         This reads one SQLite snapshot and never re-encodes a stored row as JSON.
         """
         try:
-            positions = cls._positions(cursor, related.column_projection())
+            positions = cls._positions(cls.result_columns(cursor), related.column_projection())
             return [(cls._decode_row(row, positions), related._decode_row(row, positions))
                     for row in cursor]
         finally:
@@ -659,6 +658,33 @@ class TypedRow(SqlProjection):
     def read(cls, cursor: sqlite3.Cursor) -> list[Self]:
         """Decode a complete bounded query through the same streaming boundary."""
         return list(cls.iterate(cursor))
+
+    @classmethod
+    def capture(cls, cursor: sqlite3.Cursor) -> CapturedRows[Self]:
+        """Copy a bounded result and close its cursor; decode after releasing the snapshot."""
+        with closing(cursor) as cursor:
+            return CapturedRows(cls, cls.result_columns(cursor), tuple(cursor))
+
+
+@dataclass(frozen=True)
+class CapturedRows[Row: TypedRow]:
+    """One immutable SQLite result, still encoded until its reader consumes it."""
+
+    row_type: type[Row]
+    columns: tuple[str, ...]
+    values: tuple[sqlite3.Row | tuple[object, ...], ...]
+
+    def __iter__(self) -> Iterator[Row]:
+        positions = self.row_type._positions(self.columns)
+        return (self.row_type._decode_row(row, positions) for row in self.values)
+
+    def column[Value](self, name: str, value: type[Value]) -> tuple[Value, ...]:
+        """Decode one declared key for related SQL in the same snapshot."""
+        field, = self.row_type._fields_named((name,))
+        if _base_type(field.annotation)[0] is not value:
+            raise TypeError(f"{self.row_type.__name__}.{name} is {field.annotation!r}, not {value!r}")
+        position = self.columns.index(field.wire_name)
+        return tuple(cast(Value, field.decode(row[position])) for row in self.values)
 
 
 class StoredRowDerivation(TypedRow, ABC):
@@ -694,7 +720,7 @@ class DerivedColumn(Column):
         db.execute(f"ALTER TABLE {temporary} ADD COLUMN {target} {field.storage.sql_type}")
         cursor = db.execute(f"SELECT {columns} FROM {table}")
         try:
-            positions = self.source._positions(cursor)
+            positions = self.source._positions(self.source.result_columns(cursor))
             placeholders = ", ".join("?" for _ in (*names, field.wire_name))
             db.executemany(
                 f"INSERT INTO {temporary} ({columns}, {target}) VALUES ({placeholders})",
@@ -716,6 +742,9 @@ class SQLiteSchemaDifference:
     name: str
     stored: str | None
     declared: str | None
+
+    def __str__(self) -> str:
+        return f"{self.name}: stored {self.stored or 'nothing'}; declared {self.declared or 'nothing'}"
 
 
 @dataclass(frozen=True)
@@ -1029,9 +1058,8 @@ class HeldBusFile(SchemaChange):
     path: Path
 
     def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
-        if schema.schema_differs(db):
-            raise schema.schema_error(
-                f"{self.path} differs from {schema.__name__}; "
+        schema.require_declared(
+            db, f"{self.path} differs from {schema.__name__}; "
                 f"agent-comms {self.carry_verb} carries it")
 
     def require(self) -> None:
@@ -1110,11 +1138,26 @@ class TableSchema(ABC):
         return SQLiteTableName.stored(db)
 
     @classmethod
+    def schema_differences(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        return SQLiteSchemaObject.differences(cls.stored_schema(db, sharing), cls.declared_schema())
+
+    @classmethod
     def schema_differs(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
-        return bool(SQLiteSchemaObject.differences(
-            cls.stored_schema(db, sharing), cls.declared_schema()))
+        return bool(cls.schema_differences(db, sharing))
+
+    @classmethod
+    def require_declared(
+        cls, db: sqlite3.Connection, subject: str,
+        sharing: tuple[type[TypedTable], ...] = (),
+    ) -> None:
+        """Refuse a stored schema that differs, naming every object whose stored SQL differs."""
+        if cls.schema_differs(db, sharing):
+            raise cls.schema_error(
+                f"{subject}: " + " | ".join(map(str, cls.schema_differences(db, sharing))))
 
     @classmethod
     def changed_families(
@@ -1142,8 +1185,7 @@ class TableSchema(ABC):
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> None:
         """Readers use only the declared schema, whichever kind of file this is."""
-        if cls.schema_differs(db, sharing):
-            raise cls.schema_error(f"{cls.__name__} differs from its declaration")
+        cls.require_declared(db, f"{cls.__name__} differs from its declaration", sharing)
 
     @classmethod
     def require_installed(cls, db: sqlite3.Connection) -> None:
@@ -1249,6 +1291,14 @@ class ComposedSchemas:
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
         return any(cls.changed_families(db, sharing))
+
+    @classmethod
+    def schema_differences(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        rows = (*cls.schema_rows(), *sharing)
+        return tuple(difference for family in cls.changed_families(db, sharing)
+                     for difference in family.schema_differences(db, rows))
 
     @classmethod
     def changed_families(
@@ -1746,6 +1796,18 @@ class DerivedTables(TableSchema):
         return bool(cls.changed_rows(db, sharing))
 
     @classmethod
+    def schema_differences(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        """Each changed row's SQL differences; a row whose SQL matches changed its producer."""
+        return tuple(
+            difference for row in cls.changed_rows(db, sharing)
+            for difference in SQLiteSchemaObject.differences(
+                TypedTable.objects_of(db, (row,), sharing), row.schema_objects(),
+            ) or (SQLiteSchemaDifference(
+                row.declared_name, "rows of an earlier producer", "rows of its producer"),))
+
+    @classmethod
     def changed_rows(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> tuple[type[TypedTable], ...]:
@@ -1921,7 +1983,7 @@ class StoredRowDecoding(TypedRow):
             f'SELECT {cls.row_reference()} AS "__stored_reference", '
             f'{cls._select_list(cls)} FROM {_identifier(cls.declared_name)}'
         )) as cursor:
-            positions = cls._positions(cursor, {"stored_reference": "__stored_reference"})
+            positions = cls._positions(cls.result_columns(cursor), {"stored_reference": "__stored_reference"})
             for stored in cursor:
                 try:
                     cls._decode_row(stored, positions)
@@ -2814,7 +2876,7 @@ class WalStore(StoreWriter, StoreLockFile):
         An absent file is established absence: a reader sees every declared table empty
         and creates no storage."""
         if self.path.exists():
-            with self.attached(self.path, opening) as connection:
+            with opening() as connection:
                 yield connection
             return
         with closing(self.writer(":memory:", isolation_level=None)) as connection:
@@ -2850,10 +2912,9 @@ class WalStore(StoreWriter, StoreLockFile):
 
     @contextmanager
     def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
-        """Own attachment; joined workers may borrow one serialized connection."""
+        """Open a SQLite-owned connection; joined workers may borrow it."""
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with self.attached(self.path, lambda: self._open_writer(
-                check_same_thread=check_same_thread)) as connection:
+        with self._open_writer(check_same_thread=check_same_thread) as connection:
             yield connection
 
     def _retire_committed(self, lifetime: ExitStack) -> None:
@@ -2914,7 +2975,7 @@ class TypedStore(WalStore, TableSchema):
 
     @contextmanager
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
-        """Keep this store's schema policy inside its serialized attachment."""
+        """Apply this store's schema policy before handing out its connection."""
         with super()._open_writer(check_same_thread=check_same_thread) as connection:
             self.install_schema(connection, self.schema_change(self.path))
             yield connection
@@ -2923,7 +2984,7 @@ class TypedStore(WalStore, TableSchema):
     def snapshot(self) -> Iterator[sqlite3.Connection]:
         """Read a committed store, or its declared empty schema before its first write."""
         with self.committed_or_empty(
-            type(self), lambda: self.opened_reader(self.path, StoreBusy())
+            type(self), lambda: self.opened_reader(self.path)
         ) as connection:
             self.require_schema(connection)
             yield connection

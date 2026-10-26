@@ -43,7 +43,7 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.held_orders import HeldOrders
-from agent_comms.todos import OwnerRequest, ProgressRead, Todo
+from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.turn_digests import OrderEditCountRead
@@ -136,11 +136,6 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     unjudged: int
 
     @classmethod
-    def of(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
-        return cls.from_frame(comms, commander, HeartbeatFrame.capture(
-            comms, commander, pulls, plans=comms.plans))
-
-    @classmethod
     def from_frame(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> Self:
         return cls.from_orders(
             frame.todos,
@@ -151,7 +146,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @classmethod
     def from_orders(cls, orders: Sequence[Todo], timers_up: int, unjudged: int) -> Self:
-        """The same load projection for a captured HUD read and an independent rule read."""
+        """One load projection shared by the heartbeat's HUD and standing rules."""
         return cls(sum(todo.pending for todo in orders), timers_up, unjudged)
 
     @projected(view="wire")

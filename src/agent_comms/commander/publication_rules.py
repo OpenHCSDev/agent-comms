@@ -15,7 +15,7 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink
-from agent_comms.work_branches import UnpushedHead, WorkBranches
+from agent_comms.work_branches import CommitBase, UnpushedHead, WorkBranches
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -82,11 +82,13 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
     request: PullRequestHead
     closed_at: float
     commits: tuple[str, ...]
+    base: CommitBase
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return tuple(cls(request=head.request, closed_at=head.closed_at, commits=head.missing)
+        return tuple(cls(request=head.request, closed_at=head.closed_at, commits=head.missing,
+                         base=head.base)
                      for head in frame.closed.lost if head.missing
                      if not any(review.verdict.supersedes()
                                 for review in frame.head_reviews[head.request]))
@@ -103,7 +105,7 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
 
     def line(self) -> str:
         pull = PullRequestLink(self.request.repo, self.request.pr)
-        return (f'LOST {pull.url} closed unmerged holds {len(self.commits)} commits main lacks'
+        return (f'LOST {pull.url} closed unmerged {self.base.description(len(self.commits))}'
                 ' -> land them, or record why they are dropped')
 
 

@@ -179,7 +179,7 @@ def test_board_of_forty_orders_and_two_thousand_verdicts_decodes_no_story_rows(r
                     quote="Repair the existing record owner"))
     measured = {"rows": 0, "aggregates": 0}
     read_code = StoredOrderStory.read.__func__.__code__
-    aggregate_code = StoredOrderStory.facts_for.__func__.__code__
+    aggregate_code = StoredOrderStory.captured_facts_for.__func__.__code__
     def profile(frame, event, arg):
         if event == "call" and frame.f_locals.get("cls") is StoredOrderStory:
             if frame.f_code is read_code:

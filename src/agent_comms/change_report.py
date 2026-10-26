@@ -19,6 +19,7 @@ from pydantic import JsonValue
 
 from agent_comms.errors import MissingSourceLine
 
+from .declared_family import DeclaredFamily
 from .field_codec import (
     MalformedRecord,
     NullMember,
@@ -231,8 +232,9 @@ class RegisteredRoots(SourceRoots):
         return repositories[0].checkout
 
 
-class CitedRepository(ABC):
-    """The repository a file:line belongs to, carried by the citation itself."""
+class CitedRepository(DeclaredFamily, ABC, affix="Repository"):
+    """The repository a file:line belongs to, carried by the citation itself; a declared
+    family, so its members compare as the records they are."""
 
     @abstractmethod
     def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:

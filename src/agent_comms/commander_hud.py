@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from aiohttp import ClientError
 
@@ -17,13 +17,16 @@ from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
-from agent_comms.field_codec import OrderId, projected
+from agent_comms.coordinator import Coordination
+from agent_comms.errors import ToolRefusedError
+from agent_comms.field_codec import OrderId, WireTransient, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.service_passes import ServicePassStore
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, ProgressRead, PullRequest
+from agent_comms.todos import OrderProgress, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import UnitClock, UnitState
@@ -211,11 +214,14 @@ class CommanderHud(ToolResult):
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
     board: tuple[BoardEntry, ...] = ()
+    heartbeat: Annotated[EventTime, WireTransient()] = field(
+        default_factory=UnrecordedEventTime, compare=False, kw_only=True,
+    )
+    """Read-time projection of ServicePassStore's clock; never written into the frame."""
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
-        frame = HeartbeatFrame.capture(comms, commander, ProgressRead(), plans=comms.plans)
-        return cls.of(comms, commander, frame, UnitState.current(comms, commander, frame))
+        return CommanderFrame.current(comms, commander)
 
     @classmethod
     def of(cls, comms: Comms, commander: str, frame: HeartbeatFrame,
@@ -286,7 +292,8 @@ class CommanderHud(ToolResult):
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
         """The load line, then one line per row in the order rows() declares."""
-        return (str(self.load), *(row.line() for row in self.rows()))
+        return (str(self.load), *self.heartbeat.aged_line("heartbeat", time.time()),
+                *(row.line() for row in self.rows()))
 
 
 
@@ -305,7 +312,21 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     record_type = CommanderHud
 
     def empty(self) -> CommanderHud:
-        raise FileNotFoundError(self.path)
+        raise ToolRefusedError(f"heartbeat frame missing: {self.path}")
+
+    @classmethod
+    def current(cls, comms: Comms, commander: str) -> CommanderHud:
+        """Read the heartbeat's publication, never repeat its forge and history work."""
+        owner = comms.registry.require(commander).incarnation.require_recorded()
+        completed = ServicePassStore.at(comms.root).read().heartbeat_completed_at(owner)
+        if not completed.since(time.time() - 3 * Coordination.watch_period):
+            raise ToolRefusedError(
+                f"heartbeat frame stale for {owner.name} since {completed.clock()}"
+            )
+        hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup))).read()
+        if hud.commander != owner:
+            raise ToolRefusedError(f"heartbeat frame belongs to another incarnation of {owner.name}")
+        return replace(hud, heartbeat=completed)
 
     @classmethod
     def replace_all(cls, root: Path, huds: tuple[CommanderHud, ...]) -> None:
@@ -321,5 +342,8 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
 
     @classmethod
     def read_all(cls, root: Path) -> tuple[CommanderHud, ...]:
-        return tuple(sorted((cls(path).read() for path in cls.matching_in(root)),
-                            key=lambda hud: hud.commander.name))
+        passes = ServicePassStore.at(root).read()
+        return tuple(sorted((replace(hud, heartbeat=passes.heartbeat_completed_at(
+            hud.commander.require_recorded()))
+            for path in cls.matching_in(root) for hud in (cls(path).read(),)),
+            key=lambda hud: hud.commander.name))

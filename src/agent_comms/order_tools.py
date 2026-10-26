@@ -37,7 +37,6 @@ from .errors import ToolRefusedError
 from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
-from .heartbeat_frame import HeartbeatFrame
 from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
 from .held_orders import HeldOrders
 from .input_disposition import DeliveryOverview
@@ -46,7 +45,6 @@ from .order_work import OrderWork
 from .plan_phases import OrderPhase
 from .progress_claims import ProgressClaim
 from .send_result import CorrectionResult, SendResult
-from .standing_rules import StandingRule
 from .thread_identity import ThreadIncarnation
 from .tool_caller import ThreadCaller, ToolCaller
 from .tool_request import (
@@ -67,7 +65,6 @@ from .turn_digests import (
     TurnsSince,
     UnjudgedEdits,
 )
-from .ui_model.unit_state import UnitState
 
 
 @dataclass(frozen=True)
@@ -80,11 +77,6 @@ class TodoChanged(ToolResult):
 class TodoList(ToolResult):
     todos: tuple[Todo, ...]
     progress: dict[str, OrderProgress] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class StandingRulesRead(ToolResult):
-    broken: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -250,15 +242,15 @@ class CommsCommanderLoadTool(BoardReadTool):
     description = "Read open orders, review timers and unjudged edits used by the overload rule."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
-        return OverloadDegradation.of(comms, caller.subject(self.thread), ProgressRead())
+        return CommanderHud.read(comms, caller.subject(self.thread)).load
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsHudTool(ThreadReadTool):
     label = "Commander HUD"
     description = (
-        "comms_hud reads orders by holder, review timers, strikes, unjudged edit counts, "
-        "ready/draft PRs, declared plan phases and the overload decision from their owners."
+        "Read the commander's latest published heartbeat frame: orders, review timers, "
+        "strikes, edits, PRs, plan phases and load. A missing or stale heartbeat is refused."
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CommanderHud:
@@ -324,27 +316,12 @@ class CommsTodoListTool(BoardReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStandingRulesTool(ThreadToolRequest):
+class CommsStandingRulesTool(CommsHudTool):
     label = "Read broken standing rules"
     description = (
-        "Every standing rule the commander breaks now, one line each, derived on read; "
-        "Core first does what each broken rule does itself."
+        "Read the published heartbeat's standing-rule board and HUD. The heartbeat owns "
+        "enforcement; this read never repeats it. A missing or stale heartbeat is refused."
     )
-    after: Annotated[
-        float, *tool_field("Only rules broken since this time; 0 lists every one")
-    ] = 0.0
-
-    def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        frame = HeartbeatFrame.capture(comms, caller.name, ProgressRead(), plans=comms.plans)
-        states = UnitState.current(comms, caller.name, frame)
-        broken = (*StandingRule.broken(comms, caller.name, observed=states, frame=frame),
-                  *(state for state in states if state.attention()))
-        rejected = StandingRule.enforce_all(comms, caller.name, broken)
-        return StandingRulesRead(
-            tuple(rule.line() for rule in broken
-                  if rule.broke_after(self.after) and rule not in rejected)
-            + tuple(rule.rejected_line(rejected[rule]) for rule in broken
-                    if rule.broke_after(self.after) and rule in rejected))
 
 
 @dataclass(frozen=True, kw_only=True)
