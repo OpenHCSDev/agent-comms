@@ -9,6 +9,7 @@ from ..tool_declaration import one_line
 from ..registration import Registration
 from ..selected_triage import SelectedTriage
 from .order import Commander
+from .fleet import FleetWatch
 
 def thread_names(registry: Registration) -> dict[str, str]:
     """Session file -> thread name, from the registry snapshot's threads."""
@@ -62,6 +63,7 @@ def walk(ctx: Commander, turns: dict[str, list[str]], thread: str,
 
 def main(a, ctx):
     argparse.ArgumentParser(prog='tool-watch', description=__doc__).parse_args(a)
+    FleetWatch(ctx).start()
     registry = ctx.comms.registry
     names, offsets = thread_names(registry), {}
     turns = collections.defaultdict(list)

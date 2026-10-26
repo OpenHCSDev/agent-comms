@@ -87,6 +87,10 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def clock(self) -> str:
         return "-"
 
+    def age_seconds(self, now: float) -> str:
+        """Display elapsed seconds without inventing a clock for an undated event."""
+        return "-"
+
     def require_recorded(self, label: str) -> None:
         self.recorded_at(label)
 
@@ -136,6 +140,9 @@ class RecordedEventTime(EventTime):
 
     def clock(self) -> str:
         return time.strftime("%H:%M:%S", time.localtime(self.at))
+
+    def age_seconds(self, now: float) -> str:
+        return f"{max(0, round(now - self.at))}s"
 
     def to_number(self, units_per_second: int) -> float:
         return self.at * units_per_second
