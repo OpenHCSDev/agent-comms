@@ -29,7 +29,6 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack, ExitStack, a
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from types import TracebackType
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
 from agent_comms.acp_extension import (
@@ -1419,10 +1418,7 @@ class ObservationProcess(AbstractAsyncContextManager):
             self._resources.enter_context(acquisition.pop_all())
         self._reader = AsyncExitStack()
 
-    async def __aexit__(
-        self, exc_type: type[BaseException] | None,
-        exc: BaseException | None, trace: TracebackType | None,
-    ) -> None:
+    async def __aexit__(self, *exc: object) -> None:
         await self.close()
 
     def start_receiving(
@@ -1498,7 +1494,7 @@ class ObservationProcess(AbstractAsyncContextManager):
                 waiter.set_exception(error)
 
     async def readable(self) -> None:
-        """Readiness admits one packet; receiving it is worker work."""
+        """Wait until one packet can be received by the worker."""
         loop = asyncio.get_running_loop()
         descriptor = self.connection.fileno()
         ready: asyncio.Future[None] = loop.create_future()
@@ -1519,8 +1515,8 @@ class ObservationProcess(AbstractAsyncContextManager):
     ) -> None:
         """Read and unpickle one complete packet off-loop; settle it on this loop.
 
-        Admit the next packet only after its predecessor is delivered.
-        Retirement joins an admitted read even when cancelled partway through.
+        Start the next read only after its predecessor is delivered.
+        Retirement joins a started read even when cancelled partway through.
         """
         try:
             while True:
