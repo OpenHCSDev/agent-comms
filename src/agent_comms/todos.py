@@ -1561,6 +1561,7 @@ class ProgressSource(PullRequestSource):
 
     def commits(self) -> Iterator[ProgressPoint]:
         """Card rendering consumes captured points, never retained Git ref names."""
+        self.checkout.require_read()
         return iter(self.committed)
 
     def published(self) -> Iterator[ProgressPoint]:

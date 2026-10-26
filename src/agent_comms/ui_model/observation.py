@@ -86,6 +86,7 @@ from agent_comms.ui_model.sidebar import (
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from agent_comms.view_unread import ReplyIndexResult
 from agent_comms.watched import FileSource
+from agent_comms.work_branches import WorkBranchError
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -435,7 +436,7 @@ class ReadCommanderUnit(ReadRequest):
 
     @property
     def refusal_errors(self) -> tuple[type[Exception], ...]:
-        return (*super().refusal_errors, ToolRefusedError)
+        return (*super().refusal_errors, ToolRefusedError, WorkBranchError)
 
     def read(self, comms: Comms) -> CommanderUnitDetail:
         snapshot = comms.registry.snapshot()

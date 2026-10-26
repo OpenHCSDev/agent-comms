@@ -101,6 +101,16 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
         replace(request, commander=card.unit),
     ):
         assert isinstance(stale.answer(comms), ReadRefused)
+    checkout = comms.goals.todos.get('P1').order.checked().check.directory
+    metadata = checkout / '.git'
+    saved = checkout / 'saved-git'
+    metadata.rename(saved)
+    try:
+        metadata.write_text('gitdir: ./missing-original-git\n')
+        assert isinstance(request.answer(comms), ReadRefused)
+    finally:
+        metadata.unlink()
+        saved.rename(metadata)
 
 
 def test_failed_heartbeat_pass_messages_commander_and_still_raises(notification_bus):
