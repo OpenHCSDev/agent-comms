@@ -105,7 +105,7 @@ class PiCommand(DeclaredFamily):
         return pending.future.result()
 
     async def before_settlement(self, pending: PendingRequest[PiCommand]) -> None:
-        """Ordinary metadata replies cannot admit another native model run."""
+        """Ordinary metadata replies cannot start another native model run."""
 
     @classmethod
     def response_type(cls) -> type[PiCommand]:
@@ -236,7 +236,7 @@ class FollowingPrompt(Prompt, declared_name=None):
     input: Annotated[InputRequest, WireTransient()]
 
     def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
-        # PendingRequest's original receipt already records this acknowledgement.
+        # PendingRequest already records this acknowledgement.
         return ()
 
     def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:

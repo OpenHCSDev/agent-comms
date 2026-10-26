@@ -11,7 +11,7 @@ from .agent_backend import TurnInboxItem
 from .native_pi import NativePiInputNotSent
 
 if TYPE_CHECKING:
-    from .backend import NativeSession, TurnSession
+    from .backend import NativeSession
     from .pi_events import AgentSettled, InputCommitted, MessageStart, Response
 
 
@@ -40,14 +40,14 @@ class PromptState(ABC):
 
     def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
         """A user prompt owes its declared input, answer and queue evidence."""
-        for cause in failures.TurnFailure.members_with(failures.TerminalFailure):
+        for cause in failures.TerminalFailure.members_with(failures.TerminalFailure):
             if cause.detected(session, transport_ok):
                 session.output.record_failure(cause(cause.explanation(session.output)))
 
-    def permits_extension_ui(self, session: TurnSession) -> bool:
+    def permits_extension_ui(self, session: NativeSession) -> bool:
         return False
 
-    def permits_retention(self, session: TurnSession) -> bool:
+    def permits_retention(self, session: NativeSession) -> bool:
         return False
 
 
@@ -58,10 +58,14 @@ class UnacknowledgedPrompt(PromptState):
         return AcknowledgedPrompt(response)
 
 
-class UnwrittenPrompt(PromptState, TurnInboxItem):
-    """The owning send seam has not yet written this prompt."""
+class QueuedOperation(PromptState, TurnInboxItem):
+    """An initial native operation can be placed in the turn inbox."""
 
     acknowledged = False
+
+
+class UnwrittenPrompt(QueuedOperation):
+    """The owning send seam has not yet written this prompt."""
 
     def dispatch(self):
         return UnacknowledgedPrompt()
@@ -75,10 +79,8 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
         raise NativePiInputNotSent(error, attestation) from error
 
 
-class PreparedSession(PromptState, TurnInboxItem):
+class PreparedSession(QueuedOperation):
     """An idle-session preparation owns metadata, not an unwritten user prompt."""
-
-    acknowledged = False
 
     def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
         """Preparation owes metadata replies, not a user input or assistant answer."""

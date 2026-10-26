@@ -19,7 +19,7 @@ class PendingRequest[Command: PiCommand]:
     request: Command
 
     async def response(self) -> Response:
-        """A consumer may stop waiting without cancelling the native receipt."""
+        """A consumer may stop waiting without cancelling the native reply."""
         return await asyncio.shield(self.future)
 
 

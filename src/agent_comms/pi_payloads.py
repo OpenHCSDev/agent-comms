@@ -1158,7 +1158,7 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
     def session_busy(self) -> bool:
         return False
 
-    def require_payload(self):
+    def require_payload(self) -> PiResponseData:
         return self
 
     def conflicts_attestation(self, attestation) -> bool:
@@ -1188,7 +1188,7 @@ class EmptyData(PiResponseData):
 class MissingData(ExternalNullMember, PiResponseData):
     """An omitted/null native payload is not a successful data observation."""
 
-    def require_payload(self):
+    def require_payload(self) -> typing.Never:
         raise ValueError("Native response has no data")
 
 

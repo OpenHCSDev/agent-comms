@@ -1,4 +1,4 @@
-"""Native settlement closes admission, joins actual receipts and proves the child idle."""
+"""Native settlement stops forwarding, joins prompt replies and proves the child idle."""
 
 from __future__ import annotations
 
@@ -40,13 +40,13 @@ class StatsRequest:
 
     async def request(self, session: NativeSession) -> None:
         # A newer native settlement replaces an older in-flight snapshot. Its
-        # receipt, not a copied event counter, determines the current operation.
+        # reply, not a copied event counter, determines the current operation.
         await self.close()
         session.stats = RequestingStats(asyncio.create_task(self._request(session)))
 
     @staticmethod
     async def _request(session: NativeSession) -> ReadingStats:
-        # Admission has stopped. No get_state query may overtake an input still
+        # Forwarding has stopped. No get_state query may overtake an input still
         # in async prompt preflight; join its original RPC acknowledgement first.
         await session.native.reader.pending.before_settlement()
         pending = (
@@ -99,8 +99,6 @@ class RequestingStats(RequestedStats):
     async def close(self) -> None:
         self.task.cancel()
         await asyncio.gather(self.task, return_exceptions=True)
-        if not self.task.cancelled() and self.task.exception() is None:
-            await self.task.result().close()
 
 
 @dataclass(frozen=True)
@@ -117,10 +115,6 @@ class ReadingStats(RequestedStats):
         return all(entry.future.done() and not entry.future.cancelled()
                    and entry.future.result().success.proves_idle(entry.future.result())
                    for entry in self.pending)
-
-    async def close(self) -> None:
-        for entry in self.pending:
-            entry.future.cancel()
 
     async def settle(self, session: NativeSession) -> AsyncIterator[events.AgentEvent]:
         if not all(entry.future.done() for entry in self.pending):

@@ -168,7 +168,10 @@ async def test_handler_can_consume_without_returning_a_publication(synchronous):
 def test_payload_fields_and_frozen_multiple_inheritance():
     start = events.ToolStart("id", "read", "Read file", {"path": "file"})
     assert events.ToolEvent in type(start).__mro__
-    for value in (start, events.OriginalInputStarted(), events.ModelChanged("id", True)):
+    for value in (
+        start, events.OriginalInputStarted(), events.ModelChanged("id", True),
+        events.StreamSettled(), events.SteeringInterrupted(),
+    ):
         with pytest.raises(FrozenInstanceError):
             value.extra = "not a declared field"
     from agent_comms.turn_failure import AuthorityChanged

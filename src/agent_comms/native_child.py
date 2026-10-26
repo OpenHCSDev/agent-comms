@@ -215,7 +215,7 @@ class PiChild:
         self.forwarding = self.forwarding.start(operation)
 
     async def stop_forwarding(self) -> None:
-        """Close admission before proving the native child idle; keep reading replies."""
+        """Stop forwarding before proving the native child idle; keep reading replies."""
         forwarding, self.forwarding = self.forwarding, NoInputForwarder()
         await forwarding.finish()
 

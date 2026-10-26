@@ -107,7 +107,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
         return self.decode_record(raw, strict=strict, max_bytes=max_bytes, event_type=self.event_type)
 
     def track[Command: PiCommand](self, command: Command) -> PendingRequest[Command]:
-        """Share the original request and receipt with its lifecycle owner."""
+        """Share the original request and reply with its lifecycle owner."""
         return command.id.track_in(self.pending, command.response_type(), command)
 
     @staticmethod

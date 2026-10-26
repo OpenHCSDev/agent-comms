@@ -58,7 +58,7 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
-from .prompt_state import UnwrittenPrompt
+from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
@@ -216,7 +216,7 @@ class NativeSession(MroDispatch, ABC):
 
     @property
     @abstractmethod
-    def prompt_type(self):
+    def prompt_type(self) -> type[QueuedOperation]:
         """Each concrete native operation declares whether it sends input."""
 
     def __init__(
@@ -247,7 +247,7 @@ class NativeSession(MroDispatch, ABC):
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup
         self.inputs = InputForwarding(steering_queue if steering_queue is not None else TurnInbox())
-        self.prompt_state = self.prompt_type()
+        self.prompt_state: PromptState = self.prompt_type()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
         self.output = TurnOutput()
@@ -440,7 +440,7 @@ class NativeSession(MroDispatch, ABC):
                                 await error.refuse(self)
                                 break
                             if self.native.attestation.observed:
-                                self.inputs.queue.begin(self.prompt_state)
+                                self.inputs.queue.begin(self.prompt_type())
                                 self.ensure_input_forwarding()
                         async for event in self.payload.consume(self):
                             yield event

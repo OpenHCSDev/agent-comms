@@ -9,10 +9,11 @@ from agent_comms.agent_backend import FollowUpInputPolicy, InputContent, InputRe
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.pi_commands import ClearQueue, FollowingPrompt, GetState, PiCommand, Prompt
+from agent_comms.pi_commands import ClearQueue, FollowingPrompt, GetSessionStats, GetState, PiCommand, Prompt
 from agent_comms.pi_payloads import AnonymousRequest, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_inputs import InputForwarding
+from agent_comms.turn_stats import ReadingStats, RequestingStats, StatsRequest
 from agent_comms.turn_failure import PromptSendFailed
 from agent_comms.agent_events import FollowingInputRefused, InputCleared
 from agent_comms.native_session_prepare import NativeSessionPreparation
@@ -137,6 +138,33 @@ async def test_cancelling_a_receipt_waiter_does_not_cancel_the_native_receipt(fo
     await asyncio.gather(waiter, return_exceptions=True)
     assert not receipt.future.cancelled()
     channel.pending.cancel_all()
+
+
+@pytest.mark.parametrize("requesting", (False, True))
+async def test_retiring_a_snapshot_keeps_its_written_replies_correlatable(requesting: bool):
+    channel = PiRpcChannel(asyncio.StreamReader())
+    pending = (channel.track(GetState()), channel.track(GetSessionStats()))
+    snapshot = ReadingStats(pending)
+
+    async def requested() -> ReadingStats:
+        return snapshot
+
+    state: StatsRequest = snapshot
+    if requesting:
+        task = asyncio.create_task(requested())
+        await asyncio.wait((task,))
+        state = RequestingStats(task)
+    await state.close()
+    assert all(not item.future.done() for item in pending)
+    for item in pending:
+        command = item.request
+        response = channel.decode_record(json.dumps({
+            "type": "response", "command": command.declared_name,
+            "id": command.require_id(), "success": True, "data": {},
+        }).encode())
+        assert channel.correlate(response) is command
+        assert await item.response() is response
+    await channel.finish_input()
 
 
 async def test_explicit_following_rejection_retires_only_its_transient_write(

@@ -215,10 +215,12 @@ class InputForwarding(MroDispatch):
         if not message.user or not message.input_id.reported:
             return ()
         native_id = message.input_id.require()
-        pending = self.pending.get(native_id)
-        if pending is None or message.text != pending.request.input.content.text:
+        if native_id not in self.pending:
             return ()
-        entry = pending.request.input
+        command = self.pending[native_id].request
+        if not message.matches_input(command.message, native_id):
+            return ()
+        entry = command.input
         public_id = entry.input_id
         if not session.input_start.following(public_id, native_id, entry.content.text):
             return ()
