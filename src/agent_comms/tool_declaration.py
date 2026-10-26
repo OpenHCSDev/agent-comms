@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,13 +22,8 @@ from .tool_denial import SelectedToolDenied
 from .tool_results import NoToolDiff
 
 
-class NativeRequestTools:
-    """Request declarations own their catalog and native extension."""
-
-    @classmethod
-    def catalog(cls) -> list[dict[str, object]]:
-        return [tool.schema() for tool in ToolDeclaration.members_with(cls)]
-
+class GlobalCommsExtension:
+    """Requests and their executing calls load the same packaged extension."""
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:
@@ -162,6 +158,19 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     def result_diff(cls, result, ok):
         """Opaque metadata cannot invent edit evidence."""
         return NoToolDiff()
+
+
+class NativeRequestTools(GlobalCommsExtension, ToolDeclaration, declared_name=None):
+    """Schema-bearing request declarations form the native catalog."""
+
+    @classmethod
+    @abstractmethod
+    def schema(cls) -> dict[str, object]:
+        """The declaration supplies the schema exposed to native clients."""
+
+    @classmethod
+    def catalog(cls) -> list[dict[str, object]]:
+        return [tool.schema() for tool in cls.members_with(cls)]
 
 
 @dataclass(frozen=True)

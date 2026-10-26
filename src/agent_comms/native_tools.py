@@ -23,7 +23,7 @@ from .tool_declaration import (
     EditAction,
     EditCall,
     ExecuteAction,
-    NativeRequestTools,
+    GlobalCommsExtension,
     ReadAction,
     ReplacementEdit,
     SearchAction,
@@ -86,7 +86,7 @@ class NativeExecutableTool(NativeToolDeclaration, CodingCall):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=None):
+class CoordinationCall(GlobalCommsExtension, NativeExecutableTool, declared_name=None):
     """Core's CLI owns argument decoding; this call owns identity and live events."""
 
     declared_name: str
