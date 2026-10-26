@@ -167,7 +167,7 @@ def claim_order(held_bus):
 
 
 def state_cards(comms, member):
-    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
     return tuple(state for state in UnitState.current(comms, "lead", frame)
                  if isinstance(state, member))
 
@@ -244,7 +244,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
 
 
 def unanswered(comms):
-    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
     return UnitAskUnanswered.broken(
         comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
 
@@ -300,7 +300,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
         comms.registry.remove(name)
     comms.registry.declare(Thread("worker", frozenset({"comms"}), worker.worktree))
 
-    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
     broken = StandingRule.broken(
         comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
     gone = {rule.todo.id: rule.line() for rule in broken if isinstance(rule, HolderGone)}
@@ -606,7 +606,7 @@ def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
     from agent_comms.commander.vibe_check import VibeCheck
 
     ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    frame = HeartbeatFrame.read(held_bus, "lead", ProgressRead())
+    frame = HeartbeatFrame.capture(held_bus, "lead", ProgressRead())
     assert [rule.message.message_id for rule in OwedAnswer.scan_observed(
         held_bus, "lead", (), frame)] == [ask.message_id]
     assert VibeCheck.scan_observed(held_bus, "lead", (), frame) == ()
@@ -742,7 +742,7 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_r
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
     blocked_holder(held_bus)
     blocked, = state_cards(held_bus, Blocked)
-    frame = HeartbeatFrame.read(held_bus, "lead", ProgressRead())
+    frame = HeartbeatFrame.capture(held_bus, "lead", ProgressRead())
     states = UnitState.current(held_bus, "lead", frame)
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
     assert blocked not in StandingRule.broken(

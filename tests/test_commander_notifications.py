@@ -58,7 +58,7 @@ def notifications(comms):
 
 
 def lead_hud(comms, states=()):
-    return CommanderHud.of(comms, "lead", HeartbeatFrame.read(comms, "lead", ProgressRead()), states)
+    return CommanderHud.of(comms, "lead", HeartbeatFrame.capture(comms, "lead", ProgressRead()), states)
 
 
 def beat(comms, rules=(), *, states=()):
@@ -276,7 +276,7 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
 
 def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
     comms = notification_bus
-    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
     states = UnitState.current(comms, "lead", frame)
     class FailedScan(UndatedStandingRule):
         @classmethod
