@@ -198,6 +198,10 @@ class HeadReviewRelation(DeclaredFamily):
 class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     """The input that authorizes a head review's optional order change."""
 
+    def prepared(self, goals: Goals, problems: dict[str, str]) -> tuple[HeadReviewOrder, ...]:
+        """A resolved relationship can authenticate; a refused selection contributes errors."""
+        return (self,)
+
     @staticmethod
     def holding(todos: Sequence[Todo], request: PullRequestHead) -> tuple[Todo, ...]:
         """The open orders whose current declaration holds this head, held or released."""
@@ -214,6 +218,14 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     @abstractmethod
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord: ...
+
+
+@dataclass(frozen=True)
+class PreparedHeadReview:
+    """The current forge head and its checked status text, read once before recording."""
+
+    current: OpenPullRequestHead
+    subject: str
 
 
 class HeadReview(DeclaredFamily, affix="HeadReview"):

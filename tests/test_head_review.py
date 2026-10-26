@@ -1,8 +1,11 @@
 """Head decisions through the native boundary, real stores, and the external gh process."""
 
+import subprocess
+import sys
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -34,6 +37,21 @@ pytest_plugins = ("test_holder_standing_rules", "github_fixture")
 
 REASON = StrikeReason("This head repeats the same decision in two unrelated places instead of using the existing class.")
 ACCEPTED = VerdictReason("The existing class owns this behavior without another copy")
+
+
+@pytest.mark.parametrize('roast,fields', (
+    ('The decision could be improved because the same required checks are repeated across fields',
+     {'why', 'roast.blunt'}),
+    ('Maybe improve this', {'why', 'roast.words', 'roast.because', 'roast.blunt'}),
+))
+def test_back_collects_missing_and_invalid_fields(roast: str, fields: set[str]) -> None:
+    with pytest.raises(RecordProblems) as refused:
+        judge.JudgeVerb.parse([
+            'back', '--pr', '1', '--head', 'a' * 40, '--at', 'owner.py:1',
+            '--roast', roast,
+            '--fix', 'Put the repeated checks on their existing declaring parent class',
+        ])
+    assert refused.value.problems.keys() >= fields
 
 
 @pytest.fixture
@@ -374,6 +392,43 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     posts = tuple(call for call in github.calls() if f"statuses/{head}" in call[1])
     assert len(posts) == 1 and any(f"(src +{grown})" in part for part in posts[0])
 
+    # The actual CLI must report both independent failures, then infer the unique
+    # order when corrected. Native orderless acceptance above remains legal.
+    todo = comms.goals.todos.get("P2")
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity,
+                      PullRequestLink(request.repo, request.pr), held.generation).record(
+                          comms.goals, todo.id)
+    before = comms.goals.todos.get(todo.id)
+    common = ["judge", "ok", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
+              "--head", head, "--why", ACCEPTED.text]
+
+    def cli(*arguments):
+        return subprocess.run(
+            [sys.executable, str(Path(sys.executable).with_name("agent-comms-commander")),
+             "--root", str(comms.root), *arguments],
+            cwd=comms.root, capture_output=True, text=True, timeout=30,
+        )
+
+    refused = cli(*common)
+    assert refused.returncode == 1, refused.stdout + refused.stderr
+    assert "--serves" in refused.stderr and f"src/grown.py +{grown}" in refused.stderr
+    assert comms.goals.todos.get(todo.id) == before
+    assert len(StoredHeadReview.head_reviews(comms.goals.todos, request)) == 1
+
+    back = cli("judge", "back", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
+               "--head", head, "--at", "owner.py:2",
+               "--roast", "The decision could be improved because it repeats the required checks across fields",
+               "--fix", "Put the repeated checks on their existing declaring parent class")
+    assert back.returncode == 1, back.stdout + back.stderr
+    assert "why" in back.stderr and "roast.blunt" in back.stderr
+    assert comms.goals.todos.get(todo.id) == before
+
+    accepted = cli(*common, "--serves", before.order.checked().edits[0], "--growth",
+                   "grown.py declares forty one values that the reviewed request needs as separate names")
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == todo.id
+
 
 def test_a_stacked_head_is_charged_only_its_own_growth_over_its_base_branch(
         head_bus, reviewed_source):
@@ -456,6 +511,6 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
     found = {rule.request.pr: rule.line()
              for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), (), ordered)}
     assert 11 not in found
-    assert found[9].startswith(f"{ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")
+    assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")
     assert "idle 60 min" in found[9] and found[9].endswith(" -> land or supersede it")
     assert "idle 0 min" in found[7] and found[7].endswith(" -> merge main into it")

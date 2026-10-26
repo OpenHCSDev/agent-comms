@@ -73,40 +73,115 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
     def refusing(cls, subject: str) -> Refusing:
         return Refusing(subject)
 
+    def known_located(self, name: str, fix: str) -> dict[str, str]:
+        return self.located(name, fix)
+
+    def nested_unknown(self, owner: DecoderPlan, prefix: tuple[str, ...]) -> tuple[UnknownField, ...]:
+        return ()
+
+
+def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
+    """Declares a decoder that meets absence from outside, so its None spellings are not debt."""
+    return decoder
+
 
 @dataclass(frozen=True, slots=True)
-class Refusing:
-    """One non-generator boundary preserves malformed records and locates domain errors."""
+class RefusalBoundary[Suppressed: bool]:
+    """Shared exception handling; each boundary declares whether it can suppress a refusal."""
 
     subject: str
 
     def __enter__(self) -> None:
         return None
 
+    @boundary_decoder
     def __exit__(
         self, kind: type[BaseException] | None, error: BaseException | None,
         trace: types.TracebackType | None,
-    ) -> Literal[False]:
-        if (kind is not None and issubclass(kind, ValueError)
-                and not issubclass(kind, MalformedRecord)):
-            raise MalformedRecord(f"{self.subject}: {error}") from error
-        return False
+    ) -> Suppressed | Literal[False]:
+        """The interpreter passes None for a block that raised nothing."""
+        if error is None:
+            return False
+        try:
+            raise error
+        except MalformedRecord as refused:
+            return self.refused(refused)
+        except ValueError as refused:
+            malformed = MalformedRecord(f"{self.subject}: {refused}")
+            malformed.__cause__ = refused
+            return self.refused(malformed)
+
+    @abstractmethod
+    def refused(self, error: MalformedRecord) -> Suppressed: ...
+
+
+class Refusing(RefusalBoundary[Never]):
+    """A normal decode never suppresses its error or falls through without a value."""
+
+    def refused(self, error: MalformedRecord) -> Never:
+        raise error
+
+
+@dataclass(frozen=True, slots=True)
+class Collecting(RefusalBoundary[Literal[True]]):
+    """The same data boundary collects a sibling refusal instead of stopping at it."""
+
+    problems: dict[str, str]
+    fix: str
+
+    def refused(self, error: MalformedRecord) -> Literal[True]:
+        self.problems.update(error.located(self.subject, self.fix))
+        return True
+
+
+@dataclass(frozen=True)
+class UnknownField:
+    """An undeclared input's path; its enclosing decoder supplies the declared destinations."""
+
+    owner: DecoderPlan
+    path: tuple[str, ...]
+
+    def enclosed(self, owner: DecoderPlan, prefix: tuple[str, ...]) -> UnknownField:
+        return type(self)(owner, (*prefix, *self.path))
+
+    def describe(self) -> str:
+        name = self.path[-1]
+        destinations = sorted(set(self.owner.field_paths(name)) - {self.path})
+        if not destinations:
+            return 'Unknown fields; fix: remove this field'
+        parents = ' or '.join('.'.join(path[:-1]) or 'the top level' for path in destinations)
+        paths = ' or '.join('.'.join(path) for path in destinations)
+        return f'{name} belongs under {parents}; fix: move {name} to {paths}'
 
 
 class RecordProblems(MalformedRecord):
-    """Sibling failures keep their field paths when enclosing records add theirs."""
+    """Sibling failures keep paths and unknown-field identities until their outer declaration."""
 
-    def __init__(self, problems: dict[str, str]):
-        self.problems = problems
-        super().__init__("\n".join(f"{name}: {problem}" for name, problem in problems.items()))
+    def __init__(self, problems: Mapping[str, str], unknown: tuple[UnknownField, ...] = ()):
+        self.known = types.MappingProxyType(dict(problems))
+        self.unknown = unknown
+        super().__init__()
+
+    def __str__(self) -> str:
+        return "\n".join(f"{name}: {problem}" for name, problem in self.problems.items())
+
+    @property
+    def problems(self) -> dict[str, str]:
+        return {**self.known, **{'.'.join(item.path): item.describe() for item in self.unknown}}
 
     def located(self, name: str, fix: str) -> dict[str, str]:
         return {f"{name}.{path}": problem for path, problem in self.problems.items()}
 
+    def known_located(self, name: str, fix: str) -> dict[str, str]:
+        return {f"{name}.{path}": problem for path, problem in self.known.items()}
 
-def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
-    """Declares a decoder that meets absence from outside, so its None spellings are not debt."""
-    return decoder
+    def nested_unknown(self, owner: DecoderPlan, prefix: tuple[str, ...]) -> tuple[UnknownField, ...]:
+        return tuple(item.enclosed(owner, prefix) for item in self.unknown)
+
+    @staticmethod
+    def collecting(problems: dict[str, str], name: str, fix: str) -> Collecting:
+        """Run one check through the existing boundary, preserving nested field paths."""
+        return Collecting(name, problems, fix)
 
 
 class FieldDirective:
@@ -354,16 +429,8 @@ class ArgumentDefault(ABC):
 
 @dataclass(frozen=True)
 class InferredArgumentDefault(ArgumentDefault):
-    """An absent optional argument stays absent, so the field's own default applies."""
-
-    def options(self, plan: FieldPlan) -> Mapping[str, object]:
-        return {"required": True} if plan.constructor_required else {"default": argparse.SUPPRESS}
-
-
-@dataclass(frozen=True)
-class SelectingArgumentDefault(ArgumentDefault):
-    """An option that chooses its command's member: absent, it stays absent, and the member
-    the given options chose reports every one of its own it still lacks."""
+    """An absent option stays absent. The constructor's declaration, not argparse,
+    reports required fields beside every other decoding refusal."""
 
     def options(self, plan: FieldPlan) -> Mapping[str, object]:
         return {"default": argparse.SUPPRESS}
@@ -475,7 +542,14 @@ class FieldPlan:
         return WireName.read(self.annotation, self.name)
 
     def locate(self, problems: dict[str, str], refused: MalformedRecord) -> None:
-        problems.update(refused.located(self.key, f"supply {self.annotation}"))
+        problems.update(refused.known_located(self.key, f"supply {self.annotation}"))
+
+    def field_paths(self, key: str, seen: frozenset[type]) -> tuple[tuple[str, ...], ...]:
+        direct = ((self.key,),) if self.key == key else ()
+        return direct + tuple((self.key, *path) for path in self.value.field_paths(key, seen))
+
+    def unknown_under(self, refused: MalformedRecord, owner: DecoderPlan) -> tuple[UnknownField, ...]:
+        return refused.nested_unknown(owner, (self.key,))
 
     @cached_property
     def required(self) -> bool:
@@ -733,6 +807,12 @@ class InlineFieldPlan(DeclaredFieldPlan):
 
     directives = (WireInline,)
 
+    def field_paths(self, key: str, seen: frozenset[type]) -> tuple[tuple[str, ...], ...]:
+        return _RecordDecoder(self.inlined).field_paths(key, seen)
+
+    def unknown_under(self, refused: MalformedRecord, owner: DecoderPlan) -> tuple[UnknownField, ...]:
+        return refused.nested_unknown(owner, ())
+
     @cached_property
     def inlined(self) -> type:
         declared, representation = FieldCodec.representation(self.annotation)
@@ -871,6 +951,10 @@ class DecoderPlan(ABC):
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         """Stored-value predicates; the SQL owner quotes its column and constants."""
+        return ()
+
+    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+        """Scalars declare no fields; containers and records own their traversal."""
         return ()
 
     @property
@@ -1077,6 +1161,9 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     @property
     def accepts_null(self) -> bool:
         return self.wire_structure.accepts_null
+
+    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+        return self.wire_structure.field_paths(key, seen)
 
     @boundary_decoder
     def fits_wire(self, data: object) -> bool:
@@ -2881,6 +2968,10 @@ class UnionDecoder[T](_ContextDecoder[T]):
             "(" + " AND ".join(f"({check})" for check in checks) + ")"
             for checks in alternatives),)
 
+    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+        return tuple(path for member in self.alternatives for path in member.field_paths(key, seen))
+
+
     @property
     def accepts_null(self) -> bool:
         return any(alternative.accepts_null for alternative in self.alternatives)
@@ -2978,6 +3069,9 @@ class UnionDecoder[T](_ContextDecoder[T]):
 class _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):
     container: ClassVar[type]
     items: tuple[ValueDecoder[object], ...]
+
+    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+        return tuple(('[]', *path) for item in self.items for path in item.field_paths(key, seen))
 
     def fits_wire(self, data: object) -> bool:
         return isinstance(data, list)
@@ -3115,6 +3209,9 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
     value: ValueDecoder[V]
     origins = (dict,)
 
+    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+        return tuple(('*', *path) for path in self.value.field_paths(key, seen))
+
     @staticmethod
     @abstractmethod
     def wire_mapping(entries: Iterable[tuple[object, object]]) -> object: ...
@@ -3215,6 +3312,10 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
+
+    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+        return tuple(path for member in self.target.members_with(self.target)
+                     for path in _member_decoder(member).field_paths(key, seen))
 
     def tagged(self, data: object) -> TypeGuard[dict[str, object]]:
         """The family form: an object naming its member under the family tag."""
@@ -3330,20 +3431,25 @@ class _RecordDecoder[T](_ContextDecoder[T]):
             if entry.declared.compare:
                 entry.value.compile_comparison(compiled)
 
-    def problems(self, data: dict) -> dict[str, str]:
-        plan = self.plan
-        missing = plan.required_wire_keys.difference(data)
-        # A data refusal needs the declared keys, not an expansion of every
-        # reachable schema. Recursive records are valid decode declarations.
-        problems = {key: f"Missing required fields for {self.target.__name__}: {key}; "
-                         "fix: supply this declared field" for key in missing}
-        problems.update({key: "Unknown fields; fix: remove this field"
-                         for key in data.keys() - plan.accepted_keys})
-        return problems
+    def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
+        if self.target in seen:
+            return ()
+        visited = seen | {self.target}
+        return tuple(path for entry in self.plan.bindings
+                     for path in entry.field_paths(key, visited))
+
+    def missing_fields(self, data: dict) -> dict[str, str]:
+        return {key: f"Missing required fields for {self.target.__name__}: {key}; "
+                     'fix: supply this declared field'
+                for key in self.plan.required_wire_keys.difference(data)}
+
+    def unknown_fields(self, data: dict) -> tuple[UnknownField, ...]:
+        return tuple(UnknownField(self, (key,)) for key in data.keys() - self.plan.accepted_keys)
+
 
     def shape_refusal(self, data: object) -> MalformedRecord:
         if isinstance(data, dict):
-            return RecordProblems(self.problems(data))
+            return RecordProblems(self.missing_fields(data), self.unknown_fields(data))
         return MalformedRecord("Expected a record object; fix: supply a JSON object.")
 
     def checked(self, data: object) -> dict[str, object]:
@@ -3368,7 +3474,8 @@ class _RecordDecoder[T](_ContextDecoder[T]):
     ) -> T:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
-        problems = self.problems(data)
+        problems = self.missing_fields(data)
+        unknown = list(self.unknown_fields(data))
         target = self.target
         values = {}
         for entry in entries:
@@ -3384,8 +3491,9 @@ class _RecordDecoder[T](_ContextDecoder[T]):
                                   if key in selections else entry.decoded_bound(data, context))
             except MalformedRecord as refused:
                 entry.locate(problems, refused)
-        if problems:
-            raise RecordProblems(problems)
+                unknown.extend(entry.unknown_under(refused, self))
+        if problems or unknown:
+            raise RecordProblems(problems, tuple(unknown))
         return FieldCodec.construct(target, values)
 
 

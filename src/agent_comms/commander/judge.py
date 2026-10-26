@@ -41,7 +41,6 @@ from agent_comms.comms import Comms
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import (
     Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems,
-    SelectingArgumentDefault,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
@@ -337,9 +336,15 @@ class WordedText(BoundedText):
         return MalformedRecord(f"{cls.says} ({cls.words}+ words)")
 
     @classmethod
+    def problems(cls, value: str) -> dict[str, str]:
+        return ({'words': str(cls.refusal()) + '; fix: supply the required words'}
+                if len(value.split()) < cls.words else {})
+
+    @classmethod
     def from_text(cls, value: str) -> str:
-        if len(super().from_text(value).split()) < cls.words:
-            raise cls.refusal()
+        value = super().from_text(value)
+        if problems := cls.problems(value):
+            raise RecordProblems(problems)
         return value
 
 
@@ -358,10 +363,12 @@ class RoastText(WordedText):
     says = "name the duplicated fact and its owner, with because"
 
     @classmethod
-    def from_text(cls, value: str) -> str:
-        if not re.search(r'\bbecause\b', super().from_text(value)):
-            raise cls.refusal()
-        return value
+    def problems(cls, value: str) -> dict[str, str]:
+        because = ({} if re.search(r'\bbecause\b', value)
+                   else {'because': str(cls.refusal()) + '; fix: explain the defect with because'})
+        return super().problems(value) | because | {
+            'blunt': refused + '; fix: name why the work is stupid, not a gentle suggestion'
+            for refused in BluntText.wording_refusal(value)}
 
 
 class FixText(WordedText):
@@ -418,15 +425,9 @@ class VerdictVerb(JudgeVerb):
     def argument_problems(self) -> dict[str, str]:
         """Every refusal this verdict's own arguments earn, before anything is read or written;
         each member adds its own to its parents'."""
-        return self.selection_problems()
+        return super().argument_problems() | self.selection_problems()
 
     def subject(self, ctx: order.Commander) -> ReviewSubject:
-        """One refusal lists every argument problem, so one run fixes them all."""
-        if problems := self.argument_problems():
-            raise RecordProblems(problems)
-        return self.selected_subject(ctx)
-
-    def selected_subject(self, ctx: order.Commander) -> ReviewSubject:
         return EditReview(self.ids)
 
     def run(self, ctx: order.Commander) -> None:
@@ -457,7 +458,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
                 '--pr', 'review a PR with --pr, or omit --head and --repo')
         return {}
 
-    def selected_subject(self, ctx: order.Commander) -> ReviewSubject:
+    def subject(self, ctx: order.Commander) -> ReviewSubject:
         return ReviewSubject.from_options(self, ctx)
 
     def order_link(self, todo: Todo) -> OrderLink:
@@ -478,7 +479,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class QuotingVerb(HeadVerdictVerb, declared_name=None):
     """A verb whose verdict stores the words of the order it carries out."""
-    serves: Annotated[str, Argument(options={"help": OrderQuote.rule})] = ""
+    serves: Annotated[str, Argument(flags=(OrderQuote.flag,), options={"help": OrderQuote.rule})] = ""
 
     def order_link(self, todo: Todo) -> OrderLink:
         return LinkedHeadReview.of(todo, self.serves, self.head_evidence())
@@ -486,7 +487,7 @@ class QuotingVerb(HeadVerdictVerb, declared_name=None):
     def edit_problems(self) -> dict[str, str]:
         """An accepted edit always quotes its order."""
         return super().edit_problems() | {
-            '--serves': refused for refused in OrderQuote(self.serves).word_refusal()}
+            OrderQuote.flag: refused for refused in OrderQuote(self.serves).word_refusal()}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -500,8 +501,9 @@ class OkVerb(ReasonedVerb, QuotingVerb):
                 else self.verdict(reason))
     growth: Annotated[
         tuple[str, ...],
-        Argument(options={"action": "append", "metavar": "REASON",
-                          "help": "12+ words naming a growing src file and its need; repeat for each"}),
+        Argument(flags=(GrowthReason.option,), options={
+            "action": "append", "metavar": "REASON",
+            "help": f"{GrowthReason.least_words}+ words naming a growing src file and its need; repeat for each"}),
     ] = ()
     no_owner: Annotated[
         str,
@@ -528,7 +530,7 @@ class OkVerb(ReasonedVerb, QuotingVerb):
 
     def argument_problems(self) -> dict[str, str]:
         return super().argument_problems() | {
-            f'--growth {number}': refused
+            f'{GrowthReason.option} {number}': refused
             for number, text in enumerate(self.growth, 1)
             for refused in GrowthReason.wording_refusal(text)}
 
@@ -639,7 +641,6 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
 
     def argument_problems(self) -> dict[str, str]:
         refusals = {
-            '--roast': BluntText.wording_refusal(self.roast),
             '--why --roast --fix': DirectiveText.refused(' '.join((self.why, self.roast, self.fix))),
         }
         return super().argument_problems() | self.reason_problems() | {
@@ -686,13 +687,13 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
 class SlopBackVerb(BackVerb):
     """A slop send-back: the defect is a fact restated outside its declaration, so it carries
     the formal statement. `back` parses its options; it has no subcommand of its own."""
-    pattern: Annotated[str, Argument(flags=("--slop",), default=SelectingArgumentDefault(), options={
+    pattern: Annotated[str, Argument(flags=("--slop",), options={
         "help": "slop only: pattern ID from the pinned refactor-audit catalog"})]
-    fact: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+    fact: Annotated[str, Argument(options={
         "help": "slop only: the required fact, 4+ words"})]
-    derive: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+    derive: Annotated[str, Argument(options={
         "help": "slop only: " + "|".join(Derivation.names())})]
-    by: Annotated[str, Argument(default=SelectingArgumentDefault(), options={
+    by: Annotated[str, Argument(options={
         "help": "slop only: PATH:LINE of the declaration that owns it"})]
 
     @classmethod

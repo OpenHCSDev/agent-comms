@@ -13,12 +13,12 @@ from agent_comms.todos import (
     ClaimOrder,
     CorrectCheckTodo,
     CorrectRunTodo,
-    DeliverTodo,
     DeliveryReport,
     InstallTodo,
     OrderClaim,
-    OrderDelivery,
+    OrderCompletion,
     OrderProgress,
+    TodoProblems,
     PlainText,
     ProgressRead,
     HeadReviewed,
@@ -35,10 +35,10 @@ from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderHud
 from .comms import Comms
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, MessageId, OrderId, WireName
+from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
-from .head_review import HeadReviewOrder, PullRequestHead
+from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
 from .held_orders import HeldOrders
 from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
@@ -193,8 +193,26 @@ class HeadVerdictTool:
     order: Annotated[HeadReviewOrder, *tool_field("Optional held-order link")] = NoHeadOrder()
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> HeadReviewed:
-        actor = caller.head_review_actor(comms, self.request, self.order)
-        return self.operation.reviewed(comms.goals, self.request, actor, self.order)
+        problems: dict[str, str] = {}
+        orders = self.order.prepared(comms.goals, problems)
+        actors = []
+        for order in orders:
+            with RecordProblems.collecting(problems, '--problem', 'select the current held order'):
+                actors.append(caller.head_review_actor(comms, self.request, order))
+        heads = []
+        with RecordProblems.collecting(problems, '--head', 'supply the current PR head SHA with --head'):
+            heads.append(self.request.current())
+        preparations = []
+        for current in heads:
+            with RecordProblems.collecting(problems, self.operation.preparation_field,
+                                          self.operation.preparation_fix):
+                preparations.append(PreparedHeadReview(current, self.operation.subject(comms.goals, current)))
+        if problems:
+            raise TodoProblems(problems)
+        order, = orders
+        actor, = actors
+        prepared, = preparations
+        return self.operation.reviewed(comms.goals, self.request, prepared, actor, order)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -373,7 +391,7 @@ class CommsOrderDoneTool(CommsTodoTool):
     description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
     order_id: Annotated[OrderId, *tool_field("Exact open order ID")]
     delivery: Annotated[
-        OrderDelivery,
+        OrderCompletion,
         *tool_field("A checked implementation delivery for fix, or a report for triage"),
     ]
     claims: Annotated[
@@ -390,12 +408,7 @@ class CommsOrderDoneTool(CommsTodoTool):
         return {"delivery": comms.goals.todos.get(problem).order.checked().scope.delivery_class}
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        order = todo.order.checked()
-        order.require_delivery(self.order_id)
-        verified = order.scope.verified_claims(
-            self.delivery, self.claims, comms, order.check.directory)
-        return DeliverTodo(todo.revision, actor, self.delivery, self.order_id,
-                           verified_claims=verified)
+        return self.delivery.operation(todo, actor, comms, self.order_id, self.claims)
 
 
 @dataclass(frozen=True, kw_only=True)
