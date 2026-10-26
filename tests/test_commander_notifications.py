@@ -239,9 +239,10 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     first, = notifications(comms)
     assert failing.line() in first.body
     assert not any(state.line() in first.body for state in states)
-    header = replace(lead_hud(comms, states), units=(), board=()).frame
-    assert first.body.splitlines()[0] == CommanderUpdate.header
-    assert first.body.splitlines()[-len(header):] == list(header)
+    hud = lead_hud(comms, states)
+    assert first.body.startswith(CommanderUpdate.header)
+    assert all(line in first.body for line in hud.brief())
+    assert all(card.unit.name in first.body for card in hud.units)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
     beat(comms, (failing,), states=state_cards(comms, UnitState))
     unchanged, = notifications(comms)
@@ -284,9 +285,8 @@ def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus
     assert isinstance(first.task, CommanderDecisions)
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
-    assert first.body.splitlines() == [CommanderUpdate.header,
-                                       *first.task.lines(first.timestamp),
-                                       *lead_hud(comms).frame]
+    assert all(rule.line() in first.body for rule in rules)
+    assert all(line in first.body for line in lead_hud(comms).brief())
     beat(comms, rules)
     assert len(notifications(comms)) == 1
     # Changed diagnostic wording is not another failed occurrence.
@@ -305,8 +305,7 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
-    frame = replace(lead_hud(comms), board=()).frame
-    assert quiet.body.splitlines()[-len(frame):] == list(frame)
+    assert all(line in quiet.body for line in lead_hud(comms).brief())
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
     # Nothing new and nothing cleared sends nothing.
     beat(comms, ServicePassFailing.violations(comms, "lead"))
@@ -422,3 +421,19 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     assert refused.line() == 'usage unreadable: Codex: account unavailable'
     assert refused.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(refused)) == refused
+
+
+def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(notification_bus):
+    comms = notification_bus
+    rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
+                  for index in range(12))
+    beat(comms, rules)
+    original, = notifications(comms)
+    packet = CommanderDecisions(
+        original.task.commander, original.task.handled, (), original.task.handled,
+    )
+    message = packet.send(comms, time.time(), lead_hud(comms))
+    assert sum(rule.line() in message.body for rule in rules) == 2
+    assert len(message.task.handled) == 12
+    assert len(message.task.board(comms, "lead")) == 12
+    assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12

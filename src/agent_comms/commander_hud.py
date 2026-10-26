@@ -92,6 +92,14 @@ class CommanderUnit(HudRow):
             f"draft={','.join(str(pr.number) for pr in self.draft_prs)}"
         )
 
+    def brief(self) -> str:
+        """A dense scan line; expansion reads the original order and activity owners."""
+        orders = "; ".join(
+            f"{order.problem} {order.state} · {order.progress.line}" for order in self.orders
+        ) or "no held orders"
+        pulls = ", ".join(f"#{pr.number}@{pr.head[:9]}" for pr in (*self.ready_prs, *self.draft_prs))
+        return f"{self.unit.name} | {orders} | {pulls or 'no PR'} | → {self.state.action}"
+
     def needs_hand(self) -> bool:
         """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
         return (self.state.attention() and self.state.commander_disposes) or any(
@@ -332,6 +340,22 @@ class CommanderHud(ToolResult):
             *(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
               for phases in (tuple(phase for phase in finished if phase.plan is plan),)
               if phases),
+        )
+
+    def brief(self) -> tuple[str, ...]:
+        """Heartbeat telemetry from this same frame, with completed plans folded together."""
+        finished = tuple(phase for phase in self.phases if phase.finished)
+        plans = "; ".join(
+            f"{plan.declared_name} {sum(phase.phase.plan is plan for phase in finished)}/"
+            f"{sum(phase.phase.plan is plan for phase in self.phases)}"
+            for plan in Plan.members_with(Plan)
+            if any(phase.phase.plan is plan for phase in self.phases)
+        )
+        return (
+            f"{self.load} | {len(self.units)} units | {len(self.forks)} forks",
+            self.usage.line(),
+            *(unit.brief() for unit in self.units),
+            *((f"Plans · {plans}",) if plans else ()),
         )
 
     @projected(view="wire")

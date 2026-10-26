@@ -67,7 +67,12 @@ class MainTree:
         A submodule is another repository's tree, regardless of local recurse settings.
         Git pathspecs such as ``:!file`` exclude.
         """
-        return [row for row in Repo.grep(
+        return [row for row in self.text_grep(*options, pattern=pattern, paths=paths)
+                if row.split(":", 2)[1].endswith(self.source)]
+
+    def text_grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
+        """Declared text evidence, including documents, from this exact repository tree."""
+        return Repo.grep(
             self.repo.checkout,
             "--no-recurse-submodules",
             *options,
@@ -77,7 +82,7 @@ class MainTree:
             self.commit,
             "--",
             *paths,
-        ) if row.split(":", 2)[1].endswith(self.source)]
+        )
 
     def count(self, pattern: str, paths: tuple[str, ...]) -> int:
         """Matching lines under ``paths``."""
@@ -381,6 +386,14 @@ class PatternPresent(PatternEvidence):
 
     def describe(self) -> str:
         return f"{self.pattern!r} in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class DocumentPatternPresent(PatternPresent):
+    """A recorded document fact, rather than executable Python source."""
+
+    def read(self, main: MainTree) -> bool:
+        return bool(main.text_grep("-l", pattern=self.pattern, paths=self.searched(main)))
 
 
 class BusStorageAbsent(MainEvidence, ast.NodeVisitor):

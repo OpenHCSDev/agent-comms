@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.bus_publication import AgentOrigin
@@ -61,6 +62,11 @@ class Ping(DeclaredFamily, affix="Ping"):
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
 
     @property
+    @abstractmethod
+    def group(self) -> str:
+        """Presentation grouping derived from the original rule or unit declaration."""
+
+    @property
     def urgent(self) -> bool:
         return False
 
@@ -111,6 +117,10 @@ class RulePing(Ping):
     observation: TextDigest
 
     @property
+    def group(self) -> str:
+        return self.rule.declared_name
+
+    @property
     def urgent(self) -> bool:
         return self.rule.urgent
 
@@ -137,6 +147,10 @@ class UnitPing(Ping):
     observation: TextDigest
 
     @property
+    def group(self) -> str:
+        return self.unit.name
+
+    @property
     def key(self) -> ThreadIncarnation:
         return self.unit
 
@@ -161,7 +175,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
     role: ClassVar[MessageRole]
-    header: ClassVar[str] = "Fuck your assumptions, here's what's up:"
+    header: ClassVar[str] = "COMMANDER"
 
     def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
         return self if self.commander == commander else None
@@ -170,10 +184,14 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def lines(self, now: float) -> tuple[str, ...]:
         """What this packet asks of the commander."""
 
-    def body(self, now: float, frame: tuple[str, ...]) -> str:
-        """The header, then the action lines, then the HUD telemetry: telemetry first read as
-        a status feed and the action lines scrolled under it."""
-        return "\n".join((self.header, *self.lines(now), *frame))
+    def body(self, now: float, hud: CommanderHud) -> str:
+        """Scan first; original evidence remains in the same packet and expandable HUD."""
+        stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%H:%M:%S UTC")
+        return "\n".join((
+            f"{self.header} · {self.commander.name} · {stamp} · {len(self.handled)} current",
+            *hud.brief(), "", *self.lines(now), "",
+            "Expand in Toad: F2 or /commander · units: original orders, story, commits, activity · board: every alert",
+        ))
 
     def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
         """This packet's lines the commander disposes of, through the same recorded actions the
@@ -262,7 +280,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(now, replace(hud, units=(), board=()).frame),
+            body=self.body(now, hud),
             type=InfoKind, role=self.role, task=self,
         )
         return comms.bus.publisher.publish_ordinary(
@@ -279,7 +297,7 @@ class CommanderNotice(CommanderUpdate):
         return DeliveredOutcome
 
     def lines(self, now: float) -> tuple[str, ...]:
-        return (f"Lines cleared; {len(self.handled)} still current.", *self.not_applied)
+        return (f"Cleared · {len(self.handled)} requests remain on the board.", *self.not_applied)
 
 
 @dataclass(frozen=True)
@@ -295,7 +313,15 @@ class CommanderDecisions(CommanderUpdate):
 
     def lines(self, now: float) -> tuple[str, ...]:
         waiting = sorted(self.waiting, key=lambda ping: ping.since.chronology())
+        groups: dict[str, list[Ping]] = {}
+        for ping in waiting:
+            groups.setdefault(ping.group, []).append(ping)
         return (
-            *(ping.render(now) for ping in self.decisions), *self.not_applied,
-            *(("UNDISPOSED:", *(ping.render(now) for ping in waiting)) if waiting else ()),
+            f"New · {len(self.decisions)}",
+            *(f"• {ping.render(now)}" for ping in self.decisions), *self.not_applied,
+            *(line for name, pings in groups.items() for line in (
+                f"Waiting · {name} · {len(pings)}",
+                *(f"• {ping.render(now)}" for ping in pings[:2]),
+                *((f"  +{len(pings) - 2} in the expandable board",) if len(pings) > 2 else ()),
+            )),
         )
