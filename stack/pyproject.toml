@@ -22,6 +22,6 @@ override-dependencies = [
 [tool.uv.sources]
 agent-comms = { path = "..", editable = true }
 metaclass-registry = { git = "https://github.com/OpenHCSDev/metaclass-registry", branch = "main" }
-batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", branch = "main" }
-textual = { git = "https://github.com/OpenHCSDev/textual.git", branch = "main" }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", branch = "recovery/p867-checkout" }
+textual = { git = "https://github.com/OpenHCSDev/textual.git", branch = "recovery/p867-checkout" }
 ui-theme = { git = "https://github.com/OpenHCSDev/ui-theme.git", branch = "main" }
