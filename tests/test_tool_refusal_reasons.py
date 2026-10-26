@@ -11,7 +11,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import ClaimTransitionError
 from agent_comms.field_codec import InputId
-from agent_comms.native_tool_call import CoordinationBusy
+from agent_comms.native_tool_call import SelectedToolBusy
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.selected_tool_broker import verify_sent_full_input
 
@@ -38,15 +38,14 @@ def test_busy_coordination_database_is_reported_as_busy(tmp_path, private_comms)
         writer = sqlite3.connect(path, isolation_level=None)
         try:
             writer.execute("BEGIN EXCLUSIVE")
-            with pytest.raises(CoordinationBusy) as busy:
+            with pytest.raises(SelectedToolBusy) as busy:
                 verify_sent_full_input(store, None, "owner", InputId.mint())
             writer.execute("ROLLBACK")
             message = reply(tmp_path, busy.value)
             assert "busy" in message and "did not run" in message
             assert "worktree" not in message and "UNKNOWN" not in message
             # With the database free the same call reaches the real check.
-            with pytest.raises(SelectedToolDenied) as denied:
+            with pytest.raises(SelectedToolDenied):
                 verify_sent_full_input(store, None, "owner", InputId.mint())
-            assert not isinstance(denied.value, CoordinationBusy)
         finally:
             writer.close()

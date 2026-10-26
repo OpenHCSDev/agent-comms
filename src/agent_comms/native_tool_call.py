@@ -59,14 +59,17 @@ class DuplicateToolCallIdentity(SelectedToolDenied):
         super().__init__(f"Native tool round repeats call identity {call_id!r}")
 
 
-class CoordinationBusy(SelectedToolDenied):
-    """The coordination database stayed busy; the call was not checked and nothing changed."""
+class SelectedToolBusy(SelectedToolDenied):
+    """No tool ran and no slot was consumed; a fresh call may retry."""
 
     def __init__(self) -> None:
         super().__init__(
             "The coordination database is busy. This tool call did not run and "
             "changed nothing; call the tool again."
         )
+
+    def socket_response(self) -> dict[str, object]:
+        return {"ok": False, "error": str(self)}
 
 
 class CallObservation(LifecycleCapability, ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
@@ -148,9 +151,24 @@ class AwaitingClaim(CallClaim):
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         # No retry even when the callback is cancelled or its durable commit fails.
         call.progress.claim_scope = UncertainClaim()
-        await action()
+        try:
+            await action()
+        except SelectedToolBusy:
+            call.progress.claim_scope = UnstartedClaim()
+            raise
         call.progress.observation.require(Executing, ToolNotExecuting())
         call.progress.claim_scope = AuthorizedCall()
+
+
+class UnstartedClaim(CallClaim):
+    """A refused preflight consumed no slot and needs no terminal acknowledgement."""
+
+    def finish(
+        self, call: NativeToolCall, is_error: bool, coordination_path: Path,
+        input_id: InputId, round_number: int,
+    ) -> None:
+        if not is_error:
+            raise SelectedToolDenied("Native tool succeeded after its preflight was refused")
 
 
 class AuthorizedCall(CallClaim):

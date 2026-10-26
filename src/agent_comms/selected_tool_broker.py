@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .comms import Comms
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
 from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
@@ -27,7 +27,7 @@ from .field_codec import FieldCodec, InputId, MalformedRecord, SlotId
 from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
 from .native_tool_call import (
-    CoordinationBusy,
+    SelectedToolBusy,
     NativeToolCall,
     NativeToolMode,
     ToolCallId,
@@ -169,6 +169,8 @@ def consume_selected_slot(store: Coordination, slot_id: SlotId, call_id: ToolCal
     try:
         with store.session.writing() as db:
             SelectedToolSlot.consume(db, slot_id, call_id)
+    except CoordinationBeginUnavailable as error:
+        raise SelectedToolBusy() from error
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool consumption UNKNOWN; do not retry") from error
 
@@ -230,7 +232,7 @@ def verify_sent_full_input(
         with CoordinationReadUnavailable.checking(), Coordination(str(store.session.path)) as scoped, scoped.session.read():
             _require_sent_full_input(scoped, claim_scope, owner_name, input_id)
     except CoordinationReadUnavailable as unavailable:
-        raise CoordinationBusy() from unavailable
+        raise SelectedToolBusy() from unavailable
 
 
 def _require_sent_full_input(
