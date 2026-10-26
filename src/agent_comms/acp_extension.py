@@ -6,6 +6,8 @@ they never authorize a native send, restore a queue, or replay an UNKNOWN input.
 
 from __future__ import annotations
 
+from .native_output import NativeOutputScope
+
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
@@ -49,7 +51,7 @@ from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute, NoMessageRoute
 from .thread_identity import ClaimScoped, ThreadIncarnation
 from .tool_result import DeclaredReply
-from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
+from .transcripts import NativeCommittedPrefix, TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 from .turn_context import ContextManifest
 from .turn_lease import TurnState
 from .working_memory_labels import ModelLabel
@@ -657,6 +659,17 @@ class CompactionCommittedUpdate(AgentCommsUpdate):
 
     summary: str
     first_kept: str | None
+
+
+@dataclass(frozen=True)
+class NativeRoundCommittedUpdate(AgentCommsUpdate):
+    identity: NativeCommittedPrefix
+
+
+@dataclass(frozen=True)
+class NativeOutputCommittedUpdate(AgentCommsUpdate):
+    identity: NativeCommittedPrefix
+    output: NativeOutputScope
 
 
 @dataclass(frozen=True)

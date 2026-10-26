@@ -158,6 +158,7 @@ cp -- "$native_root/native-proof-schema.mjs" "$native_package/dist/core/native-p
 "$python" "$native_root/patch-native-compaction-cap.py" "$native_package"
 "$python" "$native_root/patch-native-turn-context.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
+"$python" "$native_root/patch-native-output-commit.py" "$native_package"
 "$python" "$native_root/patch-native-file-artifact.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \

@@ -21,7 +21,8 @@ if TYPE_CHECKING:
     from .external_transcript import ExternalPageRow
     from .message_reference import MessageReference
     from .native_entries import TranscriptProjection
-    from .native_transcript import NativeRecord, NativeTranscript
+    from .native_output import NativeRecordLocation
+    from .native_transcript import NativeRecord, NativeTranscript, SessionCut
     from .threads import Thread, ThreadProvenance
     from .transcript_events import TextTranscript, TranscriptEvent
     from .transcript_routes import TranscriptRoutes, _SessionRoutes
@@ -371,6 +372,10 @@ class TranscriptSource:
     """
 
     start = 0
+
+    def committed_output_cut(self, location: NativeRecordLocation) -> SessionCut:
+        """Only a native record source can corroborate SDK commit coordinates."""
+        raise TranscriptChanged()
 
     def last_tool_call(self) -> EventTime:
         """A source without original producer tool times cannot prove activity."""

@@ -13,6 +13,7 @@ from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
 from .field_codec import DeclaredWireType, FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
+from .native_output import NativeOutputLocation, NativeRecordLocation
 from .native_pi import NativePiOperationFailed
 from .native_failures import NativePiUnavailable
 from .native_tool_call import ToolCallId
@@ -139,6 +140,12 @@ class NativePiEvent(PiEvent, declared_name=None):
     pass
 
 
+@dataclass(frozen=True)
+class NativeOutputCommitted(NativePiEvent, NativeOutputLocation):
+    def convert(self) -> Iterable[events.AgentEvent]:
+        yield events.NativeOutputCommitted(self)
+
+
 class DurablePiEvent(PiEvent, declared_name=None):
     @staticmethod
     def unowned_event(event):
@@ -176,8 +183,14 @@ class TurnStart(Opaque, NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True)
-class TurnEnd(Opaque, NativePiEvent, DurablePiEvent):
-    """Pi ends one model round. Settlement comes from agent_end / agent_settled."""
+class TurnEnd(NativePiEvent, DurablePiEvent):
+    """Pi ends one model round after its original tool results are persisted."""
+
+    round_committed: Annotated[NativeRecordLocation | PiOmitted, WireName("roundCommitted")] = PiOmitted()
+
+    def convert(self) -> Iterable[events.AgentEvent]:
+        for location in self.round_committed.present():
+            yield events.NativeRoundCommitted(location)
 
 
 @dataclass(frozen=True)

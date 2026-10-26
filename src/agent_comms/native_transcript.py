@@ -16,6 +16,7 @@ from .native_pi import NativeContextJournal
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
+    from .native_output import NativeRecordLocation
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
 
@@ -261,6 +262,25 @@ class NativeTranscript(TranscriptSource):
         with stream:
             revision = FileRevision.from_file(stream)
             return PresentSessionCut(revision, record_end(stream, revision.size))
+
+    def committed_output_cut(self, location: NativeRecordLocation) -> SessionCut:
+        """Corroborate one indexed output against its original header and row."""
+        if self.path.absolute() != location.path:
+            raise TranscriptChanged()
+        with self.path.open("rb") as stream:
+            revision = FileRevision.from_file(stream)
+            header = SessionEntry.read(stream.readline())
+            if header.id != location.session_id or revision.size < location.session_entry_end:
+                raise TranscriptChanged()
+            stream.seek(location.session_entry_start - 1)
+            if stream.read(1) != b"\n":
+                raise TranscriptChanged()
+            raw = stream.read(location.session_entry_end - location.session_entry_start)
+            if (len(raw) != location.session_entry_end - location.session_entry_start
+                    or not raw.endswith(b"\n")):
+                raise TranscriptChanged()
+            location.require_entry(NativeEntry.read(raw))
+            return PresentSessionCut(revision, location.session_entry_end)
 
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         return self.cut().publication_revision(root, self, recipient)
