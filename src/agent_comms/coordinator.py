@@ -144,6 +144,7 @@ class Coordination(ExecutionStore, AttemptStore):
             if isinstance(outcome, Exception):
                 logging.error("Service worker pass failed: %s", name, exc_info=outcome)
                 await cls.run_worker(partial(passes.failed, name, outcome))
+                await cls.run_worker(partial(watch.failed, opened_wire, outcome))
             else:
                 await cls.run_worker(partial(passes.passed, name))
             await asyncio.sleep(cls.watch_period)

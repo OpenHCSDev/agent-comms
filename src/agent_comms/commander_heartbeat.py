@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -59,6 +64,19 @@ class CommanderObservation:
 
 class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                          WatchPass[tuple[CommanderObservation, ...]]):
+
+    def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
+               error: Exception) -> None:
+        """The service loop owns the failure; the heartbeat tells its commanders."""
+        with opened_wire() as comms:
+            self.register(comms.registry)
+            for thread in self.commanders(comms.registry, comms.goals):
+                comms.bus.publisher.publish_ordinary(
+                    Message(sender=self.sender, target=thread.name,
+                            body=f"Heartbeat pass failed: {type(error).__name__}: {error}",
+                            type=InfoKind, role=ConversationRole()),
+                    origin=AgentOrigin(), destination=ThreadTarget(thread.name),
+                )
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
         return tuple(
