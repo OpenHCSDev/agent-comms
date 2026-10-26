@@ -396,7 +396,7 @@ class TrackedTurnSession(TurnSession):
         except TurnWaitExpired as expired:
             async for update in expired.wait.expire(self):
                 await self.observe_event(update)
-            raise NativePiUnavailable(self.output.failure_text or str(expired)) from expired
+            raise NativePiUnavailable(self.output.declared_failure.text) from expired
         except MalformedRecord as error:
             raise NativePiUnavailable(
                 f"Native Pi RPC record is invalid or incomplete; {type(error).__name__}: {error}"

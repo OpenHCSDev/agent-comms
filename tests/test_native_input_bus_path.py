@@ -124,7 +124,7 @@ async def test_stalled_real_native_run_records_phase_failure_instead_of_name_err
         assert len(native.starts) == 1
 
 
-async def test_agent_settled_returns_an_unwritten_inflight_steer_and_reports_uncertainty(
+async def test_agent_settled_returns_an_unwritten_inflight_steer_and_reports_it_unstarted(
     tmp_path: Path, native_runtime_package: VerifiedNativePackage, steering_input: InputRequest,
 ):
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:

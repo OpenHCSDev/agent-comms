@@ -176,7 +176,7 @@ class FinalStopMissing(TerminalFailure):
 
 
 class QueuedInputMissing(TerminalFailure):
-    default_text = "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
+    default_text = "Pi RPC run ended before a queued input started; that input did not run."
 
     @classmethod
     def detected(cls, session: NativeSession, transport_ok: bool) -> bool:
