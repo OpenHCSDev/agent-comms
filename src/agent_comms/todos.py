@@ -140,7 +140,7 @@ from agent_comms.typed_table import (
 )
 from .goal_scope import OneGoal
 from agent_comms.work_branches import (
-    BranchComparison, BranchDifference, SourceGrowth, WorkBranchError, WorkBranches,
+    BranchComparison, BranchDifference, PageInfo, SourceGrowth, WorkBranchError, WorkBranches,
 )
 
 if TYPE_CHECKING:
@@ -890,18 +890,11 @@ class MergedListedPullRequest(ListedPullRequest):
 
 
 @dataclass(frozen=True)
-class PullRequestSearchPage:
-    """A search page must not silently certify a truncated GitHub answer as complete."""
+class ClosedPullRequestPage:
+    """The repository connection, stopped at the last update inside the requested window."""
 
-    count: int
-    incomplete: bool
-    numbers: tuple[int, ...]
-    limit: ClassVar[int] = 1000
-
-    def require_complete(self) -> tuple[int, ...]:
-        if self.incomplete or self.count > self.limit:
-            raise WorkBranchError(f'GitHub pull request search is incomplete ({self.count} results).')
-        return self.numbers
+    rows: tuple[ClosedListedPullRequest, ...]
+    page_info: PageInfo
 
 
 class PullRequests:
@@ -942,20 +935,34 @@ class PullRequests:
         return self.listed(todo.repo, UnmergedListedPullRequest, todo)
 
     def closed_unmerged(self, repo: RepositoryName, since: float) -> tuple[ClosedListedPullRequest, ...]:
-        """Search only the recent closed window, then use this frame's shared metadata read."""
+        """Read the repository itself: GitHub's search index can omit known closed requests."""
         stamp = datetime.fromtimestamp(since, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
-        found = repo.api(
-            'search/issues', '--method', 'GET', '--paginate', '-f',
-            f'q=repo:{repo.to_wire()} is:pr is:unmerged is:closed closed:>={stamp}',
-            '-f', 'per_page=100', '--jq',
-            '{count: .total_count, incomplete: .incomplete_results, numbers: [.items[].number]}',
-        )
-        if found.returncode:
-            raise WorkBranchError(found.stderr.strip() or f'Closed pull requests in {repo.to_wire()} could not be read.')
-        numbers = tuple(number for line in found.stdout.splitlines()
-                        for number in FieldCodec.decode(PullRequestSearchPage,
-                            FieldCodec.parse(line)).require_complete())
-        return tuple(closed for row in self.rows(repo, numbers) for closed in row.as_closed())
+        pending: tuple[tuple[str, ...], ...] = ((),)
+        numbers = []
+        while pending:
+            cursor, *remaining = pending
+            after = f', after: {json.dumps(cursor[0])}' if cursor else ''
+            query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
+                     f'name: {json.dumps(repo.name)}) {{ pullRequests(states: CLOSED, '
+                     'orderBy: {field: UPDATED_AT, direction: DESC}, first: 100'
+                     f'{after}) {{ pageInfo {{ hasNextPage endCursor }} nodes {{ '
+                     'number branch: headRefName head: headRefOid updated: updatedAt '
+                     'base: baseRefName closed_at: closedAt merged: mergedAt created: createdAt '
+                     '} } } }')
+            found = repo.api('graphql', '-f', 'query=' + query, '--jq',
+                '.data.repository.pullRequests as $page | '
+                f'{{rows: [$page.nodes[] | select(.merged == null and .closed_at >= {json.dumps(stamp)}) '
+                f'| . + {{kind: "{ClosedListedPullRequest.declared_name}", reviewable_times: [.created]}} '
+                '| del(.merged,.created)], page_info: ($page.pageInfo '
+                f'| .hasNextPage = (.hasNextPage and ($page.nodes[-1].updated >= {json.dumps(stamp)})))}}')
+            if found.returncode:
+                raise WorkBranchError(found.stderr.strip() or f'Closed pull requests in {repo.to_wire()} could not be read.')
+            page = FieldCodec.decode(ClosedPullRequestPage, FieldCodec.parse(found.stdout))
+            for row in page.rows:
+                self._read.setdefault((repo, row.number), row)
+                numbers.append(row.number)
+            pending = (*remaining, *page.page_info.following)
+        return tuple(closed for row in self.rows(repo, tuple(numbers)) for closed in row.as_closed())
 
     def claimed_heads(self, todo: Todo) -> Iterator[tuple[OrderClaim, PullRequest]]:
         """Join the current claim to its open PR in this same GitHub read."""

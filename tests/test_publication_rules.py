@@ -58,7 +58,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     def scan(frame):
         return ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)
 
-    frame = HeartbeatFrame.read(comms, 'lead', ProgressRead(()))
+    frame = HeartbeatFrame.capture(comms, 'lead', ProgressRead(()))
     (lost,) = scan(frame)
     request = PullRequestHead(source.github, 7, lost_head)
     assert lost.request == request
@@ -73,7 +73,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=NoHeadOrder())
     tool.invoke(comms, tool.arguments, caller=ThreadCaller('lead'))
     assert scan(frame) == (lost,)  # A later store write cannot alter this beat's snapshot.
-    assert scan(HeartbeatFrame.read(comms, 'lead', ProgressRead(()))) == ()
+    assert scan(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()))) == ()
 
     # A verdict on another head must not dispose of the closed head, nor of an armed conflict.
     github.put(source.github, UnmergedListedPullRequest(
@@ -101,8 +101,8 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     # Restore an ordinary closed head, then prove Git alone clears it after landing.
     github.put(source.github, ClosedListedPullRequest(
         11, 'closed/to-land', lost_head, closed_at=stamp, **common))
-    before = scan(HeartbeatFrame.read(comms, 'lead', ProgressRead(())))
+    before = scan(HeartbeatFrame.capture(comms, 'lead', ProgressRead(())))
     assert tuple(rule.request.pr for rule in before) == (11,)
     source.git(source.checkout, 'merge', '--no-edit', 'feature')
     source.git(source.checkout, 'push', 'origin', 'main')
-    assert scan(HeartbeatFrame.read(comms, 'lead', ProgressRead(()))) == ()
+    assert scan(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()))) == ()

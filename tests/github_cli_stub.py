@@ -35,17 +35,6 @@ def main():
             print("{}")
         else:
             raise AssertionError(f"Unexpected repository endpoint: {parts}")
-    elif arguments[:2] == ["api", "search/issues"]:
-        query = next(arguments[index + 1].removeprefix('q=')
-                     for index, value in enumerate(arguments)
-                     if value == '-f' and arguments[index + 1].startswith('q='))
-        repository = re.search(r'repo:(\S+)', query).group(1)
-        since = re.search(r'closed:>=(\S+)', query).group(1)
-        data = repositories[repository]
-        numbers = [entry['listed']['number'] for entry in data['requests'].values()
-                   if entry['listed']['kind'] == data['closed_kind']
-                   and entry['listed']['closed_at'] >= since]
-        print(json.dumps({'count': len(numbers), 'incomplete': False, 'numbers': numbers}))
     elif arguments[:2] == ["api", "graphql"]:
         query = arguments[arguments.index("-f") + 1]
         assert query.startswith("query=")
@@ -60,6 +49,13 @@ def main():
             # gh --jq returns the typed projection, not the raw GraphQL envelope.
             print(json.dumps({f"p{number}": data["requests"][number]["listed"]
                               for _, number in selections}))
+        elif 'pullRequests(states: CLOSED' in query:
+            projection = arguments[arguments.index('--jq') + 1]
+            since = re.search(r'\.closed_at >= "([^"]+)"', projection).group(1)
+            rows = [entry['listed'] for entry in data['requests'].values()
+                    if entry['listed']['kind'] == data['closed_kind']
+                    and entry['listed']['closed_at'] >= since]
+            print(json.dumps({'rows': rows, 'page_info': {'hasNextPage': False, 'endCursor': None}}))
         elif "pullRequests(" in query:
             print(json.dumps({"data": {"repository": {"pullRequests": {
                 "nodes": [{"number": entry["listed"]["number"],

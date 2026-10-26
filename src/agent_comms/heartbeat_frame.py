@@ -33,7 +33,7 @@ class HeartbeatFrame(HeldOrders):
     head_reviews: Mapping[PullRequestHead, tuple[HeadReviewRecord, ...]]
 
     @classmethod
-    def read(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
+    def capture(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
         scan = HeldOrders.read(comms, commander)
         snapshot = comms.registry.snapshot()
         project = snapshot.commander_project.require()
