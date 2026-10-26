@@ -330,7 +330,7 @@ class StorageRule(RoomAllocation, DurableFile):
             for path in present:
                 if not storage.owns(Checkout(path)):
                     self.deny(f'{path} is not a registered Git checkout of {owner.name}')
-                work = OrderCheckoutWork(path, owner)
+                work = OrderCheckoutWork(path, owner.incarnation)
                 if work.read_checkout().holds_work:
                     found.append(work)
         return tuple(found)
@@ -469,9 +469,9 @@ class StorageRule(RoomAllocation, DurableFile):
 
 @dataclass(frozen=True)
 class OrderCheckoutWork(WorkBranches):
-    """An owned order checkout uses the existing Git-work reader, not another Git policy."""
+    """An order checkout records its owner's identity, not its unrelated live state."""
 
-    owner: Thread
+    owner: ThreadIncarnation
 
 
 @dataclass(frozen=True)
