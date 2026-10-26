@@ -1220,6 +1220,14 @@ class ObserverRetired(StaleRevision, ObserverStatus):
         raise self
 
 
+@dataclass(frozen=True)
+class ObserverReadFailed(ObserverStatus):
+    error: Exception
+
+    def raise_if_failed(self) -> None:
+        raise self.error
+
+
 class ObserverDied(CoordinationError, ObserverStatus):
     """The observation service's process ended while the UI was using it.
 
@@ -1414,7 +1422,7 @@ class ObservationProcess(AbstractAsyncContextManager):
         await self.close()
 
     def start_receiving(
-        self, observed: Callable[[Observed], None], failed: Callable[[ObserverDied], None],
+        self, observed: Callable[[Observed], None], failed: Callable[[Exception], None],
     ) -> None:
         """Start this process's reader on the delivery loop, once at attachment."""
         receiving = asyncio.create_task(self.receive(observed, failed))
@@ -1427,7 +1435,7 @@ class ObservationProcess(AbstractAsyncContextManager):
     def observed(self, result: Observed) -> None:
         """Awaited-only consumers have no view updates to apply."""
 
-    def failed(self, error: ObserverDied) -> None:
+    def failed(self, error: Exception) -> None:
         """The status and pending reads already carry this failure."""
 
     def request(self, request: ObservationRequest) -> None:
@@ -1503,7 +1511,7 @@ class ObservationProcess(AbstractAsyncContextManager):
             loop.remove_reader(descriptor)
 
     async def receive(
-        self, observed: Callable[[Observed], None], failed: Callable[[ObserverDied], None],
+        self, observed: Callable[[Observed], None], failed: Callable[[Exception], None],
     ) -> None:
         """Read and unpickle one complete packet off-loop; settle it on this loop.
 
@@ -1520,8 +1528,12 @@ class ObservationProcess(AbstractAsyncContextManager):
             failed(self.ended(None))
         except ObserverDied as error:
             failed(error)
-        except Exception:
-            failed(self.ended(traceback.format_exc()))
+        except Exception as error:
+            # A decode or view-delivery defect is not evidence the child died.
+            # Preserve its original exception and reject later reads too.
+            self.status = ObserverReadFailed(error)
+            self.abandon_reads(error)
+            failed(error)
 
     @cached_property
     def closing(self) -> asyncio.Task[None]:
