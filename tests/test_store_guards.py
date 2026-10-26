@@ -4,26 +4,21 @@ from __future__ import annotations
 import select
 
 import agent_comms
-import sqlite3
 import subprocess
 import sys
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.process_claim import ClaimHeldError, ProcessSingleton
-from agent_comms.store_files import SingleFileStore, StoreBusy, StoreLockContention
+from agent_comms.store_files import SingleFileStore
+from agent_comms.todos import TodoStore
 
-from test_locked_store import (
-    _hold_store_write, assert_writer_excluded, event, process,
-)
-
-
-class ImmediateSQLite(SQLiteFile):
-    contention = StoreLockContention(0.0)
+from test_locked_store import _hold_store_write, assert_writer_excluded, event, process
 
 
 def _competing_write(owner, path, started, entered):
@@ -65,19 +60,6 @@ def _hold_claim(path, ready, release):
             raise TimeoutError("claim holder was not released")
 
 
-def _hold_boundary(path, ready, release):
-    @contextmanager
-    def opening():
-        with closing(sqlite3.connect(path)) as db:
-            ready.set()
-            if not release.wait(10):
-                raise TimeoutError("attachment boundary was not released")
-            yield db
-
-    with SQLiteFile.attached(path, opening):
-        pass
-
-
 @contextmanager
 def _exec_adopter(claim):
     with ExitStack() as owned:
@@ -117,41 +99,35 @@ def test_process_singleton_refuses_competitors_and_keeps_an_exec_adoption(tmp_pa
         assert held.writable()
 
 
-def test_sqlite_boundaries_serialize_and_retire_with_the_real_exception(tmp_path):
-    path = tmp_path / "store.sqlite3"
-    opened, retired = [], []
-
-    @contextmanager
-    def opening():
-        opened.append(path)
-        with closing(sqlite3.connect(path)) as db:
-            try:
-                yield db
-            finally:
-                retired.append(sys.exception())
-                assert_writer_excluded(path)
-
-    ready, release = event(), event()
-    with process(_hold_boundary, path, ready, release):
-        assert ready.wait(10)
-        with pytest.raises(BlockingIOError), ImmediateSQLite.attached(path, opening):
-            pytest.fail("attached during another process's connection boundary")
-        assert opened == []
-        release.set()
-    failure = RuntimeError("SQL body failed")
-    with pytest.raises(RuntimeError) as caught:
-        with SQLiteFile.attached(path, opening) as connection:
-            assert connection.execute("SELECT 1").fetchone() == (1,)
-            raise failure
-    assert caught.value is failure
-    assert opened == [path]
-    assert retired == [failure]
-    with SQLiteFile.exclusive_writer(path) as connection:
-        assert connection.execute("SELECT 1").fetchone() == (1,)
-    with closing(SQLiteFile.writer(
-        path.as_uri() + "?mode=rw", StoreBusy(), isolation_level=None, uri=True,
-    )) as connection:
-        assert connection.execute("SELECT 1").fetchone() == (1,)
+def test_sqlite_connections_ignore_file_guards_but_maintenance_keeps_them(tmp_path):
+    bus = Bus.install(tmp_path / Bus.filename)
+    todos = TodoStore(tmp_path)
+    with todos.writing():
+        pass
+    releases = []
+    with ExitStack() as holders:
+        try:
+            for store in (bus, todos):
+                ready, release = event(), event()
+                releases.append(release)
+                holders.enter_context(process(_hold_store_write, SQLiteFile, store.path, ready, release))
+                assert ready.wait(10)
+            with bus.observing() as connection:
+                assert connection.execute("SELECT 1").fetchone()[0] == 1
+            with todos.snapshot() as connection:
+                assert connection.execute("SELECT 1").fetchone()[0] == 1
+            for store in (bus, todos):
+                with store.writer_connection() as connection:
+                    with store.write_transaction(connection):
+                        connection.execute("PRAGMA user_version = 1")
+                    assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        finally:
+            for release in releases:
+                release.set()
+    for store in (bus, todos):
+        with SQLiteFile.exclusive_writer(store.path) as connection:
+            assert connection.execute("SELECT 1").fetchone()[0] == 1
+            assert_writer_excluded(store.path)
 
 
 if __name__ == "__main__":
