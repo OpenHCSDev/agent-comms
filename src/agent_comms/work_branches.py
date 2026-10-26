@@ -9,13 +9,11 @@ worktrees. Nothing here is stored.
 from __future__ import annotations
 
 import subprocess
-from collections import OrderedDict
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property, lru_cache
 from pathlib import Path
-from threading import RLock
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import ConfigDict
@@ -210,13 +208,6 @@ class BranchComparison:
 
 
 @dataclass(frozen=True)
-class CommitComparison:
-    repository: WorkBranches
-    base: str
-    head: str
-
-
-@dataclass(frozen=True)
 class WorkBranches:
     """One repository's branches with commits that main does not have."""
 
@@ -229,10 +220,6 @@ class WorkBranches:
     )
     main: ClassVar[str] = "main"
     timeout: ClassVar[float] = 60.0
-    # Immutable pair answers survive frame readers; the LRU bounds retained old main SHAs.
-    _comparison_capacity: ClassVar[int] = 1024
-    _comparisons: ClassVar[OrderedDict[CommitComparison, tuple[str, ...]]] = OrderedDict()
-    _comparison_lock: ClassVar[RLock] = RLock()
 
     _PULLS: ClassVar[str] = """
 query($owner: String!, $name: String!, $after: String) {
@@ -367,26 +354,9 @@ query($owner: String!, $name: String!, $after: String) {
         if not heads:
             return {}
         (published,) = self.remote_heads('origin', f'refs/heads/{self.main}')
-        requested = {head: CommitComparison(self, published, head) for head in dict.fromkeys(heads)}
-        answers = {}
-        pending = []
-        with self._comparison_lock:
-            for head, key in requested.items():
-                if key in self._comparisons:
-                    answers[head] = self._comparisons[key]
-                    self._comparisons.move_to_end(key)
-                else:
-                    pending.append(head)
-        if pending:
-            computed = self._compare_heads(published, tuple(pending))
-            with self._comparison_lock:
-                for head, answer in computed.items():
-                    self._comparisons[requested[head]] = answer
-                    answers[head] = answer
-                while len(self._comparisons) > self._comparison_capacity:
-                    self._comparisons.popitem(last=False)
-        return answers
+        return self._compare_heads(published, tuple(sorted(set(heads))))
 
+    @lru_cache(maxsize=1024)
     def _compare_heads(self, published: str, heads: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
         self.require_commits('origin', published, *heads)
         common = self._git('merge-base', '--octopus', published, *heads).splitlines()

@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.field_codec import OrderId, PathText
-from agent_comms.standing_rules import DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule
-from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.head_review import PullRequestHead
+from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
+from agent_comms.standing_rules import DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink
 from agent_comms.work_branches import UnpushedHead, WorkBranches
