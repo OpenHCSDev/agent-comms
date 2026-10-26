@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from .coordination_database import InvalidStore, MissingStore
+    from .native_output import NativeOutputLocation
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
@@ -523,8 +524,10 @@ class Transcripts:
         source = self._page_source(name, identity.page_bound, identity.historical_source)
         return TranscriptRead(self, identity, source)
 
-    def capture_native_output(self, name: str, location) -> TranscriptReadIdentity:
+    def capture_native_output(self, name: str, location: NativeOutputLocation) -> TranscriptReadIdentity:
         page = self._page_source(name, None, None)
+        if not isinstance(page.records, NativeTranscript):
+            raise TranscriptChanged()
         original = page.records.committed_output_cut(location)
         frontier = page.projection.frontier
         through = page.thread.runtime.transcript_cursor(

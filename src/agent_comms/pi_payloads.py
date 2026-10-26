@@ -85,6 +85,7 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .backend import NativeSession, TurnSession
     from .native_entries import TranscriptProjection
+    from .native_output import NativeOutputScope
     from .pending_requests import PendingRequest, PendingRequests
     from .pi_commands import PiCommand
     from .pi_events import AutoRetryEnd, Response
@@ -815,7 +816,7 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     def matches_input(self, text: str, native_id: InputId | PiOmitted) -> bool:
         return False
 
-    def committed_outputs(self):
+    def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
         return ()
 
     def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
@@ -908,7 +909,7 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     ] = PiOmitted()
     assistant = True
 
-    def committed_outputs(self):
+    def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
         from .native_output import AssistantOutput
 
         return (AssistantOutput(),)
@@ -1016,7 +1017,7 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
     is_error: Annotated[PiField[bool], WireName("isError")] = False
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
-    def committed_outputs(self):
+    def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
         from .native_output import ToolOutput
 
         return (ToolOutput(self.tool_call_id),)

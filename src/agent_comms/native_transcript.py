@@ -16,6 +16,7 @@ from .native_pi import NativeContextJournal
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
+    from .native_output import NativeOutputLocation
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
 
@@ -262,7 +263,7 @@ class NativeTranscript(TranscriptSource):
             revision = FileRevision.from_file(stream)
             return PresentSessionCut(revision, record_end(stream, revision.size))
 
-    def committed_output_cut(self, location) -> SessionCut:
+    def committed_output_cut(self, location: NativeOutputLocation) -> SessionCut:
         """Corroborate one indexed output against its original header and row."""
         if self.path.absolute() != location.path:
             raise TranscriptChanged()
