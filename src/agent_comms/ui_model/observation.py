@@ -634,8 +634,6 @@ class NotificationsRead:
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
         """Read marks, participant activity or retained assignment evidence changed."""
-        if revision.registry != self.revision.registry:
-            return True
         current = (comms.views.observed_activity(revision, self.activity)
                    if revision.changed_since(ActivityView(), self.revision)
                    else self.activity)
@@ -820,6 +818,11 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
     def __init__(self, request: ObserveNotifications):
         super().__init__(request)
         self.read_states: dict[ReadNotifications, NotificationsRead] = {}
+
+    def continue_from(self, previous: Self) -> Self:
+        self.read_states = {request: state for request, state in previous.read_states.items()
+                            if request in self.request.reads}
+        return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         for request in self.request.reads:

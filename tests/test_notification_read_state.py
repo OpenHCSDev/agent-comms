@@ -1,6 +1,8 @@
 import sys
 from dataclasses import replace
+from pathlib import Path
 
+from agent_comms.comms import Comms
 from agent_comms.history_views import HistoryViews
 from agent_comms.private_path import FileRevision
 from agent_comms.presentation import NoRevision, WireRevision
@@ -9,7 +11,8 @@ from agent_comms.revision_views import (
     SidebarView, StatusView, StoresView,
 )
 from agent_comms.ui_model.observation import (
-    NotificationsRead, ReadNotifications, ReadRecordedNotifications, UnreadableNotificationsRead,
+    NotificationsRead, ObserveNotifications, ReadNotifications, ReadRecordedNotifications,
+    UnreadableNotificationsRead,
 )
 
 
@@ -49,6 +52,32 @@ def test_notification_read_only_acquires_activity_when_its_source_changed(comms,
         assert calls == 1
     finally:
         sys.setprofile(previous)
+
+
+def test_unrelated_registry_change_keeps_the_notification_window(comms: Comms, tmp_path: Path):
+    marker = tmp_path / 'registry-revision'
+    marker.write_text('unrelated registration change')
+    original = WireRevision.empty()
+    later = replace(original, registry=FileRevision.capture(marker).revisions())
+    settled = NotificationsRead(original)
+
+    assert later.changed_since(ActivityView(), original)
+    assert not settled.live_changed(comms, later)
+
+
+def test_changed_notification_interest_keeps_only_retained_read_states():
+    kept = ReadNotifications('kept', ())
+    removed = ReadNotifications('removed', ())
+    added = ReadNotifications('added', ())
+    previous = ObserveNotifications(frozenset((kept, removed))).observation()
+    state = NotificationsRead(WireRevision.empty())
+    previous.read_states = {kept: state, removed: state}
+    requested = ObserveNotifications(frozenset((kept, added))).observation()
+
+    continued = previous.for_interest(requested)
+
+    assert continued is requested
+    assert requested.read_states == {kept: state}
 
 
 def test_activity_views_receive_expiry_without_expiring_store_or_evidence_views():
