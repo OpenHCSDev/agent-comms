@@ -74,9 +74,7 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
     exact_target: Annotated[
         str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
     ]
-    wire_root_id: Annotated[
-        RootId, Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
-    ]
+    wire_root_id: RootId
     owner_generation: Annotated[int, Column(check="owner_generation>0")]
     attempt_ordinal: Annotated[int, Column(check="attempt_ordinal>0")]
     dispatched_at_ms: Annotated[int, Column(check="dispatched_at_ms>=0")]

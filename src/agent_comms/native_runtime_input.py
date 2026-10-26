@@ -243,9 +243,7 @@ class NativeRuntimeInput(
 
     input_id: Annotated[
         InputId,
-        FrozenColumn(
-            primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
-        ),
+        FrozenColumn(primary_key=True),
     ]
     stage: Annotated[
         type[NativeInputExecution], FrozenColumn(check=NativeInputExecution.sql_constraint("stage"))
@@ -410,10 +408,7 @@ class CurrentNativeCursor(
 
     wire_root_id: Annotated[
         RootId,
-        FrozenColumn(
-            primary_key=True,
-            check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'",
-        ),
+        FrozenColumn(primary_key=True),
     ]
     recipient_lookup: Annotated[
         ThreadLookup,

@@ -170,8 +170,8 @@ class NativeContextRecord(NativeInputCommit):
     ]
     llm_context_digest: Annotated[
         str,
+        Sha256Text,
         WireName("llmContextDigest"),
-        Column(check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"),
     ]
     # The native writer stamps the moment this context was committed for a
     # model request: the time the input was shown to the model.

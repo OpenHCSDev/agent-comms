@@ -114,17 +114,10 @@ class ClaimBatchAcknowledgements(
 
     wire_root_id: Annotated[
         RootId,
-        FrozenColumn(
-            primary_key=True,
-            check=(
-                "\n"
-                "                length(wire_root_id) = 32 AND wire_root_id NOT G"
-                "LOB '*[^0-9a-f]*'"
-            ),
-        ),
+        FrozenColumn(primary_key=True),
     ]
     wire_seq: Annotated[int, FrozenColumn(primary_key=True, check="wire_seq > 0")]
-    message_id: Annotated[MessageId, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
+    message_id: Annotated[MessageId, FrozenColumn()]
     exact_target: Annotated[str, FrozenColumn(check="length(exact_target) BETWEEN 1 AND 256")]
     envelope_digest: Annotated[str, FrozenColumn(check="length(envelope_digest) = 64")]
     audience_digest: Annotated[str, FrozenColumn(check="length(audience_digest) = 64")]

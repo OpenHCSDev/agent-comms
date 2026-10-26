@@ -1,5 +1,6 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
+import json
 import sqlite3
 from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
@@ -22,6 +23,7 @@ from agent_comms.typed_table import (
     Generated,
     Index,
     IntegerStorage,
+    JsonStorage,
     SqlStorage,
     SqlValue,
     SQLiteSchemaObject,
@@ -126,6 +128,27 @@ def test_sqlite_uses_declared_choices_and_inherited_spelling():
                 db.execute(statement, refused)
         db.execute(statement, values)
         assert DeclaredChoicesRow.select(db) == [record]
+
+
+def test_spelling_checks_follow_json_storage_and_reject_bytes_in_exact_storage():
+    @dataclass(frozen=True)
+    class StoredSpellingRow(TypedTable):
+        key: Annotated[int, Column(primary_key=True)]
+        exact: Annotated[GoalId, Column(storage=ExactStorage)]
+        json_value: Annotated[GoalId, Column(storage=JsonStorage)]
+
+    value = "a" * Id128Text.digits
+    with sqlite3.connect(":memory:") as db:
+        StoredSpellingRow.create(db)
+        statement = f'INSERT INTO "{StoredSpellingRow.declared_name}" VALUES (?, ?, ?)'
+        db.execute(statement, (1, value, json.dumps(value)))
+        assert StoredSpellingRow.select(db) == [StoredSpellingRow(1, GoalId(value), GoalId(value))]
+        for malformed in (value.encode(), value.upper(), value[:-1]):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (2, malformed, json.dumps(value)))
+        for malformed in (json.dumps(value.upper()), json.dumps(value[:-1]), json.dumps(32)):
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute(statement, (2, value, malformed))
 
 
 def test_required_row_distinguishes_absence_from_duplicate_results():

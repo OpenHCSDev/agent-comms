@@ -47,8 +47,7 @@ from contextlib import AsyncExitStack, closing, contextmanager
 from abc import abstractmethod
 import sqlite3
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
-from agent_comms.private_sidecar import sidecar_connection
+from agent_comms.native_prompt_binding import PromptBinding, PromptBindings
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_arguments import GivenArguments
@@ -667,11 +666,11 @@ class PromptBindingContention(ClaimContention, declared_name='binding'):
     @contextmanager
     def ownership(cls, service, owners):
         with Coordination(str(service.root/'coordination.sqlite3')) as store:
-            path = binding_store_path(store)
+            path = PromptBindings.path_for(store)
             if not path.exists():
                 yield False
                 return
-            with sidecar_connection(path, PromptBinding) as db:
+            with PromptBindings.connection_at(path) as db:
                 # All burst reservations must have their genuine immutable
                 # binding before holding its snapshot; no writer is blocked in
                 # an earlier bind transaction instead of the affected send seam.

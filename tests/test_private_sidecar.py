@@ -13,7 +13,10 @@ import agent_comms.private_sidecar as sidecar
 from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.field_codec import FieldCodec, InputId, RootId, ThreadLookup
-from agent_comms.native_prompt_binding import PromptBinding
+from agent_comms.native_prompt_binding import PromptBinding, PromptBindings
+from agent_comms.maintenance_barrier import MaintenanceNotHeldError
+from agent_comms.typed_table import ReconciledFile
+from conftest import maintenance_held
 
 
 @pytest.fixture
@@ -24,15 +27,7 @@ def path(tmp_path):
     # Positive fixtures use a real lexical root; redirect negatives add aliases.
     tmp_path = tmp_path.resolve()
     tmp_path.chmod(0o700)
-    return tmp_path / "binding.sqlite3"
-
-
-def _create(path):
-    sidecar.create_sidecar_file(path, PromptBinding)
-
-
-def _connection(path):
-    return sidecar.sidecar_connection(path, PromptBinding)
+    return PromptBindings.path_in(tmp_path)
 
 
 def _insert(db, key="1"):
@@ -47,6 +42,49 @@ def _insert(db, key="1"):
         expected_prompt_digest="a" * 64,
         bound_at_ms=1,
     ).insert(db)
+
+
+def test_declared_private_snapshot_carries_old_checks_without_changing_records(path):
+    previous = PromptBindings.declared_schema().copy()
+    column = PromptBinding._fields_named(("input_id",))[0]
+    check = column.storage.constraints(column.wire_name, column.annotation)[0]
+    previous[PromptBinding.declared_name] = previous[PromptBinding.declared_name].replace(
+        f" CHECK ({check})", "", 1,
+    )
+    with sqlite3.connect(":memory:") as db:
+        for statement in previous.values():
+            db.execute(statement)
+        sidecar.SnapshotMeta.for_schema(previous).insert(db)
+        _insert(db)
+        before = db.execute("SELECT * FROM prompt_binding").fetchall()
+        db.commit()
+        path.write_bytes(db.serialize())
+        path.chmod(0o600)
+    original = path.read_bytes()
+    with pytest.raises(IdentityConflict), PromptBindings.connection_at(path):
+        pytest.fail("an old schema reached a normal reader")
+    with pytest.raises(MaintenanceNotHeldError):
+        PromptBindings.reconcile_at(path)
+    assert path.read_bytes() == original
+    selected = ReconciledFile.existing_in(path.parent)[path]
+    assert selected is PromptBindings
+    with maintenance_held(path.parent):
+        assert selected.reconcile_at(path)
+        carried = path.read_bytes()
+        assert not selected.reconcile_at(path)
+        assert path.read_bytes() == carried
+    with PromptBindings.connection_at(path, read_only=True) as db:
+        assert [tuple(row) for row in db.execute("SELECT * FROM prompt_binding")] == before
+    copied = path.with_name("copied.sqlite3")
+    PromptBindings.copy_file(path, copied)
+    with PromptBindings.connection_at(copied, read_only=True) as db:
+        assert [tuple(row) for row in db.execute("SELECT * FROM prompt_binding")] == before
+    sidecar.StoreOwner.snapshot_intent(path).write_text("uncertain", encoding="utf-8")
+    with pytest.raises(sidecar.SidecarCommitUnknown):
+        PromptBindings.copy_file(path, copied)
+    with pytest.raises(sidecar.SidecarCommitUnknown):
+        PromptBindings.reconcile_at(path)
+    assert path.read_bytes() == carried
 
 
 @pytest.mark.parametrize(
@@ -70,14 +108,14 @@ def test_invalid_leaf_never_mutates_external_target(path, kind):
     else:
         path.touch(mode=0o600)
     with pytest.raises((IdentityConflict, OSError)):
-        _create(path)
+        PromptBindings.create_at(path)
     assert external.read_bytes() == b""
     assert not path.with_name("missing").exists()
 
 
 @pytest.mark.parametrize("kind", ["file", "dangling", "directory", "fifo"])
 def test_pending_intent_is_present_without_following_or_opening_it(path, kind):
-    _create(path)
+    PromptBindings.create_at(path)
     before = path.read_bytes()
     intent = sidecar.StoreOwner.snapshot_intent(path)
     if kind == "file":
@@ -90,7 +128,7 @@ def test_pending_intent_is_present_without_following_or_opening_it(path, kind):
         os.mkfifo(intent, 0o600)
     identity = intent.lstat()
     with pytest.raises(sidecar.SidecarCommitUnknown):
-        with _connection(path):
+        with PromptBindings.connection_at(path):
             pytest.fail("a pending commit reached the database caller")
     assert path.read_bytes() == before
     assert intent.lstat() == identity
@@ -103,7 +141,7 @@ def test_symlink_ancestor_refused(path):
     link = path.parent / "alias"
     link.symlink_to(directory, target_is_directory=True)
     with pytest.raises((IdentityConflict, OSError)):
-        _create(link / path.name)
+        PromptBindings.create_at(link / path.name)
     assert not (directory / path.name).exists()
 
 
@@ -119,25 +157,25 @@ def test_symlink_ancestor_refused(path):
     ],
 )
 def test_all_schema_objects_checked_independent_of_name(path, sql):
-    _create(path)
+    PromptBindings.create_at(path)
     with sqlite3.connect(path) as db:
         db.execute(sql)
     before = path.read_bytes()
-    with pytest.raises(IdentityConflict), _connection(path):
+    with pytest.raises(IdentityConflict), PromptBindings.connection_at(path):
         pass
-    with pytest.raises(IdentityConflict), _connection(path):
+    with pytest.raises(IdentityConflict), PromptBindings.connection_at(path):
         pytest.fail("tampered schema reached caller")
     assert path.read_bytes() == before
 
 
 @pytest.mark.parametrize("replacement", ["file", "symlink", "hardlink", "lock"])
 def test_mid_scope_replacement_refuses_before_publish(path, replacement):
-    _create(path)
+    PromptBindings.create_at(path)
     before = path.read_bytes()
     external = path.with_name("external.sqlite3")
     external.write_bytes(before)
     external.chmod(0o600)
-    with pytest.raises(IdentityConflict), _connection(path) as db:
+    with pytest.raises(IdentityConflict), PromptBindings.connection_at(path) as db:
         _insert(db)
         if replacement == "lock":
             lock = path.with_name(f".{path.name}.snapshot-lock")
@@ -157,10 +195,10 @@ def test_mid_scope_replacement_refuses_before_publish(path, replacement):
 
 
 def test_mutation_of_loaded_inode_refuses_before_publish(path):
-    _create(path)
+    PromptBindings.create_at(path)
     with (
         pytest.raises(IdentityConflict),
-        _connection(path) as db,
+        PromptBindings.connection_at(path) as db,
     ):
         _insert(db)
         with sqlite3.connect(path) as other:
@@ -171,9 +209,9 @@ def test_mutation_of_loaded_inode_refuses_before_publish(path):
 
 
 def test_schema_drift_during_scope_cannot_publish(path):
-    _create(path)
+    PromptBindings.create_at(path)
     before = path.read_bytes()
-    with pytest.raises(sqlite3.DatabaseError), _connection(path) as db:
+    with pytest.raises(sqlite3.DatabaseError), PromptBindings.connection_at(path) as db:
         db.execute(
             "CREATE TRIGGER suppress BEFORE INSERT ON prompt_binding "
             "BEGIN SELECT RAISE(IGNORE); END"
@@ -182,23 +220,23 @@ def test_schema_drift_during_scope_cannot_publish(path):
 
 
 def test_drop_table_is_refused_before_schema_changes(path):
-    _create(path)
+    PromptBindings.create_at(path)
     before = path.read_bytes()
-    with pytest.raises(sqlite3.DatabaseError), _connection(path) as db:
+    with pytest.raises(sqlite3.DatabaseError), PromptBindings.connection_at(path) as db:
         db.execute("DROP TABLE prompt_binding")
     assert path.read_bytes() == before
 
 
 def test_mode_drift_and_connection_attachment_are_not_admitted(path):
-    _create(path)
+    PromptBindings.create_at(path)
     before = path.read_bytes()
-    with pytest.raises(IdentityConflict), _connection(path) as db:
+    with pytest.raises(IdentityConflict), PromptBindings.connection_at(path) as db:
         _insert(db)
         path.chmod(0o644)
     path.chmod(0o600)
     with (
         pytest.raises(sqlite3.DatabaseError),
-        _connection(path) as db,
+        PromptBindings.connection_at(path) as db,
     ):
         db.execute("ATTACH ':memory:' AS other")
     assert path.read_bytes() == before
@@ -209,12 +247,12 @@ import os, signal, sys
 from pathlib import Path
 import agent_comms.private_sidecar as s
 from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
-from agent_comms.native_prompt_binding import PromptBinding
+from agent_comms.native_prompt_binding import PromptBinding, PromptBindings
 from agent_comms.field_codec import FieldCodec, InputId, RootId, ThreadLookup
 p = Path(sys.argv[1])
 print('READY', flush=True)
 assert sys.stdin.readline() == 'GO\n'
-s.create_sidecar_file(p, PromptBinding)
+PromptBindings.create_at(p)
 if len(sys.argv) > 2:
     sync = os.fsync
     count = 0
@@ -225,7 +263,7 @@ if len(sys.argv) > 2:
         if count == int(sys.argv[2]):
             os.kill(os.getpid(), signal.SIGKILL)
     s.os.fsync = crash
-    with s.sidecar_connection(p, PromptBinding) as db:
+    with PromptBindings.connection_at(p) as db:
         PromptBinding(input_id=InputId('1'*32),stage=TriageNativeExecution,
             execution_id=UnrecordedNativeColumn(),attempt_ordinal=UnrecordedNativeColumn(),owner_lookup=FieldCodec.decode(ThreadLookup,'2'*32),
             owner_generation=1,wire_root_id=FieldCodec.decode(RootId,'3'*32),
@@ -257,7 +295,7 @@ def test_two_process_installers_serialize_one_exact_schema(path):
             stdout, stderr = child.communicate(timeout=10)
             assert child.returncode == 0, stderr
             assert stdout == "OK\n"
-        with _connection(path):
+        with PromptBindings.connection_at(path):
             pass
     finally:
         for child in children:
@@ -268,7 +306,7 @@ def test_two_process_installers_serialize_one_exact_schema(path):
 
 @pytest.mark.parametrize("cut", [3, 4])
 def test_process_crash_before_or_after_replacement_leaves_unreplayable_intent(path, cut):
-    _create(path)
+    PromptBindings.create_at(path)
     child = _worker(path, str(cut))
     try:
         assert child.stdout.readline() == "READY\n"
@@ -276,7 +314,7 @@ def test_process_crash_before_or_after_replacement_leaves_unreplayable_intent(pa
         assert child.returncode < 0, stderr
         assert "OK" not in stdout
         with pytest.raises(sidecar.SidecarCommitUnknown):
-            _create(path)
+            PromptBindings.create_at(path)
     finally:
         if child.poll() is None:
             child.kill()
@@ -285,11 +323,11 @@ def test_process_crash_before_or_after_replacement_leaves_unreplayable_intent(pa
 
 def test_a_verified_snapshot_is_checked_again_the_moment_its_bytes_change(path):
     """A remembered pass requires the same complete snapshot identity."""
-    _create(path)
-    with _connection(path) as db:
+    PromptBindings.create_at(path)
+    with PromptBindings.connection_at(path) as db:
         _insert(db)
-    assert sidecar.VerifiedSnapshots.passed[path, PromptBinding] == sidecar.SnapshotIdentity.of(path.stat())
+    assert sidecar.VerifiedSnapshots.passed[path, PromptBindings] == sidecar.SnapshotIdentity.of(path.stat())
     with sqlite3.connect(path) as db:
         db.execute("CREATE TABLE unrelated_table (x)")
-    with pytest.raises(IdentityConflict), _connection(path):
+    with pytest.raises(IdentityConflict), PromptBindings.connection_at(path):
         pytest.fail("a changed snapshot reached the caller on a remembered pass")

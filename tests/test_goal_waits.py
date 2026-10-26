@@ -5,7 +5,7 @@ from agent_comms.field_codec import GoalId
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import GoalWaits, GoalWaitTargetRow, RecordedGoalWait
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.typed_table import WriterOwnedFile
+from agent_comms.typed_table import ReconciledFile, WriterOwnedFile
 from test_goal_standby_liveness import _finish, _waiting
 
 
@@ -24,7 +24,9 @@ def test_schema_carry_rederives_target_index_without_changing_saved_waits(tmp_pa
         db.execute(f'DROP INDEX "{index}"')
         db.commit()
         assert db.execute("PRAGMA foreign_key_check").fetchall()
-        assert GoalWaits.reconcile_schema(db, WriterOwnedFile())
+        selected = ReconciledFile.existing_in(waits.root)[waits.path]
+        assert selected is GoalWaits
+        assert selected.reconcile_schema(db, WriterOwnedFile())
         assert not db.execute("PRAGMA foreign_key_check").fetchall()
         assert db.execute("SELECT goal_id, wait FROM stored_goal_wait ORDER BY goal_id").fetchall() == before
     assert waits.targeting(target) == (original,)

@@ -62,7 +62,7 @@ class NativeInputCommit:
     input_id: Annotated[
         InputId,
         WireName("inputId"),
-        Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"),
+        Column(primary_key=True),
     ]
     session_id: Annotated[PiSessionId, WireName("sessionId")]
     session_entry_id: Annotated[str, WireName("sessionEntryId")]

@@ -105,14 +105,7 @@ class PublicationIntents(
     ]
     expected_message_id: Annotated[
         MessageId,
-        Column(
-            storage=ExactStorage,
-            unique=True,
-            check="""
-      typeof(expected_message_id) = 'text' AND length(expected_message_id) BETWEEN 1 AND
-      256
-    """,
-        ),
+        Column(storage=ExactStorage, unique=True),
     ]
 
     def __post_init__(self) -> None:
@@ -199,11 +192,7 @@ class PublicationEvidence(
     seq: Annotated[int, Column(unique=True, check="seq > 0")]
     message_id: Annotated[
         MessageId,
-        Column(
-            storage=ExactStorage,
-            unique=True,
-            check=("\n      typeof(message_id) = 'text' AND length(message_id) BETWEEN 1 AND 256"),
-        ),
+        Column(storage=ExactStorage, unique=True),
     ]
     received_at_ms: Annotated[int, Column(check="received_at_ms >= 0")]
     obligation_publication_required: ClassVar[Generated] = Generated(

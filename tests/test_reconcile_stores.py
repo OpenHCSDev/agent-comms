@@ -11,7 +11,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Annotated
@@ -337,7 +337,7 @@ def test_planned_reconcile_refuses_a_writer_owned_store_its_declaration_cannot_o
     @dataclass(frozen=True)
     class LaunchRow(LaunchTables, TypedTable, declared_name="launch_rows"):
         key: Annotated[str, Column(primary_key=True)]
-        count: int
+        count: int = field()
 
     stored = tmp_path / "state" / "launch.db"
     stored.parent.mkdir()

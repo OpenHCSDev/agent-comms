@@ -1659,6 +1659,10 @@ class TextRepresentation[V](FieldRepresentation[V]):
         return compile_decoder(str)
 
     @classmethod
+    def sql_checks(cls, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
+        return (f"{column} IS NULL OR typeof({column}) = 'text'",)
+
+    @classmethod
     def decode(cls, value: object) -> V:
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cls.from_text(FieldCodec.decode(str, value))
@@ -1738,7 +1742,8 @@ class HexDigits(SpelledText):
 
     @classmethod
     def sql_checks(cls, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
-        return (f"length({column}) BETWEEN {cls.minimum_digits()} AND {cls.digits}",
+        return (*super().sql_checks(column, quote),
+                f"length({column}) BETWEEN {cls.minimum_digits()} AND {cls.digits}",
                 f"{column} NOT GLOB '*[^0-9a-f]*'",
                 f"instr({column}, char(0)) = 0")
 
@@ -1827,7 +1832,8 @@ class BoundedText(TextRepresentation[str], ValidatedScalar):
 
     @classmethod
     def sql_checks(cls, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
-        return (f"instr({column}, char(0)) = 0",
+        return (*super().sql_checks(column, quote),
+                f"instr({column}, char(0)) = 0",
                 f"length({column}) BETWEEN 1 AND {cls.max_length}")
 
     @classmethod

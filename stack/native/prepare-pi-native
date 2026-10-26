@@ -44,6 +44,11 @@ if [[ ! -x "$python" ]]; then
     exit 1
 fi
 manifest="$stack_root/pi-native.sha256"
+# Render before the input stamp or cached-package check: the reader's declaration
+# also owns the native writer's schema.
+PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" \
+    "$python" "$repo_root/tools/render_native_proof_schema.py" \
+    "$native_root/native-proof-schema.mjs"
 # Build verification renders the unit prompt, never a unit's first turn.
 identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
     "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")

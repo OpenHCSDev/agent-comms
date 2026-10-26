@@ -47,10 +47,7 @@ class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorRow):
 
     participant_lookup: Annotated[
         ThreadLookup,
-        Column(
-            primary_key=True,
-            check="\n        length(participant_lookup) BETWEEN 1 AND 256\n    ",
-        ),
+        Column(primary_key=True),
     ]
     committed: bool
 

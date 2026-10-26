@@ -124,7 +124,11 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
 
     @classmethod
     def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
-        return compile_decoder(annotation).sql_checks(_identifier(column), SQLiteLiteral.of)
+        return compile_decoder(annotation).sql_checks(cls.decoded_column(column), SQLiteLiteral.of)
+
+    @classmethod
+    def decoded_column(cls, column: str) -> str:
+        return _identifier(column)
 
     @classmethod
     def to_sql(cls, value: object) -> object:
@@ -239,6 +243,10 @@ class ExactStorage(SqlStorage):
 
 class JsonStorage(SqlStorage):
     sql_type = "TEXT"
+
+    @classmethod
+    def decoded_column(cls, column: str) -> str:
+        return f"json_extract({super().decoded_column(column)}, '$')"
 
     @classmethod
     def accepts(cls, annotation: object) -> bool:
@@ -2699,6 +2707,11 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
     it opens the file and the backup holds every file the change rewrites."""
 
     __slots__ = ()
+
+    @classmethod
+    def families(cls) -> Iterator[type[Self]]:
+        """Schema owners are registered declarations, including dataclass replacements."""
+        return iter(cls.members_with(cls))
 
     @classmethod
     @abstractmethod

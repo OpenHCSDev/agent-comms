@@ -26,7 +26,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.locked_store import DurableFile, SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
 
 from .field_codec import FieldCodec
@@ -38,6 +38,11 @@ from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
 from .store_files import ExclusiveLock, StoreOwner
 from .typed_table import (
     AllObjectsTables,
+    DurableTables,
+    NoPractice,
+    Practice,
+    ReconciledFile,
+    TableSchema,
     ImmutableRows,
     SingletonRow,
     SQLiteDatabase,
@@ -201,40 +206,18 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 class SnapshotMeta(ImmutableRows, SingletonRow):
     ddl_digest: str
 
+    @classmethod
+    def for_schema(cls, schema: dict[str, str]) -> SnapshotMeta:
+        return cls(1, hashlib.sha256(FieldCodec.compact(schema).encode()).hexdigest())
+
+    @classmethod
+    def require_matches(cls, connection: sqlite3.Connection, schema: dict[str, str]) -> None:
+        if cls.select(connection) != [cls.for_schema(schema)]:
+            raise IdentityConflict("Sidecar schema declaration differs.")
+
 @dataclass(frozen=True)
 class _QuickCheck(TypedRow):
     quick_check: str
-
-
-def _schema(row_type: type[TypedTable]) -> dict[str, str]:
-    return SnapshotMeta.schema_objects() | row_type.schema_objects()
-
-
-def _digest(row_type: type[TypedTable]) -> str:
-    return hashlib.sha256(FieldCodec.compact(_schema(row_type)).encode()).hexdigest()
-
-
-def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -> None:
-    # Every named SQL object is checked, including triggers without our prefix.
-    actual = AllObjectsTables.stored_schema(connection)
-    temporary = SQLiteSchemaObject.read(
-        connection.execute("SELECT name,sql FROM sqlite_temp_master WHERE sql IS NOT NULL")
-    )
-    if SQLiteSchemaObject.differences(actual, _schema(row_type)) or temporary:
-        raise IdentityConflict("Sidecar schema objects have drifted.")
-    if SnapshotMeta.select(connection) != [SnapshotMeta(1, _digest(row_type))]:
-        raise IdentityConflict("Sidecar schema declaration differs.")
-    databases = SQLiteDatabase.read(connection.execute("PRAGMA database_list"))
-    if not databases or any(
-        row.name not in {"main", "temp"} or row.file != "" for row in databases
-    ):
-        raise IdentityConflict("Sidecar connection must contain only its in-memory snapshot.")
-    if SQLiteForeignKeys.read(connection.execute("PRAGMA foreign_keys")) != [
-        SQLiteForeignKeys(True)
-    ]:
-        raise IdentityConflict("Sidecar foreign-key checking is disabled.")
-    if _QuickCheck.read(connection.execute("PRAGMA quick_check")) != [_QuickCheck("ok")]:
-        raise IdentityConflict("Sidecar snapshot integrity failed.")
 
 
 @dataclass(frozen=True)
@@ -258,19 +241,19 @@ class VerifiedSnapshots:
     Authorized writes preserve the schema and record their published identity.
     """
 
-    passed: ClassVar[dict[tuple[Path, type[TypedTable]], SnapshotIdentity]] = {}
+    passed: ClassVar[dict[tuple[Path, type[PrivateSnapshotFile]], SnapshotIdentity]] = {}
 
     @classmethod
-    def verify(cls, connection: sqlite3.Connection, row_type: type[TypedTable],
+    def verify(cls, connection: sqlite3.Connection, owner: type[PrivateSnapshotFile],
                path: Path, info: os.stat_result) -> None:
         identity = SnapshotIdentity.of(info)
-        if cls.passed.get((path, row_type)) != identity:
-            _verify_schema(connection, row_type)
-            cls.published(path, row_type, info)
+        if cls.passed.get((path, owner)) != identity:
+            owner.verify_schema(connection)
+            cls.published(path, owner, info)
 
     @classmethod
-    def published(cls, path: Path, row_type: type[TypedTable], info: os.stat_result) -> None:
-        cls.passed[path, row_type] = SnapshotIdentity.of(info)
+    def published(cls, path: Path, owner: type[PrivateSnapshotFile], info: os.stat_result) -> None:
+        cls.passed[path, owner] = SnapshotIdentity.of(info)
 
 
 _DENIED_SIDECAR_ACTIONS = frozenset({
@@ -360,61 +343,176 @@ def _publish(
         raise
 
 
-def create_sidecar_file(path: Path, row_type: type[TypedTable]) -> None:
-    """Serialized create-or-verify; an existing empty/damaged file is not repaired."""
-    with _locked_directory(path) as directory:
-        snapshot = _read_snapshot(directory, path.name)
-        if snapshot is not None:
+class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
+    """A declared snapshot's schema, private opening, and installation carry."""
+
+    row_type: ClassVar[type[TypedTable]]
+
+    @classmethod
+    def table_schema(cls) -> type[TableSchema]:
+        return cls
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return (SnapshotMeta, cls.row_type)
+
+    @classmethod
+    def member_paths(cls, path: Path) -> frozenset[Path]:
+        return frozenset(cls.files(path))
+
+    @classmethod
+    def files(cls, path: Path) -> tuple[Path, ...]:
+        return (path, StoreOwner.snapshot_lock(path), StoreOwner.snapshot_intent(path))
+
+    @classmethod
+    def transient_paths(cls, path: Path) -> frozenset[Path]:
+        return frozenset((StoreOwner.snapshot_lock(path),))
+
+    @classmethod
+    def content_members(cls, path: Path) -> frozenset[Path]:
+        # An unresolved intent refuses copying through the same pinned protocol.
+        return frozenset((path,))
+
+    @staticmethod
+    @contextmanager
+    def writers_drained(path: Path) -> Iterator[None]:
+        # Published inodes are immutable; copy_file pins replacement of their name.
+        yield
+
+    @staticmethod
+    def settle(path: Path) -> None:
+        # The snapshot protocol has no WAL or checkpoint operation.
+        pass
+
+    @classmethod
+    def copy_file(cls, source: str | Path, target: str | Path) -> Path:
+        source, target = Path(source), Path(target)
+        with _locked_directory(source) as directory:
+            snapshot = _read_snapshot(directory, source.name)
+            if snapshot is None:
+                raise FileNotFoundError(source)
+            raw, identity = snapshot
+            target.write_bytes(raw)
+            target.chmod(stat.S_IMODE(identity.st_mode))
+            directory.unchanged(source.name, identity)
+        return target
+
+    @classmethod
+    def verify_integrity(cls, connection: sqlite3.Connection) -> None:
+        temporary = SQLiteSchemaObject.read(
+            connection.execute("SELECT name,sql FROM sqlite_temp_master WHERE sql IS NOT NULL")
+        )
+        if temporary:
+            raise IdentityConflict("Sidecar temporary schema objects have drifted.")
+        databases = SQLiteDatabase.read(connection.execute("PRAGMA database_list"))
+        if not databases or any(
+            row.name not in {"main", "temp"} or row.file != "" for row in databases
+        ):
+            raise IdentityConflict("Sidecar connection must contain only its in-memory snapshot.")
+        if SQLiteForeignKeys.read(connection.execute("PRAGMA foreign_keys")) != [
+            SQLiteForeignKeys(True)
+        ]:
+            raise IdentityConflict("Sidecar foreign-key checking is disabled.")
+        if _QuickCheck.read(connection.execute("PRAGMA quick_check")) != [_QuickCheck("ok")]:
+            raise IdentityConflict("Sidecar snapshot integrity failed.")
+
+    @classmethod
+    def verify_schema(cls, connection: sqlite3.Connection) -> None:
+        cls.verify_integrity(connection)
+        actual = AllObjectsTables.stored_schema(connection)
+        if SQLiteSchemaObject.differences(actual, cls.declared_schema()):
+            raise IdentityConflict("Sidecar schema objects have drifted.")
+        SnapshotMeta.require_matches(connection, cls.declared_schema())
+
+
+    @classmethod
+    def create_at(cls, path: Path) -> None:
+        """Serialized create-or-verify; an existing empty/damaged file is not repaired."""
+        with _locked_directory(path) as directory:
+            snapshot = _read_snapshot(directory, path.name)
+            if snapshot is not None:
+                raw, identity = snapshot
+                connection = _connect(raw)
+                try:
+                    VerifiedSnapshots.verify(connection, cls, path, identity)
+                    directory.unchanged(path.name, identity)
+                finally:
+                    connection.close()
+                return
+            connection = _connect(None)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cls.create_schema(connection)
+                SnapshotMeta.for_schema(cls.declared_schema()).insert(connection)
+                cls.verify_schema(connection)
+                connection.execute("COMMIT")
+                _publish(directory, path.name, None, connection.serialize())
+            finally:
+                connection.close()
+
+    @classmethod
+    @contextmanager
+    def connection_at(cls, path: Path, *, read_only: bool = False) -> Iterator[sqlite3.Connection]:
+        """Verify and use one exact snapshot, committing only on successful scope exit.
+
+        Callers must check rowcount/readback for their own exact inserted identities.
+        SQL COMMIT alone is not a durable acknowledgement: the scope must also exit normally.
+        """
+        with _locked_directory(path) as directory:
+            snapshot = _read_snapshot(directory, path.name)
+            if snapshot is None:
+                raise IdentityConflict("Sidecar store is not installed.")
             raw, identity = snapshot
             connection = _connect(raw)
             try:
-                VerifiedSnapshots.verify(connection, row_type, path, identity)
+                VerifiedSnapshots.verify(connection, cls, path, identity)
+                changes = connection.total_changes
+                connection.execute(f"PRAGMA query_only={int(read_only)}")
+                connection.set_authorizer(_authorize_sidecar)
+                yield connection
+                if connection.in_transaction:
+                    raise IdentityConflict("Sidecar scope left an unfinished transaction.")
                 directory.unchanged(path.name, identity)
+                if connection.total_changes != changes:
+                    published = _publish(directory, path.name, identity, connection.serialize())
+                    VerifiedSnapshots.published(path, cls, published)
             finally:
                 connection.close()
-            return
-        connection = _connect(None)
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            for statement in _schema(row_type).values():
-                connection.execute(statement)
-            SnapshotMeta(1, _digest(row_type)).insert(connection)
-            _verify_schema(connection, row_type)
-            connection.execute("COMMIT")
-            _publish(directory, path.name, None, connection.serialize())
-        finally:
-            connection.close()
 
-
-@contextmanager
-def sidecar_connection(
-    path: Path, row_type: type[TypedTable], *, read_only: bool = False
-) -> Iterator[sqlite3.Connection]:
-    """Verify and use one exact snapshot, committing only on successful scope exit.
-
-    Callers must check rowcount/readback for their own exact inserted identities.
-    SQL COMMIT alone is not a durable acknowledgement: the scope must also exit normally.
-    """
-    with _locked_directory(path) as directory:
-        snapshot = _read_snapshot(directory, path.name)
-        if snapshot is None:
-            raise IdentityConflict("Sidecar store is not installed.")
-        raw, identity = snapshot
-        connection = _connect(raw)
-        try:
-            VerifiedSnapshots.verify(connection, row_type, path, identity)
-            changes = connection.total_changes
-            connection.execute(f"PRAGMA query_only={int(read_only)}")
-            connection.set_authorizer(_authorize_sidecar)
-            yield connection
-            if connection.in_transaction:
-                raise IdentityConflict("Sidecar scope left an unfinished transaction.")
-            directory.unchanged(path.name, identity)
-            if connection.total_changes != changes:
+    @classmethod
+    def reconcile_at(cls, path: Path, practice: Practice = NoPractice()) -> bool:
+        with _locked_directory(path) as directory:
+            snapshot = _read_snapshot(directory, path.name)
+            if snapshot is None:
+                raise IdentityConflict("Sidecar store is not installed.")
+            raw, identity = snapshot
+            connection = _connect(raw)
+            try:
+                cls.verify_integrity(connection)
+                actual = AllObjectsTables.stored_schema(connection)
+                metadata = [item for item in actual if item.name in SnapshotMeta.schema_names]
+                if SQLiteSchemaObject.differences(metadata, SnapshotMeta.schema_objects()):
+                    raise IdentityConflict("Sidecar metadata objects have drifted.")
+                SnapshotMeta.require_matches(connection, {item.name: item.sql for item in actual})
+                if not cls.schema_differs(connection):
+                    cls.verify_schema(connection)
+                    directory.unchanged(path.name, identity)
+                    return False
+                cls.schema_change(path).require()
+                with SQLiteFile.write_transaction(connection):
+                    # Metadata is derived from the schema; all original data rows remain.
+                    # Recreate it before the data table so the declared order is retained.
+                    SnapshotMeta.drop(connection)
+                    SnapshotMeta.create(connection)
+                    SnapshotMeta.for_schema(cls.declared_schema()).insert(connection)
+                    cls.carry_schema(connection)
+                    cls.require_readable(connection)
+                cls.verify_schema(connection)
                 published = _publish(directory, path.name, identity, connection.serialize())
-                VerifiedSnapshots.published(path, row_type, published)
-        finally:
-            connection.close()
+                VerifiedSnapshots.published(path, cls, published)
+                return True
+            finally:
+                connection.close()
 
 
 def encode_request(text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None) -> str:
