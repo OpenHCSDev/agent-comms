@@ -22,7 +22,7 @@ from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.field_codec import GoalId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.heartbeat_subjects import HeadSubject, HeartbeatSubject, PassSubject
+from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, HeartbeatSubject, PassSubject
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer import launch as installer_launch
 from agent_comms.installer.interpreter_operation import LauncherPhase
@@ -262,13 +262,11 @@ class PhaseSubject(HeartbeatSubject):
 
     phase: type[PlanPhase]
 
-    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
-        snapshot = comms.registry.snapshot()
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
         return any(
             todo.order.checked().at.since(since)
-            for actor in actors
-            for todo in self.phase.serving(comms.goals.todos.history_for_commander(
-                snapshot.require(actor).incarnation))
+            for orders in history.orders.values()
+            for todo in self.phase.serving(orders)
         )
 
 

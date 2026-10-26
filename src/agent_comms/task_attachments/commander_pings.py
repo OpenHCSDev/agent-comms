@@ -20,7 +20,7 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.message_reference import MessageReference
-from agent_comms.heartbeat_subjects import HeartbeatSubject
+from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (
     ConversationRole, InfoKind, Message, MessageRole, NoticeRole,
 )
@@ -68,24 +68,24 @@ class Ping(DeclaredFamily, affix="Ping"):
     @abstractmethod
     def key(self) -> object: ...
 
-    def acted(self, comms: Comms, actors: frozenset[str]) -> bool:
+    def acted(self, history: CommanderHistory) -> bool:
         """Whether a subject has a recorded action since this line began."""
         began = self.since.recorded_at("A line")
-        return any(subject.disposed(comms, actors, began) for subject in self.subjects)
+        return any(subject.disposed(history, began) for subject in self.subjects)
 
-    def undisposed(self, comms: Comms, actors: frozenset[str], cut: float) -> bool:
+    def undisposed(self, history: CommanderHistory, cut: float) -> bool:
         """Waiting on the commander, and not acted on since it began. Only such a line is
         restated as waiting and locks the verbs."""
-        return self.waits_on_commander(cut) and not self.acted(comms, actors)
+        return self.waits_on_commander(cut) and not self.acted(history)
 
     def waits_on_commander(self, cut: float) -> bool:
         """The commander's to dispose of, began before ``cut``, and about a subject a verb can
         act on: a line about nothing a verb touches never waits."""
         return self.commander_disposes and self.since.before(cut)
 
-    def on_board(self, comms: Comms, actors: frozenset[str]) -> bool:
+    def on_board(self, history: CommanderHistory) -> bool:
         """The commander's to dispose of, and no recorded action has yet."""
-        return self.commander_disposes and not self.acted(comms, actors)
+        return self.commander_disposes and not self.acted(history)
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         return any(subject.acted_on(acted) for subject in self.subjects)
@@ -182,8 +182,9 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         """This packet's lines the commander disposes of, through the same recorded actions the
         gate reads: a verdict drops its line on the next read, not the next packet."""
         actors = CommanderService.actors(comms.registry.snapshot(), commander)
+        history = CommanderHistory.read(comms, actors)
         return tuple(ping.board_entry() for ping in self.handled
-                     if ping.on_board(comms, actors))
+                     if ping.on_board(history))
 
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         return await bridge.deliver_board(self, message)
@@ -195,7 +196,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
         """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
         actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        return tuple(ping for ping in self.handled if ping.undisposed(comms, actors, cut))
+        history = CommanderHistory.read(comms, actors)
+        return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
 
     def require_publication(self, sender: str, registry: RegistrySnapshot,
                             original_source: BusReader) -> None:
