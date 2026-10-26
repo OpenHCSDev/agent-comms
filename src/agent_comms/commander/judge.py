@@ -337,9 +337,15 @@ class WordedText(BoundedText):
         return MalformedRecord(f"{cls.says} ({cls.words}+ words)")
 
     @classmethod
+    def problems(cls, value: str) -> dict[str, str]:
+        return ({'words': str(cls.refusal()) + '; fix: supply the required words'}
+                if len(value.split()) < cls.words else {})
+
+    @classmethod
     def from_text(cls, value: str) -> str:
-        if len(super().from_text(value).split()) < cls.words:
-            raise cls.refusal()
+        value = super().from_text(value)
+        if problems := cls.problems(value):
+            raise RecordProblems(problems)
         return value
 
 
@@ -358,10 +364,13 @@ class RoastText(WordedText):
     says = "name the duplicated fact and its owner, with because"
 
     @classmethod
-    def from_text(cls, value: str) -> str:
-        if not re.search(r'\bbecause\b', super().from_text(value)):
-            raise cls.refusal()
-        return value
+    def problems(cls, value: str) -> dict[str, str]:
+        problems = super().problems(value)
+        if not re.search(r'\bbecause\b', value):
+            problems['because'] = str(cls.refusal()) + '; fix: explain the defect with because'
+        return problems | {
+            'blunt': refused + '; fix: name why the work is stupid, not a gentle suggestion'
+            for refused in BluntText.wording_refusal(value)}
 
 
 class FixText(WordedText):
@@ -639,7 +648,6 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
 
     def argument_problems(self) -> dict[str, str]:
         refusals = {
-            '--roast': BluntText.wording_refusal(self.roast),
             '--why --roast --fix': DirectiveText.refused(' '.join((self.why, self.roast, self.fix))),
         }
         return super().argument_problems() | self.reason_problems() | {
