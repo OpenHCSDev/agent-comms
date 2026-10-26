@@ -104,7 +104,7 @@ class NativeBoundary(ExitStack, StoredBusReader):
                   self.measurements.operation("registry_snapshot")):
                 self.privacy = store.private_guard_unlocked()
                 self.registry = store.read_snapshot_unlocked()
-                self.revision = store.revision_unlocked()
+                self.registry_revision = store.revision_unlocked()
             return self
         except BaseException:
             self.close()
@@ -118,7 +118,7 @@ class NativeBoundary(ExitStack, StoredBusReader):
         """
         store = self.bus._registry.store
         with self.read_guard(store.path):
-            if store.revision_unlocked() != self.revision:
+            if store.revision_unlocked() != self.registry_revision:
                 raise StaleFence(
                     "native registry revision changed after this decision read it")
             yield
