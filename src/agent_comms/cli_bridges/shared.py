@@ -95,7 +95,7 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
-from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, SessionRefusedError, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, SessionFailure, WatchClaim, WatchRecord
 
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from .history import History
@@ -1356,7 +1356,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         self.stop = current.cancel
         try:
             await self.options.operation.execute(self)
-        except* (BlockingIOError, SessionRefusedError):
+        except* (BlockingIOError, SessionFailure):
             raise
         except* (OSError, ValueError, CoordinationError) as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
@@ -1637,5 +1637,5 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
         options.operation.retired(bridge)
     except* BlockingIOError:
         sys.exit('Another watcher owns this conversation')
-    except* SessionRefusedError as refused:
-        sys.exit('\n'.join(str(error) for error in refused.exceptions))
+    except* SessionFailure as failure:
+        sys.exit('\n'.join(str(error) for error in failure.exceptions))

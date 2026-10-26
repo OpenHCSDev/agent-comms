@@ -10,8 +10,8 @@ import select
 import socket
 import sys
 from abc import abstractmethod
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import get_original_bases
@@ -26,7 +26,10 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
 from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
 from agent_comms_hooks.board import SessionBoard, SessionWire
-from agent_comms_hooks.watch import HeldClaim, SessionRefusedError, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import (
+    HeldClaim, SessionConnectionClosed, SessionFailure, SessionRefusedError,
+    SessionRequestTimeout, WatchClaim, WatchRecord,
+)
 
 if TYPE_CHECKING:
     from .shared import LineMonitorBridge, MonitorProbe, Serve
@@ -290,13 +293,37 @@ class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix="")
             if get_origin(base) is SessionRequest
         )
 
+    def line(self) -> str:
+        return FieldCodec.compact(FieldCodec.encode(self))
+
+    @contextmanager
+    def _timed(self) -> Iterator[None]:
+        try:
+            yield
+        except TimeoutError as error:
+            raise SessionRequestTimeout(
+                f'Session {self.declared_name} request timed out after '
+                f'{self.reply_timeout:g} seconds') from error
+
     @contextmanager
     def connection(self, endpoint: Path) -> Iterator[socket.socket]:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+        with self._timed(), socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
             peer.settimeout(self.reply_timeout)
             peer.connect(str(endpoint))
-            peer.sendall((FieldCodec.compact(FieldCodec.encode(self)) + "\n").encode())
+            peer.sendall((self.line() + "\n").encode())
             yield peer
+
+    @asynccontextmanager
+    async def replying(self, endpoint: Path, resources: AsyncExitStack) -> AsyncIterator[MonitorPeer]:
+        """Connect, reply and the caller's startup share this request's one budget."""
+        with self._timed():
+            async with asyncio.timeout(self.reply_timeout):
+                reader, writer = await asyncio.open_unix_connection(str(endpoint))
+                peer = MonitorPeer(reader, writer)
+                resources.push_async_callback(peer.close)
+                await peer.write(self.line())
+                self.read_reply(io.BytesIO(await reader.readline()))
+                yield peer
 
     def exchange(self, endpoint: Path) -> Reply:
         with self.connection(endpoint) as peer, peer.makefile("rb") as stream:
@@ -306,7 +333,7 @@ class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix="")
         """The bridge's one answer line; a socket closed before it is no answer at all."""
         raw = stream.readline(4096)
         if not raw:
-            raise ConnectionResetError('Session bridge closed before replying')
+            raise SessionConnectionClosed('Session bridge closed before replying')
         reply = FieldCodec.decode(self.reply_class | SessionRefused, FieldCodec.parse(raw))
         reply.require()
         return reply
@@ -317,6 +344,17 @@ class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix="")
 
 @dataclass(frozen=True)
 class AttachMonitor(CrossesRuntimes, SessionRequest[SessionReady], declared_name='attach'):
+
+    async def lines(self, endpoint: Path) -> AsyncIterator[bytes]:
+        """Bound the acknowledgement and startup probe, not the established live stream."""
+        async with AsyncExitStack() as resources:
+            async with self.replying(endpoint, resources) as peer:
+                first = await peer.reader.readline()
+                if not first:
+                    raise SessionConnectionClosed('Session bridge closed before its Monitor startup probe')
+            yield first
+            async for line in peer.reader:
+                yield line
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return await service.bridge.reader.attach(service, peer)
@@ -451,18 +489,12 @@ async def read_monitor(
                 current = await asyncio.to_thread(InspectSession().information, claim.socket_path)
                 if current.owner != session.owner:
                     raise ValueError('The session bridge now belongs to a different owner')
-                reader, writer = await asyncio.open_unix_connection(str(claim.socket_path))
-                peer = MonitorPeer(reader, writer)
-                try:
-                    request = AttachMonitor()
-                    await peer.write(FieldCodec.compact(FieldCodec.encode(request)))
-                    request.read_reply(io.BytesIO(await reader.readline()))
-                    announced = False
-                    async for line in reader:
-                        sys.stdout.write(line.decode())
-                        sys.stdout.flush()
-                finally:
-                    await peer.close()
+                announced = False
+                async for line in AttachMonitor().lines(claim.socket_path):
+                    sys.stdout.write(line.decode())
+                    sys.stdout.flush()
+            except SessionFailure:
+                raise
             except (FileNotFoundError, ConnectionRefusedError, ConnectionResetError):
                 # Retirement drops the old connection; the same owner can publish a
                 # fresh endpoint, and this reader keeps its lease for it. A stopped

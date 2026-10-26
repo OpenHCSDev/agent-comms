@@ -1,16 +1,14 @@
 """Socket and delivery owners exercised by the real Claude probe."""
 import asyncio
-import io
-from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_bridges.monitor import AttachMonitor, NoReader
-from agent_comms.cli_bridges.shared import BridgeLog, MONITOR_FRAME
+from agent_comms.cli_bridges.monitor import AttachMonitor, SessionReady
+from agent_comms.cli_bridges.shared import BridgeLog
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import InfoKind, Message
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import SessionConnectionClosed, WatchClaim, WatchRecord
 
 
 def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_tracebacks():
@@ -29,29 +27,28 @@ def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_traceba
     assert bodies == ['partial line', 'next line', 'ValueError: terminal failure']
 
 
-@asynccontextmanager
-async def reader(claim):
-    stream, writer = await asyncio.open_unix_connection(str(claim.socket_path))
-    request = AttachMonitor()
-    writer.write((FieldCodec.compact(FieldCodec.encode(request)) + '\n').encode())
-    await writer.drain()
-    request.read_reply(io.BytesIO(await stream.readline()))
-    probe = MONITOR_FRAME.validate_json(await stream.readline())
-    try:
-        yield stream, writer, probe
-    finally:
-        writer.close()
-        await writer.wait_closed()
+@pytest.mark.asyncio
+@pytest.mark.parametrize('wire_reply', (
+    b'',
+    (FieldCodec.compact(FieldCodec.encode(SessionReady())) + '\n').encode(),
+))
+async def test_monitor_startup_eof_is_loud_before_reply_or_probe(
+        tmp_path: Path, wire_reply: bytes) -> None:
+    endpoint = tmp_path / 'startup.sock'
 
+    async def close_at_startup(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            await reader.readline()
+            writer.write(wire_reply)
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
-def message(body, seq=1):
-    return Message(sender='peer', target='viewer', type=InfoKind, body=body, timestamp=float(seq), seq=seq)
-
-
-async def detached(bridge):
-    async with asyncio.timeout(3):
-        async with bridge.reader_changed:
-            await bridge.reader_changed.wait_for(lambda: isinstance(bridge.reader, NoReader))
+    server = await asyncio.start_unix_server(close_at_startup, str(endpoint))
+    async with server:
+        with pytest.raises(SessionConnectionClosed):
+            await anext(AttachMonitor().lines(endpoint))
 
 
 def test_enrol_is_idempotent_and_refuses_another_command(tmp_path, monkeypatch):
