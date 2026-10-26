@@ -90,7 +90,7 @@ def test_waiting_sibling_wins_status_without_an_activity_copy(tmp_path):
     ticket = RoomTicket.mint()
     with rule.room_ledger.writing() as db:
         RoomClaim(ticket, str(comms.root), ProcessIdentity.capture(os.getpid()),
-            (TestGateRoomWork((thread.incarnation,)),), WaitingRoomPhase(), 0).insert(db)
+            WaitingRoomPhase(), 0, (TestGateRoomWork((thread.incarnation,)),)).insert(db)
     original = comms.agents.activity.current(thread.name)
     observed = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
     assert observed.state == ActivityState.WAITING_FOR_ROOM

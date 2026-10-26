@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sqlite3
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -19,7 +18,7 @@ from typing import Annotated, ClassVar
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, PathText, RoomTicket
+from .field_codec import RoomTicket
 from .thread_identity import ThreadIncarnation
 from .room_need import RoomNeed
 from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
@@ -105,25 +104,14 @@ class WorkPeak(RoomLedgerRows, TypedTable):
 
 @dataclass(frozen=True)
 class RoomClaim(RoomLedgerRows, TypedTable):
-    dropped_fields: ClassVar[tuple[str, ...]] = ('unit',)
+    dropped_fields: ClassVar[tuple[str, ...]] = ('unit', 'work')
 
     ticket: Annotated[RoomTicket, Column(primary_key=True)]
     root: str
     process: Annotated[ProcessIdentity, Column(storage=JsonStorage)]
-    work: Annotated[tuple[RoomWork, ...], Column(storage=JsonStorage)]
     phase: Annotated[RoomPhase, Column(storage=JsonStorage)]
     at: float
-
-    @classmethod
-    def carry_columns(cls, db: sqlite3.Connection) -> None:
-        previous_owner, = cls.dropped_fields
-        if previous_owner in cls.stored_columns(db):
-            db.execute(cls._sql(
-                f'UPDATE "{cls.declared_name}" SET {{work}} = '
-                '(SELECT json_group_array(json_object(?, member.value, ?, '
-                f'json_array(json("{previous_owner}")))) FROM json_each({{work}}) AS member)'
-            ), (RoomWork.family_discriminator, FieldCodec.field_plan(RoomWork, 'owners').key))
-        super().carry_columns(db)
+    requests: Annotated[tuple[RoomWork, ...], Column(storage=JsonStorage)] = ()
 
 
 @dataclass(frozen=True)
@@ -142,7 +130,7 @@ class RoomLedger(DurableStore):
         with self.writing() as db:
             claim = RoomClaim.one(db, ticket=ticket)
             if claim is not None and peak is not None:
-                for work in claim.work:
+                for work in claim.requests:
                     WorkPeak.delete(db, work=type(work))
                     WorkPeak(type(work), work.per_owner(peak)).insert(db)
             RoomClaim.delete(db, ticket=ticket)
@@ -154,7 +142,7 @@ class RoomLedger(DurableStore):
         # A waiting sibling call must stay visible beside a running one.
         return {owner.name: claim
                 for claim in sorted(claims, key=lambda row: row.phase.waiting)
-                for work in claim.work for owner in work.owners
+                for work in claim.requests for owner in work.owners
                 if owner in wanted and claim.process.alive()}
 
 
@@ -282,10 +270,10 @@ class RoomAllocation(ABC):
         with ledger.snapshot() as db:
             requested = RoomClaim.require(db, ticket=ticket)
             measured = tuple(tuple(peak.need for peak in WorkPeak.select(db, work=type(work)))
-                             for work in requested.work)
+                             for work in requested.requests)
         # Registry reads finish before the machine ledger's writer is acquired.
         peaks = tuple(work.measured_needs(known, requested.root)
-                      for work, known in zip(requested.work, measured, strict=True))
+                      for work, known in zip(requested.requests, measured, strict=True))
         free = self.free_room()
         dead = ledger.dead_claims()
         with ledger.writing() as db:
@@ -298,7 +286,7 @@ class RoomAllocation(ABC):
             for other in RoomClaim.select(db):
                 held += other.phase.held
             floor = RoomNeed()
-            for work in claim.work:
+            for work in claim.requests:
                 floor = floor.peak(work.floor(self))
             spare = free.remaining(floor + held)
             # An unmeasured run calibrates alone. It reserves the observed spare
@@ -325,7 +313,7 @@ class RoomAllocation(ABC):
         ledger = self.room_ledger
         await asyncio.to_thread(ledger.root.mkdir, parents=True, exist_ok=True)
         ticket = RoomTicket.mint()
-        claim = RoomClaim(ticket, str(root), process, work, WaitingRoomPhase(), time.time())
+        claim = RoomClaim(ticket, str(root), process, WaitingRoomPhase(), time.time(), work)
         admitted = False
         try:
             def enqueue():

@@ -168,7 +168,7 @@ class AgentActivity:
         observed = {name: self._observed(thread, snapshot.owner_identity(name), events.activity[name])
                     for name, thread in requested.items()}
         for name, claim in claims.items():
-            observed[name] = claim.phase.project(observed[name], claim.work)
+            observed[name] = claim.phase.project(observed[name], claim.requests)
         return ActivityCapture(observed, events.expires_at)
 
     def observe_recipients(
