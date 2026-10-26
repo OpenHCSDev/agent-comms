@@ -157,7 +157,7 @@ from .registry_store import RegistryStore
 from .repo import Checkout, CheckoutStart, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .storage_rules import OrderCheckoutAllocation, RepositoryCheckoutAllocation, StorageProjection, StorageRule
-from .shell_effects import CheckoutStorageEffect, RemoveCheckoutStorageEffect
+from .shell_effects import CheckoutStorageEffect, CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect
 from .restart_queue import RestartQueued, enqueue
 from .restart_scope import AllOwners, RestartTarget
 from .owner_connection import OwnerConnection, socket_path
@@ -2034,17 +2034,16 @@ class AddCheckoutOperation(CheckoutOperation):
         grant = command.grant(ctx, thread)
         grant.require()
         repository = command.source(ctx, grant)
-        CheckoutStorageEffect(destination, repository.github).check(
-            StorageProjection(ctx.registry.storage_rule, thread))
+        projection = StorageProjection(ctx.registry.storage_rule, thread)
         if destination.exists():
+            CheckoutStorageEffect(destination, repository).check(projection)
             Checkout(destination).prepare()
         else:
             branch = repository.default_branch()
             Repo.git(repository.checkout, "fetch", "origin", branch)
-            Checkout.add(
-                repository.checkout, destination,
-                CheckoutStart.of(repository.checkout, f"work/{destination.name}", f"origin/{branch}"),
-            )
+            start = CheckoutStart.of(repository.checkout, f"work/{destination.name}", f"origin/{branch}")
+            CreateCheckoutStorageEffect(destination, repository, start).check(projection)
+            Checkout.add(repository.checkout, destination, start)
 
 
 class RemoveCheckoutOperation(CheckoutOperation):
