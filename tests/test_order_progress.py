@@ -22,6 +22,7 @@ from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import GitCommandError
 from agent_comms.repository_name import RepositoryName
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tool_caller import ThreadCaller
@@ -69,7 +70,6 @@ def test_a_unit_editing_before_its_first_commit_is_moving_not_stalled(held, name
     comms, worktree = held
     checkout = PresentCheckout(worktree)
     source = ProgressSource(comms.goals.todos.get('P1'), ProgressRead(()), checkout,
-                            comms.registry.storage_rule, comms.registry.require('worker'),
                             worktrees=(checkout,))
     assert OrderProgress.from_source(source) == NoCommitProgress()
     edited(worktree, name, 100.0 + 500)
@@ -143,16 +143,6 @@ def test_the_review_timer_comes_back_every_window_until_delivery(held):
     assert todo.reissued_review(5000.0) == RecordedEventTime(5000.0 + window)
 
 
-<<<<<<< HEAD
-=======
-def test_a_timer_up_tells_the_commander_to_judge_and_strikes_no_one():
-    up = ReviewTimerUp('P1', RecordedThreadIncarnation('worker', 1.0),
-                       'order-P1', RecordedEventTime(1000.0))
-    clock = time.strftime('%H:%M:%S', time.localtime(1000.0))
-    assert up.line() == f'READ worker P1: review timer up at {clock}, order order-P1 -> read its diff and judge it'
-    assert up.began() == 1000.0
-
-
 def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
     """Delete after unit reads, before HUD rendering, then complete another heartbeat."""
     comms = held_bus
@@ -178,24 +168,21 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
         heartbeat.pass_body(comms, (interrupted,))
         assert CommanderFrame.read_all(comms.root) == (interrupted.hud,)
         assert branch not in WorkBranches(checkout).worktrees()
-        failed_head = subprocess.run(
-            ['git', '-C', str(checkout), 'rev-parse', '--verify', 'HEAD^{commit}'],
-            capture_output=True, text=True, check=False,
-        )
-        assert failed_head.returncode != 0
+        reader = WorkBranches(checkout)
+        with pytest.raises(GitCommandError) as git_failure:
+            reader.difference(reader.origin_main)
         for _ in range(2):
             observed = heartbeat.observe(comms)
             (frame,) = observed
             (broken,) = (card for card in frame.states if card.unit.name == 'worker')
             assert isinstance(broken, Unreadable)
-            assert failed_head.stderr.strip() in broken.reason
+            assert broken.reason == str(git_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
             heartbeat.pass_body(comms, observed)
             assert CommanderFrame.read_all(comms.root) == (frame.hud,)
         print(broken.line())
 
 
->>>>>>> 876677a33 (Capture checkout commit clocks inside the per-unit read)
 def test_push_times_come_from_origin_reflogs_only(tmp_path):
     """The connector walked every reflog (`--all`, 3.2 s on the live checkout) to keep the origin ones."""
     origin = tmp_path / 'origin.git'

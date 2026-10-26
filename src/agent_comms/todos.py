@@ -1072,7 +1072,8 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def readings(self, source: ProgressSource) -> DistanceReadings: ...
+    def readings(self, source: ProgressSource, storage: StorageRule,
+                 owner: Thread) -> DistanceReadings: ...
 
     @abstractmethod
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]: ...
@@ -1110,7 +1111,8 @@ class MissingCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         return ()
 
-    def readings(self, source: ProgressSource) -> DistanceReadings:
+    def readings(self, source: ProgressSource, storage: StorageRule,
+                 owner: Thread) -> DistanceReadings:
         return DistanceReadings()
 
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
@@ -1133,7 +1135,8 @@ class UnreadCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         return ()
 
-    def readings(self, source: ProgressSource) -> DistanceReadings:
+    def readings(self, source: ProgressSource, storage: StorageRule,
+                 owner: Thread) -> DistanceReadings:
         raise WorkBranchError(self.reason)
 
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
@@ -1220,12 +1223,13 @@ class PresentCheckout(ProgressCheckout):
                      for path in self.branches.read_checkout().uncommitted()
                      if path.exists())
 
-    def readings(self, source: ProgressSource) -> DistanceReadings:
+    def readings(self, source: ProgressSource, storage: StorageRule,
+                 owner: Thread) -> DistanceReadings:
         """Read bounded recorded results; an absent remote default supplies no invented base."""
         if not self.default_refs:
             return DistanceReadings()
         readings: list[DistanceReading] = []
-        for tip in source.commits(*self.default_refs):
+        for tip in self.read_commits(source.todo, storage, owner, *self.default_refs):
             base = self.git("merge-base", tip.sha, self.default_reference).strip()
             commits = [ProgressPoint.listed(line) for line in reversed(self.git(
                 "log", f"--max-count={DistanceReadings.window}", "--first-parent",
@@ -1321,9 +1325,9 @@ class ProgressSource(PullRequestSource):
     """Problem progress across owned worktrees, shared Git history and retained PR identities."""
 
     checkout: ProgressCheckout
-    storage: StorageRule
-    owner: Thread
     committed: tuple[ProgressPoint, ...] = ()
+    unpublished_commits: tuple[ProgressPoint, ...] = ()
+    recorded_readings: DistanceReadings = DistanceReadings()
     worktrees: tuple[PresentCheckout, ...] = ()
 
     @classmethod
@@ -1334,20 +1338,23 @@ class ProgressSource(PullRequestSource):
         candidates = (todo.order.checked().check.directory, *owned)
         path = next(iter(Checkout.present(*candidates)), next(iter(owned), candidates[0]))
         checkout = pulls.progress_checkout(path)
+        worktrees = tuple(pulls.checkout(path) for path in Checkout.present(*owned))
         try:
-            committed = checkout.read_commits(todo, storage, owner)
+            return cls.capture(todo, pulls, checkout, worktrees, storage, owner)
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
-            checkout, committed = UnreadCheckout(path, str(failure)), ()
-        return cls(
-            todo=todo, pulls=pulls, checkout=checkout, storage=storage, owner=owner,
-            committed=committed,
-            worktrees=tuple(pulls.checkout(path) for path in Checkout.present(*owned)),
-        )
+            return cls(todo, pulls, UnreadCheckout(path, str(failure)), worktrees=worktrees)
 
-    def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
-        """The captured commit clock needs no later Git read during card rendering."""
-        return iter(self.checkout.read_commits(self.todo, self.storage, self.owner, *excluded)
-                    if excluded else self.committed)
+    @classmethod
+    def capture(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
+                worktrees: tuple[PresentCheckout, ...], storage: StorageRule,
+                owner: Thread) -> Self:
+        """Consume the clock's Git log while the checkout failure belongs to this read."""
+        return cls(todo, pulls, checkout, committed=checkout.read_commits(todo, storage, owner),
+                   worktrees=worktrees)
+
+    def commits(self) -> Iterator[ProgressPoint]:
+        """Card rendering consumes captured points, never retained Git ref names."""
+        return iter(self.committed)
 
     def published(self) -> Iterator[ProgressPoint]:
         return self.checkout.published(self.todo.reference_pattern)
@@ -1370,14 +1377,20 @@ class ProgressSource(PullRequestSource):
 
     def readings(self) -> DistanceReadings:
         """Progress observation does not run the order's Check."""
-        return DistanceReadings()
+        return self.recorded_readings
 
 
 class MeasuredProgressSource(ProgressSource):
-    """The board reads recorded distances; merge and install reads need none."""
+    """The board captures filtered commits and distances in the same failure boundary."""
 
-    def readings(self) -> DistanceReadings:
-        return self.checkout.readings(self)
+    @classmethod
+    def capture(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
+                worktrees: tuple[PresentCheckout, ...], storage: StorageRule,
+                owner: Thread) -> Self:
+        source = super().capture(todo, pulls, checkout, worktrees, storage, owner)
+        return replace(source,
+                       unpublished_commits=checkout.read_commits(todo, storage, owner, "--remotes"),
+                       recorded_readings=checkout.readings(source, storage, owner))
 
 
 @dataclass(frozen=True)
@@ -1395,6 +1408,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def from_source(cls, source: ProgressSource) -> OrderProgress:
         members = cls.members_with(FoundProgress)
         try:
+            source.checkout.require_read()
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as unread:
@@ -1528,7 +1542,7 @@ class CommittedProgress(GitProgress):
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
         return (cls(commit.sha[:9], at=commit.at, readings=source.readings())
-                for commit in source.commits("--remotes"))
+                for commit in source.unpublished_commits)
 
     @property
     def state(self) -> str:
