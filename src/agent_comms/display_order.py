@@ -52,7 +52,7 @@ class ThreadSort(DisplayOrder, DeclaredFamily, affix="ThreadSort"):
 
 
 class LastMessageThreadSort(ThreadSort, declared_name="last_message_sent"):
-    title = "Last message sent"
+    title = "Sent"
 
     @staticmethod
     def timestamp(created: float, activity: float, sent: float) -> float:
@@ -65,7 +65,7 @@ class LastMessageThreadSort(ThreadSort, declared_name="last_message_sent"):
 
 
 class CreatedThreadSort(ThreadSort, declared_name="created_at"):
-    title = "Date created"
+    title = "Created"
 
     @staticmethod
     def timestamp(created: float, activity: float, sent: float) -> float:
@@ -73,7 +73,7 @@ class CreatedThreadSort(ThreadSort, declared_name="created_at"):
 
 
 class LastActivityThreadSort(ThreadSort):
-    title = "Last activity"
+    title = "Active"
 
     @staticmethod
     def timestamp(created: float, activity: float, sent: float) -> float:
@@ -117,7 +117,7 @@ class RecentChannelSort(ChannelSort):
 
 
 class CreatedChannelSort(RecentChannelSort, declared_name="created_at"):
-    title = "Date created"
+    title = "Created"
 
     @staticmethod
     def timestamp(view: ChannelView) -> float:
@@ -125,7 +125,7 @@ class CreatedChannelSort(RecentChannelSort, declared_name="created_at"):
 
 
 class LastActivityChannelSort(RecentChannelSort):
-    title = "Last activity"
+    title = "Active"
 
     @staticmethod
     def timestamp(view: ChannelView) -> float:
@@ -133,7 +133,7 @@ class LastActivityChannelSort(RecentChannelSort):
 
 
 class LastUserInputChannelSort(RecentChannelSort):
-    title = "Last user input"
+    title = "Input"
 
     @staticmethod
     def timestamp(view: ChannelView) -> float:
