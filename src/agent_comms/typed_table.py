@@ -604,9 +604,8 @@ class TypedRow(SqlProjection):
         return frozenset()
 
     @classmethod
-    def _positions(cls, cursor: sqlite3.Cursor,
+    def _positions(cls, names: tuple[str, ...],
                    extra: Mapping[str, str] = types.MappingProxyType({})) -> dict[str, int]:
-        names = cls.result_columns(cursor)
         if not names:
             raise ValueError("Typed read requires a result set")
         projection = {**cls.column_projection(), **extra}
@@ -632,7 +631,7 @@ class TypedRow(SqlProjection):
     def iterate(cls, cursor: sqlite3.Cursor) -> Generator[Self]:
         """Stream strictly decoded rows; close this iterator to release its query."""
         try:
-            positions = cls._positions(cursor)
+            positions = cls._positions(cls.result_columns(cursor))
             for row in cursor:
                 yield cls._decode_row(row, positions)
         finally:
@@ -649,7 +648,7 @@ class TypedRow(SqlProjection):
         This reads one SQLite snapshot and never re-encodes a stored row as JSON.
         """
         try:
-            positions = cls._positions(cursor, related.column_projection())
+            positions = cls._positions(cls.result_columns(cursor), related.column_projection())
             return [(cls._decode_row(row, positions), related._decode_row(row, positions))
                     for row in cursor]
         finally:
@@ -659,6 +658,33 @@ class TypedRow(SqlProjection):
     def read(cls, cursor: sqlite3.Cursor) -> list[Self]:
         """Decode a complete bounded query through the same streaming boundary."""
         return list(cls.iterate(cursor))
+
+    @classmethod
+    def capture(cls, cursor: sqlite3.Cursor) -> CapturedRows[Self]:
+        """Copy a bounded result and close its cursor; decode after releasing the snapshot."""
+        with closing(cursor) as cursor:
+            return CapturedRows(cls, cls.result_columns(cursor), tuple(cursor))
+
+
+@dataclass(frozen=True)
+class CapturedRows[Row: TypedRow]:
+    """One immutable SQLite result, still encoded until its reader consumes it."""
+
+    row_type: type[Row]
+    columns: tuple[str, ...]
+    values: tuple[sqlite3.Row | tuple[object, ...], ...]
+
+    def __iter__(self) -> Iterator[Row]:
+        positions = self.row_type._positions(self.columns)
+        return (self.row_type._decode_row(row, positions) for row in self.values)
+
+    def column[Value](self, name: str, value: type[Value]) -> tuple[Value, ...]:
+        """Decode one declared key for related SQL in the same snapshot."""
+        field, = self.row_type._fields_named((name,))
+        if _base_type(field.annotation)[0] is not value:
+            raise TypeError(f"{self.row_type.__name__}.{name} is {field.annotation!r}, not {value!r}")
+        position = self.columns.index(field.wire_name)
+        return tuple(cast(Value, field.decode(row[position])) for row in self.values)
 
 
 class StoredRowDerivation(TypedRow, ABC):
@@ -694,7 +720,7 @@ class DerivedColumn(Column):
         db.execute(f"ALTER TABLE {temporary} ADD COLUMN {target} {field.storage.sql_type}")
         cursor = db.execute(f"SELECT {columns} FROM {table}")
         try:
-            positions = self.source._positions(cursor)
+            positions = self.source._positions(self.source.result_columns(cursor))
             placeholders = ", ".join("?" for _ in (*names, field.wire_name))
             db.executemany(
                 f"INSERT INTO {temporary} ({columns}, {target}) VALUES ({placeholders})",
@@ -1921,7 +1947,7 @@ class StoredRowDecoding(TypedRow):
             f'SELECT {cls.row_reference()} AS "__stored_reference", '
             f'{cls._select_list(cls)} FROM {_identifier(cls.declared_name)}'
         )) as cursor:
-            positions = cls._positions(cursor, {"stored_reference": "__stored_reference"})
+            positions = cls._positions(cls.result_columns(cursor), {"stored_reference": "__stored_reference"})
             for stored in cursor:
                 try:
                     cls._decode_row(stored, positions)
