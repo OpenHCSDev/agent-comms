@@ -137,7 +137,8 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @classmethod
     def of(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
-        return cls.from_frame(comms, commander, HeartbeatFrame.capture(comms, commander, pulls))
+        return cls.from_frame(comms, commander, HeartbeatFrame.capture(
+            comms, commander, pulls, plans=comms.plans))
 
     @classmethod
     def from_frame(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> Self:

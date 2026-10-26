@@ -494,6 +494,8 @@ class Connector:
     store: ConnectorStore
     issuer: str
     root: Path
+    heartbeat: CommanderHeartbeat = field(default_factory=CommanderHeartbeat,
+                                          init=False, repr=False, compare=False)
 
     @property
     def resource_metadata_url(self) -> str:
@@ -502,7 +504,7 @@ class Connector:
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
         """The connector's caller must exist at startup and at each later call."""
-        with client_wire(self.root) as comms:
+        with client_wire(self.root, plans=self.heartbeat) as comms:
             comms.registry.require(CALLER.name)
             yield comms
 
@@ -513,7 +515,7 @@ class Connector:
         Waiting with a client route borrowed would hold up its replacement. The
         pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
         """
-        yield wire(self.root)
+        yield wire(self.root, plans=self.heartbeat)
 
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object],
@@ -579,7 +581,7 @@ class Connector:
             asyncio.create_task(Coordination.watch_worker(
                 UnownedOrderWatch(), self.service_wire, passes)),
             asyncio.create_task(Coordination.watch_worker(
-                CommanderHeartbeat(), self.service_wire, passes)),
+                self.heartbeat, self.service_wire, passes)),
         )
         try:
             yield
