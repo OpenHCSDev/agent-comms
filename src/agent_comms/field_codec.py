@@ -74,6 +74,11 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
         return Refusing(subject)
 
 
+def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
+    """Declares a decoder that meets absence from outside, so its None spellings are not debt."""
+    return decoder
+
+
 @dataclass(frozen=True, slots=True)
 class RefusalBoundary[Suppressed: bool]:
     """Shared exception handling; each boundary declares whether it can suppress a refusal."""
@@ -83,10 +88,12 @@ class RefusalBoundary[Suppressed: bool]:
     def __enter__(self) -> None:
         return None
 
+    @boundary_decoder
     def __exit__(
         self, kind: type[BaseException] | None, error: BaseException | None,
         trace: types.TracebackType | None,
     ) -> Suppressed | Literal[False]:
+        """The interpreter passes None for a block that raised nothing."""
         if error is None:
             return False
         try:
@@ -133,11 +140,6 @@ class RecordProblems(MalformedRecord):
     def collecting(problems: dict[str, str], name: str, fix: str) -> Collecting:
         """Run one check through the existing boundary, preserving nested field paths."""
         return Collecting(name, problems, fix)
-
-
-def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
-    """Declares a decoder that meets absence from outside, so its None spellings are not debt."""
-    return decoder
 
 
 class FieldDirective:

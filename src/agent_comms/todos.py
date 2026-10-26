@@ -208,6 +208,10 @@ class FileDeliveryEvidence(DeliveryEvidence):
         run.require_artifact(self.path)
 
 
+class TodoProblems(RecordProblems, TodoError):
+    """Every refusal of one todo request, collected before anything is read back or written."""
+
+
 class EvidenceRequirements:
     """Shared evidence checks for a source request and its resolved delivery."""
 
@@ -285,7 +289,7 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
                 comms.registry.require(todo.holder_state.previous_assignment().owner),
             ).require_retired(todo.id)
         if problems:
-            raise RecordProblems(problems)
+            raise TodoProblems(problems)
         delivery = self.resolved_delivery(todo)
         verified = order.scope.verified_claims(
             delivery, self.completion_claims(delivery, order, claims), comms,
@@ -2349,11 +2353,10 @@ class TriageScope(OrderScope[ReportDelivery]):
         problems: dict[str, str] = {}
         with RecordProblems.collecting(problems, '--op', 'omit --op for a triage report'):
             request.source.require_report()
-        if request.screenshot:
-            problems['--screenshot'] = 'Triage returns a report; fix: use --seen REPORT, not --screenshot.'
-        if not request.seen:
-            problems['--seen'] = 'A triage order needs a report; fix: supply --seen REPORT.'
-        return problems
+        screenshot = ({'--screenshot': 'Triage returns a report; fix: use --seen REPORT, not --screenshot.'}
+                      if request.screenshot else {})
+        seen = {} if request.seen else {'--seen': 'A triage order needs a report; fix: supply --seen REPORT.'}
+        return problems | screenshot | seen
 
     def delivery(self, todo: Todo, repo: Path, request: SourceCompletion) -> ReportDelivery:
         return ReportDelivery(report=Path(request.seen).read_text())
