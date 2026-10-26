@@ -1,5 +1,7 @@
 """Named destinations share counting, change attribution and human read contracts."""
+from pathlib import Path
 
+from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
@@ -16,7 +18,7 @@ from agent_comms.threads import Thread
 @pytest.fixture
 def named_target_journey(tmp_path):
     comms = context_comms(tmp_path)
-    worktree = str(tmp_path)
+    worktree = Checkout(tmp_path)
     comms.registry.declare(Thread(
         "cli", frozenset({"team"}), worktree, execution=ExternalThreadExecution,
     ))
@@ -60,7 +62,7 @@ def test_named_targets_share_count_changes_and_human_read_contracts(named_target
 
 def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_path):
     comms = context_comms(tmp_path)
-    worktree = str(tmp_path)
+    worktree = Checkout(tmp_path)
     target = IncarnationThreadTarget(comms.registry.require("Alice").incarnation)
     original = comms.messaging.send_user_message(target, "before rename", worktree=worktree)
     comms.registry.rename("Alice", "renamed")
@@ -83,7 +85,7 @@ def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_pa
 @pytest.mark.parametrize("recreate", [False, True])
 def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_path, recreate):
     comms = context_comms(tmp_path)
-    worktree = str(tmp_path)
+    worktree = Checkout(tmp_path)
     target = IncarnationThreadTarget(comms.registry.require("Alice").incarnation)
     viewer = comms.messaging.user_identity(worktree)
     comms.registry.unregister("Alice")
@@ -104,7 +106,7 @@ def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_pat
 
 def test_dm_page_refuses_replacement_between_registry_capture_and_bus_read(tmp_path, monkeypatch):
     comms = context_comms(tmp_path)
-    worktree = str(tmp_path)
+    worktree = Checkout(tmp_path)
     target = IncarnationThreadTarget(comms.registry.require("Alice").incarnation)
     viewer = comms.messaging.user_identity(worktree)
     read_opened = ConversationMessagePageRequest.read_opened

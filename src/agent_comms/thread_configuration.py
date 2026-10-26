@@ -26,7 +26,7 @@ class ThreadConfiguration:
             thread.incarnation.require_recorded(),
             str(self.root.resolve()),
             ProcessIdentity.capture(os.getpid()),
-            thread.worktree,
+            str(thread.worktree),
             self.threads.resolve_thread_model(thread.name),
             thread.thinking_level.wire_value(),
             thread.display_title,

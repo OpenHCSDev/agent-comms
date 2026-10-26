@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated
 from .turn_failure import TurnFailure
 from .field_codec import AttemptId, GoalId, TurnId
 from .goal_attempt_identity import GoalAttemptIdentity
+from .repo import Checkout
 from .thread_identity import (
     ClaimedIdentity,
     RecordedThreadIncarnation,
@@ -22,7 +23,7 @@ from .thread_identity import (
     TurnFence,
     TurnIdentity,
 )
-from .typed_table import Column, DurableTables, ForeignKey, TypedTable
+from .typed_table import Column, DurableTables, ForeignKey, TextStorage, TypedTable
 
 if TYPE_CHECKING:
     from .goal_attempts import Reservation
@@ -55,7 +56,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     generation: Annotated[int, Column(check="generation>0")]
     owner: str
     owner_created_at: float
-    worktree: str
+    worktree: Annotated[Checkout, Column(storage=TextStorage)]
     claim_generation: Annotated[
         int, Column(record_key=True, check="{claim_generation}>0")
     ]

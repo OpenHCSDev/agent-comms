@@ -1,3 +1,4 @@
+from agent_comms.repo import Checkout, LaunchCheckout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.pi_vocabulary import HighThinkingLevel
 import os
@@ -43,7 +44,7 @@ def setup_wire(path):
     for tag in ("api", "ui"):
         comms.channels.create_tag(tag)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("both", {"api", "ui"}), ("other", set())):
-        comms.registry.declare(Thread(name=name, tags=frozenset(tags), worktree=str(path)))
+        comms.registry.declare(Thread(name=name, tags=frozenset(tags), worktree=Checkout(path)))
     return comms
 
 
@@ -105,8 +106,8 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
 
 def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('inactive', frozenset({'cohort'}), str(tmp_path)), StoppedThreadStatus())
-    comms.registry.declare(Thread('active', frozenset({'cohort'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
+    comms.registry.declare(Thread('inactive', frozenset({'cohort'}), Checkout(tmp_path)), StoppedThreadStatus())
+    comms.registry.declare(Thread('active', frozenset({'cohort'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     original = comms.registry.snapshot()
     catalog = comms.channels.catalog.read()
     for disposition in (ArchiveThreadsTagDisposition(), DeleteThreadsTagDisposition()):
@@ -139,7 +140,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
         path.write_text('{"original_saved_history":"' + name + '"}\n')
         saved[name] = path.read_bytes()
         process = ProcessIdentity.capture(os.getpid()) if name == 'active' else NoProcess()
-        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root), process_identity=process), status)
+        comms.registry.declare(Thread(name, frozenset(tags), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root), process_identity=process), status)
     comms.channels.set_channel_pinned('remove', True)
     comms.channels.set_thread_pinned('keep', 'multi', True)
     original_active = comms.registry.require('active')
@@ -172,7 +173,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
 
 def test_exclusive_tag_deletion_never_deletes_a_stopped_owner_that_is_still_alive(tmp_path):
     comms = wire(tmp_path / 'wire')
-    original = Thread('still-alive', frozenset({'remove'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    original = Thread('still-alive', frozenset({'remove'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(original, StoppedThreadStatus())
     result = comms.channels.delete_tag('remove',
         disposition=DeleteExclusiveInactiveThreadsTagDisposition(), confirmed=True)
@@ -188,7 +189,7 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
 
     comms = wire(tmp_path / 'wire')
     for index in range(40):
-        comms.registry.declare(Thread(f'member-{index}', frozenset({'remove', 'keep'}), str(tmp_path)), StoppedThreadStatus())
+        comms.registry.declare(Thread(f'member-{index}', frozenset({'remove', 'keep'}), Checkout(tmp_path)), StoppedThreadStatus())
     originals = tuple(comms.registry.all_threads().values())
     current = replace(originals[0], title=GivenThreadText('new title'), task=GivenThreadText('new task'), model=DeclaredModel('selected/model'))
     comms.registry.register(current, ArchivedThreadStatus())
@@ -224,7 +225,7 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
 
     comms = setup_wire(tmp_path)
     selected = CliCommand.selected_targets((CommandTarget.named('#api'),))
-    catalog = CliCommand.target_catalog(comms, selected, project=str(tmp_path))
+    catalog = CliCommand.target_catalog(comms, selected, project=Checkout(tmp_path))
     action = next(action for action in catalog if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
@@ -268,7 +269,7 @@ def test_any_is_non_routable(tmp_path):
     with pytest.raises(ValueError):
         comms.messaging.send("other", "#any", "agent send rejected").message.message_id
     with pytest.raises(ValueError):
-        comms.messaging.send_user_message(CommandTarget.named('#any'), "user send rejected", worktree=str(tmp_path))
+        comms.messaging.send_user_message(CommandTarget.named('#any'), "user send rejected", worktree=Checkout(tmp_path))
 
 
 def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path):
@@ -352,7 +353,7 @@ def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
     assert "reserved" not in comms.channels.catalog.read().tags
 
 
-def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
+def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path, source_repository):
     import json
 
     from agent_comms.cli_bridges.history import AnySession, OfflineHistory
@@ -364,9 +365,9 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     before = comms.registry.snapshot()
 
     with pytest.raises(ValueError):
-        comms.registry.declare(Thread('registered', frozenset({'reserved'}), str(tmp_path)))
+        comms.registry.declare(Thread('registered', frozenset({'reserved'}), Checkout(tmp_path)))
     with pytest.raises(ValueError):
-        comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=str(tmp_path))
+        comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=Checkout(tmp_path))
 
     source = tmp_path / "foreign.json"
     source.write_text(json.dumps({
@@ -385,11 +386,11 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     parent_session = tmp_path / "parent.jsonl"
     parent_session.write_text("{}\n")
     comms.registry.declare(
-        Thread('parent', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_session), comms.root))
+        Thread('parent', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_session), comms.root))
     )
     with pytest.raises(ValueError):
         comms.threads.create(
-            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="task", tags=GivenTags(frozenset({"reserved"}))),
+            ForkSpec.from_task(name="child", parent="parent", project=LaunchCheckout.checked(source_repository.checkout), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="task", tags=GivenTags(frozenset({"reserved"}))),
         )
 
     after = comms.registry.snapshot()
@@ -488,9 +489,9 @@ def test_none_membership_and_independent_channel_order(tmp_path):
 
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('moving', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('moving', frozenset(), Checkout(tmp_path)))
     comms.registry.declare(
-        Thread('peer', frozenset({'api'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('peer', frozenset({'api'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.channels.update_tags("moving", add=frozenset({"api"}))
     joined = list(comms.views.history_page(CommandTarget.named("#api")).messages)
@@ -505,13 +506,13 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     history = list(wire(tmp_path).views.history_page(CommandTarget.named("#api")).messages)
     assert [message.role.change.declared_name for message in history] == ["joined", "left"]
     assert all(not message.role.response_policy(message).starts_turn for message in history)
-    assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
+    assert not comms.views.viewer_snapshot(Checkout(tmp_path)).participants("#api")
     comms.agents.begin_turn("peer", TurnId('e99af36cdfcffbc191cce98c5d771afb'))
     assert [
-        person.thread.name for person in comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
+        person.thread.name for person in comms.views.viewer_snapshot(Checkout(tmp_path)).participants("#api")
     ] == ["peer"]
     comms.owners.stop("peer")
-    assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
+    assert not comms.views.viewer_snapshot(Checkout(tmp_path)).participants("#api")
 
 
 @pytest.mark.parametrize("order", ChannelSort.members_with(ChannelSort))
@@ -524,7 +525,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     for channel in ("#ui", "#none"):
         result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True}, caller=NoThreadCaller())
         assert result["pinned"]
-    views = observer.views.viewer_snapshot(str(tmp_path)).channels
+    views = observer.views.viewer_snapshot(Checkout(tmp_path)).channels
     assert list(views) == (
         [name for name in original if name in {"#ui", "#none"}]
         + [name for name in original if name not in {"#ui", "#none"}]

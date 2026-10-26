@@ -13,6 +13,7 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
+from .repo import Checkout
 from .field_codec import (
     ThreadLookup, FieldCodec, NullMember, PresentMember, RecordMember, SubclassUnion, WireOmitDefault,
 )
@@ -168,9 +169,9 @@ class ScheduledTurn:
         return self.goal_id.schedules_goal() and self.origin.autonomous
 
     @classmethod
-    def resuming_in_project(cls, project: str) -> ScheduledTurn:
+    def resuming_in_project(cls, project: Checkout) -> ScheduledTurn:
         return cls(
-            f"Project change completed: tools and context now use {project!r}. "
+            f"Project change completed: tools and context now use {str(project.path)!r}. "
             "Continue the user's previous request from this directory. "
             "If the request was only to switch projects, report that you are ready; "
             "do not invent extra work."

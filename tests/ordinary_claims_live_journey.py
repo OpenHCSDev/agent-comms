@@ -8,6 +8,7 @@ from __future__ import annotations
 
 
 
+from agent_comms.repo import Checkout
 import argparse
 import asyncio
 from contextlib import asynccontextmanager
@@ -85,7 +86,7 @@ async def journey(arguments):
     comms = wire(root)
     name = 'scratch-sleeper'
     comms.registry.declare(replace(Thread(
-        name, frozenset(), str(project), model=DeclaredModel(arguments.model), thinking_level=HighThinkingLevel),
+        name, frozenset(), Checkout(project), model=DeclaredModel(arguments.model), thinking_level=HighThinkingLevel),
         storage_roots=StorageRoots(scratch=stage)))
     agent = CommsAgent(comms, agent_bin=GivenBinary(arguments.native_launcher),
                        agent_args=GivenArguments(('--offline', '--no-skills', '--no-context-files', '--no-prompt-templates',)),
@@ -94,7 +95,7 @@ async def journey(arguments):
     try:
         comms.owners.require_private_launch().prepare_owner(
             comms.registry.require(name), arguments.native_launcher, LaunchRuntime.running())
-        await agent.sessions.start_owner(str(project), name)
+        await agent.sessions.start_owner(Checkout(project), name)
         async with attachment(comms, project, name, env) as (client, observer):
             for outcome in arguments.outcomes:
                 target = project / f'{outcome}.txt'

@@ -48,6 +48,7 @@ from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
 from .comms import Comms, client_wire, wire
+from .repo import Checkout
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
 from .coordination_errors import CoordinationError, Refused
@@ -673,7 +674,7 @@ class Connector:
     def request_approval(self, client: str, link: str) -> None:
         """Only the durable human identity receives the bearer approval link."""
         with self.opened_wire() as comms:
-            owner = comms.messaging.user_identity(str(self.root))
+            owner = comms.messaging.user_identity(Checkout(self.root))
             comms.messaging.send(
                 CALLER.name, owner.name,
                 f"Connector sign-in requested by {json.dumps(client)}. "

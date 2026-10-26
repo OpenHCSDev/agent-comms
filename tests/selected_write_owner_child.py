@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 from pathlib import Path
+from agent_comms.repo import Checkout
 
 from agent_comms.active_route import ActiveRoute
 from agent_comms.comms import wire
@@ -38,7 +39,7 @@ async def main(base: Path) -> None:
             agent_bin=GivenBinary("pi"), agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
         )
         try:
-            await agent.sessions.start_owner(str(base / "project"), "beta")
+            await agent.sessions.start_owner(Checkout(base / "project"), "beta")
             print(json.dumps({"event": "ready", "pid": os.getpid()}), flush=True)
             await wait_for(base / "dispatch")
             agent.inputs.auto_wake = True

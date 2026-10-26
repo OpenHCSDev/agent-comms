@@ -6,6 +6,7 @@ import pytest
 from agent_comms.cli_commands import ForkCliCommand
 from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, ThinkingLevelField
+from agent_comms.repo import LaunchCheckout
 from agent_comms.read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from agent_comms.thread_execution import ExternalThreadExecution, ThreadExecution
 from agent_comms.thread_model import UndeclaredModel
@@ -29,8 +30,8 @@ def test_declared_default_editor_round_trip(annotation, value, encoded):
     assert FieldCodec.decode(annotation, decoder.decode_editor(text)) == value
 
 
-def test_fork_default_retains_annotated_thinking_representation(tmp_path):
-    command = ForkCliCommand(name='', parent='saved', project=str(tmp_path),
+def test_fork_default_retains_annotated_thinking_representation(source_repository):
+    command = ForkCliCommand(name='', parent='saved', project=LaunchCheckout.checked(source_repository.checkout),
                              model=UndeclaredModel(), thinking_level=NoThinkingOverride)
     editable = {entry.name: entry for entry in command.editable_fields}
     decoder = compile_decoder(editable['thinking_level'].annotation)
