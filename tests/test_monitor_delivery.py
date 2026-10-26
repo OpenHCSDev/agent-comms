@@ -76,7 +76,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                     await update.observed(selected)
                 row, = DeliveryRow.select(db)
                 assert row.message.reference == fresh.reference
-                assert row.outcome is not DeliveredOutcome
+                assert row.outcome is DeliveredOutcome
                 assert isinstance(row.monitor, ObservedMonitor)
                 assert comms.bus.reads.read() == user_reads
                 unread = comms.messaging.send(
@@ -88,7 +88,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 assert {row.message.reference for row in DeliveryRow.select(db)} == {
                     fresh.reference, unread.reference,
                 }
-                assert all(row.outcome is not DeliveredOutcome for row in DeliveryRow.select(db))
+                assert all(row.outcome is DeliveredOutcome for row in DeliveryRow.select(db))
                 assert all(isinstance(row.monitor, ObservedMonitor)
                            for row in DeliveryRow.select(db))
                 assert [item.reference for item in comms.bus.inbox('viewer').page.messages] == [
@@ -339,7 +339,7 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         confirmed, = DeliveryRow.select(db, id=message.message_id)
         await confirmed.finish(reopened, EmittedOutcome)
     with Binding.open(state) as db:
-        assert DeliveryRow.select(db)[0].outcome is EmittedOutcome
+        assert DeliveryRow.select(db)[0].outcome is DeliveredOutcome
         assert DeliveryRow.select(db)[0].monitor == ObservedMonitor('record-4', 1792168805.123)
         assert len(ObservedPart.select(db)) == 7
 

@@ -46,5 +46,5 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
     ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        return self.imported(ctx, OfflineHistory.of(
+        return self.imported(ctx, OfflineHistory.stored(
             self.harness, self.source.expanduser().resolve(), self.session), self.name)

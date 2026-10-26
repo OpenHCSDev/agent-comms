@@ -328,13 +328,13 @@ def test_adding_an_index_renames_no_other_index():
     @dataclass(frozen=True)
     class IndexedRow(TypedTable):
         name: Annotated[str, Column(primary_key=True)]
-        count: int
+        count: int = field()
         indexes = (Index(('count',)), Index(('name', 'count'), where='count > 0'))
 
     @dataclass(frozen=True)
     class MoreIndexedRow(TypedTable, declared_name=IndexedRow.declared_name + '_more'):
         name: Annotated[str, Column(primary_key=True)]
-        count: int
+        count: int = field()
         indexes = (Index(('name',), unique=True), *IndexedRow.indexes)
 
     def names(row):

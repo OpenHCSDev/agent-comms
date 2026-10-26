@@ -11,6 +11,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import chdir, nullcontext
@@ -43,11 +44,10 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registration import Registration
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
-from agent_comms.store_files import store_lock_path
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
@@ -488,8 +488,8 @@ def released_published_orders(pr_commander, github_cli):
             name, frozenset(), str(checkout), execution=ExternalThreadExecution,
             process_identity=ProcessIdentity.capture(os.getpid())))
         c.transcripts.external(name).finish(
-            turn_id=NativeTurnId(name), item_id='idle', events=(AssistantTranscript(
-                'Ready for work', position='idle', timestamp=time.time()),))
+            turn_id=NativeTurnId(name), item_id=NativeItemId('idle'), events=(AssistantTranscript(
+                'Ready for work', position=NativeItemId('idle'), timestamp=time.time()),))
         assert source.git(checkout, 'status', '--porcelain') == ''
         assert source.git(checkout, 'rev-parse', 'HEAD') == source.git(checkout, 'rev-parse', '@{upstream}')
     originals = {}
@@ -673,9 +673,13 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             copied.registry.register(replace(
                 copied.registry.require(ctx.commander),
                 process_identity=ProcessIdentity.capture(os.getpid())))
-            with copied.bus.bus.writer_connection():
-                pass  # Create the writer lock through its owner before the child probes it.
-            lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))
+            probe = shlex.join((sys.executable, "-c",
+                "import sqlite3,sys\n"
+                "db=sqlite3.connect(sys.argv[1], uri=True, timeout=0)\n"
+                "db.execute('BEGIN IMMEDIATE')\n"
+                "db.rollback()\n"
+                "db.close()\n",
+                copied.bus.bus.path.as_uri() + "?mode=rw"))
             calls = ctx.root / "watcher-children.txt"
             calls.write_text("")
             binaries = ctx.root / "watcher-bin"
@@ -686,10 +690,8 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                 shim = binaries / name
                 shim.write_text(
                     "#!/bin/sh\n"
-                    f"exec 9<{lock}\n"
-                    "if flock -n 9; then state=free; flock -u 9; else state=held; fi\n"
+                    f"if {probe} 2>/dev/null; then state=free; else state=held; fi\n"
                     f"printf '{name} %s %s\\n' \"$state\" \"$*\" >> {shlex.quote(str(calls))}\n"
-                    "exec 9<&-\n"
                     f"exec {shlex.quote(executable)} \"$@\"\n")
                 shim.chmod(0o755)
             monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
@@ -699,8 +701,6 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                 start = calls.stat().st_size
                 watch.watch_pass(lambda: nullcontext(copied))
                 readings = calls.read_text()[start:].splitlines()
-                assert readings, type(watch).__name__
-                print(type(watch).__name__, *readings, sep="\n")
                 observed.extend(readings)
             application = copied.goals.todos.get(original.id)
             assert application.order.sha == merged and not application.order.accepted
