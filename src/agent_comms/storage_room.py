@@ -19,9 +19,9 @@ from typing import Annotated, ClassVar, Iterator, TYPE_CHECKING
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
-from .field_codec import PathText, RoomTicket
+from .field_codec import FieldCodec, PathText, RoomTicket
 from .thread_identity import ThreadIncarnation
-from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
+from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable, WriterOwnedFile
 from .watched import ChangeSignal, FileSource
 
 if TYPE_CHECKING:
@@ -43,6 +43,9 @@ class RoomWork(DeclaredFamily, affix="RoomWork"):
     def measured_needs(self, db: sqlite3.Connection, root: str) -> tuple[RoomNeed, ...]:
         return tuple(self.estimate(peak.need) for peak in WorkPeak.select(db, work=type(self)))
 
+    def admitted(self, db: sqlite3.Connection, root: str) -> None:
+        pass
+
 
 class BuildRoomWork(RoomWork):
     pass
@@ -59,6 +62,10 @@ class UnitStartRoomWork(RoomWork):
         if len(released) == len(self.owners):
             return (sum((peak.need for peak in released), RoomNeed()),)
         return super().measured_needs(db, root)
+
+    def admitted(self, db: sqlite3.Connection, root: str) -> None:
+        for owner in self.owners:
+            StoppedOwnerPeak.delete(db, root=root, owner=owner)
 
 
 class AllocationRoomWork(RoomWork):
@@ -132,6 +139,8 @@ class StoppedOwnerPeak(RoomLedgerRows, TypedTable):
 
 @dataclass(frozen=True)
 class RoomClaim(RoomLedgerRows, TypedTable):
+    dropped_fields: ClassVar[tuple[str, ...]] = ('unit',)
+
     ticket: Annotated[RoomTicket, Column(primary_key=True)]
     root: str
     process: Annotated[ProcessIdentity, Column(storage=JsonStorage)]
@@ -145,6 +154,24 @@ class RoomLedger(DurableStore):
     root: Path
     filename = "work_room.sqlite3"
     tables = RoomLedgerRows
+
+    @classmethod
+    def schema_change(cls, path: Path) -> WriterOwnedFile:
+        # This machine-wide ledger is outside the bus; its writer owns its carry.
+        return WriterOwnedFile()
+
+    @classmethod
+    def derive_schema(cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = ()) -> None:
+        previous_owner, = RoomClaim.dropped_fields
+        if previous_owner in RoomClaim.stored_columns(db):
+            # Carry the old claim's complete membership before dropping its column.
+            # No claim or process authority is discarded, including a live holder.
+            db.execute(RoomClaim._sql(
+                f'UPDATE "{RoomClaim.declared_name}" SET {{work}} = '
+                '(SELECT json_group_array(json_object(?, member.value, ?, '
+                f'json_array(json("{previous_owner}")))) FROM json_each({{work}}) AS member)'
+            ), (RoomWork.family_discriminator, FieldCodec.field_plan(RoomWork, 'owners').key))
+        super().derive_schema(db, sharing)
 
     def dead_claims(self):
         # Dead/replaced processes cannot hold room, but are never replayed.
@@ -337,6 +364,8 @@ class RoomAllocation:
                     return False
             RoomClaim.update(db, where='{ticket}=?', parameters=(ticket,),
                              phase=HoldingRoomPhase(need))
+            for work in claim.work:
+                work.admitted(db, claim.root)
             return True
 
     async def wait_for_room(

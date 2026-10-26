@@ -144,6 +144,7 @@ async def test_install_restart_admits_owners_its_stop_released(tmp_path: Path, n
         assert admissions == [True], 'The whole replacement batch must be admitted without waiting'
         with rule.room_ledger.snapshot() as db:
             assert RoomClaim.count(db) == 0
+            assert StoppedOwnerPeak.count(db) == 0
     finally:
         threading.setprofile(previous)
         comms.registry.storage_rule = rule
