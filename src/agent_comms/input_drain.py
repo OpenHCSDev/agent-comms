@@ -471,6 +471,9 @@ class DrainedSession:
     def owned(self) -> OwnerSession:
         raise RelationViolationError("This session has not acquired local execution")
 
+    def owned_sessions(self, session_id: str) -> tuple[str, ...]:
+        return ()
+
     @asynccontextmanager
     async def own_turn_task(self) -> AsyncIterator[None]:
         """Hold execution through cleanup; shutdown retirement suppresses the wake."""
@@ -582,6 +585,9 @@ class OwnerSession(DrainedSession):
 
     def owned(self) -> OwnerSession:
         return self
+
+    def owned_sessions(self, session_id: str) -> tuple[str, ...]:
+        return (session_id,)
 
     def producers(self) -> tuple[asyncio.Task[None], ...]:
         return (*super().producers(), self.auth_observer)

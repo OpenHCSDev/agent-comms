@@ -68,9 +68,6 @@ class SessionLifecycle:
         self.comms = comms
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
         self.bindings: dict[str, str] = {}
-        # A launcher registers this process as the owner before it starts, so
-        # this process owns that registration even if it never binds a session.
-        self.launched_owners: set[str] = set()
         self.client: SdkSessionConnection | None = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, ThreadText] = {}
@@ -221,7 +218,8 @@ class SessionLifecycle:
         subscription, which discovers them on demand. The owner process does
         not launch catalog children only to discard their answer.
         """
-        self.launched_owners.add(session_id)
+        # Retain execution before loading so a failed bind still releases it.
+        self.effects.inputs.acquire_owner(session_id)
         thread = await self._acquire_loaded(cwd, session_id)
         if not thread.process_identity.runs_here():
             raise RelationViolationError(
@@ -386,7 +384,12 @@ class SessionLifecycle:
         """
         failures: list[Exception] = []
         try:
-            for name in set(self.bindings.values()) | self.launched_owners:
+            names = {
+                self.bindings.get(owned_id, owned_id)
+                for session_id, state in self.effects.inputs.drained.items()
+                for owned_id in state.owned_sessions(session_id)
+            }
+            for name in names:
                 try:
                     await Coordination.run_worker(partial(self.release_registered_owner, name))
                 except (OSError, ValueError) as error:

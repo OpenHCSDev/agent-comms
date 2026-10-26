@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import runpy
 import sys
 from dataclasses import replace
@@ -259,6 +260,7 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
 @pytest.mark.asyncio
 async def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comms):
     from agent_comms.acp import CommsAgent
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.errors import RelationViolationError
     from agent_comms.native_arguments import GivenArguments, GivenBinary
     from agent_comms.pi_native_backend import PersistentPiSession
@@ -268,11 +270,19 @@ async def test_runner_obtains_one_backend_per_session_from_the_thread_declaratio
         agent_args=GivenArguments(("--provider", "p", "--model", "m")),
     )
     try:
-        session = agent.inputs.acquire_owner("session")
-        other = agent.inputs.acquire_owner("other")
+        for name in ("session", "other"):
+            thread = comms.registry.declare(Thread(
+                name, frozenset(), str(comms.root.parent), model=DeclaredModel('p/m'),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            ))
+            await agent.sessions.bind_owned(thread, name)
+        session = agent.inputs.state("session").owned()
+        other = agent.inputs.state("other").owned()
+        assert agent.inputs.state("attachment").owned_sessions("attachment") == ()
+        assert session.owned_sessions("session") == ("session",)
         assert session.configuration is other.configuration is agent.inputs.configuration
         assert session.stop is not other.stop
-        thread = Thread('owner', frozenset(), '/tmp/owner', model=DeclaredModel('p/m'))
+        thread = comms.registry.require("session")
         backend = agent.turns.backend_for("session", thread)
         assert type(backend) is PiNativeBackend
         assert agent.turns.backend_for("session", thread) is backend
