@@ -10,10 +10,10 @@ import os
 import threading
 import time
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Iterator, TYPE_CHECKING
 
 from .activity import ActivityState
 from .child_process import ProcessIdentity
@@ -22,6 +22,9 @@ from .field_codec import RoomTicket
 from .thread_identity import ThreadIncarnation
 from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
 from .watched import ChangeSignal, FileSource
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,9 @@ class RoomWork(DeclaredFamily, affix="RoomWork"):
     def per_owner(self, measured: RoomNeed) -> RoomNeed:
         return measured.divided(len(self.owners))
 
+    def measured_needs(self, db, root: str) -> tuple[RoomNeed, ...]:
+        return tuple(self.estimate(peak.need) for peak in WorkPeak.select(db, work=type(self)))
+
 
 class BuildRoomWork(RoomWork):
     pass
@@ -46,7 +52,12 @@ class TestGateRoomWork(RoomWork):
 
 
 class UnitStartRoomWork(RoomWork):
-    pass
+    def measured_needs(self, db, root: str) -> tuple[RoomNeed, ...]:
+        released = tuple(peak for owner in self.owners
+                         for peak in StoppedOwnerPeak.select(db, root=root, owner=owner))
+        if len(released) == len(self.owners):
+            return (sum((peak.need for peak in released), RoomNeed()),)
+        return super().measured_needs(db, root)
 
 
 class AllocationRoomWork(RoomWork):
@@ -58,7 +69,7 @@ class RoomNeed:
     memory: int = 0
     disk: int = 0
 
-    def __add__(self, other):
+    def __add__(self, other: RoomNeed) -> RoomNeed:
         return RoomNeed(self.memory + other.memory, self.disk + other.disk)
 
     def scaled(self, count: int) -> RoomNeed:
@@ -106,6 +117,15 @@ class RoomLedgerRows(StoreRows):
 @dataclass(frozen=True)
 class WorkPeak(RoomLedgerRows, TypedTable):
     work: Annotated[type[RoomWork], Column(primary_key=True)]
+    need: Annotated[RoomNeed, Column(storage=JsonStorage)]
+
+
+@dataclass(frozen=True)
+class StoppedOwnerPeak(RoomLedgerRows, TypedTable):
+    """The exited owner's measured process-tree room, not the cleanup threshold."""
+
+    root: Annotated[str, Column(primary_key=True)]
+    owner: Annotated[ThreadIncarnation, Column(primary_key=True, storage=JsonStorage)]
     need: Annotated[RoomNeed, Column(storage=JsonStorage)]
 
 
@@ -163,12 +183,13 @@ class WorkMeasurement:
         self.worker = threading.Thread(target=self.observe, daemon=True)
         self.worker.start()
 
-    def resident(self):
-        if not self.process.alive():
-            return 0
-        tree = {self.process.pid}
+    @staticmethod
+    def residents(proc: Path, processes: tuple[ProcessIdentity, ...]) -> tuple[int, ...]:
+        """Sample one process forest for the whole stop or measurement batch."""
+        if not processes:
+            return ()
         rows = {}
-        for directory in self.rule.proc.glob('[0-9]*'):
+        for directory in proc.glob('[0-9]*'):
             try:
                 values = {line.partition(':')[0]: line.partition(':')[2].split()
                           for line in (directory / 'status').read_text().splitlines()}
@@ -177,15 +198,20 @@ class WorkMeasurement:
                         int(values.get('VmHWM', ['0'])[0])) * 1024)
             except (FileNotFoundError, ProcessLookupError):
                 continue
-        pending = set(rows) - tree
-        while children := {pid for pid in pending if rows[pid][0] in tree}:
-            tree.update(children)
-            pending.difference_update(children)
-        return sum(rows[pid][1] for pid in tree if pid in rows)
+        result: list[int] = []
+        for process in processes:
+            tree = {process.pid} if process.alive() else set()
+            pending = set(rows) - tree
+            while children := {pid for pid in pending if rows[pid][0] in tree}:
+                tree.update(children)
+                pending.difference_update(children)
+            result.append(sum(rows[pid][1] for pid in tree if pid in rows))
+        return tuple(result)
 
     def observe(self):
         while True:
-            self.peak = self.peak.peak(RoomNeed(self.resident(),
+            memory, = self.residents(self.rule.proc, (self.process,))
+            self.peak = self.peak.peak(RoomNeed(memory,
                 max(0, self.disk_before - self.rule.free_room().disk)))
             if self.done.wait(self.sample_seconds):
                 break
@@ -258,7 +284,25 @@ class RoomAllocation:
         return RoomNeed(self.memory_available_bytes(), int(self.free_gib() * 2**30))
 
     def room_floor(self):
-        return RoomNeed(int(self.memory_gib * 2**30), int(self.floor_gib * 2**30))
+        return RoomNeed(disk=int(self.floor_gib * 2**30))
+
+    @contextmanager
+    def stopping(self, root: Path, owners: tuple[Thread, ...]) -> Iterator[None]:
+        """Retain the stopped batch's observed peaks for its replacement admission."""
+        if not owners:
+            yield
+            return
+        memory = WorkMeasurement.residents(
+            self.proc, tuple(owner.require_process() for owner in owners),
+        )
+        peaks = tuple(StoppedOwnerPeak(str(root), owner.incarnation, RoomNeed(amount))
+                      for owner, amount in zip(owners, memory, strict=True))
+        yield
+        self.room_ledger.root.mkdir(parents=True, exist_ok=True)
+        with self.room_ledger.writing() as db:
+            for peak in peaks:
+                StoppedOwnerPeak.delete(db, root=peak.root, owner=peak.owner)
+                peak.insert(db)
 
     def _admit(self, ticket):
         ledger = self.room_ledger
@@ -275,17 +319,17 @@ class RoomAllocation:
             for other in RoomClaim.select(db):
                 held += other.phase.held
             spare = free.remaining(self.room_floor() + held)
-            peaks = tuple(WorkPeak.one(db, work=type(work)) for work in claim.work)
+            peaks = tuple(work.measured_needs(db, claim.root) for work in claim.work)
             # An unmeasured run calibrates alone. It reserves the observed spare
             # room, never a typed-in estimate and never zero alongside another run.
-            if any(peak is None for peak in peaks):
+            if not all(peaks):
                 if held != RoomNeed() or not self.room_floor().fits(free):
                     return False
                 need = spare
             else:
                 need = RoomNeed()
-                for work, peak in zip(claim.work, peaks, strict=True):
-                    need += work.estimate(peak.need)
+                for measured in peaks:
+                    need += sum(measured, RoomNeed())
                 if not (need + self.room_floor() + held).fits(free):
                     return False
             RoomClaim.update(db, where='{ticket}=?', parameters=(ticket,),

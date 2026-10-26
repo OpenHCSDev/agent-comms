@@ -47,7 +47,7 @@ from .native_arguments import (
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .repo import Checkout
-from .storage_room import UnitStartRoomWork
+from .storage_room import MeasuredRoomReservation, UnitStartRoomWork
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (
     OwnerBusyRefusal,
@@ -369,7 +369,7 @@ class OwnerLifecycle:
         for thread in pending:
             rule.require_allocation(thread)
 
-        async def prepare():
+        async def prepare() -> MeasuredRoomReservation:
             reservation = await rule.wait_for_room(
                 (UnitStartRoomWork(tuple(thread.incarnation for thread in pending)),), self.root,
             )
@@ -420,8 +420,8 @@ class OwnerLifecycle:
         self.maintenance.assert_open_unlocked()
         snapshot = self.registry.snapshot()
         selected = {thread.name: thread for name in names for thread in (snapshot.require(name),)}
-        pending = []
-        results = {}
+        pending: list[Thread] = []
+        results: dict[str, OwnerStartResult] = {}
         for thread in selected.values():
             thread.execution.require_native()
             status = snapshot.status(thread.name)
@@ -531,13 +531,14 @@ class OwnerLifecycle:
                        if (owner := self._stop_selection(name)) is not None)
         # A process may already be dead. It still needs the exact release
         # acknowledgement before the execution owner can settle its attempted input.
-        self._stop_processes(tuple(owner for owner in owners if owner[0].process_alive))
-        # Stop is explicit abandonment of this exited local owner, not replay
-        # permission. The existing recovery owner checks its exact release and
-        # native-child absence before terminal settlement.
-        self._finish_stopped_owners(owners)
-        RecoveryMonitorCapability.settle_stopped_owners(
-            self, tuple(thread for thread, _ in owners))
+        with self.registry.storage_rule.stopping(self.root, tuple(thread for thread, _ in owners)):
+            self._stop_processes(tuple(owner for owner in owners if owner[0].process_alive))
+            # Stop is explicit abandonment of this exited local owner, not replay
+            # permission. The existing recovery owner checks its exact release and
+            # native-child absence before terminal settlement.
+            self._finish_stopped_owners(owners)
+            RecoveryMonitorCapability.settle_stopped_owners(
+                self, tuple(thread for thread, _ in owners))
 
     def require_private_launch(self) -> PrivateNkLaunch:
         """The launch authority of a root that must be private."""
@@ -560,15 +561,15 @@ class OwnerLifecycle:
         *,
         launch_runtime: LaunchRuntime,
         initial_input: LaunchInput = LaunchInput(),
-        environment: Mapping[str, str] | None = None,
+        environment: Mapping[str, str] = os.environ,
     ) -> tuple[Thread, ...]:
         # Retire predecessors before reserving any replacement process identity.
         RecoveryMonitorCapability.recover_owners(self, threads)
         self.maintenance.assert_open_unlocked()
         launch_runtime.require_available()
-        environment = launch_runtime.environment(dict(os.environ if environment is None else environment))
+        environment = launch_runtime.environment(dict(environment))
         agent_bin = self.require_launch_authority().prepare_owner(agent_bin, launch_runtime)
-        selected = []
+        selected: list[tuple[Thread, ProcessIdentity]] = []
         with ExitStack() as launches:
             for thread in threads:
                 env = initial_input.launch(thread.launch()).apply(environment)
