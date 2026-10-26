@@ -34,7 +34,7 @@ class CommanderObservation:
     def read(cls, comms: Comms, thread: Thread,
              reading: type[ProgressRead] = ProgressRead) -> CommanderObservation:
         """One frame's progress facts come from ``reading``; Core reads the live forge and Git."""
-        frame = HeartbeatFrame.read(comms, thread.name, reading())
+        frame = HeartbeatFrame.capture(comms, thread.name, reading())
         pulls = frame.pulls
         for repo in comms.registry.snapshot().commander_project.repository_names():
             pulls.open(repo)

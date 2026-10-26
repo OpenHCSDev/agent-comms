@@ -105,7 +105,7 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     rule, = rules
     assert rule.todo == todo
     assert (UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)) == claim_it
-    frame = HeartbeatFrame.read(comms, "lead", ProgressRead(()))
+    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
     timed = replace(todo, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
@@ -140,7 +140,7 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     for rule in rules:
         verdicts = assert_review_preconditions(rule, comms, request)
         assert (UnderReviewHeadVerdict in verdicts) == (rule.todo.id == second.id)
-    frame = HeartbeatFrame.read(comms, "lead", ProgressRead(()))
+    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead(()))
     timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
     timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
