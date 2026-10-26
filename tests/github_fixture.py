@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import ListedPullRequest, UnmergedListedPullRequest
+from agent_comms.todos import ClosedListedPullRequest, ListedPullRequest, UnmergedListedPullRequest
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,7 @@ class GitHubFixture:
             data.setdefault(repository.to_wire(), {
                 "open_kinds": [kind.declared_name for kind in
                                UnmergedListedPullRequest.members_with(UnmergedListedPullRequest)],
+                "closed_kind": ClosedListedPullRequest.declared_name,
                 "requests": {},
             })
         self.path.write_text(json.dumps(data))

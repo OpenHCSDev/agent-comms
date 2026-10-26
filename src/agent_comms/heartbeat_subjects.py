@@ -53,8 +53,10 @@ class HeadSubject(HeartbeatSubject):
     request: PullRequestHead
 
     def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
+        from agent_comms.todos import StoredHeadReview
+
         return any(review.at.since(since) and review.verdict.decides()
-                   for review in comms.goals.todos.head_reviews(self.request))
+                   for review in StoredHeadReview.head_reviews(comms.goals.todos, self.request))
 
     def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
         """The line is about the pull request: a verdict on any of its heads acts on it, the
@@ -63,6 +65,17 @@ class HeadSubject(HeartbeatSubject):
 
     def reviews(self, request: PullRequestHead) -> bool:
         return self.request.same_pull_request(request)
+
+
+@dataclass(frozen=True)
+class UnlandedHeadSubject(HeadSubject):
+    """Only the forge/Git condition clears this line; reviewing it does not land it."""
+
+    def disposed(self, comms: Comms, actors: frozenset[str], since: float) -> bool:
+        return False
+
+    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
+        return False
 
 
 @dataclass(frozen=True)

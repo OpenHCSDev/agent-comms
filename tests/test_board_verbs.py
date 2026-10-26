@@ -22,7 +22,7 @@ from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.todos import (
     Assignment, ClaimOrder, DeliveredProblemOrder, OrderHeadReview, OrderClaim,
     OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
-    PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StrikeReason, UnderReviewHeadVerdict, VerdictReason,
+    PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StoredHeadReview, StrikeReason, UnderReviewHeadVerdict, VerdictReason,
 )
 
 from test_held_problem_orders import merge_two_commit_fix
@@ -215,7 +215,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     judge.main(author_arguments(command, released), order.Commander.read_root(comms.root))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
-    assert comms.goals.todos.head_reviews(request)[0].order.problem == original.id
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
     assert comms.registry.require("worker").goal.require() == goal
     proposed = Assignment.of(previous.owner_identity, previous.parent_identity, GoalId.mint())
     reassigned = accepted.assigned(proposed, accepted.order.owner)
