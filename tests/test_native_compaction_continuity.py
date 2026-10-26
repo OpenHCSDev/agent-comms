@@ -14,8 +14,11 @@ def test_split_compaction_preserves_prior_summary(pinned_native):
     )
 
 
-@pytest.mark.parametrize("mode", ["manual", "preflight", "overflow"])
-def test_cancelled_compaction_cannot_send_the_waiting_prompt(pinned_native, tmp_path, mode):
+@pytest.mark.parametrize("mode", [
+    "manual", "preflight", "overflow", "send-now-overflow", "send-now-between-turns",
+    "send-now-replacement-abort-overflow",
+])
+def test_compaction_controls_preserve_input_custody(pinned_native, tmp_path, mode):
     result = subprocess.run(
         ["node", str(Path(__file__).parent / "fixtures/pi_helpers/compaction_cancellation.mjs"),
          str(pinned_native), str(tmp_path / mode), mode],

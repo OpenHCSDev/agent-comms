@@ -21,13 +21,15 @@ ABORT_AFTER_TOOLS = """\
 METHOD = """    interruptSteering(inputIds) {
         if (!Array.isArray(inputIds) || inputIds.some(id => !/^[0-9a-f]{32}$/.test(id)))
             throw new Error("Invalid native steering input IDs");
-        if (this.isCompacting) throw new Error("Wait for compaction before Send now");
+        if (this.isCompacting && !this.isStreaming)
+            throw new Error("Wait for compaction before Send now");
         if (!this.isStreaming || this._nativeInterruptIds) return false;
         const pending = this.agent.steeringQueue.messages.filter(message =>
             inputIds.includes(message.inputId) && this._nativeInputClaims.has(message.inputId));
         if (!pending.length) return false;
         this._nativeInterruptIds = pending.map(message => message.inputId);
         this._emit({ type: "steering_interrupt_started" });
+        this.abortCompaction();
         this.agent.abort();
         return true;
     }
@@ -36,6 +38,10 @@ CONTINUE = """        // Only a new explicit Send now command permits this conti
         // Consume the existing queued native input, never replay the interrupted input.
         const interruptedIds = this._nativeInterruptIds;
         this._nativeInterruptIds = undefined;
+        if (interruptedIds) {
+            const lastAssistant = this._lastAssistantMessage ?? this._findLastAssistantMessage();
+            if (lastAssistant) await this._checkCompaction(lastAssistant, false);
+        }
         const selected = interruptedIds
             ? this.agent.steeringQueue.remove(new Set(interruptedIds)) : [];
         if (selected.length) {
@@ -130,16 +136,32 @@ def main(package):
     )
     source = replace_once(
         source,
+        "            await this.agent.prompt(messages);\n"
         "            while (await this._handlePostAgentRun()) {\n"
         "                await this.agent.continue();\n"
         "            }",
-        "            let continuation;\n"
-        "            while ((continuation = await this._handlePostAgentRun())) {\n"
-        "                if (Array.isArray(continuation))\n"
-        "                    await this.agent.runPromptMessages(continuation, "
-        "{ skipInitialSteeringPoll: true });\n"
-        "                else await this.agent.continue();\n"
-        "            }",
+        """            // Only an explicit new interruption can re-enter continuation.
+            // Never repeat the initial prompt after an interrupted preparation.
+            let initialStarted = false;
+            for (;;) {
+                try {
+                    if (!initialStarted) {
+                        initialStarted = true;
+                        await this.agent.prompt(messages);
+                    }
+                    let continuation;
+                    while ((continuation = await this._handlePostAgentRun())) {
+                        if (Array.isArray(continuation))
+                            await this.agent.runPromptMessages(continuation, { skipInitialSteeringPoll: true });
+                        else await this.agent.continue();
+                    }
+                    break;
+                }
+                catch (error) {
+                    if (!this._nativeInterruptIds || !(error instanceof Error && error.name === "AbortError"))
+                        throw error;
+                }
+            }""",
     )
     source = replace_once(
         source,

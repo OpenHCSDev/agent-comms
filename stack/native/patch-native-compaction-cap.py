@@ -350,6 +350,10 @@ AUTO_FAILURE_STOCK = '''        catch (error) {
 AUTO_FAILURE_OWNED = '''        catch (error) {
             const aborted = this._autoCompactionAbortController?.signal.aborted ||
                 (error instanceof Error && error.name === "AbortError");
+            if (aborted && reason === "overflow") {
+                this._overflowRecoveryAttempted = false;
+                this.reloadContextMessages();
+            }
             const errorMessage = error instanceof Error ? error.message : "compaction failed";
             if (started) {
                 const formattedErrorMessage = aborted ? undefined : reason === "overflow"
