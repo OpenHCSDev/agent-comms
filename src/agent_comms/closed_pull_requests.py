@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .head_review import PullRequestHead
@@ -18,6 +18,7 @@ from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .repository_name import RepositoryName
     from .todos import TodoStore
 
 
@@ -50,6 +51,37 @@ class ClosedRepositoryObservation:
             self.progress.upsert(db)
 
 
+@dataclass(frozen=True)
+class ClosedHeadScan:
+    """One repository pass: main's new patches and the stored rows its heads share."""
+
+    store: TodoStore
+    reader: WorkBranches
+    repo: RepositoryName
+    published: str
+    new_patches: frozenset[str]
+    fingerprints: dict[str, StoredCommitPatch]
+    diffs: dict[tuple[str, str], StoredHeadDiff] = field(default_factory=dict)
+
+    def head(self, request: PullRequestHead, closed_at: float) -> StoredClosedHead:
+        base = self.reader.commit_base(self.published, request.head)
+        return StoredClosedHead(request, base, closed_at, base.missing(self, request.head))
+
+    def missing_after(self, base: str, head: str) -> tuple[str, ...]:
+        """Commits whose patches main lacks; none when the whole diff landed as a squash."""
+        if (base, head) not in self.diffs:
+            self.diffs[base, head] = StoredHeadDiff.prepare(self.store, self.reader, base, head)
+        diff = self.diffs[base, head]
+        candidates = StoredCommitPatch.prepare(self.store, self.reader, diff.commits,
+                                                self.fingerprints)
+        with self.store.snapshot() as db:
+            if StoredMainPatch.contains_all(db, self.repo, diff.patches - self.new_patches):
+                return ()
+            return tuple(commit.commit for commit in candidates
+                         if not StoredMainPatch.contains_all(
+                             db, self.repo, commit.patches - self.new_patches))
+
+
 class ClosedPullRequestWatch(Watch):
     """Each completed repository publishes before the next external observation starts."""
 
@@ -71,47 +103,27 @@ class ClosedPullRequestWatch(Watch):
         (published,) = reader.remote_heads('origin', f'refs/heads/{reader.main}')
         old_tips = tuple(row.main for row in previous)
         closed = tuple(pull for change in changes for pull in change.as_closed())
-        compared = tuple(dict.fromkeys((*old_tips, *(pull.head for pull in closed),
-                                        *(row.request.head for row in recorded))))
-        reader.require_commits('origin', published, *compared)
-        bases = reader.common_bases(published, compared)
+        reader.require_commits('origin', published, *old_tips, *(pull.head for pull in closed),
+                               *(row.request.head for row in recorded))
         for old in old_tips:
-            if not bases[old].ancestor(old):
+            if not Repo.descends(reader.checkout, old, published):
                 raise WorkBranchError(f'{repo.github.to_wire()} main rewrote its indexed history')
         # Index main once, then only its new suffix. No shared root across unrelated heads
         # is required, and discovering an older head cannot reopen an indexed prefix.
-        added = reader.commits_since(published, *old_tips)
         fingerprints: dict[str, StoredCommitPatch] = {}
-        main_rows = StoredCommitPatch.prepare(store, reader, added, fingerprints)
-        new_patches = frozenset(patch for row in main_rows for patch in row.patches)
+        main_rows = StoredCommitPatch.prepare(store, reader,
+                                              reader.commits_since(published, *old_tips),
+                                              fingerprints)
+        scan = ClosedHeadScan(store, reader, repo.github, published,
+                              frozenset(patch for row in main_rows for patch in row.patches),
+                              fingerprints)
         changed = frozenset(row.number for row in changes)
-        heads = {row.request.pr: row for row in recorded if row.request.pr not in changed}
-        diffs: dict[tuple[str, str], StoredHeadDiff] = {}
-        for pull in closed:
-            request = PullRequestHead(repo.github, pull.number, pull.head)
-            heads[pull.number] = StoredClosedHead(
-                request, bases[pull.head], pull.closed_time,
-                reader.commits_since(pull.head, published))
-        prepared: list[StoredClosedHead] = []
-        for row in heads.values():
-            if row.missing and (row.request.pr in changed or old_tips != (published,)):
-                row = replace(row, base=bases[row.request.head])
-                for base in row.base.shared():
-                    pair = base, row.request.head
-                    if pair not in diffs:
-                        diffs[pair] = StoredHeadDiff.prepare(store, reader, *pair)
-                    diff = diffs[pair]
-                    candidates = StoredCommitPatch.prepare(store, reader, diff.commits, fingerprints)
-                    with store.snapshot() as db:
-                        whole_landed = StoredMainPatch.contains_all(
-                            db, repo.github, diff.patches - new_patches)
-                        missing = tuple(commit.commit for commit in candidates
-                                        if not StoredMainPatch.contains_all(
-                                            db, repo.github, commit.patches - new_patches))
-                    row = replace(row, missing=() if row.base.ancestor(row.request.head)
-                                  or whole_landed else missing)
-            if row.missing:
-                prepared.append(row)
+        stale = old_tips != (published,)
+        heads = (*(scan.head(row.request, row.closed_at) if stale else row
+                   for row in recorded if row.request.pr not in changed),
+                 *(scan.head(PullRequestHead(repo.github, pull.number, pull.head), pull.closed_time)
+                   for pull in closed))
         return ClosedRepositoryObservation(
-            StoredClosedRepository(repo.github, published, updated), tuple(prepared),
-            tuple(fingerprints.values()), new_patches, tuple(diffs.values()))
+            StoredClosedRepository(repo.github, published, updated),
+            tuple(row for row in heads if row.missing),
+            tuple(fingerprints.values()), scan.new_patches, tuple(scan.diffs.values()))

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import subprocess
 from abc import abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property, lru_cache
@@ -28,6 +27,7 @@ from .repository_name import RepositoryName
 from .wire_models import WireModel
 
 if TYPE_CHECKING:
+    from .closed_pull_requests import ClosedHeadScan
     from .registry_document import RegistrySnapshot
 
 
@@ -36,13 +36,10 @@ class WorkBranchError(ValueError):
 
 
 class CommitBase(DeclaredFamily):
-    """A head's relationship to main, decoded once from Git's parent graph."""
+    """A head's relationship to main, decoded from one Git merge-base exit."""
 
-    def shared(self) -> tuple[str, ...]:
-        return ()
-
-    def ancestor(self, head: str) -> bool:
-        return False
+    @abstractmethod
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]: ...
 
     @abstractmethod
     def description(self, count: int) -> str: ...
@@ -52,11 +49,8 @@ class CommitBase(DeclaredFamily):
 class SharedCommitBase(CommitBase):
     commit: Annotated[str, GitCommitText]
 
-    def shared(self) -> tuple[str, ...]:
-        return (self.commit,)
-
-    def ancestor(self, head: str) -> bool:
-        return self.commit == head
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]:
+        return () if self.commit == head else scan.missing_after(self.commit, head)
 
     def description(self, count: int) -> str:
         return f'holds {count} commits main lacks'
@@ -64,6 +58,9 @@ class SharedCommitBase(CommitBase):
 
 @dataclass(frozen=True)
 class UnrelatedCommitBase(CommitBase):
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]:
+        return scan.reader.commits_since(head, scan.published)
+
     def description(self, count: int) -> str:
         return f'has unrelated Git history: {count} commits cannot be compared with main'
 
@@ -383,31 +380,14 @@ query($owner: String!, $name: String!, $after: String) {
         )
         return BranchComparison(base_head, head, paths)
 
-    def common_bases(self, main: str, heads: tuple[str, ...]) -> Mapping[str, CommitBase]:
-        """One graph read, independent answers: an unrelated head cannot sink its siblings.
-
-        Children precede parents in Git's topological order. The earliest reachable main
-        ancestor is therefore a best common ancestor, including in a criss-cross graph.
-        """
-        parents = {commit: tuple(ancestors)
-                   for line in self._git('rev-list', '--topo-order', '--parents',
-                                         main, *heads).splitlines()
-                   for commit, *ancestors in (line.split(),)}
-        ranks = {commit: rank for rank, commit in enumerate(parents)}
-        main_history: set[str] = set()
-        pending = [main]
-        while pending:
-            commit = pending.pop()
-            if commit not in main_history:
-                main_history.add(commit)
-                pending.extend(parents[commit])
-        bases: dict[str, tuple[str, ...]] = {}
-        for commit, ancestors in reversed(parents.items()):
-            candidates = ((commit,) if commit in main_history else
-                          tuple(base for parent in ancestors for base in bases[parent]))
-            bases[commit] = tuple(sorted(candidates, key=ranks.__getitem__)[:1])
-        return {head: next((SharedCommitBase(base) for base in bases[head]),
-                           UnrelatedCommitBase()) for head in heads}
+    def commit_base(self, main: str, head: str) -> CommitBase:
+        """Git's best common ancestor; exit 1 means the histories share none."""
+        try:
+            return SharedCommitBase(self._git('merge-base', main, head).strip())
+        except GitCommandError as error:
+            if error.returncode != 1:
+                raise
+            return UnrelatedCommitBase()
 
     def commits_since(self, head: str, *excluded: str) -> tuple[str, ...]:
         return tuple(self._git('rev-list', '--no-merges', head,

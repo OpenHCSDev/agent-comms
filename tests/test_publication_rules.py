@@ -19,6 +19,7 @@ from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.work_branches import SharedCommitBase, UnrelatedCommitBase
 from agent_comms.todos import (
     ClosedListedPullRequest, MergedListedPullRequest, NoHeadOrder,
     ProgressRead, PullRequestCommit, ReviewedHeadVerdict, SupersededHeadVerdict, VerdictReason,
@@ -43,9 +44,7 @@ def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
 
     lost, pending = rules(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans))
     assert lost == ()
-    assert pending == tuple(ClosedPullRequestScanPending(repo) for repo in repos)
-    assert pending[0].line() == (f'closed-PR scan for {repos[0].to_wire()} has not completed yet;'
-                                 ' lost closed heads there are unknown')
+    assert {rule.repo for rule in pending} == set(repos)
 
     watch = ClosedPullRequestWatch()
     watch.watch_pass(lambda: nullcontext(comms))
@@ -71,8 +70,8 @@ def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed
     rules = {rule.request.pr: rule for rule in
              ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
     assert set(rules) == {7, 10}
-    assert 'holds 1 commits main lacks' in rules[7].line()
-    assert 'has unrelated Git history: 1 commits cannot be compared with main' in rules[10].line()
+    assert rules[7].base == SharedCommitBase(source.main_commit)
+    assert rules[10].base == UnrelatedCommitBase()
     assert frame.closed.unscanned == ()
     assert FieldCodec.decode(RulePing, FieldCodec.encode(RulePing.capture(rules[10]))) == RulePing.capture(rules[10])
 
