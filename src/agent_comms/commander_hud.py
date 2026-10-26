@@ -312,26 +312,20 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     record_type = CommanderHud
 
     def empty(self) -> CommanderHud:
-        raise FileNotFoundError(self.path)
+        raise ToolRefusedError(f"heartbeat frame missing: {self.path}")
 
     @classmethod
     def current(cls, comms: Comms, commander: str) -> CommanderHud:
         """Read the heartbeat's publication, never repeat its forge and history work."""
         owner = comms.registry.require(commander).incarnation.require_recorded()
         completed = ServicePassStore.at(comms.root).read().heartbeat_completed_at(owner)
-        frame = cls(cls.path_in(comms.root, lookup=str(owner.lookup)))
-        try:
-            hud = frame.read()
-        except FileNotFoundError as error:
-            raise ToolRefusedError(
-                f"heartbeat frame missing for {owner.name}; last completed beat {completed.clock()}"
-            ) from error
-        if hud.commander != owner:
-            raise ToolRefusedError(f"heartbeat frame belongs to another incarnation of {owner.name}")
         if not completed.since(time.time() - 3 * Coordination.watch_period):
             raise ToolRefusedError(
                 f"heartbeat frame stale for {owner.name} since {completed.clock()}"
             )
+        hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup))).read()
+        if hud.commander != owner:
+            raise ToolRefusedError(f"heartbeat frame belongs to another incarnation of {owner.name}")
         return replace(hud, heartbeat=completed)
 
     @classmethod
