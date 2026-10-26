@@ -13,10 +13,19 @@ from pydantic import JsonValue
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
-from .field_codec import ActivityExclude, FieldCodec, InputId, NullMember, PresentMember, WireBind, WireOmitDefault, projected
+from .field_codec import (
+    ActivityExclude,
+    FieldCodec,
+    InputId,
+    NullMember,
+    PresentMember,
+    ToolCallId,
+    WireBind,
+    WireOmitDefault,
+    projected,
+)
 from .message_reference import MessageReference
 from .messages import Message
-from .native_tool_call import ToolCallId
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, NoTurnRouting, Routing, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText

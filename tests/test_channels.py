@@ -1,33 +1,47 @@
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.pi_vocabulary import HighThinkingLevel
 import os
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.tools import invoke_tool
-from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.channels import AllOfMatch, AnyOfMatch, BuiltinChannelView, ChannelMemberIndex, RetiredTagChannel, TagChannel, ViewPredicate, ParticipantsView
-from agent_comms.channel_targets import CommandTarget, CommsTag, DeclaredTag
-from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.channel_management import (
-    ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
-    DeleteExclusiveInactiveThreadsTagDisposition,
-)
 from agent_comms.bus import Bus
+from agent_comms.channel_management import (
+    ArchiveThreadsTagDisposition,
+    DeleteExclusiveInactiveThreadsTagDisposition,
+    DeleteThreadsTagDisposition,
+)
+from agent_comms.channel_targets import CommandTarget, CommsTag, DeclaredTag
+from agent_comms.channels import (
+    AllOfMatch,
+    AnyOfMatch,
+    BuiltinChannelView,
+    ChannelMemberIndex,
+    ParticipantsView,
+    RetiredTagChannel,
+    TagChannel,
+    ViewPredicate,
+)
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
-from conftest import installed_comms
-from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.display_order import (
-    ChannelSort, CreatedThreadSort, LastActivityThreadSort, LastMessageThreadSort, ThreadSort,
+    ChannelSort,
+    CreatedThreadSort,
+    LastActivityThreadSort,
+    LastMessageThreadSort,
+    ThreadSort,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registry_document import RosterVisibility
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_management import ForkSpec, GivenTags
+from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tools import invoke_tool
+from conftest import installed_comms
 
 
 @pytest.mark.parametrize("channel", BuiltinChannelView.members_with(BuiltinChannelView))
@@ -219,8 +233,8 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     from agent_comms.channel_management import TagDisposition
     from agent_comms.cli_command import CliCommand
     from agent_comms.field_codec import FieldCodec, compile_decoder
+    from agent_comms.tool_declaration import NativeRequestTools
     from agent_comms.tools import CommsTagsTool
-    from agent_comms.native_tools import NativeRequestTools
 
     comms = setup_wire(tmp_path)
     selected = CliCommand.selected_targets((CommandTarget.named('#api'),))

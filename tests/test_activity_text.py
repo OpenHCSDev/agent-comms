@@ -9,8 +9,11 @@ from agent_comms.activity import Activity, ActivityState, ObservedActivity, Read
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec, TurnId
-from agent_comms.native_tool_call import ToolCallId
+from agent_comms.field_codec import (
+    FieldCodec,
+    ToolCallId,
+    TurnId,
+)
 from agent_comms.pi_events import ToolExecutionStart
 from agent_comms.pi_payloads import CodelessProviderDiagnosticError, ReportedText
 from agent_comms.runtime_updates import ThreadOutput

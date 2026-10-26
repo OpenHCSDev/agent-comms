@@ -4,11 +4,17 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.acp_extension import AgentCommsUpdate, NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
+from agent_comms.acp_extension import (
+    AgentCommsUpdate,
+    NativeOutputCommittedUpdate,
+    NativeRoundCommittedUpdate,
+)
 from agent_comms.coordination_errors import TranscriptChanged
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import (
+    FieldCodec,
+    ToolCallId,
+)
 from agent_comms.native_output import AssistantOutput, ToolOutput
-from agent_comms.native_tool_call import ToolCallId
 from agent_comms.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.threads import Thread

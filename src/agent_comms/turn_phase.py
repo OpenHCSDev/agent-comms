@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import ClassVar, Self, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredFamily
 from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
+from .declared_family import DeclaredFamily
+from .field_codec import ToolCallId
 from .pi_payloads import ProviderDiagnosticError
-from .native_tool_call import ToolCallId
+
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence

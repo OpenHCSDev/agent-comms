@@ -38,8 +38,9 @@ from .selected_tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
 )
-from .storage_room import NoRoomNeeded, RoomReservation
 from .shell_effects import StorageDenied
+from .storage_room import NoRoomNeeded, RoomReservation
+from .storage_rules import StorageProjection
 from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 
@@ -63,7 +64,8 @@ class CodingToolOwner(ABC):
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = registry.require(self.owner_name)
-        effects = await asyncio.to_thread(call.decide_storage, registry.storage_rule, thread)
+        projection = StorageProjection(registry.storage_rule, thread)
+        effects = await asyncio.to_thread(projection.check_call, call)
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:
             return await registry.storage_rule.wait_for_room(

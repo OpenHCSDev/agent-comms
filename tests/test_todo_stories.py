@@ -1,14 +1,20 @@
 """History is durable, append-only, and never decoded for a board read."""
-from dataclasses import replace
 import sqlite3
 import sys
 import time
+from dataclasses import replace
 
 import pytest
+from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
 
 from agent_comms.commander.order import Commander
-from agent_comms.field_codec import FieldCodec, GoalId, MessageId, OrderId
-from agent_comms.native_tool_call import ToolCallId
+from agent_comms.field_codec import (
+    FieldCodec,
+    GoalId,
+    MessageId,
+    OrderId,
+    ToolCallId,
+)
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.order_story import StoryEvent
@@ -18,13 +24,28 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AcceptedVerdict, Assignment, CheckedProblemOrder, DroppedVerdict, EditSendBackVerdict, FailedCheckStrike,
-    OrderMessage, PeerAcceptedVerdict, ReleaseTodo, RewrittenVerdict, SendBackStrike,
-    SendBackVerdict, StoredOrderStory, StrikeReason, StrikeTodo, SupersededVerdict, Todo, TodoCommand,
-    VoidStrikeTodo, WordingCorrection,
+    AcceptedVerdict,
+    Assignment,
+    CheckedProblemOrder,
+    DroppedVerdict,
+    EditSendBackVerdict,
+    FailedCheckStrike,
+    OrderMessage,
+    PeerAcceptedVerdict,
+    ReleaseTodo,
+    RewrittenVerdict,
+    SendBackStrike,
+    SendBackVerdict,
+    StoredOrderStory,
+    StrikeReason,
+    StrikeTodo,
+    SupersededVerdict,
+    Todo,
+    TodoCommand,
+    VoidStrikeTodo,
+    WordingCorrection,
 )
 from agent_comms.tool_caller import NoThreadCaller
-from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
 from test_todos import order
 
 

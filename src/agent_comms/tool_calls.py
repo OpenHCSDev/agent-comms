@@ -16,8 +16,11 @@ from typing import ClassVar
 from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
 from .declared_family import UniqueExternalSelector
-from .field_codec import FieldCodec, MalformedRecord
-from .native_tool_call import ToolCallId
+from .field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    ToolCallId,
+)
 from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .tool_declaration import ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff

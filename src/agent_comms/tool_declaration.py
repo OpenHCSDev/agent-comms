@@ -5,14 +5,33 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, MalformedRecord, NullMember, WireName
-from .native_tool_call import ToolCallId
+from .field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NullMember,
+    ToolCallId,
+    WireName,
+)
 from .recorded_time import EventTime
 from .tool_denial import SelectedToolDenied
 from .tool_results import NoToolDiff
+
+
+class NativeRequestTools:
+    """Request declarations own their catalog and native extension."""
+
+    @classmethod
+    def catalog(cls) -> list[dict[str, object]]:
+        return [tool.schema() for tool in ToolDeclaration.members_with(cls)]
+
+
+    @classmethod
+    def native_extension(cls, package: Path) -> Path:
+        return package / "agent-comms-extensions/global-agent-comms/index.mjs"
 
 
 def one_line(text: str, limit: int) -> str:
@@ -81,7 +100,6 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     @classmethod
     def _member_declarations(cls):
         # These existing owners share this registry; imports acquire declarations.
-        from . import native_tools, tools
 
         return super()._member_declarations()
 

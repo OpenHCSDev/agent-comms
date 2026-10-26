@@ -7,9 +7,11 @@ from typing import TYPE_CHECKING, Annotated
 
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
-from .field_codec import WireName
+from .field_codec import (
+    ToolCallId,
+    WireName,
+)
 from .native_session_reopen import NativeSessionIdentity
-from .native_tool_call import ToolCallId
 from .turn_item import NativeItemId
 
 if TYPE_CHECKING:

@@ -37,6 +37,7 @@ from .field_codec import (
     SingleExternalMember,
     SingleFieldValue,
     TextRepresentation,
+    ToolCallId,
     ValidatedScalar,
     WireName,
     WireNullDefault,
@@ -50,8 +51,7 @@ from .lifecycle_capability import Successful
 from .native_failures import NativePiUnavailable
 from .native_file_artifact import NativeFileArtifact
 from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
-from .native_session_reopen import NativeSessionIdentity
-from .native_tool_call import ToolCallId
+from .native_session_reopen import NativeSessionIdentity, PiSessionId
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
 from .pi_vocabulary import (
     NoThinkingOverride,
@@ -80,7 +80,6 @@ from .turn_failure import (
     ProviderTransportFailed,
 )
 from .turn_item import CompactionChargeId, PiRequestKey, ProviderResponseId, UsageChargeId
-from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent

@@ -6,8 +6,8 @@ import json
 import sys
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Annotated
 from pathlib import Path
+from typing import Annotated
 
 from agent_comms import field_codec
 from agent_comms.command import Command
@@ -22,7 +22,7 @@ from agent_comms.native_package import (
     share_native_resources,
     write_native_manifest,
 )
-from agent_comms.storage_rules import StoragePath
+from agent_comms.thread_storage import StoragePath
 from agent_comms.unit_instructions import UnitInstructions
 
 

@@ -24,9 +24,14 @@ from .field_codec import (
     WireChoices,
     WireName,
 )
-from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaration
+from .native_tools import (
+    ArgumentTool,
+    CoordinationCall,
+    NativeToolDeclaration,
+)
 from .thread_execution import ThreadCommandAvailability
 from .tool_caller import NoThreadCaller, ThreadCaller, ToolCaller
+from .tool_declaration import NativeRequestTools
 from .tool_result import ToolResult
 
 
@@ -93,6 +98,13 @@ class ToolCall:
 class ToolRequest[Caller: ToolCaller = ToolCaller](
     ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
+    @classmethod
+    def create_call(
+        cls, call_id: ToolCallId, arguments: dict[str, object]
+    ) -> CoordinationCall:
+        return CoordinationCall(
+            call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
+
     description: ClassVar[str]
     bus_effect: ClassVar[str] = (
         "Changes the bus. Tristan has authorized claude-ai to call this without asking him."

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import os
 import subprocess
 from collections.abc import Iterator, Sequence
@@ -17,19 +16,19 @@ from .bus import Bus
 from .cli_result import CliResult
 from .comms import Comms, wire
 from .fresh_private_session import create_fresh_private_session
-from .native_session_files import CheckSession
 from .goals import NoGoal
 from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
 from .native_entries import ImportedSessionWriter, NativeEntry
+from .native_session_files import CheckSession
 from .read_basis import MemberActivityDisplayScope
 from .registry_document import RosterVisibility
-from .storage_rules import StorageRoots
-from .thread_text import NoThreadText
 from .session_file import RegistrySessionLocation
+from .thread_storage import StorageRoots
+from .thread_text import NoThreadText
 from .threads import Thread
-from .turn_lease import NoTurnRecord
 from .transcript_routes import TranscriptRoutes
+from .turn_lease import NoTurnRecord
 
 
 @dataclass(frozen=True)

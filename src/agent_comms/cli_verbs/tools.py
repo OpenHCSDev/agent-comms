@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-from agent_comms.comms import Comms
+from dataclasses import dataclass
+from typing import Annotated
 
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import ToolCatalogResult
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import FieldCodec
-from agent_comms.field_codec import Normalize
-from agent_comms.native_tools import NativeRequestTools
-from agent_comms.tool_caller import NoThreadCaller
-from agent_comms.tool_caller import ThreadCaller
-from dataclasses import dataclass
-from typing import Annotated
+from agent_comms.comms import Comms
+from agent_comms.field_codec import Argument, FieldCodec, Normalize
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_declaration import NativeRequestTools
 
 
 @dataclass(frozen=True, kw_only=True)

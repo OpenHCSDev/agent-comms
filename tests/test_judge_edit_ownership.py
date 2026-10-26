@@ -1,24 +1,26 @@
 """Each unit edit is read under exactly one held order, and stays unjudged until a verdict
 names it: a send-back reissuing the order judges no other edit."""
-from dataclasses import replace
 import time
+from dataclasses import replace
 
 import pytest
 
-from test_judge_dropped import recorded_edit, unjudged
-from test_todos import order
-
-from agent_comms.field_codec import GoalId, OrderId
-from agent_comms.native_tool_call import ToolCallId
+from agent_comms.errors import TodoError
+from agent_comms.field_codec import (
+    GoalId,
+    OrderId,
+    ToolCallId,
+)
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import ProblemGoalOrder
+from agent_comms.order_tools import CommsVerdictTool
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.storage_rules import StorageRule
-from agent_comms.order_tools import CommsVerdictTool
-from agent_comms.errors import TodoError
 from agent_comms.todos import AcceptedVerdict, SendBackVerdict, StrikeReason
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.owner_requests import NewestOpenRequest
+from test_judge_dropped import recorded_edit, unjudged
+from test_todos import order
 
 pytest_plugins = ("test_held_problem_orders",)
 

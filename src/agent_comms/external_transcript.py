@@ -18,9 +18,14 @@ from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, InputId, PageRequestId, ThreadLookup
+from .field_codec import (
+    FieldCodec,
+    InputId,
+    PageRequestId,
+    ThreadLookup,
+    ToolCallId,
+)
 from .locked_store import RegistryFile
-from .native_tool_call import ToolCallId
 from .native_runtime_input import NativeRuntimeInput
 from .native_tools import MutatingPathTool
 from .native_transcript import RecordsCut

@@ -14,8 +14,6 @@ sees the review time: when it is up, the heartbeat tells the commander to read t
 """
 from __future__ import annotations
 
-
-import argparse
 import ast
 import dataclasses
 import json
@@ -34,8 +32,6 @@ from typing import Annotated, ClassVar, Self
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference, RegisteredRoots
-from agent_comms.channel_targets import CommsTag
-from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.commander.standing import (
     DeliveryAwaitingJudgement,
     InstallDue,
@@ -45,34 +41,50 @@ from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
-    MessageId,
     Argument,
     FieldCodec,
     MalformedRecord,
+    MessageId,
     Normalize,
-    RecordProblems,
     NullMember,
+    RecordProblems,
     SingleFieldValue,
     SubclassUnion,
     boundary_decoder,
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
+from agent_comms.held_orders import HeldOrders
 from agent_comms.maintenance_barrier import MaintenanceHeldError
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
+from agent_comms.order_tools import (
+    CommsChangeProblemTool,
+    CommsFireTool,
+    CommsOrderCheckTool,
+    CommsOrderDoneTool,
+    CommsOrderRunTool,
+    CommsOrderServeTool,
+    CommsOrderTool,
+    CommsProblemCloseTool,
+    CommsTodoCreateTool,
+    CommsTodoListTool,
+    TodoList,
+)
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import MessageNotification
-from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingRule
+from agent_comms.repo import Repo
+from agent_comms.slop import Slop
+from agent_comms.standing_rules import (
+    ClearingVerb,
+    HuntDue,
+    OwedAnswer,
+)
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.typed_table import RowNotFoundError
-from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import (
     BluntText,
     CheckedDelivery,
@@ -80,18 +92,16 @@ from agent_comms.todos import (
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
-    HeadVerdict,
     LocatedProblemFinding,
     NoSuccessor,
     OperationDelivery,
-    OrderDelivery,
     OrderedHunt,
     OrderProgress,
     OrderText,
     OrderWords,
     PendingProblemOrder,
-    ProgressRead,
     ProblemFinding,
+    ProgressRead,
     PullRequestLink,
     PullRequests,
     RecordPullRequest,
@@ -104,9 +114,8 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.slop import Slop
 from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
-from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderRunTool, CommsOrderServeTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, TodoList
+from agent_comms.typed_table import RowNotFoundError
 
 
 def refuse(text, *families):
@@ -787,7 +796,7 @@ class Commander(CommanderContext):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommanderVerb(DeclaredVerb, affix="Verb"):
+class CommanderVerb(ClearingVerb, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
 
     fork: Annotated[
@@ -797,13 +806,7 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
-    clears: ClassVar[tuple[type[StandingRule], ...]] = ()
 
-    def __init_subclass__(cls, **options: object) -> None:
-        """A verb names the owed answers it clears; each rule's hint is rendered from them."""
-        super().__init_subclass__()
-        for rule in vars(cls).get("clears", ()):
-            rule.cleared_by(cls)
 
     def who(self, ctx: Commander) -> str:
         return ctx.actor_name
@@ -822,38 +825,11 @@ class CommanderVerb(DeclaredVerb, affix="Verb"):
     def gate(self, ctx: Commander) -> None:
         ctx.comms.registry.require(self.who(ctx)).require_commander()
 
-    @classmethod
-    def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
-        """Ordinary verbs do not select a head verdict."""
-        return True
 
-    def resolves_claim(self, unit: str, problem: str) -> bool:
-        """Ordinary messages and actions do not judge a delivery claim."""
-        return False
 
     @abstractmethod
     def run(self, ctx: Commander) -> None: ...
 
-    @classmethod
-    def commands(cls, values: Mapping[str, str]) -> tuple[str, ...]:
-        """The commands its parser exposes, filled from this line's observed arguments.
-
-        A parameter variant with no parser contributes no second command. Required review
-        prose remains the reviewer's, not something the board can manufacture.
-        """
-        verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
-        cls.add_parser(verbs)
-        commands = []
-        for parser in verbs.choices.values():
-            placeholder = parser._get_formatter()._format_args
-            words = [cls.tool(), cls.declared_name]
-            for action in parser._actions:
-                if action.dest in values:
-                    words += [*action.option_strings[:1], values[action.dest]]
-                elif action.required and not action.option_strings:
-                    words.append(placeholder(action, action.dest))
-            commands.append(' '.join(words))
-        return tuple(commands)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -42,15 +42,20 @@ from agent_comms.change_report import (
     FileLine,
     MainRevision,
     NoSourceReference,
+    OrderRoots,
     PullRequestHeadRevision,
     SourceReference,
     SourceRevision,
-    OrderRoots,
     SourceRoots,
     SourceText,
     WorkingTree,
 )
-from agent_comms.channel_targets import CommandTarget, CommsTag, IncarnationThreadTarget, NamedTarget
+from agent_comms.channel_targets import (
+    CommandTarget,
+    CommsTag,
+    IncarnationThreadTarget,
+    NamedTarget,
+)
 from agent_comms.child_process import (
     CheckPrinted,
     ChildResult,
@@ -76,19 +81,28 @@ from agent_comms.field_codec import (
     OrderId,
     SingleFieldValue,
     SubclassUnion,
+    ToolCallId,
     WireOmitDefault,
     WireTransient,
     WireValue,
     boundary_decoder,
 )
-from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.repo import GitCommandError
-from agent_comms.head_review import HeadReviewOrder, HeadReviewRelation, PullRequestHead, ReadPullRequestHead
+from agent_comms.goals import CheckedCommit, OrderCheck
+from agent_comms.head_review import (
+    HeadReview,
+    HeadReviewOrder,
+    HeadReviewRelation,
+    HeadReviewStatus,
+    MergeArm,
+    OpenPullRequestHead,
+    PullRequestHead,
+    ReadPullRequestHead,
+    UntouchedMergeArm,
+)
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
-from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
@@ -101,8 +115,6 @@ from agent_comms.owner_requests import (
     RequestState,
 )
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.head_review import HeadReview, HeadReviewStatus, MergeArm, OpenPullRequestHead, UntouchedMergeArm
-from agent_comms.tool_result import ToolResult
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -111,7 +123,7 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, Repo
+from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import StorageRule, UnitStorage
@@ -121,34 +133,46 @@ from agent_comms.thread_identity import (
     ThreadIncarnation,
 )
 from agent_comms.threads import Thread
+from agent_comms.tool_result import ToolResult
 from agent_comms.typed_table import (
-    StoreRows,
-    TableReference,
-    Column,
     CapturedRows,
+    Column,
     DurableStore,
     DurableTables,
     ExpressionIndex,
-    Generated,
     ForeignKey,
+    Generated,
     Index,
     NoDelete,
     NoUpdate,
     SharedFileTables,
+    StoreRows,
+    TableReference,
     TextStorage,
     TypedRow,
     TypedTable,
 )
-from .goal_scope import OneGoal
 from agent_comms.work_branches import (
-    BranchComparison, BranchDifference, CommitBase, PageInfo, SourceGrowth, WorkBranchError, WorkBranches,
+    BranchComparison,
+    BranchDifference,
+    CommitBase,
+    PageInfo,
+    SourceGrowth,
+    WorkBranchError,
+    WorkBranches,
 )
 
+from .goal_scope import OneGoal
+
 if TYPE_CHECKING:
-    from agent_comms.commander.order import (
-        Commander, CommanderContext, OrderedProblems, OrderFile, Reassignment,
-    )
     from agent_comms.bus import BusReader
+    from agent_comms.commander.order import (
+        Commander,
+        CommanderContext,
+        OrderedProblems,
+        OrderFile,
+        Reassignment,
+    )
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration

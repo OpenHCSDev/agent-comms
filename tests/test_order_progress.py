@@ -8,31 +8,34 @@ import subprocess
 import time
 from dataclasses import replace
 
-
 import pytest
-from test_todos import order
-from source_revision_fixture import SourceRepository
-from fixture_git import IDENTITY
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_hud import CommanderFrame
 from agent_comms.comms import wire
-from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.native_tools import NativeRequestTools
+from agent_comms.launch_runtime import LaunchRoot
+from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import GitCommandError
 from agent_comms.repository_name import RepositoryName
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.order_tools import CommsTodoCreateTool
-from agent_comms.work_branches import WorkBranches
-from agent_comms.todos import (
-    EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout, ProgressRead, ProgressSource,
-)
 from agent_comms.threads import Thread
+from agent_comms.todos import (
+    EditingProgress,
+    NoCommitProgress,
+    OrderProgress,
+    PresentCheckout,
+    ProgressRead,
+    ProgressSource,
+)
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.ui_model.unit_state import Unreadable
+from agent_comms.work_branches import WorkBranches
+from fixture_git import IDENTITY
+from source_revision_fixture import SourceRepository
+from test_todos import order
 
 pytest_plugins = ('test_holder_standing_rules',)
 

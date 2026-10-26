@@ -4,18 +4,19 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
-from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.tools import invoke_tool
-from agent_comms.native_tools import NativeRequestTools
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_declaration import NativeRequestTools
+from agent_comms.tools import invoke_tool
 
 
 class TestToolCatalog:
     def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
         from pathlib import Path
-        from agent_comms.pi_vocabulary import ServiceTier
-        from agent_comms.native_arguments import NativeArguments
+
         from agent_comms.cli_verbs.tools import ToolsCliCommand
+        from agent_comms.native_arguments import NativeArguments
+        from agent_comms.pi_vocabulary import ServiceTier
         from agent_comms.tool_caller import ThreadCaller
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
