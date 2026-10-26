@@ -63,7 +63,7 @@ if TYPE_CHECKING:
 
 class HeldBusWrite:
     """A CLI process's publication waits out maintenance on its own loop, never retrying a
-    write; a service's worker thread refuses instead (MessageBus.write_open)."""
+    write; a service's worker thread refuses at the store's write guard instead."""
 
     def write_when_open[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
         return asyncio.run(comms.bus.when_open(operation))
@@ -84,7 +84,7 @@ class WatchPass[Observed](ABC):
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
             observed = self.observe(comms)
-            comms.bus.write_open(partial(self.pass_body, comms, observed))
+            self.pass_body(comms, observed)
 
     @abstractmethod
     def observe(self, comms: Comms) -> Observed: ...
@@ -159,15 +159,10 @@ class MessageBus[Writes: Publisher]:
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
-    def write_open[Result](self, operation: Callable[[], Result]) -> Result:
-        """Refuse while maintenance holds the bus; the caller's loop owns any wait."""
-        MaintenanceBarrier(self._registry.store.path).assert_open_unlocked()
-        return operation()
-
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         while True:
             try:
-                result = await Coordination.run_worker(partial(self.write_open, operation))
+                result = await Coordination.run_worker(operation)
                 return await result if inspect.isawaitable(result) else result
             except MaintenanceHeldError:
                 await self.resumed()

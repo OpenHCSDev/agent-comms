@@ -86,9 +86,6 @@ class Comms:
     @contextmanager
     def client(cls, route: CommsRoute) -> Iterator[Comms]:
         """One complete client call on this selected route."""
-        # Refuse before opening stores held by maintenance. This grants nothing:
-        # each write checks again inside its own store's write transaction.
-        MaintenanceBarrier(RegistryFile.path_in(route.root)).assert_open_unlocked()
         yield cls(route)
 
     async def watch(

@@ -20,6 +20,7 @@ from agent_comms.maintenance_barrier import (
     DrainingPhase,
     InstallingPhase,
     MaintenanceBarrier,
+    MaintenanceHeldError,
     MaintenanceHolder,
     MaintenanceOperator,
     MaintenancePhase,
@@ -427,7 +428,10 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     gate = MaintenanceBarrier(comms.registry.store.path)
     hold = gate.begin(MaintenanceOperator.current())
     monkeypatch.delenv(HOLDER_NONCE, raising=False)
-    with pytest.raises(RelationViolationError):
+    with pytest.raises(MaintenanceHeldError):
+        with comms.registry.store.editing():
+            pytest.fail("Maintenance yielded an editor before refusing its write")
+    with pytest.raises(MaintenanceHeldError):
         comms.registry.declare(requested)
     assert comms.registry.store.path.read_bytes() == before
     with CoordinationSession(str(CoordinationSession.path_in(tmp_path))) as session:

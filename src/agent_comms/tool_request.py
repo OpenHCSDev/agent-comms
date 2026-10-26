@@ -5,7 +5,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Annotated, ClassVar, NoReturn
 
 from pydantic import JsonValue
@@ -171,11 +170,11 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
 
 class PublishingTool[Caller: ToolCaller = ToolCaller]:
-    """A publication is refused while maintenance holds the bus, as the call's entry is
-    (Comms.client): a request waiting out the hold would hold its connector's stop."""
+    """A publication refuses at its store's write guard during maintenance; waiting here
+    would hold the connector's stop."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
-        return comms.bus.write_open(partial(self.publish, comms, caller))
+        return self.publish(comms, caller)
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...

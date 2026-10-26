@@ -37,6 +37,9 @@ from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     AtomicFile,
     RegistryLocking,
+    StoreLock,
+    StoreReadBudget,
+    UNBOUNDED_STORE_READ,
 )
 
 
@@ -681,10 +684,21 @@ class CarriedDocument[T](LockedStore[T], HolderWrittenFile, declared_name=None):
 
     __slots__ = ()
 
-    def _write_unlocked(self, text: str) -> None:
-        self.require_maintenance_open()
-        self._replace_unlocked(text)
+    @classmethod
+    @contextmanager
+    def write_guard(
+        cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> Iterator[StoreLock]:
+        """Refuse before an editor can prepare changes under this document's lock."""
+        with super().write_guard(path, read_budget=read_budget) as lock:
+            cls.require_maintenance_open_at(path)
+            yield lock
 
-    def _replace_unlocked(self, text: str) -> None:
-        """The document's own atomic replacement."""
-        super()._write_unlocked(text)
+    @classmethod
+    @asynccontextmanager
+    async def write_guard_async(
+        cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+    ) -> AsyncIterator[StoreLock]:
+        async with super().write_guard_async(path, read_budget=read_budget) as lock:
+            cls.require_maintenance_open_at(path)
+            yield lock
