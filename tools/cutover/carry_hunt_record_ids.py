@@ -37,7 +37,7 @@ class HuntRecordIds(Carry):
             MaintenanceBarrier(RegistryStore.path_in(self.root)).read().require_held_by(
                 MaintenanceHolder.current(), "Carry saved hunt ids"
             )
-            (column,) = (field for field in HuntRecord._fields if field.column.primary_key)
+            column = FieldCodec.field_plan(HuntRecord, "id")
             with closing(TodoStore.writer(path)) as db, db:
                 db.execute("BEGIN IMMEDIATE")
                 self.rewrite_stored(db, HuntRecord, column,

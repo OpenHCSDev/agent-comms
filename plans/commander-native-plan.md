@@ -37,7 +37,7 @@
 | 4 | Close with installed evidence | `order.py close`; `closed.jsonl` | `CommsProblemCloseTool` | `one_order_owner` |
 | 5 | Board, overdue, silent, spinning | `order.py board`, `overdue`; `fleet-board.md` | `CommsTodoListTool` and the fleet tool, derived | `one_order_owner` |
 | 6 | Branch hygiene | `branches-*.txt` by hand | `CommsWorkBranchesTool` | `one_order_owner` |
-| 7 | Strikes and the strike limit | `order.py strike`; `strikes.jsonl` | `StrikeTodo`, `ObjectiveStrike`, `ProblemGoalOrder.StrikeLimit`, `TodoStore.fire` |  |
+| 7 | Strikes and scrutiny | `order.py strike`; `strikes.jsonl` | `StrikeTodo`, `ObjectiveStrike`, `Scrutinize`; manual `TodoStore.fire` |  |
 | 8 | Verdicts on a unit's tool calls | `judge.py ok`, `back`; both invoke `CommsVerdictTool` | `CommsVerdictTool`, `SendBackVerdict`: one retained event and Goal revision |  |
 | 9 | Plain words in verdicts and strikes | judge and order checks | `PlainText`, `StrikeReason` |  |
 | 10 | Refuse soft or vague orders | `order.py` | `OrderText`, `CheckedProblemOrder.require_wording` |  |
@@ -116,7 +116,7 @@ The order records and their operations below own the behavior; this phase is not
 | Send-back is one event, one implied strike and one Goal revision | `todos.py:2535` `SendBackVerdict`; `goal_management.py:80` `change_problem` | Pass: one verdict, one strike, one Todo revision, same Goal identity |
 | Missed deadline is retained once per order and cause | `todos.py:2329` `MissedDeadlineStrike`; `ObjectiveStrike.repeats` | Pass: two observations retain one strike |
 | False completion is retained once for commit and operation delivery | `todos.py:163` `OrderDelivery.check_failed`; `todos.py:194` commit integration distinction | Pass: two rejected operation deliveries retain one strike; commit family-check failure also retains one |
-| The declared two-strike limit releases the unit's open work in one fire operation | `goals.py` `ProblemGoalOrder.StrikeLimit`; `todos.py:3306` `TodoStore.fire`; `tools.py` `CommsFireTool` | Pass: two strikes and exactly one native fire release the assignment |
+| Repeated strikes prompt scrutiny without releasing the unit's work | `todos.py` `Todo.strikes_against`; `commander/standing.py` `Scrutinize` | Pass: a third strike preserves holder and order; the board names the unit for scrutiny; manual fire remains explicit |
 | Application orders require a closing run; mechanical orders are explicit | `todos.py:1283` `ApplicationOrderRun`; `MechanicalOrderRun` | Pass: decoding an order without its run is refused |
 | Installed closing requires the close tool, matching works and an existing artifact | `todos.py:2713` `InstallTodo`; `tools.py` `CommsProblemCloseTool`; `DoneTodoState.prepare_change` | Pass: missing artifact and direct state-close refused; artifact-backed close accepted |
 | Checked delivered work cannot be transferred | `todos.py:1761` `DeliveredProblemOrder.require_transfer` | Pass: native reassignment refused, stored state unchanged |

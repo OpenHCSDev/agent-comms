@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.change_report import FileLine
+from agent_comms.commander.standing import Scrutinize
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec, GoalId, OrderId, RecordProblems
@@ -17,7 +18,6 @@ from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.messages import QuestionKind
 from agent_comms.native_tool_call import ToolCallId
 from agent_comms.order_tools import (
-    CommsHudTool,
     CommsOrderDeliverTool,
     CommsVerdictTool,
     TodoChanged,
@@ -92,7 +92,6 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
                 if message.message_id == claimed.order.claim.message.message_id)
     assert sent.sender == "worker" and sent.target == ctx.commander
     assert sent.answers and sent.answers == claimed.order.claim.message.answers
-    assert "Claimed by the unit" in "\n".join(ctx.call(CommsHudTool()).frame)
     with pytest.raises(TodoError, match="Only a pending order"):
         ThreadCaller("worker").invoke(request, comms)
     assert comms.goals.todos.get("P1") == claimed
@@ -153,7 +152,7 @@ def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(
     assert delivered.strike_count == claimed.strike_count
 
 
-def test_failed_check_strike_releases_at_the_updated_revision(held_commander):
+def test_failed_check_strike_keeps_the_holder_at_the_updated_revision(held_commander):
     ctx = held_commander
     store = ctx.comms.goals.todos
     original = store.get("P1")
@@ -167,56 +166,43 @@ def test_failed_check_strike_releases_at_the_updated_revision(held_commander):
         "The delivered change still fails the source check that the order explicitly requires.",
     )
 
-    released = store.apply(first.id, failure)
-    assert released.assignment is None
-    assert released.revision == first.revision + 2
-    assert released.strike_count == first.strike_count + 1
-    latest_failure, = released.history.events(released.id, FailedCheckStrike, limit=1, descending=True)
-    latest_release, = released.history.events(released.id, ReleaseTodo, limit=1, descending=True)
+    struck = store.apply(first.id, failure)
+    assert struck.assignment == first.assignment
+    assert struck.order == first.order
+    assert struck.revision == first.revision + 1
+    assert struck.strike_count == first.strike_count + 1
+    latest_failure, = struck.history.events(struck.id, FailedCheckStrike, limit=1, descending=True)
     assert latest_failure == failure
-    assert latest_release.expected_revision == first.revision + 1
+    assert not struck.history.events(struck.id, ReleaseTodo)
     with pytest.raises(TodoConflict):
         store.apply(first.id, failure)
-    assert store.get(first.id) == released
+    assert store.get(first.id) == struck
 
 
-def test_second_commander_strike_takes_the_task_away(held_commander):
+def test_third_strike_keeps_holder_and_order_and_requests_scrutiny(held_commander):
     ctx = held_commander
     store = ctx.comms.goals.todos
-    todo = store.get("P1")
-    for reason in ("The first review found the original duplicated decision still present.",
-                   "The second review found the same duplicated decision restated in a new file."):
+    original = todo = store.get("P1")
+    for ordinal in range(3):
         todo = store.apply(todo.id, StrikeTodo(
-            todo.revision, ctx.incarnation, todo.held(), reason,
+            todo.revision, ctx.incarnation, todo.held(),
+            f"Review {ordinal + 1} found the original duplicated decision still present in the edited source.",
             evidence=(todo.order.checked().owner,),
         ))
-    assert todo.holder is None
-    assert todo.strike_count == 2
-    latest_release, = todo.history.events(todo.id, ReleaseTodo, limit=1, descending=True)
-    latest_strike, = todo.history.events(todo.id, StrikeTodo, limit=1, descending=True)
-    assert latest_release.previous == latest_strike.previous
-
-
-def test_unstrike_below_the_limit_gives_the_task_back(held_commander):
-    """Two strikes take the task away; voiding the one recorded in error restores its holder
-    in the same write."""
-    ctx = held_commander
-    store = ctx.comms.goals.todos
-    todo = store.get("P1")
-    holder = todo.held()
-    for reason in ("The first review found the original duplicated decision still present.",
-                   "The same review counted the duplicated decision a second time in error."):
-        todo = store.apply(todo.id, StrikeTodo(
-            todo.revision, ctx.incarnation, todo.held(), reason,
-            evidence=(todo.order.checked().owner,),
-        ))
-    assert todo.holder is None
-    releases = todo.history.events(todo.id, ReleaseTodo)
-    main(["unstrike", "P1", "--why", "The second strike counted the same duplicated decision from the first review twice."], ctx)
-    restored = store.get("P1")
-    assert restored.held() == holder
-    assert len(restored.live_strikes()) == 1
-    assert restored.history.events(restored.id, ReleaseTodo) == releases
+        assert todo.held() == original.held()
+        assert todo.order == original.order
+    assert todo.strikes_against(ctx.comms.registry.require("worker").incarnation) == 3
+    assert not todo.history.events(todo.id, ReleaseTodo)
+    scrutiny, = Scrutinize.violations(ctx.comms, ctx.commander)
+    assert scrutiny.holder == todo.held()
+    assert scrutiny.todo == todo
+    assert scrutiny.count == 3
+    main(["unstrike", "P1", "--why",
+          "The third strike counted the same duplicated decision from the earlier review twice."], ctx)
+    after = store.get("P1")
+    assert after.held() == original.held()
+    assert after.order == original.order
+    assert after.strike_count == 2
 
 
 def test_unstrike_does_not_undo_an_explicit_release(held_commander):
