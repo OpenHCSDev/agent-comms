@@ -10,6 +10,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from textwrap import shorten
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.bus_publication import AgentOrigin
@@ -109,6 +110,10 @@ class Ping(DeclaredFamily, affix="Ping"):
 
     def render(self, now: float) -> str:
         return self.board_entry().aged(now)
+
+    def preview(self, now: float) -> str:
+        """A bounded text view; the board and packet retain the complete original."""
+        return replace(self.board_entry(), text=shorten(self.text, width=180, placeholder="…")).aged(now)
 
 
 @dataclass(frozen=True)
@@ -318,10 +323,10 @@ class CommanderDecisions(CommanderUpdate):
             groups.setdefault(ping.group, []).append(ping)
         return (
             f"New · {len(self.decisions)}",
-            *(f"• {ping.render(now)}" for ping in self.decisions), *self.not_applied,
+            *(f"• {ping.preview(now)}" for ping in self.decisions), *self.not_applied,
             *(line for name, pings in groups.items() for line in (
                 f"Waiting · {name} · {len(pings)}",
-                *(f"• {ping.render(now)}" for ping in pings[:2]),
+                *(f"• {ping.preview(now)}" for ping in pings[:2]),
                 *((f"  +{len(pings) - 2} in the expandable board",) if len(pings) > 2 else ()),
             )),
         )

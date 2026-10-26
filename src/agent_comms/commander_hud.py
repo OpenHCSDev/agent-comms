@@ -351,10 +351,13 @@ class CommanderHud(ToolResult):
             for plan in Plan.members_with(Plan)
             if any(phase.phase.plan is plan for phase in self.phases)
         )
+        visible = tuple(unit for unit in self.units if unit.orders or unit.needs_hand())
+        quiet = tuple(unit for unit in self.units if unit not in visible)
         return (
-            f"{self.load} | {len(self.units)} units | {len(self.forks)} forks",
+            f"{self.load} | {len(visible)} active units | {len(self.forks)} forks",
             self.usage.line(),
-            *(unit.brief() for unit in self.units),
+            *(unit.brief() for unit in visible),
+            *((QuietUnits(quiet).line(),) if quiet else ()),
             *((f"Plans · {plans}",) if plans else ()),
         )
 

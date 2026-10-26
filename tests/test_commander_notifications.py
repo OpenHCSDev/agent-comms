@@ -425,15 +425,22 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
 
 def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(notification_bus):
     comms = notification_bus
-    rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
-                  for index in range(12))
+    from agent_comms.head_review import PullRequestHead
+    from agent_comms.repository_name import RepositoryName
+    from agent_comms.standing_rules import OrderlessUnreviewedHead
+
+    rules = tuple(OrderlessUnreviewedHead(
+        request=PullRequestHead(RepositoryName.from_wire("OpenHCSDev/toad"), 100 + index, "a" * 40),
+        due_at=1.0,
+    ) for index in range(12))
     beat(comms, rules)
     original, = notifications(comms)
     packet = CommanderDecisions(
         original.task.commander, original.task.handled, (), original.task.handled,
     )
     message = packet.send(comms, time.time(), lead_hud(comms))
-    assert sum(rule.line() in message.body for rule in rules) == 2
+    assert sum(f"#{rule.request.pr} " in message.body for rule in rules) == 2
+    assert max(map(len, message.body.splitlines())) < 300
     assert len(message.task.handled) == 12
-    assert len(message.task.board(comms, "lead")) == 12
+    assert {entry.text for entry in message.task.board(comms, "lead")} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12

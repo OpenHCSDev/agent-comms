@@ -70,7 +70,7 @@ class MainTree:
         return [row for row in self.text_grep(*options, pattern=pattern, paths=paths)
                 if row.split(":", 2)[1].endswith(self.source)]
 
-    def text_grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
+    def text_grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> tuple[str, ...]:
         """Declared text evidence, including documents, from this exact repository tree."""
         return Repo.grep(
             self.repo.checkout,
