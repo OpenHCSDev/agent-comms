@@ -429,6 +429,7 @@ class RegistryLocking(MultiFileStore, RegistryTier, declared_name=None):
     """The registry's lock policy: registry.json and its owner guard are replaced together,
     and a contended wait names the holders."""
 
+
 class CatalogTier(StoreLockTier):
     """CapturedSelection holds catalog before reads (read_basis.py:1127/1128)."""
 

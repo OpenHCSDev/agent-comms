@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommsTag
-from agent_comms.cli_commands import InstallCliCommand
 from agent_comms import commander
+from agent_comms.cli_commands import InstallCliCommand
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
