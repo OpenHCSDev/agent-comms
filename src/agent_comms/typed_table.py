@@ -1032,10 +1032,9 @@ class HeldBusFile(SchemaChange):
     path: Path
 
     def opened(self, schema: type[TableSchema], db: sqlite3.Connection) -> None:
-        if error := schema.schema_difference_error(
-                db, f"{self.path} differs from {schema.__name__}; "
-                    f"agent-comms {self.carry_verb} carries it"):
-            raise error
+        schema.require_declared(
+            db, f"{self.path} differs from {schema.__name__}; "
+                f"agent-comms {self.carry_verb} carries it")
 
     def require(self) -> None:
         barrier = MaintenanceBarrier(RegistryFile.path_in(self.owner.bus_root(self.path)))
@@ -1125,15 +1124,14 @@ class TableSchema(ABC):
         return bool(cls.schema_differences(db, sharing))
 
     @classmethod
-    def schema_difference_error(
+    def require_declared(
         cls, db: sqlite3.Connection, subject: str,
         sharing: tuple[type[TypedTable], ...] = (),
-    ) -> Exception | None:
-        """The refusal naming every object whose stored SQL differs, or None when none does."""
-        if not cls.schema_differs(db, sharing):
-            return None
-        return cls.schema_error(
-            f"{subject}: " + " | ".join(map(str, cls.schema_differences(db, sharing))))
+    ) -> None:
+        """Refuse a stored schema that differs, naming every object whose stored SQL differs."""
+        if cls.schema_differs(db, sharing):
+            raise cls.schema_error(
+                f"{subject}: " + " | ".join(map(str, cls.schema_differences(db, sharing))))
 
     @classmethod
     def changed_families(
@@ -1161,9 +1159,7 @@ class TableSchema(ABC):
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> None:
         """Readers use only the declared schema, whichever kind of file this is."""
-        if error := cls.schema_difference_error(
-                db, f"{cls.__name__} differs from its declaration", sharing):
-            raise error
+        cls.require_declared(db, f"{cls.__name__} differs from its declaration", sharing)
 
     @classmethod
     def require_installed(cls, db: sqlite3.Connection) -> None:
