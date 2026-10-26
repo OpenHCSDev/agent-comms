@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -114,12 +114,14 @@ class UndeclaredModel(UnselectedModel, ThreadModel):
         return self
 
 
-class CatalogSelection:
+class CatalogSelection(ABC):
     """The model and thinking inputs a catalog reads; absent inputs select no override."""
 
     __slots__ = ()
 
-    project_path: Path
+    @property
+    @abstractmethod
+    def project_path(self) -> Path: ...
 
     @property
     def model(self) -> ModelSelection:

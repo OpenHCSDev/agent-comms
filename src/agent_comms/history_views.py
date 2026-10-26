@@ -129,7 +129,7 @@ class ThreadViewRead(ConversationPreparation):
         self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))
         page = DMDisplayBasis.fetch_page(
             self.views.bus, self.views.registry, self.views.root, self.viewer,
-            ThreadTarget(self.thread.name),
+            ThreadTarget(self.thread.name), worktree=self.viewer.worktree,
             bounds=PageBounds(LiveCursor(self.through.wire.sequence + 1).older()),
         )
         if page.messages:
@@ -246,7 +246,7 @@ class HistoryViews:
         self, peer: ThreadTarget, *, worktree: Checkout, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree)
-        return DMDisplayHistory(viewer.name, peer).page(self.presentation, bounds)
+        return DMDisplayHistory(viewer.name, peer, worktree).page(self.presentation, bounds)
 
     def display_viewer(self, worktree: Checkout) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""

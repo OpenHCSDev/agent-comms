@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic import JsonValue
+from typing import cast
 
 from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec
@@ -51,7 +52,7 @@ class TargetField:
         """An unrestricted field does not declare a finite-choice editor."""
         return ()
 
-    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> TargetField:
+    async def prepare(self, catalogs: ConfigOptions, selection: object) -> TargetField:
         return self
 
     @property
@@ -79,7 +80,7 @@ class ChoiceTargetField(TargetField):
         return tuple((choice.name, choice.editor_value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions,
-                      selection: CatalogSelection) -> ChoiceTargetField:
+                      selection: object) -> ChoiceTargetField:
         decoder = field_codec.compile_decoder(self.annotation)
         options = (CatalogChoice(
                        name=label, value=decoder.encode_editor(decoder.decode(value)))
@@ -99,9 +100,9 @@ class CatalogTargetField(ChoiceTargetField):
         return (self.catalog,)
 
     async def prepare(self, catalogs: ConfigOptions,
-                      selection: CatalogSelection) -> CatalogTargetField:
+                      selection: object) -> CatalogTargetField:
         catalog = catalogs.catalog_for(self.catalog)
-        options = await catalog.display_choices(selection)
+        options = await catalog.display_choices(cast(CatalogSelection, selection))
         decoder = field_codec.compile_decoder(self.annotation)
         return replace(self, options=tuple(CatalogChoice(name=item.name,
             value=decoder.encode_editor(decoder.decode(item.value))) for item in options))

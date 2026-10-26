@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainVa
 from .coordination_errors import CommandFailure
 from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .field_codec import FieldCodec, SingleFieldValue, WireValue
+from .field_codec import FieldCodec, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
 
@@ -345,7 +345,7 @@ class KeptBranchStart(CheckoutStart):
 
 
 @dataclass(frozen=True)
-class Checkout(SingleFieldValue):
+class Checkout(SingleFieldValue, PresentMember):
     """A recorded working tree of one of our repositories.
 
     Its pinned submodules (the refactor-audit catalog) belong to the tree, and `git worktree

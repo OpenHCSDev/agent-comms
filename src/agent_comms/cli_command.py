@@ -10,7 +10,6 @@ from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
 from agent_comms.config_options import ConfigOptions
-from agent_comms.thread_model import CatalogSelection
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec, RecordMember, WireValue
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
@@ -69,7 +68,6 @@ class CliCommand(
     ModuleMembers,
     DeclaredCommand,
     CliExecution[Answer],
-    CatalogSelection,
     Generic[Answer],
     affix="CliCommand",
     discovery_package="agent_comms.cli_verbs",

@@ -233,7 +233,7 @@ class DMSelection(SelectedDisplay):
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         self.basis.acknowledge(
             views.bus, views.registry, views.root, self.basis.requested_peer,
-            viewer=views.messaging.user_identity(worktree), through=page.newest_seq,
+            worktree=worktree, through=page.newest_seq,
         )
 
     def select_evidence(self, selected: frozenset[int]) -> Self:
@@ -700,6 +700,7 @@ class DMDisplayBasis:
         viewer: Thread,
         peer: ThreadTarget,
         *,
+        worktree: Checkout,
         bounds: PageBounds,
     ) -> MessagePage:
         """Fetch a bounded human DM page and its immutable identity/read basis.
@@ -723,7 +724,7 @@ class DMDisplayBasis:
         basis = cls(
             root=str(root.resolve()),
             root_identity=(root_info.st_dev, root_info.st_ino),
-            project_path=viewer_thread.project_path,
+            project_path=worktree.resolved().path,
             requested_peer=peer.name,
             viewer_identity=viewer_thread.incarnation,
             viewer_names=viewer_names,
@@ -763,7 +764,7 @@ class DMDisplayBasis:
         root: Path,
         peer: str,
         *,
-        viewer: Thread,
+        worktree: Checkout,
         through: int,
     ) -> None:
         """CAS one painted human DM tail, never a global/executor ACK.
@@ -778,7 +779,7 @@ class DMDisplayBasis:
         with registry.store.guarded_write():
             snapshot = registry.store.read_snapshot_unlocked()
             self.validate_for(
-                root, snapshot.require(viewer.name), peer, through, snapshot,
+                root, worktree, peer, through, snapshot,
                 RecordedBusIdentity.capture(bus.bus.path), user,
             )
             self.displayed.tail.mark(bus.reads, self.displayed, through)
@@ -786,7 +787,7 @@ class DMDisplayBasis:
     def validate_for(
         self,
         root: Path,
-        viewer: Thread,
+        worktree: Checkout,
         peer: str,
         through: int,
         snapshot: RegistrySnapshot,
@@ -795,7 +796,7 @@ class DMDisplayBasis:
     ) -> None:
         if (self.root, self.project_path, self.requested_peer) != (
             str(root.resolve()),
-            viewer.project_path,
+            worktree.resolved().path,
             peer,
         ):
             raise DMScopeChanged("Painted DM read belongs to a different root, worktree or peer.")

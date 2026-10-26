@@ -152,7 +152,7 @@ class ConversationHistoryView:
             return ConversationRevision(
                 stores, cls._selection(
                     views, snapshot, views.channels.catalog._read_unlocked(),
-                    snapshot.require(viewer.name), target,
+                    snapshot.require(viewer.name), target, worktree,
                     FileRevision.capture(views.bus.history.path),
                 ),
             )
@@ -160,7 +160,7 @@ class ConversationHistoryView:
     @classmethod
     @abstractmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: Thread, target: NamedTarget,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> DisplayIdentity: ...
 
     def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
@@ -182,7 +182,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: Thread, target: NamedTarget,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> ChannelDisplayIdentity:
         with views.bus.opened_activity() as activity:
             channel = catalog.require_channel(target.selected_name(snapshot), activity)
@@ -211,9 +211,11 @@ class DMHistory(HistoryView):
 
 @dataclass(frozen=True, slots=True)
 class DMDisplayHistory(ConversationHistoryView, DMHistory):
+    worktree: Checkout
+
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: Thread, target: NamedTarget,
+                   viewer: Thread, target: NamedTarget, worktree: Checkout,
                    history_revision: FileObservation) -> DMDisplayIdentity:
         name = target.selected_name(snapshot)
         try:
@@ -224,7 +226,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         return DMDisplayIdentity(
             root_identity=(root.st_dev, root.st_ino),
             bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
-            project_path=viewer.project_path, requested_peer=target.name,
+            project_path=worktree.resolved().path, requested_peer=target.name,
             viewer=viewer.incarnation, peer=peer,
             scope=DMDisplayScope.capture(viewer.name, name, snapshot), history_revision=history_revision,
         )
@@ -246,7 +248,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
             bus.bus.path.parent,
             snapshot.require(self.first),
             self.second,
-            bounds=bounds,
+            worktree=self.worktree, bounds=bounds,
         )
 
 

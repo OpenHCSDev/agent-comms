@@ -20,7 +20,7 @@ from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.thread_management import InheritedTags
 from agent_comms.thread_management import NewThreadSpec
 from agent_comms.thread_management import TagChoice
-from agent_comms.thread_model import ThreadModel
+from agent_comms.thread_model import CatalogSelection, ThreadModel
 from pathlib import Path
 from dataclasses import dataclass
 from dataclasses import fields
@@ -31,7 +31,7 @@ import asyncio
 
 
 @dataclass(frozen=True, kw_only=True)
-class NewThreadCliCommand(NameArgument, CliCommand, declared_name="new"):
+class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_name="new"):
     help = "Create a new pi thread"
     spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
     task: Annotated[
