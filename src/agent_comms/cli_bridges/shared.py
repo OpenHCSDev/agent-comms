@@ -21,7 +21,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar, cast
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
@@ -83,15 +83,19 @@ from agent_comms.typed_table import (
     Column,
     DurableTables,
     ExpressionIndex,
+    TableSchema,
     TypedRow,
     TypedTable,
     WriterOwnedFile,
+    WriterOwnedResource,
+    WriterOwnedStore,
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
 from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
-from ..locked_store import RegistryFile, SQLiteFile
+from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
+from .history import History
 from .monitor import (
     BridgeExit,
     InspectSession,
@@ -1199,6 +1203,17 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     state_directory: ClassVar[Path]
 
     @classmethod
+    def state_path(cls) -> Path:
+        """This bridge's default state directory in the live filesystem."""
+        return Path.home() / cls.state_directory
+
+    @classmethod
+    def state_directories(cls) -> tuple[Path, ...]:
+        """Relative state directories declared by the loaded bridge members."""
+        return tuple(bridge.state_directory for bridge in cast(
+            tuple[type[CliBridge], ...], History.members_with(CliBridge)))
+
+    @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Declare the options this harness's transport needs."""
 
@@ -1324,6 +1339,27 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
             self.log(failure)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
+
+
+class BridgeDeliveryStore(WriterOwnedStore):
+    """Every binding's delivery.sqlite3. A binding's state directory is its bridge's state
+    directory joined with its bus thread (``GivenBinding.from_arguments``), so the children of
+    each bridge's directory are its bindings."""
+
+    @classmethod
+    def path(cls) -> Path:
+        return Path.home()
+
+    @classmethod
+    def resources(cls, files: FilesRequest) -> tuple[WriterOwnedResource, ...]:
+        root = files.location(cls.resource(cls.retained_filename()))
+        return tuple(cls.resource(cls.retained_filename() / path.relative_to(root))
+                     for directory in CliBridge.state_directories()
+                     for path in sorted((root / directory).glob(f"*/{BridgeStateTable.filename}")))
+
+    @classmethod
+    def table_schema(cls) -> type[TableSchema]:
+        return BridgeStateTable
 
 
 class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):

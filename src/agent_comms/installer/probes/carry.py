@@ -69,14 +69,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     writer_owned: ClassVar[tuple[type[WriterOwnedStore], ...]] = ()
     """External durable declarations this step is allowed to read and carry."""
 
-    def writer_path(self, store: type[WriterOwnedStore]) -> Path:
-        """Only a named declaration can supply an external input, on this step's root."""
-        if store not in self.writer_owned:
-            raise RelationViolationError(
-                f"{type(self).__name__} does not declare writer-owned input {store.declared_name}"
-            )
-        return self.files.writer_path(store)
-
     @staticmethod
     def writer_declarations(steps: Iterable[Carry | type[Carry]]) -> tuple[type[WriterOwnedStore], ...]:
         return tuple(dict.fromkeys(store for step in steps for store in step.writer_owned))
@@ -95,7 +87,8 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         for owner, directory in RootFile.declarations_in(self.root):
             if issubclass(owner, self.opened_files):
                 paths.update(owner.matching_in(directory))
-        paths.update(self.writer_path(store) for store in self.writer_owned)
+        paths.update(self.files.location(resource) for store in self.writer_owned
+                     for resource in store.resources(self.files))
         for path in paths:
             self.require_confined(path)
         return tuple(sorted(paths))
@@ -134,7 +127,8 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
 
     def require_confined(self, path: Path) -> None:
         """A carry reaches its bus and exactly its declared external files, never aliases."""
-        external = {self.writer_path(store) for store in self.writer_owned}
+        external = {self.files.location(resource) for store in self.writer_owned
+                    for resource in store.resources(self.files)}
         if (not path.is_relative_to(self.root) and path not in external) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
@@ -219,11 +213,12 @@ class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, Pa
     stores: tuple[type[WriterOwnedStore], ...]
 
     def run(self) -> tuple[Annotated[Path, PathText], ...]:
-        paths = []
+        paths: list[Path] = []
         with TemporaryDirectory() as directory:
             for store in self.stores:
                 store.practice_opening(self.files, Path(directory))
-                paths.append(self.files.writer_path(store))
+                paths.extend(self.files.location(resource)
+                             for resource in store.resources(self.files))
         return tuple(paths)
 
 

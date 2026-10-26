@@ -138,7 +138,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
         yield resumed.thread.status.update()
 
 
-class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=None):
+class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
     state_directory = Path('.local/state/codex-comms-inbox')
 
     def __init__(self, options: CodexOptions, address: SessionBinding, db: sqlite3.Connection) -> None:
@@ -199,5 +199,5 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
 
 def main() -> None:
     run_bridge(CodexBridge, CodexOptions.parse(
-        __doc__, Path.home() / CodexBridge.state_directory, CodexBridge))
+        __doc__, CodexBridge.state_path(), CodexBridge))
 
