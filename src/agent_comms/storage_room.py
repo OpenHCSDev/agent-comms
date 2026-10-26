@@ -315,7 +315,7 @@ class RoomAllocation:
         if thread.process_alive:
             yield
             return
-        self.require_allocation(thread)
+        self.require_floor()
         # The unit works in its own checkout, which needs no bus lock: a submodule store an
         # interrupted clone left broken is rebuilt before any lock is taken, and one git cannot
         # rebuild refuses this start.

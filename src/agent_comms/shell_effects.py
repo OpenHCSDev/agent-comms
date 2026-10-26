@@ -90,7 +90,6 @@ class AllocateStorageEffect(StorageEffect):
 
     def check(self, projection: StorageProjection) -> None:
         projection.rule.require_floor()
-        projection.storage.require_quota()
 
 
 class BuildStorageEffect(AllocateStorageEffect):
@@ -109,7 +108,7 @@ class TestGateStorageEffect(AllocateStorageEffect):
 
 @dataclass(frozen=True)
 class CheckoutStorageEffect(AllocateStorageEffect):
-    """Shared checkout ownership and quota; preparing a tree allocates no new bytes."""
+    """Shared checkout ownership and free-space admission."""
 
     path: Path
     repository: Repo
@@ -130,9 +129,6 @@ class CheckoutStorageEffect(AllocateStorageEffect):
 @dataclass(frozen=True)
 class CreateCheckoutStorageEffect(CheckoutStorageEffect):
     start: CheckoutStart
-
-    def project(self, storage: UnitStorage) -> UnitStorage:
-        return storage.adding(Checkout(self.path), self.start.tracked_bytes(self.repository.checkout))
 
 
 @dataclass(frozen=True)

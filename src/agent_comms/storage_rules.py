@@ -251,14 +251,13 @@ class GoalCheckoutAllocation(RepositoryAllocation):
 @dataclass(frozen=True)
 class StorageRule(RoomAllocation, DurableFile):
     filename: ClassVar[str] = "storage.json"
-    floor_gib: float = 5.0  # under this nothing that allocates may run
+    floor_gib: float = 10.0  # under this nothing that allocates may run
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
     idle_minutes: float = 30.0  # a pytest temp dir untouched this long holds memory for nothing
     temp_root: StoragePath = Path('/tmp')  # RAM-backed, so its pytest dirs hold memory
     proc: StoragePath = Path('/proc')
     shown: ClassVar[int] = 5  # holders named in each list
-    scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
     # Home paths are read when the rule is built, never frozen at import.
     volume: StoragePath = field(default_factory=Path.home)
     scratch_base: StoragePath = field(
@@ -266,7 +265,7 @@ class StorageRule(RoomAllocation, DurableFile):
     checkout_base: StoragePath = field(default_factory=lambda: Path.home() / 'wt')
 
     def __post_init__(self):
-        limits = (self.floor_gib, self.cleanup_gib, self.scratch_cap_gib)
+        limits = (self.floor_gib, self.cleanup_gib)
         if not all(math.isfinite(n) for n in limits):
             raise ValueError("Storage limits must be finite.")
         if min(limits) < 0:
@@ -425,16 +424,9 @@ class StorageRule(RoomAllocation, DurableFile):
     def cleanup_due(self, free_gib: float) -> bool:
         return free_gib < self.cleanup_gib
 
-    def require_quota(self, thread: Thread, *proposed: Path):
-        UnitStorage.read(self, thread, *proposed).require_quota()
-
     def require_floor(self) -> None:
         if self.below_floor(self.free_gib()):
             self.deny(f'allocation requires {self.floor_gib:g} GiB free on {self.volume}')
-
-    def require_allocation(self, thread: Thread, *proposed: Path):
-        self.require_floor()
-        self.require_quota(thread, *proposed)
 
     def require_destination(self, thread: Thread, path: Path) -> None:
         """Every destination obeys artifact and scratch ownership, without reading Git."""
@@ -457,7 +449,8 @@ class StorageRule(RoomAllocation, DurableFile):
         """The rule uses the same declared paths as storage enforcement."""
         checkout = self.order_checkout(self.roots_of(thread), "P<n>")
         return (
-            f'Storage (refused without a strike): your checkouts are '
+            f'Storage (refused without a strike): your project is {thread.project_path}; '
+            f'your checkouts are '
             f'{checkout} (another repository changed in the '
             f'same problem: {checkout}--<repository name>), '
             f'created with agent-comms {OrderCheckoutAllocation.verb} add PROBLEM '
@@ -466,9 +459,8 @@ class StorageRule(RoomAllocation, DurableFile):
             f'removed with agent-comms {OrderCheckoutAllocation.verb} remove PROBLEM in the '
             'same order that created them; '
             'your only scratch dir is '
-            f'{self.roots_of(thread).scratch}/, '
-            f'capped at {self.scratch_cap_gib:g} GB together with '
-            f'your checkouts. Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
+            f'{self.roots_of(thread).scratch}/. '
+            f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
             'never create a venv, never uv sync, never write .artifacts, never git clone. '
             f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
             'or recording.'
@@ -483,92 +475,45 @@ class OrderCheckoutWork(WorkBranches):
 
 
 @dataclass(frozen=True)
-class CheckoutClaim:
-    """Storage allocated to one checkout; existing trees propose no new bytes."""
-
-    checkout: Checkout
-    anticipated_bytes: int = 0
-
-
-@dataclass(frozen=True)
 class UnitStorage:
-    """Owned scratch and checkout claims measured against one byte budget."""
+    """Declared checkout membership, independent of the bytes already held."""
 
     rule: StorageRule
     unit: ThreadIncarnation
     roots: StorageRoots
-    home: CheckoutClaim
-    extra_checkouts: tuple[CheckoutClaim, ...]
+    home: Checkout
+    extra_checkouts: tuple[Checkout, ...]
 
     @classmethod
-    def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
+    def read(cls, rule: StorageRule, thread: Thread) -> UnitStorage:
         home, *extras = rule.checkouts_of(thread)
-        return cls(rule, thread.incarnation, rule.roots_of(thread), CheckoutClaim(Checkout(home)), tuple(
-            CheckoutClaim(Checkout(path)) for path in dict.fromkeys(
-                path for path in (*extras, *proposed) if path != home)))
-
-    @property
-    def claims(self) -> tuple[CheckoutClaim, ...]:
-        return (self.home, *self.extra_checkouts)
+        return cls(rule, thread.incarnation, rule.roots_of(thread), Checkout(home),
+                   tuple(Checkout(path) for path in extras))
 
     def owns(self, checkout: Checkout) -> bool:
-        return any(claim.checkout == checkout for claim in self.claims)
-
-    @cached_property
-    def held_gib(self) -> float:
-        roots = {path.resolve() for path in (
-            self.roots.scratch,
-            *Checkout.present(self.home.checkout.path),
-            *(claim.checkout.path for claim in self.extra_checkouts))}
-        return sum(self.rule.tree_gib(path) for path in roots
-                   if not any(path != other and path.is_relative_to(other) for other in roots))
-
-    @property
-    def anticipated_gib(self) -> float:
-        return sum(claim.anticipated_bytes for claim in self.claims) / 2**30
-
-    @property
-    def over_cap(self) -> bool:
-        return self.held_gib + self.anticipated_gib > self.rule.scratch_cap_gib
-
-    @property
-    def quota_text(self) -> str:
-        return (f'{self.held_gib:g} GiB held + {self.anticipated_gib:g} GiB checkout allocation, '
-                f'cap {self.rule.scratch_cap_gib:g} GiB')
+        return checkout == self.home or checkout in self.extra_checkouts
 
     @property
     def missing_home(self) -> bool:
-        return not self.home.checkout.path.is_dir()
+        return not self.home.path.is_dir()
 
-    def adding(
-        self, checkout: Checkout, anticipated_bytes: int = CheckoutClaim.anticipated_bytes,
-    ) -> UnitStorage:
-        claim = CheckoutClaim(checkout, anticipated_bytes)
-        claims = {item.checkout: item for item in (*self.claims, claim)}
-        return replace(self, home=claims.pop(self.home.checkout),
-                       extra_checkouts=tuple(claims.values()))
-
-    @property
-    def extra_checkout_keys(self) -> tuple[Checkout, ...]:
-        return tuple(claim.checkout for claim in self.extra_checkouts)
+    def adding(self, checkout: Checkout) -> UnitStorage:
+        if self.owns(checkout):
+            return self
+        return replace(self, extra_checkouts=(*self.extra_checkouts, checkout))
 
     def removing(self, checkout: Checkout) -> UnitStorage:
-        if checkout not in self.extra_checkout_keys:
+        if checkout not in self.extra_checkouts:
             self.rule.deny('only a current extra checkout can be removed')
         return replace(self, extra_checkouts=tuple(
-            claim for claim in self.extra_checkouts if claim.checkout != checkout))
-
-    def require_quota(self) -> None:
-        if self.over_cap:
-            self.rule.deny(self.quota_text)
+            current for current in self.extra_checkouts if current != checkout))
 
     def require_retired(self, problem: str) -> None:
         for path in self.rule.problem_checkouts(self.roots, problem):
-            if Checkout(path) in self.extra_checkout_keys:
+            if Checkout(path) in self.extra_checkouts:
                 self.rule.deny(
                     f'{self.unit.name} still has the checkout {path} for this order; '
                     'it removes it before the order counts as done')
-        self.require_quota()
 
 
 @dataclass
