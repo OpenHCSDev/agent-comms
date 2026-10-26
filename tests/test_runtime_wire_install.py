@@ -14,7 +14,7 @@ from module_layers import OutgoingWire
 
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.monitor import PauseSession
-from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.installer.request import InstallRequest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.launch import InstallRun
@@ -87,7 +87,7 @@ def test_crosses_runtimes_installed_stamp_refuses_session_drift_before_maintenan
     scratch.mkdir()
     target_tree = TargetTree(checkout, scratch, target)
     target_tree.add()
-    request = InstallRun(InstallCliCommand(checkout=checkout, spill_dir=tmp_path), root, scratch, target)
+    request = InstallRun(InstallRequest(checkout=checkout, spill_dir=tmp_path), root, scratch, target)
     result = subprocess.run(
         (sys.executable, "-m", "agent_comms.installer"),
         input=json.dumps(FieldCodec.encode(request)), text=True, capture_output=True,

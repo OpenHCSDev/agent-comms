@@ -118,13 +118,14 @@ from .field_codec import (
     RecordMember,
     TargetBound,
     WireForm,
+    WireExclude,
     WireName,
     WireOmitDefault,
     WireValue,
     boundary_decoder,
 )
 from .harness_install import Harness
-from agent_comms.installer.probes.harnesses import HarnessInstallation, InstallResult
+from agent_comms.installer.request import InstallRequest
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .goals import Goal
@@ -133,7 +134,6 @@ from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .input_disposition import InputDispositions
 from .input_origin import InputProvenance
 from .input_key import InputKey, InputKeyText
-from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .launch_runtime import LaunchRuntime
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
@@ -1808,47 +1808,11 @@ class RegisterCliCommand(NameArgument, CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstallCliCommand(HarnessInstallation, CliCommand):
+class InstallCliCommand(InstallRequest, CliCommand, declared_name=InstallRequest.kind):
+    kind: Annotated[Literal["install"], WireExclude()] = dataclasses.field(
+        default=InstallRequest.kind, init=False)
     help = ("Upgrade this machine's bus, checkout and runtime to --to, then set up every coding "
             "harness to use the bus, with the commander skill and tools")
-    checkout: Annotated[
-        Path,
-        AbsolutePathText,
-        Argument(flags=("--checkout",)),
-    ] = dataclasses.field(default_factory=Path.cwd)
-    to: Annotated[str, Argument(flags=("--to",))] = "origin/main"
-    installer: Annotated[
-        InstallerChoice,
-        Argument(
-            flags=("--installer",),
-            options={"help": "The unit running this install; the next install's plan names it"},
-        ),
-    ] = UnnamedInstaller()
-    mode: Annotated[
-        RunMode,
-        WireName("rehearse"),
-        Normalize(bool),
-        Argument(flags=("--rehearse",), options={
-            "help": "Carry and read a copy of the bus; change nothing",
-            "action": "store_const", "const": FieldCodec.encode(RehearsalMode()),
-        }),
-    ] = dataclasses.field(default_factory=LiveMode)
-    retire: Annotated[
-        bool,
-        Argument(
-            flags=("--retire",),
-            options={"help": "Move the bus aside, kept, and install a fresh one in its place"},
-        ),
-    ] = False
-    spill_dir: Annotated[
-        Path,
-        AbsolutePathText,
-        Argument(
-            flags=("--spill-dir",),
-            options={"help": "Parent directory for live backups"},
-        ),
-    ] = dataclasses.field(default_factory=lambda: Path.home() / ".cache/agent-rehearsal")
-
     @classmethod
     def published_launch(cls) -> LaunchRoot:
         """Install runs where no route selects a bus yet: the published bus while its route

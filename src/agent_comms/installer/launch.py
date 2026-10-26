@@ -24,7 +24,7 @@ from typing import Annotated, ClassVar, TextIO
 import agent_comms.installer
 from agent_comms.child_process import ResidentManager
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
-from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.installer.request import InstallRequest
 from agent_comms.commander import standing
 from agent_comms.field_codec import FieldCodec, Id128, PathText
 from agent_comms.installer.backup import StoreBackup
@@ -310,14 +310,14 @@ class InstallLogs:
 
 @dataclass(frozen=True)
 class InstallRun:
-    command: InstallCliCommand
+    command: InstallRequest
     root: Annotated[Path, PathText]
     scratch: Annotated[Path, PathText]
     target: str
     phases: list[LaunchedPhaseTiming] = field(default_factory=list)
 
     @classmethod
-    def start(cls, command: InstallCliCommand, root: Path,
+    def start(cls, command: InstallRequest, root: Path,
               launcher: LauncherPhase) -> InstallRun:
         checkout = command.checkout
         with InstallCommands() as commands, launcher.running(commands.clock):

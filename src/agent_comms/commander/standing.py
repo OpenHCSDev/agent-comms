@@ -13,7 +13,7 @@ from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommsTag
 from agent_comms import commander
-from agent_comms.cli_commands import InstallCliCommand
+from agent_comms.installer.request import InstallRequest
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
@@ -172,8 +172,8 @@ class PendingInstallDue(InstallDue):
     def launch(self, comms: Comms) -> str:
         """Every repository's merge installs the same Core target, so a run of that target
         already going is this merge's launch too; any other run is waited out."""
-        command = InstallCliCommand(checkout=self.core.checkout, to=self.target,
-                                    project=self.core.checkout)
+        command = InstallRequest(checkout=self.core.checkout, to=self.target,
+                                 project=self.core.checkout)
         try:
             with self.logs.launching():
                 run = installer_launch.InstallRun.start(command, comms.root, LauncherPhase())
