@@ -8,6 +8,8 @@ from dataclasses import dataclass
 import os
 import sqlite3
 from pathlib import Path
+
+from agent_comms.repo import Checkout
 from typing import AsyncIterator, ClassVar, Self
 from urllib.parse import quote
 
@@ -218,8 +220,8 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared
     def session_process(self) -> ProcessIdentity:
         return ProcessIdentity.capture(self.options.pid)
 
-    async def session_worktree(self) -> Path:
-        return self.options.directory
+    async def session_worktree(self) -> Checkout:
+        return Checkout(self.options.directory)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         async with self.connection() as connection:
