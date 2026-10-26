@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from agent_comms.active_route import CommsRoute
 from agent_comms.channel_targets import ChannelSelection
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channel_targets import NoChannel
@@ -30,7 +29,7 @@ from typing import get_origin
 import os
 
 if TYPE_CHECKING:
-    from agent_comms.active_route import ActiveRoute
+    from agent_comms.active_route import ActiveRoute, CommsRoute
     from agent_comms.catalog_document import CatalogDocument
     from agent_comms.cli_commands import OneTarget
     from agent_comms.cli_commands import TargetAction
@@ -44,6 +43,26 @@ if TYPE_CHECKING:
     from agent_comms.target_fields import TargetField
     from agent_comms.thread_status import ThreadStatus
     from agent_comms.threads import Thread
+
+
+class CliExecution[Answer: CliResult = CliResult](Command["Comms", Answer]):
+    """The dispatcher contract, including methods selected through multiple inheritance."""
+
+    @abstractmethod
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Execute against the selected route and write to the caller's stream."""
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        expected, actual = (
+            (iscoroutinefunction(method),
+             tuple((parameter.kind, parameter.default)
+                   for parameter in signature(method, follow_wrapped=False).parameters.values()))
+            for method in (CliExecution.execute, cls.execute)
+        )
+        if actual != expected:
+            raise TypeError(f"{cls.__qualname__}.execute{signature(cls.execute)} disagrees with "
+                            f"CliExecution.execute{signature(CliExecution.execute)}")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -269,22 +288,3 @@ class CliCommand[Answer: CliResult = CliResult](
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
-
-class CliExecution[Answer: CliResult = CliResult](Command["Comms", Answer]):
-    """The dispatcher contract, including methods selected through multiple inheritance."""
-
-    @abstractmethod
-    def execute(self, route: CommsRoute, output: TextIO) -> int:
-        """Execute against the selected route and write to the caller's stream."""
-
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        expected, actual = (
-            (iscoroutinefunction(method),
-             tuple((parameter.kind, parameter.default)
-                   for parameter in signature(method, follow_wrapped=False).parameters.values()))
-            for method in (CliExecution.execute, cls.execute)
-        )
-        if actual != expected:
-            raise TypeError(f"{cls.__qualname__}.execute{signature(cls.execute)} disagrees with "
-                            f"CliExecution.execute{signature(CliExecution.execute)}")

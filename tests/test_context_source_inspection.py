@@ -295,7 +295,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     assert captured.public_text_recorded
     assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\
         .public_text_recorded
-    from agent_comms.cli_verbs.turn_context import TurnContextCliCommand
+    from agent_comms.cli_verbs.context import TurnContextCliCommand
 
     command = TurnContextCliCommand(thread=owner.name, turn=2)
     assert command.apply(comms).to_wire()["text_recorded"] is True

@@ -1,31 +1,34 @@
-"""Declaration-owned CLI operation and its required dependencies."""
+"""The context verb and its option-selected implementation family."""
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import CoreContextInspection
 from agent_comms.cli_commands import CoreSegmentText
+from agent_comms.cli_commands import ImportedContextSources
 from agent_comms.cli_commands import NativeContextInspection
 from agent_comms.cli_commands import NativeSourceSpans
+from agent_comms.cli_commands import RecordedContextManifests
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_verbs.diff_context import DiffContextCliCommand
-from agent_comms.cli_verbs.imported_context import ImportedContextCliCommand
-from agent_comms.cli_verbs.turn_context import TurnContextCliCommand
-from agent_comms.cli_verbs.turn_diff_context import TurnDiffContextCliCommand
 from agent_comms.comms import Comms
 from agent_comms.context_store import ContextManifestCursor
 from agent_comms.context_store import LATEST_CONTEXT
 from agent_comms.coordination_errors import Refused
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import FieldCodec
+from agent_comms.importing import ImportedSessionMetadata
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.owner_connection import OwnerConnection
 from agent_comms.owner_connection import socket_path
 from agent_comms.turn_context import ContextManifest
+from agent_comms.turn_context import ContextManifestChange
 from agent_comms.turn_context import NextContextTurn
 from agent_comms.turn_context import TurnContext
 from collections.abc import Iterator
 from dataclasses import dataclass
+from itertools import dropwhile
+from itertools import takewhile
 from typing import Annotated
 import argparse
 import asyncio
@@ -96,3 +99,57 @@ class ContextCliCommand(CliCommand):
             tuple(NativeSourceSpans(position, segment.measured_manifest().sha256,
                                     segment.source_ranges())
                   for position, segment in enumerate(native.segments)))
+
+
+class ContextOptionCliCommand(ContextCliCommand):
+    @classmethod
+    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+        """These commands are selected by the context parser's options."""
+
+    @abstractmethod
+    def apply(self, ctx: Comms) -> CliResult:
+        """Inspect the context selected at the CLI boundary."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedContextCliCommand(ContextOptionCliCommand):
+    turn: int
+
+    def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
+        return dropwhile(lambda manifest: not manifest.turn.matches_generation(self.turn),
+                         super().manifests(ctx))
+
+
+class DiffContextCliCommand(ContextOptionCliCommand):
+    def apply(self, ctx: Comms) -> ContextManifestChange:
+        manifests = iter(self.manifests(ctx))
+        try:
+            current = next(manifests)
+        except StopIteration:
+            raise ValueError("No original context manifest exists for the requested turn") from None
+        for previous in manifests:
+            if not current.turn.same_recording(previous.turn):
+                return current.changed_since(previous)
+        raise ValueError("No preceding recorded turn exists for comparison")
+
+
+class ImportedContextCliCommand(ContextOptionCliCommand):
+    def apply(self, ctx: Comms) -> ImportedContextSources:
+        owner = ctx.registry.require(self.thread)
+        return ImportedContextSources(
+            "historical-imported-instructions; not current or recorded native context",
+            ImportedSessionMetadata.sources_for_owner(ctx.registry, owner))
+
+
+class TurnContextCliCommand(SelectedContextCliCommand):
+    def apply(self, ctx: Comms) -> RecordedContextManifests:
+        selected = tuple(takewhile(lambda manifest: manifest.turn.matches_generation(self.turn),
+                                   self.manifests(ctx)))
+        if not selected:
+            raise ValueError("No original context manifest exists for the requested turn")
+        return RecordedContextManifests(
+            tuple(reversed(selected)), all(manifest.public_text_recorded for manifest in selected))
+
+
+class TurnDiffContextCliCommand(SelectedContextCliCommand, DiffContextCliCommand):
+    """Start the shared diff walk at the requested turn."""
