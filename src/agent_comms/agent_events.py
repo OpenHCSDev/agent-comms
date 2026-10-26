@@ -54,7 +54,7 @@ from .turn_item import UsageChargeId
 from .turn_terminal import FailedGoalTurn
 
 if TYPE_CHECKING:
-    from .acp_extension import AgentCommsUpdate
+    from .acp_extension import AgentCommsUpdate, TextNoticeUpdate
     from .agent_event_updates import AcpEventConsumer
     from .comms import Comms
     from .goal_presentation import GoalPublicationSnapshot, GoalSnapshot
@@ -355,7 +355,9 @@ class TextEvent(AgentEvent):
 
     text: str
 
-    def acp_updates(self) -> tuple[AgentCommsUpdate, ...]:
+    def acp_updates(
+        self, notice_update: type[TextNoticeUpdate],
+    ) -> tuple[AgentCommsUpdate, ...]:
         return ()
 
 
@@ -378,10 +380,10 @@ class Thinking(AgentEvent):
 class Notice(TextEvent):
     """A standalone message, complete independently of the native turn phase."""
 
-    def acp_updates(self) -> tuple[AgentCommsUpdate, ...]:
-        from .acp_extension import TextNoticeUpdate
-
-        return (TextNoticeUpdate(),)
+    def acp_updates(
+        self, notice_update: type[TextNoticeUpdate],
+    ) -> tuple[AgentCommsUpdate, ...]:
+        return (notice_update(),)
 
 
 @dataclass(frozen=True)
@@ -512,3 +514,4 @@ class AgentEventConsumer(MroDispatch):
     @handles(RuntimeInfoObservation)
     async def record_runtime_info(self, event: RuntimeInfoObservation) -> None:
         await event.record_in(self)
+

@@ -29,6 +29,7 @@ from .acp_extension import (
     NativeOutputCommittedUpdate,
     NativeRoundCommittedUpdate,
     PromptCancelledUpdate,
+    TextNoticeUpdate,
     TextRouteUpdate,
     encode_updates,
 )
@@ -100,7 +101,7 @@ class AcpEventConsumer(MroDispatch):
         await event.publish(self.session_id, self.client)
 
     def text_metadata(self, event: events.TextEvent) -> tuple[AgentCommsUpdate, ...]:
-        return event.acp_updates()
+        return event.acp_updates(TextNoticeUpdate)
 
     def text_update(self, event: events.TextEvent) -> AgentMessageChunk:
         return AgentMessageChunk(
