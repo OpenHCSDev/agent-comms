@@ -53,6 +53,7 @@ from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
+from agent_comms.work_branches import WorkBranches
 
 pytest_plugins = ("github_fixture",)
 
@@ -256,7 +257,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     github_cli.configure(graph.repository.github)
     for number, commit in ((1, checked), (2, checked), (3, contained), (4, missing)):
         github_cli.put(graph.repository.github, MergedListedPullRequest(
-            number, f'fix/{number}', commit, updated='2026-10-25T12:00:00Z', base='main',
+            number, f'fix/{number}', commit, updated='2026-10-25T12:00:00Z', base=WorkBranches.main,
             reviewable_times=('2026-10-25T12:00:00Z',), merge=PullRequestCommit(commit),
             merged='2026-10-25T12:00:00Z'))
     caller = ThreadCaller("lead")

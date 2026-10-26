@@ -354,7 +354,7 @@ class CommitSourceDelivery(BranchPointCheck, CheckedDelivery, declared_name=None
         return (self.commit,)
 
     def merged_commits(self, repo: Repo) -> tuple[str, ...]:
-        return (self.commit,) if repo.contains(self.commit, "origin/main") else ()
+        return (self.commit,) if repo.contains(self.commit, f"origin/{WorkBranches.main}") else ()
 
     def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
         if self.commit != self.delivered:
