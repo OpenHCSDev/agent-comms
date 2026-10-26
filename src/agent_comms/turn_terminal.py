@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 
 
 class TurnInterruption(ABC):
+    def request(self) -> None:
+        """An already determined terminal reason has no pending stop to request."""
+
     @abstractmethod
     def interrupting(self, prior: TurnTerminal) -> TurnTerminal: ...
 

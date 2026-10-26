@@ -100,7 +100,6 @@ from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
-from .turn_terminal import EndedWithoutResult, TurnInterruption
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_worker import AnnotationWorker
 
@@ -164,7 +163,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,
         private_selected_tool_intent: SelectedToolIntent | None = None,
-        owner_stop: TurnInterruption = EndedWithoutResult(),
     ):
         self._comms = comms
         if private_selected_tool_intent is not None:
@@ -187,7 +185,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             self,
             agent_bin=agent_bin,
             agent_args=agent_args,
-            owner_stop=owner_stop,
         )
         self.sessions = self.session_lifecycle_class(
             comms, self.turns.agent_bin, self.turns.agent_args, self._runtime, runtime_enabled, self

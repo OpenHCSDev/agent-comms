@@ -306,7 +306,7 @@ class OwnedTurn:
         resources.push_async_callback(self.close_changed_project)
 
     def finish_goals(self) -> None:
-        self.goals.finish(self.runner.owner_stop.interrupting(self.terminal))
+        self.goals.finish(self.runner.inputs.state(self.session_id).stop.interrupting(self.terminal))
 
     async def close_changed_project(self) -> None:
         name = await self.runner.sessions.sync_identity(self.session_id)

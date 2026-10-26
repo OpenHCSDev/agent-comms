@@ -65,6 +65,7 @@ from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_context import TurnContext, UserFollowupSegment
 from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
+from .turn_terminal import EndedWithoutResult, TurnInterruption
 from .watched import ChangeSignal, FileSource
 
 if TYPE_CHECKING:
@@ -447,6 +448,7 @@ class RunningTurnTask(TurnTask):
 class DrainedSession:
     """One drained session's state, from its first use until the session ends."""
 
+    stop: TurnInterruption = field(default_factory=EndedWithoutResult)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_task: TurnTask = field(default_factory=TurnTask)

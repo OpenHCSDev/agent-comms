@@ -40,8 +40,8 @@ async def run_owner(comms: Comms) -> None:
             comms,
             runtime_enabled=True,
             agent_bin=GivenBinary(NativeArguments.owner_launcher(LaunchRuntime.running())),
-            owner_stop=stopped,
         )
+        agent.inputs.state(name).stop = stopped
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stopped.request)

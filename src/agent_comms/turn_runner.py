@@ -60,7 +60,6 @@ from .turn_lease import TurnLeaseFence, TurnState
 from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
 from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
-from .turn_terminal import TurnInterruption
 from .goal_scope import OneGoal
 
 if TYPE_CHECKING:
@@ -102,12 +101,10 @@ class TurnRunner:
         *,
         agent_bin: LaunchBinary,
         agent_args: LaunchArguments,
-        owner_stop: TurnInterruption,
     ):
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.owner_stop = owner_stop
         self.agent_bin = agent_bin.configured()
         self.agent_args = agent_args.configured()
         # One backend per ACP session, of the bound thread's declared kind.
