@@ -25,6 +25,7 @@ from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
     OwnerToolConnection,
+    SelectedToolBusy,
     ToolOutcomeUnknown,
 )
 from .pi_payloads import PiContent
@@ -390,6 +391,9 @@ class ToolTransport(Generic[Call]):
                 return ToolChildGone("unanswered")
             response = await self.handle_request(raw)
             answer = "allowed" if response.get("ok") is True else "refused"
+        except SelectedToolBusy as error:
+            response = error.socket_response()
+            answer = "refused"
         except (SelectedToolDenied, MalformedRecord) as error:
             # Only declared denials and malformed child input become a refusal.
             # Owner defects propagate; they never become a successful answer.

@@ -66,6 +66,8 @@ class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome
 class CoordinationReadUnavailable(CoordinationError, DeferredRead):
     """No committed SQLite snapshot was acquired; no absence is established."""
 
+    busy_message: ClassVar[str] = "The database read is busy"
+
     @classmethod
     @contextmanager
     def checking(cls) -> Iterator[None]:
@@ -79,8 +81,14 @@ class CoordinationReadUnavailable(CoordinationError, DeferredRead):
     def raise_from(cls, error: sqlite3.OperationalError) -> Never:
         """Decode SQLite's contention codes once, never its error wording."""
         if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
-            raise cls("The database read is busy") from error
+            raise cls(cls.busy_message) from error
         raise error
+
+
+class CoordinationBeginUnavailable(CoordinationReadUnavailable):
+    """BEGIN acquired no write transaction; its body and commit never ran."""
+
+    busy_message = "The database write transaction did not start"
 
 
 class SchemaVersionError(CoordinationError):
