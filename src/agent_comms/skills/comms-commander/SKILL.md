@@ -20,6 +20,11 @@ Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlli
 
 The commander spends its tokens on judgment: what is stupid, what changes where and why. Every unit keeps moving toward an installed fix or deleted slop.
 
+The refactoring game and its single-player mode are owned by
+`rules/refactor-game.md`. Apply it to the commander's own serial work when the
+owner directs single-player play; fleet dispatch requirements do not require
+creating units for that mode.
+
 Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `comms_fleet_story` and `comms_inbox`, configured by Core's registry, which `agent-comms install` writes. An install records the commander only from `--commander NAME` and replaces the repos only from `--repos A,B`; otherwise it keeps the bus's record. Rerun install to change it; never edit the tools for one project.
 
 ## Start of session, and after every compaction
