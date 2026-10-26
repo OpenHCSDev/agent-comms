@@ -82,11 +82,30 @@ class Refusing:
     def __exit__(
         self, kind: type[BaseException] | None, error: BaseException | None,
         trace: types.TracebackType | None,
-    ) -> Literal[False]:
-        if (kind is not None and issubclass(kind, ValueError)
-                and not issubclass(kind, MalformedRecord)):
-            raise MalformedRecord(f"{self.subject}: {error}") from error
-        return False
+    ) -> bool:
+        if error is None:
+            return False
+        try:
+            raise error
+        except MalformedRecord as refused:
+            return self.refused(refused)
+        except ValueError as refused:
+            return self.refused(MalformedRecord(f"{self.subject}: {refused}"))
+
+    def refused(self, error: MalformedRecord) -> bool:
+        raise error
+
+
+@dataclass(frozen=True, slots=True)
+class Collecting(Refusing):
+    """The same data boundary collects a sibling refusal instead of stopping at it."""
+
+    problems: dict[str, str]
+    fix: str
+
+    def refused(self, error: MalformedRecord) -> bool:
+        self.problems.update(error.located(self.subject, self.fix))
+        return True
 
 
 class RecordProblems(MalformedRecord):
@@ -98,6 +117,11 @@ class RecordProblems(MalformedRecord):
 
     def located(self, name: str, fix: str) -> dict[str, str]:
         return {f"{name}.{path}": problem for path, problem in self.problems.items()}
+
+    @staticmethod
+    def collecting(problems: dict[str, str], name: str, fix: str) -> Collecting:
+        """Run one check through the existing boundary, preserving nested field paths."""
+        return Collecting(name, problems, fix)
 
 
 def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
