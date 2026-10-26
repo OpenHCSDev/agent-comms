@@ -1732,7 +1732,6 @@ class TerminalChildStdio(ChildStdio):
 
 
 class AttachedChild(ChildProcess):
-    stdout_limit: ClassVar[int] = 64 * 1024 * 1024
     stderr_limit: ClassVar[int] = 16000
 
     def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity,

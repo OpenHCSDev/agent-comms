@@ -1349,7 +1349,6 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         current = asyncio.current_task()
         assert current is not None
         self.stop = current.cancel
-        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, self.stop)
         try:
             await self.options.operation.execute(self)
         except* BlockingIOError:
