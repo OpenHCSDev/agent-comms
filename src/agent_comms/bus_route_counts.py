@@ -106,17 +106,16 @@ class RouteCounts:
     ), route_since AS MATERIALIZED (
         SELECT target.actor,recipient.value AS recipient_lookup,
             route.target,route.sender,route.sender_lookup,
-            max(route.since,unaddressed.since) AS unaddressed,
-            max(route.since,viewer.since) AS addressed
+            max(route.since,unaddressed.since) AS unaddressed
         FROM actor_targets AS target
         JOIN route_keys AS route ON route.target=target.target
-        JOIN addressed_since AS viewer ON viewer.name=target.actor
         JOIN recipients AS recipient ON recipient.key=target.actor
         LEFT JOIN aliases AS alias ON alias.name=route.sender
-        LEFT JOIN unaddressed_since AS unaddressed ON unaddressed.name=target.actor
+        JOIN unaddressed_since AS unaddressed ON unaddressed.name=target.actor
+            AND unaddressed.since IS NOT NULL
         WHERE {DeliveryScope.delivers_sql("target.actor", "route.sender", "alias.canonical")}
     ), requests AS MATERIALIZED (
-        SELECT route.actor,row.seq,row.target,row.sender
+        SELECT recipient.key AS actor,row.seq,row.target,row.sender
         FROM recipients AS recipient
         CROSS JOIN "{ReceivedSource.declared_name}" AS addressed
             ON addressed.lookup=recipient.value
@@ -124,12 +123,15 @@ class RouteCounts:
                 AND addressed.seq<=(SELECT through FROM arguments)
                 AND {ReadCursor.above_floor("addressed.seq", "recipient.key", "''")}
         CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.seq=addressed.seq
-        CROSS JOIN route_since AS route ON route.actor=recipient.key
-            AND route.target=row.target AND route.sender=row.sender
+        CROSS JOIN actor_targets AS target ON target.actor=recipient.key AND target.target=row.target
+        CROSS JOIN route_keys AS route ON route.target=row.target AND route.sender=row.sender
             AND route.sender_lookup IS row.sender_lookup
-        WHERE row.timestamp>=route.addressed
+        CROSS JOIN addressed_since AS viewer ON viewer.name=recipient.key
+        LEFT JOIN aliases AS alias ON alias.name=row.sender
+        WHERE row.timestamp>=max(route.since,viewer.since)
+            AND {DeliveryScope.delivers_sql("recipient.key", "row.sender", "alias.canonical")}
             AND row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
-            AND {ReadCursor.above_floor("row.seq", "route.actor", "row.target")}
+            AND {ReadCursor.above_floor("row.seq", "recipient.key", "row.target")}
         UNION ALL
         SELECT route.actor,row.seq,row.target,row.sender
         FROM route_since AS route

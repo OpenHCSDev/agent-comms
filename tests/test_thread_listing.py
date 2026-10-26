@@ -17,6 +17,7 @@ from agent_comms.comms import Comms
 from agent_comms.presentation import CountedInbox
 from agent_comms.registry_store import RegistryStore
 from agent_comms.threads import Thread
+from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 
 
 def rename_during_count(root: Path, start: Event, done: Event) -> None:
@@ -78,3 +79,25 @@ def test_thread_listing_counts_outside_the_registry_lock(
     finally:
         writer.terminate()
         writer.join(5)
+
+
+def test_thread_listing_counts_frozen_deliveries_and_human_history(
+    comms: Comms, tmp_path: Path,
+) -> None:
+    comms.channels.create_tag("team")
+    comms.registry.declare(Thread(
+        "old-sender", frozenset({"team"}), str(tmp_path), created_at=9000.0,
+    ))
+    comms.messaging.send("old-sender", "#team", "History before either viewer joined")
+    for birth, name, role in ((10000.0, "human", UserThreadRole),
+                              (10001.0, "agent", AgentThreadRole)):
+        comms.registry.declare(Thread(
+            name, frozenset({"team"}), str(tmp_path), created_at=birth, role=role,
+        ))
+    with comms.registry.store.editing() as edit:
+        edit.document.rename("old-sender", "sender")
+        edit.commit()
+    comms.messaging.send("sender", "#team", "Frozen delivery to both viewers")
+    assert comms.bus.pending_counts_all(("human", "agent", "sender")) == {
+        "human": 2, "agent": 1, "sender": 0,
+    }
