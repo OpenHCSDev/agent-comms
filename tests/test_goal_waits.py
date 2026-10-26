@@ -1,10 +1,36 @@
 from dataclasses import replace
+import sqlite3
 
 from agent_comms.field_codec import GoalId
 from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
+from agent_comms.goal_waits import GoalWaits, GoalWaitTargetRow, RecordedGoalWait
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.typed_table import WriterOwnedFile
 from test_goal_standby_liveness import _finish, _waiting
+
+
+def test_schema_carry_rederives_target_index_without_changing_saved_waits(tmp_path):
+    comms, goal = _waiting(tmp_path)
+    waits = comms.goals.waits
+    original = waits.read()[goal.id]
+    target = original.targets[0].incarnation
+    orphan = GoalId.mint()
+    with sqlite3.connect(waits.path) as db:
+        before = db.execute("SELECT goal_id, wait FROM stored_goal_wait ORDER BY goal_id").fetchall()
+        db.execute("INSERT INTO goal_wait_target VALUES (?, ?, ?)", (orphan, 0, target.lookup))
+        db.execute("UPDATE goal_wait_target SET target_lookup=? WHERE goal_id=?",
+                   (RecordedThreadIncarnation("other", 42.0).lookup, goal.id))
+        index = GoalWaitTargetRow.indexes[0].name(GoalWaitTargetRow)
+        db.execute(f'DROP INDEX "{index}"')
+        db.commit()
+        assert db.execute("PRAGMA foreign_key_check").fetchall()
+        assert GoalWaits.reconcile_schema(db, WriterOwnedFile())
+        assert not db.execute("PRAGMA foreign_key_check").fetchall()
+        assert db.execute("SELECT goal_id, wait FROM stored_goal_wait ORDER BY goal_id").fetchall() == before
+    assert waits.targeting(target) == (original,)
+    assert waits.clear(goal.id)
+    with waits.snapshot() as db:
+        assert GoalWaitTargetRow.count(db) == 0
 
 
 def test_finished_turn_reads_only_its_waits_after_rename(tmp_path, monkeypatch):

@@ -3,6 +3,7 @@
 import asyncio
 import os
 import shutil
+import sqlite3
 
 import pytest
 
@@ -11,13 +12,43 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.storage_room import (
     BuildRoomWork, RoomClaim, TestGateRoomWork, UnitStartRoomWork,
-    WaitingRoomPhase,
+    WaitingRoomPhase, WorkPeak, RoomNeed,
 )
 from agent_comms.storage_rules import StorageRule
 from agent_comms.shell_effects import shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.field_codec import RoomTicket
+
+
+def test_host_ledger_writer_carries_old_schema_and_preserves_peaks_and_claims(tmp_path):
+    rule = StorageRule(volume=tmp_path)
+    ledger = rule.room_ledger
+    ledger.root.mkdir(parents=True)
+    peak = WorkPeak(BuildRoomWork, RoomNeed(memory=1234, disk=5678))
+    claim = RoomClaim(
+        RoomTicket.mint(), str(tmp_path / "bus"),
+        Thread("owner", frozenset(), str(tmp_path), created_at=42.0).incarnation,
+        ProcessIdentity.capture(os.getpid()), (BuildRoomWork,), WaitingRoomPhase(), 1.0,
+    )
+    with sqlite3.connect(ledger.path) as db:
+        for row in (WorkPeak, RoomClaim):
+            previous = row._table_sql()
+            for column in row._columns:
+                for check in column.storage.constraints(column.wire_name, column.annotation):
+                    previous = previous.replace(f" CHECK ({check})", "")
+            db.execute(previous)
+        peak.insert(db)
+        claim.insert(db)
+    with ledger.snapshot() as db:
+        assert WorkPeak.select(db) == [peak]
+        assert RoomClaim.select(db) == [claim]
+        ledger.require_schema(db)
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            RoomClaim.delete(db)
+    with ledger.writing() as db:
+        assert WorkPeak.select(db) == [peak]
+        assert RoomClaim.select(db) == [claim]
 
 
 def copied_root(tmp_path):

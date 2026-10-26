@@ -7,6 +7,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus import BusReader
@@ -22,7 +23,10 @@ from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .turn_lease import TurnLease
-from .typed_table import Column, DurableStore, ForeignKey, Index, StoreRows, TypedTable
+from .typed_table import (
+    Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild,
+    StoreRows, TypedTable,
+)
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
@@ -390,6 +394,12 @@ class StoredGoalWaitRow(GoalWaitsRows, TypedTable):
     goal_id: Annotated[GoalId, Column(primary_key=True)]
     wait: RecordedGoalWait
 
+    def record_targets(self, db: Connection) -> None:
+        """The stored wait owns the searchable projection of its original targets."""
+        GoalWaitTargetRow.delete(db, goal_id=self.goal_id)
+        for position, target in enumerate(self.wait.targets):
+            GoalWaitTargetRow(self.goal_id, position, target.incarnation.lookup).insert(db)
+
 
 @dataclass(frozen=True, slots=True)
 class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
@@ -409,6 +419,17 @@ class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
     filename: ClassVar[str] = "goal_waits.sqlite3"
     tables = GoalWaitsRows
 
+    @classmethod
+    def carry_schema(
+        cls, db: Connection, sharing: tuple[type[TypedTable], ...] = (),
+        *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
+    ) -> None:
+        super().carry_schema(db, sharing, rebuild=rebuild)
+        # Only this materialized index is replaceable; the saved wait records are original.
+        GoalWaitTargetRow.delete(db)
+        for stored in StoredGoalWaitRow.select(db):
+            stored.record_targets(db)
+
     def read(self) -> dict[str, RecordedGoalWait]:
         with self.snapshot() as db:
             return {
@@ -424,10 +445,9 @@ class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
     def record_many(self, waits: Iterable[RecordedGoalWait]) -> None:
         with self.writing() as db:
             for wait in waits:
-                StoredGoalWaitRow(wait.goal_id, wait).upsert(db)
-                GoalWaitTargetRow.delete(db, goal_id=wait.goal_id)
-                for position, target in enumerate(wait.targets):
-                    GoalWaitTargetRow(wait.goal_id, position, target.incarnation.lookup).insert(db)
+                stored = StoredGoalWaitRow(wait.goal_id, wait)
+                stored.upsert(db)
+                stored.record_targets(db)
 
     def targeting(
         self, target: RecordedThreadIncarnation
