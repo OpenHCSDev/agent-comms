@@ -480,7 +480,7 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class QuotingVerb(HeadVerdictVerb, declared_name=None):
     """A verb whose verdict stores the words of the order it carries out."""
-    serves: Annotated[str, Argument(options={"help": OrderQuote.rule})] = ""
+    serves: Annotated[str, Argument(flags=(OrderQuote.flag,), options={"help": OrderQuote.rule})] = ""
 
     def order_link(self, todo: Todo) -> OrderLink:
         return LinkedHeadReview.of(todo, self.serves, self.head_evidence())
@@ -488,7 +488,7 @@ class QuotingVerb(HeadVerdictVerb, declared_name=None):
     def edit_problems(self) -> dict[str, str]:
         """An accepted edit always quotes its order."""
         return super().edit_problems() | {
-            '--serves': refused for refused in OrderQuote(self.serves).word_refusal()}
+            OrderQuote.flag: refused for refused in OrderQuote(self.serves).word_refusal()}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -502,8 +502,9 @@ class OkVerb(ReasonedVerb, QuotingVerb):
                 else self.verdict(reason))
     growth: Annotated[
         tuple[str, ...],
-        Argument(options={"action": "append", "metavar": "REASON",
-                          "help": "12+ words naming a growing src file and its need; repeat for each"}),
+        Argument(flags=(GrowthReason.option,), options={
+            "action": "append", "metavar": "REASON",
+            "help": f"{GrowthReason.least_words}+ words naming a growing src file and its need; repeat for each"}),
     ] = ()
     no_owner: Annotated[
         str,
@@ -530,7 +531,7 @@ class OkVerb(ReasonedVerb, QuotingVerb):
 
     def argument_problems(self) -> dict[str, str]:
         return super().argument_problems() | {
-            f'--growth {number}': refused
+            f'{GrowthReason.option} {number}': refused
             for number, text in enumerate(self.growth, 1)
             for refused in GrowthReason.wording_refusal(text)}
 

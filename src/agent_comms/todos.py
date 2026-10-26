@@ -84,7 +84,9 @@ from agent_comms.field_codec import (
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from agent_comms.repo import GitCommandError
-from agent_comms.head_review import HeadReviewOrder, HeadReviewRelation, PullRequestHead, ReadPullRequestHead
+from agent_comms.head_review import (
+    HeadReviewOrder, HeadReviewRelation, PreparedHeadReview, PullRequestHead, ReadPullRequestHead,
+)
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
@@ -1850,6 +1852,7 @@ class GrowthReason(PlainText):
 
     refusal = "Say why the source grows in {}+ words; jargon {} hides what happened."
     least_words = 12
+    option: ClassVar[str] = '--growth'
 
     @classmethod
     def every(cls, texts: tuple[str, ...]) -> GrowthReason:
@@ -3877,14 +3880,16 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 @dataclass(frozen=True)
 class OrderQuote:
     quote: str
-    rule: ClassVar[str] = "Quote 4+ words of the order this verdict carries out."
+    flag: ClassVar[str] = '--serves'
+    least_words: ClassVar[int] = 4
+    rule: ClassVar[str] = f"Quote {least_words}+ words of the order this verdict carries out."
 
     def word_refusal(self) -> tuple[str, ...]:
         """Whitespace-separated words, so a dotted or CamelCase name counts as one word; the
         count needs no order text, so a verdict reports it beside its other argument refusals."""
         quoted = " ".join(self.quote.split())
-        if len(quoted.split()) < 4:
-            return (f"--serves {quoted!r} is {len(quoted.split())} words. {self.rule}",)
+        if len(quoted.split()) < self.least_words:
+            return (f"{self.flag} {quoted!r} is {len(quoted.split())} words. {self.rule}",)
         return ()
 
     def require_quote(self, text: str) -> None:
@@ -3925,15 +3930,20 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
 class HeadVerdict(HeadReview, declared_name=None):
     """One decision on a PR head, independent of whether an order holds it."""
 
-    def reviewed(self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation,
-                 order: HeadReviewOrder) -> HeadReviewed:
+    preparation_field: ClassVar[str] = '--head'
+    preparation_fix: ClassVar[str] = 'supply the current PR head SHA with --head'
+
+    def prepare(self, goals: Goals, request: PullRequestHead) -> PreparedHeadReview:
         current = request.current()
-        request = replace(request, head=current.head)
-        subject = self.subject(goals, current)
+        return PreparedHeadReview(current, self.subject(goals, current))
+
+    def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
+                 reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
+        request = replace(request, head=prepared.current.head)
         recorded = order.record_review(goals, request, self, reviewer)
         self.after_record(goals, recorded)
-        self.post(request.repo, request.head, reviewer.name, subject)
-        return HeadReviewed(recorded, self.landing(current))
+        self.post(request.repo, request.head, reviewer.name, prepared.subject)
+        return HeadReviewed(recorded, self.landing(prepared.current))
 
     def landing(self, current: OpenPullRequestHead) -> MergeArm:
         """Only an acceptance moves the PR toward main; every other verdict leaves auto-merge be."""
@@ -3994,6 +4004,9 @@ class DecidedHeadVerdict(HeadVerdict, declared_name=None):
 class ReviewedHeadVerdict(DecidedHeadVerdict):
     state = "success"
     verb = "Accepted"
+    preparation_field = GrowthReason.option
+    preparation_fix = (f"repeat {GrowthReason.option} 'PATH REASON' for each growing source file; "
+                       f'each reason names its file in {GrowthReason.least_words}+ words')
 
     def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
               reader: WorkBranches) -> bool:
@@ -4152,6 +4165,9 @@ class OrderLink(ProblemLink, declared_name=None):
     """The exact order a head decision changes."""
     order_id: OrderId
 
+    def require_quote(self, text: str) -> None:
+        """A reading or rejection carries no quoted clause; OrderQuote supplies acceptance's."""
+
     def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
         current.require_commander(actor)
         current.require_previous_assignment(self.previous)
@@ -4178,10 +4194,6 @@ class LinkedHeadReview(OrderQuote, OrderLink):
         return cls(quote=quote, problem=todo.id, order_id=todo.order.checked().id,
                    previous=todo.holder_state.previous_assignment(), evidence=evidence)
 
-    def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
-        super().require_current(current, actor)
-        self.require_quote(current.order.instructions(current))
-
 
 @dataclass(frozen=True)
 class OrderHeadReview(HeadReviewOrder):
@@ -4192,16 +4204,29 @@ class OrderHeadReview(HeadReviewOrder):
     def for_request(cls, todos: Sequence[Todo], request: PullRequestHead,
                     link: Callable[[Todo], OrderLink], problem: str = "") -> HeadReviewOrder:
         """The verb constructs its relationship from the same open orders the board reads."""
-        linked = tuple(todo for todo in cls.holding(todos, request)
-                       if not problem or todo.id == problem)
-        if not linked:
-            if problem:
-                raise TodoError(f"{problem} does not hold this pull request.")
+        holding = cls.holding(todos, request)
+        linked = tuple(todo for todo in holding if not problem or todo.id == problem)
+        if not linked and not problem:
             return NoHeadOrder()
         if len(linked) != 1:
-            raise TodoError("More than one order holds this pull request; select --problem.")
+            refusal = (f"{problem} does not hold this pull request." if not linked
+                       else 'More than one order holds this pull request.')
+            choices = ', '.join(todo.id for todo in holding) or 'none currently holds this PR'
+            problems = MalformedRecord(refusal).located(
+                '--problem', f'select a holding problem: {choices}; omit --problem for a unique order')
+            # An unresolved link cannot authenticate or write, but its quote can still fail.
+            for todo in linked or holding:
+                with RecordProblems.collecting(problems, OrderQuote.flag, OrderQuote.rule):
+                    link(todo).require_quote(todo.order.checked().instructions(todo))
+            return RefusedHeadOrder(problems)
         todo, = linked
         return cls(todo.revision, link(todo))
+
+    def prepared(self, goals: Goals, problems: dict[str, str]) -> tuple[HeadReviewOrder, ...]:
+        current = goals.todos.get(self.link.problem)
+        with RecordProblems.collecting(problems, OrderQuote.flag, OrderQuote.rule):
+            self.link.require_quote(current.order.checked().instructions(current))
+        return (self,)
 
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
@@ -4217,6 +4242,28 @@ class OrderHeadReview(HeadReviewOrder):
         current = goals.todos.get(self.link.problem)
         current.holder_state.record_review(goals, current, operation)
         return record
+
+
+@dataclass(frozen=True)
+class RefusedHeadOrder(HeadReviewOrder, declared_name=None):
+    """A failed CLI selection contributes its failures beside the head's other requirements.
+
+    It is not a wire member, cannot authenticate and can never become a stored review.
+    """
+
+    problems: dict[str, str]
+
+    def prepared(self, goals: Goals, problems: dict[str, str]) -> tuple[HeadReviewOrder, ...]:
+        problems.update(self.problems)
+        return ()
+
+    def require_reviewer(self, goals: Goals, request: PullRequestHead,
+                         actor: ThreadIncarnation) -> None:
+        raise RecordProblems(self.problems)
+
+    def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
+                      actor: ThreadIncarnation) -> HeadReviewRecord:
+        raise RecordProblems(self.problems)
 
 
 @dataclass(frozen=True)
