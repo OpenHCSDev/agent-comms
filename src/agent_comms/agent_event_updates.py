@@ -21,6 +21,7 @@ from . import agent_events as events
 from .acp_extension import (
     CompactionChangedUpdate,
     McpClientAcknowledgementUpdate,
+    NativeOutputCommittedUpdate,
     PromptCancelledUpdate,
     TextRouteUpdate,
     encode_updates,
@@ -94,6 +95,22 @@ class AcpEventConsumer(MroDispatch):
         return AgentMessageChunk(
             session_update="agent_message_chunk",
             content=TextContentBlock(type="text", text=text),
+        )
+
+    @handles(events.NativeOutputCommitted)
+    async def native_output_committed(self, event: events.NativeOutputCommitted) -> None:
+        sessions = self.agent.sessions
+        identity = await Coordination.run_worker(partial(
+            sessions.comms.transcripts.capture_native_output,
+            sessions.require(self.session_id), event.location,
+        ))
+        await self.client.publish_update(
+            session_id=self.session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(NativeOutputCommittedUpdate(identity, event.location.output)),
+            ),
         )
 
     @handles(events.GoalChanged)

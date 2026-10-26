@@ -815,6 +815,9 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     def matches_input(self, text: str, native_id: InputId | PiOmitted) -> bool:
         return False
 
+    def committed_outputs(self):
+        return ()
+
     def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
         return ()
 
@@ -904,6 +907,11 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
         PiField[str | PiOmitted], WireName("providerThinkingLevel")
     ] = PiOmitted()
     assistant = True
+
+    def committed_outputs(self):
+        from .native_output import AssistantOutput
+
+        return (AssistantOutput(),)
 
     @property
     def authoritative_text(self) -> str:
@@ -1007,6 +1015,11 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
     tool_name: Annotated[PiField[str], WireName("toolName")] = "tool"
     is_error: Annotated[PiField[bool], WireName("isError")] = False
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
+
+    def committed_outputs(self):
+        from .native_output import ToolOutput
+
+        return (ToolOutput(self.tool_call_id),)
 
     def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
         if not self.is_error:

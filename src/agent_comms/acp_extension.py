@@ -6,6 +6,8 @@ they never authorize a native send, restore a queue, or replay an UNKNOWN input.
 
 from __future__ import annotations
 
+from .native_output import NativeOutputScope
+
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
@@ -657,6 +659,12 @@ class CompactionCommittedUpdate(AgentCommsUpdate):
 
     summary: str
     first_kept: str | None
+
+
+@dataclass(frozen=True)
+class NativeOutputCommittedUpdate(AgentCommsUpdate):
+    identity: TranscriptReadIdentity
+    output: NativeOutputScope
 
 
 @dataclass(frozen=True)

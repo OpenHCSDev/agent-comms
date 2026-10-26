@@ -13,6 +13,7 @@ from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
 from .field_codec import DeclaredWireType, FieldCodec, FieldPlan, TurnId, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
+from .native_output import NativeOutputLocation
 from .native_pi import NativePiOperationFailed
 from .native_failures import NativePiUnavailable
 from .native_tool_call import ToolCallId
@@ -137,6 +138,12 @@ class PiEvent(OpenPayload, affix=""):
 
 class NativePiEvent(PiEvent, declared_name=None):
     pass
+
+
+@dataclass(frozen=True)
+class NativeOutputCommitted(NativePiEvent, NativeOutputLocation):
+    def convert(self):
+        yield events.NativeOutputCommitted(self)
 
 
 class DurablePiEvent(PiEvent, declared_name=None):

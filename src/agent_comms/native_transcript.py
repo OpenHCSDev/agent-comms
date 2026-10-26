@@ -262,6 +262,28 @@ class NativeTranscript(TranscriptSource):
             revision = FileRevision.from_file(stream)
             return PresentSessionCut(revision, record_end(stream, revision.size))
 
+    def committed_output_cut(self, location) -> SessionCut:
+        """Corroborate one indexed output against its original header and row."""
+        if self.path.absolute() != location.path:
+            raise TranscriptChanged()
+        with self.path.open("rb") as stream:
+            revision = FileRevision.from_file(stream)
+            header = SessionEntry.read(stream.readline())
+            if header.id != location.session_id or revision.size < location.session_entry_end:
+                raise TranscriptChanged()
+            stream.seek(location.session_entry_start - 1)
+            if stream.read(1) != b"\n":
+                raise TranscriptChanged()
+            raw = stream.read(location.session_entry_end - location.session_entry_start)
+            record = NativeRecord.read(location.session_entry_start, location.session_entry_end, raw)
+            entry = record.entry
+            if not record.complete or entry is None or entry.id != location.session_entry_id:
+                raise TranscriptChanged()
+            if location.output not in tuple(scope for message in entry.messages
+                                            for scope in message.committed_outputs()):
+                raise TranscriptChanged()
+            return PresentSessionCut(revision, location.session_entry_end)
+
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         return self.cut().publication_revision(root, self, recipient)
 

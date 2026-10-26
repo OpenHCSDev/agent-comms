@@ -307,6 +307,20 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         """The last native byte and assigned message included in this page."""
         return self.through or self.thread.runtime.transcript_cursor(self.wire_frontier, self.records_cut.offset, source=self.runtime)
 
+    def contains_native_prefix(self, current: TranscriptReadIdentity) -> bool:
+        """A current page contains this exact source's certified native prefix.
+
+        Assigned wire messages may advance independently of native output.
+        """
+        return (type(self) is type(current)
+                and self.root == current.root
+                and self.historical_source == current.historical_source
+                and self.runtime == current.runtime
+                and self.thread.incarnation == current.thread.incarnation
+                and self.page_bound.accepts_source(current.page_bound)
+                and self.page_bound.offset <= current.page_bound.offset
+                and self.contains_records_cut(current))
+
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
         return self.records_cut.holds(other.records_cut, self.page_bound.offset)
@@ -508,6 +522,20 @@ class Transcripts:
         identity.require_binding(self, name)
         source = self._page_source(name, identity.page_bound, identity.historical_source)
         return TranscriptRead(self, identity, source)
+
+    def capture_native_output(self, name: str, location) -> TranscriptReadIdentity:
+        page = self._page_source(name, None, None)
+        original = page.records.committed_output_cut(location)
+        frontier = page.projection.frontier
+        through = page.thread.runtime.transcript_cursor(
+            frontier, location.session_entry_end, source=page.runtime,
+        )
+        identity = self._capture_page_identity(
+            page, name, frontier, before=None, after=None, through=through,
+        )
+        if not original.holds(identity.records_cut, location.session_entry_end):
+            raise TranscriptChanged()
+        return identity
 
     def capture_page_read(
         self,
