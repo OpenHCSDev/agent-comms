@@ -128,6 +128,7 @@ async def test_prebegin_busy_keeps_native_socket_for_the_next_fresh_call(
         await Coordination.run_async(path, lambda store: None)
         listener = tool_listener(tmp_path, secrets.token_hex(32))
         server = CodingToolSocket(listener, SlotOwner(), pid=os.getpid())
+        server.turn = object()
         arguments = {"path": str(tmp_path / "read-only-proof")}
         writer = sqlite3.connect(path, isolation_level=None)
         await server.start()
