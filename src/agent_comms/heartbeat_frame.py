@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from collections.abc import Mapping
 import time
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Self
 
 from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.head_review import PullRequestHead
-from typing import TYPE_CHECKING, Self
-
 from agent_comms.held_orders import HeldOrders
 from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
@@ -41,8 +40,8 @@ class HeartbeatFrame(HeldOrders):
         repos = project.repos
         repository = Repo.declaring(repos, PlanPhase.__module__)
         since = time.time() - ClosedUnmergedPullRequest.window
-        closed = {Repo.selected(repos, name.to_wire()): pulls.closed_unmerged(name, since)
-                  for name in project.repository_names()}
+        closed = {repo: pulls.closed_unmerged(repo.github, since)
+                  for repo in project.unique_repositories()}
         reviews = comms.goals.todos.head_reviews_among(
             PullRequestHead(repo.github, pull.number, pull.head)
             for repo, rows in closed.items() for pull in rows)

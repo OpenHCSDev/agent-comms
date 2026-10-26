@@ -813,10 +813,10 @@ class UnmergedListedPullRequest(ListedPullRequest):
         return (self,)
 
     def stuck(self) -> tuple[MergeBlock, ...]:
-        return tuple(block for _ in self.armed_times
-                     for block in (self.merge_blocks or (WaitingMergeBlock(
-                         max((*self.required_times, *self.armed_times))),))
-                     if block.since <= time.time())
+        if not self.armed_times:
+            return ()
+        blocks = self.merge_blocks or (WaitingMergeBlock(max((*self.required_times, *self.armed_times))),)
+        return tuple(block for block in blocks if block.since <= time.time())
 
     @classmethod
     def picked(cls, row: ListedPullRequest) -> tuple[UnmergedListedPullRequest, ...]:
@@ -844,10 +844,6 @@ class ClosedListedPullRequest(ListedPullRequest):
     """Closed without merging; never selected as an open request."""
 
     closed_at: str
-
-    def unlanded(self, reader: WorkBranches) -> tuple[str, ...]:
-        """Git owns patch equivalence, including commits landed under different hashes."""
-        return reader.unlanded(reader.main, self.head)
 
     @cached_property
     def closed_time(self) -> float:
@@ -3991,7 +3987,7 @@ class SupersededHeadVerdict(DecidedHeadVerdict):
     """The commander explicitly drops this exact head in favor of recorded replacement work."""
 
     replacement: str
-    state = "success"
+    state = "failure"
     verb = "Superseded"
 
     def supersedes(self) -> bool:

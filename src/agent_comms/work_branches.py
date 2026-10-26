@@ -9,11 +9,13 @@ worktrees. Nothing here is stored.
 from __future__ import annotations
 
 import subprocess
+from collections import OrderedDict
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property, lru_cache
 from pathlib import Path
+from threading import RLock
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import ConfigDict
@@ -208,6 +210,13 @@ class BranchComparison:
 
 
 @dataclass(frozen=True)
+class CommitComparison:
+    repository: WorkBranches
+    base: str
+    head: str
+
+
+@dataclass(frozen=True)
 class WorkBranches:
     """One repository's branches with commits that main does not have."""
 
@@ -220,6 +229,10 @@ class WorkBranches:
     )
     main: ClassVar[str] = "main"
     timeout: ClassVar[float] = 60.0
+    # Immutable pair answers survive frame readers; the LRU bounds retained old main SHAs.
+    _comparison_capacity: ClassVar[int] = 1024
+    _comparisons: ClassVar[OrderedDict[CommitComparison, tuple[str, ...]]] = OrderedDict()
+    _comparison_lock: ClassVar[RLock] = RLock()
 
     _PULLS: ClassVar[str] = """
 query($owner: String!, $name: String!, $after: String) {
@@ -349,22 +362,109 @@ query($owner: String!, $name: String!, $after: String) {
         )
         return BranchComparison(base_head, head, paths)
 
-    def unlanded(self, base: str, head: str) -> tuple[str, ...]:
-        """Commits whose patches the published base does not hold, not just absent hashes."""
-        (published,) = self.remote_heads('origin', f'refs/heads/{base}')
-        self.require_commits('origin', published, head)
-        # Ask the cheap aggregate question first. Individual patch IDs do not recognize a
-        # squash of several commits, and computing them repeatedly walks the same base history.
-        # No worktree or index is touched; a conflict means the aggregate was not proved landed.
-        merged = Repo._run(self.checkout, 'merge-tree', '--write-tree', published, head,
-                           timeout=self.timeout)
-        if merged.returncode not in (0, 1):
-            raise WorkBranchError(merged.stderr.decode(errors='replace').strip())
+    def unlanded_among(self, heads: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
+        """One patch-ID pass for this frame, preserving each head's shared-ancestry exclusion."""
+        if not heads:
+            return {}
+        (published,) = self.remote_heads('origin', f'refs/heads/{self.main}')
+        requested = {head: CommitComparison(self, published, head) for head in dict.fromkeys(heads)}
+        answers = {}
+        pending = []
+        with self._comparison_lock:
+            for head, key in requested.items():
+                if key in self._comparisons:
+                    answers[head] = self._comparisons[key]
+                    self._comparisons.move_to_end(key)
+                else:
+                    pending.append(head)
+        if pending:
+            computed = self._compare_heads(published, tuple(pending))
+            with self._comparison_lock:
+                for head, answer in computed.items():
+                    self._comparisons[requested[head]] = answer
+                    answers[head] = answer
+                while len(self._comparisons) > self._comparison_capacity:
+                    self._comparisons.popitem(last=False)
+        return answers
+
+    def _compare_heads(self, published: str, heads: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
+        self.require_commits('origin', published, *heads)
+        common = self._git('merge-base', '--octopus', published, *heads).splitlines()
+        graph: dict[str, tuple[str, ...]] = {}
+        for line in self._git('rev-list', '--parents', '--topo-order', published, *heads,
+                              '--not', *common).splitlines():
+            commit, *parents = line.split()
+            graph[commit] = tuple(parents)
+        # Git's topological order lets every vertex derive its ancestry once. Integer
+        # bitsets avoid retaining a separate forest of SHA strings for every closed head.
+        reachable = dict.fromkeys(common, 0)
+        bits: dict[str, int] = {}
+        for index, commit in enumerate(reversed(graph)):
+            bit = 1 << index
+            bits[commit] = bit
+            ancestors = bit
+            for parent in graph[commit]:
+                if parent in reachable:
+                    ancestors |= reachable[parent]
+            reachable[commit] = ancestors
+        main = reachable[published]
+        scope = 0
+        for head in heads:
+            scope |= main ^ reachable[head]
+        commits = tuple(commit for commit, bit in bits.items()
+                        if bit & scope and len(graph[commit]) < 2)
+        patches = self.patch_ids(commits)
+        missing: dict[str, tuple[str, ...]] = {}
+        for head in heads:
+            base_side = main & ~reachable[head]
+            head_side = reachable[head] & ~main
+            landed = frozenset(patch for commit in commits if bits[commit] & base_side
+                               for patch in patches[commit])
+            missing[head] = tuple(commit for commit in commits
+                                  if bits[commit] & head_side and patches[commit] - landed)
         landed_tree = self._git('rev-parse', f'{published}^{{tree}}').strip()
-        if merged.returncode == 0 and merged.stdout.decode().splitlines()[0] == landed_tree:
-            return ()
-        return tuple(line.split()[1] for line in self._git('cherry', published, head).splitlines()
-                     if line.startswith('+ '))
+        # Git's individual patch IDs cannot recognize a multi-commit squash. Batch the
+        # aggregate proofs too: a merge that changes no tree proves the whole change landed.
+        for head, tree in self.merge_trees(published, tuple(head for head, side in missing.items() if side)).items():
+            if tree == landed_tree:
+                missing[head] = ()
+        return missing
+
+    def merge_trees(self, base: str, heads: tuple[str, ...]) -> dict[str, str]:
+        """Decode Git's NUL-framed batch protocol once; only resolved trees are proofs."""
+        resolved: dict[str, str] = {}
+        if heads:
+            fields = iter(self._git('merge-tree', '--write-tree', '--stdin', '--no-messages',
+                                    '--name-only', '-z',
+                                    input=''.join(f'{base} {head}\n' for head in heads)).split('\0'))
+            for head in heads:
+                status, tree = next(fields), next(fields)
+                if status not in ('0', '1'):
+                    raise WorkBranchError(f'Unknown merge-tree result {status!r}.')
+                for path in fields:
+                    if not path:
+                        break
+                else:
+                    raise WorkBranchError('Unterminated merge-tree path list.')
+                if status == '1':
+                    resolved[head] = tree
+            if any(fields):
+                raise WorkBranchError('Unexpected trailing merge-tree records.')
+        return resolved
+
+    def patch_ids(self, commits: tuple[str, ...]) -> dict[str, frozenset[str]]:
+        """Decode Git's patch fingerprints once; an empty commit has an empty set of patches."""
+        patches: dict[str, frozenset[str]] = {commit: frozenset() for commit in commits}
+        if commits:
+            fingerprints = Repo.git_pipeline(self.checkout,
+                ('diff-tree', '--stdin', '--root', '-r', '-p', '--full-index', '--no-color',
+                 '--no-renames', '--no-ext-diff', '--no-textconv'),
+                ('patch-id', '--stable'), timeout=self.timeout,
+                input=''.join(f'{commit}\n' for commit in commits))
+            for line in fingerprints.splitlines():
+                patch, commit = line.split()
+                patches[commit] = frozenset((patch,))
+        return patches
 
     def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
         """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""

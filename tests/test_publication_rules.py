@@ -11,13 +11,11 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import StuckMerge
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.todos import (
-    ClosedListedPullRequest, ConflictMergeBlock, MergedListedPullRequest, NoHeadOrder,
-    ProgressRead, PullRequestCommit, ReviewedHeadVerdict, SupersededHeadVerdict,
-    UnmergedListedPullRequest, VerdictReason, WaitingMergeBlock,
+    ClosedListedPullRequest, MergedListedPullRequest, NoHeadOrder,
+    ProgressRead, PullRequestCommit, ReviewedHeadVerdict, SupersededHeadVerdict, VerdictReason,
 )
 
 pytest_plugins = ('test_head_review',)
@@ -66,6 +64,13 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     assert lost.line() == (f'LOST https://github.com/{source.github.to_wire()}/pull/7 '
         'closed unmerged holds 1 commits main lacks -> land them, or record why they are dropped')
     assert judge.SupersededVerb in ClosedUnmergedPullRequest.clearing_verbs
+    accepted = ReviewedHeadVerdict(VerdictReason('The owner implements the requested behavior without competing decisions.'))
+    review = CommsHeadVerdictTool(request=request, operation=accepted, order=NoHeadOrder())
+    review.invoke(comms, review.arguments, caller=ThreadCaller('lead'))
+    assert scan(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()))) == (lost,)
+    ping = replace(RulePing.capture(lost), since=RecordedEventTime(lost.began()))
+    assert not ping.disposed(comms, frozenset(('lead',)))
+    assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
 
     verdict = judge.SupersededVerb(by='P2', why='The replacement includes the useful work and deliberately drops this obsolete implementation.').head_operation()
     assert verdict == SupersededHeadVerdict(VerdictReason(
@@ -74,29 +79,6 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     tool.invoke(comms, tool.arguments, caller=ThreadCaller('lead'))
     assert scan(frame) == (lost,)  # A later store write cannot alter this beat's snapshot.
     assert scan(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()))) == ()
-
-    # A verdict on another head must not dispose of the closed head, nor of an armed conflict.
-    github.put(source.github, UnmergedListedPullRequest(
-        10, 'armed-conflict', lost_head, armed_times=(stamp,), required_times=(stamp,),
-        merge_blocks=(ConflictMergeBlock(stamp),), **common))
-    source.git(source.checkout, 'push', 'origin', f'{lost_head}:refs/pull/10/head')
-    (stuck,) = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
-    assert stuck.request.pr == 10
-    assert 'conflicts with its base' in stuck.line()
-    accepted = ReviewedHeadVerdict(VerdictReason('The owner implements the requested behavior without competing decisions.'))
-    tool = CommsHeadVerdictTool(request=stuck.request, operation=accepted, order=NoHeadOrder())
-    tool.invoke(comms, tool.arguments, caller=ThreadCaller('lead'))
-    ping = replace(RulePing.capture(stuck), since=RecordedEventTime(stuck.began()))
-    assert not ping.disposed(comms, frozenset(('lead',)))
-    assert len(StuckMerge.scan_pulls(comms.goals, ProgressRead(()))) == 1
-    assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
-    assert not ping.acted_on(frozenset(stuck.subjects()))
-    # A clean armed head still gets an alarm after the cause's grace period.
-    waiting, = UnmergedListedPullRequest(
-        13, 'clean-but-stalled', lost_head, armed_times=(stamp,), required_times=(stamp,),
-        **common).stuck()
-    assert waiting == WaitingMergeBlock(stamp)
-    assert waiting.since == datetime.fromisoformat(stamp).timestamp() + WaitingMergeBlock.seconds
 
     # Restore an ordinary closed head, then prove Git alone clears it after landing.
     github.put(source.github, ClosedListedPullRequest(

@@ -161,10 +161,20 @@ class Repo(GitLaunch, BaseModel, WireValue):
                   input: str = "") -> bytes:
         """Git's exact output, for answers sized in bytes (``cat-file --batch``); every
         failure a GitCommandError."""
-        run = cls._run(checkout, *args, timeout=timeout, input=input.encode())
+        return cls._output(checkout, cls._run(checkout, *args, timeout=timeout, input=input.encode()))
+
+    @staticmethod
+    def _output(checkout: Path | str, run: subprocess.CompletedProcess[bytes]) -> bytes:
+        """The shared failure boundary for captured and streamed Git answers."""
         if run.returncode:
             raise GitCommandError(str(checkout), run)
         return run.stdout
+
+    @classmethod
+    def git_pipeline(cls, checkout: Path | str, producer: tuple[str, ...], consumer: tuple[str, ...],
+                     *, timeout: float = 60, input: str = '') -> str:
+        return cls._output(checkout, cls._pipe(checkout, producer, consumer,
+                           timeout=timeout, input=input.encode())).decode()
 
     @classmethod
     def git(cls, checkout: Path | str, *args: str, timeout: float = 60, input: str = "") -> str:

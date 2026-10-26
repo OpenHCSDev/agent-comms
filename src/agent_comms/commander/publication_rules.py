@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.field_codec import OrderId, PathText
-from agent_comms.standing_rules import DatedStandingRule, UnlandedHeadLine, HeldBranch, HeldBranchRule
+from agent_comms.standing_rules import DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule
+from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.head_review import PullRequestHead
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink
@@ -72,7 +73,7 @@ class EmptyPullRequest(HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class ClosedUnmergedPullRequest(UnlandedHeadLine, DatedStandingRule):
+class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
     """Closing a request does not land its patches or authorize throwing them away."""
 
     request: PullRequestHead
@@ -83,18 +84,21 @@ class ClosedUnmergedPullRequest(UnlandedHeadLine, DatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return tuple(
-            cls(request, pull.closed_time, missing)
-            for repo, rows in frame.closed_pulls.items()
-            for reader in (WorkBranches(repo.checkout),)
-            for pull in rows
-            for request in (PullRequestHead(repo.github, pull.number, pull.head),)
-            if not any(review.verdict.supersedes() for review in frame.head_reviews[request])
-            for missing in (pull.unlanded(reader),) if missing
-        )
+        found = []
+        for repo, rows in frame.closed_pulls.items():
+            remaining = tuple(pull for pull in rows if not any(review.verdict.supersedes()
+                for review in frame.head_reviews[PullRequestHead(repo.github, pull.number, pull.head)]))
+            patches = WorkBranches(repo.checkout).unlanded_among(tuple(pull.head for pull in remaining))
+            found.extend(cls(request=PullRequestHead(repo.github, pull.number, pull.head),
+                             closed_at=pull.closed_time, commits=missing)
+                         for pull in remaining for missing in (patches[pull.head],) if missing)
+        return tuple(found)
 
     def began(self) -> float:
         return self.closed_at
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (UnlandedHeadSubject(self.request),)
 
     def command_values(self) -> Mapping[str, str]:
         return {'pr': str(self.request.pr), 'head': self.request.head,

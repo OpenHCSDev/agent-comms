@@ -23,7 +23,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
-    AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject, UnlandedHeadSubject,
+    AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
 )
 from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
@@ -327,13 +327,6 @@ class HeadLine(StandingRule, declared_name=None):
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         return (HeadSubject(self.request),)
-
-
-class UnlandedHeadLine(HeadLine, declared_name=None):
-    """A review answers an edit; only landing or explicit supersession ends unlanded work."""
-
-    def subjects(self) -> tuple[HeartbeatSubject, ...]:
-        return (UnlandedHeadSubject(self.request),)
 
 
 class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=None):
@@ -781,7 +774,7 @@ class OrderlessUnreviewedHead(UnreviewedHead):
 
 
 @dataclass(frozen=True)
-class StuckMerge(UnlandedHeadLine, DatedStandingRule):
+class StuckMerge(HeadLine, DatedStandingRule):
     """An armed head GitHub will not merge: approved, queued and going nowhere. One line per
     head, naming every block on it."""
     request: PullRequestHead
