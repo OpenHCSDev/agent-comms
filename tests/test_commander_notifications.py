@@ -5,7 +5,8 @@ import os
 import pickle
 import time
 from contextlib import nullcontext
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from multiprocessing import Pipe
 
 import pytest
 
@@ -24,7 +25,8 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model import observation
-from agent_comms.ui_model.observation import CommanderHudObserved, ObserveCommanderHud
+from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
+from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import (
     AwaitingApplicationRun, NoPendingClock, PendingClock, Stuck, UnitState,
@@ -38,7 +40,10 @@ pytest_plugins = ("test_holder_standing_rules",)
 
 
 @pytest.fixture
-def notification_bus(held_bus, installed_runtime):
+def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
+    # This private bus has no account server. Exercise the actual unavailable
+    # endpoint rather than querying the operator's live account on every beat.
+    monkeypatch.setattr(CodexConnection, "CONTROL_SOCKET", tmp_path / "no-account.sock")
     lead = held_bus.registry.require("lead")
     held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
     CommanderHeartbeat.register(held_bus.registry)
@@ -62,6 +67,7 @@ def beat(comms, rules=(), *, states=()):
         comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states))
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     CommanderHeartbeat().pass_body(comms, (frame,))
+    return frame.hud
 
 
 def test_failed_heartbeat_pass_messages_commander_and_still_raises(notification_bus):
@@ -297,6 +303,7 @@ def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
     comms = notification_bus
     frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
     states = UnitState.current(comms, "lead", frame)
+    @dataclass(frozen=True)
     class FailedScan(UndatedStandingRule):
         @classmethod
         def scan_observed(cls, comms, commander, observed, frame):
@@ -314,13 +321,23 @@ def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_
     comms = notification_bus
     states = state_cards(comms, UnitState)
     reading = ObserveCommanderHud().observation()
-    beat(comms, states=states)
-    observed, = reading.read(comms, comms.views.revision())
-    # The result crosses the observation process boundary by pickle.
-    assert pickle.loads(pickle.dumps(observed)).huds == (lead_hud(comms, states),)
-    assert not list(reading.read(comms, comms.views.revision()))
-    beat(comms, states=states)
-    assert isinstance(next(reading.read(comms, comms.views.revision())), CommanderHudObserved)
+    expected = beat(comms, states=states)
+    client, observer = Pipe()
+    with client, observer:
+        service = ObservationService(comms, observer)
+        try:
+            reading.step(service, comms.views.revision())
+            assert client.poll()
+            assert client.recv().huds == (expected,)
+            reading.step(service, comms.views.revision())
+            assert not client.poll()
+            beat(comms, states=states)
+            reading.step(service, comms.views.revision())
+            assert client.poll()
+            assert isinstance(client.recv(), CommanderHudObserved)
+        finally:
+            reading.close()
+            service.retire()
 
 
 def test_a_frame_this_reader_cannot_decode_reaches_the_page_not_the_observer(notification_bus):
