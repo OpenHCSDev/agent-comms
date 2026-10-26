@@ -26,11 +26,27 @@ if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import Serve
 
 
-class SessionRefusedError(ValueError):
+class SessionFailure(Exception):
+    """A session command failed; it does not declare the serving process dead."""
+
+
+class SessionRefusedError(ValueError, SessionFailure):
     """A session endpoint rejected the control request, not malformed wire data."""
 
 
-class NoSessionBridge(RuntimeError):
+class SessionCommandError(RuntimeError, SessionFailure):
+    """A session command could not complete."""
+
+
+class SessionRequestTimeout(SessionCommandError):
+    """The request's declared reply budget expired."""
+
+
+class SessionConnectionClosed(SessionCommandError):
+    """The peer closed before a required reply or startup probe."""
+
+
+class NoSessionBridge(SessionCommandError):
     """No bridge holds this claim: nothing is delivered until connect starts one."""
 
     def __init__(self, session: str) -> None:
@@ -223,7 +239,7 @@ class WatchState(ABC):
 
 class UnclaimedWatch(WatchState):
     def rearm(self, launch: Callable[[], None]) -> None:
-        raise NoSessionBridge('Enroll this session before starting its Monitor')
+        raise SessionCommandError('Enroll this session before starting its Monitor')
 
 
 @dataclass(frozen=True)

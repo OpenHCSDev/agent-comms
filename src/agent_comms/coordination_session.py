@@ -50,7 +50,7 @@ class NativeCapture(ExitStack, StoredBusReader):
         try:
             self.activity = self.activity_clocks()
             store = self.bus._registry.store
-            with self.measurements.operation("file_exclusion"), self.read_guard(store.path):
+            with self.measurements.operation("file_exclusion"), store.guarded_read():
                 self.privacy = store.private_guard_unlocked()
                 source = store._capture_unlocked()
                 self.registry_revision = source.revision, FileRevision.capture(store.guard_path)
@@ -72,7 +72,7 @@ class NativeBoundary(NativeCapture):
         A registry write after the copy refuses the write, naming the change.
         """
         store = self.bus._registry.store
-        with self.read_guard(store.path):
+        with store.guarded_read():
             if store.revision_unlocked() != self.registry_revision:
                 raise StaleFence(
                     "native registry revision changed after this decision read it")
