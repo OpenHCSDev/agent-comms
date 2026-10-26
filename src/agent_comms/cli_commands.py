@@ -80,6 +80,7 @@ from .commander.config import (
 )
 from .comms import Comms
 from .config_options import (
+    CatalogSelection,
     ConfigOptions,
     ModelConfigOption,
     ThinkingLevelConfigOption,
@@ -105,7 +106,6 @@ from .field_codec import (
     Catalog,
     Editor,
     EditorFormat,
-    FactoryArgumentDefault,
     FieldCodec,
     FieldPlan,
     Multiline,
@@ -154,7 +154,7 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
-from .repo import Checkout, CheckoutStart, GitCommandError, Repo
+from .repo import Checkout, CheckoutStart, GitCommandError, LaunchCheckout, Repo
 from .repository_name import RepositoryName
 from .storage_rules import OrderCheckoutAllocation, RepositoryCheckoutAllocation, StorageProjection, StorageRule
 from .shell_effects import CheckoutStorageEffect, CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect
@@ -402,7 +402,7 @@ class TargetSelection(ABC):
 
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
-            *, confirmed: bool, channel: ChannelSelection, project: str,
+            *, confirmed: bool, channel: ChannelSelection, project: Checkout,
             snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         """Bind, authorize and apply the declaration on this selection."""
 
@@ -415,12 +415,12 @@ class OneTarget(TargetSelection):
         if len(self.targets) != 1:
             raise ValueError('This action requires a single target')
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
                          for bound in declaration.bindings(comms, name, context, snapshot=snapshot,
-                                                           catalog=catalog, resolved=resolved))
+                                                           project=project, catalog=catalog, resolved=resolved))
         if len(bindings) == 1:
             bound = bindings[0].for_editor(comms, name.name, project).edited(arguments)
             return bound.with_confirmation(confirmed).apply(comms)
@@ -451,7 +451,7 @@ class TargetBatch(TargetSelection):
     def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
         return member.catalog_declaration()
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         declaration.require_batch()
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
                               if member.catalog_declaration() is declaration)
@@ -470,7 +470,7 @@ class TargetBatch(TargetSelection):
                 try:
                     bindings = tuple(command for member in declarations
                                      for command in member.bindings(comms, name, context,
-                                                                   snapshot=snapshot, catalog=catalog, resolved=resolved))
+                                                                   project=project, snapshot=snapshot, catalog=catalog, resolved=resolved))
                     if not bindings:
                         scope = f' in {context}' if context is not None else ''
                         raise CommandSelectionChanged(f'This action is no longer available for {name}{scope}')
@@ -489,7 +489,7 @@ class TargetBatch(TargetSelection):
                 current_catalog = (comms.channels.catalog.read()
                                    if context or name.needs_channel_state else None)
                 if bound_command not in type(bound_command).bindings(
-                        comms, name, context, snapshot=current, catalog=current_catalog,
+                        comms, name, context, project=project, snapshot=current, catalog=current_catalog,
                         resolved=name.resolve(current, comms.bus.require_channel)):
                     scope = f' in {context}' if context is not None else ''
                     raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
@@ -523,7 +523,7 @@ class TargetEdit(Command[Comms, CliResult]):
     arguments: dict[str, str | None]
     confirmed: bool = False
     channel: ChannelSelection = NoChannel()
-    project: str | None = None
+    project: Checkout = dataclasses.field(kw_only=True)
 
     def apply(self, ctx: Comms) -> CliResult:
         arguments = self.declaration.editor_arguments(self.arguments)
@@ -850,9 +850,7 @@ class ThreadArgument:
 
 @dataclass(frozen=True, kw_only=True)
 class WorktreeArgument:
-    worktree: Annotated[str, Argument(flags=("--worktree",))] = (
-        dataclasses.field(default_factory=os.getcwd)
-    )
+    worktree: Annotated[Checkout, Argument(flags=("--worktree",))]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -918,24 +916,24 @@ class CliCommand[Answer: CliResult = CliResult](
         return ()
 
     @classmethod
-    def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> tuple[Self, ...]:
         return ()
 
     @classmethod
     def bindings(cls, comms: Comms, target: CommandTarget, channel: str | None = None,
-                 *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
+                 *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
                  resolved) -> tuple[Self, ...]:
         return target.bindings(
-            cls, comms, channel, resolved, snapshot=snapshot, catalog=catalog)
+            cls, comms, channel, resolved, project=project, snapshot=snapshot, catalog=catalog)
 
     @classmethod
     def target_catalog(cls, comms: Comms, target: TargetSelection,
                        channel: ChannelSelection = NoChannel(),
-                       *, project: str) -> tuple[TargetAction, ...]:
+                       *, project: Checkout) -> tuple[TargetAction, ...]:
         selected = target.targets
         # A catalog is one observation. Declarations borrow its original store
         # resources; execution still acquires and rebinds current state.
@@ -954,7 +952,7 @@ class CliCommand[Answer: CliResult = CliResult](
             for name, resolved in resolved_targets:
                 for context in name.contexts(member, selected_channels):
                     available = member.bindings(
-                        comms, name, context, snapshot=snapshot, catalog=catalog, resolved=resolved)
+                        comms, name, context, project=project, snapshot=snapshot, catalog=catalog, resolved=resolved)
                     if available:
                         declaration = target.listed_declaration(member)
                         grouped.setdefault(declaration, {}).update(dict.fromkeys(
@@ -964,7 +962,7 @@ class CliCommand[Answer: CliResult = CliResult](
                                   channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
 
-    def for_editor(self, comms: Comms, target: str, project: str) -> Self:
+    def for_editor(self, comms: Comms, target: str, project: Checkout) -> Self:
         return self
 
     @property
@@ -980,7 +978,7 @@ class CliCommand[Answer: CliResult = CliResult](
         catalogs = ConfigOptions.configured()
         return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
 
-    def describe(self, comms: Comms, target: CommandTarget, project: str) -> TargetAction:
+    def describe(self, comms: Comms, target: CommandTarget, project: Checkout) -> TargetAction:
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
@@ -1041,7 +1039,7 @@ class CliCommand[Answer: CliResult = CliResult](
     def execute_target(cls, comms: Comms, target: TargetSelection, arguments: dict[str, object],
                        *, confirmed: bool = False,
                        channel: ChannelSelection = NoChannel(),
-                       project: str | None = None) -> CliResult:
+                       project: Checkout) -> CliResult:
         if not cls.channel_fields():
             channel.require_unbound()
             channel = NoChannel()
@@ -1049,7 +1047,7 @@ class CliCommand[Answer: CliResult = CliResult](
         catalog = (comms.channels.catalog.read()
                    if channel.needs_catalog or any(item.needs_channel_state for item in target.targets) else None)
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
-                             project=os.getcwd() if project is None else project,
+                             project=project,
                              snapshot=snapshot, catalog=catalog)
 
 
@@ -1731,7 +1729,7 @@ class ThreadCliCommand(NameArgument, CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class RegisterCliCommand(NameArgument, CliCommand):
     help = "Register a thread"
-    worktree: Annotated[str, Argument(flags=("--worktree",))]
+    worktree: Annotated[Checkout, Argument(flags=("--worktree",))]
     tags: Annotated[
         frozenset[str],
         Normalize(_tags),
@@ -2209,7 +2207,7 @@ class NamedThreadCliCommand(ThreadBoundCliCommand, NamedCliCommand):
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> tuple[Self, ...]:
         return tuple(bound for member in cls.channel_members(resolved)
                      for bound in cls.thread_bindings(
                          comms, member.thread, member.status, resolved.channel.name, catalog=catalog))
@@ -2320,7 +2318,7 @@ class DeleteCliCommand(NameArgument, CliCommand, declared_name="delete"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class NewThreadCliCommand(NameArgument, CliCommand, declared_name="new"):
+class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_name="new"):
     help = "Create a new pi thread"
     spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
     task: Annotated[
@@ -2333,10 +2331,8 @@ class NewThreadCliCommand(NameArgument, CliCommand, declared_name="new"):
         Argument(flags=("--tags",)),
     ] = InheritedTags()
     project: Annotated[
-        str,
-        Argument(
-            flags=("--project",), default=FactoryArgumentDefault(os.getcwd)
-        ),
+        Checkout,
+        Argument(flags=("--project",)),
     ]
     model: Annotated[
         ThreadModel, Catalog(ModelConfigOption), Argument(flags=("--model",)),
@@ -2348,15 +2344,21 @@ class NewThreadCliCommand(NameArgument, CliCommand, declared_name="new"):
     ] = NativeThreadDefaults.thinking_level
 
     @classmethod
-    def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
         defaults = NativeThreadDefaults()
         return (cls(name='', project=project, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 
+    @property
+    def project_path(self) -> Path:
+        return self.project.path
+
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
+        spec = self.spec_type.from_task(**{
+            **{item.name: getattr(self, item.name) for item in fields(self.spec_type)},
+            'project': LaunchCheckout.checked(self.project.path),
+        })
         asyncio.run(ConfigOptions.configured().validate(self))
-        spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)
-                                           for item in fields(self.spec_type)})
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.process_identity)
 
@@ -2370,7 +2372,7 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
     ]
 
     @classmethod
-    def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
         return ()
 
     @classmethod
@@ -2538,9 +2540,7 @@ class TurnDiffContextCliCommand(SelectedContextCliCommand, DiffContextCliCommand
 
 @dataclass(frozen=True, kw_only=True)
 class TargetArguments(CliCommand):
-    project: Annotated[str, Argument(flags=("--project",))] = dataclasses.field(
-        default_factory=os.getcwd
-    )
+    project: Annotated[Checkout, Argument(flags=("--project",))]
     channel: Annotated[SurroundingChannel, Argument(flags=("--channel",))] = NoChannel()
     target: Annotated[
         tuple[str, ...],
@@ -2628,7 +2628,7 @@ class ExactTagCliCommand(NamedCliCommand):
         return cls(name=name)
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls.for_tag(resolved.channel.name.removeprefix('#')),) if resolved.channel.exact else ()
 
 
@@ -2692,7 +2692,7 @@ class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="
         return ArchiveCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls(name=resolved.channel.name),) if resolved.channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self):
@@ -2720,7 +2720,7 @@ class DeleteViewCliCommand(NamedCliCommand, declared_name="delete-view"):
     help = "Delete saved view"
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return resolved.channel.delete_view_bindings(cls)
 
     def confirmation(self):
@@ -2743,7 +2743,7 @@ class PinChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-
         return PinThreadCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls(name=resolved.channel.name, pinned=not resolved.channel.pinned),) if resolved.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
@@ -2758,7 +2758,7 @@ class ChannelActivityCliCommand(NamedCliCommand, declared_name="channel-activity
     ] = False
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls(name=resolved.channel.name, enabled=not resolved.channel.any_mode),) if resolved.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
@@ -2773,7 +2773,7 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
         declaration = CliCommand.member_named(self.operation)
         return TargetEdit(declaration,
                           declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,
-                          self.confirmed, self.channel, self.project).apply(ctx)
+                          self.confirmed, self.channel, project=self.project).apply(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2783,18 +2783,18 @@ class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-targ
         str, TargetBound(), Argument(flags=("--target",))
     ]
     worktree: Annotated[
-        str, TargetBound(), Argument(flags=("--worktree",))
-    ] = dataclasses.field(default_factory=os.getcwd)
+        Checkout, TargetBound(), Argument(flags=("--worktree",))
+    ]
 
     @classmethod
     def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
-        return (cls(target=thread.name),)
+        return (cls(target=thread.name, worktree=thread.worktree),)
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
-        return (cls(target=resolved.channel.name),)
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+        return (cls(target=resolved.channel.name, worktree=project),)
 
-    def for_editor(self, comms: Comms, target: str, project: str) -> Self:
+    def for_editor(self, comms: Comms, target: str, project: Checkout) -> Self:
         return replace(self, worktree=project)
 
     def apply(self, ctx: Comms) -> TargetReadResult:

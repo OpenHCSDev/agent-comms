@@ -5,6 +5,7 @@ status is controlled; UI, registry, source, ACP and native processes remain real
 under Textual Pilot; external st/Linux entrypoint acceptance is a separate gate.
 """
 
+from agent_comms.repo import Checkout
 from agent_comms.lifecycle_capability import Deferred
 from bus_history import read_history
 from conftest import publish_initial
@@ -50,8 +51,8 @@ class InstalledApp(ToadApp):
     CSS_PATH = files('toad').joinpath('toad.tcss')
 
 async def prepare(comms, project, *_):
-    comms.registry.declare(Thread('history-sender', frozenset(), str(project)))
-    comms.registry.declare(Thread('history-recipient', frozenset(), str(project)))
+    comms.registry.declare(Thread('history-sender', frozenset(), Checkout(project)))
+    comms.registry.declare(Thread('history-recipient', frozenset(), Checkout(project)))
     for index in range(220):
         publish_initial(comms, 'history-sender', 'history-recipient',
             f'Original retained source {index}: ' + 'history '*250)
@@ -72,7 +73,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     await until(pilot, lambda: not comms.registry.require('beta').executing)
     assert len(requests) == 1
     (evidence/'first-reply.svg').write_text(app.export_screenshot())
-    user = comms.messaging.user_identity(str(agent.project_root_path)).name
+    user = comms.messaging.user_identity(Checkout(agent.project_root_path)).name
     await channel_target('#team').open(NavigationContext(app, mode, agent.project_root_path, user))
     await app.selected_session.wait_content_ready()
     channel = app.selected_session.query_one(CommsChatView)

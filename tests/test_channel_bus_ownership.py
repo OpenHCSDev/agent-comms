@@ -1,5 +1,6 @@
 """Channel membership and notifications have one canonical bus authority."""
 
+from agent_comms.repo import Checkout
 from contextlib import AsyncExitStack
 from dataclasses import replace
 
@@ -25,7 +26,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     comms.registry.declare(
         replace(comms.registry.require("beta"), tags=frozenset({"team", "extra"}))
     )
-    message = comms.messaging.send_user_message(CommandTarget.named('#team'), "current membership", worktree=str(root))
+    message = comms.messaging.send_user_message(CommandTarget.named('#team'), "current membership", worktree=Checkout(root))
     initial = comms.bus.bus.delivery(message.seq)
     assert [row.canonical_thread for row in initial.recipients] == ["beta"]
     assert all(isinstance(decision.wake_mode, BoundedTriageWake) for decision in initial.decisions)

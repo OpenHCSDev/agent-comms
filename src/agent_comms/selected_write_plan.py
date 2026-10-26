@@ -34,6 +34,7 @@ from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
+from .repo import Checkout
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
@@ -88,12 +89,12 @@ class AcceptedWriteIntent(SelectedWriteIntent, declared_name="accepted"):
     def require_accepted(self):
         return self
 
-    def planned(self, worktree: str) -> PlannedWrite:
+    def planned(self, worktree: Checkout) -> PlannedWrite:
         raw = base64.b64decode(self.contents_b64, validate=True)
         if not raw or len(raw) > _MAX_BYTES or hashlib.sha256(raw).hexdigest() != self.digest:
             raise IdentityConflict("Selected write intent bytes are corrupt")
         resource = ExistingFileClaim(Path(self.resource))
-        resource.normalized(Path(worktree))
+        resource.normalized(worktree.path)
         return PlannedWrite(resource, raw, self.operation_id)
 
     def applied(self):
@@ -196,7 +197,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")
-            path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))
+            path = ExistingFileClaim(Path(resource)).normalized(owner.worktree.path)
             self._prepare_dir()
             record_path = self.path_in(self.directory, source_seq=str(source_seq), lookup=lookup)
             operation_id = ClaimId.mint()

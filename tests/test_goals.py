@@ -1,5 +1,6 @@
 """Persistent goal ownership, continuation, and stale-worker protection."""
 
+from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.comms import wire
@@ -53,11 +54,11 @@ def test_reported_turn_states_preserve_existing_wire_values():
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(
             comms.registry.require('worker'), NextTurnConfiguration(model=ChosenModel(DeclaredModel('test/model'))))
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
     restored = wire(tmp_path).registry.require("worker")
@@ -88,7 +89,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
 
 def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
 
     def stored() -> Thread:
         return wire(tmp_path).registry.require("worker")
@@ -100,7 +101,7 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
         context = thread.wake_context(comms.goals)
         assert isinstance(context.current_goal, NoWakeGoalContext)
         assert FieldCodec.encode(context)["current_goal"] is None
-        assert thread.task_scope == TurnTaskScope(project=str(tmp_path))
+        assert thread.task_scope == TurnTaskScope(project=Checkout(tmp_path))
         with pytest.raises(RelationViolationError):
             thread.goal.require()
 
@@ -118,21 +119,21 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
         "text": "Ship the release", "status": {"kind": "active"}, "progress": goal.progress,
     }
     scope = thread.task_scope
-    assert scope == GoalTaskScope(project=str(tmp_path), goal=goal.revision_key)
+    assert scope == GoalTaskScope(project=Checkout(tmp_path), goal=goal.revision_key)
     scope.require_context(thread)
     comms.goals.update_goal("worker", ClearGoalAction())
     absent(stored())
     with pytest.raises(RelationViolationError):
         scope.require_context(stored())
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="Ship the patch"))
-    assert stored().task_scope == GoalTaskScope(project=str(tmp_path), goal=replacement.revision_key)
+    assert stored().task_scope == GoalTaskScope(project=Checkout(tmp_path), goal=replacement.revision_key)
     with pytest.raises(RelationViolationError):
         scope.require_context(stored())
 
 
 def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, monkeypatch):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
     comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
@@ -163,7 +164,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
 
 def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
         tool

@@ -102,7 +102,7 @@ class SelectedExecution(NativeExecution):
         try:
             NativeSessionFiles.require_private_directory(self.root)
             owner = wire(self.root).registry.require(self.owner_name)
-            if not Path(owner.worktree).is_dir():
+            if not owner.worktree.path.is_dir():
                 raise ValueError("registered participant worktree is unavailable")
             directory = owner.native_session_directory(self.root)
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)

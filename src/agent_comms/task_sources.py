@@ -14,6 +14,7 @@ from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
 from .projection_source import ProjectionSource
+from .repo import Checkout
 from .thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
@@ -42,10 +43,10 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class TaskScope(DeclaredFamily, affix="TaskScope"):
-    project: str
+    project: Checkout
 
     @classmethod
-    def for_goal(cls, project: str, goal: GoalDeclaration) -> TaskScope:
+    def for_goal(cls, project: Checkout, goal: GoalDeclaration) -> TaskScope:
         return goal.active().task_scope(TurnTaskScope(project=project))
 
     def with_goal(self, goal: GoalRevision) -> TaskScope:

@@ -1,4 +1,6 @@
 """Original authored ingress and neutral historical evidence share one input store."""
+from pathlib import Path
+from agent_comms.repo import Checkout
 from agent_comms.controller import Controller, SessionUpdateSink
 
 from agent_comms.channel_targets import CommandTarget
@@ -187,7 +189,7 @@ async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidat
     fact = origin.retained_fact(authored)
     owner = comms.registry.require("beta")
     assert fact.for_owner(owner, comms.registry.snapshot()) == CurrentHumanInputTaskFact(authored)
-    changed = replace(owner, worktree="/another/project")
+    changed = replace(owner, worktree=Checkout(Path("/another/project")))
     assert fact.for_owner(changed, comms.registry.snapshot()) == HumanInputTaskFact(authored)
     routed = replace(restored, origin=WireInputOrigin(
         origin.root_id, MessageReference(1, MessageId.mint("original-id"))))
@@ -263,6 +265,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
 
     comms, agent = live_owner
     origin = capture(comms)
+    worktree = comms.registry.require('beta').worktree
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
     async with QueuedInput.reserve(
         agent.inputs, "beta", "beta", text=exact, prompt=exact,
@@ -274,7 +277,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     row = stored_inputs(inputs.root).lookup(queued.key)
     original_inputs = inputs.path.read_bytes()
     subject = row.context_provenance()
-    pin = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
+    pin = comms.messaging.pin_input_constraint('beta', subject, worktree=worktree)
     assert isinstance(pin.role, NoticeRole) and not pin.role.response_policy(pin).starts_turn and exact not in pin.body
     assert 'source_turn' not in FieldCodec.encode(pin.task)
     assert FieldCodec.decode(type(pin), FieldCodec.encode(pin)) == pin
@@ -295,22 +298,22 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
         wire_only = RetainedTaskFacts.capture(source, snapshot.require('beta').incarnation).facts
     with pytest.raises(RelationViolationError):
         RetainedTaskFacts(wire_only).for_owner(snapshot.require('beta'), snapshot)
-    repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
+    repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=worktree)
     assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (Message.from_message(repeated),)
     before = comms.bus.bus.revision()
-    comms.registry.declare(Thread('unaddressed', frozenset(), origin.project))
+    comms.registry.declare(Thread('unaddressed', frozenset(), worktree))
     with pytest.raises(RelationViolationError):
-        comms.messaging.pin_input_constraint('unaddressed', subject, worktree=origin.project)
+        comms.messaging.pin_input_constraint('unaddressed', subject, worktree=worktree)
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint(
-            'beta', replace(subject, key=AcpInputKey(InputId.mint())), worktree=origin.project)
+            'beta', replace(subject, key=AcpInputKey(InputId.mint())), worktree=worktree)
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('beta', replace(subject, origin=replace(origin, root_id='f'*32)),
-                                             worktree=origin.project)
+                                             worktree=worktree)
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint(
             'beta', WireProvenance(MessageReference(1, MessageId.mint('not-input'))),
-            worktree=origin.project)
+            worktree=worktree)
     assert comms.bus.bus.revision() == before
     assert inputs.path.read_bytes() == original_inputs
 
@@ -322,7 +325,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
         second = reservation.item
         reservation.release()
     second_subject = stored_inputs(inputs.root).lookup(second.key).context_provenance()
-    second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=origin.project)
+    second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=worktree)
     assert second_subject != subject
     assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (
         Message.from_message(repeated), Message.from_message(second_pin),
@@ -332,13 +335,13 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     assert row.matches_owner(owner.incarnation)
     assert not row.matches_owner(replace(owner.incarnation, created_at=owner.created_at + 1))
     assert captured(owner.name).original_text_source(second_pin.reference) == stored_inputs(inputs.root).lookup(second.key)
-    revised = comms.messaging.send_user_message(CommandTarget.named(owner.name), 'Exact human correction.', worktree=origin.project,
+    revised = comms.messaging.send_user_message(CommandTarget.named(owner.name), 'Exact human correction.', worktree=worktree,
         task=UserTaskSupersession(CorrectionTaskChange(repeated.reference)))
     current = captured(owner.name)
     assert current.current_authored_sources(owner, comms.registry.snapshot()) == (
         Message.from_message(revised), Message.from_message(second_pin),
     )
-    comms.messaging.send_user_message(CommandTarget.named(owner.name), 'Drop the second original.', worktree=origin.project,
+    comms.messaging.send_user_message(CommandTarget.named(owner.name), 'Drop the second original.', worktree=worktree,
         task=UserTaskDrop(CorrectionTaskChange(second_pin.reference)))
     assert captured(owner.name).current_authored_sources(owner, comms.registry.snapshot()) == (Message.from_message(revised),)
     assert stored_inputs(inputs.root).lookup(row.key) == row

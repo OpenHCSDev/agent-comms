@@ -260,7 +260,7 @@ class CatalogQuery(NativeQuery):
     @asynccontextmanager
     async def catalog(
         self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage,
-        worktree: Path | None = None, root: Path | str | None = None,
+        worktree: Path, root: Path | str | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .native_child import PiChild
@@ -272,7 +272,7 @@ class CatalogQuery(NativeQuery):
                 agent_bin,
                 tuple(arguments),
                 package=package,
-                worktree=Path.cwd() if worktree is None else worktree,
+                worktree=worktree,
                 root=root,
             )
             async with BoundedRun.session(
@@ -289,9 +289,9 @@ class CatalogQuery(NativeQuery):
 
     async def discover(
         self, agent_bin: str, arguments: Sequence[str], root: Path | str | None = None,
-        *, package: VerifiedNativePackage,
+        *, package: VerifiedNativePackage, worktree: Path,
     ) -> PiResponseData:
-        async with self.catalog(agent_bin, arguments, root=root, package=package) as child:
+        async with self.catalog(agent_bin, arguments, root=root, package=package, worktree=worktree) as child:
             response = await self.exchange(child)
             if response.succeeded:
                 return response.data.require_payload()

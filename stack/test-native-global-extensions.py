@@ -28,6 +28,7 @@ from agent_comms.native_pi import CAPABILITY, NativePiRpcLaunch
 from agent_comms.pi_commands import GetState
 from agent_comms.pi_events import ExtensionError
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.repo import Checkout
 
 
 def main(fixture: Path):
@@ -66,11 +67,11 @@ def main(fixture: Path):
     from agent_comms.threads import Thread
 
     comms = wire(root / "wire")
-    thread = Thread("native-startup-fixture", frozenset(), str(project),
+    thread = Thread("native-startup-fixture", frozenset(), Checkout(project),
                     storage_roots=StorageRoots(root / "scratch"),
                     process_identity=ProcessIdentity.capture(os.getpid()))
     thread = comms.registry.declare(thread)
-    environment.update(thread.native_environment(comms.root, comms.registry.snapshot(), str(project)))
+    environment.update(thread.native_environment(comms.root, comms.registry.snapshot()))
     spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/test-native-import-rpc.py")
     isolation = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(isolation)

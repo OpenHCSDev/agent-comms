@@ -1,5 +1,6 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
+from agent_comms.repo import Checkout
 import json
 from dataclasses import replace
 from threading import Event
@@ -25,7 +26,7 @@ def test_missing_painted_scope_is_a_stale_bound():
 
 def test_invalid_display_participants_are_typed_scope_changes(tmp_path):
     comms = populated(tmp_path)
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     snapshot = comms.registry.snapshot()
     for first, peer in (("missing", "alice"), (viewer, "missing"), ("alice", "bob"), (viewer, viewer)):
         with pytest.raises(DMScopeChanged):
@@ -40,7 +41,7 @@ def populated(tmp_path):
         ("bob", {"ui"}),
         ("outsider", set()),
     ):
-        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(tags), Checkout(tmp_path)))
     return comms
 
 
@@ -106,13 +107,13 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
 
 def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send_user_message(CommandTarget.named('alice'), "human input to member", worktree=str(tmp_path))
-    off = comms.views.viewer_snapshot(str(tmp_path)).channels["#api"]
+    comms.messaging.send_user_message(CommandTarget.named('alice'), "human input to member", worktree=Checkout(tmp_path))
+    off = comms.views.viewer_snapshot(Checkout(tmp_path)).channels["#api"]
     assert off.last_user_input == 0
     comms.channels.set_channel_any_mode("#api", True)
-    on = comms.views.viewer_snapshot(str(tmp_path)).channels["#api"]
+    on = comms.views.viewer_snapshot(Checkout(tmp_path)).channels["#api"]
     assert on.last_user_input > 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 0
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 0
     assert bodies(comms.views.channel_display_page("#api")) == ["human input to member"]
     assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == []
 
@@ -123,7 +124,7 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms.channels.set_channel_any_mode("api", True)
     high_water = comms.bus.bus.revision()
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
-    initial = comms.views.viewer_snapshot(str(tmp_path)).channels
+    initial = comms.views.viewer_snapshot(Checkout(tmp_path)).channels
     assert initial["#api"].last_activity > 0
 
     comms.registry.rename("alice", "renamed")
@@ -135,7 +136,7 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     )
     assert comms.bus.bus.revision() == high_water
     assert bodies(comms.views.channel_display_page("#api")) == []
-    after = comms.views.viewer_snapshot(str(tmp_path)).channels
+    after = comms.views.viewer_snapshot(Checkout(tmp_path)).channels
     assert after["#api"].last_activity < initial["#api"].last_activity
 
     comms.registry.register(replace(comms.registry.require("renamed"), tags=frozenset({"api"})))
@@ -155,23 +156,23 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
 
 def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     comms = populated(tmp_path)
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send_user_message(CommandTarget.named('#api'), "owned before rename", worktree=str(tmp_path))
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
+    comms.messaging.send_user_message(CommandTarget.named('#api'), "owned before rename", worktree=Checkout(tmp_path))
     comms.registry.rename(viewer, "human")
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 0
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 0
     comms.messaging.send("alice", "bob", "before threshold").message.message_id
-    comms.views.mark_user_view_read("#api", worktree=str(tmp_path))
+    comms.views.mark_user_view_read("#api", worktree=Checkout(tmp_path))
     comms.channels.set_channel_any_mode("#api", True)
     # The previously hidden DM was never painted, so enabling the broader
     # projection must expose it as unread despite the exact-channel marker.
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 1
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 1
     comms.messaging.send("bob", "alice", "after threshold").message.message_id
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 2
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 2
     # The old user sender is still an alias of the current human viewer.
-    comms.messaging.send_user_message(CommandTarget.named('#api'), "human owned", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 2
-    comms.views.mark_user_view_read("#api", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 0
+    comms.messaging.send_user_message(CommandTarget.named('#api'), "human owned", worktree=Checkout(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 2
+    comms.views.mark_user_view_read("#api", worktree=Checkout(tmp_path))
+    assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 0
 
 
 def test_page_boundaries_match_target_pager(tmp_path):
@@ -189,7 +190,7 @@ def test_page_boundaries_match_target_pager(tmp_path):
 
 def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_path):
     comms = populated(tmp_path)
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     comms.messaging.send("alice", viewer, "DM original").message.message_id
     started, finished = Event(), Event()
     failures = []
@@ -211,20 +212,20 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
     assert started.wait(timeout=3)
     try:
         for _ in range(20):
-            page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
+            page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
             if page.newest_seq is not None:
-                comms.views.mark_page_read(page, worktree=str(tmp_path))
-            dm = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
+                comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
+            dm = comms.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(tmp_path))
             assert bodies(dm) == ["DM original"]
-            comms.views.mark_page_read(dm, worktree=str(tmp_path))
+            comms.views.mark_page_read(dm, worktree=Checkout(tmp_path))
     finally:
         writer.join(timeout=10)
     assert finished.is_set() and not writer.is_alive() and not failures
-    page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
+    page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
     assert bodies(page) == [f"burst {n}" for n in range(20)]
     comms.registry.rename("alice", "renamed")
     with pytest.raises(DMScopeChanged):
-        comms.views.mark_page_read(dm, worktree=str(tmp_path))
+        comms.views.mark_page_read(dm, worktree=Checkout(tmp_path))
 
 
 def test_views_answer_how_far_the_bus_has_grown(tmp_path):

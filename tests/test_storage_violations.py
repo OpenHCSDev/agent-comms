@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 import json
 import shutil
 import subprocess
@@ -95,10 +96,10 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base, scratch_cap_gib=cap_gib)))
     )
     comms = wire(root)
-    lead = comms.registry.declare(Thread("lead", frozenset(), str(repository)))
+    lead = comms.registry.declare(Thread("lead", frozenset(), Checkout(repository)))
     configured_repository(comms)
     worker = comms.registry.declare(
-        Thread("worker", frozenset(), str(home))
+        Thread("worker", frozenset(), Checkout(home))
     )
     comms.goals.todos.create(
         "P1",

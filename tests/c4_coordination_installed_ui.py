@@ -1,6 +1,7 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
 
 
+from agent_comms.repo import Checkout
 from conftest import publish_initial
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget
@@ -45,24 +46,24 @@ async def main():
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')
         source.touch()
-        comms.registry.declare(Thread(name, frozenset({'team'}), str(root), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(root), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     comms.owners.stop('stopped')
     comms.owners.stop('archived')
     comms.threads.archive('archived')
     message = publish_initial(comms, owner, '#team', 'Original metadata acknowledgement')
     original_wire = comms.bus.log.path.read_bytes()
-    human = comms.views.viewer_snapshot(str(root))
+    human = comms.views.viewer_snapshot(Checkout(root))
     assert set(human.threads) == {owner, 'stopped'}
     assert human.channel_unread['#team'].count == 1
     assert comms.bus.pending_count('stopped', CommandTarget.named('#team')) == 1
-    assert comms.views.viewer_snapshot(str(root)) == human
+    assert comms.views.viewer_snapshot(Checkout(root)) == human
     original = comms.views.message_notifications_for_references((message.reference,))
     assert original.outcomes[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(
         (message.reference,) * (NotificationWindow.window_limit + 1)).outcomes == original.outcomes
-    page = comms.views.channel_display_page('#team', viewer=NamedViewer(comms.messaging.user_identity(str(root)).name))
-    comms.views.mark_page_read(page, worktree=str(root))
-    assert comms.views.viewer_snapshot(str(root)).channel_unread['#team'].count == 0
+    page = comms.views.channel_display_page('#team', viewer=NamedViewer(comms.messaging.user_identity(Checkout(root)).name))
+    comms.views.mark_page_read(page, worktree=Checkout(root))
+    assert comms.views.viewer_snapshot(Checkout(root)).channel_unread['#team'].count == 0
     assert comms.bus.pending_count('stopped', CommandTarget.named('#team')) == 1
     checks = ['full original snapshot value equality', 'original bounded reference notification windows',
               'human display acknowledgement leaves actor delivery pending']
@@ -85,7 +86,7 @@ async def main():
             await pilot.pause()
             assert set(group._members) == expected
             snapshot = comms.views.viewer_snapshot(
-                str(root), RosterVisibility(show_stopped, show_archived))
+                Checkout(root), RosterVisibility(show_stopped, show_archived))
             assert set(group._members) == set(snapshot.threads)
         checks.append('real sidebar filtered cohorts agree with original registry status')
     await asyncio.get_running_loop().shutdown_default_executor()

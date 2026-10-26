@@ -6,6 +6,7 @@ import multiprocessing
 import os
 from functools import partial
 
+from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.coordinator import Coordination
@@ -30,7 +31,7 @@ async def headless_owner(comms, tmp_path, caplog, native_runtime_package):
         thread = await Coordination.run_worker(
             partial(owner.sessions.declare_thread, str(tmp_path))
         )
-        await owner.sessions.start_owner(str(tmp_path), thread.name)
+        await owner.sessions.start_owner(Checkout(tmp_path), thread.name)
         yield owner
     finally:
         await owner.shutdown()
@@ -45,7 +46,7 @@ def observation_children():
 
 async def test_headless_bind_has_no_observation_process(headless_owner, tmp_path):
     session, = headless_owner.sessions.bindings
-    await headless_owner.sessions.start_owner(str(tmp_path), session)
+    await headless_owner.sessions.start_owner(Checkout(tmp_path), session)
     assert headless_owner.sessions.client is None
     assert headless_owner.sessions.require(session) == session
     assert observation_children() == ()
