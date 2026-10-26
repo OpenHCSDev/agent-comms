@@ -67,11 +67,13 @@ acceptance, preserving the concise receipt below. The proof does not own other a
 ## Actual CLI proof
 
 Original response bodies: `docs/evidence/cn-phase3-record-results.jsonl` (15 actual responses,
-normalized only for whitespace). Driver: `tools/proofs/cn_phase3_record.py`. The driver initializes
-real Core stores and calls `python -m agent_comms.cli tool --from ...`. It uses no fake Comms,
-fixture events or model replies. Judgment names a real edit from this unit's native session,
-read through `OrderEditsRead` after copying the session to the scratch root. No original session
-was changed and no live unit received these deliberate scratch-only strikes.
+normalized only for whitespace). The one-shot drivers `tools/proofs/cn_phase3_record.py` and
+`tools/proofs/cn_progress_read_only.py` have been removed; their source remains in Git history.
+The original driver initialized real Core stores and called
+`python -m agent_comms.cli tool --from ...`. It used no fake Comms, fixture events or model replies.
+Judgment named a real edit from this unit's native session, read through `OrderEditsRead` after
+copying the session to the scratch root. No original session was changed and no live unit received
+these deliberate scratch-only strikes.
 
 | Actual operation | P1 revision | verdicts | retained strikes | voids | assignment |
 |---|---:|---:|---:|---:|---|
