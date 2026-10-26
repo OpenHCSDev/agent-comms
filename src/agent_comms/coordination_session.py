@@ -17,7 +17,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
 from agent_comms.store_files import (
-    DEFAULT_STORE_CONTENTION, UNBOUNDED_CONTENTION, RegistryLocking,
+    DEFAULT_STORE_CONTENTION, RegistryLocking, SqliteStore,
     StoreContention, StoreLockContention,
 )
 
@@ -82,7 +82,7 @@ class NativeBoundary(ExitStack):
     """Borrow the registry's own read lock for a publication decision."""
 
     def __init__(
-        self, bus: MessageBus, *, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+        self, bus: MessageBus, *, contention: StoreLockContention = SqliteStore.contention,
     ) -> None:
         super().__init__()
 
@@ -120,8 +120,8 @@ class NativeCoordinationSession(CoordinationSession):
         )
 
     def boundary_contention(self) -> StoreLockContention:
-        """A session's boundary waits as long as the lock is held."""
-        return UNBOUNDED_CONTENTION
+        """Use the SQLite guard family's declared wait for the bus boundary."""
+        return SqliteStore.contention
 
     def boundary(self, bus: MessageBus) -> NativeBoundary:
         if bus.bus.path.parent.resolve() != self.path.parent.resolve():

@@ -27,7 +27,7 @@ from agent_comms.maintenance_barrier import (
 from agent_comms.store_files import (
     ExclusiveLock,
     SharedLock,
-    UNBOUNDED_CONTENTION,
+    StoreGuard,
     _async_store_lock,
     _store_lock,
 )
@@ -81,7 +81,7 @@ def test_dead_holder_refuses_detecting_input_then_opens(tmp_path, phase, file, m
     with real_holder(root, phase) as (child, held):
         child.kill()
         child.join(5)
-        with _store_lock(root / file, mode, UNBOUNDED_CONTENTION):
+        with _store_lock(root / file, mode, StoreGuard.contention):
             with pytest.raises(
                 MaintenanceHeldError,
             ):
@@ -110,7 +110,7 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
             async with barrier.ingress_async():
                 pytest.fail("The detecting input must be refused")
 
-        async with _async_store_lock(root / 'registry.json', ExclusiveLock(), UNBOUNDED_CONTENTION):
+        async with _async_store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention):
             attempt = asyncio.create_task(incoming())
             await asyncio.sleep(0.025)
             assert not attempt.done()

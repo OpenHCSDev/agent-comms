@@ -25,14 +25,10 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
-from .store_files import DependentStateTier, HolderNamingContention, SingleFileStore, StoreLockContention
+from .store_files import DependentStateTier, SingleFileStore, StoreLockContention
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
-
-# Publishers exclude only each other: a second one waits out the first install's route step.
-ROUTE_PUBLICATION_WAIT_SECONDS = 30.0
-
 
 @dataclass(frozen=True, slots=True)
 class ActiveRouteFile(SingleFileStore, DependentStateTier):
@@ -40,9 +36,8 @@ class ActiveRouteFile(SingleFileStore, DependentStateTier):
 
     path: Path
 
-    @classmethod
-    def contention(cls) -> StoreLockContention:
-        return HolderNamingContention(remaining=ROUTE_PUBLICATION_WAIT_SECONDS)
+    # Publishers exclude only each other while the first install publishes its route.
+    contention = StoreLockContention(30.0)
 
 
 @dataclass(frozen=True, slots=True)

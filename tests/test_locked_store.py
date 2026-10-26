@@ -9,8 +9,7 @@ import os
 import stat
 import subprocess
 import sys
-import threading
-from contextlib import contextmanager, redirect_stderr
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 
 import pytest
@@ -24,10 +23,9 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_children import RuntimeChildrenStore
 from agent_comms.store_files import (
     ExclusiveLock,
-    HolderNamingContention,
     StoreLockBusyError,
     StoreLockContention,
-    UNBOUNDED_CONTENTION,
+    StoreGuard,
     _store_lock,
 )
 
@@ -55,7 +53,7 @@ def clear(store, thread, *, timestamp=None):
 
 
 def _hold_lock(path, mode, ready, release):
-    with _store_lock(path, mode, UNBOUNDED_CONTENTION):
+    with _store_lock(path, mode, StoreGuard.contention):
         ready.set()
         if not release.wait(10):
             raise TimeoutError("lock holder was not released")
@@ -68,14 +66,6 @@ def _hold_store_write(owner, path, ready, release):
             raise TimeoutError("store writer was not released")
 
 
-def _guarded_read(owner, path, started, done, diagnostics):
-    with diagnostics.open("w") as report, redirect_stderr(report):
-        store = owner(path)
-        started.set()
-        with store.guarded_read():
-            done.set()
-
-
 def _record(path, start, prefix):
     if not start.wait(10):
         raise TimeoutError("writer was not started")
@@ -84,7 +74,7 @@ def _record(path, start, prefix):
 
 
 def _record_under_wire(path, ready):
-    with _store_lock(path.parent / 'wire', ExclusiveLock(), UNBOUNDED_CONTENTION):
+    with _store_lock(path.parent / 'wire', ExclusiveLock(), StoreGuard.contention):
         store = RuntimeInfoStore(path)
         record(store, observation())
         assert store.read().observations == {"goal": observation()}
@@ -251,23 +241,18 @@ def test_invalid_boundary_is_not_overwritten(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX flock contention contract")
-def test_registry_reads_wait_and_name_the_writer(tmp_path):
-    """A multi-file registry cut waits and names its writer."""
+def test_registry_wait_expires_and_names_the_writer(tmp_path):
+    """The multi-file guard refuses a held writer at its declared bound."""
     registry = RegistryStore(tmp_path / "registry.json")
-    ready, release, started, done = event(), event(), event(), event()
-    diagnostics = tmp_path / "registry-wait.log"
+    ready, release = event(), event()
     with process(_hold_store_write, RegistryStore, registry.path, ready, release) as writer:
         try:
             assert ready.wait(5)
             with pytest.raises(StoreLockBusyError), registry.read_now():
                 pytest.fail("a registry try-read entered during a write")
-            with process(_guarded_read, RegistryStore, registry.path, started, done, diagnostics):
-                assert started.wait(5)
-                assert not done.wait(5.2), "a registry read crossed its held write lock"
-                assert "store lock still waiting after 5 s, " in diagnostics.read_text()
-                assert f"PID {writer.pid}: " in diagnostics.read_text()
-                release.set()
-                assert done.wait(5), "a registry read did not resume after its writer"
+            with pytest.raises(StoreLockBusyError) as refused, registry.guarded_write():
+                pytest.fail("a writer crossed the held lock")
+            assert f"PID {writer.pid}: " in str(refused.value)
         finally:
             release.set()
 
@@ -287,18 +272,17 @@ def test_wire_nesting_does_not_reacquire_document_lock(tmp_path):
         assert done.wait(5)
 
 
-def test_slow_lock_wait_names_its_holder_once(tmp_path, capsys):
-    """Install 18 waited 59 s for the registry lock and nobody could say who held it."""
+def test_declared_wait_is_not_spent_by_another_acquisition(tmp_path):
     path = tmp_path / "held"
     path.write_bytes(b"")
+    policy = StoreLockContention(.01)
     with open(path, "rb") as held, open(path, "rb") as waiting:
         fcntl.flock(held, fcntl.LOCK_EX)
-        threading.Timer(.5, fcntl.flock, (held, fcntl.LOCK_UN)).start()
-        HolderNamingContention(.1).acquire(
-            waiting.fileno(), Platform.current(), mode=ExclusiveLock())
-    err = capsys.readouterr().err
-    assert err.count("store lock still waiting after 0.1 s, held by ") == 1, err
-    assert f"PID {os.getpid()}: " in err
+        for _ in range(2):
+            with pytest.raises(StoreLockBusyError) as refused:
+                policy.acquire(waiting.fileno(), Platform.current(), mode=ExclusiveLock())
+            assert f"PID {os.getpid()}: " in str(refused.value)
+            assert policy.seconds == .01
 
 
 @pytest.mark.asyncio

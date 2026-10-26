@@ -15,7 +15,7 @@ from agent_comms.store_files import (
     ExclusiveLock,
     SharedLock,
     StoreLockContention,
-    UNBOUNDED_CONTENTION,
+    StoreGuard,
     _async_store_lock,
     _store_lock,
     store_lock_path,
@@ -38,7 +38,7 @@ def probe(path, *, shared=True):
 
 def test_nested_reader_reuses_descriptor_without_downgrading_or_releasing(tmp_path):
     path = tmp_path / 'wire'
-    with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION) as outer:
+    with _store_lock(path, ExclusiveLock(), StoreGuard.contention) as outer:
         with pytest.raises(ValueError):
             with _store_lock(path, SharedLock(), StoreLockContention(0)) as inner:
                 assert inner.descriptor == outer.descriptor
@@ -57,23 +57,23 @@ def test_nested_reader_reuses_descriptor_without_downgrading_or_releasing(tmp_pa
 
 def test_shared_nesting_never_silently_upgrades(tmp_path):
     path = tmp_path / 'wire'
-    with _store_lock(path, SharedLock(), UNBOUNDED_CONTENTION) as outer:
-        with _store_lock(path, SharedLock(), UNBOUNDED_CONTENTION) as inner:
+    with _store_lock(path, SharedLock(), StoreGuard.contention) as outer:
+        with _store_lock(path, SharedLock(), StoreGuard.contention) as inner:
             assert inner.descriptor == outer.descriptor
             assert probe(path)
             assert not probe(path, shared=False)
         with pytest.raises(RelationViolationError):
-            with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
+            with _store_lock(path, ExclusiveLock(), StoreGuard.contention):
                 pytest.fail('upgraded the enclosing read transaction')
     assert probe(path, shared=False)
 
 
 def test_ended_context_does_not_reuse_its_closed_descriptor(tmp_path):
     path = tmp_path / 'wire'
-    with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
+    with _store_lock(path, ExclusiveLock(), StoreGuard.contention):
         retained = copy_context()
     def capture_again():
-        with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
+        with _store_lock(path, ExclusiveLock(), StoreGuard.contention):
             assert not probe(path)
     retained.run(capture_again)
     assert probe(path, shared=False)
@@ -82,9 +82,9 @@ def test_ended_context_does_not_reuse_its_closed_descriptor(tmp_path):
 def test_nested_source_still_checks_each_borrows_budget(tmp_path):
     path = tmp_path / 'wire'
     path.write_bytes(b'not within the nested budget')
-    with _store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION):
+    with _store_lock(path, ExclusiveLock(), StoreGuard.contention):
         with pytest.raises(RelationViolationError):
-            with _store_lock(path, SharedLock(), UNBOUNDED_CONTENTION, read_budget=BoundedStoreReadBudget(1)):
+            with _store_lock(path, SharedLock(), StoreGuard.contention, read_budget=BoundedStoreReadBudget(1)):
                 pytest.fail('nested source skipped its read budget')
         assert not probe(path)
     assert probe(path, shared=False)
@@ -101,10 +101,10 @@ def test_async_and_sync_nest_but_independent_tasks_and_threads_do_not(tmp_path):
             with _store_lock(path, SharedLock(), StoreLockContention(0)):
                 pytest.fail('another thread borrowed an exclusive transaction')
     async def run():
-        async with _async_store_lock(path, ExclusiveLock(), UNBOUNDED_CONTENTION) as outer:
-            async with _async_store_lock(path, SharedLock(), UNBOUNDED_CONTENTION) as inner:
+        async with _async_store_lock(path, ExclusiveLock(), StoreGuard.contention) as outer:
+            async with _async_store_lock(path, SharedLock(), StoreGuard.contention) as inner:
                 assert inner.descriptor == outer.descriptor
-                with _store_lock(path, SharedLock(), UNBOUNDED_CONTENTION) as synchronous:
+                with _store_lock(path, SharedLock(), StoreGuard.contention) as synchronous:
                     assert synchronous.descriptor == outer.descriptor
                 assert not probe(path)
             await asyncio.create_task(independent())

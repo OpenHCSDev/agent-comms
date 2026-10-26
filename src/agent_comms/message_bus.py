@@ -47,7 +47,7 @@ from agent_comms.read_basis import (
 )
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import DeliveryScope
-from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
+from agent_comms.store_files import SqliteStore, StoreLockContention
 
 from .watched import FileSource
 
@@ -106,7 +106,7 @@ class MessageBus[Writes: Publisher]:
 
     @contextmanager
     def opened_activity(
-        self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+        self, contention: StoreLockContention = SqliteStore.contention,
     ) -> Iterator[ActivityClocks]:
         yield self.bus.activity_clocks(contention)
 

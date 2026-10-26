@@ -83,7 +83,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
-    UNBOUNDED_CONTENTION, StoreBusy, StoreLockContention, StoreLockFile,
+    SqliteStore, StoreBusy, StoreLockContention, StoreLockFile,
 )
 
 if TYPE_CHECKING:
@@ -2738,7 +2738,7 @@ class WalStore(StoreWriter, StoreLockFile):
         self,
         schema: type[TableSchema],
         opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention = UNBOUNDED_CONTENTION,
+        contention: StoreLockContention = SqliteStore.contention,
     ) -> Iterator[sqlite3.Connection]:
         """Read the committed file, or its declared empty schema before its first write.
 

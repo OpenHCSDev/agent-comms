@@ -993,7 +993,7 @@ class BoundedWaitPhase(StoreGuardsPhase):
     """3: every guard's wait is bounded and declared on its family."""
 
     after = (ReadWriteMembersPhase,)
-    evidence = PatternAbsent(r"UNBOUNDED_CONTENTION|UnboundedContention",
+    evidence = PatternAbsent(r"UNBOUNDED[_]CONTENTION|Unbounded[C]ontention",
                              ("src", ":!src/agent_comms/skills/"))
 
 

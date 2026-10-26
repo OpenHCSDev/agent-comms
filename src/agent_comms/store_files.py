@@ -8,7 +8,6 @@ import math
 import os
 import sqlite3
 import stat
-import sys
 import tempfile
 import threading
 import time
@@ -83,27 +82,32 @@ class StoreLockBusyError(BlockingIOError, DeferredRead):
         return "store lock busy, " + LockHolder.described(self.holders)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class StoreLockContention:
-    """One operation's contention budget, spent only while acquiring physical locks."""
+    """A declared wait limit; every acquisition spends its own local budget."""
 
-    remaining: float
+    seconds: float
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.seconds) or self.seconds < 0:
+            raise ValueError("Store lock wait must be finite and nonnegative")
 
     def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
+        remaining = self.seconds
         while True:
             begun = time.monotonic()
             try:
                 mode.attempt(descriptor)
             except BlockingIOError as error:
-                self.remaining -= time.monotonic() - begun
-                if self.remaining <= 0:
+                remaining -= time.monotonic() - begun
+                if remaining <= 0:
                     raise StoreLockBusyError(platform.lock_holders(descriptor)) from error
                 begun = time.monotonic()
                 try:
-                    yield min(self.remaining, platform.store_lock_interval)
+                    yield min(remaining, platform.store_lock_interval)
                 finally:
-                    self.remaining -= time.monotonic() - begun
+                    remaining -= time.monotonic() - begun
             else:
                 return
 
@@ -114,29 +118,6 @@ class StoreLockContention:
     async def acquire_async(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
         for delay in self.waits(descriptor, platform, mode=mode):
             await asyncio.sleep(delay)
-
-
-class HolderNamingContention(StoreLockContention):
-    """Name a slow acquisition's holders once, without changing its wait budget."""
-
-    __slots__ = ("after",)
-
-    def __init__(self, after: float = 1, *, remaining: float = math.inf) -> None:
-        super().__init__(remaining)
-        self.after = after
-
-    def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
-        deadline = time.monotonic() + self.after
-        for delay in super().waits(descriptor, platform, mode=mode):
-            if time.monotonic() >= deadline:
-                deadline = math.inf
-                print(f"store lock still waiting after {self.after:g} s, "
-                      f"{LockHolder.described(platform.lock_holders(descriptor))}",
-                      file=sys.stderr, flush=True)
-            yield delay
-
-
-UNBOUNDED_CONTENTION = HolderNamingContention()
 
 
 @dataclass
@@ -285,16 +266,14 @@ class StoreGuard:
     __slots__ = ()
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
-    @classmethod
-    def contention(cls) -> StoreLockContention:
-        return HolderNamingContention()
+    contention: ClassVar[StoreLockContention] = StoreLockContention(5.0)
 
     @classmethod
     @contextmanager
     def read_guard(
         cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     ) -> Iterator[None]:
-        with _store_lock(path, SharedLock(), cls.contention(),
+        with _store_lock(path, SharedLock(), cls.contention,
                          read_budget=read_budget, lock_type=cls.lock_type):
             yield
 
@@ -303,7 +282,7 @@ class StoreGuard:
     def write_guard(
         cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     ) -> Iterator[StoreLock]:
-        with _store_lock(path, ExclusiveLock(), cls.contention(),
+        with _store_lock(path, ExclusiveLock(), cls.contention,
                          read_budget=read_budget, lock_type=cls.lock_type) as lock:
             yield lock
 
@@ -312,7 +291,7 @@ class StoreGuard:
     async def read_guard_async(
         cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     ) -> AsyncIterator[None]:
-        async with _async_store_lock(path, SharedLock(), cls.contention(),
+        async with _async_store_lock(path, SharedLock(), cls.contention,
                                      read_budget=read_budget, lock_type=cls.lock_type):
             yield
 
@@ -321,7 +300,7 @@ class StoreGuard:
     async def write_guard_async(
         cls, path: Path, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     ) -> AsyncIterator[StoreLock]:
-        async with _async_store_lock(path, ExclusiveLock(), cls.contention(),
+        async with _async_store_lock(path, ExclusiveLock(), cls.contention,
                                      read_budget=read_budget, lock_type=cls.lock_type) as lock:
             yield lock
 
@@ -463,8 +442,8 @@ class StoreContention(ABC):
         )
 
     def lock_budget(self) -> StoreLockContention:
-        """The same wait spent on the store's file locks: one fresh budget per operation."""
-        return HolderNamingContention(remaining=self.timeout)
+        """Express SQLite's timeout as the file-lock policy for each acquisition."""
+        return StoreLockContention(self.timeout)
 
 
 @dataclass(frozen=True)
@@ -504,11 +483,11 @@ class SqliteStore(StoreGuard, ABC):
     @contextmanager
     def attached(
         cls, path: Path, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention = UNBOUNDED_CONTENTION,
+        contention: StoreLockContention = StoreGuard.contention,
     ) -> Iterator[sqlite3.Connection]:
         """Serialize attachment and retirement, including cold WAL-index initialization.
 
-        Attachment spends the caller's lock budget; retirement always waits. SQLite's own
+        Attachment spends the supplied budget; retirement uses the family's bounded wait. SQLite's own
         transactions retain parallel execution between those two boundaries.
         """
         with ExitStack() as lifetime:
