@@ -60,8 +60,6 @@ if TYPE_CHECKING:
     from agent_comms.threads import Thread
 
 
-
-
 class Watch(DeclaredFamily, ABC):
     """Observe, then apply the result while the bus is open.
 

@@ -6,7 +6,7 @@ from agent_comms.channel_management import KeepThreadsTagDisposition
 from agent_comms.channel_management import TagChangeResult
 from agent_comms.channel_management import TagDisposition
 from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import MultipleTargets
+from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_verbs.exact_tag import ExactTagCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument

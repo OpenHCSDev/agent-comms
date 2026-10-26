@@ -7,13 +7,7 @@ from agent_comms.field_codec import FieldCodec
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import replace
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from agent_comms.config_options import CatalogChoice
-    from agent_comms.config_options import CatalogConfigOption
-    from agent_comms.config_options import CatalogSelection
-    from agent_comms.config_options import ConfigOptions
+from agent_comms.config_options import CatalogChoice, CatalogConfigOption, CatalogSelection, ConfigOptions
 
 
 @dataclass(frozen=True)
@@ -85,8 +79,6 @@ class ChoiceTargetField(TargetField):
 
     async def prepare(self, catalogs: ConfigOptions,
                       selection: CatalogSelection) -> ChoiceTargetField:
-        from agent_comms.config_options import CatalogChoice
-
         decoder = field_codec.compile_decoder(self.annotation)
         options = (CatalogChoice(
                        name=label, value=decoder.encode_editor(decoder.decode(value)))
@@ -99,8 +91,6 @@ class ChoiceTargetField(TargetField):
 class CatalogTargetField(ChoiceTargetField):
     @property
     def catalog(self) -> type[CatalogConfigOption]:
-        from agent_comms.config_options import CatalogConfigOption
-
         return self.plan.setting(field_codec.Catalog, CatalogConfigOption)
 
     @property
@@ -109,8 +99,6 @@ class CatalogTargetField(ChoiceTargetField):
 
     async def prepare(self, catalogs: ConfigOptions,
                       selection: CatalogSelection) -> CatalogTargetField:
-        from agent_comms.config_options import CatalogChoice
-
         catalog = catalogs.catalog_for(self.catalog)
         options = await catalog.display_choices(selection)
         decoder = field_codec.compile_decoder(self.annotation)

@@ -40,14 +40,10 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import BindingThread, CliBridge, DeliveryRow
 
 
-
-
 async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
     await child.wait()
     tail = await child.stderr_tail(max_bytes=8192)
     raise ChildProcessError(f"Core watch ended, exit {child.returncode}\n{reason}\n{tail}")
-
-
 
 
 class TimestampedWire(WireModel):

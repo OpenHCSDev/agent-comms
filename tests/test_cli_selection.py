@@ -3,7 +3,7 @@
 import pytest
 
 from agent_comms.cli_verbs.fork import ForkCliCommand
-from agent_comms.cli_commands import OneTarget, TargetBatch
+from agent_comms.cli_command import OneTarget, TargetBatch
 from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
 from agent_comms.channel_targets import CommandTarget
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
-from agent_comms.cli_commands import OneTarget, TargetBatch
+from agent_comms.cli_command import OneTarget, TargetBatch
 from agent_comms.cli_result import ResultShower
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
@@ -29,7 +29,8 @@ class RecordingShower(ResultShower):
 ])
 def test_batch_completed_result_round_trips_with_its_command_result_type(target):
     from agent_comms.cli_verbs.stop import StopCliCommand
-    from agent_comms.cli_commands import TargetBatchResult, TargetCompleted, TargetFailed, ThreadStoppedResult
+    from agent_comms.cli_commands import ThreadStoppedResult
+    from agent_comms.cli_command import TargetBatchResult, TargetCompleted, TargetFailed
     from agent_comms.field_codec import FieldCodec
 
     original = TargetBatchResult((
@@ -57,7 +58,7 @@ def test_batch_completed_result_round_trips_with_its_command_result_type(target)
 ])
 def test_each_selection_returns_its_own_result(comms, tmp_path, selection, target, resolvable):
     from agent_comms.cli_verbs.stop import StopCliCommand
-    from agent_comms.cli_commands import TargetBatchResult, TargetFailed
+    from agent_comms.cli_command import TargetBatchResult, TargetFailed
     from agent_comms.thread_status import RunningThreadStatus
 
     comms.registry.declare(Thread("first", frozenset(), str(tmp_path)), RunningThreadStatus())

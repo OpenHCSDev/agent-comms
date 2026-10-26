@@ -16,7 +16,7 @@ from agent_comms.cli import main
 from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_model import UndeclaredModel
-from agent_comms.cli_commands import CommandSelectionChanged
+from agent_comms.cli_command import CommandSelectionChanged
 from agent_comms.lifecycle_capability import Successful
 from conftest import installed_comms
 from agent_comms.threads import Thread
@@ -324,7 +324,7 @@ class TestSelectedTargetActions:
     def test_catalog_absent_view_actor_has_no_backend_actions(self, tmp_path):
         from agent_comms.cli_verbs.archive import ArchiveCliCommand
         from agent_comms.cli_command import CliCommand
-        from agent_comms.cli_commands import TargetEdit
+        from agent_comms.cli_command import TargetEdit
         from agent_comms.errors import UnregisteredThreadError
         from agent_comms.thread_status import StoppedThreadStatus
 
@@ -404,7 +404,7 @@ class TestSelectedTargetActions:
     def test_tag_batch_requires_each_confirmation_before_removing_any_tag(self, tmp_path):
         from agent_comms.cli_command import CliCommand
         from agent_comms.cli_verbs.delete_tag import DeleteTagCliCommand
-        from agent_comms.cli_commands import TargetEdit
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         selected = ('#team', '#other')
@@ -430,7 +430,7 @@ class TestSelectedTargetActions:
         from agent_comms.channel_management import ArchiveThreadsTagDisposition, TagDisposition
         from agent_comms.cli_command import CliCommand
         from agent_comms.cli_verbs.delete_tag import DeleteTagCliCommand
-        from agent_comms.cli_commands import TargetEdit
+        from agent_comms.cli_command import TargetEdit
         from agent_comms.field_codec import compile_decoder
         from agent_comms.thread_status import RunningThreadStatus
 
@@ -514,7 +514,7 @@ class TestSelectedTargetActions:
 
     def test_channel_stop_deduplicates_selected_member(self, tmp_path):
         from agent_comms.cli_verbs.stop import StopCliCommand
-        from agent_comms.cli_commands import TargetBatchResult, TargetEdit
+        from agent_comms.cli_command import TargetBatchResult, TargetEdit
         from agent_comms.thread_status import RunningThreadStatus
 
         comms = self.declared(tmp_path)
@@ -555,7 +555,7 @@ class TestSelectedTargetActions:
 
     def test_mixed_pins_keep_each_rows_original_channel(self, tmp_path):
         from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
-        from agent_comms.cli_commands import TargetEdit
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         before = {name: comms.registry.require(name).tags for name in ("alpha", "beta")}
@@ -572,7 +572,7 @@ class TestSelectedTargetActions:
         from agent_comms.cli_verbs.archive import ArchiveCliCommand
         from agent_comms.cli_command import CliCommand
         from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
-        from agent_comms.cli_commands import TargetEdit
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         comms.channels.update_tags("alpha", add=frozenset({"other"}))
@@ -600,7 +600,7 @@ class TestSelectedTargetActions:
     def test_missing_membership_reports_failure_without_losing_other_pin(self, tmp_path):
         from agent_comms.cli_command import CliCommand
         from agent_comms.cli_verbs.pin_thread import PinThreadCliCommand
-        from agent_comms.cli_commands import TargetEdit
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         comms.channels.update_tags("alpha", add=frozenset({"other"}))
@@ -620,7 +620,7 @@ class TestSelectedTargetActions:
 
     def test_mixed_read_marks_human_views_without_advancing_executor_delivery(self, tmp_path):
         from agent_comms.cli_verbs.read_target import ReadTargetCliCommand
-        from agent_comms.cli_commands import TargetEdit
+        from agent_comms.cli_command import TargetEdit
         from native_unread_fixture import completed_snapshot
         from agent_comms.ui_model.unread import ReplyUnread
 
@@ -655,7 +655,7 @@ class TestSelectedTargetActions:
         from agent_comms.cli_verbs.archive import ArchiveCliCommand
         from agent_comms.cli_command import CliCommand
         from agent_comms.cli_verbs.fork import ForkCliCommand
-        from agent_comms.cli_commands import TargetEdit
+        from agent_comms.cli_command import TargetEdit
 
         comms = self.declared(tmp_path)
         actions = CliCommand.target_catalog(comms, CliCommand.selected_targets((CommandTarget.named('missing'), CommandTarget.named('alpha'))), project=str(tmp_path))
@@ -672,7 +672,8 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     from agent_comms.child_process import NoProcess
     from agent_comms.cli_verbs.new import NewThreadCliCommand
     from agent_comms.cli_verbs.start import StartCliCommand
-    from agent_comms.cli_commands import TargetBatchResult, TargetCompleted, TargetFailed, ThreadCreatedResult, ThreadStoppedResult
+    from agent_comms.cli_commands import ThreadCreatedResult, ThreadStoppedResult
+    from agent_comms.cli_command import TargetBatchResult, TargetCompleted, TargetFailed
     from agent_comms.owner_lifecycle import OwnerStartResult
 
     launched = OwnerStartResult("alpha", 11, True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from agent_comms.catalog_document import CatalogDocument
 from agent_comms.channel_targets import ResolvedChannel
 from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import MultipleTargets
+from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_commands import TargetReadResult
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument

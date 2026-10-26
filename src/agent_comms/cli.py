@@ -9,35 +9,31 @@ orchestration semantics.
 
 from __future__ import annotations
 
-from agent_comms.cli_arguments import CliArgumentParser
+from agent_comms.cli_arguments import CliArgumentParser, CliArguments
 
 import argparse
 import sys
 from collections.abc import Sequence
 from typing import TextIO
 
-from agent_comms.cli_command import CliCommand
+from agent_comms.active_route import resolve_comms_route
 from agent_comms.cli_failures import CLI_FAILURES
-from agent_comms.cli_arguments import CliArguments
+from agent_comms.cli_protocol import CoreError
 from agent_comms.launch_root import LaunchRoot
 
 
 def _fail(error: BaseException) -> int:
     """The declared wire family owns classification, causes and JSON encoding."""
-    from agent_comms.cli_protocol import CoreError
-
     print(CoreError.from_exception(error).model_dump_json(), flush=True)
     return 1
 
 
-
-
-def build_parser(arguments: Sequence[str] | None = None) -> argparse.ArgumentParser:
+def build_parser(arguments: Sequence[str] = ()) -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
     parser.add_root_options()
-    selected = CliArgumentParser.selected_command(arguments) if arguments is not None else None
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    for declaration in CliCommand.cli_members(selected):
+    selection = CliArgumentParser.command_parsing(arguments)
+    subparsers = parser.add_subparsers(required=True)
+    for declaration in selection.declarations():
         declaration.add_parser(subparsers)
     return parser
 
@@ -53,8 +49,6 @@ def execute(arguments: Sequence[str], output: TextIO) -> int:
         arguments,
         lambda: (LaunchRoot.from_path(args.root) if args.root else declaration.published_launch()),
     )
-    from agent_comms.active_route import resolve_comms_route
-
     route = resolve_comms_route(args.root)
     with LaunchRoot.from_path(route.root).selected():
         command = declaration.from_arguments(args)

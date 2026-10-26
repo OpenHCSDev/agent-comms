@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import TargetEdit
+from agent_comms.cli_command import TargetEdit
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.comms import Comms
