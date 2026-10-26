@@ -96,6 +96,12 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                         )
                         # Native send records session_id before writing prompt bytes.
                         # An ungranted reservation cannot identify this HTTP request.
+                        # Retain earlier unresolved inputs, but identify this request
+                        # from the journal's actual latest tracked user boundary.
+                        current_inputs = tuple((row, next(
+                            entry for entry in NativeTranscript(Path(row.session_file)).tail()
+                            if entry.input_boundary).require_tracked_user()) for row in pending)
+                        pending = tuple((row, user) for row, user in current_inputs if row.input_id == user.input_id)
                         if not pending:
                             assert not broadcast
                             request_text = json.dumps(request.get("messages", ()))
@@ -108,11 +114,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                         else:
                             assert len(pending) == 1, tuple(
                                 (row.input_id, row.stage.declared_name, row.session_file, str(row.session_id))
-                                for row in pending)
-                            original = pending[0]
-                            user = next(entry for entry in NativeTranscript(
-                                Path(original.session_file)
-                            ).tail() if entry.input_boundary).require_tracked_user()
+                                for row, _ in pending)
+                            original, user = pending[0]
                             assert user.input_id == original.input_id
                             is_triage = original.stage is TriageNativeExecution
                             assignments = tuple(WakeAssignment.one(

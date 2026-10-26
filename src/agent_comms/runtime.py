@@ -279,7 +279,8 @@ class RuntimeServer(SessionUpdateSink):
             self.listener.listen()
             self.listener.setblocking(False)
             self.server = await asyncio.start_unix_server(
-                self.handle, sock=self.listener, limit=8 * 1024 * 1024
+                self.handle, sock=self.listener, limit=8 * 1024 * 1024,
+                cleanup_socket=False,
             )
         except BaseException:
             self._resources.close()
