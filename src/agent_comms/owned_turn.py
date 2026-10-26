@@ -209,8 +209,8 @@ class OwnedTurn:
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
         )
-        self.env_extra = self.thread.native_environment(
-            self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree
+        self.env_extra = self.runner.inputs.state(self.session_id).owned().native_environment(
+            self.thread, self.runner.comms.registry.snapshot(), self.worktree
         )
         from .turn_context import (
             AutomaticTitleSegment,
@@ -306,7 +306,7 @@ class OwnedTurn:
         resources.push_async_callback(self.close_changed_project)
 
     def finish_goals(self) -> None:
-        self.goals.finish(self.runner.inputs.state(self.session_id).stop.interrupting(self.terminal))
+        self.goals.finish(self.runner.inputs.state(self.session_id).owned().stop.interrupting(self.terminal))
 
     async def close_changed_project(self) -> None:
         name = await self.runner.sessions.sync_identity(self.session_id)

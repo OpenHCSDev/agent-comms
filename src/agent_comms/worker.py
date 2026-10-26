@@ -18,7 +18,6 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .native_arguments import GivenBinary, NativeArguments
 from .turn_input_source import NoTurnAcceptance
-from .turn_terminal import OwnerStop
 
 
 async def run() -> None:
@@ -35,13 +34,12 @@ async def run_owner(comms: Comms) -> None:
     async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         name = ThreadLaunch.current().name
         thread = await Coordination.run_worker(partial(comms.registry.require, name))
-        stopped = OwnerStop(comms.owners.maintenance)
         agent = CommsAgent(
             comms,
             runtime_enabled=True,
             agent_bin=GivenBinary(NativeArguments.owner_launcher(LaunchRuntime.running())),
         )
-        agent.inputs.state(name).stop = stopped
+        stopped = agent.inputs.acquire_owner(name, agent.inputs.configuration).stop
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stopped.request)

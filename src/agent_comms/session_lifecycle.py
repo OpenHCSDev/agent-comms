@@ -39,7 +39,6 @@ from .session_config_options import SessionConfigOptions
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
-from .native_arguments import NativeArguments
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .registry_document import RegistryEntry
 from .runtime import RuntimeProxy, RuntimeServer
@@ -62,13 +61,11 @@ class SessionLifecycle:
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str,
-        agent_args: NativeArguments,
         runtime: RuntimeServer,
         runtime_enabled: bool,
         effects: SessionEffects,
     ):
-        self.comms, self.agent_bin, self.agent_args = comms, agent_bin, agent_args
+        self.comms = comms
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
         self.bindings: dict[str, str] = {}
         # A launcher registers this process as the owner before it starts, so
@@ -82,7 +79,7 @@ class SessionLifecycle:
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms)
-        self.config = SessionConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
+        self.config = SessionConfigOptions(comms, runtime, self, effects)
 
     async def initialize(
         self,
@@ -158,8 +155,8 @@ class SessionLifecycle:
             Path(cwd).name,
             tags=frozenset({"acp"}),
             worktree=cwd,
-            model=ThreadModel.selected_by(self.agent_args),
-            thinking_level=self.agent_args.thinking,
+            model=ThreadModel.selected_by(self.effects.inputs.configuration.agent_args),
+            thinking_level=self.effects.inputs.configuration.agent_args.thinking,
             auto_title_pending=True,
             role=AcpThreadRole,
         )
@@ -182,6 +179,7 @@ class SessionLifecycle:
     async def bind_owned(self, thread: Thread, session_id: str) -> None:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
+        self.effects.inputs.acquire_owner(session_id, self.effects.inputs.configuration)
         self.bindings[session_id] = thread.name
         self.titles[session_id] = thread.name
         self.worktrees[session_id] = thread.worktree
@@ -362,6 +360,7 @@ class SessionLifecycle:
             finally:
                 if retirement.done() and not retirement.cancelled() and retirement.exception() is None:
                     del self.proxies[session_id]
+                    self.effects.inputs.end_session(session_id)
 
     async def close_proxies(self) -> None:
         async with self._attachment_lock:

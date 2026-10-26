@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import AsyncIterator, Iterable
 from contextlib import aclosing, asynccontextmanager
 from functools import partial
@@ -21,7 +20,6 @@ from .config_options import (CatalogConfigOption, CatalogSelection, ConfigOption
                              ConfigOptions, InvalidConfigChoice)
 from .coordinator import Coordination
 from .field_codec import FieldCodec
-from .launch_runtime import RestartEnvironment
 from .native_failures import NativePiUnavailable
 from .threads import ChosenModel, NextTurnConfiguration
 from .watched import FileSource
@@ -30,7 +28,6 @@ if TYPE_CHECKING:
     from acp.schema import SessionConfigOptionBoolean
     from .comms import Comms
     from .controller import SessionUpdateSink
-    from .native_arguments import NativeArguments
     from .pi_commands import SettingCommand
     from .runtime import RuntimeServer
     from .session_effects import SessionEffects
@@ -38,29 +35,22 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class SessionConfigOptions(ConfigOptions):
+class SessionConfigOptions:
     """Add ACP publication and persistence to the shared catalog owner."""
 
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str,
-        agent_args: NativeArguments,
         runtime: RuntimeServer,
         sessions: SessionLifecycle,
         effects: SessionEffects,
     ):
-        super().__init__(
-            agent_bin,
-            agent_args,
-            RestartEnvironment.inherit(os.environ),
-            comms.route,
-        )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[str, ConfigOptionUpdate] = {}
         self._publication_sessions: set[str] = set()
-        self._menus: set[asyncio.Task[None]] = set()
+        self._tasks: set[asyncio.Task[None]] = set()
+        self._auth_tasks: dict[Path, asyncio.Task[None]] = {}
         self.observer = self.runtime.background(self._observe_configuration())
         # The stored settings each session's owner last saw, to notice a change.
         # The model and thinking level each running turn currently uses.
@@ -81,9 +71,11 @@ class SessionConfigOptions(ConfigOptions):
                      for choice in choices],
         )
 
-    async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
-        """Present the shared catalogs through this session's ACP schema."""
-        return [await self.describe(self.catalog_for(member), thread)
+    async def options(
+        self, configuration: ConfigOptions, thread: CatalogSelection,
+    ) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
+        """Present this executing session's catalogs through the ACP schema."""
+        return [await self.describe(configuration.catalog_for(member), thread)
                 for member in ConfigOption.members_with(CatalogConfigOption)]
 
     async def _publish(
@@ -119,7 +111,7 @@ class SessionConfigOptions(ConfigOptions):
         name = await self.sessions.sync_identity(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         try:
-            await self.catalog_for(member).change(self, thread, value)
+            await self.effects.inputs.state(session_id).owned().catalog_for(member).change(self, thread, value)
         except (NativePiUnavailable, InvalidConfigChoice) as error:
             raise Refused.invalid_params({"reason": str(error)}) from error
         await self.effects.turns.close_idle_backend(session_id, thread)
@@ -129,14 +121,16 @@ class SessionConfigOptions(ConfigOptions):
         )
 
     async def configure_thread(
-        self, thread: Thread, command: SettingCommand,
+        self, configuration: ConfigOptions, thread: Thread, command: SettingCommand,
     ) -> None:
         """Store the model and thinking level Pi itself reports for this change."""
-        arguments = thread.model.native(self.agent_args).with_thinking(
+        arguments = thread.model.native(configuration.agent_args).with_thinking(
             thread.thinking_level
         )
         state = await command.configure(
-            self.agent_bin, arguments.argv, package=self.package, worktree=Path(thread.worktree), root=self.comms.root,
+            configuration.agent_bin, arguments.argv, package=configuration.package,
+            worktree=Path(thread.worktree), root=self.comms.root,
+            configuration=configuration.configuration,
         )
         model = state.model.thread_model().require_reported()
         level = state.thinking_level.require_reported(
@@ -174,9 +168,15 @@ class SessionConfigOptions(ConfigOptions):
     def start_menu(self, session_id: str, client: SessionUpdateSink) -> asyncio.Task[None]:
         """Retain initial publication until it finishes or its consumer retires."""
         self._publication_sessions.add(session_id)
+        path = self.effects.inputs.state(session_id).owned().configuration.native_config / "auth.json"
+        if path not in self._auth_tasks:
+            observer = self.runtime.background(self._observe_authentication(path))
+            self._auth_tasks[path] = observer
+            self._tasks.add(observer)
+            observer.add_done_callback(self._tasks.discard)
         task = self.runtime.background(self.send_menu(client, session_id))
-        self._menus.add(task)
-        task.add_done_callback(self._menus.discard)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
         return task
 
     @asynccontextmanager
@@ -210,25 +210,38 @@ class SessionConfigOptions(ConfigOptions):
     ) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
         name = self.sessions.require(session_id)
         return await self.options(
+            self.effects.inputs.state(session_id).owned(),
             await Coordination.run_worker(partial(self.comms.threads.running_selection, name)),
         )
 
     def stop_observing_configuration(self, session_id: str) -> None:
         self._publication_sessions.discard(session_id)
         self.publications.pop(session_id, None)
+        required = {
+            self.effects.inputs.state(session).owned().configuration.native_config / "auth.json"
+            for session in self._publication_sessions
+        }
+        for path in tuple(self._auth_tasks):
+            if path not in required:
+                self._auth_tasks.pop(path).cancel()
+
+    async def _observe_authentication(self, path: Path) -> None:
+        async with aclosing(Bus.watch_sources(FileSource(path))) as observations:
+            async for _ in observations:
+                for session_id in tuple(self._publication_sessions):
+                    configuration = self.effects.inputs.state(session_id).owned().configuration
+                    if configuration.native_config / "auth.json" == path:
+                        await self.publish_configuration(session_id)
 
     async def _observe_configuration(self) -> None:
-        sources = (
-            FileSource(self.comms.registry.store.path),
-            FileSource(self.configuration.native_config / "auth.json"),
-        )
-        async with aclosing(Bus.watch_sources(*sources)) as observations:
+        async with aclosing(Bus.watch_sources(FileSource(self.comms.registry.store.path))) as observations:
             async for _ in observations:
                 for session_id in tuple(self._publication_sessions):
                     await self.publish_configuration(session_id)
 
     async def close(self) -> None:
-        await self.retire_observations((*self._menus, self.observer))
+        await self.retire_observations((*self._tasks, self.observer))
+        self._auth_tasks.clear()
         self._publication_sessions.clear()
 
     async def publish_configuration(

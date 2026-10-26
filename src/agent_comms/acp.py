@@ -82,6 +82,8 @@ from .cursor_publication import CursorPublication
 from .field_codec import ClaimId, FieldCodec, MalformedRecord, RootId
 from .image_inputs import prompt_images
 from .input_drain import InputDrain
+from .config_options import ConfigOptions
+from .launch_runtime import RestartEnvironment
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot
 from .message_bus import MessageBus
@@ -183,13 +185,15 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             comms,
             self._runtime,
             self,
-            agent_bin=agent_bin,
-            agent_args=agent_args,
         )
         self.sessions = self.session_lifecycle_class(
-            comms, self.turns.agent_bin, self.turns.agent_args, self._runtime, runtime_enabled, self
+            comms, self._runtime, runtime_enabled, self
         )
-        self.inputs = InputDrain(comms, self.sessions, self._runtime, self, auto_wake)
+        self.inputs = InputDrain(
+            comms, self.sessions, self._runtime, self, auto_wake,
+            ConfigOptions(agent_bin.configured(), agent_args.configured(),
+                          RestartEnvironment.inherit(os.environ), comms.route),
+        )
         self.turns.bind(self.sessions, self.inputs)
         # A preplanned write is valid only while its original ACP controller
         # remains attached. Never restore this binding after a process crash.
@@ -532,8 +536,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # CursorPublication owns the cross-observation evidence lifetime;
             # close it after its session/input producers have drained.
             retirement.callback(self.cursors.close)
-            retirement.push_async_callback(self.sessions.release_owned)
             retirement.callback(self.inputs.end_sessions)
+            retirement.push_async_callback(self.sessions.release_owned)
             retirement.push_async_callback(self.turns.close)
             retirement.push_async_callback(self.sessions.close_proxies)
             retirement.push_async_callback(self.inputs.close)

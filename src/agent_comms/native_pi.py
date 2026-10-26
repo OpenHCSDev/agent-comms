@@ -475,7 +475,7 @@ class NativePiRpcLaunch:
     @classmethod
     def catalog(
         cls, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, worktree: Path,
-        root: Path | str | None = None,
+        configuration: RestartEnvironment, root: Path,
     ) -> NativePiRpcLaunch:
         """Metadata-only RPC owns an in-memory session, never a saved selection.
 
@@ -493,7 +493,8 @@ class NativePiRpcLaunch:
         cls._command_selection(command, runtime, package)
         cwd = worktree.resolve(strict=True)
         return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
-            "--no-context-files", "--no-session"), cwd, None, SelectedSession(cwd), runtime, cwd)
+            "--no-context-files", "--no-session"), cwd, configuration.encode(),
+            SelectedSession(cwd), runtime, root)
 
     @classmethod
     def managed(

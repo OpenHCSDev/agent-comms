@@ -29,6 +29,7 @@ from .bus import Bus
 from .child_process import join_retirement
 from .cohort_schema import AcceptanceFrontier
 from .comms import Comms
+from .config_options import ConfigOptions
 from .controller import SessionUpdateSink
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
@@ -65,7 +66,7 @@ from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_context import TurnContext, UserFollowupSegment
 from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
-from .turn_terminal import EndedWithoutResult, TurnInterruption
+from .turn_terminal import EndedWithoutResult, OwnerStop, TurnInterruption
 from .watched import ChangeSignal, FileSource
 
 if TYPE_CHECKING:
@@ -468,6 +469,9 @@ class DrainedSession:
     # A completed stable drain consumes this pending work.
     repeat_observation: bool = False
 
+    def owned(self) -> OwnerSession:
+        raise RelationViolationError("This session has not acquired local execution")
+
     @asynccontextmanager
     async def own_turn_task(self) -> AsyncIterator[None]:
         """Hold execution through cleanup; shutdown retirement suppresses the wake."""
@@ -569,6 +573,16 @@ class DrainedSession:
         return self.turn.require_source()
 
 
+@dataclass(eq=False)
+class OwnerSession(DrainedSession, ConfigOptions):
+    """Local execution composes queue lifetime with its own native configuration."""
+
+    stop: OwnerStop = field(kw_only=True)
+
+    def owned(self) -> OwnerSession:
+        return self
+
+
 class InputDrain(InputObservation):
     def owns_execution(self, session_id: str, owner: Thread) -> bool:
         """An attached turn can take follow-ups; a predecessor cannot."""
@@ -584,11 +598,13 @@ class InputDrain(InputObservation):
         runtime: RuntimeServer,
         effects: InputEffects,
         auto_wake: bool,
+        configuration: ConfigOptions,
     ):
         self.comms = comms
         self.sessions = sessions
         self.runtime = runtime
         self.effects = effects
+        self.configuration = configuration
         self.drained: dict[str, DrainedSession] = {}
         self.queue_lock = asyncio.Lock()
         self.dispositions = InputDispositions(comms.root)
@@ -601,6 +617,18 @@ class InputDrain(InputObservation):
         if state is None:
             state = self.drained[session_id] = DrainedSession()
         return state
+
+    def acquire_owner(self, session_id: str, configuration: ConfigOptions) -> OwnerSession:
+        """Only acquisition creates an executing session; a proxy cannot become one silently."""
+        try:
+            state = self.drained[session_id]
+        except KeyError:
+            state = self.drained[session_id] = OwnerSession(
+                configuration.agent_bin, configuration.agent_args, configuration.configuration,
+                configuration.route, configuration.models,
+                stop=OwnerStop(self.comms.owners.maintenance),
+            )
+        return state.owned()
 
     def end_session(self, session_id: str) -> None:
         """Ending a session drops its state, its live producers with it."""

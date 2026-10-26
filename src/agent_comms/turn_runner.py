@@ -39,7 +39,6 @@ from .image_input import ImageInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
-from .native_arguments import LaunchArguments, LaunchBinary
 from .native_input_owner import RegistryOwner
 from .owned_turn import OwnedTurn
 from .pi_commands import (
@@ -98,15 +97,10 @@ class TurnRunner:
         comms: Comms,
         runtime: RuntimeServer,
         effects: TurnEffects,
-        *,
-        agent_bin: LaunchBinary,
-        agent_args: LaunchArguments,
     ):
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.agent_bin = agent_bin.configured()
-        self.agent_args = agent_args.configured()
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}
         self.goals = GoalScheduler(comms, effects)
