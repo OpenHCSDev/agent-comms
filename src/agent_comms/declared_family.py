@@ -268,6 +268,17 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
         return root.members_with(root).index(cls)
 
 
+class RegisteredFamily(DeclaredFamily):
+    """Instances are members of their family's declared registry, never unnamed helpers."""
+
+    def __new__(cls, *args: object, **kwargs: object) -> Self:
+        # Construction uses declarations already registered by FamilyMeta. Discovery
+        # must not run here: it may itself be constructing another family member.
+        if dict.get(cls.__registry__, cls.declared_name) is not cls:
+            raise TypeError(f"{cls.__name__} is not a registered {cls.family_root().__name__} member")
+        return super().__new__(cls)
+
+
 class UniqueExternalSelector(ABC):
     """An external selector has one concrete owner among the family's declarations."""
 

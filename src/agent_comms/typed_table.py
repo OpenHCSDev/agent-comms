@@ -2411,7 +2411,7 @@ class WriterOwnedResource(DeclaredFile):
     owner: type[WriterOwnedStore]
 
     def live(self, root: Path) -> Path:
-        return self.owner.live(root)
+        return self.owner.live(root) / self.path.relative_to(self.owner.retained_filename())
 
 
 class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=None):
@@ -2638,7 +2638,7 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     @classmethod
     def retained_name(cls, root: Path, path: Path) -> Path:
-        return cls.retained_filename()
+        return cls.retained_filename() / path.relative_to(cls.live(root))
 
     @classmethod
     def live(cls, root: Path) -> Path:
@@ -2649,30 +2649,39 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
         return WriterOwnedResource(cls, name)
 
     @classmethod
+    def resources(cls, files: FilesRequest) -> tuple[WriterOwnedResource, ...]:
+        """Every declared file, resolved by the caller's live or retained selection."""
+        return (cls.resource(cls.retained_filename()),)
+
+    @classmethod
     def external_members(cls, files: FilesRequest) -> Mapping[Path, type[RootFile]]:
         cls.load_declarations()
-        return {files.writer_path(store): store for store in cls.members_with(cls)}
+        return {files.location(resource): store for store in cls.members_with(cls)
+                for resource in store.resources(files)}
 
     @classmethod
     def require_retained_name(cls, name: Path) -> None:
         names = {store.retained_filename() for store in WriterOwnedStore.members_with(WriterOwnedStore)}
-        if name.is_relative_to(cls.retained_directory) and name not in names:
+        if name.is_relative_to(cls.retained_directory) and not any(
+                name.is_relative_to(directory) for directory in names):
             raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
 
     @classmethod
     def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
-        path = files.writer_path(cls)
-        if not path.is_file():
-            return
-        copied = directory / cls.declared_name
-        cls.copy_group(path, copied)
-        try:
-            with closing(cls.writer(copied)) as db, db:
-                cls.table_schema().install_schema(db, WriterOwnedFile())
-                cls.table_schema().require_readable(db)
-        except RelationViolationError as error:
-            raise RelationViolationError(
-                f"{path} cannot open on this runtime: {error}") from error
+        for resource in cls.resources(files):
+            path = files.location(resource)
+            if not path.is_file():
+                continue
+            copied = directory / resource.path
+            copied.parent.mkdir(parents=True, exist_ok=True)
+            cls.copy_group(path, copied)
+            try:
+                with closing(cls.writer(copied)) as db, db:
+                    cls.table_schema().install_schema(db, WriterOwnedFile())
+                    cls.table_schema().require_readable(db)
+            except RelationViolationError as error:
+                raise RelationViolationError(
+                    f"{path} cannot open on this runtime: {error}") from error
 
     @staticmethod
     def practice_openings(root: Path, excluding: tuple[type[WriterOwnedStore], ...] = ()) -> None:
@@ -2684,7 +2693,8 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     @classmethod
     @abstractmethod
-    def path(cls) -> Path: ...
+    def path(cls) -> Path:
+        """The live file or common root used by this owner's resource declarations."""
 
     @classmethod
     @abstractmethod
