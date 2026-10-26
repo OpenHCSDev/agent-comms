@@ -59,10 +59,12 @@ from .tool_request import (
 from .tool_result import ToolResult
 from .transcript_events import SentTranscript
 from .turn_digests import (
+    ActivityTurnView,
     LastTurns,
     OrderEditsRead,
     ThreadTurns,
     TurnBound,
+    TurnView,
     TurnsSince,
     UnjudgedEdits,
 )
@@ -465,14 +467,19 @@ class CommsProblemCloseTool(CommsTodoTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsTurnsTool(ThreadReadTool):
     label = "Read turns"
-    description = ("Read a unit's ordered original transcript facts in bounded pages. "
+    description = ("Read bounded conversation excerpts and tool-call outcomes. "
+                   "Use detail=original for complete recorded events, including raw evidence. "
                    "Send the returned older window to read the next older page.")
     window: Annotated[
         TurnBound, *tool_field("Turn window; send back older for the next page")
     ] = field(default_factory=LastTurns)
+    detail: Annotated[
+        type[TurnView], *tool_field("Activity excerpts by default; original returns complete evidence")
+    ] = ActivityTurnView
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return comms.transcripts.turns(caller.subject(self.thread), self.window)
+        return replace(comms.transcripts.turns(caller.subject(self.thread), self.window),
+                       detail=self.detail)
 
 
 @dataclass(frozen=True, kw_only=True)

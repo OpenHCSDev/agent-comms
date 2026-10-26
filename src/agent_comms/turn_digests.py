@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, ClassVar, Self
+
+from pydantic import JsonValue
 
 from .todos import ProgressRead, TodoStore
 
 from .turn_item import NativeTurnId
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
+from .field_codec import FieldCodec
 from .external_transcript import ExternalTranscript, StoreRead
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
@@ -32,11 +35,39 @@ if TYPE_CHECKING:
     from .todos import OrderProgress, Todo
 
 
+class TurnView(DeclaredFamily, affix="TurnView"):
+    """The original facts or a bounded activity projection of the same read."""
+
+    @classmethod
+    @abstractmethod
+    def project(cls, answer: ThreadTurns) -> JsonValue: ...
+
+
+class ActivityTurnView(TurnView):
+    turn_limit: ClassVar[int] = 5
+
+    @classmethod
+    def project(cls, answer: ThreadTurns) -> JsonValue:
+        selected = answer.turns[:cls.turn_limit]
+        page = replace(answer, turns=selected, older=answer.older.older(selected))
+        return FieldCodec.project(page, "activity")
+
+
+class OriginalTurnView(TurnView):
+    @classmethod
+    def project(cls, answer: ThreadTurns) -> JsonValue:
+        return FieldCodec.encode(answer)
+
+
 @dataclass(frozen=True)
 class ThreadTurns(ToolResult):
     thread: ThreadIncarnation
     turns: tuple[TurnDigest, ...]
     older: TurnBound
+    detail: type[TurnView] = ActivityTurnView
+
+    def to_wire(self) -> JsonValue:
+        return self.detail.project(self)
 
 
 @dataclass(frozen=True)

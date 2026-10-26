@@ -38,13 +38,13 @@ def prepared(tmp_path):
     return comms
 
 
-def endpoint(comms, name, window):
+def endpoint(comms, name, window, *, detail='activity'):
     """The comms_turns tool through the command line's dispatcher; the conftest already clears a
     managed runtime's environment, and test_cli proves the console script around it."""
     output = io.StringIO()
     with redirect_stdout(output):
         code = main(['--root', str(comms.root), 'tool', '--tool', 'comms_turns', '--arguments',
-                     json.dumps(dict(thread=name, window=FieldCodec.encode(window)))])
+                     json.dumps(dict(thread=name, window=FieldCodec.encode(window), detail=detail))])
     assert code == 0, output.getvalue()
     return json.loads(output.getvalue())
 
@@ -53,7 +53,7 @@ def paged_answers(comms, name):
     window = LastTurns(100)
     seen = set()
     while True:
-        answer = endpoint(comms, name, window)
+        answer = endpoint(comms, name, window, detail='original')
         older = FieldCodec.decode(TurnBound, answer['older'])
         if not answer['turns']:
             assert older == window
@@ -104,6 +104,7 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
 def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     comms = prepared(tmp_path)
     source = tmp_path / 'native.jsonl'
+    evidence = 'saved evidence ' + 'x' * 49648
     rows = [
         dict(type='session', id='source', version=3, timestamp='2026-10-16T12:00:00Z'),
         dict(type='message', id='u1', timestamp='2026-10-16T12:00:00Z',
@@ -117,23 +118,32 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
                                             arguments=dict(path='x.py'))], stopReason='toolUse')),
         dict(type='message', id='result', parentId='call', timestamp='2026-10-16T12:00:04Z', message=dict(
             role='toolResult', toolCallId='read-1', toolName='read', isError=False,
-            content=[dict(type='text', text='contents')])),
+            content=[dict(type='text', text=evidence)])),
         dict(type='message', id='a2', parentId='result', timestamp='2026-10-16T12:00:05Z', message=dict(
             role='assistant', content=[dict(type='text', text='done')], stopReason='stop')),
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
     source.chmod(0o600)
     comms.registry.declare(Thread('native', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
-    answer = endpoint(comms, 'native', LastTurns(1))
+    saved = source.read_bytes()
+    activity = endpoint(comms, 'native', LastTurns(1))
+    shown, = activity['turns']
+    assert [event['kind'] for event in shown['events']] == ['user', 'assistant']
+    call, = shown['calls_started']
+    assert (call['tool_call_id'], call['state']) == ('read-1', 'succeeded')
+    assert shown['original_event_count'] == 4
+    assert evidence not in json.dumps(activity)
+    answer = endpoint(comms, 'native', LastTurns(1), detail='original')
     turn, = answer['turns']
     assert turn['turn_id'] == 'u2'
     assert [event['kind'] for event in turn['events']] == ['user', 'tool_start', 'tool_end', 'assistant']
     assert turn['events'][1]['raw_input'] == dict(path='x.py')
-    assert turn['events'][2]['text'] == 'contents'
+    assert turn['events'][2]['text'] == evidence
     assert turn['events'][3]['text'] == 'done'
     assert [turn.turn_id for turn in comms.transcripts.turns('native', LastTurns(2)).turns] == ['u2', 'u1']
     older = FieldCodec.decode(TurnBound, answer['older'])
     assert [turn['turn_id'] for turn in endpoint(comms, 'native', older)['turns']] == ['u1']
+    assert source.read_bytes() == saved
 
 
 def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_path):
@@ -166,6 +176,7 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     assert [(event['kind'], event['message']['text'] if 'message' in event else event['text'])
             for event in turn['events']] == [
         ('incoming', 'How many opens are left?'), ('assistant', 'None are left.')]
+    assert turn['events'][0]['source'] == FieldCodec.encode(asked.reference)
     assert json.loads(source.read_text().splitlines()[1])['message']['content'] == frame
 
 

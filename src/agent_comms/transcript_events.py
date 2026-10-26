@@ -13,7 +13,7 @@ from pydantic import JsonValue
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, InputId, NullMember, PresentMember, WireBind, WireOmitDefault
+from .field_codec import ActivityExclude, FieldCodec, InputId, NullMember, PresentMember, WireBind, WireOmitDefault, projected
 from .message_reference import MessageReference
 from .messages import Message
 from .native_tool_call import ToolCallId
@@ -164,6 +164,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         """Only the recorded input stands for the messages its wake selected."""
         return (self,)
 
+    def activity_items(self) -> tuple[TranscriptEvent, ...]:
+        """Only conversation text opts into the bounded activity excerpt."""
+        return ()
+
 
 @dataclass(frozen=True)
 class TranscriptCoverage:
@@ -188,6 +192,18 @@ class RecordedTranscript(TranscriptEvent):
 
 
 class TextTranscript(TranscriptEvent):
+    text: str
+
+    def activity_items(self) -> tuple[TranscriptEvent, ...]:
+        return (self,)
+
+    @projected(view="activity", name="text")
+    def activity_text(self) -> str:
+        return self.text[:TurnDigest.activity_excerpt_characters]
+
+    @projected(view="activity", name="text_characters")
+    def activity_text_characters(self) -> int:
+        return len(self.text)
 
     def as_context(self) -> ContextTranscript:
         return ContextTranscript(self.text, timestamp=self.timestamp, position=self.position)
@@ -201,7 +217,7 @@ class TextTranscript(TranscriptEvent):
 
 @dataclass(frozen=True)
 class NativeTextTranscript(TextTranscript, RecordedTranscript):
-    text: str = ""
+    text: Annotated[str, ActivityExclude()] = ""
 
 
 class MarkdownTranscript(NativeTextTranscript):
@@ -214,6 +230,9 @@ class LiveTextTranscript(StreamingMerge, MarkdownTranscript):
 
 class SilentTranscript:
     routed = False
+
+    def activity_items(self) -> tuple[TranscriptEvent, ...]:
+        return ()
 
 
 class OutgoingRoute:
@@ -251,7 +270,7 @@ class IncomingTranscript(TextTranscript):
     def category(self) -> type[MessageCategory]:
         return self.message.role.category
 
-    message: Message
+    message: Annotated[Message, ActivityExclude()]
     reader: str
     position: ClassVar[int]
     timestamp: ClassVar[float]
@@ -259,7 +278,7 @@ class IncomingTranscript(TextTranscript):
     def __post_init__(self) -> None:
         self.message.require_envelope()
 
-    @property
+    @projected(view="activity")
     def position(self) -> int:
         return self.message.seq
 
@@ -267,11 +286,11 @@ class IncomingTranscript(TextTranscript):
     def text(self):
         return self.message.body
 
-    @property
+    @projected(view="activity")
     def timestamp(self):
         return self.message.timestamp
 
-    @property
+    @projected(view="activity")
     def source(self):
         return self.message.reference
 
@@ -531,7 +550,32 @@ class TurnDigest:
     """One turn's events in their recorded order, read from the unit's own records."""
 
     turn_id: NativeTurnId
-    events: tuple[TranscriptEvent, ...]
+    events: Annotated[tuple[TranscriptEvent, ...], ActivityExclude()]
+
+    activity_excerpt_characters: ClassVar[int] = 600
+    activity_text_limit: ClassVar[int] = 4
+    activity_call_limit: ClassVar[int] = 6
+
+    @projected(view="activity", name="events")
+    def activity_events(self) -> tuple[TranscriptEvent, ...]:
+        """Keep the request and the newest conversation text; omit raw tool results."""
+        items = tuple(item for event in self.events for item in event.activity_items())
+        if len(items) <= self.activity_text_limit:
+            return items
+        return items[:1] + items[-(self.activity_text_limit - 1):]
+
+    @projected(view="activity", name="calls_started")
+    def activity_calls(self) -> tuple[OrderCall, ...]:
+        """Use the existing call owner for digests and final recorded outcomes."""
+        calls: dict[ToolCallId, OrderCall] = {}
+        for event in self.events:
+            event.record_call(calls, float("-inf"))
+        return tuple(replace(call, digest=call.digest[:self.activity_excerpt_characters])
+                     for call in tuple(calls.values())[-self.activity_call_limit:])
+
+    @projected(view="activity", name="original_event_count")
+    def activity_event_count(self) -> int:
+        return len(self.events)
 
     def with_selected(self, selected: tuple[TranscriptEvent, ...]) -> TurnDigest:
         """The selected messages stand where the frame rendered around them was recorded; the
