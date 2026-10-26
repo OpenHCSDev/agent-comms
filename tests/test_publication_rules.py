@@ -1,6 +1,7 @@
 """Publication rules use a real Git repository, shared frame, stores and forge subprocess."""
 
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from agent_comms.commander import judge
@@ -9,13 +10,14 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.order_tools import CommsHeadVerdictTool
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import StuckMerge
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.todos import (
     ClosedListedPullRequest, ConflictMergeBlock, MergedListedPullRequest, NoHeadOrder,
     ProgressRead, PullRequestCommit, ReviewedHeadVerdict, SupersededHeadVerdict,
-    UnmergedListedPullRequest, VerdictReason,
+    UnmergedListedPullRequest, VerdictReason, WaitingMergeBlock,
 )
 
 pytest_plugins = ('test_head_review',)
@@ -43,6 +45,10 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     source.git(source.checkout, 'push', 'origin', 'main')
 
     common = dict(updated=stamp, base='main', reviewable_times=(stamp,))
+    old = datetime.fromtimestamp(time.time() - ClosedUnmergedPullRequest.window - 60,
+                                UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    github.put(source.github, ClosedListedPullRequest(
+        12, 'outside-window', lost_head, closed_at=old, **common))
     for number, head in ((7, lost_head), (8, squashed_head)):
         github.put(source.github, ClosedListedPullRequest(
             number, f'closed/{number}', head, closed_at=stamp, **common))
@@ -73,16 +79,24 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     github.put(source.github, UnmergedListedPullRequest(
         10, 'armed-conflict', lost_head, armed_times=(stamp,), required_times=(stamp,),
         merge_blocks=(ConflictMergeBlock(stamp),), **common))
+    source.git(source.checkout, 'push', 'origin', f'{lost_head}:refs/pull/10/head')
     (stuck,) = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
     assert stuck.request.pr == 10
     assert 'conflicts with its base' in stuck.line()
     accepted = ReviewedHeadVerdict(VerdictReason('The owner implements the requested behavior without competing decisions.'))
     tool = CommsHeadVerdictTool(request=stuck.request, operation=accepted, order=NoHeadOrder())
     tool.invoke(comms, tool.arguments, caller=ThreadCaller('lead'))
-    ping = RulePing.capture(stuck)
+    ping = replace(RulePing.capture(stuck), since=RecordedEventTime(stuck.began()))
     assert not ping.disposed(comms, frozenset(('lead',)))
     assert len(StuckMerge.scan_pulls(comms.goals, ProgressRead(()))) == 1
     assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
+    assert not ping.acted_on(frozenset(stuck.subjects()))
+    # A clean armed head still gets an alarm after the cause's grace period.
+    waiting, = UnmergedListedPullRequest(
+        13, 'clean-but-stalled', lost_head, armed_times=(stamp,), required_times=(stamp,),
+        **common).stuck()
+    assert waiting == WaitingMergeBlock(stamp)
+    assert waiting.since == datetime.fromisoformat(stamp).timestamp() + WaitingMergeBlock.seconds
 
     # Restore an ordinary closed head, then prove Git alone clears it after landing.
     github.put(source.github, ClosedListedPullRequest(

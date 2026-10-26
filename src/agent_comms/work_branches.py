@@ -341,19 +341,18 @@ query($owner: String!, $name: String!, $after: String) {
         """Commits whose patches the published base does not hold, not just absent hashes."""
         (published,) = self.remote_heads('origin', f'refs/heads/{base}')
         self.require_commits('origin', published, head)
-        missing = tuple(line.split()[1] for line in self._git('cherry', published, head).splitlines()
-                        if line.startswith('+ '))
-        if not missing:
-            return ()
-        # Individual patch IDs do not recognize a squash of several commits. Git can still
-        # prove the aggregate change is present: merging it changes no tree. No worktree or
-        # index is touched; a conflict is a legitimate unlanded result, not an ignored error.
+        # Ask the cheap aggregate question first. Individual patch IDs do not recognize a
+        # squash of several commits, and computing them repeatedly walks the same base history.
+        # No worktree or index is touched; a conflict means the aggregate was not proved landed.
         merged = Repo._run(self.checkout, 'merge-tree', '--write-tree', published, head,
                            timeout=self.timeout)
         if merged.returncode not in (0, 1):
             raise WorkBranchError(merged.stderr.decode(errors='replace').strip())
         landed_tree = self._git('rev-parse', f'{published}^{{tree}}').strip()
-        return () if merged.returncode == 0 and merged.stdout.decode().splitlines()[0] == landed_tree else missing
+        if merged.returncode == 0 and merged.stdout.decode().splitlines()[0] == landed_tree:
+            return ()
+        return tuple(line.split()[1] for line in self._git('cherry', published, head).splitlines()
+                     if line.startswith('+ '))
 
     def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
         """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
