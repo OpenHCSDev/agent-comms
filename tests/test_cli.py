@@ -665,8 +665,8 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
         TargetCompleted(CommandTarget.named("beta"), StartCliCommand(name="beta"), attached),
         TargetFailed(CommandTarget.named("gamma"), "ValueError", "gone"),
     ))
-    assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ()
-    assert batch.reconnect_targets() == ("alpha",)
+    assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ("beta",)
+    assert batch.reconnect_targets() == ("alpha", "beta")
     assert batch.completed_count == 2
     assert TargetBatchResult(batch.outcomes[:1]).completed_count == 1
     assert TargetBatchResult(batch.outcomes[-1:]).completed_count == 0
