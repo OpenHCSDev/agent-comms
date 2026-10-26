@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated, TextIO
 
 from .bus import Bus
-from .child_process import NoProcess, OutlivesLauncherLifetime, ProcessIdentity, ProcessState, SpawnedProcess
+from .child_process import NoProcess, ObservedProcess, OutlivesLauncherLifetime, ProcessIdentity, ProcessState, SpawnedProcess
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import PathText, WireOmitDefault
@@ -70,6 +70,9 @@ class RootHost(DeclaredFamily, affix="RootHost"):
     def observed(self, root: Path) -> ProcessState:
         return NoProcess()
 
+    def retire(self, root: Path, validate: Callable[[ProcessIdentity], None]) -> None:
+        pass
+
 
 @dataclass(frozen=True)
 class NoRootHost(RootHost):
@@ -80,6 +83,13 @@ class NoRootHost(RootHost):
 class RecordedRootHost(RootHost):
     process: ProcessIdentity
     bus: RecordedBus
+
+    def retire(self, root: Path, validate: Callable[[ProcessIdentity], None]) -> None:
+        observed = self.observed(root)
+        if observed.alive():
+            process = observed.require()
+            validate(process)
+            ObservedProcess(process).stop_sync()
 
     def observed(self, root: Path) -> ProcessState:
         # A copied store cannot borrow the source root's live process.
@@ -127,10 +137,17 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
     def empty(self) -> RootRuntime:
         raise FileNotFoundError(self.path)
 
+    def retire_host(self, validate: Callable[[ProcessIdentity], None]) -> None:
+        with self.guarded_write():
+            data = self._read_unlocked()
+            data.host.retire(self.path.parent, validate)
+            self._publish_unlocked(replace(data, host=NoRootHost()))
+
     def acquire_host(
         self, runtime: LaunchRuntime, command: tuple[str, ...], *,
         environment: Mapping[str, str], cwd: str,
         output: Callable[[], AbstractContextManager[TextIO]],
+        admission: Callable[[], AbstractContextManager[None]],
     ) -> ProcessIdentity:
         """Publish the root's one host while its existing exec gate is still closed."""
         with self.guarded_write():
@@ -140,7 +157,7 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
             observed = current.host.observed(self.path.parent)
             if observed.alive():
                 return observed.require("Recorded worker host has no process")
-            with output() as capture, socket.socket(socket.AF_UNIX) as listener:
+            with admission(), output() as capture, socket.socket(socket.AF_UNIX) as listener:
                 with SpawnedProcess.launching(
                     (*command, "--listener-fd", str(listener.fileno())),
                     env=environment, cwd=cwd, output=capture, runtime=runtime,

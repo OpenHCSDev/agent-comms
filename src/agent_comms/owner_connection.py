@@ -8,20 +8,27 @@ import os
 import socket
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
+from abc import abstractmethod
+from collections.abc import Awaitable
+from dataclasses import dataclass
+from pydantic import JsonValue
+from .command import Command
+from .declared_family import DeclaredFamily
+from .tool_result import DeclaredReply
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .jsonl_stream import JsonlStreamReader
-from .owner_protocol import OwnerLine
+from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
     from .registry_document import RegistryEntry
     from .thread_identity import OwnerIdentity
-    from .runtime_requests import RuntimeRequest
+    from .runtime import RuntimeServer, SocketClient
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -34,6 +41,66 @@ class OwnerIdentityChangedError(RuntimeError, ConnectionError):
 
 class OwnerReplyLostError(RuntimeError, ConnectionError):
     """The owner disconnected after dispatch; a mutating request remains uncertain."""
+
+
+@dataclass(frozen=True)
+class RuntimeRequestContext:
+    server: RuntimeServer
+    reader: asyncio.StreamReader
+    client: SocketClient
+    session_id: str
+    name: str
+
+    async def send(self, line: OwnerLine) -> None:
+        await self.client.send(line)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RuntimeRequest(
+    DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"
+):
+    thread: str
+
+    @classmethod
+    def from_wire(cls, payload: object) -> Self:
+        values = FieldCodec.decode(dict[str, JsonValue], payload)
+        if "kind" in values:
+            raise ValueError("Unknown runtime request field: kind")
+        values["kind"] = values.pop("action", None)
+        return cls.from_payload(values)
+
+    def to_wire(self) -> dict[str, object]:
+        payload = FieldCodec.encode(self)
+        return {"action": payload.pop("kind"), **payload}
+
+    @classmethod
+    def proxy_payload(
+        cls, thread: str, controller_token: str | None, parameters: dict[str, object]
+    ) -> dict[str, object]:
+        return OwnerConnection.wire_request(FieldCodec.encode(cls), thread, parameters)
+
+    def require_owner(self, entry):
+        owner = entry.thread
+        if not owner.process_identity.runs_here() or not entry.status.running:
+            raise RelationViolationError("This process no longer owns the thread.")
+        return owner
+
+    async def bind(self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient) -> RuntimeRequestContext:
+        entry = (await Coordination.run_worker(partial(
+            server.agent._comms.registry.entry, self.thread,
+        ))).entry
+        owner = self.require_owner(entry)
+        session_id = server.agent.sessions.require_owned_session(entry)
+        return RuntimeRequestContext(server, reader, client, session_id, owner.name)
+
+
+class ResultRuntimeRequest(RuntimeRequest):
+    async def apply(self, ctx: RuntimeRequestContext) -> None:
+        reply = await self.result(ctx)
+        await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
+
+    @abstractmethod
+    async def result(self, ctx: RuntimeRequestContext) -> DeclaredReply: ...
 
 
 class OwnerConnection:

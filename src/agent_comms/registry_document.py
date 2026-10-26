@@ -1218,6 +1218,12 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
             alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching
         }
 
+    def require_detached_process(self, process: ProcessIdentity) -> None:
+        attached = tuple(thread.name for thread in self.threads.values()
+                         if thread.process_identity == process)
+        if attached:
+            raise RelationViolationError(f"Worker host still holds sessions: {attached}")
+
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.canonical_name(name)
         return OwnerIdentity(self.threads[canonical].incarnation, self.owner_generations[canonical])

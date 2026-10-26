@@ -278,7 +278,7 @@ class SessionLifecycle:
                 await self.effects.turns.close_sessions((state,))
                 await Coordination.run_worker(partial(
                     self.comms.owners.complete_session, state.owner, expected,
-                    state.configuration.launch.process, claim.generation,
+                    state.configuration.launch.process, claim.claimed_generation,
                 ))
                 self.config.stop_observing_configuration(state.identifier)
                 self.bindings.pop(state.identifier, None)
