@@ -62,6 +62,10 @@ class SurroundingChannel(SubclassUnion, ChannelSelection, affix="Channel"):
     def names_for_binding(self) -> tuple[str, ...]:
         return ()
 
+    def scope(self) -> str:
+        """How a refusal names this channel after its target; no channel adds nothing."""
+        return ""
+
 
 @dataclass(frozen=True)
 class NoChannel(NullMember, SurroundingChannel):
@@ -80,6 +84,9 @@ class OneChannel(SingleFieldValue, SurroundingChannel):
 
     def names_for_binding(self) -> tuple[str, ...]:
         return (self.name,)
+
+    def scope(self) -> str:
+        return f" in {self.name}"
 
 
 @dataclass(frozen=True)

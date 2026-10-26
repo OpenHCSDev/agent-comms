@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.cli_commands import ReconciledStoresResult
-from agent_comms.cli_verbs.store_reconcile import StoreReconcileCliCommand
+from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
 from agent_comms.field_codec import Argument
 from agent_comms.typed_table import HeldBusFile
 from agent_comms.typed_table import NoPractice

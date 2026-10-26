@@ -6,7 +6,7 @@ from agent_comms.cli_bridges.history import AnySession
 from agent_comms.cli_bridges.history import ExpectedSession
 from agent_comms.cli_bridges.history import OfflineHistory
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_verbs.importing import ImportingCliCommand
+from agent_comms.cli_support.importing import ImportingCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import Editor

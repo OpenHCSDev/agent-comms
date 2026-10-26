@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent_comms.cli_bridges.history import History
 from agent_comms.cli_commands import _tags
-from agent_comms.cli_verbs.conversation_limits import ConversationLimitsCliCommand
+from agent_comms.cli_support.conversation_limits import ConversationLimitsCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import Normalize

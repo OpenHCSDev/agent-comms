@@ -11,7 +11,8 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.channel_targets import CommandTarget, PerTargetChannels
+from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels
+from agent_comms.catalog_document import NoCatalog
 from agent_comms.cli import main
 from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
 from agent_comms.native_arguments import GivenArguments, GivenBinary
@@ -373,17 +374,17 @@ class TestSelectedTargetActions:
             with pytest.raises(ValueError):
                 RestartCliCommand.execute_target(
                     comms, RestartCliCommand.selected_targets((CommandTarget.named('alpha'),)),
-                    arguments)
+                    arguments, project=str(tmp_path))
         explicit = RestartCliCommand(name=OneOwner('alpha'), agent_bin=GivenBinary('/operator/native'),
                                       agent_args=GivenArguments(('--no-extensions',)))
         from agent_comms.cli import build_parser
         options = build_parser().parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
             '--agent-args=--no-extensions'])
-        parsed = CliCommand.member_named(options.command).from_arguments(options)
+        parsed = options.command_declaration.from_arguments(options)
         assert parsed == explicit
         assert StopCliCommand.help == 'Stop process'
-        assert not QueueRestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
+        assert not QueueRestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus(), NoChannel(), catalog=NoCatalog())
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
             comms.registry.store.path,
@@ -395,11 +396,11 @@ class TestSelectedTargetActions:
             ),
         )
         assert QueueRestartCliCommand.thread_bindings(comms,
-            replace(owner, turn_record=record, turn_generation=busy.generation), status)
+            replace(owner, turn_record=record, turn_generation=busy.generation), status, NoChannel(), catalog=NoCatalog())
         assert not QueueRestartCliCommand.thread_bindings(comms,
-            replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status)
+            replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status, NoChannel(), catalog=NoCatalog())
         assert not QueueRestartCliCommand.thread_bindings(comms,
-            replace(owner, execution=ExternalThreadExecution), status)
+            replace(owner, execution=ExternalThreadExecution), status, NoChannel(), catalog=NoCatalog())
 
     def test_tag_batch_requires_each_confirmation_before_removing_any_tag(self, tmp_path):
         from agent_comms.cli_command import CliCommand
@@ -547,7 +548,7 @@ class TestSelectedTargetActions:
         catalog = comms.channels.catalog.read()
         target = ChannelTarget("#team")
         commands = StartCliCommand.bindings(
-            comms, target, snapshot=snapshot, catalog=catalog,
+            comms, target, NoChannel(), snapshot=snapshot, catalog=catalog,
             resolved=target.resolve(snapshot, comms.bus.require_channel))
         assert tuple(command.name for command in commands) == ("alpha",)
         assert all(comms.registry.require(name).process_identity == NoProcess()

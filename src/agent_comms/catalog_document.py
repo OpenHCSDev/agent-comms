@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .activity_clocks import ActivityClocks
+from abc import ABC, abstractmethod
 import time
 from dataclasses import dataclass, field, replace
 
@@ -45,8 +46,20 @@ class ChannelPreferences:
         )
 
 
-class CatalogAccess:
+class CatalogAccess(ABC):
     """Queries available to a command's acquired catalog context."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def require_channel(self, target: str, activity: ActivityClocks) -> Channel: ...
+
+    @abstractmethod
+    def pinned_threads(self, channel: str) -> frozenset[str]: ...
+
+
+class NoCatalog(CatalogAccess):
+    """This target selection did not acquire a channel catalog."""
 
     __slots__ = ()
 
@@ -55,12 +68,6 @@ class CatalogAccess:
 
     def pinned_threads(self, channel: str) -> frozenset[str]:
         raise ValueError("Thread pin lookup requires an acquired catalog")
-
-
-class NoCatalog(CatalogAccess):
-    """This target selection did not acquire a channel catalog."""
-
-    __slots__ = ()
 
 
 @dataclass(slots=True)

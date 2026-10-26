@@ -156,6 +156,11 @@ class InstallRun:
         return cls(command, root, scratch, target,
                    [timing.launched() for timing in commands.clock.phases])
 
+    @classmethod
+    def read(cls, unit: InstallUnit) -> InstallRun:
+        """The run a launched unit was handed, decoded from its request file."""
+        return FieldCodec.decode(cls, FieldCodec.parse(unit.request.read_text()))
+
     @cached_property
     def unit(self) -> InstallUnit:
         return InstallLogs(self.root).minted()

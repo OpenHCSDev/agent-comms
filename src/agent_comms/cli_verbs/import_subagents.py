@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent_comms.cli_bridges.claude import ClaudeTranscript
 from agent_comms.cli_commands import SubagentsImportedResult
-from agent_comms.cli_verbs.importing import ImportingCliCommand
+from agent_comms.cli_support.importing import ImportingCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import PathText

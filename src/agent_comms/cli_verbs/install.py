@@ -8,6 +8,8 @@ from agent_comms.active_route import active_route_path
 from agent_comms.cli_command import CliCommand
 from agent_comms.field_codec import WireExclude
 from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
+from agent_comms.installer.launch import InstallRun
+from agent_comms.installer.logs import InstallLogs
 from agent_comms.installer.request import InstallRequest
 from agent_comms.launch_root import LaunchRoot
 from dataclasses import dataclass
@@ -32,9 +34,6 @@ class InstallCliCommand(InstallRequest, CliCommand, declared_name=InstallRequest
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """The bus may be unreadable by this runtime, or absent, until the target's own
         source has carried or created it, so nothing opens it here."""
-        from agent_comms.installer.launch import InstallRun
-        from agent_comms.installer.logs import InstallLogs
-
         with InstallLogs(route.root).launching():
             run = InstallRun.start(self, route.root, ProcessLauncherPhase())
             return run.launch(output)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogAccess, NoCatalog
+from agent_comms.catalog_document import CatalogAccess
 from agent_comms.channel_targets import ResolvedChannel
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
@@ -18,5 +18,5 @@ class ExactTagCliCommand(NamedCliCommand):
         return cls(name=name)
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return (cls.for_tag(resolved.channel.name.removeprefix('#')),) if resolved.channel.exact else ()

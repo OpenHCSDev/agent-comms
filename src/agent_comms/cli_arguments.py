@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Never, Self
 
 from agent_comms.cli_command import CliCommand
 from agent_comms.launch_root import DefaultLaunch, LaunchRequest, LaunchRoot
@@ -64,5 +64,5 @@ class CliArgumentParser(argparse.ArgumentParser):
         args, _ = selection.parse_known_args(arguments, namespace=_CommandParsingArguments())
         return args.command
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> Never:
         raise ValueError(message)

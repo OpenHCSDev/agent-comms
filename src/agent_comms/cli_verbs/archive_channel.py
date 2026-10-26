@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogAccess, NoCatalog
+from agent_comms.cli_command import CliCommand
+
+from typing import Self
+
+from agent_comms.catalog_document import CatalogAccess
 from agent_comms.channel_targets import ResolvedChannel
 from agent_comms.channels import Channel
 from agent_comms.cli_command import MultipleTargets
@@ -24,14 +28,14 @@ class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="
     ] = True
 
     @classmethod
-    def catalog_declaration(cls):
+    def catalog_declaration(cls) -> type[CliCommand]:
         return ArchiveCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return (cls(name=resolved.channel.name),) if resolved.channel.can_set_archived(cls.archived) else ()
 
-    def confirmation(self):
+    def confirmation(self) -> str:
         return (f"Archive {self.name}? Hide the channel without removing threads, tags or history. It can be restored."
                 if self.archived else '')
 

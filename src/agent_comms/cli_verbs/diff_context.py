@@ -1,51 +1,20 @@
-"""The context verb and its option-selected implementation family."""
+"""Compare consecutive recorded context manifests."""
 
 from __future__ import annotations
 
-from abc import abstractmethod
-from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import CoreContextInspection
-from agent_comms.cli_commands import CoreSegmentText
-from agent_comms.cli_commands import ImportedContextSources
-from agent_comms.cli_commands import NativeContextInspection
-from agent_comms.cli_commands import NativeSourceSpans
-from agent_comms.cli_commands import RecordedContextManifests
-from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.context_store import ContextManifestCursor
-from agent_comms.context_store import LATEST_CONTEXT
-from agent_comms.coordination_errors import Refused
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import FieldCodec
-from agent_comms.importing import ImportedSessionMetadata
-from agent_comms.native_turn_context import NativeContextData
-from agent_comms.owner_connection import OwnerConnection
-from agent_comms.owner_connection import socket_path
-from agent_comms.turn_context import ContextManifest
 from agent_comms.turn_context import ContextManifestChange
-from agent_comms.turn_context import NextContextTurn
-from agent_comms.turn_context import TurnContext
-from collections.abc import Iterator
-from dataclasses import dataclass
-from itertools import dropwhile
-from itertools import takewhile
-from typing import Annotated
-import argparse
-import asyncio
+from itertools import islice
 
-
-
-from agent_comms.cli_context import ContextOptionCliCommand, SelectedContextCliCommand
+from agent_comms.cli_context import ContextOptionCliCommand
 
 class DiffContextCliCommand(ContextOptionCliCommand):
     def apply(self, ctx: Comms) -> ContextManifestChange:
         manifests = iter(self.manifests(ctx))
-        try:
-            current = next(manifests)
-        except StopIteration:
-            raise ValueError("No original context manifest exists for the requested turn") from None
-        for previous in manifests:
-            if not current.turn.same_recording(previous.turn):
-                return current.changed_since(previous)
-        raise ValueError("No preceding recorded turn exists for comparison")
+        for current in islice(manifests, 1):
+            for previous in manifests:
+                if not current.turn.same_recording(previous.turn):
+                    return current.changed_since(previous)
+            raise ValueError("No preceding recorded turn exists for comparison")
+        raise ValueError("No original context manifest exists for the requested turn")
 

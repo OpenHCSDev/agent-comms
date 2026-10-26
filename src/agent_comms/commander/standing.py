@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
@@ -23,7 +24,9 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, HeartbeatSubject, PassSubject
 from agent_comms.held_orders import HeldOrders
+from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
+from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.interpreter_operation import LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.message_bus import WatchPass
@@ -141,11 +144,17 @@ class InstallDue(UndatedStandingRule, FamilyScan):
             merges = UninstalledMerge.read(repo, recorded.commit, main)
             if not merges:
                 continue
-            member = logs.member(repo.github, main)
+            member = InstallDue.member(logs, repo.github, main)
             due.append(member(repo.github, main, recorded.commit, merges,
                               tuple(row for row in pulls.open(repo.github) if row.landing()),
                               logs, core, target))
         return tuple(due)
+
+    @staticmethod
+    def member(logs: InstallLogs, repo: RepositoryName, main: str) -> Callable[..., InstallDue]:
+        """The merge's launched run selects its standing-rule member; none is pending."""
+        return next((RunInstallDue.selected(unit) for unit in logs.launched(repo, main)),
+                    PendingInstallDue)
 
     def launch(self, comms: Comms) -> str:
         """An already-launched merge needs no second attempt."""
@@ -171,9 +180,6 @@ class PendingInstallDue(InstallDue):
     def launch(self, comms: Comms) -> str:
         """Every repository's merge installs the same Core target, so a run of that target
         already going is this merge's launch too; any other run is waited out."""
-        from agent_comms.installer.launch import InstallRun
-        from agent_comms.installer.request import InstallRequest
-
         command = InstallRequest(checkout=self.core.checkout, to=self.target,
                                  project=self.core.checkout)
         try:
@@ -181,7 +187,7 @@ class PendingInstallDue(InstallDue):
                 run = InstallRun.start(command, comms.root, LauncherPhase())
                 run.spawn(wait=False)
         except InstallRunning as running:
-            for unit in running.installing(self.target):
+            for unit in (unit for unit in running.units if InstallRun.read(unit).target == self.target):
                 self.logs.record(unit.logs, self.repo, self.main)
             return str(running)
         self.logs.record(run.unit.logs, self.repo, self.main)
@@ -194,6 +200,11 @@ class RunInstallDue(InstallDue, declared_name=None):
     rendering reads the unit that selected it, not a second look at the logs."""
 
     unit: InstallUnit = field(compare=False, kw_only=True)
+
+    @staticmethod
+    def selected(unit: InstallUnit) -> Callable[..., RunInstallDue]:
+        """The run hands itself to the member it selects."""
+        return partial(DiedInstallDue if unit.died() else LaunchedInstallDue, unit=unit)
 
 
 class LaunchedInstallDue(RunInstallDue):

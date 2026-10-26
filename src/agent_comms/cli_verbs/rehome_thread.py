@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_verbs.conversation_limits import ConversationLimitsCliCommand
-from agent_comms.cli_verbs.running_session import RunningSessionCliCommand
+from agent_comms.cli_support.conversation_limits import ConversationLimitsCliCommand
+from agent_comms.cli_support.running_session import RunningSessionCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from dataclasses import dataclass

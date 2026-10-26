@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from agent_comms.channel_targets import NoChannel, SurroundingChannel
-
 from abc import ABC, abstractmethod
 from agent_comms.active_route import ActiveRoute
 from agent_comms.catalog_document import CatalogAccess, NoCatalog
-from agent_comms.channel_targets import ChannelSelection, CommandTarget, NoChannel
+from agent_comms.channel_targets import ChannelSelection, CommandTarget, NoChannel, SurroundingChannel
 from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_result import CliResult, ResultShower
 from agent_comms.command import Command
@@ -19,8 +17,9 @@ from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, Started
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.target_fields import TargetField
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pydantic import JsonValue
+from collections.abc import Mapping
 from typing import Annotated, Self
 
 from agent_comms.channel_targets import OneChannel, ResolvedChannel, ResolvedThread
@@ -33,6 +32,7 @@ from inspect import iscoroutinefunction, signature
 from types import get_original_bases
 from typing import TYPE_CHECKING, TextIO, cast, get_args, get_origin
 import os
+import importlib.util
 
 if TYPE_CHECKING:
     from agent_comms.active_route import CommsRoute
@@ -44,7 +44,7 @@ class ChannelBound(TargetBound):
     """A target-bound field supplies the surrounding channel scope."""
 
 
-class CliExecution[Answer: CliResult = CliResult](Command["Comms", Answer]):
+class CliExecution[Answer: CliResult = CliResult](Command[Comms, Answer]):
     """The dispatcher contract, including methods selected through multiple inheritance."""
 
     @abstractmethod
@@ -89,12 +89,9 @@ class CliCommand[Answer: CliResult = CliResult](
         selected = FieldCodec.decode(str, name)
         package = FieldCodec.decode(str, cls._family_root.__registry_config__.discovery_package)
         module = f"{package}.{cls.module_stem(selected)}"
-        try:
-            import_module_preserving_root_logging(module)
-        except ModuleNotFoundError as error:
-            if error.name != module:
-                raise
-            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from error
+        if importlib.util.find_spec(module) is None:
+            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}")
+        import_module_preserving_root_logging(module)
 
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
         result = TargetCompleted(batch.target, self, self.apply(comms))
@@ -109,11 +106,11 @@ class CliCommand[Answer: CliResult = CliResult](
     def result_type(cls) -> type[Answer]:
         """The result this command declares once, as the family's type argument in its own or
         an inherited class header."""
-        for declaration in cls.__mro__:
+        commands = cls.__mro__[:cls.__mro__.index(CliCommand) + 1]
+        for declaration in commands:
             for base in get_original_bases(declaration):
-                origin, arguments = get_origin(base), get_args(base)
-                if isinstance(origin, type) and issubclass(origin, CliCommand) and arguments:
-                    (answer,) = arguments
+                if get_origin(base) in commands:
+                    (answer,) = get_args(base)
                     return cast(type[Answer], answer)
         raise TypeError(f"{cls.__qualname__} declares no result in its class header")
 
@@ -149,7 +146,7 @@ class CliCommand[Answer: CliResult = CliResult](
         return channel.channels_for(target)
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel = NoChannel(), *, catalog: CatalogAccess = NoCatalog()) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
         return ()
 
     @classmethod
@@ -161,7 +158,7 @@ class CliCommand[Answer: CliResult = CliResult](
         return ()
 
     @classmethod
-    def bindings(cls, comms: Comms, target: CommandTarget, channel: SurroundingChannel = NoChannel(),
+    def bindings(cls, comms: Comms, target: CommandTarget, channel: SurroundingChannel,
                  *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
                  resolved: ResolvedThread | ResolvedChannel | str) -> tuple[Self, ...]:
         return target.bindings(
@@ -243,7 +240,7 @@ class CliCommand[Answer: CliResult = CliResult](
             return self.run(comms, output)
 
     @classmethod
-    def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
+    def editor_arguments(cls, values: Mapping[str, JsonValue]) -> dict[str, object]:
         return FieldCodec.editor_arguments(cls, values)
 
     def confirmation(self) -> str:
@@ -282,7 +279,7 @@ class CliCommand[Answer: CliResult = CliResult](
     def execute_target(cls, comms: Comms, target: TargetSelection, arguments: dict[str, object],
                        *, confirmed: bool = False,
                        channel: ChannelSelection = NoChannel(),
-                       project: str | None = None) -> CliResult:
+                       project: str) -> CliResult:
         if not cls.channel_fields():
             channel.require_unbound()
             channel = NoChannel()
@@ -290,7 +287,7 @@ class CliCommand[Answer: CliResult = CliResult](
         catalog = (comms.channels.catalog.read()
                    if channel.needs_catalog or any(item.needs_channel_state for item in target.targets) else NoCatalog())
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
-                             project=os.getcwd() if project is None else project,
+                             project=project,
                              snapshot=snapshot, catalog=catalog)
 
 
@@ -321,7 +318,7 @@ class TargetAction:
         return '\n'.join(filter(None, (commands[0].selection_confirmation(tuple(commands))
                                        for commands in groups.values())))
 
-    def edited(self, arguments: dict[str, str | None]) -> TargetAction:
+    def edited(self, arguments: Mapping[str, JsonValue]) -> TargetAction:
         return replace(self, bound=tuple(command.edited(type(command).editor_arguments(arguments))
                                         for command in self.bound))
 
@@ -521,8 +518,8 @@ class TargetBatch(TargetSelection):
                                      for command in member.bindings(comms, name, context,
                                                                    snapshot=snapshot, catalog=catalog, resolved=resolved))
                     if not bindings:
-                        scope = f' in {context}' if context is not None else ''
-                        raise CommandSelectionChanged(f'This action is no longer available for {name}{scope}')
+                        raise CommandSelectionChanged(
+                            f'This action is no longer available for {name}{context.scope()}')
                 except ToolRefusedError as error:
                     outcomes.append((len(planned) + len(outcomes),
                                      TargetFailed(name, type(error).__name__, str(error))))
@@ -536,12 +533,12 @@ class TargetBatch(TargetSelection):
             try:
                 current = comms.registry.snapshot()
                 current_catalog = (comms.channels.catalog.read()
-                                   if context or name.needs_channel_state else NoCatalog())
+                                   if context.needs_catalog or name.needs_channel_state else NoCatalog())
                 if bound_command not in type(bound_command).bindings(
                         comms, name, context, snapshot=current, catalog=current_catalog,
                         resolved=name.resolve(current, comms.bus.require_channel)):
-                    scope = f' in {context}' if context is not None else ''
-                    raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
+                    raise CommandSelectionChanged(
+                        f'The bound command for {name}{context.scope()} changed; refresh the selection')
                 command.schedule(TargetBatchSchedule(position, name, outcomes, together), comms)
             except CLI_FAILURES as error:
                 result = TargetFailed(name, type(error).__name__, str(error))
@@ -569,10 +566,10 @@ class TargetEdit(Command[Comms, CliResult]):
     """Accepted editor values use the declared field and current bound command."""
     declaration: type[CliCommand]
     target: TargetSelection
-    arguments: dict[str, str | None]
+    arguments: dict[str, JsonValue]
     confirmed: bool = False
     channel: ChannelSelection = NoChannel()
-    project: str | None = None
+    project: str = field(default_factory=os.getcwd)
 
     def apply(self, ctx: Comms) -> CliResult:
         arguments = self.declaration.editor_arguments(self.arguments)

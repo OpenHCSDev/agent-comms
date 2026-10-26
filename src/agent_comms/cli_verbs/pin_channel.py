@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogAccess, NoCatalog
+from agent_comms.cli_command import CliCommand
+
+from typing import Self
+
+from agent_comms.catalog_document import CatalogAccess
 from agent_comms.channel_targets import ResolvedChannel
 from agent_comms.channels import Channel
 from agent_comms.cli_command import MultipleTargets
@@ -24,11 +28,11 @@ class PinChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-
     ] = False
 
     @classmethod
-    def catalog_declaration(cls):
+    def catalog_declaration(cls) -> type[CliCommand]:
         return PinThreadCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return (cls(name=resolved.channel.name, pinned=not resolved.channel.pinned),) if resolved.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:

@@ -5,12 +5,11 @@ from __future__ import annotations
 import glob
 import json
 import shutil
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms.child_process import ResidentManager
 from agent_comms.field_codec import FieldCodec, Id128
@@ -18,9 +17,6 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.process_claim import ClaimHeldError, ProcessSingleton
 from agent_comms.repository_name import RepositoryName
-
-if TYPE_CHECKING:
-    from agent_comms.commander import standing
 
 
 @dataclass(frozen=True)
@@ -73,12 +69,6 @@ class InstallUnit:
             stderr=self.errors, inherited=self.inherited, assigned={"PYTHONPATH": pythonpath},
             wait=wait)
 
-    def target(self) -> str:
-        """Decode a launch request only when its target is actually read."""
-        from agent_comms.installer.launch import InstallRun
-
-        return FieldCodec.decode(InstallRun, FieldCodec.parse(self.request.read_text())).target
-
     def running(self) -> bool:
         return not ResidentManager.current().activity(self.unit).ended()
 
@@ -86,15 +76,10 @@ class InstallUnit:
         """Systemd signals the install, which runs its abort, and returns once the unit ends."""
         ResidentManager.current().control("stop", self.unit)
 
-    def due(self) -> Callable[..., standing.RunInstallDue]:
-        """A run whose unit is gone without printing a result died; any other was launched.
-        The run hands itself to the member it selects."""
-        from agent_comms.commander import standing
-
-        gone = ResidentManager.current().activity(self.unit).ended()
-        member = (standing.DiedInstallDue if gone and not self.result.read_text()
-                  else standing.LaunchedInstallDue)
-        return partial(member, unit=self)
+    def died(self) -> bool:
+        """A unit gone without printing a result died; any other was launched."""
+        return (ResidentManager.current().activity(self.unit).ended()
+                and not self.result.read_text())
 
     def last_error(self) -> str:
         return next((line for line in reversed(self.errors.read_text().splitlines())
@@ -109,9 +94,6 @@ class InstallRunning(UpgradeRefused):
         self.units = units
         super().__init__(f"another install holds {lock}; running units: "
                          f"{', '.join(unit.unit for unit in units)}")
-
-    def installing(self, target: str) -> tuple[InstallUnit, ...]:
-        return tuple(unit for unit in self.units if unit.target() == target)
 
 
 @dataclass(frozen=True)
@@ -161,13 +143,6 @@ class InstallLogs:
             if cause in (FieldCodec.decode(InstallCause, FieldCodec.parse(marker.read_text()))
                          for marker in unit.logs.glob("cause*.json"))
         )
-
-    def member(self, repo: RepositoryName, main: str) -> Callable[..., standing.InstallDue]:
-        """The merge's launched run selects its standing-rule member; none is pending."""
-        from agent_comms.commander import standing
-
-        return next((run.due() for run in self.launched(repo, main)),
-                    standing.PendingInstallDue)
 
     def record(self, logs: Path, repo: RepositoryName, main: str) -> None:
         """A run installs every repository's merge at once. Its first cause keeps the name

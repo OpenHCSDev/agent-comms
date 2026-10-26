@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogAccess, NoCatalog
+from agent_comms.catalog_document import CatalogAccess
 from agent_comms.channel_targets import OneChannel, ResolvedChannel
 from agent_comms.channel_targets import ResolvedThread
 from agent_comms.cli_support.named import NamedCliCommand

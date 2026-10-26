@@ -6,10 +6,8 @@ from abc import abstractmethod
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import CoreContextInspection
 from agent_comms.cli_commands import CoreSegmentText
-from agent_comms.cli_commands import ImportedContextSources
 from agent_comms.cli_commands import NativeContextInspection
 from agent_comms.cli_commands import NativeSourceSpans
-from agent_comms.cli_commands import RecordedContextManifests
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.context_store import ContextManifestCursor
@@ -17,18 +15,15 @@ from agent_comms.context_store import LATEST_CONTEXT
 from agent_comms.coordination_errors import Refused
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import FieldCodec
-from agent_comms.importing import ImportedSessionMetadata
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.owner_connection import OwnerConnection
 from agent_comms.owner_connection import socket_path
 from agent_comms.turn_context import ContextManifest
-from agent_comms.turn_context import ContextManifestChange
 from agent_comms.turn_context import NextContextTurn
 from agent_comms.turn_context import TurnContext
 from collections.abc import Iterator
 from dataclasses import dataclass
 from itertools import dropwhile
-from itertools import takewhile
 from typing import Annotated
 import argparse
 import asyncio
@@ -41,7 +36,7 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
     thread: Annotated[str, Argument(flags=("thread",))]
 
     @classmethod
-    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    def add_parser[P: argparse.ArgumentParser](cls, subparsers: argparse._SubParsersAction[P]) -> None:
         super().add_parser(subparsers)
         parser = subparsers.choices[cls.declared_name]
         parser.add_argument("--turn", type=int, default=argparse.SUPPRESS)
@@ -62,39 +57,36 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
         owner = ctx.registry.require(self.thread)
         connection = OwnerConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
 
-        async def inspect():
+        async def inspect() -> CliResult:
             try:
                 context = FieldCodec.decode(TurnContext, await connection.request("context_core"))
                 if context.thread != owner.incarnation:
                     raise ValueError("Core context belongs to another owner incarnation")
+                segments = tuple(CoreSegmentText(type(segment), segment.provenance, segment.text())
+                                 for segment in context.segments)
                 try:
-                    payload = await connection.request("context")
-                    native = FieldCodec.decode(NativeContextData, payload).require_session_file(
-                        owner.runtime.path)
+                    native = FieldCodec.decode(
+                        NativeContextData, await connection.request("context")
+                    ).require_session_file(owner.runtime.path)
                 except Refused as error:
-                    return context, None, str(error)
-                return context, native, None
+                    return CoreContextInspection("current-core-contributors; before future input",
+                                                 False, context, segments, str(error))
             finally:
                 await connection.close()
+            native_context = native.for_turn(owner, NextContextTurn())
+            return NativeContextInspection(
+                "next-native-base-and-core-contributors; before future input and provider hooks",
+                False, context, segments, native_context.segments, native_context.render().provider,
+                tuple(NativeSourceSpans(position, segment.measured_manifest().sha256,
+                                        segment.source_ranges())
+                      for position, segment in enumerate(native.segments)))
 
-        context, native, native_error = asyncio.run(inspect())
-        segments = tuple(CoreSegmentText(type(segment), segment.provenance, segment.text())
-                         for segment in context.segments)
-        if native is None:
-            return CoreContextInspection("current-core-contributors; before future input",
-                                         False, context, segments, native_error)
-        native_context = native.for_turn(owner, NextContextTurn())
-        return NativeContextInspection(
-            "next-native-base-and-core-contributors; before future input and provider hooks",
-            False, context, segments, native_context.segments, native_context.render().provider,
-            tuple(NativeSourceSpans(position, segment.measured_manifest().sha256,
-                                    segment.source_ranges())
-                  for position, segment in enumerate(native.segments)))
+        return asyncio.run(inspect())
 
 
 class ContextOptionCliCommand(CurrentContextCliCommand):
     @classmethod
-    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    def add_parser[P: argparse.ArgumentParser](cls, subparsers: argparse._SubParsersAction[P]) -> None:
         """These commands are selected by the context parser's options."""
 
     @abstractmethod

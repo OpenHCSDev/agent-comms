@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pydantic import JsonValue
+
 from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec
 from collections.abc import Callable
@@ -19,7 +21,7 @@ class TargetField:
 
     @classmethod
     def of(cls, plan: field_codec.FieldPlan, value: object) -> TargetField:
-        editor = (
+        editor: type[TargetField] = (
             CatalogTargetField
             if field_codec.Catalog.single(plan.annotation)
             else plan.setting(field_codec.Editor, cls)
@@ -57,10 +59,10 @@ class TargetField:
     def required(self) -> bool:
         return self.plan.constructor_required
 
-    def value_schema(self) -> dict[str, object]:
+    def value_schema(self) -> dict[str, JsonValue]:
         return FieldCodec.value_schema(self.annotation)
 
-    def json_schema(self) -> dict[str, object]:
+    def json_schema(self) -> dict[str, JsonValue]:
         return {**self.value_schema(), 'multiline': self.multiline,
                 'description': self.description, 'editor_default': self.editor_default}
 
@@ -105,6 +107,6 @@ class CatalogTargetField(ChoiceTargetField):
         return replace(self, options=tuple(CatalogChoice(name=item.name,
             value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
-    def value_schema(self) -> dict[str, object]:
+    def value_schema(self) -> dict[str, JsonValue]:
         return {**FieldCodec.value_schema(self.annotation),
                 'configuration': FieldCodec.encode(self.catalog)}

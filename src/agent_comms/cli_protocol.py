@@ -37,7 +37,7 @@ from .wire_models import DeclaredWireFamily, WireModel
 
 if TYPE_CHECKING:
     from .child_process import AttachedChild
-    from .cli_bridges.shared import BindingThread, CliBridge, DeliveryRow
+    from .cli_bridges.shared import CliBridge, DeliveryRow
 
 
 async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.cli_command import CliCommand
+
 from agent_comms.cli_verbs.archive_channel import ArchiveChannelCliCommand
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import TargetBound
@@ -17,5 +19,5 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name="restore-
     ] = False
 
     @classmethod
-    def catalog_declaration(cls):
+    def catalog_declaration(cls) -> type[CliCommand]:
         return cls

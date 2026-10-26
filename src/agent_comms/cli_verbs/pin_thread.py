@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from agent_comms.channel_targets import NoChannel, SurroundingChannel
+from agent_comms.channel_targets import SurroundingChannel
 
-from agent_comms.catalog_document import CatalogAccess, NoCatalog
+from agent_comms.catalog_document import CatalogAccess
 from agent_comms.cli_command import ChannelBound, MultipleTargets
 from agent_comms.cli_commands import ThreadPinnedResult
 from agent_comms.cli_support.named import NamedCliCommand
@@ -29,7 +29,7 @@ class PinThreadCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-t
     ] = False
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel = NoChannel(), *, catalog: CatalogAccess = NoCatalog()) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
         with comms.bus.opened_activity() as activity:
             return tuple(
                 cls(name=thread.name, channel=name,

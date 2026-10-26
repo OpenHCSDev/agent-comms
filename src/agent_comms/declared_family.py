@@ -58,17 +58,18 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         if is_root:
             # slots dataclasses recreate the root without its class-header keywords.
             namespace["_family_affix"] = affix if affix is not None else namespace.get("_family_affix", "")
-            namespace["__registry__"] = (
+            registry = namespace["__registry__"] = (
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )
             namespace["declared_name"] = None
-            namespace["__registry_config__"] = RegistryConfig(
-                registry_dict=namespace["__registry__"],
+            config = namespace["__registry_config__"] = RegistryConfig(
+                registry_dict=registry,
                 key_attribute="declared_name",
                 skip_if_no_key=True,
                 discovery_package=discovery_package,
             )
         elif root is not None:
+            config = root.__registry_config__
             stem = name.removesuffix(root._family_affix) if root._family_affix else name
             derived = declared_words(stem)
             # A slots dataclass recreates its declaration with the derived name in its namespace.
@@ -77,11 +78,8 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
             )
             if namespace["declared_name"] == "":
                 raise TypeError("A family member must have a nonempty name.")
-        config = (
-            cast(RegistryConfig, namespace["__registry_config__"])
-            if is_root
-            else root.__registry_config__ if root is not None else None
-        )
+        else:
+            config = None
         cls: type[DeclaredFamily] = super().__new__(
             mcs, name, bases, namespace, registry_config=config, **class_options
         )

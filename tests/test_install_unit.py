@@ -100,12 +100,12 @@ def test_a_launched_unit_gone_without_a_result_died(tmp_path, systemd):
     run.errors.write_text("Traceback\nBrokenPipeError: [Errno 32]\n\n")
 
     assert logs.launched(repo, "b" * 40) == (run,)
-    assert logs.member(repo, "b" * 40).func is standing.DiedInstallDue
-    assert logs.member(repo, "b" * 40).keywords == {"unit": run}
+    assert standing.InstallDue.member(logs, repo, "b" * 40).func is standing.DiedInstallDue
+    assert standing.InstallDue.member(logs, repo, "b" * 40).keywords == {"unit": run}
     assert run.last_error() == "BrokenPipeError: [Errno 32]"
     run.result.write_text("{}")
-    assert logs.member(repo, "b" * 40).func is standing.LaunchedInstallDue
-    assert logs.member(repo, "c" * 40) is standing.PendingInstallDue
+    assert standing.InstallDue.member(logs, repo, "b" * 40).func is standing.LaunchedInstallDue
+    assert standing.InstallDue.member(logs, repo, "c" * 40) is standing.PendingInstallDue
 
 
 def test_a_died_run_renders_from_the_run_that_selected_it(tmp_path, systemd):
@@ -118,7 +118,7 @@ def test_a_died_run_renders_from_the_run_that_selected_it(tmp_path, systemd):
     logs.record(run.logs, repo, "b" * 40)
     run.result.write_text("")
     run.errors.write_text("Traceback\nBrokenPipeError: [Errno 32]\n")
-    member = logs.member(repo, "b" * 40)
+    member = standing.InstallDue.member(logs, repo, "b" * 40)
     (run.logs / InstallLogs.cause_file).unlink()
 
     due = member(repo, "b" * 40, "0" * 40, 1, 31, logs, core, "a" * 40)
@@ -184,9 +184,9 @@ def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, syst
         None)  # type: ignore[arg-type]
 
     assert logs.launched(toad, "c" * 40) == (run.unit,)
-    assert logs.member(toad, "c" * 40).func is standing.LaunchedInstallDue
+    assert standing.InstallDue.member(logs, toad, "c" * 40).func is standing.LaunchedInstallDue
     assert logs.launched(core.github, "a" * 40) == (run.unit,)
-    assert logs.member(toad, "d" * 40) is standing.PendingInstallDue
+    assert standing.InstallDue.member(logs, toad, "d" * 40) is standing.PendingInstallDue
     assert logs.units() == (run.unit,)
 
 
