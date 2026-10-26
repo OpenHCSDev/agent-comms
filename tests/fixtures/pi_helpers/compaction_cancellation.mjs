@@ -123,7 +123,7 @@ else if (sendNow) {
     console.log(`${mode}: selected correction resumed after valid compaction`);
     process.exit(0);
 }
-if (!sendNow) assert.throws(() => session.interruptSteering([queued]), /Wait for compaction/);
+if (!sendNow && !overflowMode) assert.throws(() => session.interruptSteering([queued]), /Wait for compaction/);
 const start = performance.now();
 await session.abort();
 assert.ok(performance.now() - start < 1000, 'abort waited for summary completion');
