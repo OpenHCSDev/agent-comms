@@ -438,15 +438,15 @@ query($owner: String!, $name: String!, $after: String) {
                                     '--name-only', '-z',
                                     input=''.join(f'{base} {head}\n' for head in heads)).split('\0'))
             for head in heads:
-                status, tree = next(fields), next(fields)
-                if status not in ('0', '1'):
+                status, tree = int(next(fields)), next(fields)
+                if status not in (0, 1):
                     raise WorkBranchError(f'Unknown merge-tree result {status!r}.')
                 for path in fields:
                     if not path:
                         break
                 else:
                     raise WorkBranchError('Unterminated merge-tree path list.')
-                if status == '1':
+                if status == 1:
                     resolved[head] = tree
             if any(fields):
                 raise WorkBranchError('Unexpected trailing merge-tree records.')

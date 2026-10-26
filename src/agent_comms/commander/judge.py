@@ -82,7 +82,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
-from agent_comms.standing_rules import HeadReviewRule
+from agent_comms.standing_rules import HeadReviewRule, StandingRule
 from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
@@ -444,7 +444,7 @@ class VerdictVerb(JudgeVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class HeadVerdictVerb(VerdictVerb, order.HeartbeatGated, declared_name=None):
-    clears = (HeadReviewRule,)
+    clears: ClassVar[tuple[type[StandingRule], ...]] = (HeadReviewRule,)
     verdict: ClassVar[type[HeadVerdict]]
 
     @classmethod

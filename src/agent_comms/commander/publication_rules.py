@@ -84,7 +84,7 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        found = []
+        found: list[Self] = []
         for repo, rows in frame.closed_pulls.items():
             remaining = tuple(pull for pull in rows if not any(review.verdict.supersedes()
                 for review in frame.head_reviews[PullRequestHead(repo.github, pull.number, pull.head)]))
