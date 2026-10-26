@@ -114,7 +114,7 @@ class RouteCounts:
         JOIN unaddressed_since AS unaddressed ON unaddressed.name=target.actor
             AND unaddressed.since IS NOT NULL
         WHERE {DeliveryScope.delivers_sql("target.actor", "route.sender", "alias.canonical")}
-    ), requests AS MATERIALIZED (
+    ), requests AS NOT MATERIALIZED (
         SELECT recipient.key AS actor,row.seq,row.target,row.sender
         FROM recipients AS recipient
         CROSS JOIN "{ReceivedSource.declared_name}" AS addressed

@@ -54,6 +54,7 @@ jobs:
 
   smoke:
     needs: [ready, base]
+    if: github.event_name == 'merge_group' || startsWith(github.head_ref, 'batch/')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -118,6 +119,7 @@ jobs:
   install-rehearsal:
     name: install-rehearsal
     needs: [ready, base]
+    if: github.event_name == 'merge_group' || startsWith(github.head_ref, 'batch/')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

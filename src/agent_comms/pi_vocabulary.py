@@ -19,7 +19,11 @@ from .lifecycle_capability import Failed, LifecycleCapability, Successful
 from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
+    import sqlite3
+
+    from .attempt_states import UnsuccessfulTerminal
     from .backend import TurnSession
+    from .coordination_tables.executions import ExecutionRecord
 
 
 class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
@@ -37,11 +41,13 @@ class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
         return total
 
     @classmethod
-    def unpublished_attempt(cls):
+    def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
         from .attempt_states import UnknownOutcomeAttempt
-        from .coordination_tables.attempts import ReplayFact
+        from .coordination_tables import executions
 
-        return UnknownOutcomeAttempt(), ReplayFact.NONE
+        outcome = UnknownOutcomeAttempt()
+        executions.ReplayAssessments.accumulate(db, execution.execution_id, outcome.replay_contribution)
+        return outcome
 
     @classmethod
     def interrupted(cls, session: TurnSession) -> bool:
@@ -83,14 +89,27 @@ class PendingStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
-class FinishedPiStop:
-    @classmethod
-    def unpublished_attempt(cls):
-        from .attempt_states import AttemptFailedAttempt
-        from .coordination_tables.attempts import ReplayFact
+class FailedUnpublishedPiStop:
+    """Recovery knows this attempt failed, independently of its output facts."""
 
+    @classmethod
+    def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
+        from .attempt_states import AttemptFailedAttempt
+
+        return AttemptFailedAttempt()
+
+
+class FinishedPiStop(FailedUnpublishedPiStop):
+    @classmethod
+    def record_recovery(cls, db: sqlite3.Connection, execution: ExecutionRecord) -> UnsuccessfulTerminal:
+        from .coordination_tables import attempts, executions
+
+        outcome = super().record_recovery(db, execution)
         # The native turn finished, but recovery cannot invent a delivered reply.
-        return AttemptFailedAttempt(), ReplayFact.ASSISTANT_OUTPUT
+        executions.ReplayAssessments.accumulate(
+            db, execution.execution_id, attempts.ReplayFact.ASSISTANT_OUTPUT,
+        )
+        return outcome
 
 
 class StopStopReason(Successful, FinishedPiStop, PiStopReason):

@@ -246,8 +246,8 @@ class Registration:
     ) -> None:
         """Refuse a known-invalid declaration before its producer performs side effects."""
         catalog = ChannelCatalog.at(self.store.path.parent)
-        with self.store.reading() as document, catalog.reading() as channels:
-            self._prepare_declaration(document, channels, thread, status)
+        document, channels = self.store.read_pair(catalog)
+        self._prepare_declaration(document, channels, thread, status)
 
     def _declare_in(self, edit: RegistryEdit, thread: Thread, status: ThreadStatus) -> Thread:
         with self._preparing_declaration(edit, thread, status) as change:
@@ -360,8 +360,7 @@ class Registration:
     def reading[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[
         Concatenate[Registration, P], R]:
         def read(self: Registration, /, *args: P.args, **kwargs: P.kwargs) -> R:
-            with self.store.reading() as document:
-                return operation(document, *args, **kwargs)
+            return operation(self.store.read(), *args, **kwargs)
         return read
 
     canonical_name = reading(RegistryDocument.canonical_name)
@@ -375,7 +374,7 @@ class Registration:
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read this owner's recorded transitions without waiting on a registry writer;
         goal history's own transaction settles what the snapshot already shows."""
-        thread = self.store.read_snapshot_unlocked().require(name)
+        thread = self.snapshot().require(name)
         return GoalHistoryStore(self.store.path).history(
             thread.incarnation.wire_birth, thread.goal, scope
         )
@@ -389,20 +388,19 @@ class Registration:
         threads. Bound sessions use strict lookup instead of project discovery.
         """
         project = Path(project_path).expanduser().resolve()
-        with self.store.reading() as document:
-            located = tuple(t for t in document.threads.values() if t.project_path == project)
-            if preferred:
-                selected = document.canonical_name(preferred)
-                for thread in located:
-                    if thread.name == selected:
-                        return FoundProjectThread(thread)
-            return ProjectThreadSelection.from_threads(tuple(
-                member for thread in located for member in thread.role.acp_thread(thread)
-            ))
+        document = self.store.read()
+        located = tuple(t for t in document.threads.values() if t.project_path == project)
+        if preferred:
+            selected = document.canonical_name(preferred)
+            for thread in located:
+                if thread.name == selected:
+                    return FoundProjectThread(thread)
+        return ProjectThreadSelection.from_threads(tuple(
+            member for thread in located for member in thread.role.acp_thread(thread)
+        ))
 
     def all_threads(self) -> Mapping[str, Thread]:
-        with self.store.reading() as document:
-            return dict(document.threads)
+        return dict(self.store.read().threads)
 
     def schema_paths(self) -> frozenset[Path]:
         """Every SQLite file a registered thread's runtime keeps beside its saved session."""
@@ -420,20 +418,18 @@ class Registration:
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""
-        with self.store.reading_snapshot() as snapshot:
-            return snapshot
+        return self.store.snapshot()
 
     def active_threads(self) -> Mapping[str, Thread]:
-        with self.store.reading() as document:
-            return {thread.name: thread
-                    for thread in document.active_threads(document.active_candidates())}
+        document = self.store.read()
+        return {thread.name: thread
+                for thread in document.active_threads(document.active_candidates())}
 
     def peers(self, exclude: str) -> Sequence[str]:
-        with self.store.reading() as document:
-            exclude = document.canonical_name(exclude)
-            return [name for name in document.threads if name != exclude]
+        document = self.store.read()
+        exclude = document.canonical_name(exclude)
+        return [name for name in document.threads if name != exclude]
 
     def __contains__(self, name: str) -> bool:
-        with self.store.reading() as document:
-            name = document.canonical_name(name)
-            return name in document.threads
+        document = self.store.read()
+        return document.canonical_name(name) in document.threads

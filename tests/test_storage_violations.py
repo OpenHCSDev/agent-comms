@@ -145,7 +145,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         monitoring.set_local_events(
             monitoring.PROFILER_ID, TodoStore.held_for_commander.__code__, monitoring.events.PY_START,
         )
-        frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+        frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
         found = StorageViolation.broken(
             comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
     finally:

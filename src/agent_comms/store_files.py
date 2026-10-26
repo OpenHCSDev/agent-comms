@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Annotated, TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
 
 from .child_process import LockHolder, Platform
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationReadUnavailable, DeferredRead
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import PathText
@@ -70,7 +70,7 @@ class ExclusiveLock(ExclusiveFlock, LockMode):
         held.require_writer()
 
 
-class StoreLockBusyError(BlockingIOError):
+class StoreLockBusyError(BlockingIOError, DeferredRead):
     """A store lock exhausted its wait budget, with the observed holders."""
 
     holders: tuple[LockHolder, ...]
@@ -99,7 +99,6 @@ class StoreLockContention:
                 self.remaining -= time.monotonic() - begun
                 if self.remaining <= 0:
                     raise StoreLockBusyError(platform.lock_holders(descriptor)) from error
-                self.contended(descriptor, platform)
                 begun = time.monotonic()
                 try:
                     yield min(self.remaining, platform.store_lock_interval)
@@ -107,9 +106,6 @@ class StoreLockContention:
                     self.remaining -= time.monotonic() - begun
             else:
                 return
-
-    def contended(self, descriptor: int, platform: Platform) -> None:
-        """Each refused attempt that keeps waiting; a budget that names its holders overrides it."""
 
     def acquire(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
         for delay in self.waits(descriptor, platform, mode=mode):
@@ -120,37 +116,27 @@ class StoreLockContention:
             await asyncio.sleep(delay)
 
 
-class UnboundedContention(StoreLockContention):
-    """The budget that never runs out: spending from it leaves it unbounded, so one
-    declared instance serves every caller that waits as long as the lock is held."""
+class HolderNamingContention(StoreLockContention):
+    """Name a slow acquisition's holders once, without changing its wait budget."""
 
-    __slots__ = ()
+    __slots__ = ("after",)
 
-    def __init__(self) -> None:
-        super().__init__(math.inf)
-
-
-UNBOUNDED_CONTENTION = UnboundedContention()
-
-
-class HolderNamingContention(UnboundedContention):
-    """Waits as long as the lock is held, and prints its holders once, when the wait passes
-    ``after`` seconds, so a slow acquisition names whoever held it up (install 18 waited
-    59 s for the registry with nobody named)."""
-
-    __slots__ = ("after", "deadline")
-
-    def __init__(self, after: float) -> None:
-        super().__init__()
+    def __init__(self, after: float = 1, *, remaining: float = math.inf) -> None:
+        super().__init__(remaining)
         self.after = after
-        self.deadline = time.monotonic() + after
 
-    def contended(self, descriptor: int, platform: Platform) -> None:
-        if time.monotonic() >= self.deadline:
-            self.deadline = math.inf
-            print(f"store lock still waiting after {self.after:g} s, "
-                  f"{LockHolder.described(platform.lock_holders(descriptor))}",
-                  file=sys.stderr, flush=True)
+    def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
+        deadline = time.monotonic() + self.after
+        for delay in super().waits(descriptor, platform, mode=mode):
+            if time.monotonic() >= deadline:
+                deadline = math.inf
+                print(f"store lock still waiting after {self.after:g} s, "
+                      f"{LockHolder.described(platform.lock_holders(descriptor))}",
+                      file=sys.stderr, flush=True)
+            yield delay
+
+
+UNBOUNDED_CONTENTION = HolderNamingContention()
 
 
 @dataclass
@@ -301,7 +287,7 @@ class StoreGuard:
 
     @classmethod
     def contention(cls) -> StoreLockContention:
-        return UNBOUNDED_CONTENTION
+        return HolderNamingContention()
 
     @classmethod
     @contextmanager
@@ -441,11 +427,7 @@ class RegistryTier(StoreLockTier):
 
 class RegistryLocking(MultiFileStore, RegistryTier, declared_name=None):
     """The registry's lock policy: registry.json and its owner guard are replaced together,
-    and a wait past 5 s names the holders."""
-
-    @classmethod
-    def contention(cls) -> StoreLockContention:
-        return HolderNamingContention(5)
+    and a contended wait names the holders."""
 
 
 class CatalogTier(StoreLockTier):
@@ -482,7 +464,7 @@ class StoreContention(ABC):
 
     def lock_budget(self) -> StoreLockContention:
         """The same wait spent on the store's file locks: one fresh budget per operation."""
-        return StoreLockContention(self.timeout)
+        return HolderNamingContention(remaining=self.timeout)
 
 
 @dataclass(frozen=True)

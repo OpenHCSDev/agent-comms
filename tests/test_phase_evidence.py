@@ -389,8 +389,9 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
             return super().read(main)
 
     counted = Counted("x = 1")
-    again = PlanReading((), reading.main)
-    assert reading.holds(counted) and again.holds(counted)
+    assert reading.holds(counted)
+    again = reading.following(())
+    assert again.holds(counted)
     assert len(reads) == 1
 
     class Unreadable(PatternPresent):
@@ -400,4 +401,4 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
     unreadable = Unreadable("x")
     assert not reading.holds(unreadable)
     assert reading.describe(unreadable).startswith("unknown (GitHub is down)")
-    assert (reading.main, unreadable) not in MainEvidence.results
+    assert unreadable not in reading.following(()).reads

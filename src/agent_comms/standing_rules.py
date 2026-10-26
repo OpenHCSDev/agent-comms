@@ -15,7 +15,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.errors import RejectedEnforcementError, TodoConflict
 from agent_comms.text_digest import TextDigest
@@ -106,7 +106,7 @@ class RepeatedTodoChange(StaleTodoDecision):
                 f"to revision {self.current.revision}")
 
 
-class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
+class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
     @classmethod
     @abstractmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -121,6 +121,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
     commander_disposes: ClassVar[bool] = True
     urgent: ClassVar[bool] = False
+
+    @classmethod
+    def disposes_subjects(cls, subjects: tuple[HeartbeatSubject, ...]) -> bool:
+        """A commander verb can dispose of this rule only through its declared subjects."""
+        return cls.commander_disposes and bool(subjects)
 
     @classmethod
     def cleared_by(cls, verb: type[CommanderVerb]) -> None:
@@ -279,7 +284,7 @@ class LostTools(UndatedStandingRule):
             thread = unit.source.thread
             changes = thread.lost_tools()
             if changes:
-                found.append(cls(thread.incarnation, changes))
+                found.append(cls(thread=thread.incarnation, changes=changes))
         return tuple(found)
 
     def line(self) -> str:
@@ -371,8 +376,9 @@ class BranchBehindMain(HeldBranchRule):
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
-        return tuple(cls(held.problem, held.holder, held.difference.repository,
-                         held.difference.branch, held.difference.behind)
+        return tuple(cls(problem=held.problem, holder=held.holder,
+                         repository=held.difference.repository,
+                         branch=held.difference.branch, behind=held.difference.behind)
                      for held in branches if held.difference.behind > cls.limit)
 
     def line(self) -> str:
@@ -394,8 +400,9 @@ class BranchGrowth(HeldBranchRule):
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         return tuple(
-            cls(held.problem, held.holder, held.difference.repository,
-                held.difference.branch, held.difference.growth)
+            cls(problem=held.problem, holder=held.holder,
+                repository=held.difference.repository,
+                branch=held.difference.branch, growth=held.difference.growth)
             for held in branches if held.difference.growth.exceeds
         )
 
@@ -429,8 +436,9 @@ class SharedFileBranches(HeldBranchRule):
             if (first.holder == second.holder or left.repository != right.repository
                     or left.branch == right.branch):
                 continue
-            found.extend(cls(first.problem, first.holder, left.branch,
-                             second.problem, second.holder, right.branch, left.repository, path)
+            found.extend(cls(problem=first.problem, holder=first.holder, branch=left.branch,
+                             other_problem=second.problem, other_holder=second.holder,
+                             other_branch=right.branch, repository=left.repository, path=path)
                          for path in sorted(left.files & right.files))
         return tuple(found)
 
@@ -547,7 +555,7 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     @classmethod
     def found(cls, why: str, comms: Comms, commander: str,
               observed: Sequence[UnitState], frame: HeartbeatFrame) -> Self:
-        return cls(why)
+        return cls(why=why)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -572,7 +580,8 @@ class HeldOrderDue(HolderLine, DatedStandingRule, declared_name=None):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         """Conditions read the frame's own progress facts, never a second forge read."""
-        return tuple(cls(todo.id, todo.held().owner_identity, todo.order.checked().id, due)
+        return tuple(cls(problem=todo.id, holder=todo.held().owner_identity,
+                         order=todo.order.checked().id, since=due)
                      for todo, due in cls.conditions(comms, frame))
 
     @classmethod
@@ -613,7 +622,7 @@ class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
         return {**super().command_values(), "problem": self.todo.id}
 
 
-class ReviewTimerUp(HeldOrderDue):
+class ReviewTimerUp(HeldOrderDue, FamilyScan):
     """Each round of a held order's review timer is its own condition, so the heartbeat wakes
     the commander once per round; the unit sees no timer and nothing is struck."""
 
@@ -632,12 +641,12 @@ class ReviewTimerUp(HeldOrderDue):
                 head = PullRequestHead(todo.repo, request.number, request.head)
                 if todo.order.holds_head(head):
                     rules.append(HeadReviewTimerUp(
-                        todo.id, todo.held().owner_identity, todo.order.checked().id,
-                        due, head, todo=todo))
+                        problem=todo.id, holder=todo.held().owner_identity,
+                        order=todo.order.checked().id, since=due, request=head, todo=todo))
                     break
             else:
-                rules.append(cls(todo.id, todo.held().owner_identity,
-                                 todo.order.checked().id, due))
+                rules.append(ReviewTimerUp(problem=todo.id, holder=todo.held().owner_identity,
+                                          order=todo.order.checked().id, since=due))
         return tuple(rules)
 
     def line(self) -> str:
@@ -672,8 +681,9 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
         request: PullRequest, now: float,
     ) -> tuple[Self, ...]:
         due_at = claim.message.timestamp + cls.minutes * 60
-        return tuple(cls(problem, holder, order, claim.pull_request.repo,
-                         request.number, request.head, due)
+        return tuple(cls(problem=problem, holder=holder, order=order,
+                         repo=claim.pull_request.repo, pr=request.number,
+                         head=request.head, due_at=due)
                      for due in request.head_review_due(now, due_at))
 
     @classmethod
@@ -730,8 +740,9 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
         )
 
     @classmethod
+    @abstractmethod
     def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
-        return (cls(request, due),)
+        return (cls(request=request, due_at=due),)
 
     def began(self) -> float:
         return self.due_at
@@ -749,7 +760,8 @@ class LinkedUnreviewedHead(OrderHeadReviewCommands, UnreviewedHead, OrderRefusin
 
     @classmethod
     def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
-        return tuple(cls(request, due, todo=todo) for todo in HeadReviewOrder.holding(todos, request))
+        return tuple(cls(request=request, due_at=due, todo=todo)
+                     for todo in HeadReviewOrder.holding(todos, request))
 
 
 @dataclass(frozen=True)
@@ -776,7 +788,7 @@ class StuckMerge(HeadLine, DatedStandingRule):
     @classmethod
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
         return tuple(
-            cls(PullRequestHead(repo, row.number, row.head), blocks)
+            cls(request=PullRequestHead(repo, row.number, row.head), blocks=blocks)
             for repo in goals.registry.snapshot().commander_project.repository_names()
             for row in pulls.open(repo)
             for blocks in (row.stuck(),) if blocks
@@ -823,8 +835,9 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
                 key = (todo.repo, request.number)
                 holders[key] = (*holders.get(key, ()), todo.held().owner_identity)
         found = (
-            cls(PullRequestHead(repo, row.number, row.head), holders.get((repo, row.number), ()),
-                row.merge_blocks, row.reviewable_at)
+            cls(request=PullRequestHead(repo, row.number, row.head),
+                holders=holders.get((repo, row.number), ()),
+                blocks=row.merge_blocks, moved=row.reviewable_at)
             for repo in repos
             for row in pulls.open(repo) if row.number in linked[repo] and not row.armed_times
         )
@@ -873,8 +886,9 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
         readable = {unit for state in observed for unit in state.readable_units()}
         todos = tuple(todo for todo in frame.todos
                       if todo.held().owner_identity in readable)
-        return next((LocatedHuntDue(why, since, path)
-                     for path in cls.next_hunt(comms, commander, todos)), cls(why, since))
+        return next((LocatedHuntDue(why=why, since=since, where=path)
+                     for path in cls.next_hunt(comms, commander, todos)),
+                    cls(why=why, since=since))
 
     @classmethod
     def next_hunt(cls, comms: Comms, commander: str,
@@ -927,7 +941,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(
-            cls(original, request.id, directive)
+            cls(message=original, request=request.id, directive=directive)
             for request in requests
             for directive, original in request.directive_messages(source, snapshot.names_for(commander))
         )
@@ -964,7 +978,7 @@ class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan)
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         failing = ServicePassStore.at(comms.root).read().failing
-        return tuple(cls(watch, failed.since, failed.error)
+        return tuple(cls(watch=watch, since=failed.since, error=failed.error)
                      for watch, failed in sorted(failing.items()))
 
     def began(self) -> float:
@@ -990,7 +1004,7 @@ class BoardDisagrees(UndatedStandingRule):
 
         progress = frame.pulls.progress(frame.todos, comms.registry)
         return tuple(
-            cls(todo.id, todo.order.checked().id, merged.sha)
+            cls(problem=todo.id, order=todo.order.checked().id, merge=merged.sha)
             for todo in frame.todos
             for merged in progress[todo.id].missing_merges(
                 ProgressSource.of(todo, comms.registry, frame.pulls),
@@ -1016,7 +1030,7 @@ class MemoryLow(IndependentStandingRule, UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         rule = comms.registry.storage_rule
         memory = rule.memory()
-        return (cls(rule, memory),) if rule.memory_due(memory) else ()
+        return (cls(rule=rule, memory=memory),) if rule.memory_due(memory) else ()
 
     def line(self) -> str:
         dirs = ", ".join(map(str, self.memory.idle_dirs)) or "none"
@@ -1041,7 +1055,7 @@ class DiskLow(IndependentStandingRule, UndatedStandingRule, FamilyScan):
         rule = comms.registry.storage_rule
         free = rule.free_gib()
         member = DiskFloorLow if rule.below_floor(free) else cls
-        return (member(rule, free),) if rule.cleanup_due(free) else ()
+        return (member(rule=rule, free_gib=free),) if rule.cleanup_due(free) else ()
 
     def floor_warning(self) -> str:
         return ""

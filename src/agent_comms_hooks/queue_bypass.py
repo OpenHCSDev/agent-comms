@@ -18,8 +18,8 @@ from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import ClassVar
 
+from agent_comms.shell_commands import Program, ShellCommand
 from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook, HookRecord, HookRefused
-from agent_comms_hooks.shell import Program, ShellCommand
 from agent_comms_hooks.watch import WatchClaim
 
 GH = Program("gh")
@@ -77,11 +77,9 @@ class AdminMerge(QueueBypass):
     def target(self) -> MergeTarget:
         options, selectors = getopt.gnu_getopt(
             self.command.args[2:], self.short_options, self.long_options)
-        repositories = tuple(value for flag, value in options if flag in ("-R", "--repo"))
-        if (len(selectors) != 1 or not selectors[0].isdigit()
-                or len(repositories) != 1 or not repositories[0]):
-            raise ValueError("An admin merge must name one PR number and --repo OWNER/REPO.")
-        return MergeTarget(repository=repositories[0], number=int(selectors[0]))
+        repository, = (value for flag, value in options if flag in ("-R", "--repo"))
+        selector, = selectors
+        return MergeTarget(repository=repository, number=int(selector))
 
 
 class ApiMerge(QueueBypass):

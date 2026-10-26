@@ -21,7 +21,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar, cast
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
@@ -56,7 +56,7 @@ from agent_comms.config_options import (
     CatalogSelection,
     ConfigOptions,
 )
-from agent_comms.coordination_errors import CoordinationError
+from agent_comms.coordination_errors import CoordinationError, DeferredRead
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion
@@ -74,6 +74,7 @@ from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.threads import Thread
@@ -81,14 +82,19 @@ from agent_comms.typed_table import (
     Column,
     DurableTables,
     ExpressionIndex,
+    TableSchema,
     TypedRow,
     TypedTable,
     WriterOwnedFile,
+    WriterOwnedResource,
+    WriterOwnedStore,
 )
 from agent_comms.wire_models import WireModel
+from agent_comms_hooks.board import BoardEntry, SessionBoard
 from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
 
-from ..locked_store import RegistryFile, SQLiteFile
+from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
+from .history import History
 from .monitor import (
     BridgeExit,
     InspectSession,
@@ -104,9 +110,6 @@ from .monitor import (
     read_monitor,
 )
 
-if TYPE_CHECKING:
-    from agent_comms.task_attachments.commander_pings import CommanderUpdate
-
 
 class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
@@ -117,7 +120,40 @@ class BridgeStateTable(DurableTables):
     """
 
     __slots__ = ()
-    filename = WatchRecord.store_name
+    filename = 'delivery.sqlite3'
+    retired_tables: ClassVar[tuple[str, ...]] = ('board_line',)
+
+
+@dataclass(frozen=True)
+class DeliveredBoardContent(BridgeStateTable, TypedTable, declared_name="board_delivery"):
+    """This bridge's delivery evidence, not a copy of Core's board."""
+
+    content: Annotated[str, Column(primary_key=True)]
+    since: float
+    delivered_at: float
+
+    def alarm_due(self, entry: BoardEntry, now: float) -> bool:
+        return self.delivered_at < entry.alarm_at <= now
+
+    @classmethod
+    def deliver(cls, db: sqlite3.Connection, entries: tuple[BoardEntry, ...], now: float) -> SessionBoard:
+        """Select and stamp together: concurrent hooks cannot deliver the same change."""
+        due: list[BoardEntry] = []
+        unchanged: list[BoardEntry] = []
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            current = {entry.content for entry in entries}
+            for delivered in cls.select(db):
+                if delivered.content not in current:
+                    cls.delete(db, content=delivered.content)
+            for entry in entries:
+                prior = cls.select(db, content=entry.content, since=entry.since)
+                if all(delivered.alarm_due(entry, now) for delivered in prior):
+                    cls(entry.content, entry.since, now).upsert(db)
+                    due.append(entry)
+                else:
+                    unchanged.append(entry)
+        return SessionBoard.presented(due, unchanged, now)
 
 
 class BindingRequest(ABC):
@@ -448,8 +484,18 @@ class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
     outcome: Annotated[type[Outcome], Column(index=True)]
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
+    @contextmanager
+    def containing_busy(self, bridge: CliBridge) -> Iterator[None]:
+        """Confirmation's exhausted store wait cannot retire the message's transport."""
+        try:
+            yield
+        except DeferredRead as error:
+            bridge.log(f'Message {self.id} remains uncertain; not replayed: {error}')
+
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
-        await self.outcome.finish(bridge, self, outcome)
+        with self.containing_busy(bridge):
+            await self.outcome.finish(bridge, self, outcome)
+            bridge.log(f'{outcome.declared_name}: {self.id} from {self.message.sender}')
 
 
 BridgeOptions = TypeVar("BridgeOptions", bound=Options)
@@ -1131,6 +1177,17 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     state_directory: ClassVar[Path]
 
     @classmethod
+    def state_path(cls) -> Path:
+        """This bridge's default state directory in the live filesystem."""
+        return Path.home() / cls.state_directory
+
+    @classmethod
+    def state_directories(cls) -> tuple[Path, ...]:
+        """Relative state directories declared by the loaded bridge members."""
+        return tuple(bridge.state_directory for bridge in cast(
+            tuple[type[CliBridge], ...], History.members_with(CliBridge)))
+
+    @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Declare the options this harness's transport needs."""
 
@@ -1208,7 +1265,6 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         result = await message.task.delivered_by(self, message) if conversation else outcome
         delivery, = DeliveryRow.select(self.db, id=message.message_id)
         await delivery.finish(self, result)
-        self.log(f'{result.declared_name}: {message.message_id} from {message.sender}')
 
     async def watch(self) -> None:
         await self.prepare_delivery()
@@ -1255,6 +1311,27 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
             self.log(failure)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
+
+
+class BridgeDeliveryStore(WriterOwnedStore):
+    """Every binding's delivery.sqlite3. A binding's state directory is its bridge's state
+    directory joined with its bus thread (``GivenBinding.from_arguments``), so the children of
+    each bridge's directory are its bindings."""
+
+    @classmethod
+    def path(cls) -> Path:
+        return Path.home()
+
+    @classmethod
+    def resources(cls, files: FilesRequest) -> tuple[WriterOwnedResource, ...]:
+        root = files.location(cls.resource(cls.retained_filename()))
+        return tuple(cls.resource(cls.retained_filename() / path.relative_to(root))
+                     for directory in CliBridge.state_directories()
+                     for path in sorted((root / directory).glob(f"*/{BridgeStateTable.filename}")))
+
+    @classmethod
+    def table_schema(cls) -> type[TableSchema]:
+        return BridgeStateTable
 
 
 class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
@@ -1429,6 +1506,12 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def declare_reader(self, status: ThreadStatus) -> None:
         await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
+
+    async def board(self) -> tuple[str, ...]:
+        """The commander board this session's tool calls print, derived from Core when asked."""
+        entries = await self.comms.bus.when_open(partial(
+            CommanderUpdate.current_board, self.comms, self.binding.bus))
+        return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),

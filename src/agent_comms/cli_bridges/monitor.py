@@ -25,6 +25,7 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, Path
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
 from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
+from agent_comms_hooks.board import SessionBoard, SessionWire
 from agent_comms_hooks.watch import HeldClaim, SessionRefusedError, WatchClaim, WatchRecord
 
 if TYPE_CHECKING:
@@ -151,7 +152,8 @@ class NoReader(ReaderState):
                 bridge.reader_changed.notify_all()
             async with attachment.window_changed:
                 attachment.window_changed.notify_all()
-            bridge.log("Monitor detached; delivery paused, bridge remains connected.")
+            bridge.log(f"Monitor detached; exception={sys.exception()!r} "
+                       "(None means reader EOF); delivery paused.")
 
 
 @dataclass
@@ -209,8 +211,7 @@ class AttachedReader(UnreadyReader):
 
 
 @dataclass(frozen=True)
-class SessionReply(DeclaredFamily, affix=""):
-    family_discriminator: ClassVar[str] = "type"
+class SessionReply(SessionWire, DeclaredFamily, affix=""):
 
     def require(self) -> None:
         """Successful replies carry no refusal."""
@@ -258,6 +259,11 @@ class SessionRefused(SessionReply, declared_name='refused'):
 
 
 @dataclass(frozen=True)
+class BoardReply(SessionBoard, SessionReply, declared_name=SessionBoard.request):
+    """The hook decodes this with the standard library, through the fields it declares."""
+
+
+@dataclass(frozen=True)
 class PeerGone(SessionReply, declared_name='gone'):
 
     async def publish(self, peer: MonitorPeer) -> None:
@@ -265,8 +271,7 @@ class PeerGone(SessionReply, declared_name='gone'):
 
 
 @dataclass(frozen=True)
-class SessionRequest[Reply: SessionReply](CrossesRuntimes, DeclaredFamily, affix=""):
-    family_discriminator: ClassVar[str] = "type"
+class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix=""):
     reply_class: ClassVar[type[SessionReply]]
     reply_timeout: ClassVar[float] = 30
 
@@ -305,14 +310,22 @@ class SessionRequest[Reply: SessionReply](CrossesRuntimes, DeclaredFamily, affix
 
 
 @dataclass(frozen=True)
-class AttachMonitor(SessionRequest[SessionReady], declared_name='attach'):
+class AttachMonitor(CrossesRuntimes, SessionRequest[SessionReady], declared_name='attach'):
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return await service.bridge.reader.attach(service, peer)
 
 
 @dataclass(frozen=True)
-class VerifySession(SessionRequest[SessionReady], declared_name='verify'):
+class ReadBoard(SessionRequest[BoardReply], declared_name=SessionBoard.request):
+    """The commander's tool-call hook asking for its board at the moment of the call."""
+
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
+        return BoardReply(await service.bridge.board())
+
+
+@dataclass(frozen=True)
+class VerifySession(CrossesRuntimes, SessionRequest[SessionReady], declared_name='verify'):
     owner: ProcessIdentity
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
@@ -322,7 +335,7 @@ class VerifySession(SessionRequest[SessionReady], declared_name='verify'):
 
 
 @dataclass(frozen=True)
-class InspectSession(SessionRequest[SessionInformation], declared_name='inspect'):
+class InspectSession(CrossesRuntimes, SessionRequest[SessionInformation], declared_name='inspect'):
 
     def information(self, endpoint: Path) -> SessionInformation:
         return self.exchange(endpoint)

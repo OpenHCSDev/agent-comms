@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.held_orders import HeldOrders
-from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import OwedAnswer
@@ -26,7 +26,8 @@ class HeartbeatFrame(HeldOrders):
     answers: tuple[OwedAnswer, ...]
 
     @classmethod
-    def read(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
+    def capture(cls, comms: Comms, commander: str, pulls: ProgressRead,
+                plans: PlanReadings = PlanReadings()) -> Self:
         scan = HeldOrders.read(comms, commander)
         snapshot = comms.registry.snapshot()
         repository = Repo.declaring(
@@ -36,9 +37,10 @@ class HeartbeatFrame(HeldOrders):
             scan.live,
             scan.orphaned,
             pulls.register(scan.todos),
-            PlanReading(
+            plans.read(
+                repository,
                 comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
-                MainTree.of(repository),
+                tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
             ),
             OwedAnswer.read_scan(comms, commander, scan),
         )

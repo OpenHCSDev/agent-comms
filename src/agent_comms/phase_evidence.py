@@ -3,7 +3,8 @@ the merge gate the repository's own GitHub rules.
 
 Task acceptance never proves a phase. Each phase declares the evidence its plan's
 "Done means" names, and ``PlanPhase.done`` reads only that evidence. Evidence that reads
-only main is cached by main's commit, so a pass that finds main unmoved reads nothing again.
+only main is retained by the heartbeat with that commit; a pass with unmoved main
+reuses those answers. Forge evidence declares its independent per-pass lifetime.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
+from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.repo import Repo
 
 if TYPE_CHECKING:
@@ -36,11 +38,17 @@ class MainTree:
     commit: str
     branch: ClassVar[str] = "main"
     source: ClassVar[str] = ".py"
-    parsed: ClassVar[dict[str, tuple[str, ParsedModule]]] = {}
+    parsed: dict[str, tuple[str, ParsedModule]] = field(
+        default_factory=dict, compare=False, repr=False, kw_only=True,
+    )
 
     @classmethod
     def of(cls, repo: Repo) -> MainTree:
         return cls(repo, Repo.git(repo.checkout, "rev-parse", f"origin/{cls.branch}").strip())
+
+    def advanced(self) -> MainTree:
+        """An explicitly selected historical tree never moves."""
+        return self
 
     def has(self, path: str) -> bool:
         return not self.missing(f"{self.commit}:{path}\n")[0]
@@ -122,6 +130,36 @@ class MainTree:
         return self.repo.contains(sha, self.commit)
 
 
+@dataclass(frozen=True)
+class LiveMainTree(MainTree):
+    """The fetched main reference and its current immutable tree, owned by its reader."""
+
+    references: tuple[Path, Path] = field(compare=False)
+    revisions: tuple[FileObservation, ...] = field(compare=False)
+
+    @classmethod
+    def of(cls, repo: Repo) -> LiveMainTree:
+        loose, packed = Repo.git(
+            repo.checkout, 'rev-parse', '--path-format=absolute',
+            '--git-path', f'refs/remotes/origin/{cls.branch}', '--git-path', 'packed-refs',
+        ).splitlines()
+        references = (Path(loose), Path(packed))
+        revisions = tuple(FileRevision.capture(path) for path in references)
+        tree = MainTree.of(repo)
+        return cls(repo, tree.commit, references, revisions)
+
+    def advanced(self) -> LiveMainTree:
+        revisions = tuple(FileRevision.capture(path) for path in self.references)
+        if revisions == self.revisions:
+            return self
+        tree = MainTree.of(self.repo)
+        # Capture before reading Git: a racing reference move is seen on the next read.
+        return type(self)(
+            self.repo, tree.commit, self.references, revisions,
+            parsed=self.parsed if tree.commit == self.commit else {},
+        )
+
+
 class UnreadableEvidenceError(Exception):
     """The evidence's source could not be read this pass; the phase is unknown, not failed."""
 
@@ -134,6 +172,9 @@ class EvidenceRead(ABC):
 
     @abstractmethod
     def describe(self, evidence: PhaseEvidence) -> str: ...
+
+    def retained(self, evidence: PhaseEvidence, previous: MainTree, current: MainTree) -> bool:
+        return evidence.retained(previous, current)
 
 
 @dataclass(frozen=True)
@@ -159,6 +200,10 @@ class EvidenceUnread(EvidenceRead):
     def describe(self, evidence: PhaseEvidence) -> str:
         return f"unknown ({self.reason}): {evidence.describe()}"
 
+    def retained(self, evidence: PhaseEvidence, previous: MainTree, current: MainTree) -> bool:
+        """A source recovering from failure does not require a new main commit."""
+        return False
+
 
 @dataclass(frozen=True)
 class PlanReading:
@@ -180,6 +225,13 @@ class PlanReading:
                 self.reads[evidence] = EvidenceUnread(str(error))
         return self.reads[evidence]
 
+    def following(self, todos: tuple[Todo, ...]) -> PlanReading:
+        main = self.main.advanced()
+        return type(self)(todos, main, {
+            evidence: answer for evidence, answer in self.reads.items()
+            if answer.retained(evidence, self.main, main)
+        })
+
     def holds(self, evidence: PhaseEvidence) -> bool:
         return self.read(evidence).held()
 
@@ -187,7 +239,46 @@ class PlanReading:
         return self.read(evidence).describe(evidence)
 
 
+class PlanReadings:
+    """A plan read's lifetime; ordinary commands take one explicit snapshot."""
+
+    def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
+        return PlanReading(todos, MainTree.of(repo))
+
+    def read(self, repo: Repo, todos: tuple[Todo, ...],
+             evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+        reading = self.observed(repo, todos)
+        for declared in evidence:
+            declared.recorded(reading)
+        return reading
+
+
+class RetainedPlanReadings(PlanReadings):
+    """The heartbeat owns the current answers for each repository's fetched main."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.plans: tuple[PlanReading, ...] = ()
+
+    def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
+        for previous in self.plans:
+            if previous.main.repo == repo:
+                reading = previous.following(todos)
+                break
+        else:
+            reading = PlanReading(todos, LiveMainTree.of(repo))
+        self.plans = (*(plan for plan in self.plans if plan.main.repo != repo), reading)
+        return reading
+
+
 class PhaseEvidence(ABC):
+    def recorded(self, reading: PlanReading) -> None:
+        reading.read(self)
+
+    def retained(self, previous: MainTree, current: MainTree) -> bool:
+        """Main-derived answers remain true of the same immutable tree."""
+        return previous == current
+
     @abstractmethod
     def holds(self, reading: PlanReading) -> bool: ...
 
@@ -201,20 +292,10 @@ class PhaseEvidence(ABC):
 
 
 class MainEvidence(PhaseEvidence):
-    """Evidence that reads only main: one answer per main commit."""
-
-    results: ClassVar[dict[tuple[MainTree, MainEvidence], bool]] = {}
+    """Read the selected immutable main; PlanReading owns the answer's lifetime."""
 
     def holds(self, reading: PlanReading) -> bool:
-        key = (reading.main, self)
-        if key not in MainEvidence.results:
-            MainEvidence.results = {
-                (tree, evidence): held
-                for (tree, evidence), held in MainEvidence.results.items()
-                if tree.repo.checkout != reading.main.repo.checkout or tree == reading.main
-            }
-            MainEvidence.results[key] = self.read(reading.main)
-        return MainEvidence.results[key]
+        return self.read(reading.main)
 
     @abstractmethod
     def read(self, main: MainTree) -> bool: ...
@@ -357,6 +438,15 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
 class AllEvidence(PhaseEvidence):
     parts: tuple[PhaseEvidence, ...]
 
+    def recorded(self, reading: PlanReading) -> None:
+        for part in self.parts:
+            part.recorded(reading)
+        super().recorded(reading)
+
+    def retained(self, previous: MainTree, current: MainTree) -> bool:
+        # Derive from this pass's parts, including a source that recovered from failure.
+        return False
+
     def holds(self, reading: PlanReading) -> bool:
         return all(reading.holds(part) for part in self.parts)
 
@@ -399,6 +489,10 @@ class RulesetGates(PhaseEvidence):
     The bypass hook demands a recorded verdict on that head. GitHub rules change
     without a main commit, so read them once per reading, not per main commit.
     """
+
+    def retained(self, previous: MainTree, current: MainTree) -> bool:
+        """GitHub policy can change without a main move; read it once each pass."""
+        return False
 
     rules_query: ClassVar[str] = (
         "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context]}]"
@@ -635,7 +729,7 @@ class ScopeBindings(ast.NodeVisitor):
     def visit_alias(self, node: ast.alias) -> None:
         self.names.add(node.asname or node.name.split(".")[0])
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.names.add(node.name)
         for value in (*node.decorator_list, *node.args.defaults,
                       *(default for default in node.args.kw_defaults if default is not None)):

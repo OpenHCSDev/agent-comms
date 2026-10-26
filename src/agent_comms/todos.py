@@ -101,7 +101,7 @@ from agent_comms.owner_requests import (
     RequestState,
 )
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.head_review import HeadReview
+from agent_comms.head_review import HeadReview, HeadReviewStatus
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -567,7 +567,7 @@ class PullRequestLink:
 
 
 @dataclass(frozen=True)
-class PullRequest(DeclaredFamily, affix="PullRequest"):
+class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
     head: str
@@ -575,7 +575,6 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     orders: tuple[OrderId, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
-    status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
 
     def as_ready(self) -> tuple[PullRequest, ...]:
         return (self,)
@@ -589,10 +588,6 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
         compared = reader.pull_request_diff(self.base, self.head)
         return () if compared.paths else (compared,)
-
-    @property
-    def has_head_review(self) -> bool:
-        return HeadReview.context in self.status_contexts
 
     def belongs_to(self, todo: Todo) -> bool:
         return (todo.id in self.problems
@@ -710,7 +705,7 @@ class ConflictMergeBlock(MergeBlock):
 
 
 @dataclass(frozen=True)
-class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
+class ListedPullRequest(HeadReviewStatus, DeclaredFamily, affix="ListedPullRequest"):
     """The external query row; conversion lives here, never in its consumers."""
     number: int
     branch: str
@@ -718,7 +713,6 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     updated: str
     base: str
     reviewable_times: tuple[str, ...] = field(kw_only=True)
-    status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
     armed_times: tuple[str, ...] = field(default=(), kw_only=True)
     merge_blocks: tuple[MergeBlock, ...] = field(default=(), kw_only=True)
 
@@ -899,6 +893,21 @@ class PullRequests:
         return tuple(picked for number in self._open[repo]
                      for picked in self._read[repo, number].as_unmerged())
 
+    def carry_reviews(self, goals: Goals, repo: RepositoryName) -> None:
+        """Advance the frame's forge facts only after the existing verdict posts its carry."""
+        project = goals.registry.snapshot().commander_project.require()
+        repository = Repo.selected(project.repos, repo.to_wire())
+        reader = WorkBranches(repository.checkout)
+        for row in self.open(repo):
+            if not row.has_head_review:
+                current = ReadPullRequestHead(repo, row.number, row.head, base=row.base)
+                with goals.todos.snapshot() as db:
+                    reviews = StoredHeadReview.latest_for_pull_request(db, current)
+                for review in reviews:
+                    if review.verdict.carry(goals, review, current, reader):
+                        self._read[repo, row.number] = replace(
+                            row, status_contexts=(*row.status_contexts, HeadReview.context))
+
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
         self.register((todo,))
@@ -1072,13 +1081,23 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def readings(self, source: ProgressSource) -> DistanceReadings: ...
+    def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings: ...
 
     @abstractmethod
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]: ...
 
     def require_read(self) -> None:
         """A retired checkout needs no local read; present and unread ones decide."""
+
+    def read_commits(self, todo: Todo, refs: tuple[str, ...],
+                     *excluded: str) -> tuple[ProgressPoint, ...]:
+        """Consume this capture's selected refs inside its checkout failure boundary."""
+        points = (
+            *self.checked_commits(todo.order.checked(), refs, *excluded),
+            *self.commits(todo.reference_pattern, refs, *excluded),
+        )
+        return tuple(sorted({point.sha: point for point in points}.values(),
+                            key=lambda point: point.at, reverse=True)[:1])
 
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
@@ -1098,7 +1117,7 @@ class MissingCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         return ()
 
-    def readings(self, source: ProgressSource) -> DistanceReadings:
+    def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         return DistanceReadings()
 
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
@@ -1121,7 +1140,7 @@ class UnreadCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         return ()
 
-    def readings(self, source: ProgressSource) -> DistanceReadings:
+    def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         raise WorkBranchError(self.reason)
 
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
@@ -1133,22 +1152,22 @@ class PresentCheckout(ProgressCheckout):
 
     @property
     def default_refs(self) -> tuple[str, ...]:
-        return (self.default_reference,) if self.default_reference in self.git_refs else ()
+        return (self.default_reference,) if self.default_reference in self.origin_refs else ()
 
     def git(self, *args: str) -> str:
         return Repo.git(self.path, *args)
 
-    def require_read(self) -> None:
-        self.git("rev-parse", "--git-dir")
-
     @cached_property
-    def git_refs(self) -> tuple[str, ...]:
-        return tuple(self.git("for-each-ref", "--format=%(refname)",
-                              "refs/heads/", "refs/remotes/origin/").splitlines())
+    def head(self) -> str:
+        return self.git("rev-parse", "--verify", "HEAD^{commit}")
+
+    def require_read(self) -> None:
+        self.head
 
     @cached_property
     def origin_refs(self) -> tuple[str, ...]:
-        return tuple(ref for ref in self.git_refs if ref.startswith("refs/remotes/origin/"))
+        return tuple(self.git("for-each-ref", "--format=%(refname)",
+                              "refs/remotes/origin/").splitlines())
 
     @cached_property
     def origin_pushes(self) -> tuple[tuple[str, float], ...]:
@@ -1171,11 +1190,6 @@ class PresentCheckout(ProgressCheckout):
         return WorkBranches(self.path)
 
     @cached_property
-    def checked_out(self) -> dict[str, tuple[str, ...]]:
-        """Branch name -> the worktree paths that have it checked out."""
-        return self.branches.worktrees()
-
-    @cached_property
     def check_notes(self) -> dict[str, tuple[CheckedCommit, ...]]:
         """The stored check results read so far, by commit."""
         return {}
@@ -1186,11 +1200,11 @@ class PresentCheckout(ProgressCheckout):
         return self.check_notes[sha]
 
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
-        owned = {f"refs/heads/{branch}"
-                 for branch, paths in self.checked_out.items()
-                 if any(storage.owns_present_checkout(owner, checkout)
-                        for checkout in (Path(path).resolve() for path in paths))}
-        return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
+        owned = tuple(f"refs/heads/{branch}"
+                      for branch, paths in self.branches.worktrees().items()
+                      if any(storage.owns_present_checkout(owner, checkout)
+                             for checkout in map(Path, paths)))
+        return (*owned, *self.origin_refs)
 
     def commits(self, pattern: str, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
@@ -1217,12 +1231,12 @@ class PresentCheckout(ProgressCheckout):
                      for path in self.branches.read_checkout().uncommitted()
                      if path.exists())
 
-    def readings(self, source: ProgressSource) -> DistanceReadings:
+    def readings(self, source: ProgressSource, refs: tuple[str, ...]) -> DistanceReadings:
         """Read bounded recorded results; an absent remote default supplies no invented base."""
         if not self.default_refs:
             return DistanceReadings()
         readings: list[DistanceReading] = []
-        for tip in source.commits(*self.default_refs):
+        for tip in self.read_commits(source.todo, refs, *self.default_refs):
             base = self.git("merge-base", tip.sha, self.default_reference).strip()
             commits = [ProgressPoint.listed(line) for line in reversed(self.git(
                 "log", f"--max-count={DistanceReadings.window}", "--first-parent",
@@ -1247,8 +1261,8 @@ class PresentCheckout(ProgressCheckout):
 
 
 class CheckoutReads:
-    """Each checkout's Git facts within one read: orders sharing a checkout ask Git its
-    refs and push reflog once, and nothing outlives the read to go stale."""
+    """Share checkout readers within one frame; each capture selects its refs once,
+    while retained commit points and push reflogs belong to that frame alone."""
 
     def __init__(self) -> None:
         self._checkouts: dict[Path, PresentCheckout] = {}
@@ -1318,7 +1332,9 @@ class ProgressSource(PullRequestSource):
     """Problem progress across owned worktrees, shared Git history and retained PR identities."""
 
     checkout: ProgressCheckout
-    references: tuple[str, ...] = ()
+    committed: tuple[ProgressPoint, ...] = ()
+    unpublished_commits: tuple[ProgressPoint, ...] = ()
+    recorded_readings: DistanceReadings = DistanceReadings()
     worktrees: tuple[PresentCheckout, ...] = ()
 
     @classmethod
@@ -1329,22 +1345,30 @@ class ProgressSource(PullRequestSource):
         candidates = (todo.order.checked().check.directory, *owned)
         path = next(iter(Checkout.present(*candidates)), next(iter(owned), candidates[0]))
         checkout = pulls.progress_checkout(path)
+        worktrees = tuple(pulls.checkout(path) for path in Checkout.present(*owned))
         try:
-            references = checkout.references(storage, owner)
+            return cls.capture(todo, pulls, checkout, worktrees, storage, owner)
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
-            checkout, references = UnreadCheckout(path, str(failure)), ()
-        return cls(
-            todo=todo, pulls=pulls, checkout=checkout, references=references,
-            worktrees=tuple(pulls.checkout(path) for path in Checkout.present(*owned)),
-        )
+            return cls(todo, pulls, UnreadCheckout(path, str(failure)), worktrees=worktrees)
 
-    def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
-        points = (
-            *self.checkout.checked_commits(self.todo.order.checked(), self.references, *excluded),
-            *self.checkout.commits(self.todo.reference_pattern, self.references, *excluded),
-        )
-        return iter(sorted({point.sha: point for point in points}.values(),
-                           key=lambda point: point.at, reverse=True)[:1])
+    @classmethod
+    def capture(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
+                worktrees: tuple[PresentCheckout, ...], storage: StorageRule,
+                owner: Thread) -> Self:
+        """Select owned refs once, then consume their logs within this capture."""
+        checkout.require_read()
+        refs = checkout.references(storage, owner)
+        return cls.from_refs(todo, pulls, checkout, worktrees, refs)
+
+    @classmethod
+    def from_refs(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
+                  worktrees: tuple[PresentCheckout, ...], refs: tuple[str, ...]) -> Self:
+        return cls(todo, pulls, checkout, committed=checkout.read_commits(todo, refs),
+                   worktrees=worktrees)
+
+    def commits(self) -> Iterator[ProgressPoint]:
+        """Card rendering consumes captured points, never retained Git ref names."""
+        return iter(self.committed)
 
     def published(self) -> Iterator[ProgressPoint]:
         return self.checkout.published(self.todo.reference_pattern)
@@ -1367,14 +1391,19 @@ class ProgressSource(PullRequestSource):
 
     def readings(self) -> DistanceReadings:
         """Progress observation does not run the order's Check."""
-        return DistanceReadings()
+        return self.recorded_readings
 
 
 class MeasuredProgressSource(ProgressSource):
-    """The board reads recorded distances; merge and install reads need none."""
+    """The board captures filtered commits and distances in the same failure boundary."""
 
-    def readings(self) -> DistanceReadings:
-        return self.checkout.readings(self)
+    @classmethod
+    def from_refs(cls, todo: Todo, pulls: ProgressRead, checkout: ProgressCheckout,
+                  worktrees: tuple[PresentCheckout, ...], refs: tuple[str, ...]) -> Self:
+        source = super().from_refs(todo, pulls, checkout, worktrees, refs)
+        return replace(source,
+                       unpublished_commits=checkout.read_commits(todo, refs, "--remotes"),
+                       recorded_readings=checkout.readings(source, refs))
 
 
 @dataclass(frozen=True)
@@ -1392,6 +1421,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def from_source(cls, source: ProgressSource) -> OrderProgress:
         members = cls.members_with(FoundProgress)
         try:
+            source.checkout.require_read()
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
         except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as unread:
@@ -1525,7 +1555,7 @@ class CommittedProgress(GitProgress):
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
         return (cls(commit.sha[:9], at=commit.at, readings=source.readings())
-                for commit in source.commits("--remotes"))
+                for commit in source.unpublished_commits)
 
     @property
     def state(self) -> str:
@@ -3734,6 +3764,11 @@ class HeadVerdict(HeadReview, declared_name=None):
         """Whether this record answers the head: a reviewing mark still owes the verdict."""
         return False
 
+    def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
+              reader: WorkBranches) -> bool:
+        """A pending or rejected review never grants a new head acceptance."""
+        return False
+
     def order_events(self, record: OrderHeadReviewRecord, revision: int) -> tuple[StrikeTodo, ...]:
         return ()
 
@@ -3764,6 +3799,26 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     def require_merge(cls, request: PullRequestHead) -> None:
         """An accepted head may use the owner's admin bypass."""
 
+    def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
+              reader: WorkBranches) -> bool:
+        try:
+            reviewed_change = record.request.change_identity(reader, current.base)
+            current_change = current.change_identity(reader, current.base)
+        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired):
+            return False
+        if reviewed_change != current_change:
+            return False
+        verdict = CarriedHeadVerdict(self.reason, record.request)
+        carried = replace(record, request=replace(record.request, head=current.head),
+                          verdict=verdict, at=RecordedEventTime(time.time()))
+        goals.todos.record_head(carried)
+        verdict.post(current.repo, current.head, record.actor.name, f"#{current.pr}")
+        return True
+
+    @classmethod
+    def allows_integration(cls) -> bool:
+        return True
+
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
         project = goals.registry.snapshot().commander_project.require()
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
@@ -3775,6 +3830,16 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         if growth.exceeds:
             raise TodoError(f"Source grows {growth.total:+d} code lines (limit {growth.limit}): "
                             f"{growth.listing()}. Delete the slop or accept with --growth.")
+
+
+@dataclass(frozen=True)
+class CarriedHeadVerdict(ReviewedHeadVerdict):
+    """The original acceptance follows its unchanged patch, not a new review."""
+
+    source: PullRequestHead
+
+    def description(self, reviewer: str, subject: str) -> str:
+        return f"carried from {self.source.head[:9]}: same change"
 
 
 @dataclass(frozen=True)
@@ -3967,7 +4032,23 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
     order_id: ClassVar[Generated] = Generated(
         OrderId, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(OrderLink, 'order_id')}')", nullable=True),
     )
-    indexes = (Index(("request", "seq")), Index(("problem", "order_id", "seq")))
+    pull_request_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+        f"{{request}} -> '$.{FieldCodec.record_key(PullRequestHead, 'repo')}'",
+        f"json_extract({{request}}, '$.{FieldCodec.record_key(PullRequestHead, 'pr')}')",
+    ))
+    indexes = (Index(("request", "seq")), Index(("problem", "order_id", "seq")),
+               pull_request_index)
+
+    @classmethod
+    def latest_for_pull_request(
+        cls, db: sqlite3.Connection, request: PullRequestHead,
+    ) -> tuple[HeadReviewRecord, ...]:
+        """The access path and its predicate share this row's declared expression index."""
+        return tuple(row.record for row in cls.select(
+            db, where=" AND ".join(f"{term}=?" for term in cls.pull_request_index.terms),
+            parameters=(FieldCodec.compact(FieldCodec.encode(request.repo)), request.pr),
+            order_by=("seq",), descending=True, limit=1,
+        ))
 
 
 @dataclass(frozen=True)

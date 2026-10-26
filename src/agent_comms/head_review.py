@@ -5,6 +5,7 @@ Every path that posts that status goes through here.
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -15,11 +16,30 @@ from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .repo import Repo
 from .repository_name import RepositoryName
+from .work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .thread_identity import ThreadIncarnation
     from .todos import HeadReviewRecord, HeadVerdict, Todo
+
+
+@dataclass(frozen=True, kw_only=True)
+class HeadReviewStatus:
+    """The forge's review context, shared by listed and linked PR views."""
+
+    status_contexts: tuple[str, ...] = ()
+
+    @property
+    def has_head_review(self) -> bool:
+        return HeadReview.context in self.status_contexts
+
+
+@dataclass(frozen=True)
+class PullRequestChange:
+    """Git's whitespace-preserving identity of a pull request's complete patch."""
+
+    patch: str
 
 
 @dataclass(frozen=True)
@@ -66,6 +86,14 @@ class PullRequestHead:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
         head, base = read.stdout.split()
         return ReadPullRequestHead(repo, pr, head, base=base)
+
+    def change_identity(self, reader: WorkBranches, base: str) -> PullRequestChange:
+        """Compare the PR's patch, never the unrelated changes in its base tree.
+
+        Verbatim patch IDs preserve Python indentation and whitespace in literals.
+        The existing Git reader shares one base-head read and fetches missing objects.
+        """
+        return PullRequestChange(reader.pull_request_patch_id(base, self.head))
 
     def holds(self, commit: str) -> bool:
         return self.head.startswith(commit)
@@ -122,6 +150,23 @@ class HeadReview(DeclaredFamily, affix="HeadReview"):
     state: ClassVar[str]
     # GitHub caps a status description at 140 characters.
     description_limit: ClassVar[int] = 140
+
+    @classmethod
+    def allows_integration(cls) -> bool:
+        return False
+
+    @classmethod
+    def accepted(cls, repo: RepositoryName, head: str) -> bool:
+        """Read the latest status in our declared context on this exact commit."""
+        read = repo.rest(
+            f"commits/{head}/status", "--jq",
+            f"[.statuses[] | select(.context == {json.dumps(cls.context)}) | .state]",
+        )
+        if read.returncode:
+            raise ToolRefusedError(read.stderr.strip() or f"Review status on {head} failed.")
+        states = FieldCodec.decode(tuple[str, ...], FieldCodec.parse(read.stdout))
+        return any(member.state in states and member.allows_integration()
+                   for member in cls.members_with(cls))
 
     @abstractmethod
     def description(self, reviewer: str, subject: str) -> str: ...

@@ -51,7 +51,7 @@ from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
 
-pytest_plugins = (goal_owner_fixture.__name__, "github_fixture")
+pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "pytest_session")
 
 
 class TranscriptRecords:
@@ -195,9 +195,11 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     Child processes import this checkout's sources, the ``pythonpath`` pyproject declares:
     a relative or missing PYTHONPATH sends them to whatever tree the venv's editable
     install names, which on 2026-10-24 was a stale checkout one TurnFailure short."""
+    from xdist import is_xdist_worker
+
     os.environ["PYTHONPATH"] = os.pathsep.join(
         str(path) for path in session.config.getini("pythonpath"))
-    if session.config.option.collectonly or "PYTEST_XDIST_WORKER" in os.environ:
+    if session.config.option.collectonly or is_xdist_worker(session):
         return
     from agent_comms.repo import Checkout
 

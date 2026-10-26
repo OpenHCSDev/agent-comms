@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from textwrap import shorten
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -40,20 +40,20 @@ class HeldOrders:
     orphaned: tuple[Todo, ...]
 
     @classmethod
-    def read(cls, comms: Comms, commander: str) -> Self:
+    def read(cls, comms: Comms, commander: str) -> HeldOrders:
         """The commander's held orders captured once; filtering never reopens the store."""
-        return cls.of(comms.goals.todos, comms.registry.snapshot(), commander)
+        return HeldOrders.of(comms.goals.todos, comms.registry.snapshot(), commander)
 
     @classmethod
-    def of(cls, store: TodoStore, snapshot: RegistrySnapshot, commander: str) -> Self:
+    def of(cls, store: TodoStore, snapshot: RegistrySnapshot, commander: str) -> HeldOrders:
         """The held orders in ``store`` for ``commander`` as ``snapshot`` registers them."""
-        return cls.split(store.held_for_commander(snapshot.require(commander).incarnation),
-                         snapshot)
+        return HeldOrders.split(store.held_for_commander(snapshot.require(commander).incarnation),
+                                snapshot)
 
     @classmethod
-    def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> Self:
+    def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> HeldOrders:
         holds = tuple((todo, todo.held().holder_in(snapshot)) for todo in todos)
-        return cls(
+        return HeldOrders(
             tuple(LiveHold(todo, thread) for todo, threads in holds for thread in threads),
             tuple(todo for todo, threads in holds if not threads),
         )
