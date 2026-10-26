@@ -643,7 +643,7 @@ class ReviewTimerUp(HeldOrderDue):
 
 
 @dataclass(frozen=True)
-class HeadReviewTimerUp(OrderHeadReviewCommands, ReviewTimerUp, declared_name=None):
+class HeadReviewTimerUp(OrderHeadReviewCommands, ReviewTimerUp):
     """A timer with a current PR head offers only that order's accepted verdicts."""
 
     def line(self) -> str:
