@@ -38,9 +38,14 @@ class RepositoryName(WireValue):
     def to_wire(self) -> str:
         return "/".join(self.key)
 
+    @staticmethod
+    def command(*arguments: str) -> subprocess.CompletedProcess[str]:
+        """The GitHub process boundary shared by API reads and normal merge requests."""
+        return subprocess.run(("gh", *arguments), capture_output=True, text=True, timeout=60)
+
     def api(self, *arguments: str) -> subprocess.CompletedProcess[str]:
-        """The one GitHub reader: ``gh api`` with ``arguments``; callers judge the result."""
-        return subprocess.run(("gh", "api", *arguments), capture_output=True, text=True, timeout=60)
+        """GitHub's API protocol; callers judge its response."""
+        return self.command("api", *arguments)
 
     def rest(self, path: str, *arguments: str) -> subprocess.CompletedProcess[str]:
         """``path`` under this repository's REST root."""
