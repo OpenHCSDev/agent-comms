@@ -263,7 +263,6 @@ class StorageRule(RoomAllocation, DurableFile):
     proc: StoragePath = Path('/proc')
     shown: ClassVar[int] = 5  # holders named in each list
     scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
-    max_checkouts: int = 2
     # Home paths are read when the rule is built, never frozen at import.
     volume: StoragePath = field(default_factory=Path.home)
     scratch_base: StoragePath = field(
@@ -274,7 +273,7 @@ class StorageRule(RoomAllocation, DurableFile):
         limits = (self.floor_gib, self.cleanup_gib, self.scratch_cap_gib)
         if not all(math.isfinite(n) for n in limits):
             raise ValueError("Storage limits must be finite.")
-        if min(*limits, self.max_checkouts) < 0:
+        if min(limits) < 0:
             raise ValueError("Storage limits cannot be negative.")
         # The declared root is canonical; allocation consumers never resolve it again.
         object.__setattr__(self, "checkout_base", self.checkout_base.expanduser().resolve())
@@ -334,7 +333,7 @@ class StorageRule(RoomAllocation, DurableFile):
                 continue
             storage = UnitStorage.read(self, owner)
             for path in present:
-                if path not in (storage.home, *storage.extra_checkouts):
+                if not storage.owns(Checkout(path)):
                     self.deny(f'{path} is not a registered Git checkout of {owner.name}')
                 work = OrderCheckoutWork(path, owner)
                 if work.read_checkout().holds_work:
@@ -465,7 +464,6 @@ class StorageRule(RoomAllocation, DurableFile):
             f'Storage (refused without a strike): your checkouts are '
             f'{checkout} (another repository changed in the '
             f'same problem: {checkout}--<repository name>), '
-            f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
             f'created with agent-comms {OrderCheckoutAllocation.verb} add PROBLEM '
             f'(another repository: agent-comms {RepositoryCheckoutAllocation.verb} add '
             'PROBLEM OWNER/REPO), '
@@ -489,46 +487,80 @@ class OrderCheckoutWork(WorkBranches):
 
 
 @dataclass(frozen=True)
+class CheckoutClaim:
+    """Storage allocated to one checkout; existing trees propose no new bytes."""
+
+    checkout: Checkout
+    anticipated_bytes: int = 0
+
+
+@dataclass(frozen=True)
 class UnitStorage:
-    """The declared home (possibly non-Git) and separately counted extra Git checkouts."""
+    """Owned scratch and checkout claims measured against one byte budget."""
 
     rule: StorageRule
     unit: Thread
-    home: Path
-    extra_checkouts: tuple[Path, ...]
+    home: CheckoutClaim
+    extra_checkouts: tuple[CheckoutClaim, ...]
 
     @classmethod
     def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
         home, *extras = rule.checkouts_of(thread)
-        return cls(rule, thread, home,
-                   tuple(dict.fromkeys(path for path in (*extras, *proposed) if path != home)))
+        return cls(rule, thread, CheckoutClaim(Checkout(home)), tuple(
+            CheckoutClaim(Checkout(path)) for path in dict.fromkeys(
+                path for path in (*extras, *proposed) if path != home)))
 
     @property
-    def over_checkouts(self) -> bool:
-        return len(self.extra_checkouts) > self.rule.max_checkouts
+    def claims(self) -> tuple[CheckoutClaim, ...]:
+        return (self.home, *self.extra_checkouts)
+
+    def owns(self, checkout: Checkout) -> bool:
+        return any(claim.checkout == checkout for claim in self.claims)
+
+    @cached_property
+    def held_gib(self) -> float:
+        roots = {path.resolve() for path in (
+            self.rule.roots_of(self.unit).scratch,
+            *Checkout.present(self.home.checkout.path),
+            *(claim.checkout.path for claim in self.extra_checkouts))}
+        return sum(self.rule.tree_gib(path) for path in roots
+                   if not any(path != other and path.is_relative_to(other) for other in roots))
+
+    @property
+    def anticipated_gib(self) -> float:
+        return sum(claim.anticipated_bytes for claim in self.claims) / 2**30
+
+    @property
+    def over_cap(self) -> bool:
+        return self.held_gib + self.anticipated_gib > self.rule.scratch_cap_gib
+
+    @property
+    def quota_text(self) -> str:
+        return (f'{self.held_gib:g} GiB held + {self.anticipated_gib:g} GiB checkout allocation, '
+                f'cap {self.rule.scratch_cap_gib:g} GiB')
 
     @property
     def missing_home(self) -> bool:
-        return not self.home.is_dir()
+        return not self.home.checkout.path.is_dir()
 
-    def adding(self, path: Path) -> UnitStorage:
-        proposed = replace(self, extra_checkouts=tuple(dict.fromkeys(
-            checkout for checkout in (*self.extra_checkouts, path) if checkout != self.home)))
-        proposed.require_quota()
-        return proposed
+    def adding(self, claim: CheckoutClaim) -> UnitStorage:
+        claims = {item.checkout: item for item in (*self.claims, claim)}
+        return replace(self, home=claims.pop(self.home.checkout),
+                       extra_checkouts=tuple(claims.values()))
 
-    def removing(self, path: Path) -> UnitStorage:
-        if path not in self.extra_checkouts:
+    def removing(self, checkout: Checkout) -> UnitStorage:
+        if checkout not in (claim.checkout for claim in self.extra_checkouts):
             self.rule.deny('only a current extra checkout can be removed')
-        return replace(self, extra_checkouts=tuple(p for p in self.extra_checkouts if p != path))
+        return replace(self, extra_checkouts=tuple(
+            claim for claim in self.extra_checkouts if claim.checkout != checkout))
 
     def require_quota(self) -> None:
-        if self.over_checkouts:
-            self.rule.deny(f'at most {self.rule.max_checkouts} checkouts besides the home checkout')
+        if self.over_cap:
+            self.rule.deny(self.quota_text)
 
     def require_retired(self, problem: str) -> None:
         for path in self.rule.problem_checkouts(self.rule.roots_of(self.unit), problem):
-            if path in self.extra_checkouts:
+            if Checkout(path) in (claim.checkout for claim in self.extra_checkouts):
                 self.rule.deny(
                     f'{self.unit.name} still has the checkout {path} for this order; '
                     'it removes it before the order counts as done')
@@ -571,12 +603,11 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
 class StorageOverQuota(StorageViolation):
     @classmethod
     def violated(cls, storage: UnitStorage) -> bool:
-        return storage.over_checkouts
+        return storage.over_cap
 
     def line(self) -> str:
-        return (f'{self.storage.unit.name} holds {len(self.storage.extra_checkouts)} checkouts'
-                f' besides home, limit {self.storage.rule.max_checkouts}. hoarding them for'
-                f' what? -> order the cleanup')
+        return (f'{self.storage.unit.name} holds {self.storage.quota_text}'
+                f' -> order the cleanup')
 
 
 class StorageHomeMissing(StorageViolation):
@@ -585,7 +616,7 @@ class StorageHomeMissing(StorageViolation):
         return storage.missing_home
 
     def line(self) -> str:
-        return (f'{self.storage.unit.name} declared home {self.storage.home} is missing.'
+        return (f'{self.storage.unit.name} declared home {self.storage.home.checkout} is missing.'
                 f' who deleted it? -> restore the home checkout')
 
 

@@ -331,10 +331,10 @@ class CheckoutStart(DeclaredFamily, affix="CheckoutStart"):
     @abstractmethod
     def reference(self) -> str: ...
 
-    def tracked_gib(self, repository: Path) -> float:
+    def tracked_bytes(self, repository: Path) -> int:
         """Decode Git's tracked payload sizes before creating the working tree."""
         listing = Repo.git(repository, 'ls-tree', '-r', '-l', self.reference)
-        return sum(map(GitTreeEntry.bytes_from, listing.splitlines())) / 2**30
+        return sum(map(GitTreeEntry.bytes_from, listing.splitlines()))
 
     @classmethod
     def of(cls, repository: Path, branch: str, base: str) -> CheckoutStart:
