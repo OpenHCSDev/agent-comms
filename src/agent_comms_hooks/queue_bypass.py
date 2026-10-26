@@ -131,7 +131,7 @@ class ApiMerge(QueueBypass):
             matched, = self.endpoint(selector)
         except ValueError as error:
             raise ValueError("A merge bypass requires one explicit repos/OWNER/REPO/pulls/N/merge endpoint.") from error
-        fields = Parameters.from_fields((*options["--raw-field"], *options["--field"]))
+        fields = options.fields("--raw-field", "--field")
         try:
             head = fields.one("sha")
         except ValueError as error:

@@ -110,12 +110,12 @@ class Parameters(defaultdict[str, list[str]]):
         value, = self[name]
         return value
 
-    @classmethod
-    def from_fields(cls, values: Iterable[str]) -> Self:
-        parameters = cls()
-        for field in values:
-            name, _, value = field.partition("=")
-            parameters[name].append(value)
+    def fields(self, *names: str) -> Self:
+        parameters = type(self)()
+        for name in names:
+            for field in self[name]:
+                key, _, value = field.partition("=")
+                parameters[key].append(value)
         return parameters
 
 
