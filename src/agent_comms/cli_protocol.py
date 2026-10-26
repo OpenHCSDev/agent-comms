@@ -39,7 +39,6 @@ from .wire_models import DeclaredWireFamily, WireModel
 if TYPE_CHECKING:
     from .child_process import AttachedChild
     from .cli_bridges.shared import BindingThread, CliBridge, DeliveryRow
-    from .message_reference import MessageReference
 
 
 CLI_FAILURES = (ValueError, OSError, CommandFailure)
@@ -176,16 +175,9 @@ class UnconfirmedOutcome(Outcome):
 class DeliveredOutcome(FilteredOutcome):
     @classmethod
     async def record(cls, bridge: CliBridge, delivery: DeliveryRow) -> None:
-        await cls.acknowledge(bridge, (delivery.message.reference,))
-        await super().record(bridge, delivery)
-
-    @classmethod
-    async def acknowledge(
-        cls, bridge: CliBridge, references: tuple[MessageReference, ...],
-    ) -> None:
-        """The bridge confirms exact references, including its retained confirmations."""
         await bridge.comms.bus.when_open(partial(
-            bridge.comms.bus.mark_delivered, bridge.binding.bus, references))
+            bridge.comms.bus.mark_delivered, bridge.binding.bus, (delivery.message.reference,)))
+        await super().record(bridge, delivery)
 
 
 class EmittedOutcome(UnconfirmedOutcome):
