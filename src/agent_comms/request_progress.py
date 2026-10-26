@@ -10,6 +10,7 @@ from agent_comms import field_codec
 from .child_process import ProcessIdentity
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiModel, PiPayload, UnreportedModel
+from .turn_item import NativeTurnIdText
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,11 +23,19 @@ class UnreportedIteratorTiming(field_codec.NullMember):
     """Original record has no iterator timing, not a measured zero."""
 
 
+class IteratorStreamId(field_codec.NominalText):
+    """One original provider iterator, distinct from its request and session."""
+
+
+class IteratorStreamIdText(field_codec.NominalSpelling[IteratorStreamId]):
+    spelling = NativeTurnIdText.spelling
+
+
 @dataclass(frozen=True)
 class IteratorTiming(PiPayload):
-    """Original-iterator custody wall times, not server/network/CPU attribution."""
+    """Iterator waiting/yield wall times, not server/network/CPU attribution."""
 
-    stream_id: Annotated[str, field_codec.WireName("streamId")]
+    stream_id: Annotated[IteratorStreamId, field_codec.WireName("streamId")]
     transport: str
     phase: Literal["iteratorAwait", "consumerYield", "closed"]
     started_monotonic_ns: Annotated[str, field_codec.WireName("startedMonotonicNs")]

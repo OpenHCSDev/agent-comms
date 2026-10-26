@@ -5,7 +5,9 @@ import subprocess
 from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.request_progress import RequestProgress, UnreportedIteratorTiming
+from agent_comms.request_progress import (
+    IteratorStreamId, IteratorTiming, RequestProgress, UnreportedIteratorTiming,
+)
 
 
 def test_native_iterator_custody_is_preserved_in_request_records(pinned_native, tmp_path):
@@ -22,6 +24,8 @@ def test_native_iterator_custody_is_preserved_in_request_records(pinned_native, 
             decoded = FieldCodec.decode(RequestProgress, record)
             encoded = FieldCodec.encode(decoded)
             if "iteratorTiming" in record:
+                assert isinstance(decoded.iterator_timing, IteratorTiming)
+                assert isinstance(decoded.iterator_timing.stream_id, IteratorStreamId)
                 assert encoded["iteratorTiming"] == record["iteratorTiming"]
             else:
                 assert isinstance(decoded.iterator_timing, UnreportedIteratorTiming)
