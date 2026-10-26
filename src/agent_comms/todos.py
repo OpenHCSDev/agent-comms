@@ -3772,7 +3772,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         try:
             reviewed_change = record.request.change_identity(reader, current.base)
             current_change = current.change_identity(reader, current.base)
-        except (GitCommandError, subprocess.TimeoutExpired):
+        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired):
             return False
         if reviewed_change != current_change:
             return False

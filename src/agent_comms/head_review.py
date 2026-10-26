@@ -92,12 +92,7 @@ class PullRequestHead:
         Verbatim patch IDs preserve Python indentation and whitespace in literals.
         The existing Git reader shares one base-head read and fetches missing objects.
         """
-        base_head, = reader.remote_heads("origin", f"refs/heads/{base}")
-        reader.require_commits("origin", base_head, self.head)
-        patch = Repo.git(reader.checkout, "diff", "--binary", "--full-index",
-                         "--no-ext-diff", "--no-textconv", f"{base_head}...{self.head}", "--")
-        identity = Repo.git(reader.checkout, "patch-id", "--verbatim", input=patch)
-        return PullRequestChange(identity.partition(" ")[0].strip())
+        return PullRequestChange(reader.pull_request_patch_id(base, self.head))
 
     def holds(self, commit: str) -> bool:
         return self.head.startswith(commit)
