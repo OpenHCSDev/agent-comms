@@ -284,7 +284,7 @@ class StorageRule(RoomAllocation, DurableFile):
         if min(*limits, self.max_checkouts) < 0:
             raise ValueError("Storage limits cannot be negative.")
         # The declared root is canonical; allocation consumers never resolve it again.
-        self.checkout_base = self.checkout_base.expanduser().resolve()
+        object.__setattr__(self, "checkout_base", self.checkout_base.expanduser().resolve())
 
     @classmethod
     def load(cls, root: Path) -> Self:
