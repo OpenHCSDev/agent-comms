@@ -15,7 +15,7 @@ from pydantic import JsonValue
 
 
 from .activity import ActivityCapture
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (

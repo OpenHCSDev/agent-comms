@@ -252,17 +252,15 @@ class SessionLifecycle:
         session_id = state.identifier
         async with state.turn_lock:
             async with state.own_turn_task():
-                def capture():
+                def capture() -> str:
                     snapshot = self.comms.registry.snapshot()
                     thread = snapshot.require(state.owner.incarnation.name)
-                    row = self.effects.inputs.dispositions.lookup(key)
-                    if not row.queued_for(thread.incarnation, snapshot.claim_generation(thread.name), row.source_text):
-                        raise RelationViolationError("Startup input no longer belongs to this owner claim_scope")
-                    return row
-                row = await Coordination.run_worker(capture)
+                    return self.effects.inputs.dispositions.lookup(key).queued_text(
+                        thread.incarnation, snapshot.claim_generation(thread.name))
+                text = await Coordination.run_worker(capture)
                 await self.effects.inputs.emit_input_delivery_changed(session_id)
                 await self.effects.turns.run_agent_turn(
-                    session_id, session_id, row.source_text, acceptance=NoTurnAcceptance(),
+                    session_id, session_id, text, acceptance=NoTurnAcceptance(),
                     original_keys=(key,), original_owner_input=True,
                 )
 
@@ -448,7 +446,7 @@ class SessionLifecycle:
         failures: list[Exception] = []
         try:
             names = {
-                self.bindings.get(owner.identifier, owner.identifier)
+                owner.owner.incarnation.name
                 for state in self.effects.inputs.drained.values()
                 for owner in state.executors()
             }

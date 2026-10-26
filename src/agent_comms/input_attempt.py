@@ -121,6 +121,10 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
     def queued_for(self, owner: ThreadIncarnation, claim_scope: int, text: str) -> bool:
         return False
 
+    def queued_text(self, owner: ThreadIncarnation, claim_scope: int) -> str:
+        """The text of input still reserved for this owner claim; nothing else is queued."""
+        raise RelationViolationError("Startup input no longer belongs to this owner claim_scope")
+
     def require_started(self, claim_scope: int) -> StartedInput:
         raise RelationViolationError("Input start lacks its original native disposition")
 
@@ -340,6 +344,11 @@ class ReservedInput(Unresolved, RecoverableUnboundInput):
             and self.matches_claim(claim_scope)
             and self.digest.matches(text)
         )
+
+    def queued_text(self, owner: ThreadIncarnation, claim_scope: int) -> str:
+        if not (self.matches_owner(owner) and self.matches_claim(claim_scope)):
+            return super().queued_text(owner, claim_scope)
+        return self.source_text
 
     def bind(
         self, *, claim_scope: int, turn_id: TurnId, native_id: InputId, text: str

@@ -127,9 +127,9 @@ class SessionConfigOptions:
             thread.thinking_level
         )
         state = await command.configure(
-            configuration.agent_bin, arguments.argv, package=configuration.package,
+            configuration.launch.binary, arguments.argv, package=configuration.package,
             worktree=Path(thread.worktree), root=self.comms.root,
-            configuration=configuration.configuration,
+            configuration=configuration.launch.configuration,
         )
         model = state.model.thread_model().require_reported()
         level = state.thinking_level.require_reported(

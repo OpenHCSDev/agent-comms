@@ -11,7 +11,7 @@ from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistryEntry, RegistrySnapshot
 from .field_codec import AcpSessionId
 from .owner_connection import ResultRuntimeRequest, RuntimeRequestContext
 from .thread_identity import ClaimedIdentity, OwnerIdentity
@@ -20,6 +20,7 @@ from .tool_result import DeclaredReply
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerRestartSelection
     from .runtime import RuntimeServer, SocketClient
+    from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +115,7 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest):
     owner: OwnerIdentity
     claim: ClaimedIdentity
 
-    def require_owner(self, entry):
+    def require_owner(self, entry: RegistryEntry) -> Thread:
         if entry.owner_identity != self.owner:
             raise RelationViolationError("Stop request's fenced owner changed")
         entry.status.require_stopped()

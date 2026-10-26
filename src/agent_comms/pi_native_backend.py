@@ -250,7 +250,7 @@ class PiNativeBackend(
         package = self.comms.owners.require_private_launch().native_package
         return await open_native(
             self,
-            self.configuration.agent_bin,
+            self.configuration.launch.binary,
             thread.native_launch_arguments(
                 NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
             package=package,
@@ -277,7 +277,7 @@ class PiNativeBackend(
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
         async for event in backend.stream_agent_events(
-            self.configuration.agent_bin,
+            self.configuration.launch.binary,
             thread.native_launch_arguments(
                 NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
             content.text,

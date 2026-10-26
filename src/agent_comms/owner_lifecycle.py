@@ -567,7 +567,7 @@ class OwnerLifecycle:
             environment=launch_runtime.environment(ThreadLaunch.strip(dict(os.environ))),
             cwd=str(self.root),
             output=partial(OwnerProcessOutput.open, self.root, thread),
-            admission=partial(self.registry.storage_rule.room_for_start, thread, self.root),
+            room_for_start=partial(self.registry.storage_rule.room_for_start, thread, self.root),
         )
         with self.registry.store.guarded_write():
             recorded = RootRuntimeStore.at(self.root).read().host.observed(self.root)
@@ -618,8 +618,7 @@ class OwnerLifecycle:
     ) -> None:
         """Called only after the session's producers, turn and native child have joined."""
         with self.registry.store.editing() as edit:
-            snapshot = edit.original.snapshot
-            entry = snapshot.entry(expected.incarnation.name)
+            entry = edit.document.entry(expected.incarnation.name)
             if entry.owner_identity != expected or entry.thread.process_identity != process:
                 raise RelationViolationError("Owner changed before completed session release")
             if owner.incarnation != expected.incarnation or owner.generation > expected.generation:

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistryEntry
     from .thread_identity import OwnerIdentity
     from .runtime import RuntimeServer, SocketClient
+    from .threads import Thread
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -77,9 +78,9 @@ class RuntimeRequest(
     def proxy_payload(
         cls, thread: str, controller_token: str | None, parameters: dict[str, object]
     ) -> dict[str, object]:
-        return OwnerConnection.wire_request(FieldCodec.encode(cls), thread, parameters)
+        return OwnerConnection.wire_request(cls.declared_name, thread, parameters)
 
-    def require_owner(self, entry):
+    def require_owner(self, entry: RegistryEntry) -> Thread:
         owner = entry.thread
         if not owner.process_identity.runs_here() or not entry.status.running:
             raise RelationViolationError("This process no longer owns the thread.")

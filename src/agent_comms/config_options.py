@@ -18,7 +18,7 @@ from .active_route import resolve_comms_route
 from .launch_root import LaunchRoot
 from .bus import Bus
 from .declared_family import DeclaredFamily
-from .launch_runtime import RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .owner_launch import RetainedOwnerLaunch
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
@@ -104,7 +104,7 @@ class CatalogConfigOption(ConfigOption):
 
     @property
     def current_auth(self) -> bool:
-        return self.auth == self.owner.configuration.auth_revision()
+        return self.auth == self.owner.launch.configuration.auth_revision()
 
     def cache_key(self, thread: CatalogSelection) -> tuple[str, ...]:
         return thread.model.native(self.owner.agent_args).argv
@@ -113,7 +113,7 @@ class CatalogConfigOption(ConfigOption):
         async with self.lock:
             if not self.current_auth:
                 self.catalogs.clear()
-                self.auth = self.owner.configuration.auth_revision()
+                self.auth = self.owner.launch.configuration.auth_revision()
             key = self.cache_key(thread)
             if key not in self.catalogs:
                 # A successful empty catalogue is setup state, not a failed
@@ -203,10 +203,10 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         data = await GetAvailableThinkingLevels().discover(
-            self.owner.agent_bin,
+            self.owner.launch.binary,
             thread.model.native(self.owner.agent_args).argv,
             self.owner.route.root,
-            package=self.owner.package, configuration=self.owner.configuration,
+            package=self.owner.package, configuration=self.owner.launch.configuration,
         )
         levels = [member.declared_name for member in data.levels]
         return [CatalogChoice(value=level, name=level.title()) for level in levels]
@@ -250,8 +250,8 @@ class SpecifiedModels(ModelCatalog):
 class DiscoveredModels(ModelCatalog):
     async def qualified(self, owner: ConfigOptions) -> tuple[str, ...]:
         data = await GetAvailableModels().discover(
-            owner.agent_bin, owner.agent_args.argv, owner.route.root, package=owner.package,
-            configuration=owner.configuration,
+            owner.launch.binary, owner.agent_args.argv, owner.route.root, package=owner.package,
+            configuration=owner.launch.configuration,
         )
         return tuple(text for model in data.models if model.provider and model.id
                      for text in model.thread_model().texts())
@@ -265,17 +265,9 @@ class ConfigOptions:
     route: CommsRoute
     catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = field(default_factory=dict, init=False)
 
-    @property
-    def agent_bin(self) -> str:
-        return self.launch.binary
-
     @cached_property
     def agent_args(self) -> NativeArguments:
         return NativeArguments.parse(self.launch.arguments)
-
-    @property
-    def configuration(self) -> RestartEnvironment:
-        return self.launch.configuration
 
     @cached_property
     def models(self) -> ModelCatalog:
@@ -285,7 +277,7 @@ class ConfigOptions:
     def package(self) -> VerifiedNativePackage:
         """The verified artifact, acquired when a catalog or configuration first runs Pi."""
         return NativePiRpcLaunch.package_for_command(
-            self.agent_bin, LaunchRuntime.running(), self.route.root,
+            self.launch.binary, LaunchRuntime.running(), self.route.root,
         )
 
     @classmethod
@@ -294,10 +286,10 @@ class ConfigOptions:
         return cls(RetainedOwnerLaunch.configured(), resolve_comms_route(LaunchRoot.current().path))
 
     async def observe_authentication(
-        self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[None]],
+        self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[object]],
     ) -> None:
         """The session retires this configuration's watch with its other producers."""
-        async with aclosing(Bus.watch_sources(FileSource(self.configuration.native_config / "auth.json"))) as observations:
+        async with aclosing(Bus.watch_sources(FileSource(self.launch.configuration.native_config / "auth.json"))) as observations:
             async for _ in observations:
                 await publish(session_id)
 
@@ -307,7 +299,7 @@ class ConfigOptions:
         """Project this launch's configuration with the exact registered owner binding."""
         return {
             **ThreadLaunch.strip(dict(self.launch.environment)),
-            **self.configuration.encode(),
+            **self.launch.configuration.encode(),
             **thread.native_environment(self.route.root, snapshot, worktree),
         }
 

@@ -147,7 +147,7 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
         self, runtime: LaunchRuntime, command: tuple[str, ...], *,
         environment: Mapping[str, str], cwd: str,
         output: Callable[[], AbstractContextManager[TextIO]],
-        admission: Callable[[], AbstractContextManager[None]],
+        room_for_start: Callable[[], AbstractContextManager[None]],
     ) -> ProcessIdentity:
         """Publish the root's one host while its existing exec gate is still closed."""
         with self.guarded_write():
@@ -157,7 +157,7 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
             observed = current.host.observed(self.path.parent)
             if observed.alive():
                 return observed.require("Recorded worker host has no process")
-            with admission(), output() as capture, socket.socket(socket.AF_UNIX) as listener:
+            with room_for_start(), output() as capture, socket.socket(socket.AF_UNIX) as listener:
                 with SpawnedProcess.launching(
                     (*command, "--listener-fd", str(listener.fileno())),
                     env=environment, cwd=cwd, output=capture, runtime=runtime,

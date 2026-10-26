@@ -668,9 +668,8 @@ class InputDrain(InputObservation):
         self, session_id: AcpSessionId, configuration: ConfigOptions, owner: OwnerIdentity,
     ) -> OwnerSession:
         """Retain this allocated owner's original launch, never another host session's settings."""
-        state = self.drained.get(session_id)
-        if state is None:
-            state = self.drained[session_id] = OwnerSession(
+        if session_id not in self.drained:
+            self.drained[session_id] = OwnerSession(
                 identifier=session_id,
                 configuration=configuration,
                 owner=owner,
@@ -679,7 +678,7 @@ class InputDrain(InputObservation):
                     session_id, self.sessions.config.publish_configuration,
                 )),
             )
-        owned = state.owned()
+        owned = self.drained[session_id].owned()
         if owned.owner != owner:
             raise RelationViolationError("Another allocation already owns this session")
         return owned
