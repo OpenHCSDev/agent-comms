@@ -207,7 +207,11 @@ def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
 def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     private_directory, monkeypatch,
 ):
+    import multiprocessing
+
     from agent_comms.cli_verbs.install import InstallCliCommand
+    from agent_comms.store_files import SharedLock
+    from test_locked_store import _hold_lock, process
 
     root = (private_directory / "wire").resolve()
     root.mkdir(mode=0o700)
@@ -219,12 +223,27 @@ def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     recorded = RegisteredCommanderProject(comms.registry.require("lead").incarnation, ())
     comms.registry.set_commander_project(recorded)
     home = _harnessless_home(private_directory, monkeypatch)
-    result = InstallCliCommand(project=private_directory).apply(comms)
+    before = comms.registry.store.path.read_bytes()
+    context = multiprocessing.get_context("spawn")
+    locked, release = context.Event(), context.Event()
+    # A concurrent reader permits the install's reads, but forbids an unnecessary
+    # upgrade to a writer merely to keep the already committed configuration.
+    with process(_hold_lock, comms.registry.store.path, SharedLock(), locked, release):
+        assert locked.wait(10)
+        try:
+            result = InstallCliCommand(project=private_directory).apply(comms)
+        finally:
+            release.set()
+    assert comms.registry.store.path.read_bytes() == before
     assert result.config == recorded
     assert wire(root).registry.snapshot().commander_project == recorded
     assert not (root / "commander.json").exists()
     assert not (home / ".config/agent-comms/commander.json").exists()
     assert comms.registry.require("parked-unit").work_state == ParkedThreadWorkState()
+    comms.registry.declare(Thread("replacement", frozenset(), str(private_directory)))
+    changed = InstallCliCommand(project=private_directory, commander=NamedCommander("replacement")).apply(comms)
+    assert changed.config.commander == comms.registry.require("replacement").incarnation
+    assert comms.registry.snapshot().commander_project == changed.config
 
 
 def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):

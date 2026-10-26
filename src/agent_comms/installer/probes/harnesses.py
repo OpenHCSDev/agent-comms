@@ -64,7 +64,8 @@ class HarnessInstallation:
         home = Path.home()
         snapshot = ctx.registry.snapshot()
         project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
-        ctx.registry.set_commander_project(project)
+        if project != snapshot.commander_project:
+            ctx.registry.set_commander_project(project)
         return InstallResult(
             project,
             {
