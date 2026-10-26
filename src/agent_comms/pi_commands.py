@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import Response, ResponseOutcome
     from .pending_requests import PendingRequest
+    from .launch_runtime import RestartEnvironment
 
 
 class SessionSnapshot:
@@ -273,7 +274,7 @@ class CatalogQuery(NativeQuery):
     @asynccontextmanager
     async def catalog(
         self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage,
-        worktree: Path | None = None, root: Path | str | None = None,
+        configuration: RestartEnvironment, worktree: Path, root: Path,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .native_child import PiChild
@@ -285,8 +286,9 @@ class CatalogQuery(NativeQuery):
                 agent_bin,
                 tuple(arguments),
                 package=package,
-                worktree=Path.cwd() if worktree is None else worktree,
+                worktree=worktree,
                 root=root,
+                configuration=configuration,
             )
             async with BoundedRun.session(
                 launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
@@ -301,10 +303,13 @@ class CatalogQuery(NativeQuery):
             raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
     async def discover(
-        self, agent_bin: str, arguments: Sequence[str], root: Path | str | None = None,
-        *, package: VerifiedNativePackage,
+        self, agent_bin: str, arguments: Sequence[str], root: Path,
+        *, package: VerifiedNativePackage, configuration: RestartEnvironment,
     ) -> PiResponseData:
-        async with self.catalog(agent_bin, arguments, root=root, package=package) as child:
+        async with self.catalog(
+            agent_bin, arguments, root=root, worktree=root,
+            package=package, configuration=configuration,
+        ) as child:
             response = await self.exchange(child)
             return response.require_data()
 
@@ -345,14 +350,17 @@ class SettingCommand(CatalogQuery):
 
     async def configure(
         self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage, worktree: Path,
-        root: Path | str | None = None,
+        root: Path, configuration: RestartEnvironment,
     ) -> StateData:
         """Let native settings own validation/defaults, then observe their result.
 
         The catalog session is in memory. Its normal SetModel/SetThinkingLevel
         semantics cannot change a running turn, a saved transcript or its budget.
         """
-        catalog = self.catalog(agent_bin, arguments, package=package, worktree=worktree, root=root)
+        catalog = self.catalog(
+            agent_bin, arguments, package=package, worktree=worktree, root=root,
+            configuration=configuration,
+        )
         async with catalog as child:
             response = await self.exchange(child)
             response.success.require_success(response)

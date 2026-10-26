@@ -38,7 +38,6 @@ from agent_comms.tool_caller import ToolCaller
 from agent_comms.tools import CommsGoalHistoryTool, GoalHistory
 from agent_comms.turn_failure import NativeChildSignaled
 from agent_comms.turn_input_source import NoTurnAcceptance
-from agent_comms.turn_terminal import OwnerStop
 
 
 @pytest.fixture
@@ -69,7 +68,7 @@ def test_execution_identity_survives_wire_and_change_detection(execution_bus, ex
 
 @asynccontextmanager
 async def turn_on(comms, *, original_owner_input=False):
-    agent = CommsAgent(comms, auto_wake=False, owner_stop=OwnerStop(comms.owners.maintenance))
+    agent = CommsAgent(comms, auto_wake=False)
     owner = comms.registry.require("worker")
     session = "goal-execution-session"
     await agent.sessions.bind_owned(owner, session)
@@ -150,7 +149,7 @@ async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry
     comms = execution_bus
     async with turn_on(comms) as turn:
         await turn.progress.done(events.Done("dying backend", False))
-        turn.runner.owner_stop.request()
+        turn.runner.inputs.state(turn.session_id).owned().stop.request()
     # A new reader observes the same retained bus, without a Retry or goal write.
     relaunched = wire(comms.root)
     assert isinstance(relaunched.goals.goal_execution("worker"), RunnableExecution)

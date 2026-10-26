@@ -15,7 +15,7 @@ from pydantic import JsonValue
 
 
 from .activity import ActivityCapture
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
@@ -880,6 +880,13 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.advance_claim(name)
         self.threads[name] = thread.without_turn()
 
+    def detach_process(self, name: str, process: ProcessIdentity) -> None:
+        """A completed session releases its binding, not the root host's physical process."""
+        thread = self.require(name)
+        if thread.process_identity != process:
+            raise RelationViolationError("Session process changed before retirement")
+        self.threads[thread.name] = replace(thread, process_identity=NoProcess())
+
     def archive(self, name: str) -> None:
         name = self.require(name).name
         self.status(name).withdraw_owner(self.owners, name)
@@ -1154,6 +1161,9 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
         return {
             alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching
         }
+
+    def process_owners(self, process: ProcessIdentity) -> tuple[str, ...]:
+        return tuple(thread.name for thread in self.threads.values() if thread.process_identity == process)
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.canonical_name(name)

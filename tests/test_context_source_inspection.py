@@ -86,13 +86,13 @@ def test_current_core_context_is_independent_and_source_selection_is_current(tmp
     context = TurnContext.for_inspection(comms, owner)
     assert FieldCodec.decode(TurnContext, FieldCodec.encode(context)) == context
     request = ContextCoreRuntimeRequest(thread=owner.name)
-    assert RuntimeRequest.from_wire(request.to_wire()) == request
+    assert FieldCodec.decode(RuntimeRequest, FieldCodec.encode(request)) == request
     position, segment = next((i, s) for i, s in enumerate(context.segments)
                              if any(isinstance(p, FileProvenance) for p in s.provenance))
     source = next(p for p in segment.provenance if isinstance(p, FileProvenance))
     selected = ContextCoreSourceRuntimeRequest(thread=owner.name, owner=owner.incarnation,
         segment=position, manifest=segment.manifest(0), source=source)
-    assert RuntimeRequest.from_wire(selected.to_wire()) == selected
+    assert FieldCodec.decode(RuntimeRequest, FieldCodec.encode(selected)) == selected
     text = context.public_source_text(comms, selected.owner, selected.segment,
                                       selected.manifest, selected.source)
     assert text.text == source.public_text(comms)
@@ -183,7 +183,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     request = ContextRecordedSegmentRuntimeRequest(thread=owner.name, turn=original.turn,
                 request_id=original.request_id.require_id(), record=page.reference(page.resources[0].value),
                 segment=0, contributors=(0,))
-    assert RuntimeRequest.from_wire(request.to_wire()) == request
+    assert FieldCodec.decode(RuntimeRequest, FieldCodec.encode(request)) == request
     selected = original.selected_segment(request.segment, request.contributors)
     assert selected is child
     borrowed = NativeContextData("pi.estimateTokens", native, (system(provenance),))

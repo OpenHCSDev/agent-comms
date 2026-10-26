@@ -125,7 +125,7 @@ async def run(arguments):
     async def subscribe():
         owner = service.registry.require("wait-native")
         reader, writer = await asyncio.open_unix_connection(socket_path(service.root, owner.pid), limit=8*1024*1024)
-        writer.write((json.dumps(SubscribeRuntimeRequest(thread="wait-native").to_wire()) + "\n").encode())
+        writer.write((json.dumps(FieldCodec.encode(SubscribeRuntimeRequest(thread="wait-native"))) + "\n").encode())
         await writer.drain()
         packets = []
         while True:

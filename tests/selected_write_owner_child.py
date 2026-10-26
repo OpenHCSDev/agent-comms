@@ -14,7 +14,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_arguments import GivenArguments, GivenBinary
-from delivery_owner_fixture import canonical_agent, reply_turn_finished
+from delivery_owner_fixture import canonical_agent, reply_turn_finished, start_headless_owner
 from native_backend_fixture import NativeBackendFixture
 
 
@@ -38,7 +38,7 @@ async def main(base: Path) -> None:
             agent_bin=GivenBinary("pi"), agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
         )
         try:
-            await agent.sessions.start_owner(str(base / "project"), "beta")
+            await start_headless_owner(agent, "beta", agent.inputs.configuration.launch)
             print(json.dumps({"event": "ready", "pid": os.getpid()}), flush=True)
             await wait_for(base / "dispatch")
             agent.inputs.auto_wake = True

@@ -52,7 +52,7 @@ async def test_menu_reports_the_model_the_runtime_runs(tmp_path, monkeypatch):
         comms.agents.observe_runtime_info(name, reported)
         config = owner.sessions.config
         selection = comms.threads.running_selection(name)
-        menu = await config.describe(config.catalog_for(ModelConfigOption), selection)
+        menu = await config.describe(owner.inputs.configuration.catalog_for(ModelConfigOption), selection)
         coordination = ThreadConfiguration(
             comms.root, comms.registry, comms.threads, comms.agents,
         ).answer(name)

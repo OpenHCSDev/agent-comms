@@ -462,13 +462,10 @@ class ThreadLaunch(EnvironmentRecord):
             return False
         return canonicalize(caller) == name
 
-    @classmethod
-    def take_startup_input(cls, environment: MutableMapping[str, str] = os.environ) -> str | None:
-        """This launch's startup input, removed so no reread or child process sees it."""
-        startup_input = cls.current(environment).startup_input
-        cls.strip(environment, "startup_input")
-        # The worker still declares no startup input as None.
-        return startup_input.otherwise(None)
+    def take_startup_input(self, environment: MutableMapping[str, str]) -> str | None:
+        """Consume this already-decoded launch token before any child inherits it."""
+        self.strip(environment, "startup_input")
+        return self.startup_input.otherwise(None)
 
     def apply(self, environment: dict[str, str]) -> dict[str, str]:
         """Replace any inherited launch with this one."""

@@ -44,7 +44,8 @@ class EnsuringSessionLoadPlan(SessionLoadPlan):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
         return await Coordination.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
-            agent_bin=lifecycle.agent_bin, agent_args=GivenArguments(lifecycle.agent_args.argv),
+            agent_bin=lifecycle.effects.inputs.configuration.launch.binary,
+            agent_args=GivenArguments(lifecycle.effects.inputs.configuration.agent_args.argv),
         ))
 
 

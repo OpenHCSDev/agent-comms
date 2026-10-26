@@ -49,7 +49,7 @@ class TurnEventPublication(MroDispatch):
     session_id: str
     @handles(events.InputStarted, events.Done, events.StreamSettled, events.ToolEnd)
     async def sync_goals(self, event: events.InputStarted) -> None:
-        await self.sync_goal_execution(self.session_id, self.sessions.bindings[self.session_id])
+        await self.sync_goal_execution(self.session_id, self.sessions.require(self.session_id))
 
 
 
@@ -131,7 +131,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @property
     def thread_name(self) -> str:
-        return self.sessions.bindings[self.session_id]
+        return self.sessions.require(self.session_id)
 
     async def record_failure(self, failure: TurnFailure) -> events.Done:
         await self.consume(events.Done(text=failure.text, ok=False, failure=failure))

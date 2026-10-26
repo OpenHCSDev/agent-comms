@@ -1,12 +1,18 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
+from agent_comms.field_codec import AcpSessionId
+from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.controller import SessionUpdateSink
 
 from bus_record_fixture import prepare_native_comms
 
 from contextlib import asynccontextmanager
+from dataclasses import replace
+from functools import partial
 
 from agent_comms.acp import CommsAgent
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.coordinator import Coordination
+from agent_comms.owner_launch import RetainedOwnerLaunch
 
 
 class FakeClient(SessionUpdateSink):
@@ -25,9 +31,7 @@ async def canonical_delivery_owner(root, *, direct=False):
         runtime_enabled=True,
     )
     for person in people[1:]:
-        owner.sessions.bindings[person.name] = person.name
-        owner.sessions.titles[person.name] = person.name
-        owner.sessions.worktrees[person.name] = person.worktree
+        owner.sessions.published[AcpSessionId(person.name)] = PublishedSession.of(person)
     await owner._runtime.start()
     try:
         yield comms, owner, initial.message, root_id
@@ -45,6 +49,15 @@ def canonical_agent(comms, **options):
     )
     agent.on_connect(FakeClient())
     return agent
+
+
+async def start_headless_owner(agent: CommsAgent, name: str, launch: RetainedOwnerLaunch) -> None:
+    """Bind an actual local lease with the fixture's original session configuration."""
+    thread = await Coordination.run_worker(partial(agent._comms.owners.acquire_thread, name))
+    entry = (await Coordination.run_worker(partial(agent._comms.registry.entry, name))).entry
+    await agent.sessions.start_owner(replace(
+        launch, process=thread.require_process(), environment=thread.launch().apply(launch.environment),
+    ), entry.owner_identity)
 
 
 async def reply_turn_finished(owner, session):

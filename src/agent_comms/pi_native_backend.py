@@ -54,6 +54,7 @@ from .session_revision import (
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo
     from .comms import Comms
+    from .config_options import ConfigOptions
     from .launch_runtime import LaunchRuntime
     from .native_child import NativeChildState, PiSessionChild
     from .native_session_reopen import NativeSessionIdentity
@@ -207,19 +208,18 @@ class PiNativeBackend(
 
     def __init__(
         self,
-        agent_bin: str,
-        agent_args: NativeArguments,
+        configuration: ConfigOptions,
         comms: Comms,
         observe: Callable[[Thread, StateData, AgentInfo], Awaitable[None]],
     ) -> None:
         super().__init__()
-        self.agent_bin, self.agent_args, self.comms = agent_bin, agent_args, comms
+        self.configuration, self.comms = configuration, comms
         self.observe = observe
 
     @classmethod
     def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
         return cls(
-            runner.agent_bin, runner.agent_args, runner.comms,
+            runner.inputs.state(session_id).owned().configuration, runner.comms,
             partial(runner.observe_selected_preparation, session_id),
         )
 
@@ -229,7 +229,7 @@ class PiNativeBackend(
 
     def arguments(self, thread: Thread) -> tuple[str, ...]:
         """Pi's command-line arguments for this thread's model and thinking level."""
-        return thread.model.native(self.agent_args).with_thinking(
+        return thread.model.native(self.configuration.agent_args).with_thinking(
             thread.thinking_level
         ).argv
 
@@ -241,13 +241,13 @@ class PiNativeBackend(
 
         if open_native is None:
             open_native = NativeSessionPreparation.open
-        environment = await Coordination.run_worker(lambda: thread.native_environment(
-            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+        environment = await Coordination.run_worker(lambda: self.configuration.native_environment(
+            thread, self.comms.registry.snapshot(), thread.worktree,
         ))
         package = self.comms.owners.require_private_launch().native_package
         return await open_native(
             self,
-            self.agent_bin,
+            self.configuration.launch.binary,
             thread.native_launch_arguments(
                 NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
             package=package,
@@ -274,7 +274,7 @@ class PiNativeBackend(
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
         async for event in backend.stream_agent_events(
-            self.agent_bin,
+            self.configuration.launch.binary,
             thread.native_launch_arguments(
                 NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
             content.text,

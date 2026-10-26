@@ -110,7 +110,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         original = await attach_current()
         selection = OwnerRestartSelection.capture(comms.registry.snapshot(), name)
         assert selection.interpreter == source_python
-        launch = RetainedOwnerLaunch.capture(selection, comms.registry.snapshot())
+        launch = RetainedOwnerLaunch.capture(selection, comms.registry.snapshot(), comms.root)
         files = (native.session, native.config/'settings.json', native.config/'models.json',
                  native.config/'auth.json', InputDispositions.path_in(native.root))
         baseline = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
@@ -124,7 +124,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert not original.process_alive
         current = await attach_current()
         replacement = RetainedOwnerLaunch.capture(
-            OwnerRestartSelection.capture(comms.registry.snapshot(), name), comms.registry.snapshot())
+            OwnerRestartSelection.capture(comms.registry.snapshot(), name), comms.registry.snapshot(), comms.root)
         assert replacement.interpreter == sys.executable
         assert current.incarnation == original.incarnation
         assert current.worktree == original.worktree and current.session_file == original.session_file

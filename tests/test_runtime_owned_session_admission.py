@@ -85,7 +85,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             assert caught.value.code == Refused.INVALID_PARAMS
             assert caught.value.data["owner"] == "registered"
             assert "no loaded ACP session" in caught.value.data["reason"]
-        assert not owner.sessions.bindings
+        assert not owner.sessions.published
         assert not owner._runtime.clients
         assert comms.registry.require("registered") == thread
         assert not (root / "native-sessions").exists()
@@ -94,6 +94,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         retired = Thread('retired-owner', frozenset(), str(project), process_identity=ProcessIdentity.capture(os.getpid()))
         comms.registry.declare(retired)
         await owner.sessions.bind_owned(retired, "retired-acp-session")
+        await asyncio.to_thread(comms.owners.stop, retired.name)
         comms.registry.remove(retired.name)
         snapshot = comms.registry.snapshot()
         assert snapshot.canonical_name(retired.name) == retired.name
@@ -111,8 +112,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             owner.sessions.require_owned_session(comms.registry.entry("renamed-owner").entry)
             == "original-acp-session"
         )
-        assert owner.sessions.bindings == {
-            "retired-acp-session": "retired-owner",
+        assert {session: published.name for session, published in owner.sessions.published.items()} == {
             "original-acp-session": "registered",
         }
         assert not (root / "native-sessions").exists()

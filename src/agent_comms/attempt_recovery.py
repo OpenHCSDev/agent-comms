@@ -119,11 +119,8 @@ class VerifiedOwnerLoss(ABC):
         NativeRuntimeTable.require_installed(store.session._connection)
         identity = store.participants.get(owner.incarnation.lookup).owner_identity
         release = cls._released(releases, boundary, identity.owner_lookup)
-        if not release.matches(owner):
-            raise RecoveryBlocked("triage recovery requires this exact released owner")
-        if not release.matches(boundary.registry.require(release.name)):
-            raise RecoveryBlocked("triage recovery must precede a successor's registration")
         release = release.require_owner_loss(boundary.registry, identity)
+        release.retirement(boundary.registry, owner, release.before)
         proof = ReleasedOwnerLoss(release, store, boundary)
         with proof.observed():
             yield proof

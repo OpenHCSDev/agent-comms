@@ -244,8 +244,8 @@ class OwnedTurn:
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
         )
-        self.env_extra = self.thread.native_environment(
-            self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree
+        self.env_extra = self.runner.inputs.state(self.session_id).owned().configuration.native_environment(
+            self.thread, self.runner.comms.registry.snapshot(), self.worktree
         )
         from .turn_context import (
             AutomaticTitleSegment,
@@ -341,7 +341,7 @@ class OwnedTurn:
         resources.push_async_callback(self.close_changed_project)
 
     def finish_goals(self) -> None:
-        self.goals.finish(self.runner.owner_stop.interrupting(self.terminal))
+        self.goals.finish(self.runner.inputs.state(self.session_id).owned().stop.interrupting(self.terminal))
 
     async def close_changed_project(self) -> None:
         name = await self.runner.sessions.sync_identity(self.session_id)
@@ -412,7 +412,7 @@ class OwnedTurn:
         permit_cleanup.push_async_callback(Coordination.run_worker, permits.close)
         if not await Coordination.run_worker(self.authorize):
             return False
-        self.runner.sessions.bindings[self.session_id] = self.thread_name
+        await self.runner.sessions.sync_identity(self.session_id)
         if not await Coordination.run_worker(partial(self.begin, resources, permits)):
             return False
         self.open_stream(resources, permits)

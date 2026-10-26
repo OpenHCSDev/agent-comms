@@ -53,7 +53,7 @@ async def run(stage, package):
     source = snapshot.require_active('openhcs-helper')
     from agent_comms.owner_lifecycle import OwnerRestartSelection
 
-    launch = RetainedOwnerLaunch.capture(OwnerRestartSelection.capture(snapshot, source.name), snapshot)
+    launch = RetainedOwnerLaunch.capture(OwnerRestartSelection.capture(snapshot, source.name), snapshot, public.root)
     source_file = Path(source.session_file)
     with source_file.open('rb') as stream:
         source_hash = hashlib.file_digest(stream, 'sha256').hexdigest()

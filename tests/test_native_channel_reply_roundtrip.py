@@ -37,10 +37,6 @@ from agent_comms.turn_lease import NoTurnRecord
 from agent_comms.threads import Thread
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
-from test_coordinated_runtime import tmp_path as private_root_fixture
-
-# Reuse the existing isolated native-runtime fixture.
-tmp_path = private_root_fixture
 
 
 def start_source_owner(comms, name, runtime: RestoredRuntime):
@@ -93,11 +89,19 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                         pending = NativeRuntimeInput.select(
                             store.session._connection,
                             where=(
-                                "owner_lookup=? AND session_entry_id IS NULL"
-                                if broadcast else "session_entry_id IS NULL"
+                                "owner_lookup=? AND session_id IS NOT NULL AND session_entry_id IS NULL"
+                                if broadcast else "session_id IS NOT NULL AND session_entry_id IS NULL"
                             ),
                             parameters=((comms.registry.require(request["model"]).incarnation.lookup,) if broadcast else ()),
                         )
+                        # Native send records session_id before writing prompt bytes.
+                        # An ungranted reservation cannot identify this HTTP request.
+                        # Retain earlier unresolved inputs, but identify this request
+                        # from the journal's actual latest tracked user boundary.
+                        current_inputs = tuple((row, next(
+                            entry for entry in NativeTranscript(Path(row.session_file)).tail()
+                            if entry.input_boundary).require_tracked_user()) for row in pending)
+                        pending = tuple((row, user) for row, user in current_inputs if row.input_id == user.input_id)
                         if not pending:
                             assert not broadcast
                             request_text = json.dumps(request.get("messages", ()))
@@ -108,11 +112,10 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                             original = None
                             is_triage = requires_answer = False
                         else:
-                            assert len(pending) == 1
-                            original = pending[0]
-                            user = next(entry for entry in NativeTranscript(
-                                Path(original.session_file)
-                            ).tail() if entry.input_boundary).require_tracked_user()
+                            assert len(pending) == 1, tuple(
+                                (row.input_id, row.stage.declared_name, row.session_file, str(row.session_id))
+                                for row, _ in pending)
+                            original, user = pending[0]
                             assert user.input_id == original.input_id
                             is_triage = original.stage is TriageNativeExecution
                             assignments = tuple(WakeAssignment.one(
@@ -512,11 +515,12 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             assert Path(after.threads["questioner"].runtime.read_key).read_bytes().startswith(saved['questioner'])
     finally:
         await attachment.shutdown()
-        for name in projects:
-            await asyncio.to_thread(comms.owners.stop, name)
-        server.shutdown()
-        server.server_close()
-        serving.join(timeout=2)
+        try:
+            await asyncio.to_thread(comms.owners.stop, *projects)
+        finally:
+            server.shutdown()
+            server.server_close()
+            serving.join(timeout=2)
         assert all(not comms.registry.require(name).process_alive for name in projects)
         if retained_evidence := os.environ.get("AC_NATIVE_ROUNDTRIP_EVIDENCE"):
             evidence = Path(retained_evidence)

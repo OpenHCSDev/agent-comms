@@ -5,21 +5,31 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, cast
+from abc import abstractmethod
+from collections.abc import Awaitable
+from dataclasses import dataclass
+from .command import Command
+from .declared_family import DeclaredFamily
+from .tool_result import DeclaredReply
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec
+from .field_codec import AcpSessionId, FieldCodec, NullMember
 from .jsonl_stream import JsonlStreamReader
-from .owner_protocol import OwnerLine
+from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .child_process import ProcessIdentity
     from .registry_document import RegistryEntry
     from .thread_identity import OwnerIdentity
+    from .runtime import RuntimeServer, SocketClient
+    from .threads import Thread
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -34,18 +44,101 @@ class OwnerReplyLostError(RuntimeError, ConnectionError):
     """The owner disconnected after dispatch; a mutating request remains uncertain."""
 
 
+@dataclass(frozen=True, slots=True)
+class NoControllerToken(NullMember):
+    """The prompt came from no attached controller; no subscriber answers its dialogs."""
+
+
+@dataclass(frozen=True)
+class RuntimeRequestContext:
+    server: RuntimeServer
+    reader: asyncio.StreamReader
+    client: SocketClient
+    session: AcpSessionId
+    name: str
+
+    @property
+    def session_id(self) -> str:
+        """The ACP transport's text representation of the original session."""
+        return str(self.session)
+
+    async def send(self, line: OwnerLine) -> None:
+        await self.client.send(line)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RuntimeRequest(
+    DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"
+):
+    family_discriminator: ClassVar[str] = "action"
+    thread: str
+
+    @classmethod
+    def proxy_payload(
+        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
+    ) -> dict[str, object]:
+        return OwnerConnection.wire_request(cls.declared_name, thread, parameters)
+
+    def require_owner(self, entry: RegistryEntry) -> Thread:
+        owner = entry.thread
+        if not owner.process_identity.runs_here() or not entry.status.running:
+            raise RelationViolationError("This process no longer owns the thread.")
+        return owner
+
+    async def bind(self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient) -> RuntimeRequestContext:
+        entry = (await Coordination.run_worker(partial(
+            server.agent._comms.registry.entry, self.thread,
+        ))).entry
+        owner = self.require_owner(entry)
+        session_id = server.agent.sessions.require_owned_session(entry)
+        return RuntimeRequestContext(server, reader, client, session_id, owner.name)
+
+
+class ResultRuntimeRequest(RuntimeRequest):
+    async def apply(self, ctx: RuntimeRequestContext) -> None:
+        reply = await self.result(ctx)
+        await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
+
+    @abstractmethod
+    async def result(self, ctx: RuntimeRequestContext) -> DeclaredReply: ...
+
+
 class OwnerConnection:
     """A shared headless-client socket connection that checks root, owner and process identity."""
 
     @staticmethod
     def wire_request(action: str, thread: str, parameters: dict[str, object]) -> dict[str, object]:
         """The owner decodes the command; transport encodes its one request envelope."""
-        return {"action": action, "thread": thread, **FieldCodec.encode(parameters)}
+        return {"action": action, "thread": thread,
+                **cast(dict[str, object], FieldCodec.encode(parameters))}
+
+    @staticmethod
+    def exchange(root: Path, process: ProcessIdentity, request: RuntimeRequest) -> object:
+        """A synchronous lifecycle call uses the same declared request and reply codec.
+
+        Lifecycle calls already run on a coordination worker. Submitting their
+        socket preparation back to that same executor would deadlock it.
+        The launcher binds the inherited listener before publishing the host;
+        there is no readiness polling and no retry after dispatch.
+        """
+        with PrivateSocketRole.address(socket_path(root, process.pid)) as address:
+            with socket.socket(socket.AF_UNIX) as connection:
+                if not process.alive():
+                    raise ConnectionError("Worker host exited before request dispatch")
+                connection.connect(str(address))
+                if not process.alive():
+                    raise ConnectionError("Worker host exited before request dispatch")
+                connection.sendall((json.dumps(FieldCodec.encode(request)) + "\n").encode())
+                with connection.makefile("rb") as response:
+                    line = response.readline()
+                if not line:
+                    raise OwnerReplyLostError("Worker host disconnected after dispatch; outcome unknown")
+                return OwnerLine.read(line).reply()
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return self.wire_request(action, self.session_id, parameters)
 
-    def __init__(self, comms, session_id: str, path: Path):
+    def __init__(self, comms: Comms, session_id: str, path: Path):
         self.session_id = session_id
         self.path = path
         self._comms = comms
@@ -148,7 +241,7 @@ class OwnerConnection:
             finally:
                 self._requests.discard(task)
 
-    async def close(self):
+    async def close(self) -> None:
         self._closed = True
         tasks = tuple(self._requests)
         for task in tasks:

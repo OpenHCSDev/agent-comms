@@ -152,6 +152,9 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
 
     async def release_resources(self) -> None:
         """The ordinary turn owns its acquisitions through native/tool retirement."""
+        if not self.claims:
+            return
+
         def release() -> None:
             with NativeBoundary(self.comms.bus) as boundary, boundary.current():
                 boundary.bus.publisher.release_resources(

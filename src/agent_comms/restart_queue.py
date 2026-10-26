@@ -323,7 +323,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
     owner = selection.require_current(snapshot)
     status = snapshot.status(owner.name)
     owner.require_restart_owner(status)
-    launch = RetainedOwnerLaunch.capture(selection, snapshot)
+    launch = RetainedOwnerLaunch.capture(selection, snapshot, comms.root)
     target = RestartTarget.capture(comms, launch.environment, launch_runtime)
     target.require_available(comms)
     # Queueing itself never signals or interrupts the owner, even if it is busy.

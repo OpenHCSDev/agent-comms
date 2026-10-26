@@ -15,7 +15,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_lifecycle import OwnerRestartSelection, ProcessExitedOwnerCompletion
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.thread_identity import GenerationCounter
@@ -71,7 +71,7 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registra
     thread, snapshot = stopped(registry=thread_registration)
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
-    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch, ProcessExitedOwnerCompletion())
     assert owner.require_current(snapshot) is thread
     selection = OwnerRestartSelection(
         owner.authority.owner, launch.process, owner.authority.claim.claimed_generation,
@@ -101,7 +101,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
         "AUTHORED_CREDENTIAL": "in-memory-only",
     }
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment)
-    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch, ProcessExitedOwnerCompletion())
     runtime = RestartEnvironment.inherit(environment)
     original = OwnerRestartHandoff("/authored", (owner,), runtime, ConfiguredBinary(), InheritedArguments(), LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
@@ -133,6 +133,6 @@ def test_retirement_capture_refuses_changed_original_incarnation(*, thread_regis
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     with pytest.raises(RelationViolationError):
-        RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch)
+        RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch, ProcessExitedOwnerCompletion())
 
 

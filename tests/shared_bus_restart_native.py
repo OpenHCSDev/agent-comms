@@ -57,7 +57,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
 
 
-def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
+def configured_stage(arguments, configured, snapshot, root, *, continue_existing=False):
     """Share the original installed/configured private receiving preparation."""
     from agent_comms.native_package import VerifiedNativePackage
 
@@ -75,7 +75,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
         project.mkdir(mode=0o700)
     from agent_comms.owner_lifecycle import OwnerRestartSelection
 
-    retained = RetainedOwnerLaunch.capture(OwnerRestartSelection.capture(snapshot, configured.name), snapshot)
+    retained = RetainedOwnerLaunch.capture(OwnerRestartSelection.capture(snapshot, configured.name), snapshot, root)
     # The original owner owns auth/settings/extension selection. Bootstrap is
     # its existing OS-environment decoder, not a second fixture configuration.
     _, environment = NativePiRpcLaunch.bootstrap(
@@ -135,7 +135,7 @@ async def configured_pure_channel(arguments):
         assert len(sources) == 1, 'An explicit saved source belongs to one configured fork'
     common_tags = set.intersection(*(set(source.tags) for source in sources))
     assert 'openhcs' in common_tags
-    stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0], snapshot)
+    stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0], snapshot, public.root)
     assert len(str(service.root/'native-sessions'/('0'*32)/'s')) < 108
     names, settings = [], []
     for index, source in enumerate(sources):
@@ -481,10 +481,11 @@ async def configured_mixed_routes(arguments):
 
     assert arguments.owners == 1 and arguments.collective
     assert not (arguments.saved_source or arguments.contention or arguments.cancel_before_grant)
-    snapshot = wire().registry.snapshot()
+    public = wire()
+    snapshot = public.registry.snapshot()
     configured = snapshot.require(arguments.configured_owner)
     assert configured.model, "Configured owner has no selected model"
-    stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
+    stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot, public.root)
     name = 'batch-receiver'
     service.registry.declare(Thread('human', frozenset(), str(project), role=UserThreadRole))
     service.registry.declare(Thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task=GivenThreadText('Answer each original route accurately once; do not expose direct-message content to a channel.')))
