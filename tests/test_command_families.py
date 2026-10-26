@@ -1,3 +1,4 @@
+from agent_comms.repo import Checkout
 from agent_comms.field_codec import FieldCodec, GoalId
 
 """External contracts and adding commands without editing any consumer catalog."""
@@ -43,12 +44,8 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     assert register.name == "a" and register.tags == frozenset({"x", "y"})
     assert parse(["inbox", "--thread", "a"]).thread == "a"
     send_arguments = ["user-send", "--to", "a", "--body", "hello"]
-    monkeypatch.chdir(tmp_path)
-    assert parse(send_arguments).worktree == str(tmp_path)
-    changed = tmp_path / "changed"
-    changed.mkdir()
-    monkeypatch.chdir(changed)
-    assert parse(send_arguments).worktree == str(changed)
+    with pytest.raises(ValueError):
+        parse(send_arguments)
     assert parse([*send_arguments, "--worktree", str(tmp_path)]).worktree == str(tmp_path)
     invoke = parse(["tool", "--tool", "comms_threads"])
     assert invoke.arguments == {}
@@ -158,7 +155,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     for comms in (old, live):
         for name in ("alice", "bob"):
             comms.registry.declare(
-                Thread(name, frozenset({"team"}), str(tmp_path))
+                Thread(name, frozenset({"team"}), Checkout(tmp_path))
             )
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel").message.message_id
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct").message.message_id

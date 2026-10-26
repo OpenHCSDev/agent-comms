@@ -1,4 +1,5 @@
 """A saved native owner answers a fresh DM through its bus-owned proof resource."""
+from agent_comms.repo import Checkout
 import asyncio
 import json
 from contextlib import AsyncExitStack
@@ -26,7 +27,7 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
                 native.open_owner(runtime_enabled=True, auto_wake=True))
             ready_seconds = perf_counter() - started
             comms = agent._comms
-            comms.threads.claim_thread('sender', tags=frozenset(), worktree=str(native.project))
+            comms.threads.claim_thread('sender', tags=frozenset(), worktree=Checkout(native.project))
             native.provider.text = 'The bus-owned native proof answered.'
             sent = comms.messaging.send('sender', session, 'Qualify this fresh bus-owned proof turn.').message
             async with asyncio.timeout(60):

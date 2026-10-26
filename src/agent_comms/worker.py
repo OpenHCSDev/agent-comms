@@ -47,7 +47,7 @@ async def run_owner(comms: Comms) -> None:
             loop.add_signal_handler(sig, stopped.request)
         async with AsyncExitStack() as ownership:
             ownership.push_async_callback(lambda: agent.shutdown())
-            await agent.sessions.start_owner(thread.worktree, name)
+            await agent.sessions.start_owner(str(thread.worktree), name)
             if key := ThreadLaunch.take_startup_input():
                 initial = asyncio.create_task(
                     run_startup_input(agent, name, InputKeyText.decode(key)))

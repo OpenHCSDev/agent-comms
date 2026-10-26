@@ -1,5 +1,6 @@
 """Retained Bus snapshots preserve current-incarnation routing and displayed reads."""
 
+from agent_comms.repo import Checkout
 from collections import Counter
 
 import pytest
@@ -19,7 +20,7 @@ from agent_comms.threads import Thread
 def routed(comms, tmp_path):
     comms.channels.create_tag("team")
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), Checkout(tmp_path)))
     return comms
 
 
@@ -81,7 +82,7 @@ def test_unordered_times_and_sparse_seen_rows(routed):
 @pytest.mark.parametrize("birth_crossing", [False, True])
 def test_retained_cut_clips_future_paint_in_counts_and_listings(routed, tmp_path, birth_crossing):
     comms = routed
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     birth = comms.registry.require(viewer).created_at
     first = comms.bus.publisher.publish_ordinary(
         Message("sender", viewer, "inside cut", InfoKind, timestamp=birth + 2), destination=CommandTarget.named(viewer), origin=AgentOrigin(),
@@ -112,7 +113,7 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(routed, tmp_path
 
 def test_retained_source_uses_its_ledger_identity_after_path_replacement(routed, tmp_path):
     comms = routed
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     message = comms.messaging.send("sender", viewer, "already read").message
     displayed = comms.bus.reads.capture(
         viewer, (message,), comms.registry.snapshot(), comms.bus.bus,

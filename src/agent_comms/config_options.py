@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from functools import cached_property
-from typing import TYPE_CHECKING, ClassVar, Protocol
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import Refused
 
@@ -39,21 +40,35 @@ class InvalidConfigChoice(ValueError):
     """A configured value is not a member of its discovered catalog."""
 
 
-class CatalogSelection(Protocol):
-    """The model and thinking selection read by both draft and running catalogs."""
+class CatalogSelection(ABC):
+    """A draft or running selection owns the project its catalog is discovered in."""
 
     @property
+    @abstractmethod
     def model(self) -> ThreadModel: ...
 
     @property
+    @abstractmethod
     def thinking_level(self) -> type[ThinkingChoice]: ...
+
+    @property
+    @abstractmethod
+    def project_path(self) -> Path: ...
 
 
 @dataclass(frozen=True, slots=True)
-class RunningSelection:
-    """What a thread runs: its stored choice, otherwise the model its runtime reports."""
+class RunningSelection(CatalogSelection):
+    """The observed model belongs to a source thread, not another copied project."""
+    thread: Thread
     model: ThreadModel
-    thinking_level: type[ThinkingChoice]
+
+    @property
+    def thinking_level(self) -> type[ThinkingChoice]:
+        return self.thread.thinking_level
+
+    @property
+    def project_path(self) -> Path:
+        return self.thread.project_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +206,7 @@ class ModelConfigOption(CatalogConfigOption):
                 self.agent_args.argv,
                 LaunchRoot.current().path,
                 package=self.package,
+                worktree=thread.project_path,
             )
             values = [
                 text for model in data.models if model.provider and model.id
@@ -223,6 +239,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
             thread.model.native(self.agent_args).argv,
             LaunchRoot.current().path,
             package=self.package,
+            worktree=thread.project_path,
         )
         levels = [member.declared_name for member in data.levels]
         return [CatalogChoice(value=level, name=level.title()) for level in levels]

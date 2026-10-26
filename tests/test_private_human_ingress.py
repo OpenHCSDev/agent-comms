@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from agent_comms.repo import Checkout
 import os
 import subprocess
 import sys
@@ -79,7 +80,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     comms.channels.create_tag("team")
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
-        comms.registry.declare(Thread(name, frozenset({'team'}), str(root), created_at=created_at))
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(root), created_at=created_at))
         lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
     store = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 9999)
     for name in lookups:
@@ -107,7 +108,7 @@ def test_owner_completion_failure_retains_the_committed_send(
     try:
         with pytest.raises(CommittedMessageError) as failed:
             comms.messaging.send_user_message(
-                CommandTarget.named('alice'), "One committed input", worktree=str(tmp_path),
+                CommandTarget.named('alice'), "One committed input", worktree=Checkout(tmp_path),
                 task=attachment_type(completed))
         committed = failed.value.record.message
         assert comms.bus.bus.lookup(committed.seq) == committed
@@ -127,7 +128,7 @@ def test_owner_completion_failure_retains_the_committed_send(
 
 def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    channel = comms.messaging.send_user_message(CommandTarget.named('#team'), "hello @alice", worktree=str(tmp_path))
+    channel = comms.messaging.send_user_message(CommandTarget.named('#team'), "hello @alice", worktree=Checkout(tmp_path))
     assert channel.sender_role == UserThreadRole
     assert [row.body for row in comms.views.history_page(CommandTarget.named("#team")).messages] == ["hello @alice"]
     initial = comms.bus.bus.delivery(channel.seq)
@@ -137,7 +138,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     )
     # Bob is a frozen unmentioned observer: two members, one claim.
     assert len(accept_initial(comms.bus, root_id, channel.seq, store)) == 1
-    dm = comms.messaging.send_user_message(CommandTarget.named('bob'), "direct", worktree=str(tmp_path))
+    dm = comms.messaging.send_user_message(CommandTarget.named('bob'), "direct", worktree=Checkout(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
     assert list(comms.views.history_page(CommandTarget.named("bob"), viewer=NamedViewer(channel.sender)).messages)[-1] == dm
     dm_initial = comms.bus.bus.delivery(dm.seq)
@@ -156,15 +157,15 @@ def test_explicit_root_override_preserves_private_user_receipt(
     with LaunchRoot(comms.root).selected():
         selected = wire()
     assert selected.root == comms.root
-    sent = selected.messaging.send_user_message(CommandTarget.named('alice'), "explicit", worktree=str(tmp_path))
+    sent = selected.messaging.send_user_message(CommandTarget.named('alice'), "explicit", worktree=Checkout(tmp_path))
     assert selected.bus.bus.delivery(sent.seq).message == sent
 
 
 def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
-    user = comms.messaging.user_identity(str(tmp_path))
+    user = comms.messaging.user_identity(Checkout(tmp_path))
     message = Message(user.name, "alice", "one input", InfoKind, timestamp=123456.0)
-    origin = HumanOrigin(user.name, user.created_at, user.worktree)
+    origin = HumanOrigin(user.name, user.created_at, str(user.worktree))
     first = comms.bus.publisher.publish_ordinary(message, destination=CommandTarget.named(message.target), origin=origin)
     with pytest.raises(RelationViolationError):
         comms.bus.publisher.publish_ordinary(message, destination=CommandTarget.named(message.target), origin=origin)
@@ -174,10 +175,10 @@ def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
 def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
     with pytest.raises(RelationViolationError):
-        comms.messaging.send_user_message(CommandTarget.named('#any'), "wrong route", worktree=str(tmp_path))
+        comms.messaging.send_user_message(CommandTarget.named('#any'), "wrong route", worktree=Checkout(tmp_path))
     with pytest.raises(UnregisteredThreadError):
-        comms.messaging.send_user_message(CommandTarget.named('unregistered'), "wrong peer", worktree=str(tmp_path))
-    user = comms.messaging.user_identity(str(tmp_path))
+        comms.messaging.send_user_message(CommandTarget.named('unregistered'), "wrong peer", worktree=Checkout(tmp_path))
+    user = comms.messaging.user_identity(Checkout(tmp_path))
     with pytest.raises(RelationViolationError):
         comms.messaging.send(user.name, "alice", "agent impersonation").message
     assert comms.bus.bus.revision() == 0
@@ -202,7 +203,7 @@ def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Pa
 def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) -> None:
     comms, _, root_id, _ = _root(tmp_path)
     program = (
-        "import sys\nfrom agent_comms.comms import wire\nfrom agent_comms.channel_targets import CommandTarget\nm = wire(sys.argv[1]).messaging.send_user_message(CommandTarget.named('#team'), sys.argv[2], worktree=sys.argv[3])\nprint(m.seq, m.message_id)"
+        "import sys\nfrom agent_comms.comms import wire\nfrom agent_comms.channel_targets import CommandTarget\nfrom agent_comms.field_codec import FieldCodec\nfrom agent_comms.repo import Checkout\nm = wire(sys.argv[1]).messaging.send_user_message(CommandTarget.named('#team'), sys.argv[2], worktree=FieldCodec.decode(Checkout, sys.argv[3]))\nprint(m.seq, m.message_id)"
     )
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     processes = [

@@ -1,5 +1,6 @@
 """Fresh roots refuse unproven source coverage and unconfigured native owners."""
 
+from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 
@@ -26,7 +27,7 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_read
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         ).since(UnstartedCursor(), source_reads=source_reads)
         assert empty.covered_seq == 0 and empty.injected_source_seqs == ()
-        sent = comms.messaging.send_user_message(CommandTarget.named('bob'), "fresh selected input", worktree=str(tmp_path))
+        sent = comms.messaging.send_user_message(CommandTarget.named('bob'), "fresh selected input", worktree=Checkout(tmp_path))
         reader = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         )
@@ -42,8 +43,8 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_read
 def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_reads):
     comms, store, root_id, lookups = _root(tmp_path)
     with store:
-        first = comms.messaging.send_user_message(CommandTarget.named('bob'), "first original", worktree=str(tmp_path))
-        second = comms.messaging.send_user_message(CommandTarget.named('bob'), "second original", worktree=str(tmp_path))
+        first = comms.messaging.send_user_message(CommandTarget.named('bob'), "first original", worktree=Checkout(tmp_path))
+        second = comms.messaging.send_user_message(CommandTarget.named('bob'), "second original", worktree=Checkout(tmp_path))
         reader = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         )

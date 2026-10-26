@@ -13,6 +13,7 @@ from pathlib import Path
 
 from agent_comms.cli_bridges.claude import ClaudeTranscript
 from agent_comms.comms import wire
+from agent_comms.repo import Checkout
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.thread_management import GivenDirectory
 from agent_comms.thread_status import StoppedThreadStatus
@@ -25,7 +26,7 @@ def declaration(root: Path, name: str, created_at: float = 1) -> Thread:
     return Thread(
         name,
         frozenset({"proof"}),
-        str(root),
+        Checkout(root),
         created_at=created_at,
         storage_roots=StorageRoots(root / "scratch" / name),
     )
@@ -79,7 +80,7 @@ def main() -> None:
             event.update(type=kind, uuid=kind, message=dict(role=kind, content=content))
             print(json.dumps(event), file=stream)
     comms.registry.register(declaration(root, "sentinel"), StoppedThreadStatus())
-    reading = ObserveSidebar(str(root), True, False).observation()
+    reading = ObserveSidebar(Checkout(root), True, False).observation()
     stop = mp.Event()
     counts: Queue[int] = mp.Queue()
     process = mp.Process(target=writer, args=(root, stop, counts, args.imports))

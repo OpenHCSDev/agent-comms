@@ -52,7 +52,7 @@ class TaskScope(DeclaredFamily, affix="TaskScope"):
         return GoalTaskScope(project=self.project, goal=goal)
 
     def require_current(self, owner: Thread) -> None:
-        if self.project != owner.worktree:
+        if self.project != str(owner.worktree):
             raise RelationViolationError("Task project differs from its declared owner")
         self.require_context(owner)
 
@@ -92,7 +92,7 @@ class ProjectTaskScope(TaskScope):
         pass
 
     def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
-        return owner.worktree == self.project
+        return str(owner.worktree) == self.project
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -104,7 +104,7 @@ class TurnTaskScope(TaskScope):
             raise RelationViolationError("An active goal requires its revision scope")
 
     def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
-        return owner.worktree == self.project and declaration.turn_scope_matches(owner, registry)
+        return str(owner.worktree) == self.project and declaration.turn_scope_matches(owner, registry)
 
     def require_human_context(self, owner: Thread) -> None:
         raise RelationViolationError("A USER constraint cannot borrow a model turn scope")

@@ -81,7 +81,7 @@ class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):
         except ReservationViolationError:
             return
         if entry.status.running and entry.thread.owes_project_resume:
-            resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
+            resume = ScheduledTurn.resuming_in_project(str(entry.thread.worktree))
             pending = inputs.state(session_id).pending_turns
             if resume not in pending:
                 pending.append(resume)

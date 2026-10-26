@@ -1,5 +1,6 @@
 """Retained source applicability follows the original frozen recipient birth."""
 
+from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 from agent_comms.messages import NoticeRole
@@ -17,12 +18,12 @@ def facts_for(comms, owner):
 def test_ordinary_peer_reply_preserves_facts_but_new_user_instruction_changes_them(tmp_path):
     comms = context_comms(tmp_path)
     owner = comms.registry.require("Alice")
-    original = comms.messaging.send_user_message(CommandTarget.named('#team'), "Preserve this original constraint", worktree=str(tmp_path))
+    original = comms.messaging.send_user_message(CommandTarget.named('#team'), "Preserve this original constraint", worktree=Checkout(tmp_path))
     before = facts_for(comms, owner)
     assert [fact.source.reference for fact in before] == [original.reference]
     comms.messaging.send("Bob", "#team", "Ordinary peer acknowledgement", role=NoticeRole()).message
     assert facts_for(comms, owner) == before
-    changed = comms.messaging.send_user_message(CommandTarget.named('#team'), "A distinct new original instruction", worktree=str(tmp_path))
+    changed = comms.messaging.send_user_message(CommandTarget.named('#team'), "A distinct new original instruction", worktree=Checkout(tmp_path))
     after = facts_for(comms, owner)
     assert after != before
     assert [fact.source.reference for fact in after] == [original.reference, changed.reference]
@@ -31,7 +32,7 @@ def test_ordinary_peer_reply_preserves_facts_but_new_user_instruction_changes_th
 def test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_facts(tmp_path):
     comms = context_comms(tmp_path)
     original = comms.registry.require("Alice")
-    first = comms.messaging.send_user_message(CommandTarget.named('#team'), "Original exact user constraint", worktree=str(tmp_path))
+    first = comms.messaging.send_user_message(CommandTarget.named('#team'), "Original exact user constraint", worktree=Checkout(tmp_path))
     assert [fact.source.reference for fact in facts_for(comms, original)] == [first.reference]
 
     outsider = replace(comms.registry.require("outsider"), tags=frozenset({"team"}))
@@ -42,7 +43,7 @@ def test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_fact
     comms.registry.register(replacement)
     assert facts_for(comms, replacement) == ()
 
-    second = comms.messaging.send_user_message(CommandTarget.named('#team'), "New exact user constraint", worktree=str(tmp_path))
+    second = comms.messaging.send_user_message(CommandTarget.named('#team'), "New exact user constraint", worktree=Checkout(tmp_path))
     reopened = wire(comms.root)
     assert [fact.source.reference for fact in facts_for(reopened, replacement)] == [second.reference]
     assert [fact.source.reference for fact in facts_for(reopened, outsider)] == [second.reference]

@@ -1,5 +1,6 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
@@ -53,7 +54,7 @@ class NativeBackendFixture(AnnouncedInputStart):
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
         return Thread(
-            'direct-native', frozenset(), str(project),
+            'direct-native', frozenset(), Checkout(project),
         ).incarnation.require_recorded()
 
     def __init__(self, root, project, session, provider, config, package: VerifiedNativePackage):
@@ -224,6 +225,8 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     root.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
+    from agent_comms.repo import Repo
+    Repo.git(project, 'init', '--quiet')
     config.mkdir(mode=0o700)
     session = create_fresh_private_session(tmp_path / "sessions", worktree=project).path
     provider = provider_type(status=200, text="Native response lifecycle.")

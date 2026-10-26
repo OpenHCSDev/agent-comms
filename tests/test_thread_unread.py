@@ -3,6 +3,7 @@
 The old prefix-resume/time-budget tests described deleted owners. These checks
 exercise the current suffix, read marks, per-source publication and retirement.
 """
+from agent_comms.repo import Checkout
 import json
 import sqlite3
 from concurrent.futures import Future
@@ -50,7 +51,7 @@ def setup_thread(tmp_path):
     session(source)
     comms = installed_comms(tmp_path / 'wire')
     comms.registry.declare(Thread('worker', frozenset({'ci'}),
-        str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+        Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     return comms, source
 
 
@@ -107,11 +108,11 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     assert completed_snapshot(comms, str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
     shown = comms.transcripts.transcript_checkpoint('worker')
     append(source, content='Arrived after the displayed cut')
-    comms.views.mark_thread_view_read('worker', worktree=str(tmp_path), through=shown)
+    comms.views.mark_thread_view_read('worker', worktree=Checkout(tmp_path), through=shown)
     assert completed_snapshot(wire(comms.root), str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
     assert completed_snapshot(comms, str(tmp_path / 'other-project')).thread_unread['worker'] == ReplyUnread(1)
     comms.messaging.send('worker', '#ci', 'Channel reply')
-    comms.views.mark_user_view_read('#ci', worktree=str(tmp_path))
+    comms.views.mark_user_view_read('#ci', worktree=Checkout(tmp_path))
     comms.messaging.acknowledge('worker', tuple(m.reference for m in comms.bus.inbox('worker').page.messages))
     assert completed_snapshot(comms, str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
 
@@ -133,11 +134,11 @@ def test_read_uses_the_captured_read_document(tmp_path):
     comms, source = setup_thread(tmp_path)
     append(source)
     state = comms.views.transcript_reads
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(1)}
     document = state.reads.read()
     shown = comms.transcripts.transcript_checkpoint('worker')
-    comms.views.mark_thread_view_read('worker', worktree=str(tmp_path), through=shown)
+    comms.views.mark_thread_view_read('worker', worktree=Checkout(tmp_path), through=shown)
     assert state.counts(viewer, registry=comms.registry.snapshot(), document=document, visibility=DEFAULT_ROSTER).counts == {'worker': ReplyUnread(1)}
     assert completed_counts(state, viewer).counts == {'worker': ReplyUnread(0)}
 

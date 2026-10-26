@@ -77,6 +77,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
@@ -704,7 +705,7 @@ class CommandedBy(GivenText, BindingCommander):
     text: str
 
     async def register(self, bridge: TranscriptBridge) -> None:
-        worktree = str(await bridge.session_worktree())
+        worktree = await bridge.session_worktree()
         await bridge.comms.bus.when_open(partial(
             bridge.comms.registry.register_commanded_unit,
             bridge.binding.bus, self.text, worktree, bridge.session_process(),
@@ -717,7 +718,7 @@ class Uncommanded(AbsentText, BindingCommander):
 
     async def register(self, bridge: TranscriptBridge) -> None:
         thread = Thread(
-            bridge.binding.bus, frozenset(), str(await bridge.session_worktree()),
+            bridge.binding.bus, frozenset(), await bridge.session_worktree(),
             process_identity=bridge.session_process(), execution=ExternalThreadExecution,
         )
         await bridge.comms.bus.when_open(partial(bridge.comms.registry.declare, thread))
@@ -1200,8 +1201,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         """A line-monitor endpoint lives in the session-owned bridge process."""
         return ProcessIdentity.capture(os.getpid())
 
-    async def session_worktree(self) -> Path:
-        return Path.cwd()
+    async def session_worktree(self) -> Checkout:
+        return self.comms.registry.require(self.binding.bus).worktree
 
     async def registered_watch(self, operation: Inbox) -> None:
         with ExitStack() as endpoint:

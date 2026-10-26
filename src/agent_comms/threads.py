@@ -32,6 +32,7 @@ from .goals import (
     GoalDeclaration,
     NoGoal,
 )
+from .config_options import CatalogSelection
 from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
 from .lifecycle import LifecycleState
@@ -191,7 +192,7 @@ class ThreadProvenance:
 
     name: str = field(kw_only=False)
     tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
-    worktree: str = field(kw_only=False)
+    worktree: Checkout = field(kw_only=False)
     created_at: Annotated[CreationTime, CreationSeconds, WireRequired()]
     session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoSessionFile
@@ -227,8 +228,6 @@ class ThreadProvenance:
         object.__setattr__(self, "created_at", FieldCodec.decode(
             Annotated[CreationTime, CreationSeconds], self.created_at))
         self.require_name(self.incarnation.name)
-        if not self.worktree:
-            raise ValueError("Thread worktree cannot be empty.")
         for tag in self.tags:
             Tag.validate(tag)
 
@@ -257,7 +256,7 @@ class ThreadCatalog(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance):
+class Thread(ThreadProvenance, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
 
     parent: ThreadParent = field(default_factory=NoParent)
@@ -358,7 +357,7 @@ class Thread(ThreadProvenance):
     @property
     def project_path(self) -> Path:
         """The physical current project declared by this thread."""
-        return Path(self.worktree).expanduser().resolve()
+        return self.worktree.path.expanduser().resolve()
 
     @property
     def home_checkouts(self) -> tuple[Path, ...]:
@@ -376,7 +375,7 @@ class Thread(ThreadProvenance):
         earlier = self.project_path
         current = Path(project).expanduser().resolve()
         return replace(
-            self, worktree=project,
+            self, worktree=Checkout(current),
             earlier_projects=tuple(dict.fromkeys(
                 path for path in (*self.earlier_projects, earlier) if path != current
             )),
@@ -399,13 +398,13 @@ class Thread(ThreadProvenance):
         if not self.restart_candidates(status):
             raise RelationViolationError("Restart requires another live owner")
 
-    def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
+    def native_environment(self, root, snapshot) -> dict[str, str]:
         """Project this captured owner through the original native binding."""
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
         return {
-            **replace(self.launch(), worktree=worktree, managed=True).encode(),
+            **replace(self.launch(), managed=True).encode(),
             **project.environment(root),
         }
 
@@ -503,7 +502,7 @@ class Thread(ThreadProvenance):
 
     @property
     def task_scope(self) -> TaskScope:
-        return TaskScope.for_goal(self.worktree, self.goal)
+        return TaskScope.for_goal(str(self.worktree), self.goal)
 
     def wake_context(self, goals: Goals) -> WakeWorkContext:
         return WakeWorkContext.from_thread(self, goals)

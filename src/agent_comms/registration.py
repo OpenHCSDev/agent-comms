@@ -30,6 +30,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent
+from .repo import Checkout
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -115,7 +116,7 @@ class Registration:
                     change, thread=replace(change.thread, goal=goal))).thread
 
     def register_commanded_unit(
-        self, name: str, commander: str, worktree: str, process: ProcessIdentity,
+        self, name: str, commander: str, worktree: Checkout, process: ProcessIdentity,
     ) -> Thread:
         """Declare a new commanded endpoint without rewriting an existing declaration."""
         with self.store.editing() as edit:
@@ -197,7 +198,7 @@ class Registration:
                 original.thread, session_file=original.thread.session_file.applied(current.session_file)))
             current = joined.require_source_snapshot(edit.original.snapshot)
             location = current.writable_runtime.new_location(
-                self.store.path.parent, original.thread.worktree)
+                self.store.path.parent, original.thread.worktree.path)
             participant.owner = self._attach_native_session(edit, joined, location.path)
             return participant.owner.thread.writable_runtime
 

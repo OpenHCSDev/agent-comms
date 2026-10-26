@@ -18,7 +18,7 @@ from pathlib import Path
 
 from agent_comms.change_report import FileLine, MainRevision
 from agent_comms.commander.standing import Scrutinize
-from agent_comms.repo import Repo
+from agent_comms.repo import Checkout, Repo
 from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -71,7 +71,7 @@ def setup() -> None:
     comms = wire(ROOT)
     for name in ("record-lead", "record-worker"):
         comms.registry.declare(
-            Thread(name, frozenset(), str(CHECKOUT), created_at=time.time())
+            Thread(name, frozenset(), Checkout(CHECKOUT), created_at=time.time())
         )
     comms.goals.todos.add_request(comms.registry.require('record-lead').incarnation,
         'Confirm the order record through the actual Core tools on this isolated bus')

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainVa
 from .coordination_errors import CommandFailure
 from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
 
@@ -335,14 +335,31 @@ class KeptBranchStart(CheckoutStart):
 
 
 @dataclass(frozen=True)
-class Checkout:
-    """A working tree of one of our repositories, ready to run.
+class Checkout(SingleFieldValue):
+    """A recorded working tree of one of our repositories.
 
     Its pinned submodules (the refactor-audit catalog) belong to the tree, and `git worktree
     add` leaves them empty even with submodule.recurse set, so every tree is added, prepared
     and retired here and nowhere else."""
 
     path: Path
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(cls.path_from_input(FieldCodec.decode(str, data)))
+
+    @staticmethod
+    def path_from_input(path: Path | str) -> Path:
+        """Keep empty input distinct from Path(''), which silently means the cwd."""
+        if path == "":
+            raise ValueError("Project path must not be empty")
+        return Path(path)
+
+    def __fspath__(self) -> str:
+        return str(self.path)
+
+    def __str__(self) -> str:
+        return str(self.path)
 
     @classmethod
     def present(cls, *paths: Path) -> tuple[Path, ...]:
@@ -357,9 +374,17 @@ class Checkout:
         return cls.prepared(Path(path))
 
     @classmethod
+    def checked(cls, path: Path | str) -> Self:
+        """Resolve a supplied project and require a Git checkout, never the shell's cwd."""
+        path = cls.path_from_input(path).expanduser().resolve(strict=True)
+        if not cls.present(path):
+            raise ValueError(f"Project {path} is not a Git checkout")
+        return cls(path)
+
+    @classmethod
     def prepared(cls, path: Path) -> Self:
         """Prepare this checkout's pinned submodules before handing it to a consumer."""
-        checkout = cls(path)
+        checkout = cls.checked(path)
         checkout.prepare()
         return checkout
 
@@ -402,6 +427,14 @@ class Checkout:
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )
         Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
+
+
+class LaunchCheckout(Checkout):
+    """A project qualified for a new launch, not a historical filesystem promise."""
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls.checked(FieldCodec.decode(str, data))
 
 
 class ScratchCheckout(Checkout):

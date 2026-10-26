@@ -99,7 +99,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
             return False
         if self.claimed_identity != ClaimedIdentity(owner.incarnation, claim_scope):
             return False
-        if self.worktree != owner.worktree:
+        if self.worktree != str(owner.worktree):
             return False
         if self.turn != owner.observed_turn(claim_scope):
             return False
@@ -136,7 +136,7 @@ class FailedTurnObservation:
         # construction error is a defect and raises.
         evidence = FailedTurnEvidence(
             reservation.attempt_id, reservation.goal_id, reservation.generation,
-            owner.name, owner.incarnation.wire_birth, owner.worktree, claim_scope,
+            owner.name, owner.incarnation.wire_birth, str(owner.worktree), claim_scope,
             lease.identity.generation, goal.revision, turn_id, failure,
         )
         if owner.goal != goal or reservation.goal_id != goal.id:

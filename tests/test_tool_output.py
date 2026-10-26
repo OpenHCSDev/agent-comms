@@ -1,5 +1,7 @@
 """Inbox pages drain oldest first without changing uncertain inputs."""
+from pathlib import Path
 
+from agent_comms.repo import Checkout
 import asyncio
 import json
 import os
@@ -55,7 +57,7 @@ def inbox_comms(root):
 
     comms = canonical_goal_wire(root)
     for name in ("a", "b"):
-        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
     return comms
 
 

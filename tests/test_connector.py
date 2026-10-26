@@ -1,6 +1,7 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
 
+from agent_comms.repo import Checkout
 import asyncio
 import base64
 import hashlib
@@ -95,7 +96,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     import subprocess
     import sys
 
-    comms.registry.declare(Thread("claude-ai", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("claude-ai", frozenset(), Checkout(comms.root)))
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -142,7 +143,7 @@ def store(tmp_path: Path) -> ConnectorStore:
 @pytest.fixture
 def connector(store: ConnectorStore, root: Path, comms: Comms):
     for created_at, name in enumerate(("worker", "claude-ai"), start=1):
-        comms.registry.declare(Thread(name, frozenset(), str(root), created_at=created_at))
+        comms.registry.declare(Thread(name, frozenset(), Checkout(root), created_at=created_at))
     return Connector(store, "http://127.0.0.1:18766", root)
 
 
@@ -196,7 +197,7 @@ async def approved_token(client: TestClient, comms: Comms) -> str:
     assert (await client.head("/authorize", params=parameters, allow_redirects=False)).status == 405
     waiting = await client.get("/authorize", params=parameters, allow_redirects=False)
     assert waiting.status == 200
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     notice = comms.bus.inbox(owner.name).page.messages[-1]
     link = urlsplit(notice.body.splitlines()[-1])
     assert (await client.head(link.path, allow_redirects=False)).status == 405
@@ -274,7 +275,7 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
     assert (await client.get(
         "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
     )).status == 200
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
     secret = link.path.rsplit("/", 1)[-1]
     runner = web.AppRunner(Connector(store, "http://127.0.0.1:18766", root).application(),
@@ -478,7 +479,7 @@ async def test_connector_lists_every_tool(client, store, comms):
 
 
 async def test_connector_reads_two_newest_first_conversation_pages(client, store, comms):
-    comms.registry.declare(Thread("commander", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("commander", frozenset(), Checkout(comms.root)))
     originals = [comms.messaging.send("worker", "claude-ai", f"history {number}").message
                  for number in range(5)]
     comms.messaging.send("commander", "claude-ai", "not this conversation")
@@ -616,7 +617,7 @@ async def test_approval_previews_do_not_grant_browser_trust(client, store, comms
     assert (await client.get(
         "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
     )).status == 200
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
     before = store.path.read_bytes()
     for _ in range(2):
@@ -644,7 +645,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
         assert (await client.get(
             "/authorize", params=FieldCodec.encode(query), allow_redirects=False
         )).status == 200
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     before = len(comms.bus.inbox(owner.name).page.messages)
     assert before == ConnectorGrants.waiting_limit
     blocked = replace(login.query, state="overflow")
@@ -675,7 +676,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
 async def test_owner_browser_approval_lifecycle(client, store, comms):
     """One real HTTP/store/bus journey: owner consent, remembered browser, expiry and revoke."""
     token = await approved_token(client, comms)
-    owner = comms.messaging.user_identity(str(comms.root))
+    owner = comms.messaging.user_identity(Checkout(comms.root))
     notices = comms.bus.inbox(owner.name).page.messages
     assert len(notices) == 1 and notices[0].target == owner.name
     first_link = urlsplit(notices[0].body.splitlines()[-1])

@@ -167,13 +167,12 @@ class PrivateSendClaim(PromptBoundary):
                 input_id=self.input_id,
                 prompt=self.prompt.text,
                 context_contributions=self.prompt.contributions,
-                worktree=Path(self.owner.thread.worktree).absolute(),
+                worktree=self.owner.thread.worktree.path.absolute(),
                 session=self.session,
                 model=model,
                 thinking_level=self.owner.thread.thinking_level,
                 environment=self.owner.thread.native_environment(
                     self.bus.bus.path.parent, registry,
-                    self.owner.thread.worktree,
                 ),
                 ingress=MaintenanceBarrier(self.bus._registry.store.path),
                 startup=NativeStartup(
