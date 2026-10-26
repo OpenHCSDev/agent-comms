@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogDocument
-from agent_comms.cli_command import MultipleTargets
+from agent_comms.channel_targets import NoChannel, SurroundingChannel
+
+from agent_comms.catalog_document import CatalogAccess, NoCatalog
+from agent_comms.cli_command import ChannelBound, MultipleTargets
 from agent_comms.cli_commands import ThreadPinnedResult
-from agent_comms.cli_verbs.named import NamedCliCommand
+from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import TargetBound
@@ -20,21 +22,21 @@ from typing import Self
 class PinThreadCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-thread"):
     help = "Toggle thread pin in channel"
     channel: Annotated[
-        str, TargetBound(), Argument(flags=("--channel",))
+        str, ChannelBound(), Argument(flags=("--channel",))
     ]
     pinned: Annotated[
         bool, TargetBound(), Argument(flags=("--pinned",))
     ] = False
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument) -> tuple[Self, ...]:
-        if channel is None:
-            return ()
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel = NoChannel(), *, catalog: CatalogAccess = NoCatalog()) -> tuple[Self, ...]:
         with comms.bus.opened_activity() as activity:
-            if not catalog.require_channel(channel, activity).matches(thread.tags):
-                return ()
-        return (cls(name=thread.name, channel=channel,
-                    pinned=thread.name not in catalog.pinned_threads(channel)),)
+            return tuple(
+                cls(name=thread.name, channel=name,
+                    pinned=thread.name not in catalog.pinned_threads(name))
+                for name in channel.names_for_binding()
+                if catalog.require_channel(name, activity).matches(thread.tags)
+            )
 
     def apply(self, ctx: Comms) -> ThreadPinnedResult:
         ctx.channels.set_thread_pinned(self.channel, self.name, self.pinned)

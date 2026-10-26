@@ -6,7 +6,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli_commands import UserMessageSentResult
 from agent_comms.cli_commands import WorktreeArgument
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_verbs.publishing import PublishingCliCommand
+from agent_comms.cli_support.publishing import PublishingCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from dataclasses import dataclass

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pkgutil
 import re
 from abc import ABC, ABCMeta, abstractmethod
-from collections.abc import Hashable, Iterable, Mapping
+from collections.abc import Hashable, Iterable
 from functools import cache
 from types import ModuleType
 from typing import ClassVar, Self, cast
@@ -62,6 +62,12 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )
             namespace["declared_name"] = None
+            namespace["__registry_config__"] = RegistryConfig(
+                registry_dict=namespace["__registry__"],
+                key_attribute="declared_name",
+                skip_if_no_key=True,
+                discovery_package=discovery_package,
+            )
         elif root is not None:
             stem = name.removesuffix(root._family_affix) if root._family_affix else name
             derived = declared_words(stem)
@@ -72,18 +78,9 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
             if namespace["declared_name"] == "":
                 raise TypeError("A family member must have a nonempty name.")
         config = (
-            RegistryConfig(
-                registry_dict=(
-                    namespace["__registry__"]
-                    if is_root
-                    else cast(type[DeclaredFamily], root).__registry__
-                ),
-                key_attribute="declared_name",
-                skip_if_no_key=True,
-                discovery_package=discovery_package,
-            )
-            if is_root or root is not None
-            else None
+            cast(RegistryConfig, namespace["__registry_config__"])
+            if is_root
+            else root.__registry_config__ if root is not None else None
         )
         cls: type[DeclaredFamily] = super().__new__(
             mcs, name, bases, namespace, registry_config=config, **class_options
@@ -101,6 +98,7 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         replaces: object = None,
     ) -> type | None:
         # Check constructed declarations; lazy discovery cannot run inside class construction.
+        cls.validate_module_name()
         cls.validate_selection(dict.values(config.registry_dict))
         return AutoRegisterMeta._register_class(cls, key, config, replaces=replaces)
 
@@ -156,6 +154,7 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
     _family_root: ClassVar[type[DeclaredFamily]]
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
+    __registry_config__: ClassVar[RegistryConfig]
 
     def __init_subclass__(
         cls,
@@ -185,10 +184,18 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
         return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}
 
     @classmethod
-    def member_named(cls, name: object) -> type[Self]:
+    def validate_module_name(cls) -> None:
+        """Ordinary families may group several declarations in one module."""
+
+    @classmethod
+    def _prepare_member(cls, name: object) -> None:
         cls._member_declarations()
+
+    @classmethod
+    def member_named(cls, name: object) -> type[Self]:
+        cls._prepare_member(name)
         try:
-            member = cast(Mapping[object, type[DeclaredFamily]], cls.__registry__)[name]
+            member = dict.__getitem__(cast(dict[object, type[DeclaredFamily]], cls.__registry__), name)
         except (KeyError, TypeError):
             raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):

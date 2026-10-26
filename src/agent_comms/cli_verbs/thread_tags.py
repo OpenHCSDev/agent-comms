@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogDocument
+from agent_comms.channel_targets import NoChannel, SurroundingChannel
+
+from agent_comms.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.cli_commands import ThreadTagsResult
 from agent_comms.cli_commands import _tag_text
 from agent_comms.cli_commands import _tags
-from agent_comms.cli_verbs.named import NamedCliCommand
+from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import EditorFormat
@@ -31,7 +33,7 @@ class ThreadTagsCliCommand(NamedCliCommand, declared_name="thread-tags"):
     ]
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel = NoChannel(), *, catalog: CatalogAccess = NoCatalog()) -> tuple[Self, ...]:
         return (cls(name=thread.name, tags=thread.tags),)
 
     def apply(self, ctx: Comms) -> ThreadTagsResult:

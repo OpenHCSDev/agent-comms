@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.cli_command import CliCommand
-from agent_comms.cli_verbs.thread_lifecycle import ThreadLifecycleCliCommand
+from agent_comms.cli_support.thread_lifecycle import ThreadLifecycleCliCommand
 from agent_comms.comms import Comms
 from agent_comms.owner_lifecycle import OwnerStartResult
 from agent_comms.thread_execution import NativeOwnerCommand

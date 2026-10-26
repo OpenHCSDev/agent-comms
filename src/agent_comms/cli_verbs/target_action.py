@@ -5,7 +5,7 @@ from __future__ import annotations
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_verbs.target_arguments import TargetArguments
+from agent_comms.cli_support.target_arguments import TargetArguments
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from dataclasses import dataclass

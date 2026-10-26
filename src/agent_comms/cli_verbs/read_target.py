@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogDocument
+from agent_comms.channel_targets import NoChannel, SurroundingChannel
+
+from agent_comms.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.channel_targets import ResolvedChannel
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_command import MultipleTargets
@@ -32,11 +34,11 @@ class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-targ
     ] = dataclasses.field(default_factory=os.getcwd)
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel = NoChannel(), *, catalog: CatalogAccess = NoCatalog()) -> tuple[Self, ...]:
         return (cls(target=thread.name),)
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess):
         return (cls(target=resolved.channel.name),)
 
     def for_editor(self, comms: Comms, target: str, project: str) -> Self:

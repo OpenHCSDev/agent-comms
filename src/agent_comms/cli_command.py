@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from agent_comms.channel_targets import NoChannel, SurroundingChannel
+
 from abc import ABC, abstractmethod
 from agent_comms.active_route import ActiveRoute
-from agent_comms.catalog_document import CatalogDocument
+from agent_comms.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.channel_targets import ChannelSelection, CommandTarget, NoChannel
 from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_result import CliResult, ResultShower
@@ -21,8 +23,10 @@ from dataclasses import dataclass, replace
 from pydantic import JsonValue
 from typing import Annotated, Self
 
-from agent_comms.channel_targets import OneChannel, ResolvedChannel
+from agent_comms.channel_targets import OneChannel, ResolvedChannel, ResolvedThread
 from agent_comms.declared_verb import DeclaredCommand
+from agent_comms.declared_family import UnknownFamilyMember
+from metaclass_registry.discovery import import_module_preserving_root_logging
 from agent_comms.field_codec import FieldPlan, TargetBound
 from agent_comms.launch_root import LaunchRoot
 from inspect import iscoroutinefunction, signature
@@ -34,6 +38,10 @@ if TYPE_CHECKING:
     from agent_comms.active_route import CommsRoute
     from agent_comms.thread_status import ThreadStatus
     from agent_comms.threads import Thread
+
+
+class ChannelBound(TargetBound):
+    """A target-bound field supplies the surrounding channel scope."""
 
 
 class CliExecution[Answer: CliResult = CliResult](Command["Comms", Answer]):
@@ -63,6 +71,31 @@ class CliCommand[Answer: CliResult = CliResult](
     affix="CliCommand",
     discovery_package="agent_comms.cli_verbs",
 ):
+    @staticmethod
+    def module_stem(name: str) -> str:
+        """The CLI spelling and its importable Python module share one derivation."""
+        return name.replace("-", "_")
+
+    @classmethod
+    def validate_module_name(cls) -> None:
+        actual = cls.__module__.rpartition(".")[2]
+        expected = cls.module_stem(cls.declared_name)
+        if actual != expected:
+            raise TypeError(f"{cls.__qualname__} declares {cls.declared_name!r}; "
+                            f"its module stem must be {expected!r}, not {actual!r}")
+
+    @classmethod
+    def _prepare_member(cls, name: object) -> None:
+        selected = FieldCodec.decode(str, name)
+        package = FieldCodec.decode(str, cls._family_root.__registry_config__.discovery_package)
+        module = f"{package}.{cls.module_stem(selected)}"
+        try:
+            import_module_preserving_root_logging(module)
+        except ModuleNotFoundError as error:
+            if error.name != module:
+                raise
+            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from error
+
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
         result = TargetCompleted(batch.target, self, self.apply(comms))
         batch.outcomes.append((batch.position, result))
@@ -107,16 +140,16 @@ class CliCommand[Answer: CliResult = CliResult](
         return tuple(
             entry
             for entry in FieldCodec.argument_fields(cls)
-            if entry.key == "channel" and entry.setting(TargetBound, False)
+            if entry.setting(ChannelBound, False)
         )
 
     @classmethod
     def selection_channels(cls, channel: ChannelSelection,
-                           target: str) -> tuple[str | None, ...]:
+                           target: str) -> tuple[SurroundingChannel, ...]:
         return channel.channels_for(target)
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel = NoChannel(), *, catalog: CatalogAccess = NoCatalog()) -> tuple[Self, ...]:
         return ()
 
     @classmethod
@@ -124,13 +157,13 @@ class CliCommand[Answer: CliResult = CliResult](
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def bindings(cls, comms: Comms, target: CommandTarget, channel: str | None = None,
-                 *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
-                 resolved) -> tuple[Self, ...]:
+    def bindings(cls, comms: Comms, target: CommandTarget, channel: SurroundingChannel = NoChannel(),
+                 *, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+                 resolved: ResolvedThread | ResolvedChannel | str) -> tuple[Self, ...]:
         return target.bindings(
             cls, comms, channel, resolved, snapshot=snapshot, catalog=catalog)
 
@@ -149,7 +182,7 @@ class CliCommand[Answer: CliResult = CliResult](
         # the acquired namespace rather than reserving a special actor spelling.
         available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
-                   if channel.needs_catalog or any(item.needs_channel_state for item in selected) else None)
+                   if channel.needs_catalog or any(item.needs_channel_state for item in selected) else NoCatalog())
         resolved_targets = tuple((name, name.resolve(snapshot, comms.bus.require_channel)) for name in available_targets)
         grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
         for member in target.command_members(cls):
@@ -188,7 +221,7 @@ class CliCommand[Answer: CliResult = CliResult](
     def describe(self, comms: Comms, target: CommandTarget, project: str) -> TargetAction:
 
         bound = self.for_editor(comms, target.name, project)
-        channels = next((OneChannel(cast(str, item.current(bound)))
+        channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
         return TargetAction((bound,), target.destination_names, type(bound), channels)
 
@@ -240,7 +273,7 @@ class CliCommand[Answer: CliResult = CliResult](
         return type(self).from_payload(
             {
                 **{key: encoded[key] for key in bound & encoded.keys()},
-                "kind": FieldCodec.encode(type(self)),
+                type(self).family_discriminator: FieldCodec.encode(type(self)),
                 **arguments,
             }
         )
@@ -255,7 +288,7 @@ class CliCommand[Answer: CliResult = CliResult](
             channel = NoChannel()
         snapshot = comms.registry.snapshot()
         catalog = (comms.channels.catalog.read()
-                   if channel.needs_catalog or any(item.needs_channel_state for item in target.targets) else None)
+                   if channel.needs_catalog or any(item.needs_channel_state for item in target.targets) else NoCatalog())
         return target.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
@@ -419,7 +452,7 @@ class TargetSelection(ABC):
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
             *, confirmed: bool, channel: ChannelSelection, project: str,
-            snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
+            snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
         """Bind, authorize and apply the declaration on this selection."""
 
 
@@ -431,7 +464,7 @@ class OneTarget(TargetSelection):
         if len(self.targets) != 1:
             raise ValueError('This action requires a single target')
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object], *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
@@ -467,13 +500,13 @@ class TargetBatch(TargetSelection):
     def listed_declaration(self, member: type[CliCommand]) -> type[CliCommand]:
         return member.catalog_declaration()
 
-    def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object], *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> CliResult:
         declaration.require_batch()
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
                               if member.catalog_declaration() is declaration)
                         if declaration.catalog_declaration() is declaration else (declaration,))
         outcomes: list[tuple[int, TargetCompleted | TargetFailed]] = []
-        planned: dict[CliCommand, tuple[int, CommandTarget, str | None]] = {}
+        planned: dict[CliCommand, tuple[int, CommandTarget, SurroundingChannel]] = {}
         together: dict[type[AppliedTogether], list[tuple[int, CommandTarget, AppliedTogether]]] = {}
         for name in self.targets:
             try:
@@ -503,7 +536,7 @@ class TargetBatch(TargetSelection):
             try:
                 current = comms.registry.snapshot()
                 current_catalog = (comms.channels.catalog.read()
-                                   if context or name.needs_channel_state else None)
+                                   if context or name.needs_channel_state else NoCatalog())
                 if bound_command not in type(bound_command).bindings(
                         comms, name, context, snapshot=current, catalog=current_catalog,
                         resolved=name.resolve(current, comms.bus.require_channel)):

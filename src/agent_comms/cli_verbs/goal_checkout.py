@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent_comms.cli_commands import CheckoutGrant
 from agent_comms.cli_commands import GoalCheckoutGrant
-from agent_comms.cli_verbs.prepared_checkout import PreparedCheckoutCliCommand
+from agent_comms.cli_support.prepared_checkout import PreparedCheckoutCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import PathText

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from agent_comms.channel_targets import NoChannel, SurroundingChannel
+
 from abc import abstractmethod
-from agent_comms.catalog_document import CatalogDocument
+from agent_comms.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.cli_command import CliCommand
 from agent_comms.comms import Comms
 from agent_comms.thread_execution import ThreadCommandAvailability
@@ -17,8 +19,8 @@ from typing import Self
 class ThreadBoundCliCommand(ThreadCommandAvailability, CliCommand):
     @classmethod
     def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus,
-                        channel: str | None = None, *,
-                        catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
+                        channel: SurroundingChannel = NoChannel(), *,
+                        catalog: CatalogAccess = NoCatalog()) -> tuple[Self, ...]:
         return (cls.thread_binding(thread),) if cls.available_for_thread(thread, status) else ()
 
     @classmethod

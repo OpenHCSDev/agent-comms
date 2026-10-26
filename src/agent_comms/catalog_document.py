@@ -45,8 +45,26 @@ class ChannelPreferences:
         )
 
 
+class CatalogAccess:
+    """Queries available to a command's acquired catalog context."""
+
+    __slots__ = ()
+
+    def require_channel(self, target: str, activity: ActivityClocks) -> Channel:
+        raise ValueError("Channel lookup requires an acquired catalog")
+
+    def pinned_threads(self, channel: str) -> frozenset[str]:
+        raise ValueError("Thread pin lookup requires an acquired catalog")
+
+
+class NoCatalog(CatalogAccess):
+    """This target selection did not acquire a channel catalog."""
+
+    __slots__ = ()
+
+
 @dataclass(slots=True)
-class CatalogDocument:
+class CatalogDocument(CatalogAccess):
     tags: frozenset[str] = frozenset()
     preferences: dict[str, ChannelPreferences] = field(default_factory=dict)
     saved_views: dict[str, SavedView] = field(default_factory=dict)

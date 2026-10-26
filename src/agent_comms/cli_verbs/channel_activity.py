@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogDocument
+from agent_comms.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.channel_targets import ResolvedChannel
 from agent_comms.channels import Channel
-from agent_comms.cli_verbs.named import NamedCliCommand
+from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import TargetBound
@@ -22,7 +22,7 @@ class ChannelActivityCliCommand(NamedCliCommand, declared_name="channel-activity
     ] = False
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess):
         return (cls(name=resolved.channel.name, enabled=not resolved.channel.any_mode),) if resolved.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:

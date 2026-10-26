@@ -47,9 +47,9 @@ def execute(arguments: Sequence[str], output: TextIO) -> int:
     declaration = args.command_declaration
     LaunchRoot.startup(
         arguments,
-        lambda: (LaunchRoot.from_path(args.root) if args.root else declaration.published_launch()),
+        lambda: args.root.resolve(declaration.published_launch),
     )
-    route = resolve_comms_route(args.root)
+    route = resolve_comms_route(args.root.resolve(LaunchRoot.current).path)
     with LaunchRoot.from_path(route.root).selected():
         command = declaration.from_arguments(args)
         return command.execute(route, output)

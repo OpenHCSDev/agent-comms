@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.cli_verbs.new import NewThreadCliCommand
-from agent_comms.cli_verbs.thread_bound import ThreadBoundCliCommand
+from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import TargetBound

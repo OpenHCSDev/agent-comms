@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from agent_comms.catalog_document import CatalogDocument
+from agent_comms.catalog_document import CatalogAccess, NoCatalog
 from agent_comms.channel_targets import ResolvedChannel
 from agent_comms.channels import Channel
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_verbs.archive import ArchiveCliCommand
-from agent_comms.cli_verbs.named import NamedCliCommand
+from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import TargetBound
@@ -28,7 +28,7 @@ class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="
         return ArchiveCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess):
         return (cls(name=resolved.channel.name),) if resolved.channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self):

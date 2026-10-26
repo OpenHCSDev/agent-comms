@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.cli_command import CliCommand
-from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_root import DefaultLaunch, LaunchRequest, LaunchRoot
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import BindingThread
@@ -38,6 +38,7 @@ class _CommandParsingArguments(argparse.Namespace):
 
 
 class CliArguments(argparse.Namespace):
+    root: LaunchRequest
     command: str
     command_declaration: type[CliCommand]
     binding_thread: BindingThread
@@ -48,7 +49,7 @@ class CliArgumentParser(argparse.ArgumentParser):
 
     def add_root_options(self) -> None:
         self.add_argument(
-            "--root", default=None,
+            "--root", type=LaunchRoot.from_path, default=DefaultLaunch(),
             help="Explicit Comms root directory (otherwise uses the published active route)",
         )
         self.add_argument(LaunchRoot.argument, help=argparse.SUPPRESS)
