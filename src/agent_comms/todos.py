@@ -4194,6 +4194,8 @@ class StoredClosedRepository(TodoStoreRows, TypedTable):
     main: Annotated[str, GitCommitText]
     observed_at: float
 
+    dropped_fields = ('oldest',)
+
 
 @dataclass(frozen=True)
 class StoredClosedHead(TodoStoreRows, TypedTable):
