@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .errors import ToolRefusedError
 from .native_build_inputs import GitLaunch, NamedProgram
-from .repository_name import RepositoryName
+from .repo import Checkout, CheckoutStart, Repo
 from .shell_commands import ShellCommand
 from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .storage_rules import StorageProjection
+    from .storage_rules import StorageProjection, UnitStorage
 
 
 class ShellProgram(NamedProgram):
@@ -109,19 +109,30 @@ class TestGateStorageEffect(AllocateStorageEffect):
 
 @dataclass(frozen=True)
 class CheckoutStorageEffect(AllocateStorageEffect):
-    """A checkout allocated to a declared repository, before Git creates its directory."""
+    """Shared checkout ownership and quota; preparing a tree allocates no new bytes."""
 
     path: Path
-    repository: RepositoryName
+    repository: Repo
+
+    def project(self, storage: UnitStorage) -> UnitStorage:
+        return storage.adding(Checkout(self.path))
 
     def check(self, projection: StorageProjection) -> None:
         rule, thread = projection.rule, projection.thread
         rule.require_destination(thread, self.path)
-        if not rule.owns_checkout(thread, self.path, self.repository):
+        if not rule.owns_checkout(thread, self.path, self.repository.github):
             destination = rule.order_checkout(rule.roots_of(thread), "P<number>")
             rule.deny(f'checkout destination must be {destination}')
+        projection.storage = self.project(projection.storage)
         super().check(projection)
-        projection.storage = projection.storage.adding(self.path)
+
+
+@dataclass(frozen=True)
+class CreateCheckoutStorageEffect(CheckoutStorageEffect):
+    start: CheckoutStart
+
+    def project(self, storage: UnitStorage) -> UnitStorage:
+        return storage.adding(Checkout(self.path), self.start.tracked_bytes(self.repository.checkout))
 
 
 @dataclass(frozen=True)
@@ -131,7 +142,7 @@ class RemoveCheckoutStorageEffect(StorageEffect):
     def check(self, projection: StorageProjection) -> None:
         if self.path == projection.thread.project_path:
             projection.rule.deny(f'{self.path} is where {projection.thread.name} runs; choose another existing project first: agent-comms set-project {projection.thread.name} <existing-project>')
-        projection.storage = projection.storage.removing(self.path)
+        projection.storage = projection.storage.removing(Checkout(self.path))
 
 
 def physical_path(value: str, cwd: Path) -> Path:

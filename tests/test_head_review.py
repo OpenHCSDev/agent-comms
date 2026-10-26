@@ -10,7 +10,7 @@ import pytest
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.head_review import HeadReview, PullRequestHead
+from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
 from agent_comms.heartbeat_subjects import HeadSubject, UnitSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
@@ -90,6 +90,8 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
     assert tuple(record.verdict for record in records) == (accepted, rejected)
     assert all(record.request == request and record.order == NoHeadOrder() for record in records)
     assert comms.goals.todos.head_reviews(request)[0].verdict == rejected
+    current = ReadPullRequestHead(request.repo, request.pr, request.head, base="main")
+    assert comms.goals.todos.head_reviews(current) == comms.goals.todos.head_reviews(request)
     assert tuple(todo.strike_count for todo in comms.goals.todos.list(request.repo)) == before
     posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
     assert len(posts) == 2

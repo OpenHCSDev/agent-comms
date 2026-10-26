@@ -224,7 +224,7 @@ class CommandDeliverySource(DeliverySource, declared_name=None):
 
 @dataclass(frozen=True)
 class PullRequestDeliverySource(CommandDeliverySource):
-    """Core reads the order's merged PR: its merge commit is checked, its first commit recorded."""
+    """Core reads the order's merged PR: its merge commit is checked, its head recorded."""
 
     def require_report(self) -> None:
         pass
