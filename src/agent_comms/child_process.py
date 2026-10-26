@@ -2138,7 +2138,8 @@ class SpawnedProcess(SynchronousProcess):
                 child.platform.force_group(child.identity)
 
     def reap(self) -> ChildOutcome:
-        return ChildOutcome.from_returncode(self.process.wait(timeout=STOP_GRACE_SECONDS))
+        """Collect the owned child's actual exit; stop grace belongs to its stop plan."""
+        return ChildOutcome.from_returncode(self.process.wait())
 
     async def wait(self) -> ChildOutcome:
         await self.platform.wait_exited(self.identity)
