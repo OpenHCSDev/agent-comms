@@ -17,7 +17,7 @@ from typing import ClassVar, Self
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, TurnId
-from .locked_store import RegistryFile
+from .locked_store import DocumentBytes, RegistryFile
 from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -224,22 +224,36 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def _read_unlocked(self) -> RegistryDocument:
         return self.read_revision_unlocked().document
 
-    def read_revision_unlocked(self) -> RegistryRevision:
+    def _capture_unlocked(self) -> DocumentBytes:
         self.private_guard_unlocked()  # before even a cache hit
-        revision = FileRevision.capture(self.path)
-        return self.cache.entry.revision_at(revision, lambda stale: self._decode_revision_unlocked(revision))
+        return super()._capture_unlocked()
 
-    def _decode_revision_unlocked(self, revision: FileObservation) -> RegistryRevision:
+    def _decode_capture(self, source: DocumentBytes) -> RegistryDocument:
+        return self._decode_revision(source).document
+
+    def read_revision_unlocked(self) -> RegistryRevision:
+        return self._decode_revision(self._capture_unlocked())
+
+    def _decode_revision(self, source: DocumentBytes) -> RegistryRevision:
         with self.cache.decoding:
             return self.cache.entry.revision_at(
-                revision, lambda stale: self._cache_revision_unlocked(stale, revision))
+                source.revision, lambda stale: self._cache_revision(stale, source))
 
-    def _cache_revision_unlocked(self, stale: CachedRegistry, revision: FileObservation) -> RegistryRevision:
-        raw = revision.either(
-            lambda present: FieldCodec.parse(self.path.read_bytes()), lambda: self._encode(self.empty()))
-        entry = RegistryRevision(revision, stale.decoded(self, raw), raw)
+    def _cache_revision(self, stale: CachedRegistry, source: DocumentBytes) -> RegistryRevision:
+        raw = source.revision.either(
+            lambda present: FieldCodec.parse(source.content), lambda: self._encode(self.empty()))
+        entry = RegistryRevision(source.revision, stale.decoded(self, raw), raw)
         self.cache.entry = entry
         return entry
+
+    def snapshot(self) -> RegistrySnapshot:
+        source, = self._copy_sources(self)
+        return self._decode_snapshot(source)
+
+    def _decode_snapshot(self, source: DocumentBytes) -> RegistrySnapshot:
+        revision = self._decode_revision(source)
+        with self.cache.decoding:
+            return revision.snapshot
 
     def read_snapshot_unlocked(self) -> RegistrySnapshot:
         revision = self.read_revision_unlocked()
