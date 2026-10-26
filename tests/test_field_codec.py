@@ -1109,11 +1109,15 @@ def test_hex_spelling_derives_new_lengths_from_the_declaration(count: int) -> No
 def test_hex_commit_spelling_keeps_its_bounded_length_contract() -> None:
     from agent_comms.field_codec import GitCommitText
 
-    for count in (7, 12, 40):
-        assert GitCommitText.decode("a" * count) == "a" * count
-    for malformed in ("a" * 6, "a" * 41, "A" * 40, "g" * 7):
-        with pytest.raises(MalformedRecord):
-            GitCommitText.decode(malformed)
+    class InheritedCommit(GitCommitText):
+        pass
+
+    for owner in (GitCommitText, InheritedCommit):
+        for count in (7, 12, 40):
+            assert owner.decode("a" * count) == "a" * count
+        for malformed in ("a" * 6, "a" * 41, "A" * 40, "g" * 7):
+            with pytest.raises(MalformedRecord):
+                owner.decode(malformed)
 
 
 def test_order_identity_owns_minting_and_wire_spelling() -> None:

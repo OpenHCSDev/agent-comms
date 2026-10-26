@@ -26,11 +26,11 @@ def unfinished_todo(db):
 
 
 def _old_todo(path):
-    """A store created before the selector CHECKs were declared."""
+    """A store created before the declared column CHECKs."""
     target = Todo.schema_objects()[Todo.declared_name]
     original = target
     for item in Todo._fields:
-        for constraint in item.storage.family_constraints(item.name, item.annotation):
+        for constraint in item.storage.constraints(item.name, item.annotation):
             original = original.replace(f" CHECK ({constraint})", "", 1)
     assert original != target
     with closing(sqlite3.connect(path)) as db:

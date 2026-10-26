@@ -122,48 +122,9 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     @abstractmethod
     def accepts(cls, annotation: object) -> bool: ...
 
-    @staticmethod
-    def _choice_constraint(column: str, values: tuple) -> str:
-        choices = ", ".join(
-            (
-                "'" + value.replace("'", "''") + "'"
-                if isinstance(value, str)
-                else str(int(value))
-                if isinstance(value, bool)
-                else str(value)
-            )
-            for value in values
-        )
-        return f"{_identifier(column)} IN ({choices})"
-
-    @classmethod
-    def family_constraints(cls, column: str, annotation: object) -> tuple[str, ...]:
-        """The generated selector CHECK, also consumed by stopped DDL carries."""
-        if compile_decoder(annotation).uses_representation:
-            return ()
-        declared, _ = _base_type(annotation)
-        if get_origin(declared) is not type:
-            return ()
-        members = get_args(declared)
-        if not members or not issubclass(members[0], DeclaredFamily):
-            return ()
-        return (cls._choice_constraint(column, members[0].names()),)
-
     @classmethod
     def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
-        family = cls.family_constraints(column, annotation)
-        if family:
-            return family
-        declared, _ = _base_type(annotation)
-        if get_origin(declared) is Literal:
-            values = get_args(declared)
-        elif isinstance(declared, type) and issubclass(declared, Enum):
-            if issubclass(declared, IntFlag):
-                return ()  # Combinations belong to the flag declaration's mask constraint.
-            values = tuple(member.value for member in declared)
-        else:
-            return ()
-        return (cls._choice_constraint(column, values),)
+        return compile_decoder(annotation).sql_checks(_identifier(column), SQLiteLiteral.of)
 
     @classmethod
     def to_sql(cls, value: object) -> object:
