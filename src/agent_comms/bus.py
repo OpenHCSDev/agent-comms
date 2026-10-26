@@ -102,13 +102,13 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
     ) -> tuple[Message, ...]:
         """The newest message between any sender and any target: one covering-index query
         over the whole selection; an empty selection stays empty."""
-        (newest,) = db.execute(
+        positions = db.execute(
+            f'SELECT seq FROM "{Addressed.table.declared_name}" WHERE seq = ('
             f'SELECT MAX(seq) FROM "{Addressed.table.declared_name}" '
             f'WHERE sender IN ({", ".join("?" * len(senders))}) '
-            f'AND target IN ({", ".join("?" * len(targets))})',
-            (*senders, *targets)).fetchone()
-        positions = () if newest is None else (FieldCodec.decode(int, newest),)
-        headers = (BusRow.require(db, seq=seq) for seq in positions)
+            f'AND target IN ({", ".join("?" * len(targets))}))',
+            (*senders, *targets))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
 

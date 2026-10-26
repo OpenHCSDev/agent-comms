@@ -29,11 +29,9 @@ class CodexConnection:
         self.answers: dict[int, asyncio.Future[JsonValue]] = {}
         self.initialized: InitializeResponse
 
-    def answer(self, request_id: int | None) -> asyncio.Future[JsonValue]:
-        if request_id is None:
-            raise ConnectionError('Codex reported a failure outside any request')
+    def answer(self, request_id: int) -> asyncio.Future[JsonValue]:
         try:
-            return self.answers.pop(request_id)
+            return self.answers[request_id]
         except KeyError as error:
             raise ValueError('Codex replied to an unknown request') from error
 
@@ -43,10 +41,10 @@ class CodexConnection:
             raise ConnectionError(f'Codex connection ended: {frame.type.name}')
         return RPC_RESPONSE.validate_json(frame.data)
 
-    async def call(self, params: RequestParams) -> JsonValue:
+    async def call[Params: RequestParams](self, params: Params) -> JsonValue:
         self.sequence += 1
-        request = Request[type(params)](id=self.sequence, method=params.method, params=params)
-        future = asyncio.get_running_loop().create_future()
+        request = Request[Params](id=self.sequence, method=params.method, params=params)
+        future: asyncio.Future[JsonValue] = asyncio.get_running_loop().create_future()
         self.answers[request.id] = future
         try:
             async with asyncio.timeout(15):
@@ -55,7 +53,7 @@ class CodexConnection:
                     (await self.receive()).route(self)
                 return await future
         finally:
-            self.answers.pop(request.id, None)
+            del self.answers[request.id]
             future.cancel()
 
     async def notifications(self) -> AsyncIterator[RpcNotification]:

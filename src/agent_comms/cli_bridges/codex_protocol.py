@@ -14,6 +14,7 @@ from pydantic import (
     Field,
     JsonValue,
     PlainSerializer,
+    SerializeAsAny,
     ValidateAs,
     field_validator,
 )
@@ -274,7 +275,7 @@ Params = TypeVar('Params', bound=RequestParams)
 class Request(WireModel, Generic[Params]):
     id: int
     method: str
-    params: Params
+    params: SerializeAsAny[Params]
 
 
 class Initialized(WireModel):
@@ -305,11 +306,21 @@ class RpcSuccess(RpcReply):
 
 
 class RpcFailure(RpcReply):
-    id: int | None
     error: RpcError
+
+
+class RpcRequestFailure(RpcFailure):
+    id: int
 
     def route(self, connection: CodexConnection) -> None:
         connection.answer(self.id).set_exception(RuntimeError(f'Codex: {self.error.message}'))
+
+
+class RpcConnectionFailure(RpcFailure):
+    id: None
+
+    def route(self, connection: CodexConnection) -> None:
+        raise ConnectionError('Codex reported a failure outside any request')
 
 
 class RpcNotification(RpcReply):
@@ -320,7 +331,7 @@ class RpcNotification(RpcReply):
         connection.pending.append(self)
 
 
-RPC_RESPONSE = WireModel.adapter(RpcSuccess | RpcFailure | RpcNotification)
+RPC_RESPONSE = WireModel.adapter(RpcSuccess | RpcRequestFailure | RpcConnectionFailure | RpcNotification)
 
 
 class Item(TaggedWire, ABC, affix=""):

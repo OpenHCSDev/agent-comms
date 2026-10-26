@@ -86,7 +86,7 @@ from agent_comms_hooks.watch import (
 )
 
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
-from .history import History
+from .history import HarnessSession
 from .monitor import (
     BridgeExit,
     InspectSession,
@@ -1106,7 +1106,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     def state_directories(cls) -> tuple[Path, ...]:
         """Relative state directories declared by the loaded bridge members."""
         return tuple(bridge.state_directory for bridge in cast(
-            tuple[type[CliBridge], ...], History.members_with(CliBridge)))
+            tuple[type[CliBridge], ...], HarnessSession.members_with(CliBridge)))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:

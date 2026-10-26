@@ -6,9 +6,9 @@ updates the live bridges publish, so an import and a bridge read a session throu
 Each harness declares itself once, on its parent (ClaudeHistory, CodexHistory, OpenCodeHistory,
 PiHistory);
 a reader inherits its harness parent and its path (OfflineHistory, OnlineHistory), and is found by
-that crossing. A bridge is its harness's online reader plus delivery and following. Standalone readers
-are the earliest declared members on each inheritance path; subclasses adding bridge
-capabilities do not introduce another way to read the same session.
+that crossing. Bridges share their harness's decoder and add delivery and following; they
+are discovered by that capability, independently of whether they also read history.
+Standalone readers are the earliest declared members on each inheritance path.
 """
 from __future__ import annotations
 
@@ -37,10 +37,14 @@ if TYPE_CHECKING:
     from .opencode_protocol import Session
 
 
-class History(ReadsHistory, DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
-    """One session's past, oldest first, as transcript updates."""
+class HarnessSession(DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
+    """A harness session's declared readers and bridges, selected by their capabilities."""
 
     harness: ClassVar[type[Harness]]
+
+
+class History(ReadsHistory, HarnessSession, declared_name=None):
+    """One session's past, oldest first, as transcript updates."""
 
     @classmethod
     def readers(cls, harness: type[Harness]) -> tuple[type[Self], ...]:
@@ -56,7 +60,7 @@ class History(ReadsHistory, DeclaredFamily, affix="History", discovery_package="
         return ImportSnapshot.read(self, limits)
 
 
-class HarnessHistory(History):
+class HarnessHistory(HarnessSession):
     """Its direct subclasses each declare one harness; every reader inherits one of them."""
 
 
@@ -145,7 +149,7 @@ class OfflineHistory(ReadAtOnce, History):
         return source.suffix in cls.suffixes
 
     @classmethod
-    def of(cls, harness: type[Harness], source: Path, session: ExpectedSession) -> OfflineHistory:
+    def stored(cls, harness: type[Harness], source: Path, session: ExpectedSession) -> OfflineHistory:
         readers = tuple(reader for reader in cls.readers(harness) if reader.reads(source))
         if len(readers) != 1:
             raise ValueError(f'No single {harness.declared_name} reader for {source}')
@@ -161,7 +165,7 @@ class OnlineHistory(History):
         """`directory` is the session's."""
 
     @classmethod
-    def of(cls, harness: type[Harness], thread: str, address: HarnessAddress, directory: Path) -> OnlineHistory:
+    def running(cls, harness: type[Harness], thread: str, address: HarnessAddress, directory: Path) -> OnlineHistory:
         reader, = cls.readers(harness)
         return reader.connected(thread, address, directory)
 

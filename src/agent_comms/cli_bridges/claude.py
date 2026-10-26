@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from contextlib import aclosing
 from dataclasses import replace
 from functools import partial
@@ -18,15 +17,16 @@ from agent_comms.watched import FileSource
 from agent_comms_hooks.session import SessionHook
 from agent_comms_hooks.watch import WatchClaim
 
+from .history import ClaudeHistory
 from .claude_protocol import ClaudeMonitorFrame
-from .claude_transcript import RunningClaude
-from .shared import SessionBinding, Enrol, LineMonitorBridge, Options, Watch, run_bridge
+from .claude_transcript import ClaudeJsonLines, RunningClaude
+from .shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
 
 if TYPE_CHECKING:
     from agent_comms.task_attachments.commander_pings import CommanderUpdate
 
 
-class ClaudeBridge(RunningClaude, LineMonitorBridge):
+class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
     """Follow this Claude session's file without submitting an input.
 
     Heartbeat packets reach the session through the board its tool-call hook prints, which
@@ -48,12 +48,8 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge):
     def environment_session(cls) -> str:
         return SessionHook.environment_session()
 
-    def __init__(self, options: Options, address: SessionBinding, db: sqlite3.Connection) -> None:
-        LineMonitorBridge.__init__(self, options, address, db)
-        RunningClaude.__init__(self, address.thread)
-
     async def watch_operation(self, operation: Watch) -> None:
-        state = WatchClaim(self.thread).state()
+        state = WatchClaim(self.address.thread).state()
         await asyncio.to_thread(state.rearm, partial(Connect().begin, self))
         await super().watch_operation(operation)
 

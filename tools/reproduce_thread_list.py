@@ -11,7 +11,7 @@ from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
 from pathlib import Path
 
-from agent_comms.cli_bridges.claude import ClaudeTranscript
+from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.comms import wire
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.thread_management import GivenDirectory

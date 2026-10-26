@@ -378,7 +378,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
 
     with pytest.raises(ValueError):
         comms.threads.import_thread(
-            OfflineHistory.of(OpenCodeHarness, source, AnySession()),
+            OfflineHistory.stored(OpenCodeHarness, source, AnySession()),
             name="imported",
             tags=frozenset({"reserved"}),
         )
