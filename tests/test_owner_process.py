@@ -196,7 +196,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             # Query the fixture workers' pinned SDK, not the caller's launcher.
             client = canonical_agent(comms, agent_bin=GivenBinary(str(package / 'dist' / 'cli.js')), auto_wake=False)
             lifetime.push_async_callback(client.shutdown)
-            catalog = client.sessions.config.catalog_for(ThinkingLevelConfigOption)
+            catalog = client.inputs.configuration.catalog_for(ThinkingLevelConfigOption)
             return await catalog.choices(Thread('catalog', frozenset(), str(tmp_path), model=DeclaredModel(model)))
 
     declared_options = await thinking_options()

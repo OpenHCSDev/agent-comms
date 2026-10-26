@@ -6,6 +6,8 @@ import asyncio
 import os
 from abc import abstractmethod
 from collections import Counter
+from collections.abc import Awaitable, Callable, Mapping
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar
@@ -13,25 +15,30 @@ from typing import TYPE_CHECKING, ClassVar
 from .coordination_errors import Refused
 
 from .active_route import resolve_comms_route
-from .declared_family import DeclaredFamily
 from .launch_root import LaunchRoot
-from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .native_arguments import ConfiguredBinary, InheritedArguments
+from .bus import Bus
+from .declared_family import DeclaredFamily
+from .launch_runtime import LaunchRuntime, ThreadLaunch
+from .owner_launch import RetainedOwnerLaunch
+from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .pi_vocabulary import ThinkingChoice
 from .thread_model import CatalogSelection, ThreadModel
 from .pi_commands import (
+    GetAvailableModels,
     GetAvailableThinkingLevels,
     SetModel,
     SetThinkingLevel,
 )
+from .watched import FileSource
 
 if TYPE_CHECKING:
     from .session_config_options import SessionConfigOptions
+    from .field_codec import AcpSessionId
 
     from .active_route import CommsRoute
-    from .native_arguments import NativeArguments
     from .native_package import VerifiedNativePackage
+    from .registry_document import RegistrySnapshot
     from .threads import Thread
 
 
@@ -78,11 +85,8 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision and acquisition lock."""
 
-    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment,
-                 package: VerifiedNativePackage):
-        self.agent_bin, self.agent_args = agent_bin, agent_args
-        self.configuration = configuration
-        self.package = package
+    def __init__(self, owner: ConfigOptions):
+        self.owner = owner
         self.catalogs: dict[tuple[str, ...], asyncio.Task[list[CatalogChoice]]] = {}
         self.waiters: Counter[asyncio.Task[list[CatalogChoice]]] = Counter()
         self.auth: tuple[int, int] | None = None
@@ -90,16 +94,16 @@ class CatalogConfigOption(ConfigOption):
 
     @property
     def current_auth(self) -> bool:
-        return self.auth == self.configuration.auth_revision()
+        return self.auth == self.owner.launch.configuration.auth_revision()
 
     def cache_key(self, thread: CatalogSelection) -> tuple[str, ...]:
-        return thread.model.native(self.agent_args).argv
+        return thread.model.native(self.owner.agent_args).argv
 
     async def choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
         async with self.lock:
             if not self.current_auth:
                 self.catalogs.clear()
-                self.auth = self.configuration.auth_revision()
+                self.auth = self.owner.launch.configuration.auth_revision()
             key = self.cache_key(thread)
             if key not in self.catalogs:
                 # A successful empty catalogue is setup state, not a failed
@@ -165,37 +169,17 @@ class ModelConfigOption(CatalogConfigOption):
         return thread.model.otherwise(None)
 
     def cache_key(self, thread: CatalogSelection) -> tuple[str, ...]:
-        return self.agent_args.argv
+        return self.owner.agent_args.argv
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
-        values = [
-            value.strip()
-            for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
-            if value.strip()
-        ]
-        if not values:
-            from .pi_commands import GetAvailableModels
-
-            data = await GetAvailableModels().discover(
-                self.agent_bin,
-                self.agent_args.argv,
-                LaunchRoot.current().path,
-                package=self.package,
-            )
-            values = [
-                text for model in data.models if model.provider and model.id
-                for text in model.thread_model().texts()
-            ]
-        return [
-            CatalogChoice(value=value, name=value) for value in dict.fromkeys(values)
-        ]
+        return await self.owner.models.choices(self.owner)
 
     async def apply(
         self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
         provider, model = value.split("/", 1)
         await owner.configure_thread(
-            thread, SetModel(provider=provider, model_id=model),
+            self.owner, thread, SetModel(provider=provider, model_id=model),
         )
 
 
@@ -209,10 +193,10 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin,
-            thread.model.native(self.agent_args).argv,
-            LaunchRoot.current().path,
-            package=self.package,
+            self.owner.launch.binary,
+            thread.model.native(self.owner.agent_args).argv,
+            self.owner.route.root,
+            package=self.owner.package, configuration=self.owner.launch.configuration,
         )
         levels = [member.declared_name for member in data.levels]
         return [CatalogChoice(value=level, name=level.title()) for level in levels]
@@ -221,45 +205,97 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
         await owner.configure_thread(
-            thread, SetThinkingLevel(level=value),
+            self.owner, thread, SetThinkingLevel(level=value),
         )
 
 
-class ConfigOptions:
-    """Own one launch's declared model and thinking catalogs."""
+class ModelCatalog(DeclaredFamily, affix="ModelCatalog"):
+    """The launch's selected discovery source, decoded once at its environment boundary."""
 
-    def __init__(
-        self,
-        agent_bin: str,
-        agent_args: NativeArguments,
-        configuration: RestartEnvironment,
-        route: CommsRoute,
-    ):
-        self.agent_bin, self.agent_args = agent_bin, agent_args
-        self.configuration = configuration
-        self.route = route
-        self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
+    variable: ClassVar[str] = "AGENT_COMMS_AGENT_MODELS"
+
+    @classmethod
+    def configured(cls, environment: Mapping[str, str] = os.environ) -> ModelCatalog:
+        values = tuple(value.strip() for value in environment.get(cls.variable, "").split(",")
+                       if value.strip())
+        return SpecifiedModels(values) if values else DiscoveredModels()
+
+    async def choices(self, owner: ConfigOptions) -> list[CatalogChoice]:
+        return [CatalogChoice(value=value, name=value)
+                for value in dict.fromkeys(await self.qualified(owner))]
+
+    @abstractmethod
+    async def qualified(self, owner: ConfigOptions) -> tuple[str, ...]: ...
+
+
+@dataclass(frozen=True)
+class SpecifiedModels(ModelCatalog):
+    values: tuple[str, ...]
+
+    async def qualified(self, owner: ConfigOptions) -> tuple[str, ...]:
+        return self.values
+
+
+@dataclass(frozen=True)
+class DiscoveredModels(ModelCatalog):
+    async def qualified(self, owner: ConfigOptions) -> tuple[str, ...]:
+        data = await GetAvailableModels().discover(
+            owner.launch.binary, owner.agent_args.argv, owner.route.root, package=owner.package,
+            configuration=owner.launch.configuration,
+        )
+        return tuple(text for model in data.models if model.provider and model.id
+                     for text in model.thread_model().texts())
+
+
+@dataclass(eq=False)
+class ConfigOptions:
+    """Own one launch's settings and declared model and thinking catalogs."""
+
+    launch: RetainedOwnerLaunch
+    route: CommsRoute
+    catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = field(default_factory=dict, init=False)
+
+    @cached_property
+    def agent_args(self) -> NativeArguments:
+        return NativeArguments.parse(self.launch.arguments)
+
+    @cached_property
+    def models(self) -> ModelCatalog:
+        return ModelCatalog.configured(self.launch.environment)
 
     @cached_property
     def package(self) -> VerifiedNativePackage:
         """The verified artifact, acquired when a catalog or configuration first runs Pi."""
         return NativePiRpcLaunch.package_for_command(
-            self.agent_bin, LaunchRuntime.running(), self.route.root,
+            self.launch.binary, LaunchRuntime.running(), self.route.root,
         )
 
     @classmethod
     def configured(cls) -> ConfigOptions:
-        """Catalogs of the native binary, arguments and environment this process is configured with."""
-        command = ConfiguredBinary().configured()
-        configuration = RestartEnvironment.inherit(os.environ)
-        return cls(
-            command, InheritedArguments().configured(), configuration,
-            resolve_comms_route(LaunchRoot.current().path),
-        )
+        """The CLI ingress's catalog; hosted owners supply their original launch directly."""
+        return cls(RetainedOwnerLaunch.configured(), resolve_comms_route(LaunchRoot.current().path))
+
+    async def observe_authentication(
+        self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[object]],
+    ) -> None:
+        """The session retires this configuration's watch with its other producers."""
+        async with aclosing(Bus.watch_sources(FileSource(self.launch.configuration.native_config / "auth.json"))) as observations:
+            async for _ in observations:
+                await publish(session_id)
+
+    def native_environment(
+        self, thread: Thread, snapshot: RegistrySnapshot, worktree: str,
+    ) -> dict[str, str]:
+        """Project this launch's configuration with the exact registered owner binding."""
+        return {
+            **ThreadLaunch.strip(dict(self.launch.environment)),
+            **self.launch.configuration.encode(),
+            **thread.native_environment(self.route.root, snapshot, worktree),
+        }
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
-            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration, self.package)
+            self.catalogs[member] = member(self)
         return self.catalogs[member]
 
 

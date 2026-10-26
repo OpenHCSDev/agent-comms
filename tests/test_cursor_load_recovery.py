@@ -8,6 +8,8 @@ import os
 
 import pytest
 
+from agent_comms.field_codec import AcpSessionId
+from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
@@ -32,7 +34,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path, priva
         comms,
         auto_wake=False,
     )
-    agent.sessions.bindings[owner.name] = owner.name
+    agent.sessions.published[AcpSessionId(owner.name)] = PublishedSession.of(owner)
     attached = asyncio.get_running_loop().create_future()
 
     def accept(reader, writer):

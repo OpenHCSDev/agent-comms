@@ -23,8 +23,8 @@ import os
 import re
 import sys
 import time
-from collections.abc import Iterator, Sequence
-from contextlib import AsyncExitStack, contextmanager
+from collections.abc import AsyncIterator, Iterator, Sequence
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -82,6 +82,8 @@ from .cursor_publication import CursorPublication
 from .field_codec import ClaimId, FieldCodec, MalformedRecord, RootId
 from .image_inputs import prompt_images
 from .input_drain import InputDrain
+from .config_options import ConfigOptions
+from .owner_launch import RetainedOwnerLaunch
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot
 from .message_bus import MessageBus
@@ -100,7 +102,6 @@ from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
-from .turn_terminal import EndedWithoutResult, TurnInterruption
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_worker import AnnotationWorker
 
@@ -164,7 +165,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,
         private_selected_tool_intent: SelectedToolIntent | None = None,
-        owner_stop: TurnInterruption = EndedWithoutResult(),
     ):
         self._comms = comms
         if private_selected_tool_intent is not None:
@@ -185,14 +185,14 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             comms,
             self._runtime,
             self,
-            agent_bin=agent_bin,
-            agent_args=agent_args,
-            owner_stop=owner_stop,
         )
         self.sessions = self.session_lifecycle_class(
-            comms, self.turns.agent_bin, self.turns.agent_args, self._runtime, runtime_enabled, self
+            comms, self._runtime, runtime_enabled, self
         )
-        self.inputs = InputDrain(comms, self.sessions, self._runtime, self, auto_wake)
+        self.inputs = InputDrain(
+            comms, self.sessions, self._runtime, self, auto_wake,
+            ConfigOptions(RetainedOwnerLaunch.configured(agent_bin, agent_args), comms.route),
+        )
         self.turns.bind(self.sessions, self.inputs)
         # A preplanned write is valid only while its original ACP controller
         # remains attached. Never restore this binding after a process crash.
@@ -529,14 +529,30 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         ).schedule()
         return 1
 
+    def stop_all(self) -> None:
+        """Request every executing session's own stop; attachments have no execution."""
+        for state in self.inputs.drained.values():
+            state.request_stop()
+
+    @asynccontextmanager
+    async def host(self, listener_fd: int) -> AsyncIterator[None]:
+        """One host owns its inherited listener and all session cleanup."""
+        try:
+            self._runtime.inherit_listener(listener_fd)
+            await self._runtime.start()
+            yield
+        finally:
+            self.stop_all()
+            await self.shutdown()
+
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
         async with AsyncExitStack() as retirement:
             # CursorPublication owns the cross-observation evidence lifetime;
             # close it after its session/input producers have drained.
             retirement.callback(self.cursors.close)
-            retirement.push_async_callback(self.sessions.release_owned)
             retirement.callback(self.inputs.end_sessions)
+            retirement.push_async_callback(self.sessions.release_owned)
             retirement.push_async_callback(self.turns.close)
             retirement.push_async_callback(self.sessions.close_proxies)
             retirement.push_async_callback(self.inputs.close)

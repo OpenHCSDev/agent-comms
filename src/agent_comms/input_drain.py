@@ -29,6 +29,7 @@ from .bus import Bus
 from .child_process import join_retirement
 from .cohort_schema import AcceptanceFrontier
 from .comms import Comms
+from .config_options import ConfigOptions
 from .controller import SessionUpdateSink
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
@@ -41,7 +42,7 @@ from .drain_failures import (
     record_drain_failure,
 )
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import InputId, RootId, ThreadLookup
+from .field_codec import AcpSessionId, InputId, RootId, ThreadLookup
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -61,10 +62,11 @@ from .routing import ScheduledTurn
 from .runtime import RuntimeServer
 from .schedule_rules import ProjectResumeCheck, WakeOutcome, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
-from .thread_identity import ClaimedIdentity
+from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .threads import Thread
 from .turn_context import TurnContext, UserFollowupSegment
 from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
+from .turn_terminal import OwnerStop
 from .watched import ChangeSignal, FileSource
 
 if TYPE_CHECKING:
@@ -289,7 +291,7 @@ class InputObservation(ABC):
             root_id,
             self.auto_wake,
             self.sessions.runtime_enabled,
-            self.sessions.bindings.get(session_id),
+            self.sessions.published.get(AcpSessionId(session_id)),
             self.state(session_id).turn_open(),
             self.state(session_id).turn_task.busy,
             participant,
@@ -471,6 +473,18 @@ class DrainedSession:
     # A completed stable drain consumes this pending work.
     repeat_observation: bool = False
 
+    def owned(self) -> OwnerSession:
+        raise RelationViolationError("This session has not acquired local execution")
+
+    def configuration_for(self, ingress: ConfigOptions) -> ConfigOptions:
+        return ingress
+
+    def executors(self) -> tuple[OwnerSession, ...]:
+        return ()
+
+    def request_stop(self) -> None:
+        """An attachment observes execution; it has no owner to stop."""
+
     @asynccontextmanager
     async def own_turn_task(self) -> AsyncIterator[None]:
         """Hold execution through cleanup; shutdown retirement suppresses the wake."""
@@ -572,6 +586,34 @@ class DrainedSession:
         return self.turn.require_source()
 
 
+@dataclass(eq=False)
+class OwnerSession(DrainedSession):
+    """Local execution retains its original configuration, never copies its fields."""
+
+    identifier: AcpSessionId = field(kw_only=True)
+    configuration: ConfigOptions = field(kw_only=True)
+    owner: OwnerIdentity = field(kw_only=True)
+    stop: OwnerStop = field(kw_only=True)
+    auth_observer: asyncio.Task[None] = field(kw_only=True)
+    retirement_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    retired: asyncio.Future[None] = field(default_factory=asyncio.Future)
+
+    def owned(self) -> OwnerSession:
+        return self
+
+    def configuration_for(self, ingress: ConfigOptions) -> ConfigOptions:
+        return self.configuration
+
+    def executors(self) -> tuple[OwnerSession, ...]:
+        return (self,)
+
+    def request_stop(self) -> None:
+        self.stop.request()
+
+    def producers(self) -> tuple[asyncio.Task[None], ...]:
+        return (*super().producers(), self.auth_observer)
+
+
 class InputDrain(InputObservation):
     async def begin_observation(
         self, state: DrainedSession, entry: RegistryEntry,
@@ -602,11 +644,13 @@ class InputDrain(InputObservation):
         runtime: RuntimeServer,
         effects: InputEffects,
         auto_wake: bool,
+        configuration: ConfigOptions,
     ):
         self.comms = comms
         self.sessions = sessions
         self.runtime = runtime
         self.effects = effects
+        self.configuration = configuration
         self.drained: dict[str, DrainedSession] = {}
         self.queue_lock = asyncio.Lock()
         self.dispositions = InputDispositions(comms.root)
@@ -619,6 +663,25 @@ class InputDrain(InputObservation):
         if state is None:
             state = self.drained[session_id] = DrainedSession()
         return state
+
+    def acquire_owner(
+        self, session_id: AcpSessionId, configuration: ConfigOptions, owner: OwnerIdentity,
+    ) -> OwnerSession:
+        """Retain this allocated owner's original launch, never another host session's settings."""
+        if session_id not in self.drained:
+            self.drained[session_id] = OwnerSession(
+                identifier=session_id,
+                configuration=configuration,
+                owner=owner,
+                stop=OwnerStop(self.comms.owners.maintenance),
+                auth_observer=self.runtime.background(configuration.observe_authentication(
+                    session_id, self.sessions.config.publish_configuration,
+                )),
+            )
+        owned = self.drained[session_id].owned()
+        if owned.owner != owner:
+            raise RelationViolationError("Another allocation already owns this session")
+        return owned
 
     def end_session(self, session_id: str) -> None:
         """Ending a session drops its state, its live producers with it."""
@@ -661,7 +724,7 @@ class InputDrain(InputObservation):
         try:
             owner, claim_scope = await Coordination.run_worker(partial(
                 self.comms.registry.live_owner_with_claim,
-                self.sessions.bindings.get(session_id, session_id),
+                self.sessions.require(session_id) if session_id in self.sessions.published else session_id,
             ))
         except (RelationViolationError, UnregisteredThreadError):
             # The unavailable observation carries no local queue authority.
@@ -821,10 +884,13 @@ class InputDrain(InputObservation):
                 state.to_turn(SendNow(tuple(state.queued)))
 
     async def close(self) -> None:
-        """Retire input producers; their turns settle from the runner's owner stop."""
+        """Retire all producers only at host shutdown."""
         self.closing = True
-        tasks = tuple(task for state in self.drained.values() for task in state.producers())
-        for state in self.drained.values():
+        await self.close_sessions(tuple(self.drained.values()))
+
+    async def close_sessions(self, states: tuple[DrainedSession, ...]) -> None:
+        tasks = tuple(task for state in states for task in state.producers())
+        for state in states:
             state.retire_producers()
         for task in tasks:
             task.cancel()

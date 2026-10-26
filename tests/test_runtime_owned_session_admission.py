@@ -85,7 +85,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             assert caught.value.code == Refused.INVALID_PARAMS
             assert caught.value.data["owner"] == "registered"
             assert "no loaded ACP session" in caught.value.data["reason"]
-        assert not owner.sessions.bindings
+        assert not owner.sessions.published
         assert not owner._runtime.clients
         assert comms.registry.require("registered") == thread
         assert not (root / "native-sessions").exists()
@@ -111,7 +111,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             owner.sessions.require_owned_session(comms.registry.entry("renamed-owner").entry)
             == "original-acp-session"
         )
-        assert owner.sessions.bindings == {
+        assert {session: published.name for session, published in owner.sessions.published.items()} == {
             "retired-acp-session": "retired-owner",
             "original-acp-session": "registered",
         }

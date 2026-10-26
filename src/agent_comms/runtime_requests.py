@@ -33,13 +33,13 @@ from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, WireName, WireValue, GoalId
+from .field_codec import AcpSessionId, FieldCodec, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
-from .owner_connection import OwnerConnection
+from .owner_connection import NoControllerToken, OwnerConnection, ResultRuntimeRequest, RuntimeRequest, RuntimeRequestContext
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import LiveThreadOwnerBinding
@@ -63,69 +63,6 @@ if TYPE_CHECKING:
     from .agent_backend import CompactionOutcome
     from .input_disposition import DeliveryOverview
     from .runtime import RuntimeServer, SocketClient
-
-
-@dataclass(frozen=True)
-class RuntimeRequestContext:
-    server: RuntimeServer
-    reader: asyncio.StreamReader
-    client: SocketClient
-    session_id: str
-    name: str
-
-    async def send(self, line: OwnerLine) -> None:
-        await self.client.send(line)
-
-
-@dataclass(frozen=True, kw_only=True)
-class RuntimeRequest(
-    DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"
-):
-    thread: str
-
-    @classmethod
-    def from_wire(cls, payload: object) -> Self:
-        values = FieldCodec.decode(dict[str, JsonValue], payload)
-        if "kind" in values:
-            raise ValueError("Unknown runtime request field: kind")
-        values["kind"] = values.pop("action", None)
-        return cls.from_payload(values)
-
-    def to_wire(self) -> dict[str, object]:
-        payload = FieldCodec.encode(self)
-        return {"action": payload.pop("kind"), **payload}
-
-    @classmethod
-    def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, object]
-    ) -> dict[str, object]:
-        # The owner decodes once; proxies preserve the owner's error envelope.
-        return OwnerConnection.wire_request(FieldCodec.encode(cls), thread, parameters)
-
-    def require_owner(self, entry):
-        owner = entry.thread
-        if not owner.process_identity.runs_here() or not entry.status.running:
-            raise RelationViolationError("This process no longer owns the thread.")
-        return owner
-
-    async def bind(
-        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient
-    ) -> RuntimeRequestContext:
-        entry = (await Coordination.run_worker(partial(
-            server.agent._comms.registry.entry, self.thread,
-        ))).entry
-        owner = self.require_owner(entry)
-        session_id = server.agent.sessions.require_owned_session(entry)
-        return RuntimeRequestContext(server, reader, client, session_id, owner.name)
-
-
-class ResultRuntimeRequest(RuntimeRequest):
-    async def apply(self, ctx: RuntimeRequestContext) -> None:
-        reply = await self.result(ctx)
-        await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
-
-    @abstractmethod
-    async def result(self, ctx: RuntimeRequestContext) -> DeclaredReply: ...
 
 
 @dataclass(frozen=True)
@@ -206,7 +143,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 
         return {
             "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
-            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
+            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(FieldCodec.encode(self)),
         }
 
     def require_original(self, entry):
@@ -271,11 +208,6 @@ class FreshSubscribeRuntimeRequest(SubscribeRuntimeRequest):
             yield
 
 
-@dataclass(frozen=True, slots=True)
-class NoControllerToken(NullMember):
-    """The prompt came from no attached controller; no subscriber answers its dialogs."""
-
-
 @dataclass(frozen=True, kw_only=True)
 class PromptRuntimeRequest(ResultRuntimeRequest):
     request: PromptRequest
@@ -285,7 +217,7 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, object]
+        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
     ) -> dict[str, object]:
         return super().proxy_payload(
             thread, controller_token, {"controllerToken": controller_token, **parameters}

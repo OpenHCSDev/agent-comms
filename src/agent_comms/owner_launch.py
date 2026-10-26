@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import os
+import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
 from . import launch_runtime
-from .native_arguments import InheritedArguments, NativeArguments
-from .registry_document import RegistrySnapshot
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
+from .registry_document import RegistryEntry, RegistrySnapshot
+from .field_codec import AcpSessionId
+from .owner_connection import ResultRuntimeRequest, RuntimeRequestContext
+from .thread_identity import ClaimedIdentity, OwnerIdentity
+from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerRestartSelection
+    from .runtime import RuntimeServer, SocketClient
+    from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +34,18 @@ class RetainedOwnerLaunch:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "configuration", launch_runtime.RestartEnvironment.inherit(self.environment))
+
+    @classmethod
+    def configured(
+        cls, binary: LaunchBinary = ConfiguredBinary(),
+        arguments: LaunchArguments = InheritedArguments(),
+    ) -> RetainedOwnerLaunch:
+        """Capture a process ingress once, before its configuration is shared by reference."""
+        environment = dict(os.environ)
+        environment[NativeArguments.binary_key] = binary.configured(environment)
+        arguments.apply(environment)
+        return cls(ProcessIdentity.capture(os.getpid()),
+                   str(launch_runtime.LaunchRuntime.running().interpreter), environment)
 
     @classmethod
     def capture(
@@ -59,3 +79,53 @@ class RetainedOwnerLaunch:
     @property
     def arguments(self) -> tuple[str, ...]:
         return InheritedArguments().configured(self.environment).argv
+
+
+@dataclass(frozen=True)
+class OwnerAttachedReply(DeclaredReply):
+    owner: OwnerIdentity
+
+
+@dataclass(frozen=True)
+class OwnerRetiredReply(DeclaredReply):
+    owner: OwnerIdentity
+
+
+@dataclass(frozen=True, kw_only=True)
+class StartOwnerRuntimeRequest(ResultRuntimeRequest):
+    launch: RetainedOwnerLaunch
+    owner: OwnerIdentity
+
+    async def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
+    ) -> RuntimeRequestContext:
+        if not self.launch.process.runs_here():
+            raise RelationViolationError("Start request belongs to another host process")
+        if self.thread != self.owner.incarnation.name:
+            raise RelationViolationError("Start request names another owner")
+        return RuntimeRequestContext(server, reader, client, AcpSessionId(self.thread), self.thread)
+
+    async def result(self, ctx: RuntimeRequestContext) -> OwnerAttachedReply:
+        await ctx.server.agent.sessions.start_owner(self.launch, self.owner)
+        return OwnerAttachedReply(self.owner)
+
+
+@dataclass(frozen=True, kw_only=True)
+class StopOwnerRuntimeRequest(ResultRuntimeRequest):
+    owner: OwnerIdentity
+    claim: ClaimedIdentity
+
+    def require_owner(self, entry: RegistryEntry) -> Thread:
+        if entry.owner_identity != self.owner:
+            raise RelationViolationError("Stop request's fenced owner changed")
+        entry.status.require_stopped()
+        if not entry.thread.process_identity.runs_here():
+            raise RelationViolationError("Stop request belongs to another host process")
+        return entry.thread
+
+    async def result(self, ctx: RuntimeRequestContext) -> OwnerRetiredReply:
+        state = ctx.server.agent.inputs.state(ctx.session_id).owned()
+        if state.owner.incarnation != self.owner.incarnation or state.owner.generation >= self.owner.generation:
+            raise RelationViolationError("Stop request does not fence this original session")
+        await ctx.server.agent.sessions.retire_owner(state, self.owner, self.claim)
+        return OwnerRetiredReply(state.owner)

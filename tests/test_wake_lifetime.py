@@ -4,6 +4,8 @@
 import asyncio
 import os
 
+from agent_comms.field_codec import AcpSessionId
+from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -20,7 +22,7 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
         Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     agent = CommsAgent(comms, auto_wake=True, runtime_enabled=True)
-    agent.sessions.bindings["owner"] = "owner"
+    agent.sessions.published[AcpSessionId("owner")] = PublishedSession.of(comms.registry.require("owner"))
     inputs = agent.inputs
     controller = object()
     token = inputs.runtime.controller.set(controller)

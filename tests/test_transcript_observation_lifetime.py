@@ -44,7 +44,7 @@ def observation_children():
 
 
 async def test_headless_bind_has_no_observation_process(headless_owner, tmp_path):
-    session, = headless_owner.sessions.bindings
+    session, = headless_owner.sessions.published
     await headless_owner.sessions.start_owner(str(tmp_path), session)
     assert headless_owner.sessions.client is None
     assert headless_owner.sessions.require(session) == session
@@ -53,7 +53,7 @@ async def test_headless_bind_has_no_observation_process(headless_owner, tmp_path
 
 async def test_subscriptions_share_process_and_last_close_joins_it(headless_owner):
     owner = headless_owner
-    session, = owner.sessions.bindings
+    session, = owner.sessions.published
     frontend = canonical_agent(owner._comms, auto_wake=False)
     first = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
     second = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
