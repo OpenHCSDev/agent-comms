@@ -27,8 +27,7 @@ class CommanderService(ServiceSender):
     def forks(cls, snapshot: RegistrySnapshot, commander: str) -> tuple[Thread, ...]:
         """The commander's forks Core registered, heard from or not."""
         return tuple(
-            fork for thread in snapshot.threads.values()
-            if thread.parent.named(commander)
+            fork for thread in snapshot.children(commander)
             for fork in thread.execution.commander_forks(thread)
         )
 
