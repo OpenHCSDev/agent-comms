@@ -1014,6 +1014,18 @@ class LockCensusPhase(StoreGuardsPhase):
     evidence = PatternPresent(r"^class StoreLockCalls\(", ("tools/debt_ratchet.py",))
 
 
+class ScopedReadsPhase(StoreGuardsPhase):
+    """6: a store lock is held for its copy or its change only; no caller names a lock."""
+
+    after = (ReadWriteMembersPhase,)
+    evidence = PatternAbsent(
+        r"guarded_(read|write)(_async)?\(|StoreLock\.ordered|reading_snapshot\(|read_snapshot_unlocked\("
+        r"|[^f]\._read_unlocked\(|store\.reading\(|CapturedSelection\.reading\(|catalog\.reading\("
+        r"|reads\.reading\(",
+        ("src", *StoreGuardsPhase.owners, ":!src/agent_comms/registry_store.py"),
+    )
+
+
 class KeymapK2K7Phase(ToadAskPhase):
     """Toad keymap K2 to K7: remappable F1/F2, focus-modal bindings, a binding menu (toad#1212)."""
 

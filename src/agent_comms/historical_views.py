@@ -235,9 +235,9 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         bus = presentation.bus
-        with presentation.registry.store.reading_snapshot() as snapshot:
-            peer = self.second.selected_name(snapshot)
-            missing = peer not in snapshot.threads
+        snapshot = presentation.registry.snapshot()
+        peer = self.second.selected_name(snapshot)
+        missing = peer not in snapshot.threads
         if missing and bus.history.threads(peer):
             return MessagePage((), False, False, NoDisplaySelection())
         return DMDisplayBasis.fetch_page(

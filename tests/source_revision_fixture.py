@@ -60,6 +60,14 @@ class SourceRepository(Repo):
             capture_output=True, check=True, timeout=30,
         ).stdout.strip()
 
+    def publish_change(self, message: str, *files: str) -> str:
+        """Commit fixture files and publish this PR's new head through real Git."""
+        self.git(self.checkout, 'add', '--', *files)
+        self.git(self.checkout, 'commit', '-m', message)
+        head = self.git(self.checkout, 'rev-parse', 'HEAD').strip()
+        self.git(self.checkout, 'push', 'origin', f'HEAD:refs/pull/{self.number}/head')
+        return head
+
     @classmethod
     def remote_for(cls, root: Path, repository: RepositoryName) -> Path:
         remote = root / f'{repository.to_wire()}.git'

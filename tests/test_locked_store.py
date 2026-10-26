@@ -1,11 +1,14 @@
 """Canonical locks and durable bytes through a real declared document store."""
 from __future__ import annotations
 
+import asyncio
 import fcntl
 import json
 import multiprocessing
 import os
 import stat
+import subprocess
+import sys
 import threading
 from contextlib import contextmanager, redirect_stderr
 from dataclasses import dataclass, replace
@@ -16,7 +19,9 @@ from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
-from agent_comms.child_process import Platform
+from agent_comms.child_process import ChildLaunch, ChildRetirementFailed, DiesWithLauncherLifetime, Platform, StreamingChildStdio
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.runtime_children import RuntimeChildrenStore
 from agent_comms.store_files import (
     ExclusiveLock,
     HolderNamingContention,
@@ -294,3 +299,62 @@ def test_slow_lock_wait_names_its_holder_once(tmp_path, capsys):
     err = capsys.readouterr().err
     assert err.count("store lock still waiting after 0.1 s, held by ") == 1, err
     assert f"PID {os.getpid()}: " in err
+
+
+@pytest.mark.asyncio
+async def test_cancelled_spawn_joins_record_and_retires_its_registered_child(tmp_path):
+    store = RuntimeChildrenStore.at(tmp_path)
+    ready, release = event(), event()
+    marker = tmp_path / "executed"
+    with process(_hold_store_write, RuntimeChildrenStore, store.path, ready, release):
+        assert ready.wait(5)
+        with ChildLaunch(
+            Platform.current(),
+            (sys.executable, "-c", "import pathlib,sys; pathlib.Path(sys.argv[1]).touch()", str(marker)),
+            (), LaunchRuntime.at_prefix(tmp_path), DiesWithLauncherLifetime,
+        ) as launch:
+            pending = asyncio.create_task(launch.spawn_async(
+                cwd=tmp_path, env=os.environ, stdio=StreamingChildStdio(input_enabled=False),
+            ))
+            try:
+                async with asyncio.timeout(5):
+                    # Closing the parent's identity writer happens after spawn,
+                    # immediately before the join of the blocked record writer.
+                    while not launch.identity_writer.closed:
+                        await asyncio.sleep(0)
+                    pending.cancel()
+                    await asyncio.sleep(0)
+                    release.set()
+                    with pytest.raises(asyncio.CancelledError):
+                        await pending
+            finally:
+                release.set()
+                await asyncio.gather(pending, return_exceptions=True)
+    assert store.read().records == ()
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
+async def test_runtime_retirement_refuses_and_reaps_an_unrecorded_exec_gated_child(tmp_path):
+    store = RuntimeChildrenStore.at(tmp_path)
+    store.read().require_open()
+    marker = tmp_path / "executed"
+    with ChildLaunch(
+        Platform.current(),
+        (sys.executable, "-c", "import pathlib,sys; pathlib.Path(sys.argv[1]).touch()", str(marker)),
+        (), LaunchRuntime.running(), DiesWithLauncherLifetime,
+    ) as launch:
+        process = subprocess.Popen(launch.argv, **launch.options)
+        child = launch.spawned(process, store)
+        try:
+            RuntimeChildrenStore.retire(tmp_path)
+            with pytest.raises(ChildRetirementFailed):
+                await launch.record_async(child.identity, store)
+            assert process.wait(timeout=2) < 0
+            assert not child.alive()
+            assert not marker.exists()
+            assert store.read().records == ()
+        finally:
+            launch.cancel_before_release(child.identity)
+            child.reap()
+            child.close_streams()

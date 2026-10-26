@@ -102,7 +102,7 @@ from agent_comms.owner_requests import (
     RequestState,
 )
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.head_review import HeadReview
+from agent_comms.head_review import HeadReview, HeadReviewStatus
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -568,7 +568,7 @@ class PullRequestLink:
 
 
 @dataclass(frozen=True)
-class PullRequest(DeclaredFamily, affix="PullRequest"):
+class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
     head: str
@@ -576,7 +576,6 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     orders: tuple[OrderId, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
-    status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
 
     def as_ready(self) -> tuple[PullRequest, ...]:
         return (self,)
@@ -590,10 +589,6 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
         compared = reader.pull_request_diff(self.base, self.head)
         return () if compared.paths else (compared,)
-
-    @property
-    def has_head_review(self) -> bool:
-        return HeadReview.context in self.status_contexts
 
     def belongs_to(self, todo: Todo) -> bool:
         return (todo.id in self.problems
@@ -756,7 +751,7 @@ class WaitingMergeBlock(MergeBlock):
 
 
 @dataclass(frozen=True)
-class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
+class ListedPullRequest(HeadReviewStatus, DeclaredFamily, affix="ListedPullRequest"):
     """The external query row; conversion lives here, never in its consumers."""
     number: int
     branch: str
@@ -764,7 +759,6 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     updated: str
     base: str
     reviewable_times: tuple[str, ...] = field(kw_only=True)
-    status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
     armed_times: tuple[str, ...] = field(default=(), kw_only=True)
     merge_blocks: tuple[MergeBlock, ...] = field(default=(), kw_only=True)
     required_times: tuple[str, ...] = field(default=(), kw_only=True)
@@ -1003,6 +997,21 @@ class PullRequests:
         self.rows(repo, numbers)
         return tuple(picked for number in self._open[repo]
                      for picked in self._read[repo, number].as_unmerged())
+
+    def carry_reviews(self, goals: Goals, repo: RepositoryName) -> None:
+        """Advance the frame's forge facts only after the existing verdict posts its carry."""
+        project = goals.registry.snapshot().commander_project.require()
+        repository = Repo.selected(project.repos, repo.to_wire())
+        reader = WorkBranches(repository.checkout)
+        for row in self.open(repo):
+            if not row.has_head_review:
+                current = ReadPullRequestHead(repo, row.number, row.head, base=row.base)
+                with goals.todos.snapshot() as db:
+                    reviews = StoredHeadReview.latest_for_pull_request(db, current)
+                for review in reviews:
+                    if review.verdict.carry(goals, review, current, reader):
+                        self._read[repo, row.number] = replace(
+                            row, status_contexts=(*row.status_contexts, HeadReview.context))
 
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
@@ -3868,6 +3877,11 @@ class HeadVerdict(HeadReview, declared_name=None):
         """A review does not authorize dropping unlanded patches."""
         return False
 
+    def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
+              reader: WorkBranches) -> bool:
+        """A pending or rejected review never grants a new head acceptance."""
+        return False
+
     def order_events(self, record: OrderHeadReviewRecord, revision: int) -> tuple[StrikeTodo, ...]:
         return ()
 
@@ -3894,6 +3908,22 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     state = "success"
     verb = "Accepted"
 
+    def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
+              reader: WorkBranches) -> bool:
+        try:
+            reviewed_change = record.request.change_identity(reader, current.base)
+            current_change = current.change_identity(reader, current.base)
+        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired):
+            return False
+        if reviewed_change != current_change:
+            return False
+        verdict = CarriedHeadVerdict(self.reason, record.request)
+        carried = replace(record, request=replace(record.request, head=current.head),
+                          verdict=verdict, at=RecordedEventTime(time.time()))
+        goals.todos.record_head(carried)
+        verdict.post(current.repo, current.head, record.actor.name, f"#{current.pr}")
+        return True
+
     @classmethod
     def allows_integration(cls) -> bool:
         return True
@@ -3909,6 +3939,16 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         if growth.exceeds:
             raise TodoError(f"Source grows {growth.total:+d} code lines (limit {growth.limit}): "
                             f"{growth.listing()}. Delete the slop or accept with --growth.")
+
+
+@dataclass(frozen=True)
+class CarriedHeadVerdict(ReviewedHeadVerdict):
+    """The original acceptance follows its unchanged patch, not a new review."""
+
+    source: PullRequestHead
+
+    def description(self, reviewer: str, subject: str) -> str:
+        return f"carried from {self.source.head[:9]}: same change"
 
 
 @dataclass(frozen=True)
@@ -4116,7 +4156,23 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
     order_id: ClassVar[Generated] = Generated(
         OrderId, Column(generated=f"json_extract({{record}}, '$.{FieldCodec.record_key(HeadReviewRecord, 'order')}.{FieldCodec.record_key(OrderLink, 'order_id')}')", nullable=True),
     )
-    indexes = (Index(("request", "seq")), Index(("problem", "order_id", "seq")))
+    pull_request_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+        f"{{request}} -> '$.{FieldCodec.record_key(PullRequestHead, 'repo')}'",
+        f"json_extract({{request}}, '$.{FieldCodec.record_key(PullRequestHead, 'pr')}')",
+    ))
+    indexes = (Index(("request", "seq")), Index(("problem", "order_id", "seq")),
+               pull_request_index)
+
+    @classmethod
+    def latest_for_pull_request(
+        cls, db: sqlite3.Connection, request: PullRequestHead,
+    ) -> tuple[HeadReviewRecord, ...]:
+        """The access path and its predicate share this row's declared expression index."""
+        return tuple(row.record for row in cls.select(
+            db, where=" AND ".join(f"{term}=?" for term in cls.pull_request_index.terms),
+            parameters=(FieldCodec.compact(FieldCodec.encode(request.repo)), request.pr),
+            order_by=("seq",), descending=True, limit=1,
+        ))
 
 
 @dataclass(frozen=True)
