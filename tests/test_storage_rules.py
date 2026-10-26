@@ -111,7 +111,7 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(
     measured = storage.held_gib
     assert storage.home == CheckoutClaim(Checkout(home))
     assert storage.extra_checkouts == (CheckoutClaim(Checkout(old)),)
-    assert storage.adding(CheckoutClaim(Checkout(home))) == storage
+    assert storage.adding(Checkout(home)) == storage
     assert rule.owns_present_checkout(thread, home)
     assert not rule.owns_present_checkout(other, old)
     with pytest.raises(StorageDenied):
@@ -167,7 +167,7 @@ def test_non_git_home_is_not_charged_and_nested_roots_are_counted_once(
     assert before == rule.tree_gib(checkout)
     (nested / 'new-data').write_bytes(b'new' * 2**10)
     assert storage.held_gib == before
-    assert storage.adding(CheckoutClaim(Checkout(checkout))).held_gib == rule.tree_gib(checkout)
+    assert storage.adding(Checkout(checkout)).held_gib == rule.tree_gib(checkout)
     assert storage.removing(Checkout(alias)).held_gib == rule.tree_gib(checkout)
 
 
@@ -200,12 +200,13 @@ def test_projected_checkout_reservations_follow_checkout_membership(checkout_com
                           anticipated_bytes=128 * 2**20)
     second = CheckoutClaim(Checkout(rule.order_checkout(rule.roots_of(thread), 'P2')),
                            anticipated_bytes=64 * 2**20)
-    single = storage.adding(first)
+    single = storage.adding(first.checkout, first.anticipated_bytes)
     assert single.removing(first.checkout).anticipated_gib == storage.anticipated_gib
-    assert single.removing(first.checkout).adding(first) == single
-    assert single.adding(second).removing(first.checkout).anticipated_gib == second.anticipated_bytes / 2**30
-    assert single.adding(second).adding(first).anticipated_gib == single.adding(second).anticipated_gib
-    assert single.adding(replace(first, anticipated_bytes=second.anticipated_bytes)).anticipated_gib == second.anticipated_bytes / 2**30
+    assert single.removing(first.checkout).adding(first.checkout, first.anticipated_bytes) == single
+    both = single.adding(second.checkout, second.anticipated_bytes)
+    assert both.removing(first.checkout).anticipated_gib == second.anticipated_bytes / 2**30
+    assert both.adding(first.checkout, first.anticipated_bytes).anticipated_gib == both.anticipated_gib
+    assert single.adding(first.checkout, second.anticipated_bytes).anticipated_gib == second.anticipated_bytes / 2**30
 
 
 @pytest.mark.parametrize('line,expected', [

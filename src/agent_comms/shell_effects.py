@@ -17,7 +17,7 @@ from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateR
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .storage_rules import CheckoutClaim, StorageProjection
+    from .storage_rules import StorageProjection, UnitStorage
 
 
 class ShellProgram(NamedProgram):
@@ -114,9 +114,8 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     path: Path
     repository: Repo
 
-    def claim(self) -> CheckoutClaim:
-        from .storage_rules import CheckoutClaim
-        return CheckoutClaim(Checkout(self.path))
+    def project(self, storage: UnitStorage) -> UnitStorage:
+        return storage.adding(Checkout(self.path))
 
     def check(self, projection: StorageProjection) -> None:
         rule, thread = projection.rule, projection.thread
@@ -124,7 +123,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
         if not rule.owns_checkout(thread, self.path, self.repository.github):
             destination = rule.order_checkout(rule.roots_of(thread), "P<number>")
             rule.deny(f'checkout destination must be {destination}')
-        projection.storage = projection.storage.adding(self.claim())
+        projection.storage = self.project(projection.storage)
         super().check(projection)
 
 
@@ -132,9 +131,8 @@ class CheckoutStorageEffect(AllocateStorageEffect):
 class CreateCheckoutStorageEffect(CheckoutStorageEffect):
     start: CheckoutStart
 
-    def claim(self) -> CheckoutClaim:
-        from .storage_rules import CheckoutClaim
-        return CheckoutClaim(Checkout(self.path), self.start.tracked_bytes(self.repository.checkout))
+    def project(self, storage: UnitStorage) -> UnitStorage:
+        return storage.adding(Checkout(self.path), self.start.tracked_bytes(self.repository.checkout))
 
 
 @dataclass(frozen=True)

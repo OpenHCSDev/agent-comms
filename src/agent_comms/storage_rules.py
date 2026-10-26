@@ -543,7 +543,10 @@ class UnitStorage:
     def missing_home(self) -> bool:
         return not self.home.checkout.path.is_dir()
 
-    def adding(self, claim: CheckoutClaim) -> UnitStorage:
+    def adding(
+        self, checkout: Checkout, anticipated_bytes: int = CheckoutClaim.anticipated_bytes,
+    ) -> UnitStorage:
+        claim = CheckoutClaim(checkout, anticipated_bytes)
         claims = {item.checkout: item for item in (*self.claims, claim)}
         return replace(self, home=claims.pop(self.home.checkout),
                        extra_checkouts=tuple(claims.values()))
