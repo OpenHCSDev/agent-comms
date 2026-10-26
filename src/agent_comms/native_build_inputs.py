@@ -26,10 +26,29 @@ class GitOptions:
     arguments: list[str]
 
 
-class Executable:
+class NamedProgram:
+    """Program capabilities compose their declared names before registration."""
+
+    names: ClassVar[frozenset[str]] = frozenset()
+
+    def __init_subclass__(cls, *, names: frozenset[str] = frozenset()) -> None:
+        cls.names = cls.names | names
+        super().__init_subclass__()
+        cls.register_names(names)
+
+    @classmethod
+    def register_names(cls, names: frozenset[str]) -> None:
+        """Launch-only programs need no shell decoder registration."""
+
+
+class Executable(NamedProgram):
     """A child-launch capability declares its executable name."""
 
     program: ClassVar[str]
+
+    def __init_subclass__(cls, *, names: frozenset[str] = frozenset()) -> None:
+        cls.names = cls.names | frozenset((cls.program,))
+        super().__init_subclass__(names=names)
 
 
 class GitLaunch(Executable):

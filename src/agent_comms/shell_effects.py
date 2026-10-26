@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .errors import ToolRefusedError
-from .native_build_inputs import Executable, GitLaunch
+from .native_build_inputs import GitLaunch, NamedProgram
 from .repository_name import RepositoryName
 from .shell_commands import ShellCommand
 from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
@@ -20,23 +20,14 @@ if TYPE_CHECKING:
     from .storage_rules import StorageProjection
 
 
-class ShellProgram:
-    names: ClassVar[frozenset[str]] = frozenset()
+class ShellProgram(NamedProgram):
     programs: ClassVar[dict[str, type[ShellProgram]]] = {}
 
     @classmethod
-    def executable_names(cls) -> frozenset[str]:
-        """Aliases and executable capabilities declare names; consumers derive them."""
-        if issubclass(cls, Executable):
-            return cls.names | frozenset((cls.program,))
-        return cls.names
-
-    def __init_subclass__(cls, *, names: frozenset[str] = frozenset()) -> None:
-        super().__init_subclass__()
-        cls.names = cls.names | names
+    def register_names(cls, names: frozenset[str]) -> None:
         for name in names:
             ShellProgram.programs[name] = cls
-        for name in cls.executable_names():
+        for name in cls.names:
             ShellProgram.programs.setdefault(name, cls)
 
     @classmethod
@@ -47,7 +38,7 @@ class ShellProgram:
 
     @classmethod
     def accepts(cls, name: str) -> bool:
-        return name in cls.executable_names()
+        return name in cls.names
 
     @staticmethod
     def matches(args: Sequence[str], prefixes: Sequence[tuple[str, ...]]) -> bool:
@@ -215,7 +206,7 @@ class BuildsOnCommands(MeasuredCommands):
                 ('python', '-m', 'hatchling', 'build'), ('python', '-m', 'build'))
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
-        return super().effects(args, cwd) + BuildsOnCommands.measured(args, self.executable_names())
+        return super().effects(args, cwd) + BuildsOnCommands.measured(args, self.names)
 
 
 class TestsOnCommands(MeasuredCommands):
@@ -224,7 +215,7 @@ class TestsOnCommands(MeasuredCommands):
                 ('python', 'test_gate.py'))
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
-        return super().effects(args, cwd) + TestsOnCommands.measured(args, self.executable_names())
+        return super().effects(args, cwd) + TestsOnCommands.measured(args, self.names)
 
 
 class WritesTargets(ShellProgram):
