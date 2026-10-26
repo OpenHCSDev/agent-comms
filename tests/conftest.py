@@ -47,6 +47,10 @@ from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.commander.order import Commander
 from agent_comms.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.practice import TestHome
+from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.upgrade import Stack
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
@@ -405,6 +409,29 @@ def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *t
         )
 
     return configure
+
+
+@pytest.fixture(scope="session")
+def rehearsal_runtime() -> LaunchRuntime:
+    """The installed CLI built this artifact once before starting its rehearsal tests."""
+    runtime = LaunchRuntime.running()
+    assert RuntimeResolution.at(runtime.prefix).core_commit == Repo.git(
+        Path(__file__).resolve().parents[1], "rev-parse", "HEAD").strip()
+    return runtime
+
+
+@pytest.fixture(scope="session")
+def rehearsal_stack(tmp_path_factory: pytest.TempPathFactory,
+                    rehearsal_runtime: LaunchRuntime) -> Iterator[Stack]:
+    """Separate writable host state shares the session's immutable runtime artifact."""
+    home = tmp_path_factory.mktemp("installed-home")
+    TestHome(home).prepare()
+    pointer = home / ".local/share/agent-comms/current"
+    pointer.parent.mkdir(parents=True)
+    pointer.symlink_to(rehearsal_runtime.prefix, target_is_directory=True)
+    with InstallCommands() as commands:
+        yield Stack(Path(__file__).resolve().parents[1], commands, home,
+                    runtime=rehearsal_runtime)
 
 
 @pytest.fixture
