@@ -11,13 +11,19 @@ from pydantic import ValidationError
 
 from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import Binding, DeliveryRow, GivenBinding, StoredBinding
-from agent_comms.field_codec import RecordProblems
 from agent_comms.cli_protocol import (
-    WATCH_LINE, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
+    WATCH_LINE,
+    DeliveredOutcome,
+    FailedCoreError,
+    UnavailableCoreError,
+    UnconfirmedOutcome,
 )
-from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.field_codec import RecordProblems
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.messages import InfoKind, Message
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('error,expected', [
@@ -109,7 +115,8 @@ print('opened', flush=True)
                 await child.wait()
 
     await open_together(fresh=True)
-    binding = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
+    binding = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
+                      thread='external-session', start=Binding.bus_head(str(tmp_path)))
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
     pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
@@ -119,7 +126,7 @@ print('opened', flush=True)
             assert pending.insert_if_absent(db).rowcount
     await open_together(fresh=False)
     with Binding.open(tmp_path) as db:
-        assert StoredBinding().bind(db) == binding
+        assert StoredBinding().bind(db) == binding.address()
         assert DeliveryRow.select(db) == [pending]
 
 
@@ -128,9 +135,10 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
         tmp_path, conflicting, bus):
     from journal_binding_cases import concurrent_bindings
 
-    first = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
-    other = Binding(
-        str(tmp_path), 'other-viewer', 'external-session', Binding.bus_head(str(tmp_path)))
+    first = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
+                    thread='external-session', start=Binding.bus_head(str(tmp_path)))
+    other = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('other-viewer', 2.0),
+                    thread='external-session', start=Binding.bus_head(str(tmp_path)))
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
     pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
@@ -142,7 +150,8 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
     with Binding.open(tmp_path) as db:
         winner, = Binding.select(db)
         assert winner in (first, other)
-        assert StoredBinding().bind(db) == winner.bind(db) == winner
+        assert StoredBinding().bind(db) == winner.address()
+        assert winner.bind(db) == winner
         loser = other if winner == first else first
         with pytest.raises(ValueError):
             loser.bind(db)
@@ -153,14 +162,15 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
 
 
 def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path, bus):
-    binding = Binding(str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path)))
+    binding = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
+                      thread='external-session', start=Binding.bus_head(str(tmp_path)))
     with Binding.open(tmp_path) as db:
         assert binding.bind(db) == binding
         statements = []
         db.set_trace_callback(statements.append)
         with closing(SQLiteFile.writer(tmp_path / 'delivery.sqlite3')) as writer:
             writer.execute('BEGIN IMMEDIATE')
-            assert StoredBinding().bind(db) == binding
+            assert StoredBinding().bind(db) == binding.address()
             assert writer.in_transaction
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 
@@ -190,15 +200,22 @@ async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
     assert line.message.to_wire() == sent.to_wire() == record.to_wire()
 
 
-def test_given_binding_fields_override_the_stored_binding(tmp_path, bus):
+def test_given_binding_fields_override_the_stored_binding(tmp_path, comms):
     """A partial binding takes each missing field from the stored one; a field absent from
     both is refused by name, and a changed field still claims another conversation."""
+    for name in ('viewer', 'other-viewer'):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     type_key = {Binding.family_discriminator: Binding.declared_name}
     with Binding.open(tmp_path) as db:
         with pytest.raises(RecordProblems, match='bus_thread'):
-            GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db)
+            GivenBinding({**type_key, 'root': str(comms.root)}).bind(db)
         stored = Binding(
-            str(tmp_path), 'viewer', 'external-session', Binding.bus_head(str(tmp_path))).bind(db)
-        assert GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db) == stored
+            root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
+            thread='external-session', start=Binding.bus_head(str(comms.root)),
+        ).bind(db)
+        address = GivenBinding({**type_key, 'root': str(comms.root)}).bind(db)
+        assert address == stored.address()
+        assert address.registered(comms).bind(db) == stored
+        other = GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
-            GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)
+            other.registered(comms).bind(db)
