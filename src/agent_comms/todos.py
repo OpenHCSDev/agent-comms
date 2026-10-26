@@ -102,7 +102,8 @@ from agent_comms.owner_requests import (
     RequestState,
 )
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.head_review import HeadReview, HeadReviewStatus
+from agent_comms.head_review import HeadReview, HeadReviewStatus, MergeArm, OpenPullRequestHead, UntouchedMergeArm
+from agent_comms.tool_result import ToolResult
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -3827,14 +3828,18 @@ class HeadVerdict(HeadReview, declared_name=None):
     """One decision on a PR head, independent of whether an order holds it."""
 
     def reviewed(self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation,
-                 order: HeadReviewOrder) -> HeadReviewRecord:
+                 order: HeadReviewOrder) -> HeadReviewed:
         current = request.current()
         request = replace(request, head=current.head)
         subject = self.subject(goals, current)
         recorded = order.record_review(goals, request, self, reviewer)
         self.after_record(goals, recorded)
         self.post(request.repo, request.head, reviewer.name, subject)
-        return recorded
+        return HeadReviewed(recorded, self.landing(current))
+
+    def landing(self, current: OpenPullRequestHead) -> MergeArm:
+        """Only an acceptance moves the PR toward main; every other verdict leaves auto-merge be."""
+        return UntouchedMergeArm()
 
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
         """What the published status names; acceptance also measures what the head grows."""
@@ -3911,6 +3916,10 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     @classmethod
     def allows_integration(cls) -> bool:
         return True
+
+    def landing(self, current: OpenPullRequestHead) -> MergeArm:
+        """Accepting the current head means landing it: arm it, pinned to that head."""
+        return current.arm()
 
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
         project = goals.registry.snapshot().commander_project.require()
@@ -4124,6 +4133,12 @@ class HeadReviewRecord:
 @dataclass(frozen=True)
 class OrderHeadReviewRecord(HeadReviewRecord):
     order: OrderLink
+
+
+@dataclass(frozen=True)
+class HeadReviewed(ToolResult):
+    record: HeadReviewRecord
+    merge: MergeArm
 
 
 @dataclass(frozen=True)

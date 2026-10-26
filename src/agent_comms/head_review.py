@@ -79,13 +79,14 @@ class PullRequestHead:
         return cls(held[0].repo, pr, head)
 
     @classmethod
-    def at(cls, repo: RepositoryName, pr: int) -> ReadPullRequestHead:
-        """Read GitHub's head and the branch it merges into, in one request."""
-        read = repo.rest(f"pulls/{pr}", "--jq", '.head.sha + " " + .base.ref')
+    def at(cls, repo: RepositoryName, pr: int) -> OpenPullRequestHead:
+        """Read GitHub's head, the branch it merges into, its node and draft state in one request."""
+        read = repo.rest(f"pulls/{pr}", "--jq",
+                         '.head.sha + " " + .base.ref + " " + .node_id + " " + (.draft | tostring)')
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
-        head, base = read.stdout.split()
-        return ReadPullRequestHead(repo, pr, head, base=base)
+        head, base, node, draft = read.stdout.split()
+        return OpenPullRequestHead.drafted(draft)(repo, pr, head, base=base, node=node)
 
     def change_identity(self, reader: WorkBranches, base: str) -> PullRequestChange:
         """Compare the PR's patch, never the unrelated changes in its base tree.
@@ -102,7 +103,7 @@ class PullRequestHead:
         """One pull request, whichever head each side read."""
         return self.repo == other.repo and self.pr == other.pr
 
-    def current(self) -> ReadPullRequestHead:
+    def current(self) -> OpenPullRequestHead:
         """GitHub's read of the PR, refused unless the reviewed head is still its head."""
         current = self.at(self.repo, self.pr)
         if not current.holds(self.head):
@@ -117,6 +118,77 @@ class ReadPullRequestHead(PullRequestHead):
     """The head as GitHub reported it, with the base branch the same read named."""
 
     base: str = field(kw_only=True)
+
+
+class MergeArm(DeclaredFamily, affix="MergeArm"):
+    """What a head verdict did to the PR's auto-merge, as the verb reports it."""
+
+    @abstractmethod
+    def lines(self, request: PullRequestHead) -> tuple[str, ...]: ...
+
+
+@dataclass(frozen=True)
+class UntouchedMergeArm(MergeArm):
+    """Only acceptance arms; every other verdict leaves auto-merge as it was."""
+
+    def lines(self, request: PullRequestHead) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class DraftMergeArm(MergeArm):
+    def lines(self, request: PullRequestHead) -> tuple[str, ...]:
+        return (f"#{request.pr} is a draft, so not armed",)
+
+
+@dataclass(frozen=True)
+class ArmedMergeArm(MergeArm):
+    head: Annotated[str, GitCommitText]
+
+    def lines(self, request: PullRequestHead) -> tuple[str, ...]:
+        return (f"#{request.pr} auto-merge armed at {self.head}",)
+
+
+@dataclass(frozen=True)
+class OpenPullRequestHead(ReadPullRequestHead):
+    """GitHub's read of an open PR: the node its mutations name, and whether it is a draft."""
+
+    node: str = field(kw_only=True)
+    # GitHub's REST ``draft`` field as ``tostring`` renders it.
+    forge_draft: ClassVar[str]
+
+    @classmethod
+    def drafted(cls, draft: str) -> type[OpenPullRequestHead]:
+        return next(member for member in cls.__subclasses__() if member.forge_draft == draft)
+
+    @abstractmethod
+    def arm(self) -> MergeArm:
+        """Auto-merge pinned to exactly this head, so a later push never lands unreviewed."""
+
+
+@dataclass(frozen=True)
+class DraftPullRequestHead(OpenPullRequestHead):
+    forge_draft = "true"
+
+    def arm(self) -> MergeArm:
+        return DraftMergeArm()
+
+
+@dataclass(frozen=True)
+class ReadyPullRequestHead(OpenPullRequestHead):
+    forge_draft = "false"
+    mutation: ClassVar[str] = (
+        "mutation($node: ID!, $head: GitObjectID!) { enablePullRequestAutoMerge(input: "
+        "{pullRequestId: $node, expectedHeadOid: $head, mergeMethod: MERGE}) { clientMutationId } }")
+
+    def arm(self) -> MergeArm:
+        armed = self.repo.api("graphql", "-f", "query=" + self.mutation,
+                              "-f", f"node={self.node}", "-f", f"head={self.head}")
+        if armed.returncode:
+            raise ToolRefusedError(
+                f"#{self.pr} verdict recorded but auto-merge was not armed: "
+                f"{armed.stderr.strip() or 'gh api graphql failed'}")
+        return ArmedMergeArm(self.head)
 
 
 class HeadReviewRelation(DeclaredFamily):
