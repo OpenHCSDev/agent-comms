@@ -21,6 +21,7 @@ from agent_comms.locked_store import RegistryFile, SQLiteStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.watched import ChangeSignal, FileSource
 from agent_comms.private_path import FileRevision
+from agent_comms.presentation import WireRevision
 from agent_comms.view_unread import (
     NativeReplyPreparation, ReplyIndex, ReplyIndexUpdate, ReplyRead, ReplyReading,
     TranscriptReadState,
@@ -125,8 +126,11 @@ def private_ledger(watched_bus):
 async def test_private_goal_commits_wake_but_reads_do_not(watched_bus, private_ledger):
     first_goal_id = GoalId.mint()
     second_goal_id = GoalId.mint()
-    bus, _ = watched_bus
-    async with aclosing(bus.watch()) as observations:
+    bus, comms = watched_bus
+    # Match ObservationService.watch, including the UI's revision sources.
+    sources = tuple(FileSource(path) for group in WireRevision.source_paths(comms.views).values()
+                    for path in group)
+    async with aclosing(bus.watch(*sources)) as observations:
         await anext(observations)
         for goal in (first_goal_id, second_goal_id):
             await asyncio.to_thread(private_ledger.create_goal, goal)
@@ -141,11 +145,13 @@ async def test_private_goal_commits_wake_but_reads_do_not(watched_bus, private_l
             await asyncio.gather(waiting, return_exceptions=True)
 
 
-def test_private_failed_readback_does_not_publish(private_ledger):
+def test_private_failed_readback_does_not_publish(watched_bus, private_ledger):
     retained_goal_id = GoalId.mint()
     private_ledger.create_goal(retained_goal_id)
-    with Bus.register_sources(*(FileSource(path) for path in
-                               private_ledger.source_paths(private_ledger.root))) as changes:
+    _, comms = watched_bus
+    with Bus.register_sources(*(FileSource(path) for group in
+                               WireRevision.source_paths(comms.views).values()
+                               for path in group)) as changes:
         with pytest.raises(StorageUncertainError):
             private_ledger._change(
                 lambda db: Generation.delete(db, goal_id=retained_goal_id), lambda _: False,
@@ -157,7 +163,7 @@ def test_private_failed_readback_does_not_publish(private_ledger):
 def test_private_notification_failure_returns_no_ready_grant(private_ledger):
     uncertain_goal_id = GoalId.mint()
     marker, = private_ledger.source_paths(private_ledger.root)
-    marker.mkdir()
+    marker.mkdir(parents=True)
     with pytest.raises(StorageUncertainError):
         private_ledger.create_goal(uncertain_goal_id)
     assert private_ledger.snapshot(uncertain_goal_id).goal_id == uncertain_goal_id
