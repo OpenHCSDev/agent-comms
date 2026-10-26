@@ -1749,17 +1749,20 @@ class DerivedTables(TableSchema):
 
 
 class DurableTables(TableSchema):
-    """Rows nothing else can rebuild: the writer carries a stored schema that differs onto
-    the declaration where the declaration says how, keeping every row, and refuses the rest.
-    No hand-written step repeats what a declaration already says."""
+    """Rows nothing else can rebuild: carry them where the declaration says how, retire only
+    tables the store explicitly names, and refuse other differences."""
 
     __slots__ = ()
+    retired_tables: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def carry_schema(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
         *, rebuild: SchemaRebuild = FULL_SCHEMA_REBUILD,
     ) -> None:
+        for table in SQLiteTableName.stored(db):
+            if table.name in cls.retired_tables:
+                table.drop(db)
         cls.derive_schema(db, sharing)
 
 
