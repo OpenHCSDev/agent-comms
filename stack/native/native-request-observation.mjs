@@ -1,9 +1,9 @@
 /** Request timing is a diagnostic resource, never admission or retry authority. */
 import { randomUUID } from "node:crypto";
 
-export function observeRequest(options, record) {
+export function observeRequest(options, record, iterator) {
     // Transport work must not depend on a presentation observer succeeding.
-    try { options?.onRequestProgress?.(record); } catch { /* observer only */ }
+    try { options?.onRequestProgress?.(record, iterator); } catch { /* observer only */ }
 }
 
 export class NativeRequestObservation {
@@ -18,7 +18,10 @@ export class NativeRequestObservation {
         this.callbackMaxNs = 0n;
     }
 
-    observe = (record) => {
+    // Retain the actual last-observed stream, including its closed state across
+    // retries. This is not an aggregate that merges distinct transport sources.
+    observe = (record, iterator = this.iterator) => {
+        this.iterator = iterator;
         const now = process.hrtime.bigint();
         const progress = { requestId: this.requestId, sessionId: this.sessionId,
             startedAtMs: this.startedAtMs,
@@ -26,7 +29,8 @@ export class NativeRequestObservation {
             elapsedMs: Number(now - this.started) / 1e6,
             callbackMs: Number(this.callbackNs) / 1e6,
             callbackCount: this.callbackCount, callbackMaxMs: Number(this.callbackMaxNs) / 1e6,
-            ...record };
+            ...record,
+            ...(iterator && { iteratorTiming: iterator.snapshot(now) }) };
         observeRequest({ onRequestProgress: this.observer }, progress);
     };
 
@@ -69,22 +73,62 @@ export class NativeRequestObservation {
     }
 }
 
-/** Observe the original provider event iterator, before message projection.
- * End is iterator custody release (including failure/cancel), not a commit proof.
+/** One original iterator owns its cumulative custody durations. These are wall
+ * times, not CPU times: iterator await includes transport/decode/scheduling and
+ * return() cleanup; consumer yield includes projection and downstream awaits.
+ * No event payloads are inspected or retained. A snapshot includes the open
+ * interval, so a stalled next() or consumer is visible before stream closure.
  */
-export async function* observeStream(options, events, transport) {
-    let first = true;
-    try {
-        for await (const event of events) {
-            if (first) {
-                first = false;
-                observeRequest(options, { stage: "first_event", transport,
-                    detail: "Provider stream started" });
-            }
-            yield event;
-        }
-    } finally {
-        observeRequest(options, { stage: "stream_end", transport,
-            detail: "Provider stream closed" });
+class NativeIteratorObservation {
+    constructor(transport) {
+        this.streamId = randomUUID();
+        this.transport = transport;
+        this.phase = "iteratorAwait";
+        this.elapsed = { iteratorAwait: 0n, consumerYield: 0n, closed: 0n };
+        this.eventCount = 0;
     }
+
+    transition(phase) {
+        const now = process.hrtime.bigint();
+        this.elapsed[this.phase] += now - this.changed;
+        this.changed = now;
+        this.phase = phase;
+    }
+
+    snapshot(now = process.hrtime.bigint()) {
+        const elapsed = { ...this.elapsed };
+        elapsed[this.phase] += now - this.changed;
+        return { streamId: this.streamId, transport: this.transport, phase: this.phase,
+            startedMonotonicNs: this.started.toString(), observedMonotonicNs: now.toString(),
+            iteratorAwaitMs: Number(elapsed.iteratorAwait) / 1e6,
+            consumerYieldMs: Number(elapsed.consumerYield) / 1e6,
+            eventCount: this.eventCount };
+    }
+
+    async *events(options, events) {
+        this.started = process.hrtime.bigint();
+        this.changed = this.started;
+        try {
+            for await (const event of events) {
+                this.transition("consumerYield");
+                this.eventCount++;
+                if (this.eventCount === 1) this.observe(options, "first_event", "Provider stream started");
+                try { yield event; }
+                finally { this.transition("iteratorAwait"); }
+            }
+        } finally {
+            this.transition("closed");
+            this.observe(options, "stream_end", "Provider stream closed");
+        }
+    }
+
+    observe(options, stage, detail) {
+        observeRequest(options, { stage, transport: this.transport, detail,
+            iteratorTiming: this.snapshot() }, this);
+    }
+}
+
+/** End is iterator custody release (including failure/cancel), not commit proof. */
+export function observeStream(options, events, transport) {
+    return new NativeIteratorObservation(transport).events(options, events);
 }

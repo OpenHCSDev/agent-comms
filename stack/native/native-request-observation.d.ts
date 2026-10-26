@@ -1,7 +1,18 @@
 /** Diagnostic request coordinates. Not an admission or retry receipt. */
 import type { Api, Model } from "../types.js";
 
+export interface IteratorTiming {
+    streamId: string;
+    transport: string;
+    phase: "iteratorAwait" | "consumerYield" | "closed";
+    startedMonotonicNs: string;
+    observedMonotonicNs: string;
+    iteratorAwaitMs: number;
+    consumerYieldMs: number;
+    eventCount: number;
+}
 export interface RequestObservationPoint {
+    iteratorTiming?: IteratorTiming;
     stage: string;
     detail?: string;
     transport?: string;
@@ -28,12 +39,12 @@ export interface NativeRequestProgress extends RequestObservationPoint {
     callbackCount: number;
     callbackMaxMs: number;
 }
-export type RequestObserver = (point: RequestObservationPoint) => void;
+export type RequestObserver = (point: RequestObservationPoint, iterator?: NativeIteratorObservation) => void;
 export declare function observeRequest(options: { onRequestProgress?: RequestObserver } | undefined,
-                                      point: RequestObservationPoint): void;
+                                      point: RequestObservationPoint, iterator?: NativeIteratorObservation): void;
 export declare class NativeRequestObservation {
     constructor(config: { sessionId?: string; onRequestProgress?: (progress: NativeRequestProgress) => void });
-    observe(point: RequestObservationPoint): void;
+    observe(point: RequestObservationPoint, iterator?: NativeIteratorObservation): void;
     callback<T>(name: string, action: () => T | Promise<T>, announce?: boolean, detail?: string): Promise<T>;
     options<T>(config: T): T & { onRequestProgress: RequestObserver };
     events<T extends { type: string }>(events: AsyncIterable<T>): AsyncGenerator<T>;
@@ -41,3 +52,8 @@ export declare class NativeRequestObservation {
 }
 export declare function observeStream<T>(options: { onRequestProgress?: RequestObserver } | undefined,
     events: AsyncIterable<T>, transport: string): AsyncGenerator<T>;
+/** Only observeStream supplies this already-started, read-only source. */
+declare class NativeIteratorObservation {
+    private constructor();
+    snapshot(now?: bigint): IteratorTiming;
+}
