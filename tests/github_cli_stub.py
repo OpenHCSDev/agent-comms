@@ -18,7 +18,7 @@ def main():
         executable = shutil.which(Path(sys.argv[0]).name, path=path)
         if executable is None:
             raise FileNotFoundError("The actual gh executable is required for its option declarations.")
-        os.execv(executable, [executable, *arguments])
+        os.execv(executable, [executable, "help", *arguments[:-1]])
     repositories = json.loads((directory / "pull_requests.json").read_text())
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
