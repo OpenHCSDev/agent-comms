@@ -94,28 +94,17 @@ class PiCommand(DeclaredFamily):
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return False
 
-    @asynccontextmanager
-    async def pending_response(self, child):
-        channel = child.reader
-        pending = child.send(self)
-        try:
-            await child.drain()
-            yield pending.future
-        finally:
-            self.id.release_from(channel.pending, self.response_type())
-            pending.future.cancel()
-
     async def exchange(self, child, *, strict=False, max_bytes=None, on_event=lambda event: None):
         channel = child.reader
-        async with self.pending_response(child) as future:
-            while not future.done():
-                event = await channel.receive(strict=strict, max_bytes=max_bytes)
-                if event is None:
-                    raise EOFError('Pi RPC ended before the requested response')
-                event.correlate_or_deliver(channel, on_event)
-            return future.result()
+        pending = await child.send_request(self)
+        while not pending.future.done():
+            event = await channel.receive(strict=strict, max_bytes=max_bytes)
+            if event is None:
+                raise EOFError('Pi RPC ended before the requested response')
+            event.correlate_or_deliver(channel, on_event)
+        return pending.future.result()
 
-    async def before_settlement(self, pending: PendingRequest) -> None:
+    async def before_settlement(self, pending: PendingRequest[PiCommand]) -> None:
         """Ordinary metadata replies cannot admit another native model run."""
 
     @classmethod
@@ -221,7 +210,7 @@ class Prompt(PiCommand):
     def response_type(cls) -> type[PiCommand]:
         return Prompt
 
-    async def before_settlement(self, pending: PendingRequest) -> None:
+    async def before_settlement(self, pending: PendingRequest[PiCommand]) -> None:
         # Both original and following prompts can still be in async preflight.
         await pending.response()
 
@@ -426,6 +415,14 @@ class ClearQueue(PiCommand):
 
     response_payload = QueueClearedData
     input_ids: Annotated[tuple[InputId, ...], WireName("inputIds")]
+
+    def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        session.inputs.cleared(self.input_ids, response, session)
+        return ()
+
+    def rejected(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+        session.finish_request()
+        return super().rejected(response, session)
 
 
 @dataclass(frozen=True, kw_only=True)

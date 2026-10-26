@@ -6,8 +6,9 @@ from contextlib import AsyncExitStack
 from time import perf_counter
 
 import agent_comms.native_package as native_package
+import pytest
 
-from agent_comms.agent_backend import InputContent, InputRequest, SteerInputPolicy, TurnInbox
+from agent_comms.agent_backend import ClearQueue, InputContent, InputRequest, SteerInputPolicy, TurnInbox
 from agent_comms.backend import NativeSession
 from agent_comms.field_codec import InputId
 from agent_comms.native_package import VerifiedNativePackage
@@ -64,8 +65,10 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
     assert all(child.retired for child in native.children)
 
 
-async def test_written_following_input_finishes_through_shared_native_settlement(
+@pytest.mark.parametrize("clear, expected_turns", ((False, 2), (True, 1)))
+async def test_written_following_input_settles_after_native_queue_decision(
     tmp_path: Path, native_runtime_package: VerifiedNativePackage,
+    clear: bool, expected_turns: int,
 ):
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         native.provider.response_gate = asyncio.Event()
@@ -79,12 +82,17 @@ async def test_written_following_input_finishes_through_shared_native_settlement
             inbox.put_nowait(following)
             await wait_for(lambda: bool(running.inputs.pending))
             await running.native.reader.pending.before_settlement()
+            if clear:
+                inbox.put_nowait(ClearQueue((following.input_id,)))
+                await wait_for(lambda: not running.inputs.pending)
             native.provider.response_gate.set()
             result = await task
             assert result[-1].ok, result[-1]
-            assert native.provider.posts == 2
-            assert len(native.starts) == 2
-            assert native.starts[1][0] == following.input_id
+            assert native.provider.posts == expected_turns
+            assert len(native.starts) == expected_turns
+            assert [started[0] for started in native.starts[1:]] == (
+                [following.input_id] if not clear else []
+            )
             assert running.inputs.settled and running.stats.complete
             assert native.persistent.child_state.retained
         finally:

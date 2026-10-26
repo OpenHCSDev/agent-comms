@@ -154,6 +154,12 @@ class PiChild:
     async def drain(self) -> None:
         await self.proc.drain()
 
+    async def send_request[Command: PiCommand](self, command: Command) -> PendingRequest[Command]:
+        """A written request belongs to the channel until its reply or retirement."""
+        pending = self.send(command)
+        await self.drain()
+        return pending
+
     async def send_fenced(
         self, command: PiCommand, boundary: Callable[[], AbstractContextManager[None]],
         *, measurements: PublicationMeasurements,
@@ -404,9 +410,9 @@ class BorrowedNative(SuccessorNative):
     ) -> PiResponseData:
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        async with request.pending_response(self.child) as response:
-            received = await response
-            return received.success.require_data(received)
+        pending = await self.child.send_request(request)
+        received = await pending.response()
+        return received.success.require_data(received)
 
 @dataclass
 class RetainedNative(ChildNative):

@@ -74,8 +74,7 @@ class InputForwarding(MroDispatch):
         while True:
             self.current = await self.queue.get()
             try:
-                # An inbox item performs one operation. PreparedSession must not
-                # also run its UnwrittenPrompt ancestor and send a prompt.
+                # An inbox item performs one operation, not every matching base handler.
                 handler = next(self.handlers_for(self.current))
                 if not await handler(self.current, session):
                     return
@@ -136,16 +135,19 @@ class InputForwarding(MroDispatch):
         command = commands.ClearQueue(input_ids=await self.queued(item.input_ids))
         if not command.input_ids:
             return True
-        async with command.pending_response(session.native) as future:
-            response = await future
-        data = response.success.require_data(response)
-        for native_id in data.require_requested(command.input_ids):
+        await self.write(session, command)
+        return True
+
+    def cleared(
+        self, requested: tuple[InputId, ...], response: Response, session: TurnSession,
+    ) -> None:
+        """The native reply owns removal, even after the forwarding task retires."""
+        for native_id in response.data.require_payload().require_requested(requested):
             removed = self.retire(native_id)
             session.rejected_commands.append(events.InputCleared(
                 id=removed.input_id, native_id=native_id, text=removed.content.text,
             ))
         session.rejected_signal.set()
-        return True
 
     @handles(UseSettings)
     async def use_settings(self, item: UseSettings, session: TurnSession) -> bool:

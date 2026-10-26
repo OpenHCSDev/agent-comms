@@ -22,8 +22,6 @@ class PromptState(ABC):
 
     awaiting_start = False
     started = False
-    settled = False
-    dispatched = True
 
     def dispatch(self) -> PromptState:
         return self
@@ -64,7 +62,6 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
     """The owning send seam has not yet written this prompt."""
 
     acknowledged = False
-    dispatched = False
 
     def dispatch(self):
         return UnacknowledgedPrompt()
@@ -78,14 +75,16 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
         raise NativePiInputNotSent(error, attestation) from error
 
 
-class PreparedSession(UnwrittenPrompt):
-    """An idle-session preparation owns no user prompt."""
+class PreparedSession(PromptState, TurnInboxItem):
+    """An idle-session preparation owns metadata, not an unwritten user prompt."""
+
+    acknowledged = False
 
     def validate_terminal(self, session: NativeSession, transport_ok: bool) -> None:
         """Preparation owes metadata replies, not a user input or assistant answer."""
 
     def permits_retention(self, session: NativeSession) -> bool:
-        return session.output.clean
+        return session.stats.complete and session.output.clean
 
 
 @dataclass(frozen=True)
@@ -114,7 +113,6 @@ class StartedPrompt(AcknowledgedPrompt):
 @dataclass(frozen=True)
 class SettledPrompt(StartedPrompt):
     event: AgentSettled
-    settled = True
 
     def permits_extension_ui(self, session):
         return False

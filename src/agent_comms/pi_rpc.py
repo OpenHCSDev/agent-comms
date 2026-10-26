@@ -74,12 +74,12 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     async def request(self, command, child):
         if self._read_task is None:
             return await command.exchange(child, strict=True, on_event=self.event_type.unowned_event)
-        async with command.pending_response(child) as future:
-            await asyncio.wait((future, self._read_task), return_when=asyncio.FIRST_COMPLETED)
-            response = future.result() if future.done() else self._read_task.result()
-            if response is None:
-                raise EOFError('Pi child ended before its response')
-            return response
+        pending = await child.send_request(command)
+        await asyncio.wait((pending.future, self._read_task), return_when=asyncio.FIRST_COMPLETED)
+        response = pending.future.result() if pending.future.done() else self._read_task.result()
+        if response is None:
+            raise EOFError('Pi child ended before its response')
+        return response
 
     async def converted(self):
         while (event := await self.next_event()) is not None:

@@ -199,9 +199,6 @@ class RequestId(PiReported[PiRequestKey]):
     ) -> PendingRequest[Command]:
         return pending.add(owner, self.value, request=command)
 
-    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
-        pending.discard(owner, self.value)
-
     def take_from(
         self, pending: PendingRequests, owner: type[PiCommand], response: Response,
     ) -> PiCommand | None:
@@ -216,9 +213,6 @@ class AnonymousRequest(PiOmitted):
         self, pending: PendingRequests, owner: type[PiCommand], command: Command,
     ) -> PendingRequest[Command]:
         return pending.add(owner, PiRequestKey.fresh(), request=command)
-
-    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
-        """The anonymous entry is keyed by a private token nobody else holds."""
 
     def take_from(
         self, pending: PendingRequests, owner: type[PiCommand], response: Response,

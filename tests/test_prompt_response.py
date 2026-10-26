@@ -9,12 +9,12 @@ from agent_comms.agent_backend import FollowUpInputPolicy, InputContent, InputRe
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.pi_commands import FollowingPrompt, GetState, PiCommand, Prompt
+from agent_comms.pi_commands import ClearQueue, FollowingPrompt, GetState, PiCommand, Prompt
 from agent_comms.pi_payloads import AnonymousRequest, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_inputs import InputForwarding
 from agent_comms.turn_failure import PromptSendFailed
-from agent_comms.agent_events import FollowingInputRefused
+from agent_comms.agent_events import FollowingInputRefused, InputCleared
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from native_response_fixture import native_response_session
 from agent_comms.turn_item import PiRequestKey
@@ -160,6 +160,30 @@ async def test_explicit_following_rejection_retires_only_its_transient_write(
     assert session.rejected_commands == [FollowingInputRefused(id=following.input.input_id)]
     assert session.rejected_signal.is_set()
     assert await receipt.response() is response
+
+
+async def test_queue_clear_reply_applies_without_a_forwarding_waiter(
+    following: FollowingPrompt, native_response_session: NativeSessionPreparation,
+):
+    session = native_response_session
+    channel = PiRpcChannel(asyncio.StreamReader())
+    receipt = channel.track(following)
+    session.inputs.pending[following.input_id] = receipt
+    clear = ClearQueue(input_ids=(following.input_id,))
+    channel.track(clear)
+    response = channel.decode_record(json.dumps({
+        "type": "response", "command": "clear_queue", "id": clear.require_id(),
+        "success": True, "data": {"inputIds": [following.input_id]},
+    }).encode())
+    assert channel.correlate(response) is clear
+    assert tuple(clear.on_response(response, session)) == ()
+    assert not session.inputs.pending
+    assert session.rejected_commands == [InputCleared(
+        id=following.input.input_id, native_id=following.input_id,
+        text=following.input.content.text,
+    )]
+    assert session.rejected_signal.is_set()
+    channel.pending.cancel_all()
 
 
 def test_unwritten_core_inbox_is_not_native_pending_work(following: FollowingPrompt):

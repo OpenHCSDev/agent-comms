@@ -40,9 +40,6 @@ class PendingRequests(Sealed):
         self._pending[key] = pending
         return pending
 
-    def discard(self, result_type: type[PiCommand], request_id: PiRequestKey) -> None:
-        self._pending.pop((result_type, request_id), None)
-
     def take(
         self, result_type: type[PiCommand], request_id: PiRequestKey, value: Response,
     ) -> PiCommand | None:
