@@ -616,7 +616,7 @@ class StorageHomeMissing(StorageViolation):
         return storage.missing_home
 
     def line(self) -> str:
-        return (f'{self.storage.unit.name} declared home {self.storage.home.checkout} is missing.'
+        return (f'{self.storage.unit.name} declared home {self.storage.home.checkout.path} is missing.'
                 f' who deleted it? -> restore the home checkout')
 
 
