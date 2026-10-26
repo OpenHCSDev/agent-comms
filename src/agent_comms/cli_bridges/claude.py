@@ -1,12 +1,13 @@
 """Claude Code sessions: their stored transcripts, and the live bridge that follows one."""
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import aclosing
 from dataclasses import replace
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, ClassVar, Self
 
@@ -18,11 +19,12 @@ from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
 from agent_comms.watched import FileSource
 from agent_comms_hooks.session import SessionHook
+from agent_comms_hooks.watch import WatchClaim
 
 from ..wire_models import WireModel
 from .claude_protocol import CLAUDE_RECORD, ClaudeMonitorFrame, ClaudeRecord, ClaudeSession
 from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import SessionBinding, Enrol, LineMonitorBridge, Options, run_bridge
+from .shared import SessionBinding, Enrol, LineMonitorBridge, Options, Watch, run_bridge
 
 if TYPE_CHECKING:
     from agent_comms.task_attachments.commander_pings import CommanderUpdate
@@ -117,6 +119,11 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge):
     def __init__(self, options: Options, address: SessionBinding, db: sqlite3.Connection) -> None:
         LineMonitorBridge.__init__(self, options, address, db)
         RunningClaude.__init__(self, address.thread)
+
+    async def watch_operation(self, operation: Watch) -> None:
+        state = WatchClaim(self.thread).state()
+        await asyncio.to_thread(state.rearm, partial(Connect().begin, self))
+        await super().watch_operation(operation)
 
     async def deliver_board(self, update: CommanderUpdate, message: Message) -> type[Outcome]:
         """The packet is on the bus, which is the board; only the session needs waking."""

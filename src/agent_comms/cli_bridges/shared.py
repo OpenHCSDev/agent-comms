@@ -95,7 +95,7 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
-from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import HeldClaim, NoSessionBridge, SessionRefusedError, WatchClaim, WatchRecord
 
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from .history import History
@@ -236,7 +236,7 @@ class GivenBinding(BindingRequest):
 
     def bind(self, db: sqlite3.Connection) -> BindingAddress:
         stored = Binding.select(db)
-        defaults = (FieldCodec.encode_fields(stored[0].address()) if stored else {
+        defaults: dict[str, object] = (FieldCodec.encode_fields(stored[0].address()) if stored else {
             'start': FieldCodec.encode(Binding.bus_head(
                 self.given[FieldCodec.record_key(BindingAddress, 'root')])),
         })
@@ -312,6 +312,11 @@ class SessionBinding(ABC):
     def registered(self, comms: Comms) -> Binding:
         return Binding(root=self.root, owner=self.recipient(comms),
                        thread=self.thread, start=self.start)
+
+    def address(self) -> BindingAddress:
+        """Project this session's recipient address without replacing its stored identity."""
+        return BindingAddress(root=self.root, thread=self.thread,
+                              start=self.start, bus=self.bus)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -1351,7 +1356,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         self.stop = current.cancel
         try:
             await self.options.operation.execute(self)
-        except* BlockingIOError:
+        except* (BlockingIOError, SessionRefusedError):
             raise
         except* (OSError, ValueError, CoordinationError) as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
@@ -1632,3 +1637,5 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
         options.operation.retired(bridge)
     except* BlockingIOError:
         sys.exit('Another watcher owns this conversation')
+    except* SessionRefusedError as refused:
+        sys.exit('\n'.join(str(error) for error in refused.exceptions))
