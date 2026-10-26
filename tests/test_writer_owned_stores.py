@@ -133,7 +133,7 @@ def writer_owned_step(writer_owned_store):
             if apply and count:
                 (column,) = row._fields_named(("target",))
                 with closing(store.writer(path)) as db, db:
-                    self.rewrite_stored(db, row, column, [
+                    self.rewrite_stored(db, row, FieldCodec.field_plan(row, column.name), [
                         (column.encode(ChannelTarget("#comms")), BARE_TARGET),
                     ])
             return Carried(count, rewritten=(store.retained_filename(),)
