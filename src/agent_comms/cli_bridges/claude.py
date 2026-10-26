@@ -22,7 +22,7 @@ from agent_comms_hooks.session import SessionHook
 from ..wire_models import WireModel
 from .claude_protocol import CLAUDE_RECORD, ClaudeMonitorFrame, ClaudeRecord, ClaudeSession
 from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
+from .shared import SessionBinding, Enrol, LineMonitorBridge, Options, run_bridge
 
 if TYPE_CHECKING:
     from agent_comms.task_attachments.commander_pings import CommanderUpdate
@@ -114,9 +114,9 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge):
     def environment_session(cls) -> str:
         return SessionHook.environment_session()
 
-    def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
-        LineMonitorBridge.__init__(self, options, binding, db)
-        RunningClaude.__init__(self, binding.thread)
+    def __init__(self, options: Options, address: SessionBinding, db: sqlite3.Connection) -> None:
+        LineMonitorBridge.__init__(self, options, address, db)
+        RunningClaude.__init__(self, address.thread)
 
     async def deliver_board(self, update: CommanderUpdate, message: Message) -> type[Outcome]:
         """The packet is on the bus, which is the board; only the session needs waking."""
@@ -171,7 +171,7 @@ class Connect(Enrol):
     def begin(self, bridge: LineMonitorBridge) -> None:
         """Serve.launch raises unless the started bridge answers its readiness exchange."""
         SessionHook.current(
-            bridge.binding.thread, str(RunningClaude(bridge.binding.thread).source)
+            bridge.address.thread, str(RunningClaude(bridge.address.thread).source)
         ).start()
 
 

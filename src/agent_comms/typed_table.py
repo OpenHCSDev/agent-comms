@@ -347,6 +347,12 @@ class Column(FieldDirective):
             return column
         return cls()
 
+    def derived_expressions(
+        self, row: type[TypedTable], field: _Field, db: sqlite3.Connection,
+        lifetime: ExitStack,
+    ) -> Mapping[str, str]:
+        return {}
+
     def immutable_fields(self, field: _Field) -> tuple[_Field, ...]:
         return ()
 
@@ -653,6 +659,56 @@ class TypedRow(SqlProjection):
     def read(cls, cursor: sqlite3.Cursor) -> list[Self]:
         """Decode a complete bounded query through the same streaming boundary."""
         return list(cls.iterate(cursor))
+
+
+class StoredRowDerivation(TypedRow, ABC):
+    """A typed projection of the stored row that derives one declared column."""
+
+    @abstractmethod
+    def derived_value(self) -> object: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class DerivedColumn(Column):
+    """A column whose earlier rows supply its value through their typed projection."""
+
+    source: type[StoredRowDerivation]
+
+    def derived_expressions(
+        self, row: type[TypedTable], field: _Field, db: sqlite3.Connection,
+        lifetime: ExitStack,
+    ) -> Mapping[str, str]:
+        names = self.source.columns()
+        stored = row.stored_columns(db)
+        if not set(names).issubset(stored):
+            return {}
+        if field.wire_name in stored:
+            raise RelationViolationError(
+                f"{row.declared_name} stores both {names} and derived {field.wire_name}")
+        columns = ", ".join(_identifier(name) for name in names)
+        table = _identifier(row.declared_name)
+        temporary = _identifier(f"carry_{row.declared_name}_{field.wire_name}")
+        target = _identifier(field.wire_name)
+        db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {columns} FROM {table} WHERE 0")
+        lifetime.callback(db.execute, f"DROP TABLE {temporary}")
+        db.execute(f"ALTER TABLE {temporary} ADD COLUMN {target} {field.storage.sql_type}")
+        cursor = db.execute(f"SELECT {columns} FROM {table}")
+        try:
+            positions = self.source._positions(cursor)
+            placeholders = ", ".join("?" for _ in (*names, field.wire_name))
+            db.executemany(
+                f"INSERT INTO {temporary} ({columns}, {target}) VALUES ({placeholders})",
+                ((*record, field.encode(
+                    self.source._decode_row(record, positions).derived_value()))
+                 for record in cursor),
+            )
+        finally:
+            cursor.close()
+        index = _identifier(f"carry_{row.declared_name}_{field.wire_name}_inputs")
+        db.execute(f"CREATE INDEX {index} ON {temporary} ({columns})")
+        matches = " AND ".join(
+            f"{temporary}.{_identifier(name)} IS {table}.{_identifier(name)}" for name in names)
+        return {field.name: f"(SELECT {target} FROM {temporary} WHERE {matches})"}
 
 
 @dataclass(frozen=True)
@@ -1121,9 +1177,7 @@ class TableSchema(ABC):
         Other table differences are refused with the rows untouched."""
         for row in cls.schema_rows():
             row.take_previous_name(db)
-            StoredColumnCarry.drop_declared_fields(row, db)
-            StoredColumnCarry.derive_missing_fields(row, db)
-            StoredColumnCarry.derive_relaxed_fields(row, db)
+            StoredColumnCarry.carry_columns(row, db)
             if SQLiteColumnShape.only_constraints_differ(db, row):
                 row.rebuild(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
@@ -1886,6 +1940,22 @@ class StoredColumnCarry:
     """Columns an earlier declaration stored that this row no longer has; the writer drops
     the ones it finds and keeps every row. A stored column nothing declares is still refused,
     since only the declaration can say its values are disposable."""
+
+    @staticmethod
+    def carry_columns(row: type[TypedTable], db: sqlite3.Connection) -> None:
+        """Carry the supplied row declaration before its stored schema is checked."""
+        with ExitStack() as lifetime:
+            changed = {
+                name: expression
+                for field in row._columns
+                for name, expression in field.column.derived_expressions(
+                    row, field, db, lifetime).items()
+            }
+            if changed:
+                row.rebuild(db, changed)
+        StoredColumnCarry.drop_declared_fields(row, db)
+        StoredColumnCarry.derive_missing_fields(row, db)
+        StoredColumnCarry.derive_relaxed_fields(row, db)
 
     @classmethod
     def derive_missing_fields(cls, row: type[TypedTable], db: sqlite3.Connection) -> None:
