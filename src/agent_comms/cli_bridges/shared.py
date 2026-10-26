@@ -1335,7 +1335,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
             '--after', json.dumps(FieldCodec.encode(
                 DeliveryRow.resume_after(self.db, self.binding))),
             '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
-            stdio=StreamingChildStdio(input_enabled=False))
+            stdio=StreamingChildStdio(input_enabled=False, limit=64 * 1024 * 1024))
         try:
             async for item in WatchLine.stream(child):
                 await item.handle(self, child)
