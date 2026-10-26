@@ -412,7 +412,7 @@ class ReadCursor:
             f"WHERE floor.actor={actor} AND floor.target IN ({target},'')),0)"
         )
 
-    joined_sql = """cursors AS MATERIALIZED (
+    joined_sql = """cursors AS NOT MATERIALIZED (
         SELECT row.*,max(coalesce(read.high_water,0),coalesce(all_read.high_water,0)) AS high_water,
             coalesce(read.exceptions,'[]') AS exceptions FROM requests AS row
         LEFT JOIN read_cursors AS read ON read.actor=row.actor AND read.target=row.target
