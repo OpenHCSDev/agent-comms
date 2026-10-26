@@ -12,7 +12,6 @@ from __future__ import annotations
 
 
 import json
-import os
 import sqlite3
 import subprocess
 import sys
@@ -28,14 +27,12 @@ from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.native import PrepareProducerDigestsProbe
-from agent_comms.installer.practice import TestHome
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
     CarriedRun,
     CreatedRun,
     InstalledUpgrade,
     RehearsedUpgrade,
-    Stack,
     UncopiedRehearsal,
     Upgrade,
 )
@@ -66,39 +63,16 @@ def declare_storage(root: Path, scratch: Path) -> None:
         StorageRule(scratch_base=scratch, floor_gib=0))))
 
 
-# Every test here pays installed_home's private runtime build, so the first one a worker
-# runs would spend the 60 s default building it.
 pytestmark = pytest.mark.timeout(280)
 
 
-@pytest.fixture(scope="module")
-def installed_home(tmp_path_factory) -> dict[str, str]:
-    """A home holding what an installed machine has: the installer's uv, and as the
-    installed runtime a build of this source. Both cases share
-    it, so the second reuses the staged runtime the first built, as a second install
-    would. Package caches stay shared."""
-    home = tmp_path_factory.mktemp("installed-home")
-    uv = home / ".local/state/agent-comms/upgrade-bus/uv"
-    uv.parent.mkdir(parents=True)
-    uv.symlink_to(TestHome(home).uv)
-    caches = subprocess.run([uv, "cache", "dir"], check=True, capture_output=True, text=True)
-    environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
-                   "npm_config_cache": str(Path.home() / ".npm")}
-    environment.pop("PYTHONPATH", None)
-    outgoing = Stack.build(shared_clone(tmp_path_factory.mktemp("installed-source") / "checkout"), InstallCommands(), home)
-    assert (outgoing.runtime.package_root / "__init__.py").is_file()
-    (home / ".local/share/agent-comms/current").symlink_to(
-        outgoing.runtime.prefix, target_is_directory=True)
-    return environment
-
-
 @pytest.fixture
-def installed_comms(private_comms, installed_home):
+def installed_comms(private_comms, rehearsal_stack):
     """An installed machine's bus belongs to its installed runtime, not to the test
     process that declared it."""
     declare_storage(private_comms.root, private_comms.root.parent / "install-scratch")
     with pytest.MonkeyPatch.context() as installed:
-        installed.setenv("HOME", installed_home["HOME"])
+        installed.setenv("HOME", str(rehearsal_stack.home))
         RootRuntime.publish(private_comms.root, LaunchRuntime.installed())
     return private_comms
 
@@ -113,16 +87,15 @@ def install_checkout(tmp_path_factory) -> Path:
     return checkout
 
 
-def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path):
+def test_runtime_producer_digests_ignore_foreign_source(rehearsal_stack, tmp_path):
     """A dirty review checkout may read through the runtime interpreter, never publish its digests."""
-    home = Path(installed_home["HOME"])
-    runtime = LaunchRuntime((home / ".local/share/agent-comms/current").resolve() / "bin/python")
+    home, runtime = rehearsal_stack.home, rehearsal_stack.runtime
     foreign = shared_clone(tmp_path / "review").path
     source = foreign / "src/agent_comms/messages.py"
     source.write_text(source.read_text().replace(
         '"""Reverse lookups are derived from the record, in its append transaction."""',
         '"""A dirty review changes this producer declaration."""', 1))
-    environment = {**installed_home, "PYTHONPATH": str(foreign / "src")}
+    environment = {**rehearsal_stack.environment(), "PYTHONPATH": str(foreign / "src")}
     with InstallCommands() as commands:
         commands.probe(PrepareProducerDigestsProbe(), runtime.interpreter, cwd=home,
                        env=runtime.environment(environment), program=InstalledProgram())
@@ -145,7 +118,7 @@ print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
                   'stamped': STAMP.producer_digests({})}))
 """
     own = json.loads(subprocess.check_output(
-        [runtime.interpreter, "-I", "-c", read], env=installed_home, text=True))
+        [runtime.interpreter, "-I", "-c", read], env=rehearsal_stack.environment(), text=True))
     assert own["stamp"] == "WheelStamp"
     assert own["computed"] == own["read"] == own["stamped"]
     reviewed = json.loads(subprocess.check_output(
@@ -174,7 +147,7 @@ def drop_one_index(root: Path) -> Path:
 @pytest.mark.parametrize("repos, drifted", (
     ((), False), (("--repos",), True),
 ), ids=("kept-repos-current-stores", "given-repos-drifted-store"))
-def test_install_rehearses_without_changing_the_bus(installed_comms, installed_home, install_checkout, tmp_path,
+def test_install_rehearses_without_changing_the_bus(installed_comms, rehearsal_stack, install_checkout, tmp_path,
                                                     repos, drifted):
     """A rehearsal copies only what pending carries and the planned reconcile name;
     with neither, nothing is copied. Neither case changes the bus.
@@ -190,7 +163,7 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     installed = subprocess.run(
         [Path(sys.executable).with_name("agent-comms"), "--root", comms.root, "install",
          "--rehearse", "--checkout", checkout, "--to", "HEAD", "--project", checkout, *given],
-        cwd=checkout, env={**installed_home, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
+        cwd=checkout, env=rehearsal_stack.environment(),
         capture_output=True, text=True, timeout=270)
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
@@ -206,7 +179,7 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     assert bus_files(LiveFilesRequest(comms.root)) == before
 
 
-def test_rehearsal_refuses_changed_native_inputs(installed_comms, installed_home, install_checkout):
+def test_rehearsal_refuses_changed_native_inputs(installed_comms, rehearsal_stack, install_checkout):
     """The target's own installer refuses a stale pin before rehearsing the bus."""
     checkout = install_checkout
     declare_test_bus(installed_comms, channels=("comms",))
@@ -224,13 +197,13 @@ def test_rehearsal_refuses_changed_native_inputs(installed_comms, installed_home
     installed = subprocess.run(
         [Path(sys.executable).with_name("agent-comms"), "--root", installed_comms.root, "install",
          "--rehearse", "--checkout", checkout, "--to", target, "--project", checkout],
-        cwd=checkout, env=installed_home, capture_output=True, text=True, timeout=270)
+        cwd=checkout, env=rehearsal_stack.environment(), capture_output=True, text=True, timeout=270)
     assert installed.returncode != 0
     assert "Native build inputs changed; rebuild with --update-pins" in installed.stderr
 
 
 def test_failed_live_migration_restores_data_checkout_and_runtime(
-        installed_comms, installed_home, install_checkout, tmp_path):
+        installed_comms, rehearsal_stack, install_checkout, tmp_path):
     comms, checkout = installed_comms, install_checkout
     declare_test_bus(comms, channels=("comms",), threads=(
         Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
@@ -262,14 +235,14 @@ class Fault(Carry):
                     "Migration that fails after writing on the live bus"], check=True)
     target = subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
     subprocess.run(["git", "-C", checkout, "checkout", "--detach", "-q", current], check=True)
-    home = Path(installed_home["HOME"])
+    home = rehearsal_stack.home
     pointer = home / ".local/share/agent-comms/current"
     outgoing = pointer.resolve()
     installed = subprocess.run(
         [Path(sys.executable).with_name("agent-comms"), "--root", comms.root, "install",
          "--checkout", checkout, "--to", target, "--project", checkout,
          "--spill-dir", tmp_path / "backups"],
-        cwd=checkout, env={**installed_home, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
+        cwd=checkout, env=rehearsal_stack.environment(),
         capture_output=True, text=True, timeout=270)
     assert installed.returncode != 0
     assert "Install rolled back:" in installed.stderr, installed.stderr
@@ -283,7 +256,7 @@ class Fault(Carry):
 
 
 def test_failed_publication_restores_absent_route_without_store_changes(
-        installed_comms, installed_home, install_checkout, tmp_path):
+        installed_comms, rehearsal_stack, install_checkout, tmp_path):
     checkout = install_checkout
     declare_test_bus(installed_comms, channels=("comms",))
     current = subprocess.check_output(
@@ -303,8 +276,8 @@ def test_failed_publication_restores_absent_route_without_store_changes(
     home = tmp_path / "publication-home"
     uv = home / ".local/state/agent-comms/upgrade-bus/uv"
     uv.parent.mkdir(mode=0o700, parents=True)
-    uv.symlink_to(Path(installed_home["HOME"]) / ".local/state/agent-comms/upgrade-bus/uv")
-    outgoing = (Path(installed_home["HOME"]) / ".local/share/agent-comms/current").resolve()
+    uv.symlink_to(rehearsal_stack.uv)
+    outgoing = rehearsal_stack.runtime.prefix
     pointer = home / ".local/share/agent-comms/current"
     pointer.parent.mkdir(mode=0o700, parents=True)
     pointer.symlink_to(outgoing, target_is_directory=True)
@@ -318,7 +291,7 @@ def test_failed_publication_restores_absent_route_without_store_changes(
         [pointer / "bin/agent-comms", "--root", installed_comms.root, "install",
          "--checkout", checkout, "--to", target, "--project", checkout,
          "--spill-dir", tmp_path / "backups"], cwd=checkout,
-        env={**installed_home, "HOME": str(home)}, capture_output=True, text=True, timeout=270,
+        env={**rehearsal_stack.environment(), "HOME": str(home)}, capture_output=True, text=True, timeout=270,
     )
     assert completed.returncode != 0
     assert "Install rolled back:" in completed.stderr, completed.stderr
@@ -334,14 +307,14 @@ def test_failed_publication_restores_absent_route_without_store_changes(
 @pytest.mark.parametrize("fresh, live_kind", ((False, CarriedRun), (True, CreatedRun)),
                          ids=("retained-bus", "fresh-bus"))
 def test_installed_entry_reports_completion_after_target_source_retirement(
-        installed_comms, installed_home, install_checkout, tmp_path, fresh, live_kind):
+        installed_comms, rehearsal_stack, install_checkout, tmp_path, fresh, live_kind):
     root = tmp_path / "new-bus" if fresh else installed_comms.root
     if not fresh:
         declare_test_bus(installed_comms, channels=("comms",))
     scratch = tmp_path / "install-scratch"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     declare_storage(root, scratch)
-    home = Path(installed_home["HOME"])
+    home = rehearsal_stack.home
     outgoing = home / ".local/share/agent-comms/current/bin/agent-comms"
     # The caller and terminal publisher import installed packages. Only InstallRun's
     # existing target-source child borrows its temporary tree during the operation.
@@ -349,14 +322,14 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
         [outgoing, "--root", root, "install", "--checkout", install_checkout,
          "--to", "HEAD", "--project", install_checkout,
          "--spill-dir", tmp_path / "backups"],
-        cwd=install_checkout, env=installed_home, capture_output=True, text=True, timeout=270,
+        cwd=install_checkout, env=rehearsal_stack.environment(), capture_output=True, text=True, timeout=270,
     )
     assert completed.returncode == 0, completed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
     assert isinstance(result, InstalledUpgrade) and type(result.live) is live_kind
     # The bus now belongs to the installed runtime, so its own CLI reads it.
     read = subprocess.run([outgoing, "--root", root, "history", "#comms"],
-                          env=installed_home, capture_output=True, text=True, check=True, timeout=60)
+                          env=rehearsal_stack.environment(), capture_output=True, text=True, check=True, timeout=60)
     page = FieldCodec.parse(read.stdout)[ChannelHistoryPageResult.messages_key]
     history = tuple(reversed(FieldCodec.decode(tuple[Message, ...], page)))
     assert len(history) == (1 if fresh else 2)

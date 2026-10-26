@@ -166,7 +166,7 @@ jobs:
         run: uv pip install --system -e src/agent_comms/skills/refactor-audit '.[dev]'
       - name: Build the installer's private runtime and rehearse through its CLI
         if: steps.reach.outputs.reaches == 'true'
-        run: python -m agent_comms.installer.test_runtime $REHEARSALS
+        run: python -m agent_comms.installer.test_runtime $REHEARSALS --durations=0
 
   review-verdict:
     name: review-verdict
