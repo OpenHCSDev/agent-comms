@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Mapping, Self
 
+from agent_comms.commander_service import CommanderService
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
@@ -21,27 +23,41 @@ from agent_comms.todos import StoredHeadReview
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.todos import Todo
+    from agent_comms.ui_model.unit_state import UnitState
 
 
 @dataclass(frozen=True)
 class CommanderHistory:
-    """One reader's immutable order history, shared by every subject it evaluates."""
+    """One board read's order history and current conditions, never retained between reads."""
 
     comms: Comms
     orders: Mapping[ThreadIncarnation, tuple[Todo, ...]]
+    commander: str
+    actors: frozenset[str]
 
     @classmethod
-    def read(cls, comms: Comms, actors: frozenset[str]) -> Self:
+    def read(cls, comms: Comms, commander: str) -> Self:
         snapshot = comms.registry.snapshot()
+        actors = CommanderService.actors(snapshot, commander)
         identities = frozenset(snapshot.require(actor).incarnation for actor in actors)
         return cls(comms, MappingProxyType({
             actor: comms.goals.todos.history_for_commander(actor) for actor in identities
-        }))
+        }), commander, actors)
 
-    @property
-    def actors(self) -> frozenset[str]:
-        return frozenset(actor.name for actor in self.orders)
+    @cached_property
+    def frame(self) -> HeartbeatFrame:
+        from agent_comms.heartbeat_frame import HeartbeatFrame
+        from agent_comms.todos import ProgressRead
+
+        return HeartbeatFrame.capture(self.comms, self.commander, ProgressRead(), self.comms.plans)
+
+    @cached_property
+    def observed(self) -> tuple[UnitState, ...]:
+        from agent_comms.ui_model.unit_state import UnitState
+
+        return UnitState.current(self.comms, self.commander, self.frame)
 
 
 @dataclass(frozen=True)
