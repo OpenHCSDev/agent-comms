@@ -3159,12 +3159,12 @@ class _RecordDecoder[T](_ContextDecoder[T]):
     def encode(self, value: object) -> dict[str, object]:
         if not isinstance(value, self.target):
             raise MalformedRecord(f"Expected {self.target.__name__} record")
-        result = FieldCodec._record_plan(type(value)).encoded(
+        result = self.plan.encoded(
             value, "wire", lambda entry, current: entry.value.encode(current)
         )
         result.update(
             (member.wire_name, FieldCodec.encode(getattr(value, name)))
-            for name, member in FieldCodec._projections(type(value), "wire").items()
+            for name, member in FieldCodec._projections(self.target, "wire").items()
         )
         return result
 
