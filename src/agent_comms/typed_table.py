@@ -2814,7 +2814,7 @@ class WalStore(StoreWriter, StoreLockFile):
         An absent file is established absence: a reader sees every declared table empty
         and creates no storage."""
         if self.path.exists():
-            with self.attached(self.path, opening) as connection:
+            with opening() as connection:
                 yield connection
             return
         with closing(self.writer(":memory:", isolation_level=None)) as connection:
@@ -2850,10 +2850,9 @@ class WalStore(StoreWriter, StoreLockFile):
 
     @contextmanager
     def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
-        """Own attachment; joined workers may borrow one serialized connection."""
+        """Open a SQLite-owned connection; joined workers may borrow it."""
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with self.attached(self.path, lambda: self._open_writer(
-                check_same_thread=check_same_thread)) as connection:
+        with self._open_writer(check_same_thread=check_same_thread) as connection:
             yield connection
 
     def _retire_committed(self, lifetime: ExitStack) -> None:
@@ -2914,7 +2913,7 @@ class TypedStore(WalStore, TableSchema):
 
     @contextmanager
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
-        """Keep this store's schema policy inside its serialized attachment."""
+        """Apply this store's schema policy before handing out its connection."""
         with super()._open_writer(check_same_thread=check_same_thread) as connection:
             self.install_schema(connection, self.schema_change(self.path))
             yield connection
