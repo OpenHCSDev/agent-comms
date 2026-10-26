@@ -551,8 +551,12 @@ class UnitStorage:
         return replace(self, home=claims.pop(self.home.checkout),
                        extra_checkouts=tuple(claims.values()))
 
+    @property
+    def extra_checkout_keys(self) -> tuple[Checkout, ...]:
+        return tuple(claim.checkout for claim in self.extra_checkouts)
+
     def removing(self, checkout: Checkout) -> UnitStorage:
-        if checkout not in (claim.checkout for claim in self.extra_checkouts):
+        if checkout not in self.extra_checkout_keys:
             self.rule.deny('only a current extra checkout can be removed')
         return replace(self, extra_checkouts=tuple(
             claim for claim in self.extra_checkouts if claim.checkout != checkout))
@@ -563,7 +567,7 @@ class UnitStorage:
 
     def require_retired(self, problem: str) -> None:
         for path in self.rule.problem_checkouts(self.rule.roots_of(self.unit), problem):
-            if Checkout(path) in (claim.checkout for claim in self.extra_checkouts):
+            if Checkout(path) in self.extra_checkout_keys:
                 self.rule.deny(
                     f'{self.unit.name} still has the checkout {path} for this order; '
                     'it removes it before the order counts as done')
