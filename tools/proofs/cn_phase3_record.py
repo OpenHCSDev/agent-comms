@@ -17,6 +17,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from agent_comms.change_report import FileLine, MainRevision
+from agent_comms.commander.standing import Scrutinize
 from agent_comms.repo import Repo
 from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
@@ -170,7 +171,7 @@ def record(session: Path) -> None:
             ),
         )
     todo = comms.goals.todos.get("P1")
-    assert todo.struck_out(worker.incarnation)
+    assert todo.strikes_against(worker.incarnation) >= Scrutinize.threshold
     cli(
         "record-lead",
         CommsFireTool(

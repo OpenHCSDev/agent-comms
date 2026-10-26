@@ -167,7 +167,8 @@ class AttemptResolutions(Carry):
                     GoalAttemptStore.write_transaction(db),
                 ):
                     if updates:
-                        self.rewrite_stored(db, AttemptRecord, column, updates)
+                        self.rewrite_stored(db, AttemptRecord,
+                                            FieldCodec.field_plan(AttemptRecord, column.name), updates)
                     if schema_changes:
                         for row in dropped:
                             GoalWorkDecision.delete(
