@@ -2520,7 +2520,7 @@ class _ScalarDecoder[T, Target = object](ValueDecoder[T]):
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
 
-class _OpaqueDecoder[T](_ScalarDecoder[T]):
+class _OpaqueDecoder[T, Target = object](_ScalarDecoder[T, Target]):
     """A represented value with no structure of its own: its representation is its content."""
 
     __slots__ = ()
@@ -2529,7 +2529,7 @@ class _OpaqueDecoder[T](_ScalarDecoder[T]):
         return represented.encode(value)
 
 
-class _OpaqueRecordDecoder[T](_OpaqueDecoder[T]):
+class _OpaqueRecordDecoder[T](_OpaqueDecoder[T, type[T]]):
     """A represented record compares its declared record fields, not its wire spelling."""
 
     __slots__ = ()
