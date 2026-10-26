@@ -19,7 +19,7 @@ from agent_comms.native_transcript import NativeTranscript
 from agent_comms.store_files import (
     ExclusiveLock,
     StoreLockContention,
-    UNBOUNDED_CONTENTION,
+    StoreGuard,
     _store_lock,
 )
 from bus_record_fixture import OWNER_LOOKUP
@@ -141,7 +141,7 @@ def test_consumer_throw_into_original_rows_is_not_a_file_failure(tmp_path):
 
 def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
     lock_target = tmp_path / "ownership"
-    with _store_lock(lock_target, ExclusiveLock(), UNBOUNDED_CONTENTION):
+    with _store_lock(lock_target, ExclusiveLock(), StoreGuard.contention):
         # Reentrancy is intentional; a separate execution must contend.
         def compete():
             with pytest.raises(BlockingIOError):
@@ -162,7 +162,7 @@ def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
     with _store_lock(tmp_path / 'first', ExclusiveLock(), resource):
         time.sleep(.04)
     with _store_lock(tmp_path / 'second', ExclusiveLock(), resource):
-        assert resource.remaining == .025
+        assert resource.seconds == .025
 
 
 @pytest.mark.asyncio

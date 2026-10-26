@@ -59,7 +59,7 @@ class OrderCorrections(Carry):
                 MaintenanceHolder.current(), "Carry stored order check corrections"
             )
         marker = json.dumps(RETIRED)
-        with TodoStore.observing(path) as db:
+        with TodoStore.opened_reader(path) as db:
             if "prior_orders" not in Todo.stored_columns(db):
                 return Carried(0)
             rows = StoredOrders.read(

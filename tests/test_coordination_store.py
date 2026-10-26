@@ -1275,12 +1275,12 @@ def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_pat
         "SELECT * FROM nonexistent_original_table",
     ):
         with pytest.raises(sqlite3.OperationalError):
-            with CoordinationStore.observing(db_path) as reader:
+            with CoordinationStore.opened_reader(db_path) as reader:
                 reader.execute(statement)
         with pytest.raises(sqlite3.ProgrammingError):
             reader.execute("SELECT 1")
     with pytest.raises(RuntimeError):
-        with CoordinationStore.observing(db_path) as reader:
+        with CoordinationStore.opened_reader(db_path) as reader:
             raise RuntimeError("consumer failed")
     with pytest.raises(sqlite3.ProgrammingError):
         reader.execute("SELECT 1")

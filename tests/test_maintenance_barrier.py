@@ -31,7 +31,7 @@ from agent_comms.maintenance_barrier import (
 from agent_comms.registration import Registration
 from agent_comms.store_files import (
     ExclusiveLock,
-    UNBOUNDED_CONTENTION,
+    StoreGuard,
     _async_store_lock,
     _store_lock,
 )
@@ -294,7 +294,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
             with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
-    async with _async_store_lock(root / 'registry.json', ExclusiveLock(), UNBOUNDED_CONTENTION):
+    async with _async_store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention):
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
@@ -340,7 +340,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / 'registry.json', ExclusiveLock(), UNBOUNDED_CONTENTION), pytest.raises(RelationViolationError):
+    with _store_lock(root / 'registry.json', ExclusiveLock(), StoreGuard.contention), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 

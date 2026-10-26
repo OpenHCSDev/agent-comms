@@ -30,7 +30,7 @@ class WorkingMemoryAnnotations:
     def reading(path):
         """Borrow one original committed snapshot; readers never install a store."""
         schema = CoordinationStore.schema_at(Path(path))
-        with CoordinationStore.observing(Path(path)) as db:
+        with CoordinationStore.opened_reader(Path(path)) as db:
             schema.require_schema(db)
             yield db
 

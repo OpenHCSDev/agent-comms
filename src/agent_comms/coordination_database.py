@@ -63,7 +63,7 @@ class ReadableStore(StoreFile):
     path: Path
 
     def _capture(self, consumer, *arguments):
-        with CoordinationStore.observing(self.path) as connection:
+        with CoordinationStore.opened_reader(self.path) as connection:
             yield consumer.capture(connection, *arguments)
 
 
