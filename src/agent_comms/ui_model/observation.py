@@ -31,6 +31,8 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
+from metaclass_registry.mro_dispatch import MroDispatch, handles
+
 from agent_comms.acp_extension import (
     GoalSnapshotReply,
     TranscriptDraftUpdate,
@@ -1222,10 +1224,14 @@ class ObserverRetired(StaleRevision, ObserverStatus):
 
 @dataclass(frozen=True)
 class ObserverReadFailed(ObserverStatus):
-    error: Exception
+    error: BaseException
 
     def raise_if_failed(self) -> None:
         raise self.error
+
+    def settle(self, process: ObservationProcess) -> None:
+        process.status = self
+        process.abandon_reads(self.error)
 
 
 class ObserverDied(CoordinationError, ObserverStatus):
@@ -1392,7 +1398,7 @@ def serve(route: CommsRoute, connection: Connection) -> None:
         connection.close()
 
 
-class ObservationProcess(AbstractAsyncContextManager):
+class ObservationProcess(AbstractAsyncContextManager, MroDispatch):
     """One ordered receive/decode task, loop-owned delivery, and joined retirement."""
 
     @classmethod
@@ -1426,7 +1432,27 @@ class ObservationProcess(AbstractAsyncContextManager):
     ) -> None:
         """Start this process's reader on the delivery loop, once at attachment."""
         receiving = asyncio.create_task(self.receive(observed, failed))
+        receiving.add_done_callback(partial(self.receive_ended, failed))
         self._reader.push_async_callback(self.stop_receiving, receiving)
+
+    def receive_ended(
+        self, failed: Callable[[Exception], None], receiving: asyncio.Task[None],
+    ) -> None:
+        if not receiving.cancelled():
+            self.dispatch_sync(receiving.exception(), failed)
+
+    @handles(Exception)
+    def receive_error(self, error: Exception, failed: Callable[[Exception], None]) -> object:
+        ObserverReadFailed(error).settle(self)
+        failed(error)
+        return self.DISCARD
+
+    @handles(BaseException)
+    def receive_interrupted(
+        self, error: BaseException, failed: Callable[[Exception], None],
+    ) -> None:
+        ObserverReadFailed(error).settle(self)
+        raise error
 
     async def stop_receiving(self, receiving: asyncio.Task[None]) -> None:
         receiving.cancel()
@@ -1486,7 +1512,7 @@ class ObservationProcess(AbstractAsyncContextManager):
             elif not waiter.cancelled():
                 waiter.exception()
 
-    def abandon_reads(self, error: Exception) -> None:
+    def abandon_reads(self, error: BaseException) -> None:
         """The reader's retirement settles its waiters with the original cause."""
         reads, self.reads = self.reads, {}
         for waiter in reads.values():
@@ -1527,12 +1553,6 @@ class ObservationProcess(AbstractAsyncContextManager):
             await Coordination.run_worker(partial(self.process.join, timeout=2))
             failed(self.ended(None))
         except ObserverDied as error:
-            failed(error)
-        except Exception as error:
-            # A decode or view-delivery defect is not evidence the child died.
-            # Preserve its original exception and reject later reads too.
-            self.status = ObserverReadFailed(error)
-            self.abandon_reads(error)
             failed(error)
 
     @cached_property
