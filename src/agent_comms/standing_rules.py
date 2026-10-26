@@ -11,9 +11,10 @@ from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
+from functools import cache
 from itertools import combinations
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 from agent_comms.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.field_codec import FieldCodec, OrderId
@@ -29,20 +30,19 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference, SourceGrowth
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.storage_rules import UnitStorage
-from agent_comms.todos import ProgressRead, ProgressSource, StoredHeadReview
+from agent_comms.messages import Message
+from agent_comms.owner_requests import OwnerRequestId, RequestDirective
+from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
+from agent_comms.todos import MergeBlock, ProgressRead, ProgressSource, StoredHeadReview
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
     from agent_comms.commander.order import CommanderVerb
     from agent_comms.comms import Comms
     from agent_comms.heartbeat_frame import HeartbeatFrame
-    from agent_comms.owner_requests import OwnerRequestId, RequestDirective
-    from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
-    from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import (
-        MergeBlock, OrderClaim, OwnerRequest, PresentCheckout, PullRequest, Todo, TodoStore,
+        OrderClaim, OwnerRequest, PresentCheckout, PullRequest, Todo, TodoStore,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -121,6 +121,21 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
     def broke_after(self, after: float) -> bool: ...
 
     clearing_verbs: ClassVar[tuple[type[CommanderVerb], ...]] = ()
+
+    @classmethod
+    def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
+        """Discovery completes the declarations: each rule's observation comparison
+        compiles then, so a compared field with no codec owner refuses before any
+        heartbeat keys an observation."""
+        members = super()._member_declarations()
+        for member in members:
+            cast(type[StandingRule], member).compiled_comparison()
+        return members
+
+    @classmethod
+    @cache
+    def compiled_comparison(cls) -> None:
+        FieldCodec.compile_comparison(cls)
     commander_disposes: ClassVar[bool] = True
     urgent: ClassVar[bool] = False
 

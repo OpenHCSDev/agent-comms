@@ -8,6 +8,7 @@ from typing import Annotated
 import pytest
 
 from agent_comms.field_codec import FieldCodec, WireRequired
+from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_creation import CreationSeconds, CreationTime, RecordedCreationTime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
@@ -61,3 +62,19 @@ def test_represented_scalar_compares_through_its_declared_representation():
     digest = FieldCodec.comparison_digest(recorded)
     assert digest == FieldCodec.comparison_digest(Born(RecordedCreationTime(12.5)))
     assert digest != FieldCodec.comparison_digest(Born(RecordedCreationTime(13.0)))
+
+
+class Unowned:
+    """A compared type the codec has no owner for."""
+
+
+@dataclass(frozen=True)
+class HoldsUnowned:
+    label: str
+    unowned: Unowned
+
+
+def test_comparison_compiles_every_compared_field_and_refuses_an_unowned_type():
+    with pytest.raises(TypeError, match="Unowned"):
+        FieldCodec.compile_comparison(HoldsUnowned)
+    assert StandingRule.names()  # discovery compiles every rule's comparison
