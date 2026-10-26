@@ -474,8 +474,10 @@ class DeliveryRow(JournalMessage, BridgeStateTable, TypedTable):
         """
         sequence = cls._sql(cls.sequence_sql)
         condition, parameters = cls._condition("1", (), key)
+        sequence_column, identity_column = MessageReference.columns()
         return tuple(MessageReference.iterate(db.execute(
-            f'SELECT {sequence}, {cls._sql("{id}")} FROM "{cls.declared_name}" '
+            f'SELECT {sequence} AS "{sequence_column}", '
+            f'{cls._sql("{id}")} AS "{identity_column}" FROM "{cls.declared_name}" '
             f'WHERE {condition} ORDER BY {sequence} DESC'
             + (" LIMIT ?" if limit is not None else ""),
             parameters + ((limit,) if limit is not None else ()),
