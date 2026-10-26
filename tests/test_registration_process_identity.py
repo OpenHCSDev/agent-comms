@@ -59,7 +59,8 @@ def test_concurrent_starters_reserve_one_current_owner(tmp_path):
 
     def reserve(process):
         ready.wait(timeout=5)
-        return registry.reserve_owner(original, process)
+        owner, = registry.reserve_owners((original, process))
+        return owner
 
     with ExitStack() as children, ThreadPoolExecutor(max_workers=2) as workers:
         processes = tuple(children.enter_context(SpawnedProcess.launch(

@@ -156,7 +156,9 @@ class Goals:
             raise TodoError("; ".join(
                 f"{work.owner.name} retains work in {work.checkout}" for work in held)
                 + " -> the holder must commit and push it before the problem is released")
-        return store.fire(owner, actor, reason)
+        released = store.fire(owner, actor, reason)
+        self.registry.transition_status(owner, lambda status: status.without_stopped_peak())
+        return released
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

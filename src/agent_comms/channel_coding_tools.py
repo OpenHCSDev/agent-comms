@@ -67,7 +67,7 @@ class CodingToolOwner(ABC):
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:
             return await registry.storage_rule.wait_for_room(
-                work, thread, self.comms.root)
+                tuple(kind((thread.incarnation,)) for kind in work), self.comms.root)
         return NoRoomNeeded()
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:

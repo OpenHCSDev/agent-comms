@@ -32,6 +32,7 @@ from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.storage_room import RoomAllocation
+from agent_comms.room_need import RoomNeed
 from agent_comms.work_branches import WorkBranches
 
 from .shell_effects import StorageDenied, StorageEffect
@@ -260,7 +261,6 @@ class StorageRule(RoomAllocation, DurableFile):
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
     idle_minutes: float = 30.0  # a pytest temp dir untouched this long holds memory for nothing
     temp_root: StoragePath = Path('/tmp')  # RAM-backed, so its pytest dirs hold memory
-    proc: StoragePath = Path('/proc')
     shown: ClassVar[int] = 5  # holders named in each list
     scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
     # Home paths are read when the rule is built, never frozen at import.
@@ -282,6 +282,9 @@ class StorageRule(RoomAllocation, DurableFile):
     def load(cls, root: Path) -> Self:
         path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
+
+    def room_floor(self) -> RoomNeed:
+        return RoomNeed(int(self.memory_gib * 2**30), int(self.floor_gib * 2**30))
 
     def initial_roots(self, name: str) -> StorageRoots:
         return StorageRoots(self.scratch_base / name)

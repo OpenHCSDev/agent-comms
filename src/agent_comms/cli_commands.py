@@ -2626,12 +2626,16 @@ class TargetActionCliCommand(TargetArguments, declared_name="target-action"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RestoreOwnerCliCommand(NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleCliCommand,
+class RestoreOwnerCliCommand(AppliedTogether, NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleCliCommand,
                              CliCommand[OwnerStartResult], declared_name="restore-owner"):
     help = "Restore owner process without changing its goal"
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
-        return ctx.owners.start(self.name)
+        return self.apply_together(ctx, (self,))[0]
+
+    @classmethod
+    def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[OwnerStartResult, ...]:
+        return ctx.owners.start(*(command.name for command in commands))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sqlite3
 import threading
 import time
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -18,15 +19,29 @@ from typing import Annotated, ClassVar
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
-from .field_codec import RoomTicket
-from .repo import Checkout
+from .field_codec import FieldCodec, PathText, RoomTicket
 from .thread_identity import ThreadIncarnation
+from .room_need import RoomNeed
 from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
 from .watched import ChangeSignal, FileSource
 
-
+@dataclass(frozen=True)
 class RoomWork(DeclaredFamily, affix="RoomWork"):
-    """Each declaration owns a separately measured kind of work."""
+    """One measured kind of work, with every owner sharing its request."""
+
+    owners: tuple[ThreadIncarnation, ...]
+
+    def estimate(self, measured: RoomNeed) -> RoomNeed:
+        return measured.scaled(len(self.owners))
+
+    def per_owner(self, measured: RoomNeed) -> RoomNeed:
+        return measured.divided(len(self.owners))
+
+    def measured_needs(self, peaks: tuple[RoomNeed, ...], root: str) -> tuple[RoomNeed, ...]:
+        return tuple(self.estimate(peak) for peak in peaks)
+
+    def floor(self, rule: RoomAllocation) -> RoomNeed:
+        return rule.room_floor()
 
 
 class BuildRoomWork(RoomWork):
@@ -38,29 +53,22 @@ class TestGateRoomWork(RoomWork):
 
 
 class UnitStartRoomWork(RoomWork):
-    pass
+    def floor(self, rule: RoomAllocation) -> RoomNeed:
+        return RoomNeed(disk=rule.room_floor().disk)
+
+    def measured_needs(self, peaks: tuple[RoomNeed, ...], root: str) -> tuple[RoomNeed, ...]:
+        from .registry_store import RegistryFile, RegistryStore
+
+        snapshot = RegistryStore(RegistryFile.path_in(Path(root))).snapshot()
+        released = tuple(need for owner in self.owners if owner.current(snapshot)
+                         for need in snapshot.status(owner.name).stopped_needs())
+        if len(released) == len(self.owners):
+            return (sum(released, RoomNeed()),)
+        return super().measured_needs(peaks, root)
 
 
 class AllocationRoomWork(RoomWork):
     """Other allocating operations, not mislabeled as builds or tests."""
-
-
-@dataclass(frozen=True)
-class RoomNeed:
-    memory: int = 0
-    disk: int = 0
-
-    def __add__(self, other):
-        return RoomNeed(self.memory + other.memory, self.disk + other.disk)
-
-    def remaining(self, other):
-        return RoomNeed(max(0, self.memory - other.memory), max(0, self.disk - other.disk))
-
-    def fits(self, free):
-        return self.memory <= free.memory and self.disk <= free.disk
-
-    def peak(self, other):
-        return RoomNeed(max(self.memory, other.memory), max(self.disk, other.disk))
 
 
 @dataclass(frozen=True)
@@ -97,13 +105,25 @@ class WorkPeak(RoomLedgerRows, TypedTable):
 
 @dataclass(frozen=True)
 class RoomClaim(RoomLedgerRows, TypedTable):
+    dropped_fields: ClassVar[tuple[str, ...]] = ('unit',)
+
     ticket: Annotated[RoomTicket, Column(primary_key=True)]
     root: str
-    unit: Annotated[ThreadIncarnation, Column(storage=JsonStorage)]
     process: Annotated[ProcessIdentity, Column(storage=JsonStorage)]
-    work: Annotated[tuple[type[RoomWork], ...], Column(storage=JsonStorage)]
+    work: Annotated[tuple[RoomWork, ...], Column(storage=JsonStorage)]
     phase: Annotated[RoomPhase, Column(storage=JsonStorage)]
     at: float
+
+    @classmethod
+    def carry_columns(cls, db: sqlite3.Connection) -> None:
+        previous_owner, = cls.dropped_fields
+        if previous_owner in cls.stored_columns(db):
+            db.execute(cls._sql(
+                f'UPDATE "{cls.declared_name}" SET {{work}} = '
+                '(SELECT json_group_array(json_object(?, member.value, ?, '
+                f'json_array(json("{previous_owner}")))) FROM json_each({{work}}) AS member)'
+            ), (RoomWork.family_discriminator, FieldCodec.field_plan(RoomWork, 'owners').key))
+        super().carry_columns(db)
 
 
 @dataclass(frozen=True)
@@ -123,8 +143,8 @@ class RoomLedger(DurableStore):
             claim = RoomClaim.one(db, ticket=ticket)
             if claim is not None and peak is not None:
                 for work in claim.work:
-                    WorkPeak.delete(db, work=work)
-                    WorkPeak(work, peak).insert(db)
+                    WorkPeak.delete(db, work=type(work))
+                    WorkPeak(type(work), work.per_owner(peak)).insert(db)
             RoomClaim.delete(db, ticket=ticket)
 
     def claims(self, root, threads):
@@ -132,8 +152,10 @@ class RoomLedger(DurableStore):
         with self.snapshot() as db:
             claims = RoomClaim.select(db, root=str(root))
         # A waiting sibling call must stay visible beside a running one.
-        return {claim.unit.name: claim for claim in sorted(claims, key=lambda row: row.phase.waiting)
-                if claim.unit in wanted and claim.process.alive()}
+        return {owner.name: claim
+                for claim in sorted(claims, key=lambda row: row.phase.waiting)
+                for work in claim.work for owner in work.owners
+                if owner in wanted and claim.process.alive()}
 
 
 class WorkMeasurement:
@@ -148,12 +170,13 @@ class WorkMeasurement:
         self.worker = threading.Thread(target=self.observe, daemon=True)
         self.worker.start()
 
-    def resident(self):
-        if not self.process.alive():
-            return 0
-        tree = {self.process.pid}
+    @staticmethod
+    def residents(proc: Path, processes: tuple[ProcessIdentity, ...]) -> tuple[int, ...]:
+        """Sample one process forest for the whole stop or measurement batch."""
+        if not processes:
+            return ()
         rows = {}
-        for directory in self.rule.proc.glob('[0-9]*'):
+        for directory in proc.glob('[0-9]*'):
             try:
                 values = {line.partition(':')[0]: line.partition(':')[2].split()
                           for line in (directory / 'status').read_text().splitlines()}
@@ -162,15 +185,20 @@ class WorkMeasurement:
                         int(values.get('VmHWM', ['0'])[0])) * 1024)
             except (FileNotFoundError, ProcessLookupError):
                 continue
-        pending = set(rows) - tree
-        while children := {pid for pid in pending if rows[pid][0] in tree}:
-            tree.update(children)
-            pending.difference_update(children)
-        return sum(rows[pid][1] for pid in tree if pid in rows)
+        result: list[int] = []
+        for process in processes:
+            tree = {process.pid} if process.alive() else set()
+            pending = set(rows) - tree
+            while children := {pid for pid in pending if rows[pid][0] in tree}:
+                tree.update(children)
+                pending.difference_update(children)
+            result.append(sum(rows[pid][1] for pid in tree if pid in rows))
+        return tuple(result)
 
     def observe(self):
         while True:
-            self.peak = self.peak.peak(RoomNeed(self.resident(),
+            memory, = self.residents(self.rule.proc, (self.process,))
+            self.peak = self.peak.peak(RoomNeed(memory,
                 max(0, self.disk_before - self.rule.free_room().disk)))
             if self.done.wait(self.sample_seconds):
                 break
@@ -228,8 +256,10 @@ class MeasuredRoomReservation(RoomReservation):
                 RoomClaim.delete(db, ticket=ticket)
 
 
-class RoomAllocation:
+@dataclass(frozen=True)
+class RoomAllocation(ABC):
     """StorageRule's admission and measurement behavior, shared by all callers."""
+    proc: Annotated[Path, PathText] = Path('/proc')
     work_kinds: ClassVar[type[RoomWork]] = RoomWork
     # A release wakes through inotify. The timed OS refresh also observes room
     # freed by jobs outside Core, which cannot notify this ledger.
@@ -242,12 +272,20 @@ class RoomAllocation:
     def free_room(self):
         return RoomNeed(self.memory_available_bytes(), int(self.free_gib() * 2**30))
 
-    def room_floor(self):
-        return RoomNeed(int(self.memory_gib * 2**30), int(self.floor_gib * 2**30))
+    @abstractmethod
+    def room_floor(self) -> RoomNeed:
+        """The rule declares its ordinary-work thresholds."""
 
     def _admit(self, ticket):
         ledger = self.room_ledger
         # OS reads and /proc traversal never hold the writer transaction.
+        with ledger.snapshot() as db:
+            requested = RoomClaim.require(db, ticket=ticket)
+            measured = tuple(tuple(peak.need for peak in WorkPeak.select(db, work=type(work)))
+                             for work in requested.work)
+        # Registry reads finish before the machine ledger's writer is acquired.
+        peaks = tuple(work.measured_needs(known, requested.root)
+                      for work, known in zip(requested.work, measured, strict=True))
         free = self.free_room()
         dead = ledger.dead_claims()
         with ledger.writing() as db:
@@ -259,32 +297,35 @@ class RoomAllocation:
             held = RoomNeed()
             for other in RoomClaim.select(db):
                 held += other.phase.held
-            spare = free.remaining(self.room_floor() + held)
-            peaks = tuple(WorkPeak.one(db, work=work) for work in claim.work)
+            floor = RoomNeed()
+            for work in claim.work:
+                floor = floor.peak(work.floor(self))
+            spare = free.remaining(floor + held)
             # An unmeasured run calibrates alone. It reserves the observed spare
             # room, never a typed-in estimate and never zero alongside another run.
-            if any(peak is None for peak in peaks):
-                if held != RoomNeed() or not self.room_floor().fits(free):
+            if not all(peaks):
+                if held != RoomNeed() or not floor.fits(free):
                     return False
                 need = spare
             else:
                 need = RoomNeed()
-                for peak in peaks:
-                    need += peak.need
-                if not (need + self.room_floor() + held).fits(free):
+                for measured in peaks:
+                    need += sum(measured, RoomNeed())
+                if not (need + floor + held).fits(free):
                     return False
             RoomClaim.update(db, where='{ticket}=?', parameters=(ticket,),
                              phase=HoldingRoomPhase(need))
             return True
 
-    async def wait_for_room(self, work, thread, root, *, process=None):
+    async def wait_for_room(
+        self, work: tuple[RoomWork, ...], root: Path, *, process: ProcessIdentity | None = None,
+    ) -> MeasuredRoomReservation:
         """Wait without a registry/wire lock, atomically reserve, and measure."""
         process = process or ProcessIdentity.capture(os.getpid())
         ledger = self.room_ledger
         await asyncio.to_thread(ledger.root.mkdir, parents=True, exist_ok=True)
         ticket = RoomTicket.mint()
-        claim = RoomClaim(ticket, str(root), thread.incarnation,
-                          process, work, WaitingRoomPhase(), time.time())
+        claim = RoomClaim(ticket, str(root), process, work, WaitingRoomPhase(), time.time())
         admitted = False
         try:
             def enqueue():
@@ -309,22 +350,3 @@ class RoomAllocation:
         finally:
             if not admitted:
                 await asyncio.to_thread(ledger.release, ticket)
-
-    @contextmanager
-    def room_for_start(self, thread, root):
-        if thread.process_alive:
-            yield
-            return
-        self.require_allocation(thread)
-        # The unit works in its own checkout, which needs no bus lock: a submodule store an
-        # interrupted clone left broken is rebuilt before any lock is taken, and one git cannot
-        # rebuild refuses this start.
-        Checkout(thread.project_path).prepare()
-        reservation = asyncio.run(self.wait_for_room((UnitStartRoomWork,), thread, root))
-        try:
-            yield
-        except BaseException:
-            reservation.finish(completed=False)
-            raise
-        else:
-            reservation.finish()

@@ -214,7 +214,7 @@ async def configured_pure_channel(arguments):
         assert originals and len({row.message_id for row in originals}) == arguments.wave_size
         # All originals exist before dispatch. No coalescing timer or forced FULL
         # changes the channel policy; owners snapshot the already pending wave.
-        await asyncio.gather(*(asyncio.to_thread(service.owners.start, name) for name in names))
+        await asyncio.to_thread(service.owners.start, *names)
         await asyncio.gather(*(attach(service, name) for name in names))
         await asyncio.gather(*(attachment.load_session(cwd=source.worktree, session_id=name)
             for name, source in zip(names, sources, strict=True)))

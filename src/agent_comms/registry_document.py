@@ -918,6 +918,14 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.owners.advance(expected.name)
         return self.claims.generations[expected.name]
 
+    def transition_status(
+        self, owner: ThreadIncarnation, change: Callable[[ThreadStatus], ThreadStatus],
+    ) -> None:
+        """Change only the original declaration; never resurrect a removed owner."""
+        if owner.current(self):
+            name = self.require(owner.name).name
+            self.set_status(name, change(self.statuses[name]))
+
     def unregister(self, name: str) -> None:
         name = self.require(name).name
         self.status(name).withdraw_owner(self.owners, name)

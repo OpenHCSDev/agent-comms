@@ -538,7 +538,8 @@ class ThreadManagement:
             child = self.registry._declare_unlocked(child)
         # A failed launch cannot erase a declaration another starter reserved,
         # nor erase the first input if reservation committed before the failure.
-        return self.owners._launch_owner(
-            child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
+        owner, = self.owners._launch_owners(
+            (child,), resolved_bin, initial_input=spec.task, launch_runtime=runtime,
         )
+        return owner
 

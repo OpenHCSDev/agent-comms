@@ -93,7 +93,7 @@ async def journey(arguments):
     results = []
     try:
         comms.owners.require_private_launch().prepare_owner(
-            comms.registry.require(name), arguments.native_launcher, LaunchRuntime.running())
+            arguments.native_launcher, LaunchRuntime.running())
         await agent.sessions.start_owner(str(project), name)
         async with attachment(comms, project, name, env) as (client, observer):
             for outcome in arguments.outcomes:
