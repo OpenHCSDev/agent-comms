@@ -4029,7 +4029,7 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
         """The access path and its predicate share this row's declared expression index."""
         return tuple(row.record for row in cls.select(
             db, where=" AND ".join(f"{term}=?" for term in cls.pull_request_index.terms),
-            parameters=(FieldCodec.compact(request.repo), request.pr),
+            parameters=(FieldCodec.compact(FieldCodec.encode(request.repo)), request.pr),
             order_by=("seq",), descending=True, limit=1,
         ))
 
