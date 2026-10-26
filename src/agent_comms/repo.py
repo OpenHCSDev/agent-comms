@@ -391,7 +391,7 @@ class Checkout(SingleFieldValue, PresentMember):
     def checked(cls, path: Path | str) -> Self:
         """Resolve a supplied project and require a Git checkout, never the shell's cwd."""
         checkout = cls(cls.path_from_input(path)).resolved(strict=True)
-        if not cls.present(checkout.path):
+        if not cls.git_roots(checkout.path):
             raise ValueError(f"Project {checkout.path} is not a Git checkout")
         return checkout
 
