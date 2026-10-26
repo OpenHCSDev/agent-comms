@@ -266,6 +266,7 @@ class ProgressWatchdog(MroDispatch):
                     # an internal task completion is not a fabricated RPC line.
                     continue
                 if done.intersection(finish_tasks):
+                    session.finish_signal.consumed()
                     read_task.cancel()
                     await asyncio.gather(read_task, return_exceptions=True)
                     if session.awaiting_native_attestation:

@@ -159,6 +159,12 @@ class InputContent:
 class TurnInboxItem(ABC):
     """An inbox item carries its input identities; the forwarding owner dispatches it."""
 
+    has_work: ClassVar[bool] = True
+
+    def return_to(self, inbox: TurnInbox) -> None:
+        """An operation not handed off still belongs at the inbox front."""
+        inbox.begin(self)
+
     @property
     def carried_inputs(self) -> tuple[InputId, ...]:
         return ()

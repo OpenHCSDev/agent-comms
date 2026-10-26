@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from agent_comms.agent_backend import FollowUpInputPolicy, InputContent, InputRequest, TurnInbox
+from agent_comms.agent_backend import FollowUpInputPolicy, InputContent, InputRequest
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
@@ -212,12 +212,3 @@ async def test_queue_clear_reply_applies_without_a_forwarding_waiter(
     )]
     assert session.rejected_signal.is_set()
     channel.pending.cancel_all()
-
-
-def test_unwritten_core_inbox_is_not_native_pending_work(following: FollowingPrompt):
-    inbox = TurnInbox()
-    inbox.put_nowait(following.input)
-    forwarding = InputForwarding(inbox)
-    assert inbox.ready
-    assert not forwarding.unresolved
-    assert forwarding.settled

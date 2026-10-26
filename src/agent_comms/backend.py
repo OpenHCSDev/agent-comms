@@ -192,6 +192,9 @@ class FinishSignal(ABC):
     @abstractmethod
     def waiters(self) -> tuple[asyncio.Task[bool], ...]: ...
 
+    def consumed(self) -> None:
+        pass
+
 
 class NoFinishSignal(FinishSignal):
     def waiters(self) -> tuple[asyncio.Task[bool], ...]:
@@ -204,6 +207,9 @@ class EventFinishSignal(FinishSignal):
 
     def waiters(self) -> tuple[asyncio.Task[bool], ...]:
         return (asyncio.create_task(self.event.wait()),)
+
+    def consumed(self) -> None:
+        self.event.clear()
 
 
 NO_FINISH_SIGNAL = NoFinishSignal()

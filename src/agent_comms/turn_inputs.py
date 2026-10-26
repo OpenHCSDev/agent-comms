@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from . import agent_events as events
 from . import pi_commands as commands
@@ -28,11 +28,20 @@ if TYPE_CHECKING:
     from .pi_events import MessageStart, Response
 
 
+class NoCurrentItem(TurnInboxItem):
+    """No dequeued operation remains with the forwarding task."""
+
+    has_work: ClassVar[bool] = False
+
+    def return_to(self, inbox: TurnInbox) -> None:
+        pass
+
+
 @dataclass
 class InputForwarding(MroDispatch):
     queue: TurnInbox = field(default_factory=TurnInbox)
     pending: dict[InputId, PendingRequest[commands.FollowingPrompt]] = field(default_factory=dict)
-    current: TurnInboxItem | None = None
+    current: TurnInboxItem = field(default_factory=NoCurrentItem)
     started: bool = False
     uncertain: bool = False
 
@@ -43,8 +52,8 @@ class InputForwarding(MroDispatch):
 
     @property
     def unresolved(self) -> bool:
-        # Core's unwritten inbox is not work held by the native child.
-        return bool(self.pending)
+        # A turn cannot report success while an accepted operation still needs forwarding.
+        return self.current.has_work or bool(self.pending) or self.queue.has_ready_work
 
     @property
     def settled(self) -> bool:
@@ -78,8 +87,15 @@ class InputForwarding(MroDispatch):
                 handler = next(self.handlers_for(self.current))
                 if not await handler(self.current, session):
                     return
+            except asyncio.CancelledError:
+                self.current.return_to(self.queue)
+                raise
             finally:
-                self.current = None
+                self.release_current()
+
+    def release_current(self) -> None:
+        """The inbox, native channel or send decision now owns this operation."""
+        self.current = NoCurrentItem()
 
     @handles(TurnInboxItem)
     async def unhandled(self, item: TurnInboxItem, session: NativeSession) -> bool:
@@ -106,9 +122,7 @@ class InputForwarding(MroDispatch):
         identity = session.native.attestation.require_identity()
         session.launch.session.attest(identity)
         if (
-            state.is_streaming.value_or(True)
-            or state.is_compacting.value_or(True)
-            or not state.pending_message_count.matches(0)
+            state.session_busy or not state.pending_message_count.matches(0)
         ):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")
         session.active_session_file = identity.session_file
@@ -118,6 +132,7 @@ class InputForwarding(MroDispatch):
     async def write(self, session: NativeSession, *written: commands.PiCommand) -> None:
         for command in written:
             session.native.send(command)
+        self.release_current()
         await session.native.drain()
 
     async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[InputId, ...]:

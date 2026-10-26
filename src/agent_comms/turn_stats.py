@@ -126,6 +126,7 @@ class ReadingStats(RequestedStats):
             # agent_settled observation owns its snapshot; do not poll the model.
             session.stats = StatsRequest()
             session.watchdog.phase = phases.ModelWaitPhase()
+            session.ensure_input_forwarding()
             return
         # A proved idle child cannot start an input it still owes Core.
         # Report that UNKNOWN immediately, rather than manufacture model wait.
