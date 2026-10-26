@@ -4195,16 +4195,15 @@ class StoredClosedHead(TodoStoreRows, TypedTable):
     pr: ClassVar[Generated] = Generated(
         int, Column(generated=f"json_extract({{request}}, '$.{FieldCodec.record_key(PullRequestHead, 'pr')}')"),
     )
-    indexes = (Index(("repo", "pr")), Index(("closed_at",)))
+    missing_where: ClassVar[str] = 'json_array_length({missing}) > 0'
+    indexes = (Index(("repo", "pr")), Index(("repo",), where=missing_where))
 
     @classmethod
-    def current(cls, db: sqlite3.Connection, repos: Iterable[RepositoryName],
-                since: float) -> tuple[Self, ...]:
+    def current(cls, db: sqlite3.Connection, repos: Iterable[RepositoryName]) -> tuple[Self, ...]:
         result: list[Self] = []
         for repo in repos:
             StoredClosedRepository.require(db, repo=repo)
-            result.extend(cls.select(db, repo=repo, where="{closed_at}>=?",
-                                     parameters=(since,)))
+            result.extend(cls.select(db, repo=repo, where=cls.missing_where))
         return tuple(result)
 
 

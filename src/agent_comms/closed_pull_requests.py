@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from .commander.publication_rules import ClosedUnmergedPullRequest
 from .head_review import PullRequestHead
 from .message_bus import WatchPass
 from .repo import Repo
@@ -54,8 +52,7 @@ class ClosedPullRequestWatch(WatchPass[tuple[ClosedRepositoryObservation, ...]])
     """The forge poll owns close/reopen observations; a frame only reads its prepared rows."""
 
     def observe(self, comms: Comms) -> tuple[ClosedRepositoryObservation, ...]:
-        since = time.time() - ClosedUnmergedPullRequest.window
-        return tuple(self.observe_repository(comms.goals.todos, repo, since)
+        return tuple(self.observe_repository(comms.goals.todos, repo)
                      for repo in comms.registry.snapshot().commander_project.unique_repositories())
 
     def pass_body(self, comms: Comms, observed: tuple[ClosedRepositoryObservation, ...]) -> None:
@@ -63,20 +60,19 @@ class ClosedPullRequestWatch(WatchPass[tuple[ClosedRepositoryObservation, ...]])
             item.commit(comms.goals.todos)
 
     @staticmethod
-    def observe_repository(store: TodoStore, repo: Repo, since: float) -> ClosedRepositoryObservation:
+    def observe_repository(store: TodoStore, repo: Repo) -> ClosedRepositoryObservation:
         with store.snapshot() as db:
             previous = StoredClosedRepository.select(db, repo=repo.github)
             recorded = StoredClosedHead.select(db, repo=repo.github,
-                                               where='{closed_at}>=?', parameters=(since,))
-        floor = max((since, *(row.observed_at for row in previous)))
+                                               where=StoredClosedHead.missing_where)
+        floor = max((row.observed_at for row in previous), default=0.0)
         changes = PullRequests().updated_since(repo.github, floor)
         updated = max((floor, *(row.updated_at for row in changes)))
         reader = WorkBranches(repo.checkout)
         (published,) = reader.remote_heads('origin', f'refs/heads/{reader.main}')
         old_tips = tuple(row.main for row in previous)
         old_roots = tuple(row.oldest for row in previous)
-        closed = tuple(pull for change in changes for pull in change.as_closed()
-                       if pull.closed_time >= since)
+        closed = tuple(pull for change in changes for pull in change.as_closed())
         reader.require_commits('origin', published, *old_tips, *old_roots,
                                *(pull.head for pull in closed))
         for old in old_tips:
@@ -120,7 +116,8 @@ class ClosedPullRequestWatch(WatchPass[tuple[ClosedRepositoryObservation, ...]])
                                     if not StoredMainPatch.contains_all(
                                         db, repo.github, commit.patches - new_patches))
                 row = replace(row, missing=() if ancestor or whole_landed else missing)
-            prepared.append(row)
+            if row.missing:
+                prepared.append(row)
         return ClosedRepositoryObservation(
             StoredClosedRepository(repo.github, published, oldest, updated), tuple(prepared),
             tuple(fingerprints.values()), new_patches, tuple(diffs.values()))

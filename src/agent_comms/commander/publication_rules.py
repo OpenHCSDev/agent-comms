@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.field_codec import OrderId, PathText
 from agent_comms.head_review import PullRequestHead
@@ -79,7 +79,6 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
     request: PullRequestHead
     closed_at: float
     commits: tuple[str, ...]
-    window: ClassVar[float] = 7 * 24 * 60 * 60
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,

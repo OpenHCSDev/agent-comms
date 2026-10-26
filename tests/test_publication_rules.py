@@ -46,10 +46,11 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     source.git(source.checkout, 'push', 'origin', 'main')
 
     common = dict(updated=stamp, base='main', reviewable_times=(stamp,))
-    old = datetime.fromtimestamp(time.time() - ClosedUnmergedPullRequest.window - 60,
+    old = datetime.fromtimestamp(time.time() - 30 * 24 * 60 * 60,
                                 UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
     github.put(source.github, ClosedListedPullRequest(
-        12, 'outside-window', lost_head, closed_at=old, **common))
+        12, 'old-unresolved', lost_head, closed_at=old, updated=old,
+        base='main', reviewable_times=(old,)))
     for number, head in ((7, lost_head), (8, squashed_head)):
         github.put(source.github, ClosedListedPullRequest(
             number, f'closed/{number}', head, closed_at=stamp, **common))
@@ -67,7 +68,9 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
         return HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans)
 
     frame = capture()
-    (lost,) = scan(frame)
+    found = {rule.request.pr: rule for rule in scan(frame)}
+    assert set(found) == {7, 12}
+    lost, old_lost = found[7], found[12]
     request = PullRequestHead(source.github, 7, lost_head)
     assert lost.request == request
     assert lost.commits == (lost_head,)
@@ -77,7 +80,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     accepted = ReviewedHeadVerdict(VerdictReason('The owner implements the requested behavior without competing decisions.'))
     review = CommsHeadVerdictTool(request=request, operation=accepted, order=NoHeadOrder())
     review.invoke(comms, review.arguments, caller=ThreadCaller('lead'))
-    assert scan(capture()) == (lost,)
+    assert set(scan(capture())) == {lost, old_lost}
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(lost.began()))
     assert not ping.acted(CommanderHistory.read(comms, frozenset(('lead',))))
     assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
@@ -87,14 +90,14 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
         'The replacement includes the useful work and deliberately drops this obsolete implementation.'), 'P2')
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=NoHeadOrder())
     tool.invoke(comms, tool.arguments, caller=ThreadCaller('lead'))
-    assert scan(frame) == (lost,)  # A later store write cannot alter this beat's snapshot.
-    assert scan(capture()) == ()
+    assert set(scan(frame)) == {lost, old_lost}  # A later write cannot alter this snapshot.
+    assert scan(capture()) == (old_lost,)
 
     # Restore an ordinary closed head, then prove Git alone clears it after landing.
     github.put(source.github, ClosedListedPullRequest(
         11, 'closed/to-land', lost_head, closed_at=stamp, **common))
     before = scan(capture())
-    assert tuple(rule.request.pr for rule in before) == (11,)
+    assert {rule.request.pr for rule in before} == {11, 12}
     source.git(source.checkout, 'merge', '--no-edit', 'feature')
     source.git(source.checkout, 'push', 'origin', 'main')
     assert scan(capture()) == ()
