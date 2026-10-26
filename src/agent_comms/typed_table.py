@@ -680,10 +680,13 @@ class CapturedRows[Row: TypedRow]:
         positions = self.row_type._positions(self.columns)
         return (self.row_type._decode_row(row, positions) for row in self.values)
 
-    def column(self, name: str) -> tuple[object, ...]:
-        """Carry a selected raw key into related SQL in the same snapshot."""
-        position = self.columns.index(self.row_type.column_projection()[name])
-        return tuple(row[position] for row in self.values)
+    def column[Value](self, name: str, value: type[Value]) -> tuple[Value, ...]:
+        """Decode one declared key for related SQL in the same snapshot."""
+        field, = self.row_type._fields_named((name,))
+        if _base_type(field.annotation)[0] is not value:
+            raise TypeError(f"{self.row_type.__name__}.{name} is {field.annotation!r}, not {value!r}")
+        position = self.columns.index(field.wire_name)
+        return tuple(cast(Value, field.decode(row[position])) for row in self.values)
 
 
 class StoredRowDerivation(TypedRow, ABC):

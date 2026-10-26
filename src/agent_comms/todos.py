@@ -4928,10 +4928,6 @@ class Todo(TodoStoreRows, TypedTable):
             f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid",
             parameters))
 
-    @classmethod
-    def rows(cls, db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
-        return TransactionTodoHistory(db).attach(cls.capture_rows(db, where, parameters))
-
     @property
     def repository(self) -> Repo:
         return Repo(checkout=self.order.checked().check.directory, github=self.repo)
@@ -5331,7 +5327,7 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         return FieldCodec.decode(int, bound)
 
     @classmethod
-    def captured_facts_for(cls, db: sqlite3.Connection, problems: tuple[object, ...]) -> CapturedRows[StoryFacts]:
+    def captured_facts_for(cls, db: sqlite3.Connection, problems: tuple[str, ...]) -> CapturedRows[StoryFacts]:
         """Copy one aggregate result per listing, without decoding under the snapshot."""
         if not problems:
             return CapturedRows(StoryFacts, StoryFacts.columns(), ())
@@ -5377,11 +5373,6 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         """)
         return StoryFacts.capture(db.execute(query, problems))
 
-    @classmethod
-    def facts_for(cls, db: sqlite3.Connection, problems: tuple[str, ...]) -> dict[str, StoryFacts]:
-        """A transaction's immediate aggregate read uses the same captured projection."""
-        return StoryFacts.by_problem(problems, cls.captured_facts_for(db, problems))
-
 
 class TodoHistory:
     """Shared history queries; a board snapshot overrides only its aggregate lookup."""
@@ -5396,7 +5387,8 @@ class TodoHistory:
 
     def facts_for(self, problem: str) -> StoryFacts:
         with self.snapshot() as db:
-            return StoredOrderStory.facts_for(db, (problem,))[problem]
+            facts = StoredOrderStory.captured_facts_for(db, (problem,))
+        return StoryFacts.by_problem((problem,), facts)[problem]
 
     def bound_for(self, problem: str) -> int:
         with self.snapshot() as db:
@@ -5467,19 +5459,19 @@ class OwnerRequestStore(DurableStore):
             current = OwnerRequest.require(db, id=request)
             state = current.require_open(commander)
             completed = replace(current, state=state.complete(
-                request, self._serving(db, request), reason,
+                request, TransactionTodoHistory(db).attach(
+                    Todo.capture_rows(db, *self._serving(request))), reason,
             ))
             completed.upsert(db)
         return completed
 
     @staticmethod
-    def _serving(db: sqlite3.Connection, request: OwnerRequestId) -> tuple[Todo, ...]:
-        return TransactionTodoHistory(db).attach(
-            Todo.select(db, request=request, where=Todo.serving_request))
+    def _serving(request: OwnerRequestId) -> tuple[str, tuple]:
+        return f'request=? AND ({Todo.serving_request})', (FieldCodec.encode(request),)
 
     def serving_orders(self, request: OwnerRequestId) -> tuple[Todo, ...]:
         """Pending work and unaccepted claims, through the request's partial index."""
-        return self._select(f'request=? AND ({Todo.serving_request})', (FieldCodec.encode(request),))
+        return self._select(*self._serving(request))
 
     def for_request(self, request: OwnerRequestId) -> tuple[Todo, ...]:
         """Every order that served this independent request, open or done."""
@@ -5493,16 +5485,16 @@ class OwnerRequestStore(DurableStore):
             return ()
         with self.snapshot() as db:
             selected = reader(db, where, parameters)
-            facts = StoredOrderStory.captured_facts_for(db, selected.column('id'))
-        rows = tuple(selected)
-        history = BoardTodoHistory(self.root, MappingProxyType(
-            StoryFacts.by_problem((todo.id for todo in rows), facts)))
-        return history.attach(rows)
+            facts = StoredOrderStory.captured_facts_for(db, selected.column('id', str))
+        return self._board(tuple(selected), facts)
+
+    def _board(self, rows: tuple[Todo, ...], facts: CapturedRows[StoryFacts]) -> tuple[Todo, ...]:
+        return BoardTodoHistory(self.root, MappingProxyType(
+            StoryFacts.by_problem((todo.id for todo in rows), facts))).attach(rows)
 
     def _snapshot_rows(self, db: sqlite3.Connection, rows: tuple[Todo, ...]) -> tuple[Todo, ...]:
-        history = BoardTodoHistory(self.root, MappingProxyType(StoredOrderStory.facts_for(
-            db, tuple(todo.id for todo in rows))))
-        return history.attach(rows)
+        return self._board(rows, StoredOrderStory.captured_facts_for(
+            db, tuple(todo.id for todo in rows)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -5547,11 +5539,11 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         even one whose fork has ended, is the commander's to replace; sibling forks
         stay refused, since a fork never created a problem itself. An order whose work waits
         only on install holds no unit, as ProblemOrder.occupies_holder answers."""
-        for todo in cls.held_in(db,
+        for todo in TransactionTodoHistory(db).attach(cls.held_in(db,
                 f'NOT (({Assignment.sql_field("parent")}=? '
                 f'AND {Assignment.sql_field("parent_created")}=?) '
                 'OR (creator=? AND creator_created=?))',
-                (assigner.name, assigner.wire_birth) * 2, unit=unit):
+                (assigner.name, assigner.wire_birth) * 2, unit=unit)):
             if not todo.order.occupies_holder():
                 continue
             raise TodoError(
@@ -5644,18 +5636,13 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return Todo.capture_rows(db, f"state IN ({selected}) AND ({where})", (*states, *parameters))
 
     @classmethod
-    def _held(cls, db: sqlite3.Connection, where: str, parameters: tuple,
-              *, unit: ThreadIncarnation) -> CapturedRows[Todo]:
+    def held_in(cls, db: sqlite3.Connection, where: str, parameters: tuple,
+                *, unit: ThreadIncarnation) -> CapturedRows[Todo]:
         """The one open-unit query, used by every reader and writer."""
         terms = Todo.unit_index.terms[:-1]
         match = f"({', '.join(terms)})=({','.join('?' for term in terms)})"
         return cls._open(db, f'{match} AND ({where})',
                          (unit.name, unit.wire_birth, *parameters))
-
-    @classmethod
-    def held_in(cls, db: sqlite3.Connection, where: str, parameters: tuple,
-                *, unit: ThreadIncarnation) -> tuple[Todo, ...]:
-        return TransactionTodoHistory(db).attach(cls._held(db, where, parameters, unit=unit))
 
     @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
@@ -5665,7 +5652,8 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     @classmethod
     def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
-        return cls._one(Todo.rows(db, "id=?", (todo_id,)), todo_id)
+        return cls._one(TransactionTodoHistory(db).attach(
+            Todo.capture_rows(db, "id=?", (todo_id,))), todo_id)
 
     def for_order(self, order_id: OrderId) -> tuple[Todo, ...]:
         """A sent order can cover several linked problems; its ID is not a Todo key."""
@@ -5699,7 +5687,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
         return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
-                            reader=partial(self._held, unit=owner))
+                            reader=partial(self.held_in, unit=owner))
 
     def held_orders(self) -> tuple[Todo, ...]:
         return self._select("assignment IS NOT NULL", (),
@@ -5725,7 +5713,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
         return any(todo.pending for todo in self._select(
-            '1', (), reader=partial(self._held, unit=owner)))
+            '1', (), reader=partial(self.held_in, unit=owner)))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?",
@@ -5744,7 +5732,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select('creator=? AND creator_created=?',
-            (commander.name, commander.wire_birth), reader=partial(self._held, unit=unit))
+            (commander.name, commander.wire_birth), reader=partial(self.held_in, unit=unit))
 
     def require_recurrence_declaration(
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
@@ -5837,7 +5825,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         if not self.path.exists() or not (words := tuple(PlainText.found(text))):
             return ()
         with self.writing() as db:
-            held = self.held_in(db, '1', (), unit=unit)
+            held = TransactionTodoHistory(db).attach(self.held_in(db, '1', (), unit=unit))
             at = EventTime.capture(time.time())
             corrected = tuple(WordingCorrection(todo.revision, message_id, words, at=at).write(db, todo, self)
                               for todo in held)
@@ -5850,9 +5838,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         records the same reason, and its order and strikes stay."""
         with self.writing() as db:
             commander = actor.commanding_identity
-            held = tuple((todo, todo.held()) for todo in self.held_in(
+            held = tuple((todo, todo.held()) for todo in TransactionTodoHistory(db).attach(self.held_in(
                 db, 'creator=? AND creator_created=?',
-                (commander.name, commander.wire_birth), unit=unit))
+                (commander.name, commander.wire_birth), unit=unit)))
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
             released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).write(db, todo, self)
