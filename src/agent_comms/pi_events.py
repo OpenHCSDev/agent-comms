@@ -754,6 +754,10 @@ class Response(NativePiEvent, DurablePiEvent):
     def responses_to(self, request: PiCommand) -> tuple[Response, ...]:
         return (self,) if self.responds_to(request) else ()
 
+    def require_data(self) -> PiResponseData:
+        """Expose this response's payload only after its outcome accepts it."""
+        return self.success.require_data(self)
+
     def rejection_details(self) -> dict:
         """Private diagnostic projection, excluding response data and prompt content."""
         return {
@@ -778,7 +782,7 @@ class SucceededResponseOutcome(ResponseOutcome):
     payload_field = FieldCodec.field_plan(Response, "data")
 
     def proves_idle(self, response: Response) -> bool:
-        return not self.require_data(response).session_busy
+        return not response.require_data().session_busy
 
     def conflicts_attestation(self, data: PiResponseData, attestation: NativeAttestation) -> bool:
         return data.conflicts_attestation(attestation)

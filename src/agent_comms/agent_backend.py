@@ -159,8 +159,6 @@ class InputContent:
 class TurnInboxItem(ABC):
     """An inbox item carries its input identities; the forwarding owner dispatches it."""
 
-    has_work: ClassVar[bool] = True
-
     def return_to(self, inbox: TurnInbox) -> None:
         """An operation not handed off still belongs at the inbox front."""
         inbox.begin(self)
@@ -188,6 +186,13 @@ class TurnInbox(asyncio.Queue[TurnInboxItem]):
     def has_ready_work(self) -> bool:
         """Only an open inbox can give queued work to the running turn."""
         return self.ready.is_set() and not self.empty()
+
+    @property
+    def ready_inputs(self) -> tuple[InputId, ...]:
+        """Runnable user inputs, excluding parked input and control operations."""
+        return tuple(
+            input_id for item in self._queue for input_id in item.carried_inputs
+        ) if self.has_ready_work else ()
 
     def begin(self, item: TurnInboxItem) -> None:
         self._queue.appendleft(item)
