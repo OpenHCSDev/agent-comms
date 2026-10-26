@@ -10,11 +10,10 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 from collections.abc import Sequence
-from urllib.parse import urlsplit
 
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems, WireName
+from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .repo import Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches
@@ -143,19 +142,6 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     @abstractmethod
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord: ...
-
-
-@dataclass(frozen=True)
-class PullRequestView:
-    """The GitHub CLI's current-head read, decoded at that external boundary."""
-
-    head: Annotated[str, GitCommitText, WireName("headRefOid")]
-    pr: Annotated[int, WireName("number")]
-    url: str
-
-    def request(self) -> PullRequestHead:
-        repository = RepositoryName.from_wire("/".join(urlsplit(self.url).path.split("/")[1:3]))
-        return PullRequestHead(repository, self.pr, self.head)
 
 
 class HeadReview(DeclaredFamily, affix="HeadReview"):

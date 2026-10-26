@@ -14,16 +14,9 @@ def main():
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
     if arguments[:2] == ["pr", "view"]:
-        repository_flag = "--repo" if "--repo" in arguments else "-R"
-        repository = arguments[arguments.index(repository_flag) + 1]
-        data = repositories[repository]
+        data = repositories[arguments[arguments.index("-R") + 1]]
         request = data["requests"][arguments[2]]
         field = arguments[arguments.index("--json") + 1]
-        if field == "headRefOid,number,url":
-            listed = request["listed"]
-            print(json.dumps({"headRefOid": listed["head"], "number": listed["number"],
-                              "url": f"https://github.com/{repository}/pull/{listed['number']}"}))
-            return
         assert arguments[arguments.index("--jq") + 1] == "." + field
         print({"number": request["listed"]["number"], "body": request["body"]}[field])
     elif len(arguments) > 1 and arguments[0] == "api" and arguments[1].startswith("repos/"):

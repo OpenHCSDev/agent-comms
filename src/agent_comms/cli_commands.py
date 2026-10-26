@@ -13,7 +13,6 @@ import json
 import os
 import re
 import shlex
-import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -35,7 +34,7 @@ from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, Started
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.message_bus import HeldBusWrite
-from agent_comms_hooks.queue_bypass import GH, QueueBypass
+from agent_comms_hooks.queue_bypass import QueueBypass
 from agent_comms_hooks.shell import ShellCommand
 from agent_comms_hooks.watch import WatchClaim
 
@@ -196,7 +195,7 @@ from .thread_status import ThreadStatus
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .todos import Todo
-from .head_review import PullRequestHead, PullRequestView
+from .head_review import PullRequestHead
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,
@@ -1085,11 +1084,8 @@ class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-
         heads = []
         for simple in ShellCommand.split(self.bash):
             for bypass in QueueBypass.matching(simple):
-                read = subprocess.run((GH.name, *bypass.view_arguments()),
-                                      capture_output=True, text=True, timeout=60)
-                if read.returncode:
-                    raise ToolRefusedError(read.stderr.strip() or "The merge's current PR head could not be read.")
-                request = FieldCodec.decode(PullRequestView, FieldCodec.parse(read.stdout)).request()
+                target = bypass.target()
+                request = PullRequestHead.at(RepositoryName.from_wire(target.repository), target.number)
                 reviews = ctx.goals.todos.head_reviews(request)
                 if not reviews:
                     raise ToolRefusedError(
