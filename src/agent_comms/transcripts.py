@@ -25,7 +25,8 @@ from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
-from .native_transcript import NativeTranscript, RecordsCut
+from .native_transcript import NativeTranscript, RecordsCut, SessionCut
+from .native_output import NativeRecordLocation
 from .notification_evidence import NotificationWindow
 from .private_path import FileObservation, FileRevision
 from .private_registry_guard import RegistryPrivacy
@@ -37,6 +38,7 @@ from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, Transcr
 from .transcript_routes import TranscriptRoutes
 from .transcript_sources import (
     AssignedSourceCursor,
+    AssignedSourceIdentity,
     AssignedTranscriptSource,
     EarlierTranscript,
     LaterTranscript,
@@ -53,7 +55,6 @@ if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from .coordination_database import InvalidStore, MissingStore
-    from .native_output import NativeRecordLocation
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
@@ -198,6 +199,27 @@ class NativeTranscriptCursor(TranscriptCursor):
             reads.mark_read(viewer, key, self.offset, NativeTranscript(Path(key)).cut())
 
 
+@dataclass(frozen=True)
+class NativeCommittedPrefix:
+    """Original committed native bytes, without unrelated snapshot revisions."""
+
+    original: NativeRecordLocation
+    records_cut: SessionCut
+    source: AssignedSourceIdentity
+
+    @property
+    def page_bound(self) -> NativeTranscriptCursor:
+        return NativeTranscriptCursor(self.original.session_file, self.original.session_entry_end)
+
+    def contains_native_prefix(self, current: TranscriptReadIdentity) -> bool:
+        current_source = AssignedSourceIdentity(current.root, current.thread.incarnation)
+        return (
+            (self.source, self.original.session_file) == (current_source, current.runtime.read_key)
+            and self.page_bound.within(current.page_bound)
+            and self.records_cut.holds(current.records_cut, self.original.session_entry_end)
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class WireTranscriptCursor(NativeTranscriptCursor):
     wire: AssignedSourceCursor = field()
@@ -307,22 +329,6 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     def page_bound(self) -> TranscriptCursor:
         """The last native byte and assigned message included in this page."""
         return self.through or self.thread.runtime.transcript_cursor(self.wire_frontier, self.records_cut.offset, source=self.runtime)
-
-    def contains_native_prefix(self, current: TranscriptReadIdentity) -> bool:
-        """A current page contains this exact source's certified native prefix.
-
-        Assigned wire messages may advance independently of native output.
-        """
-        return (self.native_source == current.native_source
-                and self.page_bound.offset <= current.page_bound.offset
-                and self.contains_records_cut(current))
-
-    @property
-    def native_source(
-        self,
-    ) -> tuple[str, str, str | None, RuntimeLocation, ThreadIncarnation, str | None]:
-        return (self.declared_name, self.root, self.historical_source, self.runtime,
-                self.thread.incarnation, self.page_bound.session_file)
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
@@ -528,19 +534,16 @@ class Transcripts:
 
     def capture_native_output(
         self, name: str, location: NativeRecordLocation,
-    ) -> TranscriptReadIdentity:
+    ) -> NativeCommittedPrefix:
         page = self._page_source(name, None, None)
-        original = page.records.committed_output_cut(location)
-        frontier = page.projection.frontier
-        through = page.thread.runtime.transcript_cursor(
-            frontier, location.session_entry_end, source=page.runtime,
+        cut = page.records.committed_output_cut(location)
+        original = NativeRecordLocation(**{
+            item.name: getattr(location, item.name)
+            for item in fields(NativeRecordLocation) if item.init
+        })
+        return NativeCommittedPrefix(
+            original, cut, AssignedSourceIdentity(str(page.root), page.thread.incarnation),
         )
-        identity = self._capture_page_identity(
-            page, name, frontier, before=None, after=None, through=through,
-        )
-        if not original.holds(identity.records_cut, location.session_entry_end):
-            raise TranscriptChanged()
-        return identity
 
     def capture_page_read(
         self,

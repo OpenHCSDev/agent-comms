@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .controller import SessionUpdateSink
     from .native_output import NativeRecordLocation
     from .routing import MessageRoute, NoMessageRoute
-    from .transcripts import TranscriptReadIdentity
+    from .transcripts import NativeCommittedPrefix
     from .turn_effects import TurnEffects
 
 
@@ -115,7 +115,7 @@ class AcpEventConsumer(MroDispatch):
     async def publish_native_commit(
         self,
         location: NativeRecordLocation,
-        update: Callable[[TranscriptReadIdentity], AgentCommsUpdate],
+        update: Callable[[NativeCommittedPrefix], AgentCommsUpdate],
     ) -> None:
         sessions = self.agent.sessions
         identity = await Coordination.run_worker(

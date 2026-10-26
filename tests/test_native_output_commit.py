@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.acp_extension import AgentCommsUpdate, NativeOutputCommittedUpdate
+from agent_comms.acp_extension import AgentCommsUpdate, NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
 from agent_comms.coordination_errors import TranscriptChanged
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_output import AssistantOutput, ToolOutput
@@ -52,8 +52,8 @@ def test_output_proof_covers_only_original_prefix_and_survives_later_appends(com
     assert not proof.contains_native_prefix(replace(fresh, root='/different/source'))
     assert not proof.contains_native_prefix(replace(fresh, thread=replace(fresh.thread,
         created_at=fresh.thread.created_at.to_wire() + 1)))
-    update = NativeOutputCommittedUpdate(proof, marker.output)
-    assert FieldCodec.decode(AgentCommsUpdate, FieldCodec.encode(update)) == update
+    for update in (NativeOutputCommittedUpdate(proof, marker.output), NativeRoundCommittedUpdate(proof)):
+        assert FieldCodec.decode(AgentCommsUpdate, FieldCodec.encode(update)) == update
     replacement = path.with_suffix('.replacement')
     replacement.write_bytes(path.read_bytes())
     replacement.replace(path)
@@ -104,3 +104,23 @@ def test_sdk_emits_scoped_marker_after_original_append(pinned_native, tmp_path):
     ended = tuple(PiEvent.from_wire(markers[-1]).convert())
     assert len(ended) == 1 and isinstance(ended[0], NativeRoundCommitted)
     assert ended[0].location.session_entry_end == markers[-2]['sessionEntryEnd']
+
+    from agent_comms.native_transcript import NativeTranscript
+
+    assert NativeTranscript(ended[0].location.path).committed_output_cut(
+        ended[0].location).offset == markers[-2]['sessionEntryEnd']
+
+
+def test_commit_capture_reads_only_header_and_original_row(committed):
+    comms, path, marker = committed
+    header, original = path.read_bytes().splitlines(keepends=True)
+    unrelated = b'not a decodable history record\n' * 1000
+    path.write_bytes(header + unrelated + original)
+    marker = replace(marker, session_entry_start=len(header) + len(unrelated),
+                     session_entry_end=path.stat().st_size)
+    # This does not claim corrupted old history is readable. A commit witness
+    # corroborates the original indexed row, not a rendered historical page.
+    proof = comms.transcripts.capture_native_output('worker', marker)
+    assert proof.original.session_entry_start == len(header) + len(unrelated)
+    assert proof.page_bound.offset == path.stat().st_size
+    assert comms.transcripts.page_reads == 0
