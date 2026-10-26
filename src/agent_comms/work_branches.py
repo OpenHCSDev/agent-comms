@@ -460,10 +460,16 @@ query($owner: String!, $name: String!, $after: String) {
         """Branch name -> worktree paths that have it checked out."""
         checked: dict[str, list[str]] = {}
         path = None
+        head = ""
         for line in self._git("worktree", "list", "--porcelain").splitlines():
             if line.startswith("worktree "):
                 path = line.removeprefix("worktree ")
-            elif line.startswith("branch refs/heads/") and path is not None:
+                head = ""
+            elif line.startswith("HEAD "):
+                head = line.removeprefix("HEAD ")
+            elif line.startswith("branch refs/heads/") and path is not None and head.strip("0"):
+                # Git retains a worktree's symbolic branch after its ref is deleted,
+                # with an all-zero HEAD. That is not an existing local branch.
                 checked.setdefault(line.removeprefix("branch refs/heads/"), []).append(path)
         return {branch: tuple(paths) for branch, paths in checked.items()}
 
