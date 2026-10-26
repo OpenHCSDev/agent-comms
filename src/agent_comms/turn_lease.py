@@ -32,7 +32,7 @@ from .message_reference import MessageReference
 from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import NoTurnRouting, Routing
-from .store_files import DependentStateTier, store_lock_path
+from .store_files import DependentStateTier, RegistryLocking, store_lock_path
 from .thread_identity import (
     NoObservedTurn,
     ObservedTurn,
@@ -675,23 +675,14 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
     def read(self) -> TurnDeclaration:  # type: ignore[override]  # A successor may be finished.
         """This turn while its thread still names it, else the thread's current turn.
 
-        RegistryEdit.commit saves the registry before it retires a superseded file, so
-        neither read needs a lock: a file gone after the registry named it means the
-        registry now names its successor.
+        The shared registry lock covers its two-file authority and keeps a named
+        turn from being retired while it is read. Turn-file replacements are atomic.
         """
         from .registry_store import RegistryStore
 
-        registry = RegistryStore(self.registry_path)
-        current = registry.read_snapshot_unlocked().current_turn(self)
-        if current != self:
-            return current.read()
-        try:
-            return self._read_unlocked()
-        except MissingTurnRecordError:
-            current = registry.read_snapshot_unlocked().current_turn(self)
-            if current == self:
-                raise
-            return current.read()
+        with RegistryStore(self.registry_path).reading_snapshot() as registry:
+            current = registry.current_turn(self)
+            return self._read_unlocked() if current == self else current.read()
 
     @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
@@ -713,16 +704,18 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
         return active.lease(incarnation, self)
 
     def _named_unlocked(self) -> LockedTurn:
-        """This generation as its registry names it now, read under the writer lock. A
-        registry edit saves before it retires a superseded file, so a writer that waited out
-        the retirement finds the registry naming another generation."""
+        """This generation under the registry and turn writer locks, in that order.
+
+        Retirement saves the registry before deleting a superseded file; a waiting
+        writer therefore finds the registry naming the successor generation.
+        """
         from .registry_store import RegistryStore
 
         registry = RegistryStore(self.registry_path).read_snapshot_unlocked()
         return NamedTurn(self) if registry.holds_turn(self.identity) else RetiredTurn()
 
     def without_claim(self) -> None:
-        with self.writers.guarded_write():
+        with RegistryLocking.read_guard(self.registry_path), self.writers.guarded_write():
             self._named_unlocked().without_claim()
 
     def retire(self) -> None:
@@ -736,7 +729,7 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
-        with self.writers.guarded_write():
+        with RegistryLocking.read_guard(self.registry_path), self.writers.guarded_write():
             return self._named_unlocked().effects(lease, observe)
 
     def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
