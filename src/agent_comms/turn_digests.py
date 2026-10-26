@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from pydantic import JsonValue
 
-from .todos import ProgressRead, TodoStore
+from .todos import ProgressRead, Todo, TodoStore
 
 from .turn_item import NativeTurnId
 from .declared_family import DeclaredFamily
@@ -22,6 +22,7 @@ from .order_work import OrderWork
 from .storage_rules import StorageRoots, StorageRule
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
+from .threads import Thread
 from .tool_declaration import EditCall
 from .tool_result import ToolResult
 from .bus import Bus
@@ -30,9 +31,8 @@ from .transcript_events import IncomingTranscript, TurnDigest
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .threads import Thread
     from .transcript_sources import TranscriptSource
-    from .todos import OrderProgress, Todo
+    from .todos import OrderProgress
 
 
 class TurnView(DeclaredFamily, affix="TurnView"):
