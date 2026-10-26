@@ -26,6 +26,7 @@ from .message_reference import FirstUnreadStart, InboxStart
 from .messages import Message
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
+from .phase_evidence import PlanReadings
 from .publisher import OwnerPublisher, Publisher
 from .registration import Registration
 from .relationships import ThreadRelationships
@@ -42,7 +43,9 @@ class Comms:
 
     def __init__(
         self, root: CommsRoute, publisher: type[Publisher] = default_publisher,
+        *, plans: PlanReadings = PlanReadings(),
     ) -> None:
+        self.plans = plans
         self.route = root
         RootRuntime.require_attachable(self.route.root, LaunchRuntime.running())
         self.route.observe_root()
@@ -84,9 +87,9 @@ class Comms:
 
     @classmethod
     @contextmanager
-    def client(cls, route: CommsRoute) -> Iterator[Comms]:
+    def client(cls, route: CommsRoute, *, plans: PlanReadings = PlanReadings()) -> Iterator[Comms]:
         """One complete client call on this selected route."""
-        yield cls(route)
+        yield cls(route, plans=plans)
 
     async def watch(
         self, name: str, *, acknowledgment: type[WatchAcknowledgment],
@@ -118,15 +121,17 @@ class Comms:
 def wire(
     root: Path | str | None = None,
     publisher: type[Publisher] = Comms.default_publisher,
+    *, plans: PlanReadings = PlanReadings(),
 ) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
     route = resolve_comms_route(root)
-    return Comms(route, publisher)
+    return Comms(route, publisher, plans=plans)
 
 
-def client_wire(root: Path | str | None = None) -> AbstractContextManager[Comms]:
+def client_wire(root: Path | str | None = None, *,
+                plans: PlanReadings = PlanReadings()) -> AbstractContextManager[Comms]:
     """One client call: it borrows the published route until it retires and answers in full.
 
     Every reader observes committed bus rows without preparing another store.
     """
-    return Comms.client(resolve_comms_route(root))
+    return Comms.client(resolve_comms_route(root), plans=plans)

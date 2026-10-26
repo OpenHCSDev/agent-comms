@@ -214,7 +214,7 @@ class CommanderHud(ToolResult):
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
-        frame = HeartbeatFrame.capture(comms, commander, ProgressRead())
+        frame = HeartbeatFrame.capture(comms, commander, ProgressRead(), plans=comms.plans)
         return cls.of(comms, commander, frame, UnitState.current(comms, commander, frame))
 
     @classmethod
