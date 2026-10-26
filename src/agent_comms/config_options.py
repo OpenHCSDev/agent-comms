@@ -51,8 +51,9 @@ class CatalogSelection(ABC):
     @abstractmethod
     def thinking_level(self) -> type[ThinkingChoice]: ...
 
+    @property
     @abstractmethod
-    def project_directory(self) -> Path: ...
+    def project_path(self) -> Path: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,8 +66,9 @@ class RunningSelection(CatalogSelection):
     def thinking_level(self) -> type[ThinkingChoice]:
         return self.thread.thinking_level
 
-    def project_directory(self) -> Path:
-        return self.thread.project_directory()
+    @property
+    def project_path(self) -> Path:
+        return self.thread.project_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,7 +206,7 @@ class ModelConfigOption(CatalogConfigOption):
                 self.agent_args.argv,
                 LaunchRoot.current().path,
                 package=self.package,
-                worktree=thread.project_directory(),
+                worktree=thread.project_path,
             )
             values = [
                 text for model in data.models if model.provider and model.id
@@ -237,7 +239,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
             thread.model.native(self.agent_args).argv,
             LaunchRoot.current().path,
             package=self.package,
-            worktree=thread.project_directory(),
+            worktree=thread.project_path,
         )
         levels = [member.declared_name for member in data.levels]
         return [CatalogChoice(value=level, name=level.title()) for level in levels]

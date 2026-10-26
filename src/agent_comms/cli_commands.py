@@ -2351,7 +2351,8 @@ class NewThreadCliCommand(NameArgument, CatalogSelection, CliCommand, declared_n
         return (cls(name='', project=project, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 
-    def project_directory(self) -> Path:
+    @property
+    def project_path(self) -> Path:
         return self.project.path
 
     def apply(self, ctx: Comms) -> ThreadCreatedResult:

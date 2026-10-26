@@ -259,9 +259,6 @@ class ThreadCatalog(DurableFile, PatternFile):
 class Thread(ThreadProvenance, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
 
-    def project_directory(self) -> Path:
-        return self.worktree.path
-
     parent: ThreadParent = field(default_factory=NoParent)
     work_state: Annotated[
         ThreadWorkState, RegistrationPolicy(InheritPrevious), WireOmitDefault()

@@ -206,7 +206,7 @@ class OwnedTurn:
         return self.goal_permit.prepare_launch(permits, self.runner.comms.goals.open_goal_store())
 
     def prepare_prompt(self, batch: InputBatch):
-        self.worktree = str(self.thread.project_directory())
+        self.worktree = str(self.thread.project_path)
         self.env_extra = self.thread.native_environment(
             self.runner.comms.root, self.runner.comms.registry.snapshot()
         )
