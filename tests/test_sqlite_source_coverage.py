@@ -1,6 +1,8 @@
 """SQLite delivery prefixes preserve native gaps without a file checkpoint."""
 
 
+from contextlib import closing
+
 import pytest
 
 from agent_comms.bus import BusRecord, PrivateRecord, PublicRecord
@@ -79,22 +81,17 @@ def test_prefix_rejects_replaced_database_with_the_same_sequence(coverage, tmp_p
         prefix.require_current(bus)
 
 
-@pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
-def test_slow_page_is_still_read_and_covered(coverage, declaration, source_reads, monkeypatch):
-    """Elapsed time never decides whether a bounded page is readable."""
-    import time
-
+def test_received_stream_keeps_its_read_snapshot_without_holding_the_writer(coverage):
     bus = coverage.bus.bus
-    record = bus.append(lambda seq, db: record_from(
-        declaration, Message("author", "worker", "source", InfoKind, seq=seq)))
-    received = type(bus).received
 
-    def slow(self, *args, **kwargs):
-        time.sleep(0.3)
-        return received(self, *args, **kwargs)
+    def append():
+        return bus.append(lambda seq, db: record_from(
+            PrivateRecord, Message("author", "worker", "source", InfoKind, seq=seq)))
 
-    monkeypatch.setattr(type(bus), "received", slow)
-    result = coverage.read(source_reads=source_reads)
-    assert result.blocked_seq == next((row.seq for row in record.deliveries()), None)
-    assert result.covered_seq == (0 if record.deliveries() else record.seq)
-    assert result.source_prefix.through_seq == record.seq
+    first, second = append(), append()
+    with closing(bus.iter_received(coverage.recipient_lookup, descending=False)) as stream:
+        assert next(stream).seq == first.seq
+        third = append()
+        assert tuple(record.seq for record in stream) == (second.seq,)
+    assert tuple(record.seq for record in bus.received(
+        coverage.recipient_lookup, descending=False)) == (first.seq, second.seq, third.seq)

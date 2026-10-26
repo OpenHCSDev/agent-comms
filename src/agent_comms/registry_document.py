@@ -343,13 +343,15 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def __setitem__(self, name: str, thread: Thread) -> None:
         if thread.name != name:
             raise MalformedRecord("thread name differs from its declaration")
-        self._decoded[name] = self._binding(thread)
+        # Readers of this revision share lazy decoding, never semantic edits.
+        self._decoded = {**self._decoded, name: self._binding(thread)}
         self._raw.pop(name, None)
 
     def __delitem__(self, name: str) -> None:
         if name not in self:
             raise KeyError(name)
         self._raw.pop(name, None)
+        self._decoded = self._decoded.copy()
         self._decoded.pop(name, None)
 
     def to_wire(self) -> dict[str, JsonValue]:
@@ -394,19 +396,19 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         result.update(threads)
         return result
 
-    def copy(self) -> ThreadRows:
-        result = ThreadRows()
-        result._raw = self._raw.copy()
-        result._decoded = self._decoded.copy()
-        result._binding = self._binding
+    @classmethod
+    def copied(cls, source: ThreadRows) -> Self:
+        result = cls()
+        result._raw = source._raw.copy()
+        result._decoded = source._decoded
+        result._binding = source._binding
         return result
 
+    def copy(self) -> ThreadRows:
+        return ThreadRows.copied(self)
+
     def freeze(self) -> ThreadRows:
-        result = FrozenThreadRows()
-        result._raw = self._raw.copy()
-        result._decoded = self._decoded.copy()
-        result._binding = self._binding
-        return result
+        return FrozenThreadRows.copied(self)
 
     def reuse(self, rows: Mapping[str, object], kept: frozenset[str], earlier: ThreadRows) -> None:
         self._raw = self.checked_rows(rows)

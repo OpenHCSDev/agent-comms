@@ -14,7 +14,7 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
-from agent_comms.registry_document import RegistryDocument, ThreadSlice
+from agent_comms.registry_document import RegistryDocument, ThreadRows, ThreadSlice
 from agent_comms.registry_store import RegistryStore, UncachedRegistry
 from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.threads import Thread
@@ -197,3 +197,25 @@ def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(
     other['unread'] = written['unread']
     assert written == other
     assert written != ThreadRows.from_wire({})
+
+
+def test_thread_rows_share_decoding_but_keep_snapshot_edits_isolated(tmp_path):
+    stored = {"owner": FieldCodec.encode(owner(tmp_path, registry=None))}
+    rows = ThreadRows.from_wire(stored)
+    frozen, another, editable = rows.freeze(), rows.freeze(), rows.copy()
+    decoded = frozen["owner"]
+    assert rows["owner"] is another["owner"] is editable["owner"] is decoded
+
+    reused = ThreadRows()
+    reused.reuse(stored, frozenset(stored), rows)
+    assert reused["owner"] is decoded
+
+    changed = replace(decoded, tags=frozenset({"changed"}))
+    rows["owner"] = changed
+    assert rows["owner"] is changed
+    assert frozen["owner"] is another["owner"] is editable["owner"] is decoded
+    del editable["owner"]
+    assert "owner" not in editable
+    assert frozen["owner"] is reused["owner"] is decoded
+    with pytest.raises(TypeError):
+        frozen["owner"] = changed

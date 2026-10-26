@@ -372,11 +372,23 @@ class BusReader(RouteCounts, ABC):
         sender_lookups: tuple[str, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
+        return tuple(self.iter_received(
+            lookup, after=after, before=before, limit=limit, sender_lookups=sender_lookups,
+            descending=descending, sequences=sequences,
+        ))
+
+    def iter_received(
+        self, lookup: ThreadLookup, *, after: int = 0, before: int | None = None, limit: int = 100,
+        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        sequences: tuple[int, ...] = (),
+    ) -> Generator[Delivered]:
+        """Decode only consumed deliveries, within one committed read snapshot."""
         with self.reading() as source, closing(source._source_sequences(
             *ReceivedSource.query(lookup, sender_lookups), after=after, before=before,
             descending=descending, sequences=sequences, limit=limit,
         )) as positions:
-            return tuple(source.delivery(seq) for seq in positions)
+            for seq in positions:
+                yield source.delivery(seq)
 
     def direct_replies(
         self, lookup: ThreadLookup, *, after: int = 0, limit: int = 100,

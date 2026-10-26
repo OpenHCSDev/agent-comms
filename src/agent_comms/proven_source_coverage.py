@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 from abc import ABC, abstractmethod
+from contextlib import closing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,7 @@ from .audience_manifest import FrozenRecipient
 from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CoveragePage
+from .bus_tables import ReceivedSource
 from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from .coordination_cohort import AcceptedCohort, _claim_record
 from .coordination_session import NativeBoundary
@@ -237,48 +239,53 @@ class SourceCoverage:
             if self.store.session._connection.in_transaction:
                 raise IdentityConflict("source coverage requires a committed coordinator snapshot")
             prefix.require_start(request.after_seq)
-            records = self.bus.bus.received(
-                self.recipient_lookup, after=request.after_seq, before=prefix.through_seq + 1,
-                descending=False, limit=request.limit + 1,
-            )
-            more = len(records) > request.limit
-            request.require_exhausted(more)
-            initials = tuple(delivery for record in records[:request.limit]
-                             for delivery in record.deliveries())
-            prefix.require_current(self.bus.bus)
-            horizon = initials[-1].seq if more else prefix.through_seq
-            covered, inputs, no_wake, blocked = request.after_seq if request.partial else 0, [], [], None
-            for initial in initials:
-                seq = initial.message.seq
-                matches = [
-                    (recipient, decision)
-                    for recipient, decision in zip(
-                        initial.recipients, initial.decisions, strict=True
-                    )
-                    if recipient.recipient_lookup == self.recipient_lookup
-                ]
-                if len(matches) > 1:
-                    raise IdentityConflict("duplicate stable lookup in frozen audience")
-                if not matches:
-                    raise IdentityConflict("recipient source differs from its frozen audience")
-                recipient, decision = matches[0]
-                acknowledgement = self._accepted_cohort(initial, boundary.privacy)
-                if acknowledgement is None:
-                    blocked = seq
-                    break
-                claims = decision.claim_decisions()
-                if not claims:
-                    no_wake.append(seq)
-                for selected in claims:
-                    settlement = self._selected_inputs(seq, recipient, selected, acknowledgement, source_reads)
-                    if not settlement.apply(inputs):
-                        blocked = seq
-                        break
-                if blocked is not None:
-                    break
-                covered = seq
-            if blocked is None:
-                covered = max(covered, horizon)
+            with self.bus.bus.reading() as source:
+                # Truncation is a fact about indexed positions, not decoded bodies.
+                with closing(source._source_sequences(
+                    *ReceivedSource.query(self.recipient_lookup), after=request.after_seq,
+                    before=prefix.through_seq + 1, descending=False, limit=request.limit + 1,
+                )) as selected:
+                    positions = tuple(selected)
+                more = len(positions) > request.limit
+                request.require_exhausted(more)
+                prefix.require_current(self.bus.bus)
+                horizon = positions[request.limit - 1] if more else prefix.through_seq
+                covered, inputs, no_wake, blocked = request.after_seq if request.partial else 0, [], [], None
+                with closing(source.iter_received(
+                    self.recipient_lookup, after=request.after_seq, before=prefix.through_seq + 1,
+                    descending=False, limit=request.limit, sequences=positions[:request.limit],
+                )) as initials:
+                    for initial in initials:
+                        seq = initial.message.seq
+                        matches = [
+                            (recipient, decision)
+                            for recipient, decision in zip(
+                                initial.recipients, initial.decisions, strict=True
+                            )
+                            if recipient.recipient_lookup == self.recipient_lookup
+                        ]
+                        if len(matches) > 1:
+                            raise IdentityConflict("duplicate stable lookup in frozen audience")
+                        if not matches:
+                            raise IdentityConflict("recipient source differs from its frozen audience")
+                        recipient, decision = matches[0]
+                        acknowledgement = self._accepted_cohort(initial, boundary.privacy)
+                        if acknowledgement is None:
+                            blocked = seq
+                            break
+                        claims = decision.claim_decisions()
+                        if not claims:
+                            no_wake.append(seq)
+                        for selected in claims:
+                            settlement = self._selected_inputs(seq, recipient, selected, acknowledgement, source_reads)
+                            if not settlement.apply(inputs):
+                                blocked = seq
+                                break
+                        if blocked is not None:
+                            break
+                        covered = seq
+                if blocked is None:
+                    covered = max(covered, horizon)
             prefix.require_current(self.bus.bus)
             return ProvenSourceCoverage(
                 self.wire_root_id,
