@@ -18,14 +18,13 @@ from typing import TYPE_CHECKING, ClassVar, Never
 
 from .field_codec import FieldCodec, InputId, MalformedRecord, NominalSpelling, NominalText, SlotId
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
-from .storage_room import NoRoomNeeded
+from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageProjection, StorageRule
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .native_tool_transport import UnboundToolTransport
     from .envelope_claim_transitions import FileClaimPath
-    from .storage_room import RoomReservation
     from .threads import Thread
     from .shell_effects import StorageEffect
     from .pi_payloads import PiToolResult
