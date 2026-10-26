@@ -202,13 +202,6 @@ class PassiveWake(NoSourceProof, WakePolicy):
         raise IntegrityViolationError("passive claim cannot engage")
 
 
-class UnmentionedWake(PassiveWake):
-    """A delivered observer, not even a passive claim."""
-
-    def recipient_decision(self, recipient: ThreadLookup, audience: MessageAudience):
-        return NoWakeDecision(recipient)
-
-
 class BoundedTriageWake(Active, TriageSourceProof, WakePolicy):
     triage = True
 

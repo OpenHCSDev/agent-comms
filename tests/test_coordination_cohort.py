@@ -26,7 +26,7 @@ from agent_comms.assignment_states import (
     FullPendingAssignment,
 )
 from agent_comms.cohort_schema import AcceptanceFrontier, ClaimBatchAcknowledgements, CohortDeliveries
-from agent_comms.messages import Message
+from agent_comms.messages import InfoKind, Message
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import (
@@ -92,17 +92,18 @@ def test_frozen_delivery_full_n_observer_and_public_history(tmp_path: Path) -> N
         (lookups["Alice"], lookups["Bob"])
     )
     assert len(verified.decisions) == 2
-    assert [type(decision).__name__ for decision in verified.decisions].count("NoWakeDecision") == 1
-    (first,) = accept_initial(comms.bus, root_id, message.seq, coordinator)
+    accepted = accept_initial(comms.bus, root_id, message.seq, coordinator)
+    first = next(row for row in accepted if row.recipient == "Alice")
     assert first.recipient_lookup == lookups["Alice"]
     assert first.lifecycle.mode == FullWake()
     assert len(sealed_cohort_assignments(coordinator, lookups["Alice"])) == 1
-    assert sealed_cohort_assignments(coordinator, lookups["Bob"]) == ()
+    (observer,) = sealed_cohort_assignments(coordinator, lookups["Bob"])
+    assert observer.lifecycle.mode == BoundedTriageWake()
     delivery_rows = coordinator.session._connection.execute(
         "SELECT claim_id FROM cohort_delivery_receipts ORDER BY ordinal"
     ).fetchall()
     assert len(delivery_rows) == 2
-    assert sum(row["claim_id"] is None for row in delivery_rows) == 1
+    assert all(row["claim_id"] is not None for row in delivery_rows)
 
 
 def test_export_contains_only_the_public_message(tmp_path: Path) -> None:
@@ -231,7 +232,24 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
 
 def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    sent = publish_initial(comms, "sender", "#team", "@Alice hello")
+    from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+    from agent_comms.bus import PrivateRecord
+    from agent_comms.mentions import ThreadMention
+    from agent_comms.wake import OrdinaryControl
+    from agent_comms.wake_policy import NoWakeDecision, WakeDecision
+
+    # A historical committed cohort retains its no-wake decision after an upgrade.
+    sent = comms.bus.bus.append(lambda seq, db: PrivateRecord.from_message(
+        freeze_audience(
+            Message("sender", "#team", "@Alice hello", InfoKind, seq=seq,
+                    mentions=(ThreadMention("Alice", 0, 6),)),
+            tuple(FrozenRecipient(lookups[name], name) for name in ("Alice", "Bob")),
+            "historical-policy", sender_lookup=lookups["sender"], sender_name="sender",
+        ),
+        decisions=(WakeDecision(lookups["Alice"], MessageAudience.MENTIONED, FullWake()),
+                   NoWakeDecision(lookups["Bob"])),
+        control=OrdinaryControl.declared_name,
+    ))
     (selected,) = accept_initial(comms.bus, root_id, sent.seq, store)
     observer_claim = replace(
         selected,

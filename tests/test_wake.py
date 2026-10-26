@@ -21,7 +21,7 @@ from agent_comms.messages import (
     NoticeRole,
 )
 from agent_comms.obligation_states import SilentResponse
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
+from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.thread_identity import AgentThreadRole, ThreadRole, UserThreadRole
 from agent_comms.threads import Thread
 from agent_comms.wake import (
@@ -129,18 +129,20 @@ def test_direct_is_full_only_for_frozen_lookup_and_route_ignores_sender_role(
     assert message.reply_target == reply_target
 
 
-def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddressed() -> None:
+def test_valid_mention_wakes_every_member_and_directly_addresses_mentioned_member() -> None:
     message = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
     assert decide(message, RECIPIENT_LOOKUP) == WakeDecision(
         RECIPIENT_LOOKUP, MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, SENDER_LOOKUP) == NoWakeDecision(SENDER_LOOKUP)
+    assert decide(message, SENDER_LOOKUP) == WakeDecision(
+        SENDER_LOOKUP, MessageAudience.MENTIONED, BoundedTriageWake()
+    )
     assert decide(message, OWNER_LOOKUP) is None  # Not in the frozen audience.
     assert MEMBERS[0] in audience(message).recipients  # The bus must retain both identities.
     assert message.exact_reply_target == "#team"
-    assert message.role.response_policy(message) is MentionedOnlyPolicy.instance()
+    assert message.role.response_policy(message) is MentionedPolicy.instance()
     assert message.role.response_policy(message).starts_turn_for(message, "beta")
-    assert not message.role.response_policy(message).starts_turn_for(message, "alpha")
+    assert message.role.response_policy(message).starts_turn_for(message, "alpha")
     assert message.reply_target is None
 
 
@@ -153,7 +155,9 @@ def test_renamed_mentioned_member_preserves_stable_lookup_not_old_alias() -> Non
     assert decide(message, RENAMED_RECIPIENT_LOOKUP, members) == WakeDecision(
         RENAMED_RECIPIENT_LOOKUP, MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, RENAMED_OWNER_LOOKUP, members) == NoWakeDecision(RENAMED_OWNER_LOOKUP)
+    assert decide(message, RENAMED_OWNER_LOOKUP, members) == WakeDecision(
+        RENAMED_OWNER_LOOKUP, MessageAudience.MENTIONED, BoundedTriageWake()
+    )
     assert members[0] in audience(message, members).recipients
     # The textual old alias and mutable current tags are not consulted.
     assert "beta" not in audience(message, members).canonical_members
@@ -185,7 +189,9 @@ def test_mixed_in_and_out_of_scope_mentions_only_name_valid_frozen_member() -> N
     assert decide(message, RECIPIENT_LOOKUP) == WakeDecision(
         RECIPIENT_LOOKUP, MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, SENDER_LOOKUP) == NoWakeDecision(SENDER_LOOKUP)
+    assert decide(message, SENDER_LOOKUP) == WakeDecision(
+        SENDER_LOOKUP, MessageAudience.MENTIONED, BoundedTriageWake()
+    )
     assert MEMBERS[0] in audience(message).recipients
 
 
@@ -229,7 +235,10 @@ def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> 
 
 def test_no_wake_is_not_a_passive_claim() -> None:
     mentioned = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
-    observer = decide(mentioned, SENDER_LOOKUP)
+    # Old committed no-wake decisions retain their meaning; do not replay them.
+    observer = RecipientDecision.from_wire({
+        "recipient_lookup": SENDER_LOOKUP, "no_wake": "unmentioned_observer",
+    })
     assert observer == NoWakeDecision(SENDER_LOOKUP, NoWakeReason.UNMENTIONED_OBSERVER)
     assert observer.claim_decisions() == ()
     assert observer.wake_policy() == PassiveWake()

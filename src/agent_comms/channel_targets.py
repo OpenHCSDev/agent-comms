@@ -13,10 +13,10 @@ from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredT
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
-from .response_policy import DirectPolicy, MentionedOnlyPolicy
+from .response_policy import DirectPolicy, MentionedPolicy
 from .thread_identity import ThreadIncarnation
 from .typed_table import sql_literal
-from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
+from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 
 if TYPE_CHECKING:
     from .audience_manifest import AudiencedMessage, FrozenRecipient
@@ -548,7 +548,7 @@ class ChannelTarget(NamedTarget):
 
     def response_policy(self, message: Message) -> ResponsePolicy:
         if message.mentions:
-            return MentionedOnlyPolicy.instance()
+            return MentionedPolicy.instance()
         return message.sender_role.channel_policy()
 
     def effective_mentions(self, message: AudiencedMessage):
@@ -561,8 +561,8 @@ class ChannelTarget(NamedTarget):
         return " ".join((*(f"@{thread}" for thread in threads), body))
 
     def wake_policy(self, recipient: FrozenRecipient, mentions: frozenset[str]) -> WakePolicy:
-        if mentions:
-            return FullWake() if recipient.canonical_thread in mentions else UnmentionedWake()
+        if recipient.canonical_thread in mentions:
+            return FullWake()
         return BoundedTriageWake()
 
     def require_publication(

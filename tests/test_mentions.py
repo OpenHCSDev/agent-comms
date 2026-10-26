@@ -11,7 +11,7 @@ from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
+from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.thread_model import DeclaredModel
@@ -34,9 +34,9 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert Message.from_wire(message.to_wire()) == message.envelope
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
-    assert "Response policy: mentioned_only" in scheduled.prompt
-    assert "only resolved mentioned identities may respond: @alpha, @beta" in scheduled.prompt
-    assert "unmentioned observers dismiss quietly" in scheduled.prompt
+    assert "Response policy: mentioned" in scheduled.prompt
+    assert "addressed especially to: @alpha, @beta" in scheduled.prompt
+    assert "other channel members may contribute when involved or relevant" in scheduled.prompt
     assert "delivery and history remain #team" in scheduled.prompt
 
 
@@ -76,14 +76,14 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
 
     mentioned = comms.messaging.send_user_message(CommandTarget.named('#team'), "@beta please answer", worktree=str(tmp_path))
     eligibility = mentioned.response_eligibility(("alpha", "beta"))
-    assert eligibility.policy is MentionedOnlyPolicy.instance()
-    assert eligibility.recipients == ("beta",)
-    assert not mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "alpha")
+    assert eligibility.policy is MentionedPolicy.instance()
+    assert eligibility.recipients == ("alpha", "beta")
+    assert mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "alpha")
     assert mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "beta")
     assert mentioned.target == "#team"
     mentioned_prompt = ScheduledTurn.incoming(mentioned).prompt
-    assert "only resolved mentioned identities may respond: @beta" in mentioned_prompt
-    assert "unmentioned observers dismiss quietly" in mentioned_prompt
+    assert "addressed especially to: @beta" in mentioned_prompt
+    assert "other channel members may contribute when involved or relevant" in mentioned_prompt
 
     agent_chatter = comms.messaging.send("alpha", "#team", "status only").message
     assert agent_chatter.role.response_policy(agent_chatter) is InformationalPolicy.instance()
@@ -132,9 +132,9 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         sender_role=sender_role,
         mentions=(ThreadMention("beta", 0, 5),),
     )
-    assert mentioned.role.response_policy(mentioned) is MentionedOnlyPolicy.instance()
-    assert not mentioned.role.response_policy(mentioned).starts_turn
-    assert not mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "alpha")
+    assert mentioned.role.response_policy(mentioned) is MentionedPolicy.instance()
+    assert mentioned.role.response_policy(mentioned).starts_turn
+    assert mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "alpha")
     assert mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "beta")
     assert mentioned.target == "#team"
 
@@ -251,12 +251,12 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
     aliases = comms.registry.snapshot().aliases
     assert message in comms.bus.inbox("final").page.messages
     assert message.role.response_policy(message).starts_turn_for(message, "final", aliases=aliases)
-    assert not message.role.response_policy(message).starts_turn_for(message, "observer", aliases=aliases)
+    assert message.role.response_policy(message).starts_turn_for(message, "observer", aliases=aliases)
     assert message.response_eligibility(("final", "observer"), aliases=aliases).recipients == (
-        "final",
+        "final", "observer",
     )
     assert (
-        "only resolved mentioned identities may respond: @final"
+        "addressed especially to: @final"
         in ScheduledTurn.incoming(message, aliases=aliases).prompt
     )
     assert message.mentions[0].thread == "alpha"  # Original wire record is unchanged.
@@ -267,5 +267,5 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
         outside.response_eligibility(
             ("final", "observer"), aliases=comms.registry.snapshot().aliases
         ).recipients
-        == ()
+        == ("final", "observer")
     )
