@@ -228,7 +228,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         self.private_guard_unlocked()  # before even a cache hit
         return super()._capture_unlocked()
 
-    def _decode_copy(self, source: DocumentBytes) -> RegistryDocument:
+    def _decode_capture(self, source: DocumentBytes) -> RegistryDocument:
         return self._decode_revision(source).document
 
     def read_revision_unlocked(self) -> RegistryRevision:

@@ -414,10 +414,21 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         return self._read_using(self._decode)
 
     def _read_using(self, decode: Callable[[JsonValue], T]) -> T:
+        return self._read_captured(
+            lambda: DocumentBytes.capture(self.path),
+            lambda source: self._decode_bytes(source, decode),
+        )
+
+    def _decode_bytes(self, source: DocumentBytes, decode: Callable[[JsonValue], T]) -> T:
+        return source.revision.either(
+            lambda present: decode(FieldCodec.parse(source.content)), self.empty,
+        )
+
+    def _read_captured(
+        self, capture: Callable[[], DocumentBytes], decode: Callable[[DocumentBytes], T],
+    ) -> T:
         try:
-            return decode(FieldCodec.parse(self.path.read_bytes()))
-        except FileNotFoundError:
-            return self.empty()
+            return decode(capture())
         except (OSError, MalformedRecord) as error:
             return self._unreadable(error)
 
@@ -948,30 +959,29 @@ class DocumentBytes:
             return cls(MissingFile(), b"")
 
 
-class CopyingStore(RankedStoreLock, declared_name=None):
+class CopyingStore[Snapshot](RankedStoreLock, declared_name=None):
     """Capture dependent documents together; release their guards before decoding."""
 
     def _capture_unlocked(self) -> DocumentBytes:
         return DocumentBytes.capture(self.path)
 
+    @abstractmethod
+    def _decode_capture(self, source: DocumentBytes) -> Snapshot:
+        """Decode the captured bytes after every source guard has closed."""
+
     @staticmethod
-    def _copy_sources(*sources: CopyingStore) -> tuple[DocumentBytes, ...]:
+    def _copy_sources(*sources: CopyingStore[object]) -> tuple[DocumentBytes, ...]:
         with StoreLock.ordered(*(source.guarded_read() for source in
                                  sorted(sources, key=RankedStoreLock.rank_key))):
             return tuple(source._capture_unlocked() for source in sources)
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(CopyingStore, FileStore, LockedFile, JsonDocument[T], declared_name=None):
+class LockedStore(CopyingStore[T], FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Each copy ends before decoding; each change owns its complete write."""
 
-    def _decode_copy(self, source: DocumentBytes) -> T:
-        try:
-            return source.revision.either(
-                lambda present: self._decode(FieldCodec.parse(source.content)), self.empty,
-            )
-        except (OSError, MalformedRecord) as error:
-            return self._unreadable(error)
+    def _decode_capture(self, source: DocumentBytes) -> T:
+        return self._decode_bytes(source, self._decode)
 
     @contextmanager
     def reading(self, *sources) -> Iterator[T]:
@@ -981,15 +991,12 @@ class LockedStore(CopyingStore, FileStore, LockedFile, JsonDocument[T], declared
             yield self._read_unlocked()
 
     def read(self) -> T:
-        try:
-            source, = self._copy_sources(self)
-        except OSError as error:
-            return self._unreadable(error)
-        return self._decode_copy(source)
+        return self._read_captured(lambda: self._copy_sources(self)[0], self._decode_capture)
 
     def read_pair[U](self, other: LockedStore[U]) -> tuple[T, U]:
         first, second = self._copy_sources(self, other)
-        return self._decode_copy(first), other._decode_copy(second)
+        return (self._read_captured(lambda: first, self._decode_capture),
+                other._read_captured(lambda: second, other._decode_capture))
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
         with self.guarded_write():

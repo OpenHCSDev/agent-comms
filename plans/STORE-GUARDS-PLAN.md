@@ -123,5 +123,6 @@ Tristan, 2026-10-25: "we shld not hold a lock forthsake of it, grab it for wahty
 - `LockedStore.reading`, `RegistryStore.reading_snapshot` and `CapturedSelection.reading` are deleted; `read_snapshot_unlocked` and `_read_unlocked` are private to the members that define them.
 
 **Checks.** The pattern in `ScopedReadsPhase` (`plan_phases.py`) goes from 111 to 0. Behaviour: during a live heartbeat pass, a commander verb answers in under 5 s.
+Checkpoint: 96 at #3367; phase 6 stays open for the remaining sites and three yielding readers.
 
 **Deleted.** Every caller-held lock, the three yielding readers, and each caller's choice of read or write guard.
