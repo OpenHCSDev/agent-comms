@@ -15,10 +15,11 @@ import subprocess
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from importlib.metadata import entry_points
 from typing import ClassVar
 
 from agent_comms.shell_commands import Program, ShellCommand
-from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook
+from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook, HookRecord, HookRefused
 from agent_comms_hooks.watch import WatchClaim
 
 GH = Program("gh")
@@ -77,6 +78,14 @@ class AdminMerge(QueueBypass):
                               for word in ("--repo", value)))
 
 
+@dataclass(frozen=True)
+class MergeTarget(HookRecord):
+    """The merge endpoint's repository and PR, decoded once from its captures."""
+
+    repository: str
+    number: int
+
+
 class ApiMerge(QueueBypass):
     """The merge API's external path already identifies the PR and repository."""
 
@@ -90,7 +99,8 @@ class ApiMerge(QueueBypass):
 
     def subject(self) -> tuple[str, ...]:
         matched = next(match for arg in self.command.args if (match := self.path.fullmatch(arg)))
-        return (matched["number"], "--repo", matched["repository"])
+        target = MergeTarget.decode(matched.groupdict())
+        return (str(target.number), "--repo", target.repository)
 
 
 class QueueBypassGuard(BashRefusal):
@@ -113,15 +123,16 @@ class QueueBypassGuard(BashRefusal):
         bindings = WatchClaim(hook.session_id).state().bindings()
         if not bindings:
             return ("The commander session has no recorded bus binding; no verdict can be read.",)
+        (entry,) = entry_points(group="console_scripts", name="agent-comms")
         for binding in bindings:
             try:
                 checked = subprocess.run(
-                    (sys.executable, "-m", "agent_comms.cli", "--root", binding.root,
+                    (sys.executable, "-m", entry.module, "--root", binding.root,
                      "merge-review", "--session", hook.session_id, "--bash", command),
                     capture_output=True, text=True, timeout=60,
                 )
             except (OSError, subprocess.TimeoutExpired) as error:
-                return (f"Core's merge-verdict reader failed: {error}",)
+                raise HookRefused(f"Core's merge-verdict reader failed: {error}") from error
             if checked.returncode:
                 return (checked.stderr.strip() or checked.stdout.strip(),)
         return ()
