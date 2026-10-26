@@ -1185,17 +1185,16 @@ class CapturedSelection:
         cls, registry: Registration, catalog: ChannelCatalog,
         reads: ReadLedger, viewer: DisplayViewer, activity: ActivityClocks,
     ) -> Iterator[CapturedSelection]:
-        """Borrow the original identity resources and read the ledger once.
+        """Capture identity, membership and reads, then release their guards.
 
-        Finish reading the ledger before yielding: painted acknowledgement may
-        write that same ledger while identity and membership remain acquired.
+        The yielded value does not borrow the fleet's locks for caller work.
         """
         with registry.store.reading_snapshot() as snapshot, catalog.reading() as channels:
             with reads.reading() as read_document:
                 selected = cls.capture(
                     snapshot, channels, reads, read_document, viewer, activity
                 )
-            yield selected
+        yield selected
 
     @property
     def channels(self) -> Channels:
