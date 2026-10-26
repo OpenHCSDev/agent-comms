@@ -318,7 +318,9 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
                 and self.contains_records_cut(current))
 
     @property
-    def native_source(self) -> tuple[str, str, str | None, RuntimeLocation, ThreadIncarnation, str | None]:
+    def native_source(
+        self,
+    ) -> tuple[str, str, str | None, RuntimeLocation, ThreadIncarnation, str | None]:
         return (self.declared_name, self.root, self.historical_source, self.runtime,
                 self.thread.incarnation, self.page_bound.session_file)
 
@@ -524,7 +526,9 @@ class Transcripts:
         source = self._page_source(name, identity.page_bound, identity.historical_source)
         return TranscriptRead(self, identity, source)
 
-    def capture_native_output(self, name: str, location: NativeRecordLocation) -> TranscriptReadIdentity:
+    def capture_native_output(
+        self, name: str, location: NativeRecordLocation,
+    ) -> TranscriptReadIdentity:
         page = self._page_source(name, None, None)
         original = page.records.committed_output_cut(location)
         frontier = page.projection.frontier

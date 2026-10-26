@@ -276,7 +276,8 @@ class NativeTranscript(TranscriptSource):
             if stream.read(1) != b"\n":
                 raise TranscriptChanged()
             raw = stream.read(location.session_entry_end - location.session_entry_start)
-            if len(raw) != location.session_entry_end - location.session_entry_start or not raw.endswith(b"\n"):
+            if (len(raw) != location.session_entry_end - location.session_entry_start
+                    or not raw.endswith(b"\n")):
                 raise TranscriptChanged()
             location.require_entry(NativeEntry.read(raw))
             return PresentSessionCut(revision, location.session_entry_end)

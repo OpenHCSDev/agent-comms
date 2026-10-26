@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from acp.schema import (
     AgentMessageChunk,
@@ -43,12 +44,12 @@ from .tool_results import tool_result_content
 from .transcript_updates import TranscriptUpdate
 
 if TYPE_CHECKING:
-    from .controller import SessionUpdateSink
-    from .routing import MessageRoute, NoMessageRoute
-    from .turn_effects import TurnEffects
-    from .native_output import NativeRecordLocation
-    from .transcripts import TranscriptReadIdentity
     from .acp_extension import AgentCommsUpdate
+    from .controller import SessionUpdateSink
+    from .native_output import NativeRecordLocation
+    from .routing import MessageRoute, NoMessageRoute
+    from .transcripts import TranscriptReadIdentity
+    from .turn_effects import TurnEffects
 
 
 class AcpToolAction(MroDispatch):
@@ -103,21 +104,27 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.NativeOutputCommitted)
     async def native_output_committed(self, event: events.NativeOutputCommitted) -> None:
-        await self.publish_native_commit(event.location, partial(NativeOutputCommittedUpdate, output=event.location.output))
+        await self.publish_native_commit(
+            event.location, partial(NativeOutputCommittedUpdate, output=event.location.output)
+        )
 
     @handles(events.NativeRoundCommitted)
     async def native_round_committed(self, event: events.NativeRoundCommitted) -> None:
         await self.publish_native_commit(event.location, NativeRoundCommittedUpdate)
 
     async def publish_native_commit(
-        self, location: NativeRecordLocation,
+        self,
+        location: NativeRecordLocation,
         update: Callable[[TranscriptReadIdentity], AgentCommsUpdate],
     ) -> None:
         sessions = self.agent.sessions
-        identity = await Coordination.run_worker(partial(
-            sessions.comms.transcripts.capture_native_output,
-            sessions.require(self.session_id), location,
-        ))
+        identity = await Coordination.run_worker(
+            partial(
+                sessions.comms.transcripts.capture_native_output,
+                sessions.require(self.session_id),
+                location,
+            )
+        )
         await self.client.publish_update(
             session_id=self.session_id,
             update=AgentMessageChunk(

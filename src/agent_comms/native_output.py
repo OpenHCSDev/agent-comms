@@ -1,15 +1,16 @@
 """A native output's original persisted location and presentation scope."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
+from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import WireName
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import ToolCallId
 from .turn_item import NativeItemId
-from .coordination_errors import TranscriptChanged
 
 if TYPE_CHECKING:
     from .native_entries import NativeEntry
@@ -52,6 +53,7 @@ class NativeOutputLocation(NativeRecordLocation):
 
     def require_entry(self, entry: NativeEntry) -> None:
         super().require_entry(entry)
-        if self.output not in tuple(scope for message in entry.messages
-                                    for scope in message.committed_outputs()):
+        if self.output not in tuple(
+            scope for message in entry.messages for scope in message.committed_outputs()
+        ):
             raise TranscriptChanged()
