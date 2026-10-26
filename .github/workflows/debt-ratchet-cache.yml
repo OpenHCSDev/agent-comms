@@ -15,6 +15,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  rehearsal-dependencies:
+    name: Cache install rehearsal dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Prepare install rehearsal dependencies
+        id: dependencies
+        uses: ./.github/actions/prepare-rehearsal
+      # Queue refs cannot publish a cache for a later queue ref; main owns that cache.
+      # A hit skips only this publisher's warmup, never the real install rehearsal.
+      - name: Fill the private runtime's dependency wheel cache
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        shell: bash .github/run-step.sh {0}
+        # The existing entrypoint builds the runtime and installs dev dependencies
+        # before invoking pytest; a version query fills that cache without running tests.
+        run: python -m agent_comms.installer.test_runtime --version
+
   warm:
     name: cache-${{ matrix.kind }}
     runs-on: ubuntu-latest

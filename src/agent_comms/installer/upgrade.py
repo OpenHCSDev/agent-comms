@@ -655,12 +655,14 @@ class Stack(Extendable):
         core = self.commands.git(self.checkout, "rev-parse", "HEAD").strip()
         scratch = StorageRule().scratch_base
         scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
-            print(self.commands.run(
-                self.python, "-m", "pytest", "-q", "-s",
-                "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
-                "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
-                *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
+        temporary = Path(tempfile.mkdtemp(dir=scratch, prefix=f"tests-{core[:12]}-"))
+        print(self.commands.run(
+            self.python, "-m", "pytest", "-q", "-s",
+            "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
+            "--basetemp", temporary / "pytest", "-p", "no:cacheprovider",
+            *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
+        # Only a successful test process permits retiring its evidence and private state.
+        shutil.rmtree(temporary)
 
     def probe[Answer](self, probe: RuntimeProbe[Answer]) -> Answer:
         """Every call into this runtime during an install goes to its one worker, which

@@ -246,7 +246,7 @@ class Fault(Carry):
         capture_output=True, text=True, timeout=270)
     assert installed.returncode != 0
     assert "Install rolled back:" in installed.stderr, installed.stderr
-    assert "intentional failure after writing the resource" in installed.stderr
+    assert "intentional failure after writing the resource" in installed.stderr, installed.stderr
     assert saved.read_text() == "original"
     assert pointer.resolve() == outgoing
     assert (home / ".local/bin/agent-comms").resolve() == outgoing / "bin/agent-comms"
