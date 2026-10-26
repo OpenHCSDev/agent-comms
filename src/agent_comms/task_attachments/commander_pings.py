@@ -87,9 +87,6 @@ class Ping(DeclaredFamily, affix="Ping"):
         """The commander's to dispose of, and no recorded action has yet."""
         return self.commander_disposes and not self.acted(history)
 
-    def acted_on(self, acted: frozenset[HeartbeatSubject]) -> bool:
-        return any(subject.acted_on(acted) for subject in self.subjects)
-
     @property
     @abstractmethod
     def commander_disposes(self) -> bool:
