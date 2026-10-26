@@ -1910,8 +1910,7 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
             "with it before and after its carries")
 
     def answer(self, root: Path) -> BusReadBack:
-        with RegistryStore.at(root).reading_snapshot() as snapshot:
-            return BusReadBack(len(snapshot.threads))
+        return BusReadBack(len(RegistryStore.at(root).snapshot().threads))
 
     def apply(self, ctx: Comms) -> BusReadBack:
         return self.answer(ctx.root)
