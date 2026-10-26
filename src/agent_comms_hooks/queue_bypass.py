@@ -42,6 +42,7 @@ class QueueBypass(ABC):
     selectors: tuple[str, ...]
     reason: ClassVar[str]
     prefix: ClassVar[tuple[str, ...]]
+    repo_flag: ClassVar[str] = "--repo"
 
     @classmethod
     def possible(cls, args: list[str]) -> bool:
@@ -98,12 +99,12 @@ class AdminMerge(QueueBypass):
         options, selectors = self.options, self.selectors
         try:
             options.one(self.admin_flag)
-            repository = options.one("--repo")
+            repository = options.one(self.repo_flag)
             head = options.one(self.head_flag)
             selector, = selectors
             return MergeTarget(repository=repository, number=int(selector), head=head)
         except ValueError as error:
-            raise ValueError(f"Admin merge requires one PR number, --repo and {self.head_flag} HEAD.") from error
+            raise ValueError(f"Admin merge requires one PR number, {self.repo_flag} and {self.head_flag} HEAD.") from error
 
 
 class ApiMerge(QueueBypass):
@@ -111,6 +112,8 @@ class ApiMerge(QueueBypass):
 
     reason = "`gh api .../pulls/N/merge` bypasses required checks."
     prefix = ("api",)
+    field_flags: ClassVar[tuple[str, ...]] = ("--raw-field", "--field")
+    input_flag: ClassVar[str] = "--input"
     path: ClassVar[re.Pattern[str]] = re.compile(
         r"\A/?repos/(?P<repository>[^/\s]+/[^/\s]+)/pulls/(?P<number>\d+)/merge\Z")
 
@@ -124,14 +127,14 @@ class ApiMerge(QueueBypass):
 
     def target(self) -> MergeTarget:
         options, selectors = self.options, self.selectors
-        if "--input" in options:
-            raise ValueError("A merge bypass requires a literal sha body field, not --input.")
+        if self.input_flag in options:
+            raise ValueError(f"A merge bypass requires a literal sha body field, not {self.input_flag}.")
         selector, = selectors
         try:
             matched, = self.endpoint(selector)
         except ValueError as error:
             raise ValueError("A merge bypass requires one explicit repos/OWNER/REPO/pulls/N/merge endpoint.") from error
-        fields = options.fields("--raw-field", "--field")
+        fields = options.fields(*self.field_flags)
         try:
             head = fields.one("sha")
         except ValueError as error:
