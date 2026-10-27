@@ -45,8 +45,6 @@ class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):
     @contextmanager
     def _directory(self) -> Iterator[int]:
         """Pin the publication directory without lending any caller a store lock."""
-        if self.path.name != RouteFile.filename or not self.path.is_absolute():
-            raise ValueError("active comms route requires its absolute route path")
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         refusal = ValueError("active comms route directory changed or is not owned")
         directory = OwnedDirectoryRole.read(self.path.parent, refusal)
@@ -73,6 +71,8 @@ class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):
         change: Callable[[RouteFile, Callable[[], None], int], Result],
     ) -> Result:
         """Stage and validate before EX; publication uses the current file's policy."""
+        if self.path.name != RouteFile.filename or not self.path.is_absolute():
+            raise ValueError("active comms route requires its absolute route path")
         payload = route.encoded()
         route.launch().validate()
         with self._directory() as directory:

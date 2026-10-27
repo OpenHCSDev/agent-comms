@@ -12,7 +12,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
-from contextlib import closing, contextmanager, nullcontext
+from contextlib import AbstractContextManager, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from functools import cache
 from importlib import import_module
@@ -1018,7 +1018,7 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
             self._publish_unlocked(document)
             return document
 
-        def prepare(source: DocumentBytes):
+        def prepare(source: DocumentBytes) -> AbstractContextManager[Callable[[], T]]:
             def existing(present: FileRevision) -> Callable[[], T]:
                 value = self.read_copied(source)
                 return lambda: value
