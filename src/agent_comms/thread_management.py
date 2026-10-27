@@ -5,8 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -157,19 +156,17 @@ class NewThreadSpec:
     def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
-    def declaration(self, registry: Registration) -> Thread:
+    def declaration(self) -> Thread:
         return Thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
                       worktree=self.project, model=self.model, thinking_level=self.thinking_level)
 
-    @contextmanager
-    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
+    def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
         project = self.project.path
-        thread = self.declaration(threads.registry)
+        thread = self.declaration()
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
-        with threads.registry.store.guarded_write():
-            saved = RegistrySessionLocation.from_path(location.read_key, threads.root)
-            yield replace(thread, session_file=saved)
+        saved = RegistrySessionLocation.from_path(location.read_key, threads.root)
+        return threads.registry.declare(replace(thread, session_file=saved))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -186,24 +183,18 @@ class ForkSpec(NewThreadSpec):
 
     def child(self, parent: Thread, runtime: RuntimeLocation, threads: ThreadManagement) -> Thread:
         saved = RegistrySessionLocation.from_path(runtime.read_key, threads.root)
-        return replace(self.declaration(threads.registry),
+        return replace(self.declaration(),
                        parent=ForkedParent(parent.name), tags=self.tags.for_child(parent.tags),
                        backend=parent.backend, session_file=saved)
 
-    @contextmanager
-    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
+    def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
         # Copy saved history before locking the registry for its declaration.
         parent = self._parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime, threads.root))
-        with threads.registry.store.guarded_write():
-            current = self._parent(threads)
-            if current.incarnation != parent.incarnation or current.runtime != parent.runtime:
-                raise RelationViolationError(
-                    f"Parent thread {self.parent!r} changed its saved session during the fork; "
-                    f"the created fork {location} was not registered."
-                )
-            yield self.child(current, location, threads)
+        return threads.registry.declare_child(
+            parent, lambda current: self.child(current, location, threads),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,25 +338,25 @@ class ThreadManagement:
         """Move one thread's project, preserving its owner and conversation."""
         if not path.strip():
             raise ValueError("Project path cannot be empty.")
-        with self.registry.store.guarded_write():
-            thread = self.registry.require(name)
-            target = Path(path).expanduser()
-            if not target.is_absolute():
-                target = thread.worktree.path / target
-            try:
-                target = target.resolve(strict=True)
-            except (OSError, RuntimeError) as error:
-                raise ValueError(f"Cannot open project directory: {target}") from error
-            if not target.is_dir():
-                raise ValueError(f"Project path is not a directory: {target}")
-            previous = str(thread.project_path)
-            current = str(target)
-            if current == previous:
-                return ProjectChangeResult(thread.name, previous, current, False)
-            self.registry.register(
-                thread.moved_to_project(Checkout(target)), self.registry.status(thread.name),
-            )
-            return ProjectChangeResult(thread.name, previous, current, True)
+        original = self.registry.require(name)
+        target = Path(path).expanduser()
+        if not target.is_absolute():
+            target = original.worktree.path / target
+        try:
+            target = target.resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise ValueError(f"Cannot open project directory: {target}") from error
+        if not target.is_dir():
+            raise ValueError(f"Project path is not a directory: {target}")
+        project = Checkout(target)
+
+        def move(current: Thread) -> Thread:
+            current.require_original_project(original)
+            return current if current.project_path == target else current.moved_to_project(project)
+
+        updated = self.registry.update_thread(name, move)
+        previous, current = str(original.project_path), str(updated.project_path)
+        return ProjectChangeResult(updated.name, previous, current, current != previous)
 
     def rename_managed_thread(
         self, name: str, display_name: str, *, owner: ProcessIdentity
@@ -416,27 +407,23 @@ class ThreadManagement:
         or project invalidates the native settings result acquired by the caller.
         """
         Thread.require_declaration(original)
-        with self.registry.store.guarded_write():
-            thread = self.registry.require(original.name)
+
+        def configure(thread: Thread) -> Thread:
             thread.require_original_model_configuration(original)
             thread.execution.require_native()
-            updated = configuration.configured(thread)
-            if updated != thread:
-                self.registry.register(updated, self.registry.status(thread.name))
-            return updated
+            return configuration.configured(thread)
+
+        return self.registry.update_thread(original.name, configure)
 
     def initialize_native_configuration(
         self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
-        with self.registry.store.guarded_write():
-            thread = self.registry.require(name)
-            updated = thread.initialized_native_configuration(
+        return self.registry.update_thread(
+            name, lambda thread: thread.initialized_native_configuration(
                 model=model, thinking_level=thinking_level,
-            )
-            if updated != thread:
-                self.registry.register(updated, self.registry.status(thread.name))
-            return updated
+            ),
+        )
 
     def running_selection(self, name: str) -> RunningSelection:
         thread = self.registry.require(name)
@@ -458,19 +445,14 @@ class ThreadManagement:
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
         saved_model = ThreadModel.from_choice(location.model_choice) if path.is_file() else UndeclaredModel()
-        with self.registry.store.guarded_write():
-            current = self.registry.require(original.name)
-            if current != original:
-                raise RelationViolationError("Original thread changed before native source publication")
-            attached = replace(
-                current.initialized_native_configuration(
-                    model=saved_model, thinking_level=NoThinkingOverride,
-                ),
-                process_identity=process,
-                session_file=RegistrySessionLocation.from_path(location.read_key, self.root),
-            )
-            self.registry.register(attached)
-            return attached
+        attached = replace(
+            original.initialized_native_configuration(
+                model=saved_model, thinking_level=NoThinkingOverride,
+            ),
+            process_identity=process,
+            session_file=RegistrySessionLocation.from_path(location.read_key, self.root),
+        )
+        return self.registry.replace_original(original, attached)
 
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
@@ -535,8 +517,7 @@ class ThreadManagement:
         """Prepare the session, then register and launch the thread with its task as first input."""
         resolved_bin = ConfiguredBinary().configured()
         runtime = LaunchRuntime.running()
-        with spec.prepared(self, resolved_bin, runtime) as child:
-            child = self.registry._declare_unlocked(child)
+        child = spec.declare(self, resolved_bin, runtime)
         # A failed launch cannot erase a declaration another starter reserved,
         # nor erase the first input if reservation committed before the failure.
         return self.owners._launch_owner(

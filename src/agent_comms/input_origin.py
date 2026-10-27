@@ -127,17 +127,25 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
 
     @classmethod
     def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
-        with comms.registry.store.guarded_write():
-            snapshot = comms.registry.store.read_snapshot_unlocked()
-            owner = snapshot.require_active(claim_scope.incarnation.name)
-            if snapshot.claimed_identity(owner.name) != claim_scope:
-                raise RelationViolationError("User input attachment changed before capture")
-            root_id = comms.registry.store.private_guard_unlocked().namespace
-            user = comms.messaging.user_identity(owner.worktree)
-            return cls(
-                root_id=root_id, author=HumanOrigin.of(user),
-                claimed_identity=claim_scope, project=owner.worktree, goal=owner.goal.captured,
-            )
+        snapshot, privacy, _ = comms.registry.store.snapshot_with_authority()
+        owner = cls._require_owner(snapshot, claim_scope)
+        root_id = privacy.namespace
+        comms.messaging.user_identity(owner.worktree)
+        snapshot, privacy, _ = comms.registry.store.snapshot_with_authority()
+        privacy.require_root(root_id, RelationViolationError("User input namespace changed before capture"))
+        owner = cls._require_owner(snapshot, claim_scope)
+        user = snapshot.user_thread().require(RelationViolationError("User input author was removed"))
+        return cls(
+            root_id=root_id, author=HumanOrigin.of(user),
+            claimed_identity=claim_scope, project=owner.worktree, goal=owner.goal.captured,
+        )
+
+    @staticmethod
+    def _require_owner(snapshot: RegistrySnapshot, claim_scope: ClaimedIdentity) -> Thread:
+        owner = snapshot.require_active(claim_scope.incarnation.name)
+        if snapshot.claimed_identity(owner.name) != claim_scope:
+            raise RelationViolationError("User input attachment changed before capture")
+        return owner
 
     @property
     def reply_target(self) -> str:
@@ -147,14 +155,13 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
         if controller is None or controller.attached(None) is None:
             raise RelationViolationError("User input origin requires its attached ACP controller")
 
-        with comms.registry.store.guarded_read():
-            comms.registry.store.private_guard_unlocked().require_root(
-                self.root_id, RelationViolationError("User input origin belongs to another native namespace"),
-            )
+        comms.registry.store.privacy().require_root(
+            self.root_id, RelationViolationError("User input origin belongs to another native namespace"),
+        )
         if self.claimed_identity != claim_scope:
             raise RelationViolationError("User input origin attachment changed")
         self.author.require_registered(snapshot)
-        owner = snapshot.require_active(claim_scope.incarnation.name)
+        owner = self._require_owner(snapshot, claim_scope)
         if (self.project, self.goal) != (owner.worktree, owner.goal.captured):
             raise RelationViolationError("User input scope changed before reservation")
 

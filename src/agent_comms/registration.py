@@ -22,7 +22,7 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution, ExternalThreadExecution
-from .thread_identity import GenerationCounter
+from .thread_identity import GenerationCounter, UserThreadRole
 from .thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
@@ -85,6 +85,52 @@ class Registration:
         with self.store.editing() as edit:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
             self._commit_registration(edit, change)
+
+    def update_thread(self, name: str, change: Callable[[Thread], Thread]) -> Thread:
+        """Transform the current declaration through its normal registration rules."""
+        with self.store.editing() as edit:
+            current = edit.document.require(name)
+            changed = change(current)
+            if changed != current:
+                return self._commit_registration(edit, edit.document.prepare_registration(
+                    changed, edit.document.status(current.name), new_owner=False,
+                )).thread
+            return current
+
+    def replace_original(self, original: Thread, replacement: Thread) -> Thread:
+        """Publish a prepared declaration only against its complete original value."""
+        with self.store.editing() as edit:
+            if edit.document.require(original.name) != original:
+                raise RelationViolationError("Original thread changed before native source publication")
+            return self._commit_registration(edit, edit.document.prepare_registration(
+                replacement, _DEFAULT_PRESENCE, new_owner=False,
+            )).thread
+
+    def claim_user(self, worktree: Checkout) -> Thread:
+        """Allocate one human identity, rechecking the acquired namespace."""
+        with self.store.editing() as edit:
+            def create() -> Thread:
+                thread = Thread(edit.document.claim_name("user"), frozenset(), worktree,
+                                role=UserThreadRole)
+                return self._commit_registration(edit, edit.document.prepare_registration(
+                    thread, _DEFAULT_PRESENCE, new_owner=False,
+                )).thread
+
+            return edit.document.user_thread().or_create(create)
+
+    def declare_child(self, original: Thread, prepare: Callable[[Thread], Thread]) -> Thread:
+        """Publish a prepared fork only while its original parent's source is current."""
+        with self.store.editing() as edit:
+            current = edit.document.require(original.name)
+            current.execution.require_native()
+            current.runtime.require_forkable()
+            child = prepare(current)
+            if (current.incarnation, current.runtime) != (original.incarnation, original.runtime):
+                raise RelationViolationError(
+                    f"Parent thread {original.name!r} changed its saved session during the fork; "
+                    f"the created fork {child.runtime} was not registered."
+                )
+            return self._declare_in(edit, child, _DEFAULT_PRESENCE)
 
     def prepare_native_root(self) -> PrivateRegistryGuard:
         """Prepare native authority, then its complete runtime outside the registry lock."""

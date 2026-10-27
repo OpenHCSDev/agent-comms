@@ -453,10 +453,13 @@ class Thread(ThreadProvenance, CatalogSelection):
         if self.parent.named(self.name):
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
 
+    def require_original_project(self, original: Thread) -> None:
+        if (self.incarnation, self.worktree) != (original.incarnation, original.worktree):
+            raise RelationViolationError("Thread project changed before publication")
+
     def require_original_model_configuration(self, original: Thread) -> None:
+        self.require_original_project(original)
         changed = any((
-            self.incarnation != original.incarnation,
-            self.worktree != original.worktree,
             self.model != original.model,
             self.thinking_level != original.thinking_level,
             self.service_tier != original.service_tier,

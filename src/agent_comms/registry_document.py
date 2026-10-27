@@ -148,6 +148,16 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         """A channel reaches the default roster: stopped owners receive, archived do not."""
         return self.visible_threads(DEFAULT_ROSTER)
 
+    @cached_property
+    def _human(self) -> UserThreadLookup[str]:
+        # Names belong to this revision; resolution uses its bound thread rows.
+        return next((FoundUserThread(human.name)
+                     for thread in self.threads.values()
+                     for human in thread.role.human(thread)), NoUserThread())
+
+    def user_thread(self) -> UserThreadLookup[Thread]:
+        return self._human.map(self.require)
+
 
 class UserThreadLookup[Value](ABC):
     """The registry's human selection, including a registry with no human yet."""
@@ -619,17 +629,6 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     claims: Annotated[
         GenerationCounter, SlicePolicy(GenerationOf)
     ] = field(default_factory=GenerationCounter)
-
-    @cached_property
-    def _human(self) -> UserThreadLookup[str]:
-        # This answer belongs to the decoded revision. Keep the name, not an
-        # unbound Thread: store binding and later reads use the current row.
-        return next((FoundUserThread(human.name)
-                     for thread in self.threads.values()
-                     for human in thread.role.human(thread)), NoUserThread())
-
-    def user_thread(self) -> UserThreadLookup[Thread]:
-        return self._human.map(self.require)
 
     def copy(self) -> RegistryDocument:
         return replace(

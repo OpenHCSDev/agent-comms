@@ -734,10 +734,10 @@ class DMDisplayBasis:
             displayed=displayed,
             fetched_through=page.newest_seq or 0,
         )
-        with registry.store.guarded_read():
-            basis.validate_identity(
-                registry.store.read_snapshot_unlocked(),
-                RecordedBusIdentity.capture(bus.bus.path), registry.user_thread())
+        current = registry.snapshot()
+        basis.validate_identity(
+            current, RecordedBusIdentity.capture(bus.bus.path), current.user_thread(),
+        )
         return replace(page, selection=DMSelection(basis))
 
     def identity(self, history_revision: FileObservation) -> DMDisplayIdentity:
