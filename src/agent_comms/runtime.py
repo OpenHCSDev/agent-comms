@@ -362,8 +362,9 @@ class RuntimeServer(SessionUpdateSink):
             if not line:
                 return
             request = FieldCodec.decode(RuntimeRequest, json.loads(line))
-            context = await request.bind(self, reader, client)
-            await request.apply(context)
+            with request.holder.selected():
+                context = await request.bind(self, reader, client)
+                await request.apply(context)
         except SubscriberClosed:
             pass
         except asyncio.CancelledError:

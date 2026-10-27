@@ -384,7 +384,7 @@ class StoreBackup:
         # The registry owns this ordering: restore its snapshot before publishing
         # the matching guard, after every unrelated selected file.
         ordered = (
-            *(name for name in selected if name not in registry),
+            *(name for name in sorted(selected) if name not in registry),
             *(name for name in registry if name in selected),
         )
         AtomicFile(self.restoring).write_text('')
