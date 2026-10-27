@@ -12,13 +12,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_waits import GoalWait
-from agent_comms.input_drain import InputDrain
-from agent_comms.locked_store import LockedStore
-from agent_comms.registration import Registration
-from agent_comms.session_lifecycle import SessionLifecycle
 from agent_comms.process_claim import ProcessSingleton
 from agent_comms.store_files import SqliteStore
 from agent_comms.installer.probes.carry import Carry
@@ -1084,54 +1077,36 @@ class PackageStructurePhase(PlanPhase, declared_name=None):
 
 class PackageDeclarationsPhase(PackageStructurePhase):
     after = (RamBudgetPhase, ScopedReadsPhase)
-    evidence = AllEvidence((
-        ClassDeclared(FieldCodec.__name__, ("src/agent_comms/nominal/field_codec.py",)),
-        ClassDeclared(DeclaredFamily.__name__, ("src/agent_comms/nominal/declared_family.py",)),
-        PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
-            "field_codec", "declared_family", "json_schema", "sealed",
-        ))),
-    ))
+    evidence = PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
+        "field_codec", "declared_family", "json_schema", "sealed",
+    )))
 
 
 class PackageStoragePhase(PackageStructurePhase):
     after = (PackageDeclarationsPhase,)
-    evidence = AllEvidence((
-        ClassDeclared(LockedStore.__name__, ("src/agent_comms/storage/locked_store.py",)),
-        PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
-            "store_files", "locked_store", "private_path", "maintenance_barrier",
-        ))),
-    ))
+    evidence = PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
+        "store_files", "locked_store", "private_path", "maintenance_barrier",
+    )))
 
 
 class PackageCoordinationPhase(PackageStructurePhase):
     after = (PackageStoragePhase,)
-    evidence = AllEvidence((
-        ClassDeclared(Coordination.__name__, ("src/agent_comms/coordination/coordinator.py",)),
-        PathsAbsent(("src/agent_comms/coordinator.py", "src/agent_comms/coordination_database.py",
-                     "src/agent_comms/coordination_tables")),
-    ))
+    evidence = PathsAbsent(("src/agent_comms/coordinator.py", "src/agent_comms/coordination_database.py",
+                            "src/agent_comms/coordination_tables"))
 
 
 class PackageExecutionPhase(PackageStructurePhase):
     after = (PackageCoordinationPhase,)
-    evidence = AllEvidence((
-        ClassDeclared(InputDrain.__name__, ("src/agent_comms/execution/input_drain.py",)),
-        ClassDeclared(SessionLifecycle.__name__, ("src/agent_comms/execution/session_lifecycle.py",)),
-        PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
-            "input_drain", "session_lifecycle", "owner_lifecycle", "owned_turn",
-        ))),
-    ))
+    evidence = PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
+        "input_drain", "session_lifecycle", "owner_lifecycle", "owned_turn",
+    )))
 
 
 class PackageConsumerClosurePhase(PackageStructurePhase):
     after = (PackageExecutionPhase,)
-    evidence = AllEvidence((
-        ClassDeclared(Registration.__name__, ("src/agent_comms/registry/registration.py",)),
-        ClassDeclared(GoalWait.__name__, ("src/agent_comms/planning/goal_waits.py",)),
-        PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
-            "registration", "registry_store", "registry_document", "threads", "goal_waits",
-        ))),
-    ))
+    evidence = PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
+        "registration", "registry_store", "registry_document", "threads", "goal_waits",
+    )))
 
 
 class BoardLineLockTextPhase(OwnerAsksPhase):

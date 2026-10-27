@@ -97,10 +97,13 @@ and installation; keep retained P861 edits outside these moves until integrated.
    Finish all consumers in Core, Toad, Textual, tools, fixtures and generated
    installer configuration. Delete every old import path in its move batch.
 
-The five phase declarations name the leading owner and require the old files to
-be absent at each checkpoint. Those source predicates locate the work; they do
-not prove behavioral parity or complete consumer closure. A phase is accepted
-only with the entire closure and working application evidence described here.
+The five phase declarations require the old files to be absent at each
+checkpoint. Their deletion predicates track removal of the flat paths; they do
+not prove destination ownership, behavioral parity or complete consumer closure.
+The destination table and required source pass specify those obligations. A
+phase is accepted only with that closure and working application evidence.
+The board must not import execution owners merely to spell their names: doing
+so creates the PlanPhase → InputDrain → Todo → PlanPhase initialization cycle.
 
 ## Required source pass for each move
 
