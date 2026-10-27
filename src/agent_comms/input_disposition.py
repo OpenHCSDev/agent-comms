@@ -279,7 +279,7 @@ class InputDispositions(DurableStore):
     def harness_attempts(self, entries: tuple[RegistryEntry, ...]) -> tuple[ReservedInput, ...]:
         """Uncertain harness attempts for these entries' frozen incarnations, as the inputs
         they are. Derived on every read and never stored by reading."""
-        owners = {entry.thread.incarnation.lookup: entry for entry in entries}
+        owners = {entry.thread.incarnation.require_recorded().lookup: entry for entry in entries}
         outcomes = Outcome.members_with(UnconfirmedOutcome)
         with Coordination(str(CoordinationStore.path_in(self.root))) as store, store.session.read():
             attempts = HarnessDelivery.select(
