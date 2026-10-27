@@ -718,7 +718,7 @@ class AtomicFile:
         descriptor, temporary = self._stage()
         try:
             with os.fdopen(descriptor, "wb") as output:
-                os.fchmod(output.fileno(), self.mode)
+                Platform.current().make_private_descriptor(output.fileno(), self.mode)
                 yield output, temporary
         finally:
             self._discard(temporary)
