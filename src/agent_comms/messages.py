@@ -23,7 +23,9 @@ from typing import (
     get_origin, get_type_hints,
 )
 
-from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
+from agent_comms.response_policy import (
+    NO_ALIASES, InformationalPolicy, ResponseEligibility, ResponsePolicy,
+)
 from agent_comms.typed_table import (
     AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
     ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
@@ -975,7 +977,7 @@ class Message(Addressed, BusCapability, TurnOrigin):
         return kind.decode_message({"ts": 0.0, **data})
 
     def response_eligibility(
-        self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
+        self, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> ResponseEligibility:
         """Resolve channel responders from canonical audience identities.
 
