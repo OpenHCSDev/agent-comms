@@ -51,7 +51,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 from agent_comms.threads import Thread
-from restart_fixture import original_restart_json
+from restart_fixture import dead_owner_restart, original_restart_json
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 

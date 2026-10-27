@@ -7,6 +7,7 @@ as attempted, never turned back into pending. Delete this tool after acceptance.
 from pathlib import Path
 from typing import ClassVar
 
+from agent_comms.child_process import Platform
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
@@ -81,6 +82,8 @@ class RestartQueueRows(Carry):
                         raise RelationViolationError("Original restart changed before JSON retirement")
             for path, _ in originals:
                 path.unlink()
+            for parent in {path.parent for path, _ in originals}:
+                Platform.current().sync_directory(parent)
         # The current reader waits on maintenance before acting. Target runtimes
         # remain original; an Attempting record is never selected for execution.
         if any(record.state.items_with(Pending, record) for _, record in originals):
