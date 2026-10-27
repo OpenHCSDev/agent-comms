@@ -92,7 +92,7 @@ from agent_comms_hooks.watch import (
 )
 
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
-from .history import HarnessSession
+from agent_comms.harness_install import HarnessSession
 from .monitor import (
     BridgeExit,
     InspectSession,
