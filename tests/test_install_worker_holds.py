@@ -17,7 +17,7 @@ from agent_comms.installer.interpreter_operation import (
     serve,
 )
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
-from agent_comms.installer.probes.commands import CliCommandProbe, CliOutput
+from agent_comms.installer.probes.commands import CliCommandProbe, CliOutput, CliRefusedError
 from agent_comms.installer.probes.owners import OwnerActionsProbe
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
@@ -44,9 +44,9 @@ def test_cli_reply_preserves_declared_failure_from_each_entry(comms, probe_type)
     with InstallCommands() as commands:
         stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)
         probe = probe_type(("--root", str(comms.root), "not-a-command"))
-        with pytest.raises(UpgradeRefused, match="invalid choice") as refused:
+        with pytest.raises(UpgradeRefused) as refused:
             stack.cli_reply(probe, partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))
-    assert "undecodable answer" not in str(refused.value)
+    assert isinstance(refused.value.__cause__, CliRefusedError)
 
 
 def test_owner_reports_own_their_refusal():
@@ -76,7 +76,7 @@ def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_p
             return os.environ.get(HOLDER_NONCE, "")
 
     try:
-        holders = (ClaimId.mint(), ClaimId.mint(), "")
+        holders = (str(ClaimId.mint()), str(ClaimId.mint()), "")
         lines = "".join(
             FieldCodec.compact(FieldCodec.encode(ProbeRequest(HolderSeenProbe(), holder))) + "\n"
             for holder in holders
@@ -85,7 +85,7 @@ def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_p
         answers = tmp_path / "answers"
         monkeypatch.setattr("sys.stdin", io.StringIO(lines))
         monkeypatch.setattr("sys.stdout", answers.open("w"))
-        monkeypatch.setenv(HOLDER_NONCE, ClaimId.mint())
+        monkeypatch.setenv(HOLDER_NONCE, str(ClaimId.mint()))
         serve()
         assert [FieldCodec.decode(HolderSeenProbe().answer_type(),
                                   FieldCodec.decode(ProbeReply, FieldCodec.parse(line)).answer)

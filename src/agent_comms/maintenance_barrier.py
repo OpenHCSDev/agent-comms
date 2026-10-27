@@ -13,7 +13,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, MutableMapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
-from contextvars import ContextVar
+from contextvars import Context, ContextVar
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
@@ -267,6 +267,12 @@ class MaintenanceHolder(SubclassUnion):
             yield self
         finally:
             self._selected.reset(token)
+
+    @classmethod
+    def in_context(cls, context: Context) -> Context:
+        """Carry this request's claim across a joined executor boundary."""
+        context.run(cls._selected.set, cls.current())
+        return context
 
     @staticmethod
     def outside(environment: Mapping[str, str]) -> dict[str, str]:
