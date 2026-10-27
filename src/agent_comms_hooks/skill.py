@@ -41,12 +41,17 @@ class DeckReader(ABC):
     commander also follows the commander's. RuleFile's audience is the one owner of that split.
     """
 
-    audiences: ClassVar[tuple[type[RuleAudience], ...]]
+    audiences: ClassVar[tuple[type[RuleAudience], ...]] = ()
+    """Its own audience after every audience its base readers serve."""
     deck_suffix: ClassVar[str]
     """Where this reader's deck sits beside the transcript: a session whose role changes finds
     no deck of its new kind and is dealt again."""
     slice_chars: ClassVar[int] = 2_000
     """The most characters one inline slice carries; a longer paragraph splits at its lines."""
+
+    def __init_subclass__(cls, audience: type[RuleAudience], **options: object) -> None:
+        super().__init_subclass__(**options)
+        cls.audiences = (*cls.audiences, audience)
 
     @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
@@ -121,11 +126,10 @@ class DeckReader(ABC):
         return tuple(runs)
 
 
-class FleetReader(DeckReader):
+class FleetReader(DeckReader, audience=FleetAudience):
     """A bound session the registry does not name commander: the fleet rules, the voice they
     are said in and the failures already caught."""
 
-    audiences = (FleetAudience,)
     deck_suffix = ".fleet-deck.json"
 
     @classmethod
@@ -147,11 +151,10 @@ class FleetReader(DeckReader):
                 " where your summary disagrees with them, the summary is wrong.")
 
 
-class CommanderReader(FleetReader):
+class CommanderReader(FleetReader, audience=CommanderAudience):
     """The session the registry names commander: the fleet's sources plus the indictment, the
     commander skill, the commander's own rules and the slop catalog's index."""
 
-    audiences = (FleetAudience, CommanderAudience)
     deck_suffix = ".deck.json"
 
     @classmethod

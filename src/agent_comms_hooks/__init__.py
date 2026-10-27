@@ -28,11 +28,14 @@ class HookRecord:
 
     @classmethod
     def decode(cls, record: Mapping[str, object]) -> Self:
+        """A field Claude Code may omit declares its default; a required field it omits is a
+        missing argument, refused by the constructor."""
         hints = get_type_hints(cls)
         return cls(
             **{
                 declared.name: HookRecord.field(hints[declared.name], record[declared.name])
                 for declared in fields(cls)
+                if declared.name in record
             }
         )
 
@@ -43,6 +46,15 @@ class HookRecord:
         if isinstance(value, Mapping) and issubclass(declared, HookRecord):
             return declared.decode(value)
         return declared(value)
+
+
+class SubagentId(str):
+    """Claude Code's name for one subagent, kept across its resumes; Core knows the subagent
+    as the commander fork this id names."""
+
+    @property
+    def fork(self) -> str:
+        return f"claude-{self}"
 
 
 @dataclass(frozen=True)

@@ -3,9 +3,11 @@ until each dealt part has been read in full.
 
 The deal's order to read the parts is text, and text loses to a compaction summary: the model
 holds its own paraphrase of the rules and treats the order as optional. This gate makes the
-order the only path forward. It reads two files beside the transcript and nothing else, so it
-costs no registry or bus read on any tool call. A subagent runs on its parent's transcript and
-is never gated: the parent reads the parts.
+order the only path forward. PreToolUse only judges: it refuses any tool but Read while a part
+is unread. PostToolUse, which Claude Code sends only after a tool completes, records a Read that
+covered a whole dealt part; a failed or partial Read leaves the gate closed. Both read two files
+beside the transcript and nothing else, so no tool call pays a registry or bus read. A subagent
+runs on its parent's transcript and is never gated: the parent reads the parts.
 """
 
 from __future__ import annotations
@@ -16,10 +18,23 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook
+from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord, SubagentId
+
+
+@dataclass(frozen=True)
+class ReadInput(HookRecord):
+    """The Read tool's input. Claude Code omits `offset` and `limit` for a read from the first
+    line; the defaults are the tool's own: line 1, and at most 2,000 lines."""
+
+    file_path: Path
+    offset: int = 1
+    limit: int = 2_000
+
+    def covers(self, part: Path) -> bool:
+        """Whether this read returned every line of the part."""
+        return self.offset <= 1 and self.limit >= len(part.read_text(encoding="utf-8").splitlines())
 
 
 class DefaultGate(ABC):
@@ -28,19 +43,23 @@ class DefaultGate(ABC):
 
 @dataclass(frozen=True)
 class GatedCall(ClaudeToolHook, DeclaredFamily):
-    """One tool call the read gate judges; a member names its tool in its declaration and
-    says only what that tool means."""
+    """One tool call the read gate judges before it runs and sees after it completes; a member
+    names its tool in its declaration and says only what that tool means."""
 
     @classmethod
     def of(cls, record: Mapping[str, object]) -> GatedCall:
         """The boundary decode: a subagent's call, a tool the family names, or any other."""
         if "agent_id" in record:
             return SubagentCall.decode(record)
-        return cls.member_or_default(record["tool_name"], DefaultGate).decode(record)
+        tool = ClaudeToolHook.decode(record).tool_name
+        return cls.member_or_default(tool, DefaultGate).decode(record)
 
     @abstractmethod
     def judge(self) -> None:
-        """Record or refuse this call."""
+        """PreToolUse: refuse this call, or let it run."""
+
+    def completed(self) -> None:
+        """PostToolUse: what this completed call records; most record nothing."""
 
     def unread(self) -> tuple[Path, ...]:
         """The dealt parts not yet read in full since the last deal. A deal writes the read
@@ -53,18 +72,18 @@ class GatedCall(ClaudeToolHook, DeclaredFamily):
 
 @dataclass(frozen=True)
 class ReadCall(GatedCall, declared_name="Read"):
-    """A Read is always allowed; a full Read of a dealt part counts it as read."""
-
-    partial: ClassVar[tuple[str, ...]] = ("offset", "limit")
-    """Read arguments that return less than the whole file."""
+    """A Read always runs; once it completes, a read covering a whole dealt part counts it."""
 
     def judge(self) -> None:
-        path = Path(str(self.tool_input["file_path"]))
-        if path.parent.resolve() != self.parts.resolve() or any(
-                key in self.tool_input for key in self.partial):
+        return
+
+    def completed(self) -> None:
+        read = ReadInput.decode(self.tool_input)
+        path = read.file_path
+        if path.parent.resolve() != self.parts.resolve() or not read.covers(path):
             return
-        with self.parts_read.open("a", encoding="utf-8") as read:
-            read.write(path.name + "\n")
+        with self.parts_read.open("a", encoding="utf-8") as record:
+            record.write(path.name + "\n")
 
 
 @dataclass(frozen=True)
@@ -84,9 +103,9 @@ class OtherCall(GatedCall, DefaultGate):
 
 @dataclass(frozen=True)
 class SubagentCall(GatedCall):
-    """A subagent's call: its parent reads the parts, so it is never refused."""
+    """A subagent's call: its parent reads the parts, so it is never refused or recorded."""
 
-    agent_id: str
+    agent_id: SubagentId
 
     def judge(self) -> None:
         return

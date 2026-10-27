@@ -446,15 +446,20 @@ def refused(capsys, call):
 
 def test_every_tool_but_read_waits_for_each_dealt_part_to_be_read_in_full(
         tmp_path, capsys, commanding_session):
+    """PreToolUse only judges; a part counts as read only when a Read covering all of it
+    completes, which Claude Code reports as PostToolUse."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()
     parts = sorted(transcript.with_suffix(".reread").iterdir())
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
-    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(parts[0]), "limit": 5}))
+    whole = {"file_path": str(parts[0])}
+    assert not refused(capsys, gated(transcript, "Read", whole))
+    assert refused(capsys, gated(transcript, "Edit", {}))  # a Read that never completed
+    gated(transcript, "Read", {**whole, "limit": 5}).completed()
     assert refused(capsys, gated(transcript, "Edit", {}))  # a partial read is not a reading
     for part in parts:
-        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(part)}))
+        gated(transcript, "Read", {"file_path": str(part)}).completed()
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()  # compaction
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))

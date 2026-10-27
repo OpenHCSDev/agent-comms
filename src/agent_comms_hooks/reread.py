@@ -16,10 +16,12 @@ heartbeat's board, which the bridge derives from Core whenever this hook asks.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from typing import ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram
+from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import DeckReader, DeckStart
 
 
@@ -71,7 +73,11 @@ class ReminderProgram(ClaudeHookProgram):
 
 
 def main() -> None:
-    hook = BoardReminder.read()
+    """A completed tool call first records what it read for the read gate, then takes its
+    reminder; both decode the one record Claude Code sent."""
+    record = json.load(sys.stdin)
+    GatedCall.of(record).completed()
+    hook = BoardReminder.decode(record)
     if texts := hook.take():
         hook.warn("\n\n".join(texts))
 

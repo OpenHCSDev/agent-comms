@@ -12,17 +12,8 @@ import subprocess
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeHookProgram
+from agent_comms_hooks import ClaudeHookProgram, SubagentId
 from agent_comms_hooks.watch import CommanderSession
-
-
-class SubagentId(str):
-    """Claude Code's name for one subagent, kept across its resumes; Core knows the subagent
-    as the commander fork this id names."""
-
-    @property
-    def fork(self) -> str:
-        return f"claude-{self}"
 
 
 @dataclass(frozen=True)
