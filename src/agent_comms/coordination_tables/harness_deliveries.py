@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
-from typing import Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
@@ -19,6 +19,9 @@ from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, Unreco
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import Column, ForeignKey, FrozenColumn, ImmutableRows, NoDelete
+
+if TYPE_CHECKING:
+    from agent_comms.assignment_store import AssignmentStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +68,19 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
             return False
         self.insert(db)
         return True
+
+    def begin(self, assignments: AssignmentStore, db: sqlite3.Connection) -> bool:
+        """The claim leaves the native queue in the same write that stores the attempt, so no
+        crash lets a later native owner replay it. False when it was already attempted."""
+        assignments.settle_harness_inputs(
+            db, self.recipient_lookup, (self.reference,), lambda state: state.harness_handoff())
+        return self.first_write(db)
+
+    def record(self, assignments: AssignmentStore, db: sqlite3.Connection) -> None:
+        """The attempt's outcome and the claim steps it declares commit together."""
+        assignments.settle_harness_inputs(
+            db, self.recipient_lookup, (self.reference,), self.outcome.claim_steps)
+        self.write(db)
 
     @classmethod
     def latest(cls, db: sqlite3.Connection, bridge: type[HarnessSession],
