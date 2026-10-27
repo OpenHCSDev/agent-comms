@@ -5,6 +5,7 @@ import os
 import threading
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -49,7 +50,7 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
 
 
 @pytest.mark.parametrize('mutation', [
-    {'created_at': 200.0}, {'worktree': '/different'},
+    {'created_at': 200.0}, {'worktree': Checkout(Path('/different'))},
     {'goal': None},
 ])
 def test_raw_registry_writer_cannot_cross_captured_claim_identity(tmp_path, mutation):
@@ -82,7 +83,7 @@ def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
     leased, _ = registry.lease_local_turn('owner', TurnId('9b473845f684444f80a26586ae298d2b'))
     with registry.store.editing() as edit:
         record = edit.document.threads['owner'].turn_record
-        record._publish_unlocked(replace(record.read(), claimed_generation=RecordedGeneration(99)))
+        record.writers.replace(replace(record.read(), claimed_generation=RecordedGeneration(99)))
         edit.commit()
     with pytest.raises(RelationViolationError):
         registry.live_owner_with_claim('owner')

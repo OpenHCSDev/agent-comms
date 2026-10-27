@@ -36,7 +36,10 @@ from .session_file import RegistrySessionLocation
 from .store_files import RegistryLocking
 from .thread_identity import TurnIdentity
 from .threads import Thread
-from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord, TurnDeclaration
+from .turn_lease import (
+    ActiveTurn, LockedTurn, NamedTurn, RecordedGeneration, RetiredTurn, StoredTurnRecord,
+    TurnDeclaration,
+)
 
 
 class CachedRegistry(ABC):
@@ -315,6 +318,14 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         current = self._decode_snapshot(registry).current_turn(held)
         return current.read_copied(held, turn)
 
+    def change_turn[Result](
+        self, record: StoredTurnRecord, change: Callable[[LockedTurn], Result],
+    ) -> Result:
+        """Keep retirement excluded while the named turn's own transaction changes it."""
+        with self.current_snapshot() as cut:
+            named = NamedTurn(record) if cut.snapshot.holds_turn(record.identity) else RetiredTurn()
+            return change(named)
+
     def privacy(self) -> RegistryPrivacy:
         """Capture namespace authority without lending its lock to a consumer."""
         with self.guarded_read():
@@ -352,7 +363,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             revision = registry.revision, FileRevision.capture(self.guard_path)
         return RegistryPairCut(
             self, self._decode_snapshot(registry), privacy, revision,
-            other._read_captured(lambda: peer, other._decode_capture),
+            other.read_copied(peer),
         )
 
     def current_pair[Peer](self, other: LockedStore[Peer]) -> AbstractContextManager[RegistryPairCut[Peer]]:
@@ -364,8 +375,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         """Capture related files together; decode none while holding a guard."""
         registry, first_source, second_source = self._copy_sources(self, first, second)
         return (self._decode_snapshot(registry),
-                first._read_captured(lambda: first_source, first._decode_capture),
-                second._read_captured(lambda: second_source, second._decode_capture))
+                first.read_copied(first_source), second.read_copied(second_source))
 
     def _decode_snapshot(self, source: DocumentBytes) -> RegistrySnapshot:
         revision = self._decode_revision(source)

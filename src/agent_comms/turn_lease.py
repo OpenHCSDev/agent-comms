@@ -27,12 +27,15 @@ from .field_codec import (
 from .goal_presentation import RunningExecution
 from .input_disposition import InputDispositions
 from .lifecycle_capability import Executing, LifecycleCapability
-from .locked_store import CopyingStore, DocumentBytes, DurableFile, JsonDocument, LockedFile, PatternFile
+from .locked_store import (
+    CopyingStore, DocumentBytes, DocumentChange, DocumentTransactions, DurableFile, LockedFile,
+    PatternFile,
+)
 from .message_reference import MessageReference
 from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import NoTurnRouting, Routing
-from .store_files import DependentStateTier, RegistryLocking, SingleFileStore, store_lock_path
+from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import (
     NoObservedTurn,
     ObservedTurn,
@@ -594,11 +597,20 @@ class TurnFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True)
-class LockedTurnFile(CopyingStore, SingleFileStore, TurnFile, LockedFile, DependentStateTier):
+class LockedTurnFile(CopyingStore, SingleFileStore, TurnFile, LockedFile,
+                     DocumentTransactions[ActiveTurn], DependentStateTier):
     """The writer lock of one turn file. A phase change takes this lock, never the
     registry's; a registry edit superseding the turn takes it before retiring the file."""
 
     path: Path
+
+    record_type = ActiveTurn
+
+    def empty(self) -> ActiveTurn:
+        raise MissingTurnRecordError(f"Active turn record is missing: {self.path}")
+
+    def read(self) -> ActiveTurn:
+        return self.read_copied(DocumentBytes.capture(self.path))
 
 
 class LockedTurn(ABC):
@@ -619,18 +631,19 @@ class NamedTurn(LockedTurn):
     record: StoredTurnRecord
 
     def without_claim(self) -> None:
-        self.record._publish_unlocked(self.record._read_unlocked().without_claim())
+        self.record.writers.update(lambda active: DocumentChange.to(active.without_claim()))
 
     def effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
-        active = self.record._read_unlocked()
-        if not active.held_by(lease):
-            return ()
-        effects = tuple(observe(TurnState(active)))
-        for state in effects:
-            self.record._publish_unlocked(state.active.require_active())
-        return effects
+        def change(active: ActiveTurn) -> DocumentChange[ActiveTurn, tuple[TurnState, ...]]:
+            if not active.held_by(lease):
+                return DocumentChange(active, ())
+            effects = tuple(observe(TurnState(active)))
+            for state in effects:
+                active = state.active.require_active()
+            return DocumentChange(active, effects)
+        return self.record.writers.update(change)
 
 
 class RetiredTurn(LockedTurn):
@@ -646,7 +659,7 @@ class RetiredTurn(LockedTurn):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurnReference,
+class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
                        declared_name=None):
     """Turn file bound to the registry that decoded its wire reference."""
 
@@ -655,10 +668,8 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
         repr=False, compare=False
     )
 
-    record_type = ActiveTurn
-
     @property
-    def path(self) -> Path:  # type: ignore[override]  # Derived from its registry.
+    def path(self) -> Path:
         identity = self.identity
         return self.path_in(self.registry_path.parent,
                             lookup=identity.incarnation.require_recorded().lookup,
@@ -673,10 +684,7 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
         return (self if (self.registry_path, self.identity) ==
                 (record.registry_path, record.identity) else record)
 
-    def empty(self) -> ActiveTurn:
-        raise MissingTurnRecordError(f"Active turn record is missing: {self.path}")
-
-    def read(self) -> TurnDeclaration:  # type: ignore[override]  # A successor may be finished.
+    def read(self) -> TurnDeclaration:
         """This turn while its thread still names it, else the thread's current turn.
 
         The shared registry lock covers its two-file authority and keeps a named
@@ -688,7 +696,7 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
 
     def read_copied(self, original: StoredTurnRecord, source: DocumentBytes) -> TurnDeclaration:
         if self == original:
-            return self._read_captured(lambda: source, self._decode_capture)
+            return self.writers.read_copied(source)
         return self.read()
 
     @classmethod
@@ -701,43 +709,33 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
     ) -> StoredTurnRecord:
         record = cls.for_identity(registry_path, identity)
         record.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        record._publish_unlocked(turn)
+        record.writers.replace(turn)
         return record
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLease:
-        active = self._read_unlocked()
+        active = self.writers.read()
         active.validate_owner(process, generation)
         return active.lease(incarnation, self)
 
-    def _named_unlocked(self) -> LockedTurn:
-        """This generation under the registry and turn writer locks, in that order.
-
-        Retirement saves the registry before deleting a superseded file; a waiting
-        writer therefore finds the registry naming the successor generation.
-        """
+    def without_claim(self) -> None:
         from .registry_store import RegistryStore
 
-        registry = RegistryStore(self.registry_path).read_snapshot_unlocked()
-        return NamedTurn(self) if registry.holds_turn(self.identity) else RetiredTurn()
-
-    def without_claim(self) -> None:
-        with RegistryLocking.read_guard(self.registry_path), self.writers.guarded_write():
-            self._named_unlocked().without_claim()
+        RegistryStore(self.registry_path).change_turn(self, lambda named: named.without_claim())
 
     def retire(self) -> None:
         """Delete a superseded turn under its own lock; a phase change waiting on that lock
         then finds the registry no longer names it. The generation never recurs, so its
         lock file goes with it."""
-        with self.writers.guarded_write():
-            self.path.unlink()
-            store_lock_path(self.path).unlink(missing_ok=True)
+        self.writers.retire()
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
-        with RegistryLocking.read_guard(self.registry_path), self.writers.guarded_write():
-            return self._named_unlocked().effects(lease, observe)
+        from .registry_store import RegistryStore
+
+        return RegistryStore(self.registry_path).change_turn(
+            self, lambda named: named.effects(lease, observe))
 
     def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))
