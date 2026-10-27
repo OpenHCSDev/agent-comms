@@ -42,7 +42,7 @@ from agent_comms.child_process import (
 from agent_comms.cli_arguments import CliArguments
 from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, FilteredOutcome, Outcome, TaggedWire, UnconfirmedOutcome, WatchLine, raise_child_exit
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_errors import CoordinationError, DeferredRead
+from agent_comms.coordination_errors import CoordinationError, DeferredRead, IdentityConflict
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion
@@ -61,6 +61,7 @@ from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, Thr
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
@@ -1254,6 +1255,43 @@ class BridgeDeliveryStore(WriterOwnedStore):
     @classmethod
     def table_schema(cls) -> type[TableSchema]:
         return BridgeStateTable
+
+    @classmethod
+    def context_entered(
+        cls, root: Path, recipient: ThreadIncarnation, snapshot: RegistryProvenance,
+        references: Iterable[MessageReference],
+    ) -> frozenset[MessageReference]:
+        """The supplied messages a harness bridge proved entered this recipient's context.
+
+        Only this recipient's journals are opened: each declared bridge's binding under each
+        name the registry retains for this birth. A journal of another root or another birth
+        under a reused name proves nothing about this recipient; a row naming a supplied ID at
+        another sequence is conflicting evidence and is reported."""
+        wanted = {reference.message_id: reference for reference in references}
+        if not wanted:
+            return frozenset()
+        lookup = recipient.require_recorded().lookup
+        entered: set[MessageReference] = set()
+        for named in recipient.recorded_names(snapshot):
+            for directory in CliBridge.state_directories():
+                journal = cls.path() / directory / named.name / BridgeStateTable.filename
+                if not journal.is_file():
+                    continue
+                with closing(SQLiteFile.read_snapshot(journal)) as db:
+                    binding = Binding.require(db)
+                    if binding.root != str(root) or binding.owner.require_recorded().lookup != lookup:
+                        continue
+                    for row in DeliveryRow.select(
+                            db, where=f"{{id}} IN ({','.join('?' * len(wanted))})",
+                            parameters=tuple(wanted)):
+                        reference = row.message.reference
+                        if reference != wanted[row.id]:
+                            raise IdentityConflict(
+                                f"{journal} records message {row.id} at {reference.seq}, "
+                                f"not {wanted[row.id].seq}")
+                        if row.outcome.entered_context():
+                            entered.add(reference)
+        return frozenset(entered)
 
 
 class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):

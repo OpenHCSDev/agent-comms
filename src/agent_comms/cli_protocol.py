@@ -150,6 +150,12 @@ class Outcome(DeclaredFamily, affix="Outcome"):
     ) -> None:
         await observation.record(bridge, delivery)
 
+    @classmethod
+    def entered_context(cls) -> bool:
+        """Whether this attempt proves the message entered the harness context; an emitted,
+        unconfirmed or filtered attempt proves nothing."""
+        return False
+
 
 class FilteredOutcome(Outcome):
     @classmethod
@@ -169,6 +175,10 @@ class DeliveredOutcome(FilteredOutcome):
         await bridge.comms.bus.when_open(partial(
             bridge.comms.bus.mark_delivered, bridge.binding.bus, (delivery.message.reference,)))
         await super().record(bridge, delivery)
+
+    @classmethod
+    def entered_context(cls) -> bool:
+        return True
 
 
 class EmittedOutcome(UnconfirmedOutcome):
