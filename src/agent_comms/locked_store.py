@@ -997,16 +997,20 @@ class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
     def update_each[R](
         self, change: Callable[[T], Iterable[DocumentChange[T, R]]],
     ) -> tuple[R, ...]:
-        """Publish each declared transition under one uninterrupted writer hold."""
-        with self.guarded_write():
-            original = self._read_unlocked()
-            results = []
-            for changed in change(original):
-                if changed.document is not original:
-                    self._publish_unlocked(changed.document)
-                original = changed.document
-                results.append(changed.result)
-            return tuple(results)
+        """Decode before exclusion; apply transitions once after their cut is current."""
+        while True:
+            source = DocumentBytes.capture(self.path)
+            original = self.read_copied(source)
+            with self.guarded_write():
+                if FileRevision.capture(self.path) != source.revision:
+                    continue
+                results = []
+                for changed in change(original):
+                    if changed.document is not original:
+                        self._publish_unlocked(changed.document)
+                    original = changed.document
+                    results.append(changed.result)
+                return tuple(results)
 
     def initialize(self, create: Callable[[], T]) -> T:
         """Publish a first value once; concurrent creators read the winner."""

@@ -10,7 +10,7 @@ import stat
 import subprocess
 import sys
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import pytest
 
@@ -86,6 +86,38 @@ class RegistryWithConcurrentDecoder(RegistryStore, declared_name=None):
         with process(_replace_captured_documents, self.path.parent):
             pass
         return super()._decode_snapshot(source)
+
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeWithConcurrentDecoder(RuntimeInfoStore, declared_name=None):
+    pending: list[str] = field(default_factory=lambda: ["concurrent"])
+
+    def _decode_capture(self, source):
+        if self.pending:
+            name = self.pending.pop()
+            ready = event()
+            with process(_record, self.path, ready, name):
+                ready.set()
+        return super()._decode_capture(source)
+
+
+def test_update_decodes_without_exclusion_and_never_applies_a_stale_change(tmp_path):
+    path = tmp_path / "runtime_info.json"
+    record(RuntimeInfoStore(path), observation("original"))
+    store = RuntimeWithConcurrentDecoder(path)
+    applied = []
+
+    def change(document):
+        applied.append(frozenset(document.observations))
+        return DocumentChange.to(RuntimeInfoDocument({
+            **document.observations, "local": observation("local"),
+        }))
+
+    store.update(change)
+    expected = {"original", *(f"concurrent-{index}" for index in range(12))}
+    assert applied == [frozenset(expected)]
+    assert set(store.read().observations) == expected | {"local"}
 
 
 def _record_under_wire(path, ready):
