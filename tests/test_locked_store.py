@@ -159,6 +159,22 @@ def test_current_observation_persistence_and_noop(tmp_path):
     assert store.read() == RuntimeInfoDocument()
 
 
+def test_each_transition_is_visible_before_the_next_while_writer_stays_excluded(tmp_path):
+    store = RuntimeInfoStore(tmp_path / "runtime_info.json")
+    first = RuntimeInfoDocument({"first": observation("first")})
+    second = RuntimeInfoDocument({**first.observations, "second": observation("second")})
+
+    def changes(original):
+        assert original == RuntimeInfoDocument()
+        yield DocumentChange(first, "first")
+        assert store.read() == first
+        assert_writer_excluded(store.path)
+        yield DocumentChange(second, "second")
+
+    assert store.update_each(changes) == ("first", "second")
+    assert store.read() == second
+
+
 def test_related_snapshots_keep_their_cut_and_release_writers_before_decode(tmp_path):
     first = RuntimeInfoStore(tmp_path / "first")
     second = RuntimeInfoStore(tmp_path / "second")

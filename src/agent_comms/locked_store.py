@@ -11,7 +11,7 @@ import stat
 import tempfile
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Collection, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from functools import cache
@@ -433,6 +433,10 @@ class JsonDocument(RootFile, ABC, Generic[T]):
             return decode(capture())
         except (OSError, MalformedRecord) as error:
             return self._unreadable(error)
+
+    def read_copied(self, source: DocumentBytes) -> T:
+        """Decode a document captured by its owning multi-file read."""
+        return self._read_captured(lambda: source, self._decode_capture)
 
     def _unreadable(self, error: Exception) -> T:
         """Strict by default; optional owners may declare a fail-closed value."""
@@ -986,34 +990,26 @@ class CopyingStore(RankedStoreLock, declared_name=None):
             return captured
 
 
-@dataclass(frozen=True, slots=True)
-class LockedStore(CopyingStore, FileStore, LockedFile, JsonDocument[T], declared_name=None):
-    """Each copy ends before decoding; each change owns its complete write."""
-
-    def read(self) -> T:
-        return self._read_captured(lambda: self._copy_sources(self)[0], self._decode_capture)
-
-    def read_pair[U](self, other: LockedStore[U]) -> tuple[T, U]:
-        first, second = self._copy_sources(self, other)
-        return (self._read_captured(lambda: first, self._decode_capture),
-                other._read_captured(lambda: second, other._decode_capture))
-
-    def read_pair_observed[U, Observation](
-        self, other: LockedStore[U], observe: Callable[[], Observation],
-    ) -> tuple[T, U, Observation]:
-        """Capture two documents and a cheap observer token in the same source cut."""
-        with self._capturing_sources(self, other) as (first, second):
-            observed = observe()
-        return (self._read_captured(lambda: first, self._decode_capture),
-                other._read_captured(lambda: second, other._decode_capture), observed)
+class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
+    """Document changes own their write guard, independent of path construction."""
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
+        result, = self.update_each(lambda original: (change(original),))
+        return result
+
+    def update_each[R](
+        self, change: Callable[[T], Iterable[DocumentChange[T, R]]],
+    ) -> tuple[R, ...]:
+        """Publish each declared transition under one uninterrupted writer hold."""
         with self.guarded_write():
             original = self._read_unlocked()
-            changed = change(original)
-            if changed.document is not original:
-                self._publish_unlocked(changed.document)
-            return changed.result
+            results = []
+            for changed in change(original):
+                if changed.document is not original:
+                    self._publish_unlocked(changed.document)
+                original = changed.document
+                results.append(changed.result)
+            return tuple(results)
 
     def initialize(self, create: Callable[[], T]) -> T:
         """Publish a first value once; concurrent creators read the winner."""
@@ -1033,3 +1029,29 @@ class LockedStore(CopyingStore, FileStore, LockedFile, JsonDocument[T], declared
         """
         with self.guarded_write():
             self._publish_unlocked(value)
+
+    def retire(self) -> None:
+        """Retire an obsolete document and its writer claim in the same transaction."""
+        with self.guarded_write():
+            self.path.unlink()
+            store_lock_path(self.path).unlink(missing_ok=True)
+
+
+@dataclass(frozen=True, slots=True)
+class LockedStore(CopyingStore, FileStore, LockedFile, DocumentTransactions[T], declared_name=None):
+    """Each copy ends before decoding; each change owns its complete write."""
+
+    def read(self) -> T:
+        return self._read_captured(lambda: self._copy_sources(self)[0], self._decode_capture)
+
+    def read_pair[U](self, other: LockedStore[U]) -> tuple[T, U]:
+        first, second = self._copy_sources(self, other)
+        return self.read_copied(first), other.read_copied(second)
+
+    def read_pair_observed[U, Observation](
+        self, other: LockedStore[U], observe: Callable[[], Observation],
+    ) -> tuple[T, U, Observation]:
+        """Capture two documents and a cheap observer token in the same source cut."""
+        with self._capturing_sources(self, other) as (first, second):
+            observed = observe()
+        return self.read_copied(first), other.read_copied(second), observed
