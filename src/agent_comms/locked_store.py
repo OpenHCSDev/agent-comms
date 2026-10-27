@@ -27,7 +27,7 @@ from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
-from .private_path import FileObservation, FileRevision, MissingFile, PrivateFileRole
+from .private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole, PrivateFileRole
 from .store_files import (
     AtomicFile,
     DEFAULT_ISOLATION,
@@ -154,7 +154,7 @@ class RootFile:
         with cls.writers_drained(path):
             for retained, source in cls.content_files(path, name).items():
                 target = directory / retained
-                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                PrivateDirectoryRole.make_parents(target.parent)
                 cls.copy_file(source, target)
                 Platform.current().sync_file(target)
                 saved[retained] = cls.digest(target)
@@ -170,10 +170,7 @@ class RootFile:
 
     @staticmethod
     def _restore_member(source: Path, target: Path) -> None:
-        missing = [parent for parent in target.parents if not parent.exists()]
-        for parent in reversed(missing):
-            parent.mkdir(mode=0o700)
-            Platform.current().sync_directory(parent.parent)
+        PrivateDirectoryRole.make_parents(target.parent)
         descriptor, temporary = tempfile.mkstemp(prefix=".restore-", dir=target.parent)
         os.close(descriptor)
         stage = Path(temporary)

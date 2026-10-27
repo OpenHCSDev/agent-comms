@@ -1,74 +1,44 @@
 """Queued owner handoff wakes for registry and allocated queue entries."""
 
-from agent_comms.repo import Checkout
 import asyncio
-import json
-import subprocess
-import sys
 from contextlib import aclosing
 from dataclasses import replace
 
-import pytest
 
 import agent_comms.restart_queue as queue
-from agent_comms.bus import Bus
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec, RestartId
-from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
-from agent_comms.watched import DirectorySource, FileSource
-
-
-@pytest.fixture
-def dead_owner_restart(private_comms):
-    comms = private_comms
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(comms.root)))
-    snapshot = comms.registry.snapshot()
-    with subprocess.Popen(
-        (sys.executable, '-c', 'import sys; sys.stdin.buffer.read(1)'), stdin=subprocess.PIPE,
-    ) as process:
-        identity = ProcessIdentity.capture(process.pid)
-        process.communicate(b'x', timeout=10)
-        assert process.returncode == 0
-    selection = OwnerRestartSelection(
-        snapshot.owner_identity('worker'), identity,
-        snapshot.claim_generation('worker'), sys.executable,
-    )
-    return queue.QueuedRestart(
-        RestartId.mint(), selection,
-        queue.RestartTarget(sys.executable, RestartEnvironment(), sys.executable),
-        queue.PendingRestart(),
-    )
-
+from agent_comms.bus import Bus
+from agent_comms.field_codec import FieldCodec, RestartId
+from agent_comms.watched import FileSource
+from restart_fixture import dead_owner_restart, original_restart_json
 
 def test_dead_owner_restart_settles_before_selection_checks(private_comms, dead_owner_restart):
-    store = queue.RestartQueue(private_comms.root / queue.DIRECTORY)
+    store = queue.RestartQueue(private_comms.root)
     owner = dead_owner_restart.selection.identity.incarnation.require_recorded()
-    with store.guarded_write():
-        store.save(dead_owner_restart)
-    queue.step(private_comms)
-    with store.guarded_read():
-        assert not tuple(store.active_records())
-        assert not store.active_path(owner).exists()
-        assert list(store.history(owner)) == [replace(
-            dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
-        )]
+    with store.writing() as db:
+        dead_owner_restart.insert(db)
+    store.step(private_comms)
+    with store.snapshot() as db:
+        assert not store._active(db)
+    assert store.history(owner) == [replace(
+        dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
+    )]
 
 
 def test_cancel_settles_dead_pending_owner_without_a_watcher(
     private_comms, dead_owner_restart,
 ):
-    store = queue.RestartQueue(private_comms.root / queue.DIRECTORY)
+    store = queue.RestartQueue(private_comms.root)
     owner = dead_owner_restart.selection.identity.incarnation.require_recorded()
-    with store.guarded_write():
-        store.save(dead_owner_restart)
-    queue.cancel(private_comms, 'worker')
-    with store.guarded_read():
-        assert not store.active_path(owner).exists()
-        assert list(store.history(owner)) == [replace(
-            dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
-        )]
+    with store.writing() as db:
+        dead_owner_restart.insert(db)
+    store.cancel(owner)
+    with store.snapshot() as db:
+        assert not store._active(db)
+    assert store.history(owner) == [replace(
+        dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
+    )]
 
 
 async def test_restore_owner_keeps_blocked_goal_unchanged(
@@ -108,39 +78,86 @@ async def test_restore_owner_keeps_blocked_goal_unchanged(
         await asyncio.to_thread(comms.owners.stop, 'worker')
 
 
-def test_history_keeps_interrupted_terminal_visible_until_step_settles_it(
+def test_attempted_and_terminal_records_never_return_to_pending(
     private_comms, dead_owner_restart,
 ):
+    store = queue.RestartQueue(private_comms.root)
+    owner = dead_owner_restart.owner
+    attempted = replace(dead_owner_restart, state=queue.AttemptingRestart())
+    terminal = replace(dead_owner_restart, id=RestartId.mint(),
+                       state=queue.UncertainRestart(reason='ambiguous owner restart'))
+    with store.writing() as db:
+        attempted.insert(db)
+        terminal.insert(db)
+    store.step(private_comms)
+    assert store.cancel(owner) == []
+    assert store.history(owner) == [attempted, terminal]
+    with store.snapshot() as db:
+        assert store._active(db) == [attempted]
+
+
+async def test_inotify_wakes_for_registry_and_queue_changes(private_comms, dead_owner_restart):
     comms = private_comms
-    owner = dead_owner_restart.selection.identity.incarnation.require_recorded()
-    record = replace(dead_owner_restart,
-                     state=queue.UncertainRestart(reason='interrupted terminal move'))
-    store = queue.RestartQueue(comms.root / queue.DIRECTORY)
-    active = store.active_path(owner)
-    with store.guarded_write():
-        active.write_text(json.dumps(FieldCodec.encode(record)))
-    original = active.read_bytes()
-    with store.guarded_read():
-        assert list(store.history(owner)) == [record]
-        assert not tuple(store.active_records())
-        assert active.read_bytes() == original
-    queue.step(comms)
-    assert not active.exists()
-    with store.guarded_read():
-        assert list(store.history(owner)) == [record]
-        assert store.settled_path(record).read_bytes() == original
-
-
-async def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
-    root = tmp_path / "wire"
-    root.mkdir()
-    directory = root / queue.DIRECTORY
-    directory.mkdir()
-    async with aclosing(Bus.watch_sources(
-        FileSource(root / "registry.json"), DirectorySource(directory),
-    )) as observations:
+    store = queue.RestartQueue(comms.root)
+    sources = (FileSource(comms.registry.store.path),
+               *(FileSource(path) for path in type(store).source_paths(comms.root)))
+    async with aclosing(Bus.watch_sources(*sources)) as observations:
         await anext(observations)
-        (root / "registry.json").write_text("changed")
+        comms.registry.declare(Thread('wake', frozenset(), Checkout(comms.root)))
         await asyncio.wait_for(anext(observations), 1)
-        (directory / "next.json").write_text("queued")
+        with store.writing() as db:
+            dead_owner_restart.insert(db)
         await asyncio.wait_for(anext(observations), 1)
+        assert store.history(dead_owner_restart.owner) == [dead_owner_restart]
+
+
+def test_carry_keeps_every_original_and_never_requeues_an_attempt(
+    private_comms, original_restart_json, tmp_path,
+):
+    from cutover.carry_restart_queue import RestartQueueRows
+    from agent_comms.locked_store import LiveFilesRequest
+    from conftest import maintenance_held
+
+    comms = private_comms
+    directory = comms.root / queue.DIRECTORY
+    paths = tuple(original_restart_json)
+    pending, attempted, terminal, interrupted = original_restart_json.values()
+    originals = tuple(path.read_bytes() for path in paths)
+    carry = RestartQueueRows(LiveFilesRequest(comms.root), tmp_path / 'spill')
+    assert carry.carry(apply=False).changed == 4
+    assert not (directory / 'queue.sqlite3').exists()
+    with maintenance_held(comms.root):
+        assert carry.carry(apply=True).changed == 4
+        assert tuple(path.read_bytes() for path in paths) == originals
+        # A repeated carry verifies exact rows instead of minting or reclassifying them.
+        assert carry.carry(apply=True).changed == 4
+        store = queue.RestartQueue(comms.root)
+        assert store.history(pending.owner) == [pending, terminal]
+        assert store.history(attempted.owner) == [attempted]
+        assert store.history(interrupted.owner) == [interrupted]
+        assert carry.after_acceptance().changed == 4
+        assert not any(path.exists() for path in paths)
+        assert store.history(attempted.owner) == [attempted]
+    # The original pending process is dead. The watcher can only settle it;
+    # the attempted record has no new execution permission.
+    store.step(comms)
+    assert store.history(attempted.owner) == [attempted]
+
+
+def test_carry_refuses_to_activate_an_intent_from_settled_history(
+        private_comms, original_restart_json, tmp_path):
+    import pytest
+    from cutover.carry_restart_queue import RestartQueueRows
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.locked_store import LiveFilesRequest
+
+    path, pending = next(iter(original_restart_json.items()))
+    destination = path.parents[1] / "settled" / str(pending.owner.lookup) / f"{pending.id}.json"
+    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.rename(destination)
+    original = destination.read_bytes()
+    carry = RestartQueueRows(LiveFilesRequest(private_comms.root), tmp_path / 'spill')
+    with pytest.raises(RelationViolationError, match='settled restart'):
+        carry.carry(apply=False)
+    assert destination.read_bytes() == original
+    assert not queue.RestartQueue(private_comms.root).path.exists()

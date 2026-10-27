@@ -15,6 +15,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import DeclaredFile, LiveFilesRequest, RegistryFile, RootFile, UndeclaredFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage_rules import StorageRule
+from agent_comms.private_path import PrivateDirectoryRole
 
 
 @dataclass(frozen=True)
@@ -48,9 +49,9 @@ class RuntimeHome(ABC):
 
     def prepare(self) -> None:
         source = self.uv
-        self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        PrivateDirectoryRole.make_parents(self.path)
         uv = self.uv_path(self.path)
-        uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        PrivateDirectoryRole.make_parents(uv.parent)
         uv.unlink(missing_ok=True)
         uv.symlink_to(source)
         cache = Path(subprocess.run(["npm", "config", "get", "cache"], capture_output=True,
@@ -75,7 +76,7 @@ class RehearsalHome(RuntimeHome):
         selected = installed.resolve(strict=True)
         super().prepare()
         pointer = self.path / installed.relative_to(Path.home())
-        pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        PrivateDirectoryRole.make_parents(pointer.parent)
         pointer.unlink(missing_ok=True)
         pointer.symlink_to(selected)
 
@@ -108,7 +109,7 @@ class PracticeCopy:
 
     def include(self, paths: tuple[Path, ...]) -> None:
         floor = StorageRule.load(self.root).floor_gib * 2**30
-        self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        PrivateDirectoryRole.make_parents(self.path)
         if shutil.disk_usage(self.path.parent).free < floor:
             raise UpgradeRefused("Insufficient free space before building the practice copy")
         witnesses = set(MaintenanceBarrier(RegistryFile.path_in(self.root)).witness_paths)
@@ -117,7 +118,7 @@ class PracticeCopy:
             if source in self.copied or source in witnesses or not source.exists():
                 continue
             target = resource.retained(self.path)
-            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            PrivateDirectoryRole.make_parents(target.parent)
             self.copied.update((member, resource) for member in resource.owner.copy_group(source, target))
 
     def retain(self, paths: tuple[Path, ...]) -> None:

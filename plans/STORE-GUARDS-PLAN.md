@@ -30,7 +30,7 @@ The fact "which lock guards this write" is declared nowhere, so every caller res
 
 ## How to execute without churn
 
-- **No stored data changes.** Lock files keep their paths (`store_lock_path`, `store_files.py:343`); only who takes them changes. No carry step.
+- **Keep formats when changing guard ownership alone.** The restart queue replaces its separate JSON save/move with one existing typed SQLite transaction; its one-time carry outside production source preserves every exact pending, attempted and settled intent before retiring JSON. Other stores retain their paths and formats.
 - **Delete, never wrap.** A site the audit marked PROTECTS NOTHING loses its lock with no replacement. A WIDER site moves to its own store's guard, as #3187 did for turn files.
 - **One store family per PR.** Phases 1 to 3 change `store_files.py`, `locked_store.py` and `typed_table.py` together, so they run in order with one editor. Phase 4 waits for P628 (unit-installer), which owns `maintenance_barrier.py` and `goal_attempts.py` now.
 - **Out of scope while owned elsewhere:** `coordination_session.py` and `proven_source_coverage.py` (fork-coverage), `typed_table.py:2183-2310`, `goal_attempts.py` and `maintenance_barrier.py` (P628), and `queued_input.py`'s `deliver_pending` (#3183). Each joins its phase once its owner merges.
