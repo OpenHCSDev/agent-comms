@@ -51,6 +51,8 @@ from .message_page import PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .owner_lifecycle import OwnerStartResult
+from .owner_connection import OwnerConnection
+from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
@@ -690,6 +692,23 @@ class CommsThreadsTool(ReadTool, ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadListing:
         threads = ThreadsCliCommand(active_only=self.active_only).apply(comms)
         return caller.listing(comms, threads.threads)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsResourcesTool(ThreadReadTool):
+    label = "Host resources"
+    description = (
+        "Read a running thread's shared Python host memory, module and owner counts, "
+        "and cumulative registry read/capture/decode counts. Native model children "
+        "are separate from this shared host measurement."
+    )
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
+        thread = comms.registry.require(caller.subject(self.thread))
+        return FieldCodec.decode(HostResources, OwnerConnection.exchange(
+            comms.root, thread.require_process(),
+            ReadHostResourcesRuntimeRequest(thread=thread.name),
+        ))
 
 
 @dataclass(frozen=True, kw_only=True)

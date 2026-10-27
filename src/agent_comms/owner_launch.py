@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 import asyncio
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .child_process import Platform, ProcessIdentity
+from .child_process import Platform, ProcessIdentity, ProportionalMemory, ResidentMemory
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
@@ -17,6 +19,8 @@ from .field_codec import AcpSessionId, FieldCodec
 from .owner_connection import OwnerConnection, ResultRuntimeRequest, RuntimeRequestContext
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .tool_result import DeclaredReply
+from .tool_result import ToolResult
+from .registry_store import RegistryReadCounts
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerRestartSelection
@@ -92,6 +96,39 @@ class OwnerAttachedReply(DeclaredReply):
 @dataclass(frozen=True)
 class OwnerRetiredReply(DeclaredReply):
     owner: OwnerIdentity
+
+
+@dataclass(frozen=True)
+class HostResources(ToolResult):
+    """The shared control host; native model children have independent allocations."""
+
+    process: ProcessIdentity
+    owners: int
+    modules: int
+    memory: ResidentMemory
+    proportional_bytes: int
+    registry: RegistryReadCounts
+    budget_bytes: int
+    fleet_resident_bytes: int
+    fleet_budget_bytes: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReadHostResourcesRuntimeRequest(ResultRuntimeRequest):
+    async def result(self, ctx: RuntimeRequestContext) -> HostResources:
+        owners = sum(len(state.executors()) for state in ctx.server.agent.inputs.drained.values())
+        def capture() -> HostResources:
+            comms = ctx.server.agent._comms
+            process = ProcessIdentity.capture(os.getpid())
+            return HostResources(
+                process, owners, len(sys.modules),
+                process.memory(), ProportionalMemory.read(Path("/proc") / str(process.pid)).bytes,
+                comms.registry.store.cache.read_counts(),
+                comms.registry.storage_rule.host_memory_bytes,
+                sum(row.resident for row in ResidentMemory.tree(process, Path("/proc")).values()),
+                comms.registry.storage_rule.fleet_memory_budget(owners),
+            )
+        return await Coordination.run_worker(capture)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -20,7 +20,7 @@ from agent_comms.send_outcome import AuthorityChangedSend, SendBoundary, SendOut
 from . import agent_events as events
 from .agent_backend import InputStartListener
 from .channel_coding_tools import CodingToolOwner
-from .coordination_session import NativeBoundary
+from .coordination_session import NativeBoundary, NativeCommit
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
 from .field_codec import ClaimId, InputId, TurnId
@@ -156,7 +156,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
             return
 
         def release() -> None:
-            with NativeBoundary(self.comms.bus) as boundary, boundary.current():
+            with NativeCommit(self.comms.bus) as boundary:
                 boundary.bus.publisher.release_resources(
                     boundary, tuple(self.claims.values()), "Released files after an ordinary turn"
                 )

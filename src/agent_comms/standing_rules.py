@@ -35,6 +35,8 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
+from agent_comms.child_process import ProcessIdentity, ResidentMemory
+from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
@@ -1149,6 +1151,50 @@ class BoardDisagrees(UndatedStandingRule):
             f"REPAIR the board reads no commit for {self.problem} order {self.order}, but its linked PR"
             f" merged as {self.merge[:9]}. why guess when git has the answer?"
             " -> repair the progress read this wake"
+        )
+
+
+@dataclass(frozen=True)
+class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
+    """A shared control host which has exceeded its measured regression budget."""
+
+    process: ProcessIdentity
+    memory: ResidentMemory = field(compare=False)
+    rule: StorageRule = field(compare=False)
+    owners: int
+    fleet_resident: int = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        try:
+            runtime = RootRuntimeStore.at(comms.root).read()
+        except FileNotFoundError:
+            return ()  # A root which never launched a worker has no host memory.
+        process = runtime.host.observed(comms.root)
+        if not process.alive():
+            return ()
+        try:
+            identity = process.require()
+            memory = identity.memory(comms.registry.storage_rule.proc)
+        except ProcessLookupError:
+            return ()
+        rule = comms.registry.storage_rule
+        owners = sum(thread.process_identity == identity
+                     for thread in comms.registry.all_threads().values())
+        fleet = sum(row.resident for row in ResidentMemory.tree(identity, rule.proc).values())
+        exceeded = rule.host_memory_exceeded(memory) or fleet > rule.fleet_memory_budget(owners)
+        return (cls(identity, memory, rule, owners, fleet),) if exceeded else ()
+
+    def line(self) -> str:
+        return (
+            f"RAM shared Python host {self.process.pid}: "
+            f"{self.memory.resident / 2**20:.0f} MiB resident, "
+            f"{self.memory.peak / 2**20:.0f} MiB peak / "
+            f"{self.rule.host_memory_bytes / 2**20:.0f} MiB host budget; "
+            f"whole fleet {self.fleet_resident / 2**20:.0f} / "
+            f"{self.rule.fleet_memory_budget(self.owners) / 2**20:.0f} MiB "
+            f"for {self.owners} owners"
+            " -> inspect comms_resources and fix the host's growing owner"
         )
 
 

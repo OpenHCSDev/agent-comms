@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_session import NativeCommit
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import RootId, ThreadLookup
 
@@ -72,8 +72,7 @@ async def _accept_visible_deliveries(
         # The frontier cannot outlive a rolled-back acceptance, nor does it
         # assert that any native input was consumed.
         with (
-            NativeBoundary(bus) as boundary,
-            boundary.current(),
+            NativeCommit(bus) as boundary,
             bus.bus.reading() as source,
             resource.session.writing() as db,
         ):

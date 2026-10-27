@@ -39,11 +39,11 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
+from typing import TYPE_CHECKING, Annotated, Any, BinaryIO, ClassVar, NoReturn, Self, TextIO
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128, NullMember, RecordMember, SubclassUnion
+from .field_codec import FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .sealed import Sealed
 from .systemd_unit import AgentsSlice, SystemdUnit
@@ -58,6 +58,66 @@ if TYPE_CHECKING:
 
 STOP_GRACE_SECONDS = 2.0
 
+
+@dataclass(frozen=True)
+class ProcfsColumn(FieldDirective):
+    key: str
+    scale: int = 1024
+
+    def value(self, tokens: list[str]) -> int:
+        return int(tokens[0]) * self.scale
+
+
+class ProcfsRecord:
+    """Procfs owns the text; field declarations own selection, units and requiredness."""
+
+    filename: ClassVar[str]
+
+    @classmethod
+    def read(cls, directory: Path) -> Self:
+        fields = {key: value.split()
+                  for line in (directory / cls.filename).read_text().splitlines()
+                  for key, _, value in (line.partition(":"),)}
+        return FieldCodec.decode(cls, {
+            plan.key: column.value(fields[column.key])
+            for plan in FieldCodec.field_plans(cls)
+            for column in ProcfsColumn.single(plan.annotation)
+            if column.key in fields
+        })
+
+
+@dataclass(frozen=True)
+class ProportionalMemory(ProcfsRecord):
+    filename = "smaps_rollup"
+    bytes: Annotated[int, ProcfsColumn("Pss"), WireRequired()]
+
+
+@dataclass(frozen=True)
+class ResidentMemory(ProcfsRecord):
+    """One procfs status sample, in bytes; kernel threads have no resident pages."""
+
+    filename = "status"
+    parent: Annotated[int, ProcfsColumn("PPid", 1), WireRequired()]
+    resident: Annotated[int, ProcfsColumn("VmRSS")] = 0
+    peak: Annotated[int, ProcfsColumn("VmHWM")] = 0
+
+    @classmethod
+    def tree(cls, process: ProcessIdentity, proc: Path) -> dict[int, ResidentMemory]:
+        """A sampled descendant set, guarded by the root's exact process birth."""
+        if not process.alive():
+            return {}
+        rows = {}
+        for directory in proc.glob("[0-9]*"):
+            try:
+                rows[int(directory.name)] = cls.read(directory)
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+        tree = {process.pid}
+        pending = set(rows) - tree
+        while children := {pid for pid in pending if rows[pid].parent in tree}:
+            tree.update(children)
+            pending.difference_update(children)
+        return {pid: rows[pid] for pid in tree & rows.keys()} if process.alive() else {}
 
 class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
@@ -196,6 +256,13 @@ class ProcessIdentity(RecordMember, ProcessState):
     def __post_init__(self) -> None:
         if self.pid <= 0 or self.start_time <= 0:
             raise ValueError("A positive PID and platform start time are required")
+
+    def memory(self, proc: Path = Path("/proc")) -> ResidentMemory:
+        platform = Platform.current()
+        platform.require(self)
+        result = ResidentMemory.read(proc / str(self.pid))
+        platform.require(self)
+        return result
 
     @classmethod
     def pid_argument(cls, value: str) -> dict[str, object]:

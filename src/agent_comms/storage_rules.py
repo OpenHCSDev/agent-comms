@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.child_process import ResidentMemory
 from agent_comms.field_codec import (
     FieldCodec,
     GoalId,
@@ -193,6 +194,10 @@ class GoalCheckoutAllocation(RepositoryAllocation):
 @dataclass(frozen=True)
 class StorageRule(RoomAllocation, DurableFile):
     filename: ClassVar[str] = "storage.json"
+    # Shared Python control host, measured through real three/29-owner journeys.
+    host_memory_bytes: ClassVar[int] = 512 * 2**20
+    # Independent interactive children; a reporting budget, never a killing limit.
+    native_owner_memory_bytes: ClassVar[int] = 192 * 2**20
     floor_gib: float = 10.0  # under this nothing that allocates may run
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
@@ -350,15 +355,20 @@ class StorageRule(RoomAllocation, DurableFile):
         for pid in self.proc.glob('[0-9]*'):
             try:
                 argv = (pid / 'cmdline').read_bytes().split(b'\0')
-                status = (pid / 'status').read_text().splitlines()
+                memory = ResidentMemory.read(pid)
             except (FileNotFoundError, ProcessLookupError):
                 continue
-            rss = [line.split()[1] for line in status if line.startswith('VmRSS:')]
-            if rss and any(b'pytest' in word for word in argv):
-                yield MemoryHolder(f'pid {pid.name}', int(rss[0]) / 2**20)
+            if memory.resident and any(b'pytest' in word for word in argv):
+                yield MemoryHolder(f'pid {pid.name}', memory.resident / 2**30)
 
     def memory_due(self, memory: MemoryUse) -> bool:
         return memory.available_gib < self.memory_gib
+
+    def host_memory_exceeded(self, memory: ResidentMemory) -> bool:
+        return max(memory.resident, memory.peak) > self.host_memory_bytes
+
+    def fleet_memory_budget(self, owners: int) -> int:
+        return self.host_memory_bytes + owners * self.native_owner_memory_bytes
 
     def below_floor(self, free_gib: float) -> bool:
         return free_gib < self.floor_gib
