@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from .goal_presentation import GoalExecution, GoalExecutionSource
     from .messaging import Messaging
     from .registry_document import RegistrySnapshot
+    from .registry_store import RegistryStore
     from .threads import Thread
 
 
@@ -636,14 +637,13 @@ class NamedTurn(LockedTurn):
     def effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
-        def change(active: ActiveTurn) -> DocumentChange[ActiveTurn, tuple[TurnState, ...]]:
+        def change(active: ActiveTurn) -> Iterator[DocumentChange[ActiveTurn, TurnState]]:
             if not active.held_by(lease):
-                return DocumentChange(active, ())
+                return
             effects = tuple(observe(TurnState(active)))
             for state in effects:
-                active = state.active.require_active()
-            return DocumentChange(active, effects)
-        return self.record.writers.update(change)
+                yield DocumentChange(state.active.require_active(), state)
+        return self.record.writers.update_each(change)
 
 
 class RetiredTurn(LockedTurn):
@@ -679,6 +679,13 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     def writers(self) -> LockedTurnFile:
         return LockedTurnFile(self.path)
 
+    @property
+    def registry(self) -> RegistryStore:
+        """The registry owner this stored reference is bound to."""
+        from .registry_store import RegistryStore
+
+        return RegistryStore(self.registry_path)
+
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         record = super().bound_to(registry_path, identity)
         return (self if (self.registry_path, self.identity) ==
@@ -690,9 +697,7 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
         The shared registry lock covers its two-file authority and keeps a named
         turn from being retired while it is read. Turn-file replacements are atomic.
         """
-        from .registry_store import RegistryStore
-
-        return RegistryStore(self.registry_path).read_turn(self)
+        return self.registry.read_turn(self)
 
     def read_copied(self, original: StoredTurnRecord, source: DocumentBytes) -> TurnDeclaration:
         if self == original:
@@ -719,9 +724,7 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
         return active.lease(incarnation, self)
 
     def without_claim(self) -> None:
-        from .registry_store import RegistryStore
-
-        RegistryStore(self.registry_path).change_turn(self, lambda named: named.without_claim())
+        self.registry.change_turn(self, lambda named: named.without_claim())
 
     def retire(self) -> None:
         """Delete a superseded turn under its own lock; a phase change waiting on that lock
@@ -732,10 +735,7 @@ class StoredTurnRecord(Executing, TurnFile, StoredTurnReference,
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
-        from .registry_store import RegistryStore
-
-        return RegistryStore(self.registry_path).change_turn(
-            self, lambda named: named.effects(lease, observe))
+        return self.registry.change_turn(self, lambda named: named.effects(lease, observe))
 
     def transition(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))

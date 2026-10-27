@@ -11,7 +11,7 @@ import stat
 import tempfile
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Collection, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from functools import cache
@@ -994,12 +994,22 @@ class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
     """Document changes own their write guard, independent of path construction."""
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
+        result, = self.update_each(lambda original: (change(original),))
+        return result
+
+    def update_each[R](
+        self, change: Callable[[T], Iterable[DocumentChange[T, R]]],
+    ) -> tuple[R, ...]:
+        """Publish each declared transition under one uninterrupted writer hold."""
         with self.guarded_write():
             original = self._read_unlocked()
-            changed = change(original)
-            if changed.document is not original:
-                self._publish_unlocked(changed.document)
-            return changed.result
+            results = []
+            for changed in change(original):
+                if changed.document is not original:
+                    self._publish_unlocked(changed.document)
+                original = changed.document
+                results.append(changed.result)
+            return tuple(results)
 
     def initialize(self, create: Callable[[], T]) -> T:
         """Publish a first value once; concurrent creators read the winner."""
