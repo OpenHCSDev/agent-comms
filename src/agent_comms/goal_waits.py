@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -21,7 +21,7 @@ from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .turn_lease import TurnLease
+from .turn_lease import TurnCompletion, TurnLease
 from .typed_table import (
     Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild,
     StoreRows, TypedTable,
@@ -29,7 +29,10 @@ from .typed_table import (
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
-    from .goal_management import Goals
+    from .registration import Registration
+    from .message_bus import MessageBus
+    from .message_reference import MessageReference
+    from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
     from .registry_store import RegistryEdit
     from .threads import Thread
@@ -257,7 +260,7 @@ class GoalWaitReview:
     turn: TurnLease
 
     @staticmethod
-    def capture(goals: Goals, incarnation: RecordedThreadIncarnation) -> GoalWaitReview:
+    def capture(goals: GoalWaitRecovery, incarnation: RecordedThreadIncarnation) -> GoalWaitReview:
         with goals.registry.store.current_snapshot() as cut:
             snapshot = cut.snapshot
             for owner in snapshot.threads_for(incarnation):
@@ -266,7 +269,7 @@ class GoalWaitReview:
                 )
             raise UnregisteredThreadError("The reviewed thread incarnation was removed.")
 
-    def current_for(self, goals: Goals) -> bool:
+    def current_for(self, goals: GoalWaitRecovery) -> bool:
         """Caller holds the publication lock; no reply decoding belongs in this check."""
         snapshot = goals.registry.snapshot()
         return any(
@@ -284,14 +287,14 @@ class GoalWaitReview:
             for goal in owner.goal.active()
         )
 
-    def require_current(self, goals: Goals, owner: Thread) -> None:
+    def require_current(self, goals: GoalWaitRecovery, owner: Thread) -> None:
         if owner.incarnation != self.owner.incarnation or not self.current_for(goals):
             raise ValueError(
                 "Goal, dependency or wait changed during reply review; inspect it again."
             )
 
     def publish_unanswered(
-        self, goals: Goals, publish: Callable[[RegistryEdit], tuple[str, ...]],
+        self, goals: GoalWaitRecovery, publish: Callable[[RegistryEdit], tuple[str, ...]],
     ) -> tuple[str, ...]:
         """Publish once through the checked edit after an unlocked read proves silence."""
         owner = self.owner.incarnation.require_recorded()
@@ -341,7 +344,7 @@ class GoalInputReview(GoalWaitReview):
         """Publishing an input review still requires the exact prepared goal."""
         return owner.goal == self.owner.goal
 
-    def current_for(self, goals: Goals) -> bool:
+    def current_for(self, goals: GoalWaitRecovery) -> bool:
         if not super(GoalInputReview, self).current_for(goals):
             return False
         snapshot = goals.registry.snapshot()
@@ -372,6 +375,144 @@ class GoalInputReview(GoalWaitReview):
             tuple(reviewed),
             tuple(excluded),
         )
+
+
+class GoalWaitRecovery:
+    """Release and consume dependency waits against their original goal and input state."""
+
+    registry: Registration
+    bus: MessageBus
+    agents: AgentActivity
+    waits: GoalWaits
+
+    def goal_wait(self, name: str) -> GoalWait:
+        goal = self.registry.require(name).goal
+        return self.waits.resolve(goal)
+
+    def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
+        """Read silence outside the registry, then release only the observed wait."""
+        try:
+            incarnation = self.registry.require(name).incarnation.require_recorded()
+            review = GoalWaitReview.capture(self, incarnation)
+        except UnregisteredThreadError:
+            return ()
+        owner = review.owner
+        snapshot = review.snapshot
+        if self.agents.is_working(owner.incarnation, snapshot) or not any(
+            review.wait.current_for(goal, owner.incarnation.require_recorded())
+            for goal in owner.goal.active()
+        ):
+            return ()
+        closed = GoalWaits.closed_wait_group(
+            owner.name, review.wait.targets, self.waits.read(), snapshot, self.agents,
+        )
+        if not closed:
+            return ()
+        # A failed read is a diagnostic, never evidence of silence.
+        def release(edit: RegistryEdit) -> tuple[str, ...]:
+            snapshot = edit.original.snapshot
+            owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
+            if self.agents.is_working(owner.incarnation, snapshot):
+                return ()
+            closed = GoalWaits.closed_wait_group(
+                owner.name, review.wait.targets, self.waits.read(), snapshot, self.agents,
+            )
+            if not closed:
+                return ()
+            names = ", ".join(f"@{member}" for member in closed)
+            note = (
+                f"Dependency wait group ({names}) has no independent worker. "
+                "Standby was released; inspect dependencies and continue useful work."
+            )
+            return closed if self._release_reviewed_wait(edit, review, note) else ()
+
+        return review.publish_unanswered(self, release)
+
+    def release_waits_after_terminal_turn(self, fence: TurnCompletion) -> tuple[str, ...]:
+        """A completed turn may release silence observed outside the registry lock."""
+        snapshot = self.registry.snapshot()
+        sources = fence.idle_sources(snapshot)
+        if not sources:
+            return ()
+        source, = sources
+        released: list[str] = []
+        for wait in self.waits.targeting(source.incarnation.require_recorded()):
+            for owner in snapshot.threads_for(wait.owner):
+                try:
+                    review = GoalWaitReview.capture(self, owner.incarnation.require_recorded())
+                except UnregisteredThreadError:
+                    continue
+                if review.wait == wait:
+                    released.extend(self._release_finished_wait(review, fence))
+        return tuple(released)
+
+    def _release_finished_wait(
+        self, review: GoalWaitReview, fence: TurnCompletion,
+    ) -> tuple[str, ...]:
+        wait, owner = review.wait, review.owner
+        if not any(wait.current_for(goal, owner.incarnation.require_recorded())
+                   for goal in owner.goal.active()):
+            return ()
+        if any(self.agents.is_working(target.incarnation, review.snapshot)
+               for target in wait.targets):
+            return ()
+        def release(edit: RegistryEdit) -> tuple[str, ...]:
+            current = edit.original.snapshot
+            sources = fence.idle_sources(current)
+            if not sources or any(self.agents.is_working(target.incarnation, current)
+                                  for target in wait.targets):
+                return ()
+            actual_source, = sources
+            note = (
+                f"Declared dependency @{actual_source.name} finished without a qualifying direct "
+                "reply, and no declared dependency has an active turn. "
+                "Standby was released; inspect messages and UNKNOWN inputs, then "
+                "continue independent work or redelegate. No input was replayed."
+            )
+            if self._release_reviewed_wait(edit, review, note):
+                actual_owner, = current.threads_for(owner.incarnation.require_recorded())
+                return (actual_owner.name,)
+            return ()
+
+        return review.publish_unanswered(self, release)
+
+    def _release_reviewed_wait(self, edit: RegistryEdit, review: GoalWaitReview, note: str) -> bool:
+        """Publish a validated silent wait through the review's existing registry edit."""
+        snapshot = edit.original.snapshot
+        owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
+        goal = owner.goal.require_active()
+        progress = f"{goal.progress}\n\n{note}" if goal.progress else note
+        change = edit.document.prepare_registration(
+            replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
+            snapshot.status(owner.name), new_owner=False,
+        )
+        self.registry._commit_registration(edit, change)
+        return review.wait.clear(self.waits)
+
+    def consume_goal_wait(self, name: str, wait_id: GoalWaitId) -> bool:
+        """Consume the exact wait after reserving its original attempt."""
+        goal = self.registry.require(name).goal.active()
+        return goal.consume_wait(self.waits, wait_id)
+
+    def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
+        """Read the exact completed delivery before checking its original owner fence."""
+        with self.registry.store.current_snapshot():
+            owner.require_registry(self.registry)
+            review = GoalWaitReview.capture(self, owner.thread.incarnation.require_recorded())
+        incarnation = review.owner.incarnation.require_recorded()
+        if not review.wait.owner_matches(incarnation):
+            return False
+        original, = self.bus.bus.deliveries_for_references((reference,))
+        if not review.wait.matches(original, incarnation):
+            return False
+        with self.registry.store.current_snapshot() as cut:
+            owner.require_registry(self.registry)
+            if not review.current_for(self):
+                return False
+            current, = cut.snapshot.threads_for(incarnation)
+            goal = current.continuation_goal(owner.thread)
+            return any(review.wait.current_for(actual, incarnation)
+                       and review.wait.clear(self.waits) for actual in goal)
 
 
 class GoalWaitsRows(StoreRows):
