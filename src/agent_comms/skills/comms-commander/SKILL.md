@@ -98,6 +98,8 @@ One line per unit touched, then the next unit. Every turn longer than a couple o
 
 rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md the default verdicts. Slop is a property of the program, not of its author.
 
+- **NRA finds and removes slop; read the `nra-refactoring` skill before ordering a refactor.** One complete NominalRefactorAdvisor scan is the map (rules/refactor-game.md); each finding names the restated fact, its owner and the factoring, and a fixable finding names the codemod that applies it. Order the codemod run, not a hand edit the tool already performs.
+
 - **Every slop claim cites the pinned catalog and carries its formal statement.** Slop send-backs: `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; a correctness send-back (a bug, not a restated fact) gives only `--at` the failing PATH:LINE, and the options given choose which. Orders: a `slop` array of `{"pattern":"IDEN-5","fact":"the fields of each order","at":"src/example.py:1","derive":"declaration","by":"src/owner.py:1"}`; when the order's edits create the owner, `"by":{"created":"src/new_owner.py:1"}`, and done refuses until that line exists on the delivered tree. The tools refuse unknown IDs and malformed fields.
 
 ## Forks, strikes and the record

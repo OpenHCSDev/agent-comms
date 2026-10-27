@@ -104,7 +104,6 @@ def test_commander_admin_and_api_merges_require_the_pinned_recorded_ok(
         head_bus, reviewed_source, tmp_path):
     comms, github, request = head_bus
     transcript = tmp_path / "s.jsonl"
-    transcript.with_suffix(".reread").mkdir()
     WatchClaim("s").enrol(WatchRecord("lead", str(comms.root), (), tmp_path / "state"))
     def commands(head):
         return (

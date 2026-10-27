@@ -12,7 +12,8 @@ import subprocess
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
+from agent_comms_hooks import ClaudeHookProgram
+from agent_comms_hooks.watch import CommanderSession
 
 
 class SubagentId(str):
@@ -25,7 +26,7 @@ class SubagentId(str):
 
 
 @dataclass(frozen=True)
-class SubagentHook(ClaudeTranscriptHook):
+class SubagentHook(CommanderSession):
     """What Claude Code adds for a subagent event; `transcript_path` stays the parent's."""
 
     agent_id: SubagentId
@@ -38,7 +39,7 @@ class SubagentHook(ClaudeTranscriptHook):
 
     def register(self) -> None:
         """A subagent of any other session is not the commander's fork."""
-        if not self.parts.exists():
+        if not self.commands:
             return
         run = self.commanding("join")
         if run.returncode:
@@ -49,7 +50,7 @@ class SubagentHook(ClaudeTranscriptHook):
                   " a record of what you found.")
 
     def retire(self) -> None:
-        if not self.parts.exists():
+        if not self.commands:
             return
         run = self.commanding("retire")
         if run.returncode:

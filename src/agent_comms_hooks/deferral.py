@@ -18,7 +18,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import ClassVar, Self
 
-from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook, HookRecord
+from agent_comms_hooks import ClaudeHookProgram, HookRecord
+from agent_comms_hooks.watch import CommanderSession
 
 
 class Tagged(HookRecord):
@@ -204,7 +205,7 @@ def quoted(phrases: tuple[str, ...]) -> str:
 
 
 @dataclass(frozen=True)
-class StopHook(ClaudeTranscriptHook):
+class StopHook(CommanderSession):
     stop_hook_active: bool
 
     @cached_property
@@ -223,7 +224,7 @@ class StopHook(ClaudeTranscriptHook):
 
     def guard(self) -> None:
         """A stop this hook already sent back is let through, so it never loops."""
-        if self.stop_hook_active or not self.parts.exists():
+        if self.stop_hook_active or not self.commands:
             return
         reply = self.reply()
         reasons = tuple(

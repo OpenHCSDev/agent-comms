@@ -51,6 +51,9 @@ from agent_comms.launch_runtime import LaunchRuntime
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
+from agent_comms.thread_model import DeclaredModel
+from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "pytest_session")
 
@@ -523,3 +526,25 @@ def wired(comms: Comms) -> Comms:
     ))
 
 
+
+
+@pytest.fixture
+def commander_bus(tmp_path):
+    """A bus whose registry names `claude-code` its commander, beside a unit `unit-x`."""
+    bus = wire(tmp_path / "bus")
+    for name in ("claude-code", "unit-x"):
+        bus.registry.declare(Thread(
+            name, frozenset(), Checkout(tmp_path),
+            model=DeclaredModel("anthropic/claude-opus-4-6")))
+    bus.registry.set_commander_project(RegisteredCommanderProject(
+        bus.registry.require("claude-code").incarnation, ()))
+    return bus
+
+
+@pytest.fixture
+def commanding_session(tmp_path, monkeypatch, commander_bus):
+    """Claude session `s` bound to the thread the registry names commander: the only way a
+    session commands, so hooks see the same answer the registry gives."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    WatchClaim("s").enrol(WatchRecord("claude-code", str(commander_bus.root), (), tmp_path / "state"))
+    return commander_bus

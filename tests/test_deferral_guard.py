@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 from agent_comms_hooks.deferral import FutureOrder, Later, NextTick
 
 
@@ -19,6 +20,9 @@ def text(words):
     return {"type": "text", "text": words}
 
 
+pytestmark = pytest.mark.usefixtures("commanding_session")
+
+
 TOOL = {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}
 RESULT = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}
 
@@ -27,7 +31,6 @@ def stop(tmp_path: Path, records, *, idle: str, active: bool = False) -> subproc
     """Run the installed hook module with Core's idle command answered by `idle` (a shell body)."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("".join(json.dumps(record) + "\n" for record in records))
-    transcript.with_suffix(".reread").mkdir()
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     command = bin_dir / "agent-comms-commander"
@@ -85,3 +88,14 @@ def test_a_failed_idle_read_blocks_and_says_so(tmp_path):
 ])
 def test_each_deferral_shape_recognises_its_phrase(shape, reply):
     assert tuple(shape.found(reply))
+
+
+@pytest.mark.parametrize("bound", ["", "unit-x"])
+def test_a_session_that_is_not_commander_stops_freely(tmp_path, monkeypatch, commander_bus, bound):
+    """Only the registry's commander is sent back; a unit or an unbound session may defer."""
+    monkeypatch.setenv("HOME", str(tmp_path / "unit-home"))
+    if bound:
+        WatchClaim("s").enrol(WatchRecord(bound, str(commander_bus.root), (), tmp_path / "state"))
+    result = stop(tmp_path, DEFERRING, idle="printf 'pi-story-tool\\n'")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""

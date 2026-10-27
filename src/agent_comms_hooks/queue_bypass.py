@@ -209,13 +209,11 @@ class QueueBypassGuard(BashRefusal):
     def reasons_for(cls, hook: ClaudeToolHook) -> tuple[str, ...]:
         command = Bash.decode(hook.tool_input).command
         reasons = cls.reasons(command)
-        if not reasons or not hook.parts.exists():
+        state = WatchClaim(hook.session_id).state()
+        if not reasons or not state.commands():
             return reasons
-        bindings = WatchClaim(hook.session_id).state().bindings()
-        if not bindings:
-            return ("The commander session has no recorded bus binding; no verdict can be read.",)
         (entry,) = entry_points(group="console_scripts", name="agent-comms")
-        for binding in bindings:
+        for binding in state.bindings():
             try:
                 checked = subprocess.run(
                     (sys.executable, "-m", entry.module, "--root", binding.root,
