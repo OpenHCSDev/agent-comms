@@ -16,6 +16,7 @@ import pytest
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
+from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, TodoError
 from agent_comms.external_transcript import ExternalTranscript
@@ -210,6 +211,8 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     ctx = CommanderContext.read_root(comms.root).model_copy(
         update={"actor": CommanderForkCaller(fork.name)}
     )
+    heartbeat = CommanderHeartbeat()
+    heartbeat.pass_body(comms, (CommanderObservation.read(comms, parent),))
     hud = ctx.call(CommsHudTool(thread=ctx.commander))
     assert hud.commander == parent.incarnation
     assert [(unit.unit, tuple(order.problem for order in unit.orders)) for unit in hud.units] == [

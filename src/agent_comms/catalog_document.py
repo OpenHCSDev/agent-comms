@@ -72,21 +72,10 @@ class NoCatalog(CatalogAccess):
 
 @dataclass(slots=True)
 class CatalogPreferences(CatalogAccess):
-    """The channel preference map owns its edits, pin cleanup and parent relation."""
+    """The channel preference map owns ordering, pin edits and cleanup."""
 
     preferences: dict[str, ChannelPreferences] = field(default_factory=dict)
     list_order: type[ChannelSort] = NameChannelSort
-
-    def validate_parents(self) -> None:
-        for name in self.preferences:
-            visited = set()
-            parent = name
-            while parent is not None:
-                if parent in visited:
-                    raise ValueError("Channel parent relation cannot contain a cycle.")
-                visited.add(parent)
-                parent = self.preferences.get(parent, ChannelPreferences()).parent
-
 
     def pinned_threads(self, channel: str) -> frozenset[str]:
         return self.preferences.get(channel, ChannelPreferences()).pinned_threads
@@ -105,28 +94,6 @@ class CatalogPreferences(CatalogAccess):
         preference = self.preferences.get(channel.name, ChannelPreferences(created_at=channel.created_at))
         self.preferences[channel.name] = replace(preference, **changes)
         return self.require_channel(channel.name, activity)
-
-
-    def set_metadata(self, name: str, activity: ActivityClocks, *, parent: str | None, archived: bool) -> Channel:
-        current = self.require_channel(name, activity)
-        current.require_metadata()
-        if type(archived) is not bool:
-            raise ValueError("Channel archived state must be boolean.")
-        if parent is not None:
-            parent = ChannelTarget.normalize_name(parent)
-            try:
-                parent_channel = self.require_channel(parent, activity)
-            except UnknownChannelError as error:
-                raise ValueError(f"Unknown parent channel: {parent!r}") from error
-            parent_channel.require_parent()
-        result = self.set_preferences(name, activity, parent=parent, archived=archived)
-        self.validate_parents()
-        return result
-
-
-    def set_archived(self, name: str, archived: bool, activity: ActivityClocks) -> Channel:
-        channel = self.require_channel(name, activity)
-        return self.set_metadata(channel.name, activity, parent=channel.parent, archived=archived)
 
 
     def set_list_order(self, order: type[ChannelSort]) -> type[ChannelSort]:
@@ -192,6 +159,39 @@ class CatalogDocument(CatalogPreferences):
         if any(name != view.name for name, view in self.saved_views.items()):
             raise ValueError("Saved view key must match its declared name")
         self.validate_parents()
+
+    def validate_parents(self) -> None:
+        for name in self.preferences:
+            visited = set()
+            parent = name
+            while parent is not None:
+                if parent in visited:
+                    raise ValueError("Channel parent relation cannot contain a cycle.")
+                visited.add(parent)
+                parent = self.preferences.get(parent, ChannelPreferences()).parent
+
+
+    def set_metadata(self, name: str, activity: ActivityClocks, *, parent: str | None, archived: bool) -> Channel:
+        current = self.require_channel(name, activity)
+        current.require_metadata()
+        if type(archived) is not bool:
+            raise ValueError("Channel archived state must be boolean.")
+        if parent is not None:
+            parent = ChannelTarget.normalize_name(parent)
+            try:
+                parent_channel = self.require_channel(parent, activity)
+            except UnknownChannelError as error:
+                raise ValueError(f"Unknown parent channel: {parent!r}") from error
+            parent_channel.require_parent()
+        result = self.set_preferences(name, activity, parent=parent, archived=archived)
+        self.validate_parents()
+        return result
+
+
+    def set_archived(self, name: str, archived: bool, activity: ActivityClocks) -> Channel:
+        channel = self.require_channel(name, activity)
+        return self.set_metadata(channel.name, activity, parent=channel.parent, archived=archived)
+
 
     @property
     def present_tags(self) -> frozenset[str]:

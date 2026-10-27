@@ -15,6 +15,7 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
+from agent_comms.routing import NoTurnRouting
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile, ExclusiveLock, StoreLockContention, _store_lock
@@ -30,7 +31,7 @@ def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_regi
     thread_registration.register(owner(tmp_path, registry=thread_registration))
     before = thread_registration.snapshot().owner_identity("owner")
     with thread_registration.store.editing() as edit:
-        leased, generation = edit.lease_turn(edit.document.threads["owner"], TurnId.mint(), None)
+        leased, generation = edit.lease_turn(edit.document.threads["owner"], TurnId.mint(), NoTurnRouting())
     assert generation == before.generation
     assert leased.turn_generation == 1
     thread_registration.release_turn(leased.turn_lease)
@@ -38,7 +39,7 @@ def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_regi
     document.rename("owner", "renamed")
     document.unregister("renamed")
     document.begin_delete("renamed")
-    assert document.remove("renamed") == ()
+    assert document.remove_originals((document.threads["renamed"],)) == {"renamed": ()}
     assert not document.threads
     assert not list(tmp_path.iterdir())
 
