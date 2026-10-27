@@ -657,7 +657,7 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
 
 class InformationalMessage(RoleActivitySource):
 
-    def response_policy(self, message):
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
         return InformationalPolicy.instance()
 
     def counts_as_conversation(self):
@@ -701,7 +701,7 @@ class ConversationRole(ConversationActivity, SendableRole):
     def as_historical(self):
         return HistoricalConversationRole()
 
-    def response_policy(self, message):
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
         return (CommandTarget.named(message.target).response_policy(message)
                 if message.type.conversation_message else InformationalPolicy.instance())
 
@@ -765,7 +765,7 @@ class HistoricalRole:
     def notification_references(self, message):
         return ()
 
-    def response_policy(self, message):
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
         return InformationalPolicy.instance()
 
     def as_historical(self):
