@@ -1077,16 +1077,18 @@ class PackageStructurePhase(PlanPhase, declared_name=None):
 
 class PackageDeclarationsPhase(PackageStructurePhase):
     after = (RamBudgetPhase, ScopedReadsPhase)
-    evidence = PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
-        "field_codec", "declared_family", "json_schema", "sealed",
-    )))
+    evidence = PathsAbsent((
+        "src/agent_comms/field_codec.py", "src/agent_comms/declared_family.py",
+        "src/agent_comms/json_schema.py", "src/agent_comms/sealed.py",
+    ))
 
 
 class PackageStoragePhase(PackageStructurePhase):
     after = (PackageDeclarationsPhase,)
-    evidence = PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
-        "store_files", "locked_store", "private_path", "maintenance_barrier",
-    )))
+    evidence = PathsAbsent((
+        "src/agent_comms/store_files.py", "src/agent_comms/locked_store.py",
+        "src/agent_comms/private_path.py", "src/agent_comms/maintenance_barrier.py",
+    ))
 
 
 class PackageCoordinationPhase(PackageStructurePhase):
@@ -1097,16 +1099,19 @@ class PackageCoordinationPhase(PackageStructurePhase):
 
 class PackageExecutionPhase(PackageStructurePhase):
     after = (PackageCoordinationPhase,)
-    evidence = PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
-        "input_drain", "session_lifecycle", "owner_lifecycle", "owned_turn",
-    )))
+    evidence = PathsAbsent((
+        "src/agent_comms/input_drain.py", "src/agent_comms/session_lifecycle.py",
+        "src/agent_comms/owner_lifecycle.py", "src/agent_comms/owned_turn.py",
+    ))
 
 
 class PackageConsumerClosurePhase(PackageStructurePhase):
     after = (PackageExecutionPhase,)
-    evidence = PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
-        "registration", "registry_store", "registry_document", "threads", "goal_waits",
-    )))
+    evidence = PathsAbsent((
+        "src/agent_comms/registration.py", "src/agent_comms/registry_store.py",
+        "src/agent_comms/registry_document.py", "src/agent_comms/threads.py",
+        "src/agent_comms/goal_waits.py",
+    ))
 
 
 class BoardLineLockTextPhase(OwnerAsksPhase):
