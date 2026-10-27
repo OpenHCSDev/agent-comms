@@ -1013,19 +1013,20 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
 
     def initialize(self, create: Callable[[], T]) -> T:
         """Publish a first value once; concurrent creators read the winner."""
-        def change(original: tuple[DocumentBytes, T]) -> T:
-            source, value = original
+        def initialize() -> T:
+            document = create()
+            self._publish_unlocked(document)
+            return document
 
-            def initialize() -> T:
-                document = create()
-                self._publish_unlocked(document)
-                return document
+        def prepare(source: DocumentBytes):
+            def existing(present: FileRevision) -> Callable[[], T]:
+                value = self.read_copied(source)
+                return lambda: value
 
-            return source.revision.either(lambda present: value, initialize)
+            return nullcontext(source.revision.either(existing, lambda: initialize))
 
         return self.change_current(
-            self._capture_unlocked,
-            lambda source: nullcontext((source, self.read_copied(source))), change)
+            self._capture_unlocked, prepare, lambda ready: ready())
 
     def replace(self, value: T) -> None:
         """Publish a complete owned snapshot without reading the discarded one.
