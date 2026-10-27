@@ -28,7 +28,6 @@ from agent_comms.assignment_states import (
 )
 from agent_comms.cohort_schema import AcceptanceFrontier, ClaimBatchAcknowledgements, CohortDeliveries
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import (
     pending_sealed_assignments,
@@ -328,7 +327,7 @@ def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path)
     proof = comms.bus.bus.delivery(sent.seq)
     with store.session.writing() as db:
         ClaimBatchAcknowledgements.for_delivery(
-            proof, RegistryPrivacy.capture(comms.root), 8,
+            proof, comms.registry.store.privacy(), 8,
         ).insert(db)
     with pytest.raises(IdentityConflict):
         accept_initial(comms.bus, root_id, sent.seq, store)

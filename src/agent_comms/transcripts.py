@@ -439,7 +439,9 @@ class TranscriptRead:
     @classmethod
     @contextmanager
     def publication_source(cls, root: Path) -> Iterator[Connection | None]:
-        privacy = RegistryPrivacy.capture(root)
+        from .registry_store import RegistryStore
+
+        privacy = RegistryStore.at(root).privacy()
         with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls, privacy) as db:
             yield db
 

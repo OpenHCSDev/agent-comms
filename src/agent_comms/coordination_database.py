@@ -78,9 +78,9 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
 
     @classmethod
     def schema_at(cls, path: Path) -> type[TableSchema]:
-        from .private_registry_guard import RegistryPrivacy
+        from .registry_store import RegistryStore
 
-        return RegistryPrivacy.capture(path.parent).coordinator_schema()
+        return RegistryStore.at(path.parent).privacy().coordinator_schema()
 
     @classmethod
     def observed(cls, path: Path) -> StoreFile:

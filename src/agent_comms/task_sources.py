@@ -618,7 +618,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
         from .input_disposition import InputDispositions
         from .registry_store import RegistryStore
 
-        privacy = RegistryStore.at(original_source.path.parent).private_guard_unlocked()
+        privacy = RegistryStore.at(original_source.path.parent).privacy()
         row = self.subject.require_human_input().require_original(
             InputDispositions(original_source.path.parent))
         origin = row.origin.require_human()

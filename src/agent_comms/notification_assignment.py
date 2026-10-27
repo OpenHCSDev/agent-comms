@@ -339,7 +339,9 @@ class NotificationAssignment(NotificationSource):
         cls, root: Path, sources: Sequence[Delivered]
     ) -> NotificationAssignmentRead:
         """Capture assignment evidence through the single observing connection owner."""
-        privacy = RegistryPrivacy.capture(root)
+        from .registry_store import RegistryStore
+
+        privacy = RegistryStore.at(root).privacy()
         with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
             cls, sources, privacy,
         ) as result:

@@ -226,10 +226,8 @@ class SelectedParticipant(MroDispatch):
         tuple[MessageNotification, ...],
     ]:
         """Capture detached registry, participant and optional context in one worker."""
-        with comms.registry.store.guarded_read():
-            privacy = comms.registry.store.private_guard_unlocked()
-            privacy.require_root(
-                root_id, IdentityConflict("Selected claim namespace changed"))
+        privacy = comms.registry.store.privacy()
+        privacy.require_root(root_id, IdentityConflict("Selected claim namespace changed"))
         try:
             thread, generation = comms.registry.live_owner_with_claim(name)
         except (RelationViolationError, ValueError) as error:
@@ -301,9 +299,8 @@ class SelectedParticipant(MroDispatch):
         def capture():
             # Historical public records have no delivery capability. Native identity
             # belongs to the original registry guard, not a second bus metadata file.
-            with bus._registry.store.guarded_read():
-                bus._registry.store.private_guard_unlocked().require_root(
-                    root_id, IdentityConflict("Selected source namespace changed"))
+            bus._registry.store.privacy().require_root(
+                root_id, IdentityConflict("Selected source namespace changed"))
             with bus.bus.reading() as source:
                 return source.deliveries_for_references(tuple(
                     MessageReference(assignment.wire_seq, assignment.message_id)
