@@ -90,8 +90,17 @@ class ToolCaller(ABC):
         return AgentOrigin()
 
 
+class OperatorOutcomes:
+    """A caller speaking for the owner reads every recipient outcome, as the owner's UI does."""
+
+    __slots__ = ()
+
+    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+        return AllOutcomes()
+
+
 @dataclass(frozen=True)
-class NoThreadCaller(ToolCaller):
+class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return grant
 
@@ -103,9 +112,6 @@ class NoThreadCaller(ToolCaller):
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         return ThreadListing(threads, ())
-
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        return AllOutcomes()
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ToolCatalogResult(tools)

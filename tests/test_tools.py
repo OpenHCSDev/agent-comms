@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
+from agent_comms.connector_caller import DirectorCaller
 from agent_comms.errors import ToolRefusedError
 from agent_comms.presentation import MessageNotification, SentMessageSummary
 from agent_comms.threads import Thread
@@ -197,6 +198,11 @@ class TestToolCatalog:
         with pytest.raises(ToolRefusedError, match="is not readable by this caller"):
             invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
                         caller=ThreadCaller("outsider"))
+        # The director speaks for the owner, so it reads another sender's message whole.
+        director = invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
+                               caller=DirectorCaller("outsider"))
+        assert sorted(row["recipient_identity"]["canonical_thread"]
+                      for row in director["outcomes"]) == ["alice", "bob"]
 
     def test_inbox_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
