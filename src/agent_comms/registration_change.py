@@ -10,7 +10,6 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
@@ -22,6 +21,7 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .registry_document import RegistryDocument
+    from .registry_store import RegistryStore
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -44,7 +44,7 @@ class RegistrationChange(ABC):
         """Initial declarations have no prior executor to preserve or replace."""
         return self
 
-    def prepare_participant(self, root: Path) -> None:
+    def prepare_participant(self, registry: RegistryStore) -> None:
         """An update retains the participant its incarnation already declared."""
 
     def apply(self, document: RegistryDocument) -> None:
@@ -62,11 +62,10 @@ class InitialRegistration(RegistrationChange):
     prior_goal = NoGoal()
     changes_owner = True
 
-    def prepare_participant(self, root: Path) -> None:
+    def prepare_participant(self, registry: RegistryStore) -> None:
         """The participant commits before the registry makes this incarnation visible."""
-        from .registry_store import RegistryStore
-
-        privacy = RegistryStore.at(root).privacy()
+        root = registry.path.parent
+        privacy = registry.privacy()
         with CoordinationSession(str(CoordinationSession.path_in(root))) as session:
             ParticipantStore(session).register(self.thread.incarnation.lookup, committed=True)
             with session.writing() as db:

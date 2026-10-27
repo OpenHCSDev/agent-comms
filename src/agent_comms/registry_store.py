@@ -139,7 +139,7 @@ class RegistryEdit:
         for name in restored:
             InitialRegistration(
                 thread=self.document.require(name), status=self.document.status(name),
-            ).prepare_participant(self.store.path.parent)
+            ).prepare_participant(self.store)
         return restored
 
     def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:

@@ -32,6 +32,7 @@ from .private_path import FileObservation, FileRevision
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
+from .registry_store import RegistryStore
 from .routing import TurnRouting
 from .threads import Thread, ThreadProvenance
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
@@ -439,8 +440,6 @@ class TranscriptRead:
     @classmethod
     @contextmanager
     def publication_source(cls, root: Path) -> Iterator[Connection | None]:
-        from .registry_store import RegistryStore
-
         privacy = RegistryStore.at(root).privacy()
         with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls, privacy) as db:
             yield db

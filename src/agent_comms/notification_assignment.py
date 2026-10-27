@@ -27,6 +27,7 @@ from .notification_progress import (
 )
 from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .private_registry_guard import RegistryPrivacy
+from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow
 
 if TYPE_CHECKING:
@@ -339,8 +340,6 @@ class NotificationAssignment(NotificationSource):
         cls, root: Path, sources: Sequence[Delivered]
     ) -> NotificationAssignmentRead:
         """Capture assignment evidence through the single observing connection owner."""
-        from .registry_store import RegistryStore
-
         privacy = RegistryStore.at(root).privacy()
         with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
             cls, sources, privacy,
