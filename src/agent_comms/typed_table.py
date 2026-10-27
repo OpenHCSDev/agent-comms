@@ -2834,9 +2834,11 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
             entry.load()
 
     @classmethod
-    def member_named(cls, name: object) -> type[Self]:
+    def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
+        """Members are acquired from installed entry points before any lookup or listing,
+        so a command line's choices name the same stores a decode accepts."""
         cls.load_declarations()
-        return super().member_named(name)
+        return super()._member_declarations()
 
 
 class CarriedWriter(HolderWrittenFile, StoreWriter):
