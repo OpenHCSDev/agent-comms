@@ -105,8 +105,8 @@ class GoalScheduler:
 
     def prepare_goal(self, session_id: str) -> ScheduledTurn | None:
         """Read/recover the original READY grant in its joined storage worker."""
-        with self.comms.registry.store.guarded_write():
-            snapshot = self.comms.registry.snapshot()
+        with self.comms.registry.store.current_snapshot() as cut:
+            snapshot = cut.snapshot
             thread = snapshot.require(self.sessions.require(session_id))
             try:
                 thread.require_local_process(ProcessIdentity.capture(os.getpid()))
