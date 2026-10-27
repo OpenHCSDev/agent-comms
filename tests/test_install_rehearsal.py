@@ -373,6 +373,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
 async def test_restart_intents_survive_installed_carry(
         installed_comms, installed_home, install_checkout, original_restart_json, tmp_path):
     from agent_comms.restart_queue import QueuedRestart, RestartQueue
+    from cutover.carry_restart_queue import RestartQueueRows
     from agent_comms.watched import ChangeSignal, FileSource
 
     root = installed_comms.root
@@ -389,7 +390,7 @@ async def test_restart_intents_survive_installed_carry(
             env=installed_home, capture_output=True, text=True, timeout=270)
         assert completed.returncode == 0, completed.stderr
         result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
-        assert result.pending == ()
+        assert result.pending == (RestartQueueRows.declared_name,)
         assert not any(path.exists() for path in paths)
         # A carried pending owner may settle only after maintenance opens.
         async with asyncio.timeout(20):
