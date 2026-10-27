@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .child_process import Platform, ProcessIdentity, ResidentMemory
+from .child_process import Platform, ProcessIdentity, ProportionalMemory, ResidentMemory
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
@@ -115,14 +116,13 @@ class HostResources(ToolResult):
 @dataclass(frozen=True, kw_only=True)
 class ReadHostResourcesRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> HostResources:
-        from .coordinator import Coordination
         owners = sum(len(state.executors()) for state in ctx.server.agent.inputs.drained.values())
         def capture() -> HostResources:
             comms = ctx.server.agent._comms
             process = ProcessIdentity.capture(os.getpid())
             return HostResources(
                 process, owners, len(sys.modules),
-                process.memory(), ResidentMemory.proportional(Path("/proc") / str(process.pid)),
+                process.memory(), ProportionalMemory.read(Path("/proc") / str(process.pid)).bytes,
                 comms.registry.store.cache.read_counts(),
                 comms.registry.storage_rule.host_memory_bytes,
                 sum(row.resident for row in ResidentMemory.tree(process, Path("/proc")).values()),

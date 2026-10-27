@@ -36,6 +36,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
+from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
@@ -1165,7 +1166,6 @@ class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        from .root_runtime import RootRuntimeStore
         try:
             runtime = RootRuntimeStore.at(comms.root).read()
         except FileNotFoundError:

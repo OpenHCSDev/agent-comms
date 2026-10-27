@@ -304,7 +304,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     ]]:
         """Decode outside the guard, then retain a current cut for a bounded write.
 
-        A change before admission recaptures only this read. The caller has not
+        A change before the write begins recaptures only this read. The caller has not
         received a decision or performed any side effect yet.
         """
         deadline = time.monotonic() + self.contention.seconds

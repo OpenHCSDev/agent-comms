@@ -51,6 +51,8 @@ from .message_page import PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .owner_lifecycle import OwnerStartResult
+from .owner_connection import OwnerConnection
+from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
@@ -702,8 +704,6 @@ class CommsResourcesTool(ThreadReadTool):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
-        from .owner_connection import OwnerConnection
-        from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
         thread = comms.registry.require(caller.subject(self.thread))
         return FieldCodec.decode(HostResources, OwnerConnection.exchange(
             comms.root, thread.require_process(),

@@ -124,7 +124,7 @@ async def test_fleet_memory_stays_under_its_cap(tmp_path, native_workers, owner_
     from agent_comms.tools import CommsResourcesTool
     from agent_comms.tool_caller import NoThreadCaller
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.child_process import Platform, ResidentMemory
+    from agent_comms.child_process import Platform, ProportionalMemory, ResidentMemory
     import json
 
     comms = wire(native_workers.root)
@@ -173,7 +173,7 @@ async def test_fleet_memory_stays_under_its_cap(tmp_path, native_workers, owner_
         print("FLEET_PROCESSES", json.dumps([
             {"process": FieldCodec.encode(Platform.current().identity(pid)),
              "memory": FieldCodec.encode(memory),
-             "proportional_bytes": ResidentMemory.proportional(Path("/proc") / str(pid))}
+             "proportional_bytes": ProportionalMemory.read(Path("/proc") / str(pid)).bytes}
             for pid, memory in children.items()
         ]), flush=True)
         journals = {name: Path(comms.registry.require(name).runtime.read_key) for name in names}

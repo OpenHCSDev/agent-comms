@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import time
 from collections.abc import Callable, Iterator
-from contextlib import ExitStack, contextmanager, nullcontext
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -26,6 +26,9 @@ from agent_comms.store_files import (
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus
+    from .registry_document import RegistrySnapshot
+    from .private_registry_guard import RegistryPrivacy
+    from .private_path import FileObservation
 
 
 def system_clock() -> int:
@@ -56,7 +59,9 @@ class NativeCapture(ExitStack, StoredBusReader):
             self.close()
             raise
 
-    def registry_capture(self):
+    def registry_capture(self) -> AbstractContextManager[tuple[
+        RegistrySnapshot, RegistryPrivacy, tuple[FileObservation, FileObservation],
+    ]]:
         return nullcontext(self.bus._registry.store.snapshot_with_authority())
 
 
@@ -78,9 +83,11 @@ class NativeBoundary(NativeCapture):
 
 
 class NativeCommit(NativeBoundary):
-    """Admit a current decoded cut before the caller makes a bounded write decision."""
+    """Keep a current decoded cut through a bounded write decision."""
 
-    def registry_capture(self):
+    def registry_capture(self) -> AbstractContextManager[tuple[
+        RegistrySnapshot, RegistryPrivacy, tuple[FileObservation, FileObservation],
+    ]]:
         return self.bus._registry.store.current_snapshot()
 
 

@@ -64,8 +64,10 @@ descendants against those budgets on the existing heartbeat. It reports excess;
 it never kills a native process or replays an input. `comms_resources` reads the
 actual owning host through the existing owner socket, reporting its process birth,
 RSS/HWM/PSS, module/owner counts, whole-fleet RSS and registry request/capture/decode
-counts. `ResidentMemory` owns procfs decoding for that report, work admission's
-existing measurement and the existing test-process cleanup view.
+counts. `ProcfsRecord` decodes the external text through the existing codec and
+field directives; `ResidentMemory` and `ProportionalMemory` declare their columns,
+units and required fields. The report, existing work measurement and test-process
+cleanup view consume these records.
 
 `test_fleet_memory_stays_under_its_cap` extends the existing hosted-owner journey
 at three and 29 owners: one exact host, concurrent native replies, independent
@@ -76,12 +78,13 @@ fleet samples. Summed PSS is observational evidence, not an admission guarantee.
 The unchanged/changed-revision test observes no physical capture/decode for
 three unchanged reads and one capture/decode for an external replacement.
 
-The 2026-10-27 combined source run passed 43 cases in 76.08 s. The shared host
-peaked at 188.6 MiB RSS for three owners and 211.2 MiB for 29; the 29-owner forest
-sample used 4857.4 MiB RSS / 3303.2 MiB PSS across 32 processes, with 957 modules
+The 2026-10-27 combined source run passed 43 cases in 76.08 s; the final procfs
+declarations passed both fleet sizes and work admission (10 cases in 51.54 s).
+The final shared host peaked at 187.6 MiB RSS for three owners and 210.3 MiB for 29;
+the 29-owner forest sample used 4864.6 MiB RSS / 3309.9 MiB PSS across 32 processes, with 957 modules
 loaded in the one Python host. Source/result artifacts are retained in
 `codex-greentext/fleet-memory-final-measurement.json` and
-`fleet-memory-admitted-cut.log`. These are controlled-provider real-process
+`fleet-memory-declarations.log`. These are controlled-provider real-process
 workloads, not a claim about every model's or build tool's memory use.
 
 That run exposed a registry race before cursor commits. `RegistryStore.current_snapshot`
