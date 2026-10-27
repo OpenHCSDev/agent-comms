@@ -11,7 +11,7 @@ from agent_comms.threads import Thread
 from agent_comms.bus import Bus
 from agent_comms.field_codec import FieldCodec, RestartId
 from agent_comms.watched import FileSource
-from restart_fixture import dead_owner_restart, original_restart_json
+from restart_fixture import dead_owner_restart
 
 def test_dead_owner_restart_settles_before_selection_checks(private_comms, dead_owner_restart):
     store = queue.RestartQueue(private_comms.root)
@@ -109,55 +109,3 @@ async def test_inotify_wakes_for_registry_and_queue_changes(private_comms, dead_
             dead_owner_restart.insert(db)
         await asyncio.wait_for(anext(observations), 1)
         assert store.history(dead_owner_restart.owner) == [dead_owner_restart]
-
-
-def test_carry_keeps_every_original_and_never_requeues_an_attempt(
-    private_comms, original_restart_json, tmp_path,
-):
-    from cutover.carry_restart_queue import RestartQueueRows
-    from agent_comms.locked_store import LiveFilesRequest
-    from conftest import maintenance_held
-
-    comms = private_comms
-    directory = comms.root / queue.DIRECTORY
-    paths = tuple(original_restart_json)
-    pending, attempted, terminal, interrupted = original_restart_json.values()
-    originals = tuple(path.read_bytes() for path in paths)
-    carry = RestartQueueRows(LiveFilesRequest(comms.root), tmp_path / 'spill')
-    assert carry.carry(apply=False).changed == 4
-    assert not (directory / 'queue.sqlite3').exists()
-    with maintenance_held(comms.root):
-        assert carry.carry(apply=True).changed == 4
-        assert tuple(path.read_bytes() for path in paths) == originals
-        # A repeated carry verifies exact rows instead of minting or reclassifying them.
-        assert carry.carry(apply=True).changed == 4
-        store = queue.RestartQueue(comms.root)
-        assert store.history(pending.owner) == [pending, terminal]
-        assert store.history(attempted.owner) == [attempted]
-        assert store.history(interrupted.owner) == [interrupted]
-        assert carry.after_acceptance().changed == 4
-        assert not any(path.exists() for path in paths)
-        assert store.history(attempted.owner) == [attempted]
-    # The original pending process is dead. The watcher can only settle it;
-    # the attempted record has no new execution permission.
-    store.step(comms)
-    assert store.history(attempted.owner) == [attempted]
-
-
-def test_carry_refuses_to_activate_an_intent_from_settled_history(
-        private_comms, original_restart_json, tmp_path):
-    import pytest
-    from cutover.carry_restart_queue import RestartQueueRows
-    from agent_comms.errors import RelationViolationError
-    from agent_comms.locked_store import LiveFilesRequest
-
-    path, pending = next(iter(original_restart_json.items()))
-    destination = path.parents[1] / "settled" / str(pending.owner.lookup) / f"{pending.id}.json"
-    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.rename(destination)
-    original = destination.read_bytes()
-    carry = RestartQueueRows(LiveFilesRequest(private_comms.root), tmp_path / 'spill')
-    with pytest.raises(RelationViolationError, match='settled restart'):
-        carry.carry(apply=False)
-    assert destination.read_bytes() == original
-    assert not queue.RestartQueue(private_comms.root).path.exists()

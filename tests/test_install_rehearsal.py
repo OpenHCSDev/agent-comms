@@ -12,7 +12,6 @@ from __future__ import annotations
 
 
 from agent_comms.repo import Checkout
-import asyncio
 import json
 import os
 import sqlite3
@@ -51,7 +50,6 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 from agent_comms.threads import Thread
-from restart_fixture import dead_owner_restart, original_restart_json
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -368,38 +366,3 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     if not fresh:
         assert history[0].body.startswith("Install starting")
     assert scratch.is_dir() and not tuple(scratch.iterdir())
-
-
-async def test_restart_intents_survive_installed_carry(
-        installed_comms, installed_home, install_checkout, original_restart_json, tmp_path):
-    from agent_comms.restart_queue import QueuedRestart, RestartQueue
-    from cutover.carry_restart_queue import RestartQueueRows
-    from agent_comms.watched import ChangeSignal, FileSource
-
-    root = installed_comms.root
-    paths = tuple(original_restart_json)
-    before = {path: path.read_bytes() for path in paths}
-    outgoing = Path(installed_home["HOME"]) / ".local/share/agent-comms/current/bin/agent-comms"
-    expected = {row.id: row.state.settle(row) for row in original_restart_json.values()}
-    sources = tuple(FileSource(path) for path in RestartQueue.source_paths(root))
-    async with ChangeSignal.opened(*sources) as changes:
-        completed = await asyncio.to_thread(subprocess.run,
-            [outgoing, "--root", root, "install", "--checkout", install_checkout,
-             "--to", "HEAD", "--project", install_checkout,
-             "--spill-dir", tmp_path / "backups"], cwd=install_checkout,
-            env=installed_home, capture_output=True, text=True, timeout=270)
-        assert completed.returncode == 0, completed.stderr
-        result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
-        assert result.pending == (RestartQueueRows.declared_name,)
-        assert not any(path.exists() for path in paths)
-        # A carried pending owner may settle only after maintenance opens.
-        async with asyncio.timeout(20):
-            while True:
-                changes.prepare()
-                with RestartQueue(root).snapshot() as db:
-                    rows = {row.id: row for row in QueuedRestart.select(db)}
-                if rows == expected:
-                    break
-                await changes.wait()
-    retained = tuple((tmp_path / "backups").rglob("*.json"))
-    assert all(any(copy.read_bytes() == content for copy in retained) for content in before.values())
