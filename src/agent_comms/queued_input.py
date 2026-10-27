@@ -123,6 +123,7 @@ class QueuedInput:
         inputs: InputDrain,
         name: str,
         *,
+        snapshot: RegistrySnapshot,
         text: str,
         prompt: str,
         echo: bool,
@@ -132,8 +133,7 @@ class QueuedInput:
         input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
-        """Called under the registry lock; acceptance follows the durable reservation."""
-        snapshot = inputs.comms.registry.snapshot()
+        """The current registry selection permits this durable input reservation."""
         canonical = snapshot.canonical_name(name)
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(
@@ -187,10 +187,10 @@ class QueuedInput:
                 sources = tuple(inputs.state(session_id).following.values())
 
                 def capture():
-                    with inputs.comms.registry.store.guarded_write():
+                    with inputs.comms.registry.store.current_snapshot() as cut:
                         cls.require_capacity(inputs, sources)
                         return cls.capture(
-                            inputs, name, text=text, prompt=prompt, echo=echo,
+                            inputs, name, snapshot=cut.snapshot, text=text, prompt=prompt, echo=echo,
                             images=images, controller=controller, input_id=input_id,
                             origin=origin, ownership=ownership,
                         )
@@ -344,11 +344,11 @@ class DeliveredInput(QueuedInput):
         so cancellation cannot lose a successfully paused but unplaced input.
         The worker opens/closes SQLite and never reads or mutates live queues.
         """
-        with inputs.comms.registry.store.guarded_write():
+        with inputs.comms.registry.store.current_snapshot() as cut:
             accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
             if not accepted:
                 return
-            snapshot = inputs.comms.registry.snapshot()
+            snapshot = cut.snapshot
             canonical = snapshot.canonical_name(name)
             owner = snapshot.threads[canonical]
             context = QueuedInputContext.capture(owner, snapshot.claimed_identity(canonical))
@@ -430,8 +430,8 @@ class DeliveredInput(QueuedInput):
         if not any(row.key not in live_keys
                    for row in document.unbound_wire_inputs(root_id).values()):
             return 0
-        with comms.registry.store.guarded_write():
-            entry = comms.registry.entry(name).entry
+        with comms.registry.store.current_entry(name) as cut:
+            entry = cut.entry
             owner = entry.thread
             document = dispositions.unresolved(entry.names)
             rows = {

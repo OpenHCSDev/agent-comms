@@ -139,11 +139,12 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
                WireInputOrigin(origin.root_id, MessageReference(
                    1, MessageId.mint("forged-reference"))))
     for witness in invalid:
-        with comms.registry.store.guarded_write(), pytest.raises(RelationViolationError):
+        with comms.registry.store.current_snapshot() as cut, pytest.raises(RelationViolationError):
             with ExitStack() as ownership:
                 QueuedInput.capture(
                     agent.inputs,
                     "beta",
+                    snapshot=cut.snapshot,
                     text="Original",
                     prompt="Original",
                     echo=True,
@@ -154,11 +155,12 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
                     input_id=InputId.mint(),
                 )
                 ownership.pop_all()
-    with comms.registry.store.guarded_write(), pytest.raises(RelationViolationError):
+    with comms.registry.store.current_snapshot() as cut, pytest.raises(RelationViolationError):
         with ExitStack() as ownership:
             QueuedInput.capture(
                 agent.inputs,
                 "beta",
+                snapshot=cut.snapshot,
                 text="Original",
                 prompt="Original",
                 echo=True,
@@ -224,11 +226,12 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
     with pytest.raises(ValueError):
         FieldCodec.decode(HumanInputOrigin, {**encoded, "goal": None})
 
-    with comms.registry.store.guarded_write(), pytest.raises(RelationViolationError):
+    with comms.registry.store.current_snapshot() as cut, pytest.raises(RelationViolationError):
         with ExitStack() as ownership:
             QueuedInput.capture(
                 agent.inputs,
                 "beta",
+                snapshot=cut.snapshot,
                 text="Original",
                 prompt="Original",
                 echo=True,
