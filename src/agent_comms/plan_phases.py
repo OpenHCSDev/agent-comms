@@ -85,6 +85,10 @@ class OwnerAsksPlan(Plan):
     document = "plans/OWNER-ASKS-PLAN.md"
 
 
+class PackageStructurePlan(Plan):
+    document = "plans/PACKAGE-STRUCTURE-PLAN.md"
+
+
 class OrderPhase(DeclaredFamily, affix="Phase"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
@@ -1065,6 +1069,62 @@ class UnflattenModulesPhase(OwnerAsksPhase):
     """The package structure for the flat modules of ``src/agent_comms`` is a declared plan."""
 
     evidence = ClassDeclared("PackageStructurePlan", ("src/agent_comms/plan_phases.py",))
+
+
+class PackageStructurePhase(PlanPhase, declared_name=None):
+    plan = PackageStructurePlan
+
+
+class PackageDeclarationsPhase(PackageStructurePhase):
+    after = (RamBudgetPhase, ScopedReadsPhase)
+    evidence = AllEvidence((
+        ClassDeclared("FieldCodec", ("src/agent_comms/nominal/field_codec.py",)),
+        ClassDeclared("DeclaredFamily", ("src/agent_comms/nominal/declared_family.py",)),
+        PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
+            "field_codec", "declared_family", "json_schema", "sealed",
+        ))),
+    ))
+
+
+class PackageStoragePhase(PackageStructurePhase):
+    after = (PackageDeclarationsPhase,)
+    evidence = AllEvidence((
+        ClassDeclared("LockedStore", ("src/agent_comms/storage/locked_store.py",)),
+        PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
+            "store_files", "locked_store", "private_path", "maintenance_barrier",
+        ))),
+    ))
+
+
+class PackageCoordinationPhase(PackageStructurePhase):
+    after = (PackageStoragePhase,)
+    evidence = AllEvidence((
+        ClassDeclared("Coordination", ("src/agent_comms/coordination/coordinator.py",)),
+        PathsAbsent(("src/agent_comms/coordinator.py", "src/agent_comms/coordination_database.py",
+                     "src/agent_comms/coordination_tables")),
+    ))
+
+
+class PackageExecutionPhase(PackageStructurePhase):
+    after = (PackageCoordinationPhase,)
+    evidence = AllEvidence((
+        ClassDeclared("InputDrain", ("src/agent_comms/execution/input_drain.py",)),
+        ClassDeclared("SessionLifecycle", ("src/agent_comms/execution/session_lifecycle.py",)),
+        PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
+            "input_drain", "session_lifecycle", "owner_lifecycle", "owned_turn",
+        ))),
+    ))
+
+
+class PackageConsumerClosurePhase(PackageStructurePhase):
+    after = (PackageExecutionPhase,)
+    evidence = AllEvidence((
+        ClassDeclared("Registration", ("src/agent_comms/registry/registration.py",)),
+        ClassDeclared("GoalWait", ("src/agent_comms/planning/goal_waits.py",)),
+        PathsAbsent(tuple(f"src/agent_comms/{name}.py" for name in (
+            "registration", "registry_store", "registry_document", "threads", "goal_waits",
+        ))),
+    ))
 
 
 class BoardLineLockTextPhase(OwnerAsksPhase):
