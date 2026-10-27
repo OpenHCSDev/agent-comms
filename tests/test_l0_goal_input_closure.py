@@ -128,7 +128,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
         key, seq=message.seq, owner="owner", claim_scope=claim_scope, target="owner", text=message.body
     )
     messages = comms.bus.inbox("owner").page.messages
-    comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
+    comms.bus.mark_read_through("owner", messages[-1].seq)
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id)), wait_for=("peer",))
     with pytest.raises(ValueError):
         comms.goals.update_goal("owner", action)

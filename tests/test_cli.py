@@ -100,7 +100,7 @@ class TestCliSuccess:
         code, presence = cli(tmp_path, "who")
         assert code == 0 and presence == {"who": []}
 
-    def test_send_and_inbox_and_ack(self, cli, tmp_path):
+    def test_send_and_inbox(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
         cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
         code, out = cli(
@@ -110,10 +110,6 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "inbox", "--thread", "b")
         assert out["messages"][0]["text"] == "hi"
         assert out["messages"][0]["type"] == "alert"
-        code, out = cli(tmp_path, "ack", "--thread", "b")
-        assert out == {"acknowledged": 1}
-        code, out = cli(tmp_path, "inbox", "--thread", "b")
-        assert out == {"messages": [], "before": None, "has_older": False, "pending": 0}
 
     def test_send_notice_and_conversation_record_channel_wake_modes(self, cli, comms):
         from agent_comms.cli_bridges.shared import Send
@@ -139,28 +135,6 @@ class TestCliSuccess:
             ["--to", "#comms", "--body", "record", "--role", "notice"]))
         assert bridged.role is NoticeRole
         assert SendableRole.names() == ("conversation", "notice")
-
-    def test_acknowledge_marks_only_its_references_beside_a_reader(self, cli, tmp_path):
-        import threading
-        from agent_comms.comms import wire
-
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
-        for body in ("one", "two", "three"):
-            cli(tmp_path, "send", "--from", "a", "--to", "b", "--body", body)
-        comms = wire(tmp_path)
-        second = comms.bus.inbox("b").page.messages[1]
-        # A page reader holds an open bus snapshot; an acknowledgment must not
-        # wait for it, so it never queues readers behind an exclusive request.
-        with comms.bus.bus.reading():
-            acknowledged = []
-            worker = threading.Thread(target=lambda: acknowledged.append(
-                comms.messaging.acknowledge("b", (second.reference,))))
-            worker.start()
-            worker.join(10)
-            assert not worker.is_alive()
-        assert acknowledged == [1]
-        assert [message.body for message in comms.bus.inbox("b").page.messages] == ["one", "three"]
 
     def test_thread_detail_and_stop_and_heartbeat(self, cli, tmp_path):
         # A CLI registration is an inbox; only an attached process connects it.

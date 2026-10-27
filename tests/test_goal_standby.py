@@ -277,16 +277,15 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     assert comms.goals.recover_closed_goal_wait("alice") == ("alice", "bob")
 
 
-@pytest.mark.parametrize("acknowledged", [False, True])
-def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, acknowledged):
+@pytest.mark.parametrize("read_by_human", [False, True])
+def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, read_by_human):
     comms = canonical_goal_wire(tmp_path)
     for name in ("parent", "child"):
         comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
     message = comms.messaging.send("child", "parent", "Finished immediately").message
-    if acknowledged:
-        references = tuple(message.reference for message in comms.bus.inbox("parent").page.messages)
-        comms.messaging.acknowledge("parent", references)
+    if read_by_human:
+        comms.bus.mark_read_through("parent", comms.bus.inbox("parent").page.messages[-1].seq)
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "parent",

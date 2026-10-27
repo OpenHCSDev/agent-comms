@@ -2,13 +2,12 @@
 
 import asyncio
 from contextlib import aclosing
-from agent_comms.read_basis import OnReadWatchAcknowledgment
 
 
 async def test_watch_emits_startup_unread_then_arrival_and_leaves_untaken_unread(wired):
     first = wired.messaging.send("PR111", "fixer", "already unread").message
 
-    async with aclosing(wired.watch("fixer", acknowledgment=OnReadWatchAcknowledgment)) as watcher:
+    async with aclosing(wired.watch("fixer")) as watcher:
         initial = await asyncio.wait_for(anext(watcher), timeout=3)
         assert initial.message_id == first.message_id
 
@@ -27,5 +26,5 @@ async def test_watch_emits_startup_unread_then_arrival_and_leaves_untaken_unread
         # Closing here never advances the iterator to the third message.
 
     unread = {message.message_id for message in wired.bus.inbox("fixer").page.messages}
-    assert first.message_id not in unread
-    assert third.message_id in unread
+    # Watching records nothing: what it emitted stays as unread as what it never reached.
+    assert {first.message_id, third.message_id} <= unread

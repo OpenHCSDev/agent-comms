@@ -19,7 +19,12 @@ from agent_comms.assignment_states import (
     DeliveredAssignment,
     EngagedAssignment,
 )
+from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import wire
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
+from agent_comms.coordinator import Coordination
+from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
 from agent_comms.field_codec import InputId, MessageId, TurnId
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
@@ -368,9 +373,15 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     old, live, source, messages, _root_id = archived_notification
     old.registry.declare(replace(old.registry.require("agent"), execution=ExternalThreadExecution))
     unread = old.bus.inbox("agent").page.messages
-    assert old.bus.mark_delivered(
-        "agent", tuple(message.reference for message in unread)
-    ) == 1
+    lookup = old.registry.snapshot().threads["agent"].incarnation.require_recorded().lookup
+    # The bridge's own path: the attempt and the claim step it proves commit together.
+    with Coordination(str(CoordinationStore.path_in(old.root))) as store, \
+            store.session.writing() as db:
+        for message in unread:
+            attempt = HarnessDelivery(ClaudeBridge, lookup, message.message_id, message.seq,
+                                      DeliveredOutcome)
+            assert attempt.begin(store.assignments, db)
+            attempt.record(store.assignments, db)
     current, = old.views.message_notifications_for_references(AllOutcomes(), (messages[0].reference,)).outcomes[
         messages[0].seq, messages[0].message_id
     ]
