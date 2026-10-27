@@ -212,7 +212,6 @@ class ThreadPresentation(ThreadStatusDisplay):
     """A thread's acquired presentation, or its declared absence."""
 
     notifications: tuple[MessageNotification, ...] = ()
-    sent_notifications: tuple[MessageNotification, ...] = ()
     read_identity: TranscriptReadIdentity | None = None
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
@@ -270,14 +269,13 @@ class ThreadPresentation(ThreadStatusDisplay):
             transcripts.root, transcripts.registry, sources, notification_read,
             viewer=OwnerOutcomes.of(window.read.identity.thread),
         )
-        incoming, sent = (
-            tuple(replace(notification, message=source.message)
-                  for source in selected
-                  for notification in projected.outcomes[source.message.seq, source.message.message_id])
-            for selected in (window.sources, window.sent_sources)
+        incoming = tuple(
+            replace(notification, message=source.message)
+            for source in window.sources
+            for notification in projected.outcomes[source.message.seq, source.message.message_id]
         )
         return replace(
-            self, notifications=incoming, sent_notifications=sent,
+            self, notifications=incoming,
             notification_window=projected,
             read_identity=window.read.identity,
             incoming_references=tuple(source.message.reference for source in window.sources),

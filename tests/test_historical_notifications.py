@@ -1,6 +1,7 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
 
+from agent_comms.presentation import AllOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
@@ -55,7 +56,8 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
         document=document, conversation_snapshot=source.provenance)
     HistoricalDisplay(source, basis.select((messages[1].seq,))).acknowledge(live.bus.history, live.registry)
     with live.bus.history.read_sources() as sources:
-        results = source.notification_references(sources, tuple(message.reference for message in messages[1:]))
+        results = source.notification_references(sources, tuple(message.reference for message in messages[1:]),
+                                               AllOutcomes())
     painted, = results.outcomes[messages[1].seq, messages[1].message_id]
     unpainted, = results.outcomes[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
@@ -110,7 +112,7 @@ def test_recorded_assignment_schema_refusal_is_read_only(archived_notification):
     database.chmod(0o600)
     original = database.read_bytes()
     with pytest.raises(SchemaVersionError), live.bus.history.read_sources() as sources:
-        source.notification_references(sources, (messages[0].reference,))
+        source.notification_references(sources, (messages[0].reference,), AllOutcomes())
     assert database.read_bytes() == original
 
 
@@ -258,7 +260,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
             expected_revision=paused.revision,
         )
     unrelated = old.messaging.send("agent", "sender", "unrelated later message").message
-    notification, = old.views.message_notifications_for_references(
+    notification, = old.views.message_notifications_for_references(AllOutcomes(),
         (original.reference,)
     ).outcomes[original.seq, original.message_id]
     assert unrelated.answers == ()
@@ -305,7 +307,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     )
     response = old.messaging.send("agent", "sender", "recorded reply").message
 
-    notification, = old.views.message_notifications_for_references(
+    notification, = old.views.message_notifications_for_references(AllOutcomes(),
         (original.reference,)
     ).outcomes[original.seq, original.message_id]
 
@@ -348,7 +350,7 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
             expected_revision=paused.revision,
         )
 
-    notifications = old.views.message_notifications_for_references(
+    notifications = old.views.message_notifications_for_references(AllOutcomes(),
         (original.reference,)
     ).outcomes[original.seq, original.message_id]
 
@@ -369,12 +371,12 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     assert old.bus.mark_delivered(
         "agent", tuple(message.reference for message in unread)
     ) == 1
-    current, = old.views.message_notifications_for_references((messages[0].reference,)).outcomes[
+    current, = old.views.message_notifications_for_references(AllOutcomes(), (messages[0].reference,)).outcomes[
         messages[0].seq, messages[0].message_id
     ]
     assert current.label == "Read" and not current.displayed_to
     with live.bus.history.read_sources() as sources:
-        archived, = source.notification_references(sources, (messages[0].reference,)).outcomes[
+        archived, = source.notification_references(sources, (messages[0].reference,), AllOutcomes()).outcomes[
             messages[0].seq, messages[0].message_id
         ]
     assert archived.label == "Sent" and not archived.displayed_to

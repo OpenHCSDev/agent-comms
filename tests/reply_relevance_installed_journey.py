@@ -1,5 +1,6 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
 
+from agent_comms.presentation import AllOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
@@ -156,7 +157,7 @@ async def run(stage, package):
                                 source_reads=source_reads,
                             )
                             assert len(history) == 2 and all(row.expected_prompt_equality_established for row in history)
-                            handling = service.views.message_notifications_for_references(
+                            handling = service.views.message_notifications_for_references(AllOutcomes(),
                                 (original.reference,)).outcomes[(original.seq, original.message_id)]
                             notification, = handling
                             assert notification.label == 'Responded'

@@ -11,7 +11,7 @@ from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
-from .presentation import MessageNotification, ThreadRecord
+from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class ThreadListing(ToolResult):
     threads: tuple[Annotated[ThreadRecord, WireForm], ...]
-    sent_notifications: tuple[MessageNotification, ...]
+    sent_messages: tuple[SentMessageSummary, ...]
 
 
 class ToolCaller(ABC):
@@ -46,6 +46,10 @@ class ToolCaller(ABC):
 
     @abstractmethod
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
+
+    @abstractmethod
+    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+        """Whose recipient outcomes this caller may read."""
 
     @abstractmethod
     def acting_name(self, default: str) -> str: ...
@@ -86,8 +90,17 @@ class ToolCaller(ABC):
         return AgentOrigin()
 
 
+class OperatorOutcomes:
+    """A caller speaking for the owner reads every recipient outcome, as the owner's UI does."""
+
+    __slots__ = ()
+
+    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+        return AllOutcomes()
+
+
 @dataclass(frozen=True)
-class NoThreadCaller(ToolCaller):
+class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return grant
 
@@ -143,7 +156,10 @@ class ThreadCaller(ToolCaller):
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
-        return ThreadListing(threads, presentation.sent_notifications)
+        return ThreadListing(threads, SentMessageSummary.recent(presentation))
+
+    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+        return OwnerOutcomes.of(comms.registry.require(self.name))
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(
