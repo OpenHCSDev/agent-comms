@@ -235,15 +235,15 @@ class AnsweredSource(messages.BusProjectionTables):
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         kind_filter = (
-            "AND " + messages.Message.table._sql("message.{type}")
+            "AND " + messages.MessageInput.table._sql("message.{type}")
             + " IN (" + ",".join("?" for _ in kinds) + ") "
             if kinds else ""
         )
         query = (
             f'SELECT asked.seq FROM "{MessageIdentitySource.declared_name}" AS asked '
-            f'JOIN "{messages.Message.table.declared_name}" AS message USING(seq) '
+            f'JOIN "{messages.MessageInput.table.declared_name}" AS message USING(seq) '
             f'WHERE asked.sender IN ({asking}) AND '
-            + messages.Message.table._sql('message.{timestamp} BETWEEN ? AND ? ')
+            + messages.MessageInput.table._sql('message.{timestamp} BETWEEN ? AND ? ')
             + f'AND asked.seq < ? {kind_filter}AND ({eligible}) AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
             f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
@@ -269,7 +269,7 @@ class AnsweredSource(messages.BusProjectionTables):
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         identity = MessageIdentitySource.declared_name
-        content = messages.Message.table
+        content = messages.MessageInput.table
         query = (
             'WITH matches AS (SELECT reply.seq, '
             + content._sql('reply_message.{timestamp} AS timestamp ')

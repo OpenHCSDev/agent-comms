@@ -271,7 +271,7 @@ class BusReader(RouteCounts, ABC):
                 members = ' AND type IN (' + ','.join('?' for _ in kinds) + ')'
             rows = db.execute(
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
-                f'JOIN "{Message.table.declared_name}" USING(seq) '
+                f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                 f'WHERE ({predicate}) AND seq > ? AND seq < ?{members} '
                 f'ORDER BY seq {order} LIMIT ?',
                 (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
@@ -287,7 +287,7 @@ class BusReader(RouteCounts, ABC):
             return AddressedRow.matching(
                 db, (f'{{seq}} IN (SELECT MAX(seq) FROM '
                      f'"{Addressed.table.declared_name}" '
-                     f'JOIN "{Message.table.declared_name}" USING(seq) '
+                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                      f'WHERE ({predicate}) AND seq <= ? GROUP BY sender, target)'),
                 (*parameters, through),
             )
@@ -450,7 +450,7 @@ class BusReader(RouteCounts, ABC):
                 counts[scope.channel] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
+                    f'JOIN "{MessageInput.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
                     f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
                     (*bindings.values(), max(after, selection.seen.lower_bound(scope, selection.registry)),
@@ -470,7 +470,7 @@ class BusReader(RouteCounts, ABC):
             rows = db.execute(
                 f'WITH {ReadCursor.sql("?")}, requests AS ('
                 f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                f'JOIN "{Message.table.declared_name}" USING(seq) '
+                f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                 f'WHERE seq > 0 AND ({predicate}) AND seq IN ({received})), '
                 f'{ReadCursor.joined_sql} '
                 f'SELECT DISTINCT seq FROM cursors WHERE {ReadCursor.read_sql}',
@@ -486,7 +486,7 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return AddressedRow.matching(
                 db, (f'{{seq}} IN (SELECT seq FROM "{Addressed.table.declared_name}" '
-                     f'JOIN "{Message.table.declared_name}" USING(seq) '
+                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                      f'WHERE ({predicate}) AND seq <= ?)'),
                 (*parameters, through),
             )

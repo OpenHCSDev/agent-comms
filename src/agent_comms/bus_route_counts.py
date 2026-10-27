@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .bus_tables import ReceivedSource
 from .class_fact import ClassFact
 from .field_codec import ThreadLookup
-from .messages import BusProjectionTables, BusRow, Message, PublicRecord, PublicSender
+from .messages import BusProjectionTables, BusRow, MessageInput, PublicRecord, PublicSender
 from .projection_source import ProducedRow
 from .read_basis import ReadCursor
 from .routing import DeliveryScope
@@ -190,7 +190,7 @@ class RouteCounts:
             {delivery.actor: seen}, after,
             f''', unread AS (
                 SELECT request.seq,request.target,request.sender,message.mentions
-                FROM cursors AS request CROSS JOIN "{Message.table.declared_name}" AS message USING(seq)
+                FROM cursors AS request CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
                 WHERE actor=? AND {seen.unread_rule()}
             ) SELECT seq,target FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)
             ORDER BY seq {traversal.seq_order} LIMIT ?''',
