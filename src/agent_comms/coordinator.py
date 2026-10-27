@@ -23,6 +23,7 @@ from .coordination_session import (
     system_clock,
 )
 from .execution_store import ExecutionStore
+from .maintenance_barrier import MaintenanceHolder
 from .participant_store import ParticipantStore
 from .store_files import DEFAULT_STORE_CONTENTION, StoreContention, StoreLock
 from .working_memory_annotations import WorkingMemoryAnnotations
@@ -115,8 +116,6 @@ class Coordination(ExecutionStore, AttemptStore):
 
     @staticmethod
     def worker_context() -> Context:
-        from .maintenance_barrier import MaintenanceHolder
-
         return MaintenanceHolder.in_context(StoreLock.worker_context())
 
     @staticmethod

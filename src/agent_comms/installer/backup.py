@@ -8,6 +8,7 @@ import shutil
 import stat
 import sys
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,7 +23,6 @@ from agent_comms.active_route import (
     RouteFile,
     RouteFileSelection,
     active_route_path,
-    read_active_route,
 )
 from agent_comms.child_process import Platform
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
@@ -54,6 +54,60 @@ class SavedFile:
     def at(cls, path: Path) -> Self:
         observed = path.stat()
         return cls(observed.st_size, observed.st_mtime_ns, observed.st_ino)
+
+
+class SavedRoute(ABC):
+    """The original route's prepared restoration, including original absence."""
+
+    @staticmethod
+    def read(path: Path) -> SavedRoute:
+        source = ActiveRouteFile(path).capture()
+
+        def present(revision: FileRevision) -> SavedRoute:
+            info = path.stat()
+            content = source.content
+            try:
+                route = ActiveRoute.from_bytes(content, path)
+            except MalformedRecord:
+                pass  # An unreadable original is restored byte-for-byte.
+            else:
+                content = route.rebound().encoded()
+            return PresentSavedRoute(content, info.st_mode, info.st_nlink)
+
+        return source.revision.either(present, AbsentSavedRoute)
+
+    @abstractmethod
+    def matches(self, path: Path) -> bool: ...
+
+    @abstractmethod
+    def restore(self, path: Path, directory: int) -> None: ...
+
+
+class AbsentSavedRoute(SavedRoute):
+    def matches(self, path: Path) -> bool:
+        return not path.exists()
+
+    def restore(self, path: Path, directory: int) -> None:
+        os.unlink(path.name, dir_fd=directory)
+        os.fsync(directory)
+
+
+@dataclass(frozen=True)
+class PresentSavedRoute(SavedRoute):
+    content: bytes
+    mode: int
+    links: int
+
+    def matches(self, path: Path) -> bool:
+        try:
+            current = path.stat()
+        except FileNotFoundError:
+            return False
+        return (current.st_mode == self.mode and current.st_nlink == self.links
+                and path.read_bytes() == self.content)
+
+    def restore(self, path: Path, directory: int) -> None:
+        DirectoryAtomicFile(path, mode=stat.S_IMODE(self.mode), directory=directory).write_bytes(self.content)
 
 
 def bus_paths(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...]) -> tuple[Path, ...]:
@@ -222,22 +276,19 @@ class StoreBackup:
         return archived
 
     def restore_route(self) -> None:
-        def restore(restored: bytes | None, directory: int) -> None:
+        def restore(saved: SavedRoute, directory: int) -> None:
             if FileRevision.capture(self.route) != self.route_revision:
                 print(f'Keeping concurrently changed route: {self.route}', file=sys.stderr)
                 return
-            if self.route_matches(restored):
+            if saved.matches(self.route):
                 return
-            if restored is not None:
-                DirectoryAtomicFile(self.route, directory=directory).write_bytes(restored)
-            else:
-                os.unlink(self.route.name, dir_fd=directory)
-                os.fsync(directory)
+            saved.restore(self.route, directory)
             self.route_revision = FileRevision.capture(self.route)
-            if not self.route_matches(restored):
+            if not saved.matches(self.route):
                 raise UpgradeRefused('Active route differs after backup restoration')
 
-        ActiveRouteFile(self.route).update(self.restored_route, restore)
+        ActiveRouteFile(self.route).update(
+            partial(SavedRoute.read, self.path / RouteFile.filename), restore)
 
     def require_route_revision(self) -> None:
         if FileRevision.capture(self.route) != self.route_revision:
@@ -254,29 +305,8 @@ class StoreBackup:
 
         return ActiveRouteFile(self.route).publish(route, publish)
 
-    def restored_route(self) -> bytes | None:
-        """The saved route, naming the bus its root holds now: restoring the stores copies
-        the bus back under a new file identity, and the route names its bus by identity.
-        An unreadable saved route selected no bus, and comes back as it was."""
-        saved = self.path / RouteFile.filename
-        try:
-            route = read_active_route(saved)
-        except MalformedRecord:
-            return saved.read_bytes()
-        return None if route is None else route.rebound().encoded()
-
     def route_original(self) -> bool:
-        return self.route_matches(self.restored_route())
-
-    def route_matches(self, restored: bytes | None) -> bool:
-        """Compare prepared bytes and physical privacy without decoding under EX."""
-        if restored is None:
-            return not self.route.exists()
-        if not self.route.exists():
-            return False
-        current, original = self.route.stat(), (self.path / RouteFile.filename).stat()
-        return (current.st_mode == original.st_mode and current.st_nlink == original.st_nlink
-                and self.route.read_bytes() == restored)
+        return SavedRoute.read(self.path / RouteFile.filename).matches(self.route)
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
@@ -289,11 +319,12 @@ class StoreBackup:
             if backup.selected_files() != selected:
                 raise UpgradeRefused('Existing backup belongs to different resources')
             backup.files()  # An interrupted snapshot is never treated as complete.
-            def confirm(restored: bytes | None, directory: int) -> None:
-                if not backup.route_matches(restored):
+            def confirm(saved: SavedRoute, directory: int) -> None:
+                if not saved.matches(route):
                     raise UpgradeRefused('Existing backup belongs to a different route')
                 backup.route_revision = FileRevision.capture(route)
-            ActiveRouteFile(route).update(backup.restored_route, confirm)
+            ActiveRouteFile(route).update(
+                partial(SavedRoute.read, path / RouteFile.filename), confirm)
             return backup
         PrivateDirectoryRole.make_parents(path.parent)
         path.mkdir(mode=PrivateDirectoryRole.permissions)

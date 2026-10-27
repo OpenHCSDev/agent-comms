@@ -227,11 +227,26 @@ class DeadHolderReleasedPhase(ReadyPhase):
 HOLDER_NONCE = "AGENT_COMMS_MAINTENANCE_HOLDER"
 
 
-class MaintenanceHolder(SubclassUnion):
+class MaintenanceSelection(ABC):
+    """A selected request claim or a view of the process's inherited environment."""
+
+    @abstractmethod
+    def resolved(self) -> MaintenanceHolder: ...
+
+
+class InheritedMaintenanceSelection(MaintenanceSelection):
+    def resolved(self) -> MaintenanceHolder:
+        return MaintenanceHolder.from_environment(os.environ)
+
+
+class MaintenanceHolder(SubclassUnion, MaintenanceSelection):
     """One request's maintenance claim, or its process's inherited claim outside requests."""
 
-    _selected: ClassVar[ContextVar[MaintenanceHolder | None]] = ContextVar(
-        "maintenance_holder", default=None)
+    _selected: ClassVar[ContextVar[MaintenanceSelection]] = ContextVar(
+        "maintenance_holder", default=InheritedMaintenanceSelection())
+
+    def resolved(self) -> MaintenanceHolder:
+        return self
 
     @abstractmethod
     def holds(self, nonce: ClaimId) -> bool: ...
@@ -245,8 +260,7 @@ class MaintenanceHolder(SubclassUnion):
 
     @classmethod
     def current(cls) -> MaintenanceHolder:
-        selected = cls._selected.get()
-        return selected if selected is not None else cls.from_environment(os.environ)
+        return cls._selected.get().resolved()
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str]) -> MaintenanceHolder:

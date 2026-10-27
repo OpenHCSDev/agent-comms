@@ -22,8 +22,11 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
 from .launch_root import LaunchRoot
+from .locked_store import DocumentBytes
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
+from .private_path import (
+    FileRevision, MissingFile, ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole,
+)
 from .recorded_bus import RecordedBusIdentity
 from .store_files import (
     DependentStateTier, DirectoryAtomicFile, ExclusiveDirectoryAtomicFile,
@@ -41,6 +44,36 @@ class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):
 
     # Publishers exclude only each other while the first install publishes its route.
     contention = StoreLockContention(30.0)
+
+    def capture(self) -> DocumentBytes:
+        """Capture private route bytes; decoding belongs outside every publication guard."""
+        path = self.path
+        refusal = RouteFileNotPrivate()
+        try:
+            fd = PrivateFileRole.read(path, refusal)
+        except FileNotFoundError:
+            return DocumentBytes(MissingFile(), b"")
+        try:
+            PrivateDirectoryRole.require(
+                path.parent.lstat(), ValueError("active comms route directory must be owner-only"))
+            info = os.fstat(fd)
+            if not 0 < info.st_size <= 4096:
+                raise refusal
+            raw = os.read(fd, 4097)
+        finally:
+            os.close(fd)
+        try:
+            current = path.lstat()
+        except FileNotFoundError as error:
+            raise ValueError("active comms route changed while reading") from error
+        if (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) != (
+            info.st_dev,
+            info.st_ino,
+            info.st_size,
+            info.st_mtime_ns,
+        ):
+            raise ValueError("active comms route changed while reading")
+        return DocumentBytes(FileRevision.from_stat(info), raw)
 
     @contextmanager
     def _directory(self) -> Iterator[int]:
@@ -179,6 +212,14 @@ class ActiveRoute(CommsRoute):
         return replace(self, bus_identity=RecordedBusIdentity.capture(Bus.path_in(self.root)))
 
     @classmethod
+    def from_bytes(cls, raw: bytes, path: Path) -> ActiveRoute:
+        try:
+            value = FieldCodec.parse(raw)
+        except MalformedRecord as error:
+            raise MalformedRecord("active comms route is invalid JSON") from error
+        return cls.from_record(value, path)
+
+    @classmethod
     def from_record(cls, value: object, path: Path) -> ActiveRoute:
         value = FieldCodec.decode(dict[str, object], value)
         match value:
@@ -234,36 +275,9 @@ class RouteFileNotPrivate(ValueError):
 def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     """Decode the one trusted default route; explicit roots bypass this file."""
     path = active_route_path() if path is None else path
-    refusal = RouteFileNotPrivate()
-    try:
-        fd = PrivateFileRole.read(path, refusal)
-    except FileNotFoundError:
-        return None
-    try:
-        PrivateDirectoryRole.require(
-            path.parent.lstat(), ValueError("active comms route directory must be owner-only"))
-        info = os.fstat(fd)
-        if not 0 < info.st_size <= 4096:
-            raise refusal
-        raw = os.read(fd, 4097)
-    finally:
-        os.close(fd)
-    try:
-        current = path.lstat()
-    except FileNotFoundError as error:
-        raise ValueError("active comms route changed while reading") from error
-    if (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) != (
-        info.st_dev,
-        info.st_ino,
-        info.st_size,
-        info.st_mtime_ns,
-    ):
-        raise ValueError("active comms route changed while reading")
-    try:
-        value = FieldCodec.parse(raw)
-    except MalformedRecord as error:
-        raise MalformedRecord("active comms route is invalid JSON") from error
-    return ActiveRoute.from_record(value, path)
+    source = ActiveRouteFile(path).capture()
+    return source.revision.either(
+        lambda present: ActiveRoute.from_bytes(source.content, path), lambda: None)
 
 
 def route_new_bus(route: ActiveRoute, path: Path) -> str:

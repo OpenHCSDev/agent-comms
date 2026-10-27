@@ -1025,8 +1025,10 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, decl
 
             return nullcontext(source.revision.either(existing, lambda: initialize))
 
-        return self.change_current(
-            self._capture_unlocked, prepare, lambda ready: ready())
+        def apply(ready: Callable[[], T]) -> T:
+            return ready()
+
+        return self.change_current(self._capture_unlocked, prepare, apply)
 
     def replace(self, value: T) -> None:
         """Publish a complete owned snapshot without reading the discarded one.
