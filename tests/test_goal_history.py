@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms.child_process import Platform
 from agent_comms.comms import Comms, wire
+from agent_comms.field_codec import FieldCodec
 from conftest import installed_comms
 from test_locked_store import _hold_lock, event, process
 from agent_comms.goal_actions import (
@@ -85,7 +86,9 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
         for tool in ToolRequest.members_with(ToolRequest)
         if tool.declared_name == "comms_goal_history"
     )
-    result = history_tool.invoke(reopened, {"goal_id": first.id}, caller=ThreadCaller("worker"))
+    result = history_tool.invoke(
+        reopened, {"goal_id": FieldCodec.encode(first.id)}, caller=ThreadCaller("worker"),
+    )
     assert [row["after"]["revision"] for row in result["history"] if row["after"]] == [
         1,
         2,

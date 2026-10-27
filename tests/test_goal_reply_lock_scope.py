@@ -18,7 +18,7 @@ from agent_comms.coordination_errors import StaleFence
 from agent_comms.field_codec import GoalWaitId, TurnId
 from agent_comms.goal_actions import (
     EditGoalAction,
-    GoalActionContext,
+    GoalPublicationContext,
     GoalPrecondition,
     RuntimeInvocable,
     SetGoalAction,
@@ -151,9 +151,9 @@ def test_reply_appended_between_review_and_publication_is_still_eligible(reviewi
     cut = reviewing.bus.bus.revision()
     prepared = standby(reviewing).prepare(reviewing.goals, "owner", RuntimeInvocable)
     reply = reviewing.messaging.send("child", "owner", "Arrived during review").message
-    with reviewing.registry.store.guarded_write():
-        prepared.apply(GoalActionContext(
-            reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
+    with reviewing.registry.store.editing() as edit:
+        prepared.apply(GoalPublicationContext(
+            reviewing.goals, edit.document.require("owner"), RuntimeInvocable, edit=edit,
         ))
     wait = reviewing.goals.goal_wait("owner")
     assert wait.after_seq == cut < reply.seq
@@ -221,9 +221,9 @@ def test_stale_review_never_writes_inputs_or_replaces_newer_wait(reviewing, chan
     before = inputs.read(prepared.reviewed_inputs)
     wait_before = reviewing.goals.goal_wait("owner")
     goal_before = reviewing.registry.require("owner").goal
-    with reviewing.registry.store.guarded_write(), pytest.raises(ValueError):
-        prepared.apply(GoalActionContext(
-            reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
+    with reviewing.registry.store.editing() as edit, pytest.raises(ValueError):
+        prepared.apply(GoalPublicationContext(
+            reviewing.goals, edit.document.require("owner"), RuntimeInvocable, edit=edit,
         ))
     assert inputs.read(prepared.reviewed_inputs) == before
     assert reviewing.goals.goal_wait("owner") == wait_before
@@ -316,9 +316,9 @@ def test_display_edit_during_standby_review_is_preserved(reviewing, rename):
     reviewing.registry.register(replace(reviewing.registry.require("owner"), title=title))
     if rename:
         reviewing.registry.rename("owner", "renamed-owner")
-    with reviewing.registry.store.guarded_write():
-        prepared.apply(GoalActionContext(
-            reviewing.goals, reviewing.registry.require("owner"), RuntimeInvocable,
+    with reviewing.registry.store.editing() as edit:
+        prepared.apply(GoalPublicationContext(
+            reviewing.goals, edit.document.require("owner"), RuntimeInvocable, edit=edit,
         ))
     assert reviewing.registry.require("owner").title == title
     assert reviewing.goals.goal_wait("owner").goal_id == prepared.review.goal_id

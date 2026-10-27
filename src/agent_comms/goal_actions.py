@@ -61,6 +61,7 @@ from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .registry_document import CommanderProject
+    from .registry_store import RegistryEdit
     from .goal_presentation import GoalSnapshot
 
 
@@ -122,8 +123,15 @@ class GoalActionContext:
 
 
 @dataclass(frozen=True, kw_only=True)
+class GoalPublicationContext(GoalActionContext):
+    """An action may publish only through the registry edit that checked its original."""
+
+    edit: RegistryEdit
+
+
+@dataclass(frozen=True, kw_only=True)
 class GoalAction[Result: GoalDeclaration](
-    DeclaredFamily, Command[GoalActionContext, Result], affix="GoalAction"
+    DeclaredFamily, Command[GoalPublicationContext, Result], affix="GoalAction"
 ):
     expect: GoalPrecondition = GoalPrecondition()
     preserve_wait: ClassVar[bool] = False
@@ -164,7 +172,7 @@ class GoalAction[Result: GoalDeclaration](
     def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction[Result]:
         return self
 
-    def apply(self, ctx: GoalActionContext) -> Result:
+    def apply(self, ctx: GoalPublicationContext) -> Result:
         self.expect.check(ctx)
         self.require_actor(ctx.actor)
         if ctx.model_report and any(
@@ -176,13 +184,11 @@ class GoalAction[Result: GoalDeclaration](
         if goal == ctx.thread.goal:
             return goal
         self.before_publish(goal, ctx)
-        ctx.goals.registry.register(
-            replace(
-                ctx.thread,
-                goal=goal,
-            ),
-            ctx.goals.registry.status(ctx.thread.name),
+        change = ctx.edit.document.prepare_registration(
+            replace(ctx.thread, goal=goal),
+            ctx.edit.document.status(ctx.thread.name), new_owner=False,
         )
+        ctx.goals.registry._commit_registration(ctx.edit, change)
         if not self.preserve_wait:
             ctx.thread.goal.clear_wait(ctx.goals.waits)
         return goal
