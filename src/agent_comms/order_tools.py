@@ -85,7 +85,7 @@ class TodoList(ToolResult):
 @dataclass(frozen=True)
 class ProblemOrdered(ToolResult):
     goal: Goal
-    todo: Todo
+    todos: tuple[Todo, ...]
 
 
 @dataclass(frozen=True)
@@ -331,18 +331,21 @@ class CommsStandingRulesTool(CommsHudTool):
 class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
     description = (
-        "Reserve a Todo assignment and publish its Goal with the commander's review timer; "
-        "does not replay input."
+        "Reserve the order's Todo assignments in one transaction and publish its Goal with "
+        "the commander's review timer; does not replay input."
     )
     order: Annotated[
-        OrderGoalAction, *tool_field("Problem, request, expected_revision, review_at, commander")
+        OrderGoalAction, *tool_field(
+            "Problem, request, expected_revision, review_at, commander, and together: the "
+            "order's other open problems with their expected revisions")
     ]
     owner: Annotated[str, *tool_field("Assignee thread")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
         goal = comms.goals.update_goal(self.owner, self.order.bound_to(
             caller.identity(comms), caller.commander(comms).incarnation))
-        return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
+        return ProblemOrdered(goal, tuple(comms.goals.todos.get(problem)
+                                          for problem in self.order.problems()))
 
 
 @dataclass(frozen=True, kw_only=True)

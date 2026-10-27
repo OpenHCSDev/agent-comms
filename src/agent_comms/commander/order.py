@@ -92,6 +92,7 @@ from agent_comms.todos import (
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
+    ExpectedProblem,
     LocatedProblemFinding,
     NoSuccessor,
     OperationDelivery,
@@ -558,11 +559,13 @@ class ListedProblems(OrderedProblems):
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
                review_at: RecordedEventTime) -> None:
-        for pid in group:
-            context.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-                problem=pid, expected_revision=context.comms.goals.todos.get(pid).revision,
-                assigner=context.actor_identity, traced=traced, order=order, request=request,
-                review_at=review_at, commander=context.commander)))
+        """One goal update and one Todo transaction give the unit the document's whole group."""
+        first, *others = (ExpectedProblem(pid, context.comms.goals.todos.get(pid).revision)
+                          for pid in group)
+        context.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
+            problem=first.problem, expected_revision=first.expected_revision,
+            together=tuple(others), assigner=context.actor_identity, traced=traced, order=order,
+            request=request, review_at=review_at, commander=context.commander)))
 
 
 class Reassignment(SubclassUnion, affix="Reassignment"):
