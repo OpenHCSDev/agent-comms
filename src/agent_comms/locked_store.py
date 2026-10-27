@@ -1011,6 +1011,15 @@ class LockedStore(CopyingStore[T], FileStore, LockedFile, JsonDocument[T], decla
                 self._publish_unlocked(changed.document)
             return changed.result
 
+    def initialize(self, create: Callable[[], T]) -> T:
+        """Publish a first value once; concurrent creators read the winner."""
+        with self.guarded_write():
+            if self.path.exists():
+                return self._read_unlocked()
+            document = create()
+            self._publish_unlocked(document)
+            return document
+
     def replace(self, value: T) -> None:
         """Publish a complete owned snapshot without reading the discarded one.
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import socket
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, TextIO
@@ -16,7 +16,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import PathText, WireOmitDefault
 from .launch_runtime import LaunchRuntime
-from .locked_store import LockedStore, RegistryFile, RollbackRetained
+from .locked_store import DocumentChange, LockedStore, RegistryFile, RollbackRetained
 from .maintenance_barrier import MaintenanceBarrier
 from .owner_connection import socket_path
 from .private_path import FileIdentity, PrivateSocketRole
@@ -145,10 +145,11 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
         raise FileNotFoundError(self.path)
 
     def retire_host(self, ready: Callable[[ProcessIdentity], bool]) -> None:
-        with self.guarded_write():
-            data = self._read_unlocked()
+        def retire(data: RootRuntime) -> DocumentChange[RootRuntime, None]:
             if data.host.retire(self.path.parent, ready):
-                self._publish_unlocked(replace(data, host=NoRootHost()))
+                return DocumentChange(replace(data, host=NoRootHost()), None)
+            return DocumentChange(data, None)
+        self.update(retire)
 
     def acquire_host(
         self, runtime: LaunchRuntime, command: tuple[str, ...], *,
@@ -162,36 +163,37 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
             return observed.require("Recorded worker host has no process")
         # Wait for memory without holding either writer.
         # Re-read under the writer before launch so concurrent starters share one host.
-        with room_for_start():
-            with self.guarded_write():
-                current = self._read_unlocked()
+        # The launch remains gated until update has published the winning host.
+        with room_for_start(), ExitStack() as resources:
+            def launch(current: RootRuntime) -> DocumentChange[RootRuntime, ProcessIdentity]:
                 observed = current.available_host(self.path.parent, runtime)
                 if observed.alive():
-                    return observed.require("Recorded worker host has no process")
-                with output() as capture, socket.socket(socket.AF_UNIX) as listener:
-                    with SpawnedProcess.launching(
-                        (*command, "--listener-fd", str(listener.fileno())),
-                        env=environment, cwd=cwd, output=capture, runtime=runtime,
-                        pass_fds=(listener.fileno(),), lifetime=OutlivesLauncherLifetime,
-                    ) as child:
-                        path = socket_path(self.path.parent, child.identity.pid)
-                        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                        with PrivateSocketRole.address(path) as address:
-                            listener.bind(str(address))
-                        listener.listen()
-                        bus = RecordedBus(FileIdentity.from_stat(Bus.path_in(self.path.parent).stat()))
-                        self._publish_unlocked(replace(current, host=RecordedRootHost(child.identity, bus)))
-                        return child.identity
+                    return DocumentChange(current, observed.require("Recorded worker host has no process"))
+                capture = resources.enter_context(output())
+                listener = resources.enter_context(socket.socket(socket.AF_UNIX))
+                child = resources.enter_context(SpawnedProcess.launching(
+                    (*command, "--listener-fd", str(listener.fileno())),
+                    env=environment, cwd=cwd, output=capture, runtime=runtime,
+                    pass_fds=(listener.fileno(),), lifetime=OutlivesLauncherLifetime,
+                ))
+                path = socket_path(self.path.parent, child.identity.pid)
+                path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                with PrivateSocketRole.address(path) as address:
+                    listener.bind(str(address))
+                listener.listen()
+                bus = RecordedBus(FileIdentity.from_stat(Bus.path_in(self.path.parent).stat()))
+                return DocumentChange(replace(current, host=RecordedRootHost(child.identity, bus)), child.identity)
+            return self.update(launch)
 
     def publish_runtime(self, runtime: LaunchRuntime) -> None:
         self.owner(runtime)
-        with self.guarded_write():
-            current = self._read_unlocked()
+        def publish(current: RootRuntime) -> DocumentChange[RootRuntime, RootRuntime]:
             if current.prefix == runtime.prefix:
-                return
+                return DocumentChange.to(current)
             if current.host.observed(self.path.parent).alive():
                 raise ForeignRuntimeError("Retire the root's worker host before changing runtime")
-            self._publish_unlocked(RootRuntime(runtime.prefix))
+            return DocumentChange.to(RootRuntime(runtime.prefix))
+        self.update(publish)
 
     def owner(self, creator: LaunchRuntime) -> RootRuntime:
         try:
@@ -204,8 +206,7 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
 
         Adoption is where a directory becomes a root, so its bus is created here, empty:
         from then on an absent bus file means a deleted bus, never one not yet written."""
-        with self.guarded_write():
-            if not self.path.exists():
-                Bus.install(Bus.path_in(self.path.parent))
-                self._publish_unlocked(RootRuntime(runtime.prefix))
-            return self._read_unlocked()
+        def create() -> RootRuntime:
+            Bus.install(Bus.path_in(self.path.parent))
+            return RootRuntime(runtime.prefix)
+        return self.initialize(create)
