@@ -344,6 +344,14 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             named = NamedTurn(record) if cut.snapshot.holds_turn(record.identity) else RetiredTurn()
             return change(named)
 
+    def prepare_native_root(self) -> PrivateRegistryGuard:
+        """Commit this store's namespace before preparing runtime tables outside its writer."""
+        with self.guarded_write():
+            self.read_revision_unlocked().document.purpose.require_write()
+            guard = self.private_guard_unlocked().prepare_native(self.path)
+        guard.prepare_runtime()
+        return guard
+
     def privacy(self) -> RegistryPrivacy:
         """Capture namespace authority without lending its lock to a consumer."""
         with self.guarded_read():
@@ -397,14 +405,6 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     def _decode_snapshot(self, source: DocumentBytes) -> RegistrySnapshot:
         revision = self._decode_revision(source)
-        with self.cache.decoding:
-            return revision.snapshot
-
-    def read_snapshot_unlocked(self) -> RegistrySnapshot:
-        revision = self.read_revision_unlocked()
-        # Shared readers may be the first to ask for this revision's snapshot.
-        # Use the existing decode mutex for that one construction, not the
-        # whole caller's read lifetime.
         with self.cache.decoding:
             return revision.snapshot
 

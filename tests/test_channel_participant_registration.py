@@ -18,7 +18,7 @@ from agent_comms.threads import Thread
 @pytest.mark.asyncio
 async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
         comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(tmp_path)))
     stopped = comms.registry.require("stopped-reviewer")

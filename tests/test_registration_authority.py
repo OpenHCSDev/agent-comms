@@ -174,7 +174,7 @@ def test_turn_access_waits_for_private_registry_commit(tmp_path, operation):
     from agent_comms.store_files import AtomicFile
 
     registry = registered(tmp_path)
-    registry.prepare_native_root()
+    registry.store.prepare_native_root()
     leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     record, lease = leased.turn_record, leased.require_turn_lease()
     if operation == 'sidebar':
@@ -223,7 +223,7 @@ def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
     from agent_comms.store_files import AtomicFile
 
     registry = registered(tmp_path)
-    registry.prepare_native_root()
+    registry.store.prepare_native_root()
     leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     with registry.store.guarded_write():
         guard = registry.store.private_guard_unlocked()

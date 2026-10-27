@@ -216,7 +216,7 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
     original = comms.registry.declare(Thread(
         'viewer', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     lookup = original.incarnation.require_recorded().lookup
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
         store.participants.register(lookup, committed=True)
     state = tmp_path / 'bridge-state'
@@ -466,7 +466,7 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
     comms.registry.declare(Thread('viewer', frozenset(), Checkout(tmp_path),
                                   execution=ExternalThreadExecution))
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
     with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
         store.participants.register(lookup, committed=True)
@@ -548,7 +548,7 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
     comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
     comms.registry.declare(Thread('viewer', frozenset(), Checkout(tmp_path),
                                   execution=ExternalThreadExecution))
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
     with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
         store.participants.register(lookup, committed=True)

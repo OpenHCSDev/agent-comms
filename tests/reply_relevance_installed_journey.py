@@ -74,7 +74,7 @@ async def run(stage, package):
         env=environment,
     )
     assert Path(fork.session_file).is_relative_to(stage)
-    root_id = service.registry.prepare_native_root().namespace
+    root_id = service.registry.store.prepare_native_root().namespace
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_AGENT_BIN=str(binary),

@@ -32,7 +32,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
     comms = prepare_native_comms(wire(root))
     for name in ("sender", "receiver"):
         comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol')))
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     lookup = comms.registry.require("receiver").incarnation.lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(lookup, committed=True)

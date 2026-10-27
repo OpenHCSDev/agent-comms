@@ -61,7 +61,7 @@ def _root(
         Thread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
     ]
     people = [comms.registry.declare(person) for person in people]
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = publish_initial(comms, "sender", target, body)

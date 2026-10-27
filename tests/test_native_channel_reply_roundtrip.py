@@ -241,7 +241,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         comms.registry.declare(
             Thread(name, frozenset({'team'}), Checkout(project), model=DeclaredModel(f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture'), thinking_level=OffThinkingLevel)
         )
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     attachment = CommsClient(
         comms,
         runtime_enabled=True,

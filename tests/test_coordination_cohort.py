@@ -75,7 +75,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     coordinator = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 4723)
     for name in ("Alice", "Bob", "Charlie"):
         coordinator.participants.register(lookups[name], committed=True)
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     return comms, coordinator, root_id, lookups
 
 
@@ -357,7 +357,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     try:
         candidate = wire(root)
         with pytest.raises(RelationViolationError):
-            candidate.registry.prepare_native_root()
+            candidate.registry.store.prepare_native_root()
         # Root adoption owns the empty bus (root_runtime.py adopt); the refusal is that
         # no private authority exists for the untrusted root.
         assert not candidate.registry.store.guard_path.exists()

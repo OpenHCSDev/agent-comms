@@ -50,7 +50,7 @@ def test_existing_public_participant_survives_native_root_preparation(tmp_path):
     thread = comms.registry.declare(Thread("public-first", frozenset(), Checkout(tmp_path)))
     with CoordinationSession(str(CoordinationStore.path_in(comms.root))) as session:
         before = ParticipantStore(session).get(thread.incarnation.lookup)
-    comms.registry.prepare_native_root()
+    comms.registry.store.prepare_native_root()
     with CoordinationSession(str(CoordinationStore.path_in(comms.root))) as session:
         assert ParticipantStore(session).get(thread.incarnation.lookup) == before
 

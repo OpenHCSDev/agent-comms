@@ -54,7 +54,7 @@ def _root(
         comms.registry.declare(
             Thread(f'member{number:03}', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol'))
         )
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     store = Coordination(str(root / "coordination.sqlite3"))
     return comms, store, WakeCandidateIndex(comms.bus.bus), root_id
 

@@ -11,14 +11,19 @@ def test_importing_order_with_empty_home_reads_no_config_and_opens_no_store(tmp_
                    if not key.startswith(('AGENT_COMMS_', 'PI_COMMS_', 'PI_NATIVE_'))}
     environment['HOME'] = str(tmp_path)
     result = subprocess.run([sys.executable, '-B', '-c', '''
-from agent_comms.comms import Comms
-from agent_comms.registry_store import RegistryStore
+import os
+import sys
+from pathlib import Path
 
-def forbidden(*args, **kwargs):
-    raise AssertionError('import opened a store or read configuration')
+def no_runtime_files(event, arguments):
+    if event == 'sqlite3.connect' and arguments[0] != ':memory:':
+        raise AssertionError('import opened a database')
+    if event in {'open', 'os.listdir', 'os.scandir'}:
+        path = arguments[0]
+        if isinstance(path, (str, bytes)) and Path(os.fsdecode(path)).is_relative_to(Path.home()):
+            raise AssertionError('import opened a runtime file or read configuration')
 
-Comms.__init__ = forbidden
-RegistryStore.read_snapshot_unlocked = forbidden
+sys.addaudithook(no_runtime_files)
 import agent_comms.commander.order
 '''], env=environment, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
