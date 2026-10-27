@@ -85,6 +85,10 @@ class OwnerAsksPlan(Plan):
     document = "plans/OWNER-ASKS-PLAN.md"
 
 
+class PackageStructurePlan(Plan):
+    document = "plans/PACKAGE-STRUCTURE-PLAN.md"
+
+
 class OrderPhase(DeclaredFamily, affix="Phase"):
     """What an order serves: one plan phase, or nothing in any plan."""
 
@@ -1064,7 +1068,50 @@ class RamBudgetPhase(OwnerAsksPhase):
 class UnflattenModulesPhase(OwnerAsksPhase):
     """The package structure for the flat modules of ``src/agent_comms`` is a declared plan."""
 
-    evidence = ClassDeclared("PackageStructurePlan", ("src/agent_comms/plan_phases.py",))
+    evidence = ClassDeclared(PackageStructurePlan.__name__, ("src/agent_comms/plan_phases.py",))
+
+
+class PackageStructurePhase(PlanPhase, declared_name=None):
+    plan = PackageStructurePlan
+
+
+class PackageDeclarationsPhase(PackageStructurePhase):
+    after = (RamBudgetPhase, ScopedReadsPhase)
+    evidence = PathsAbsent((
+        "src/agent_comms/field_codec.py", "src/agent_comms/declared_family.py",
+        "src/agent_comms/json_schema.py", "src/agent_comms/sealed.py",
+    ))
+
+
+class PackageStoragePhase(PackageStructurePhase):
+    after = (PackageDeclarationsPhase,)
+    evidence = PathsAbsent((
+        "src/agent_comms/store_files.py", "src/agent_comms/locked_store.py",
+        "src/agent_comms/private_path.py", "src/agent_comms/maintenance_barrier.py",
+    ))
+
+
+class PackageCoordinationPhase(PackageStructurePhase):
+    after = (PackageStoragePhase,)
+    evidence = PathsAbsent(("src/agent_comms/coordinator.py", "src/agent_comms/coordination_database.py",
+                            "src/agent_comms/coordination_tables"))
+
+
+class PackageExecutionPhase(PackageStructurePhase):
+    after = (PackageCoordinationPhase,)
+    evidence = PathsAbsent((
+        "src/agent_comms/input_drain.py", "src/agent_comms/session_lifecycle.py",
+        "src/agent_comms/owner_lifecycle.py", "src/agent_comms/owned_turn.py",
+    ))
+
+
+class PackageConsumerClosurePhase(PackageStructurePhase):
+    after = (PackageExecutionPhase,)
+    evidence = PathsAbsent((
+        "src/agent_comms/registration.py", "src/agent_comms/registry_store.py",
+        "src/agent_comms/registry_document.py", "src/agent_comms/threads.py",
+        "src/agent_comms/goal_waits.py",
+    ))
 
 
 class BoardLineLockTextPhase(OwnerAsksPhase):
