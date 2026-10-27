@@ -42,6 +42,8 @@ from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
+from agent_comms_hooks.deferral import StopHook
+from agent_comms_hooks.forks import SubagentHook
 from agent_comms_hooks.skill import CommanderStart
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from test_commander_notifications import beat, lead_hud
@@ -293,7 +295,7 @@ def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_ever
     assert set(slices[2::4]) == set(RuleFile.drift_tells())
     assert set(slices[3::4]) == {
         f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines()}
-    assert all(len(text) < 2_000 for text in slices)
+    assert all(len(text) <= CommanderStart.slice_chars for text in slices)
 
 
 def run_installed(monkeypatch, capsys, transcript):
@@ -382,3 +384,24 @@ def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander
     WatchClaim("s").enrol(WatchRecord("claude-code", str(commander_bus.root), (), tmp_path))
     assert CommanderStart.decode(
         {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take()
+
+
+def test_a_demoted_commander_keeps_its_deck_files_but_they_get_no_vote(
+        tmp_path, capsys, commanding_session):
+    """Command moves to another thread in the registry; the old commander's dealt deck stays
+    on disk, and no hook treats it as command: no reminder, stop guard or fork."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert CommanderStart.decode(hook_record(transcript, "SessionStart")).take()
+    assert transcript.with_suffix(".deck.json").exists()
+    commanding_session.registry.set_commander_project(RegisteredCommanderProject(
+        commanding_session.registry.require("unit-x").incarnation, ()))
+    reminder = BoardReminder.decode(hook_record(transcript))
+    assert [reminder.take() for _ in range(SliceReminder.every * 2)] == [()] * SliceReminder.every * 2
+    StopHook.decode({"hook_event_name": "Stop", "session_id": "s",
+                     "transcript_path": str(transcript), "stop_hook_active": False}).guard()
+    SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": "s",
+                         "transcript_path": str(transcript), "agent_id": "a9"}).register()
+    assert capsys.readouterr().out == ""
+    assert "claude-a9" not in commanding_session.registry
+    assert transcript.with_suffix(".deck.json").exists()

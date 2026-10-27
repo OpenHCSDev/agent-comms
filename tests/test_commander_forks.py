@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import CommanderContext, OrderFile
