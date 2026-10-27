@@ -17,6 +17,9 @@ from agent_comms.change_report import FileLine
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.commander_hud import CommanderHud
+from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, TodoError
 from agent_comms.external_transcript import ExternalTranscript
@@ -46,6 +49,7 @@ from agent_comms.threads import Thread
 from agent_comms.todos import (
     PendingProblemOrder,
     ProblemAllocation,
+    ProgressRead,
     ReleaseTodo,
     StrikeReason,
     SupersededVerdict,
@@ -211,8 +215,11 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     ctx = CommanderContext.read_root(comms.root).model_copy(
         update={"actor": CommanderForkCaller(fork.name)}
     )
-    heartbeat = CommanderHeartbeat()
-    heartbeat.pass_body(comms, (CommanderObservation.read(comms, parent),))
+    frame = HeartbeatFrame.capture(comms, parent.name, ProgressRead())
+    states = UnitState.current(comms, parent.name, frame)
+    observed = CommanderObservation(parent, (), (), states,
+        CommanderHud.of(comms, parent.name, frame, states))
+    CommanderHeartbeat().pass_body(comms, (observed,))
     hud = ctx.call(CommsHudTool(thread=ctx.commander))
     assert hud.commander == parent.incarnation
     assert [(unit.unit, tuple(order.problem for order in unit.orders)) for unit in hud.units] == [
