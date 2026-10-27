@@ -33,4 +33,3 @@ def dead_owner_restart(private_comms):
         queue.RestartTarget(sys.executable, RestartEnvironment(), sys.executable),
         queue.PendingRestart(),
     )
-

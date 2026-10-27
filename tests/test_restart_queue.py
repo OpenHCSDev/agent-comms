@@ -109,4 +109,3 @@ async def test_inotify_wakes_for_registry_and_queue_changes(private_comms, dead_
             dead_owner_restart.insert(db)
         await asyncio.wait_for(anext(observations), 1)
         assert store.history(dead_owner_restart.owner) == [dead_owner_restart]
-

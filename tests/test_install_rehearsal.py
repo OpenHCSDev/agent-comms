@@ -366,4 +366,3 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     if not fresh:
         assert history[0].body.startswith("Install starting")
     assert scratch.is_dir() and not tuple(scratch.iterdir())
-
