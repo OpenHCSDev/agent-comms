@@ -122,7 +122,7 @@ class BridgeStateTable(DurableTables):
 
     __slots__ = ()
     filename = 'delivery.sqlite3'
-    retired_tables: ClassVar[tuple[str, ...]] = ('board_line',)
+    retired_tables: ClassVar[tuple[str, ...]] = ('board_line', 'delivery', 'observed_part')
 
 
 @dataclass(frozen=True)
@@ -998,12 +998,6 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         return Path.home() / cls.state_directory
 
     @classmethod
-    def state_directories(cls) -> tuple[Path, ...]:
-        """Relative state directories declared by the loaded bridge members."""
-        return tuple(bridge.state_directory for bridge in cast(
-            tuple[type[CliBridge], ...], HarnessSession.members_with(CliBridge)))
-
-    @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Declare the options this harness's transport needs."""
 
@@ -1181,11 +1175,16 @@ class BridgeDeliveryStore(WriterOwnedStore):
         return Path.home()
 
     @classmethod
-    def resources(cls, files: FilesRequest) -> tuple[WriterOwnedResource, ...]:
+    def journals(cls, files: FilesRequest) -> tuple[tuple[type[CliBridge], WriterOwnedResource], ...]:
+        """Each binding's journal with the bridge member whose state directory holds it."""
         root = files.location(cls.resource(cls.retained_filename()))
-        return tuple(cls.resource(cls.retained_filename() / path.relative_to(root))
-                     for directory in CliBridge.state_directories()
-                     for path in sorted((root / directory).glob(f"*/{BridgeStateTable.filename}")))
+        return tuple((bridge, cls.resource(cls.retained_filename() / path.relative_to(root)))
+                     for bridge in cast(tuple[type[CliBridge], ...], HarnessSession.members_with(CliBridge))
+                     for path in sorted((root / bridge.state_directory).glob(f"*/{BridgeStateTable.filename}")))
+
+    @classmethod
+    def resources(cls, files: FilesRequest) -> tuple[WriterOwnedResource, ...]:
+        return tuple(resource for _bridge, resource in cls.journals(files))
 
     @classmethod
     def table_schema(cls) -> type[TableSchema]:

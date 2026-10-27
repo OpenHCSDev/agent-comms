@@ -110,6 +110,10 @@ class HarnessObservedPart(ImmutableRows, CoordinatorRow, declared_name="harness_
                            target=HarnessDelivery,
                            target_columns=("bridge", "recipient_lookup", "message_id")),)
 
+    def key(self) -> dict[str, object]:
+        return {"bridge": self.bridge, "recipient_lookup": self.recipient_lookup,
+                "message_id": self.message_id, "number": self.number}
+
     @classmethod
     def of(cls, db: sqlite3.Connection, delivery: HarnessDelivery) -> tuple[Self, ...]:
         return tuple(cls.select(db, **delivery.key(), order_by=("number",)))

@@ -14,7 +14,6 @@ def test_bridges_list_their_own_state_directories(monkeypatch, tmp_path: Path) -
     monkeypatch.setenv("HOME", str(tmp_path))
     bridges = HarnessSession.members_with(CliBridge)
     assert set(bridges) == {ClaudeBridge, CodexBridge, OpenCodeBridge}
-    assert CliBridge.state_directories() == tuple(bridge.state_directory for bridge in bridges)
     assert BridgeDeliveryStore.path() == tmp_path
     for bridge in bridges:
         assert bridge.state_path() == tmp_path / bridge.state_directory
