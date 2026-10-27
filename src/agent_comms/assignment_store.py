@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from agent_comms.field_codec import AssignmentId, ThreadLookup
 
 from collections.abc import Callable, Sequence
@@ -88,6 +90,7 @@ class AssignmentStore:
 
     def settle_harness_inputs(
         self,
+        db: sqlite3.Connection,
         recipient_lookup: ThreadLookup,
         sources: Sequence[MessageReference],
         steps: Callable[[AssignmentState], tuple[type[AssignmentState], ...]],
@@ -96,20 +99,21 @@ class AssignmentStore:
 
         The claim is the thread's one record of delivery, so it survives a move
         to another execution; each claim walks the steps its own state declares.
+        Every step runs in the caller's coordinator write, so the harness attempt
+        and its claim consequence commit together or not at all.
         """
-        with self.session.read():
-            claims = WakeAssignment.select(
-                self.session._connection,
-                where=f"recipient_lookup=? AND wire_seq IN ({','.join('?' * len(sources))})",
-                parameters=(recipient_lookup, *(source.seq for source in sources)),
-            )
+        claims = WakeAssignment.select(
+            db,
+            where=f"recipient_lookup=? AND wire_seq IN ({','.join('?' * len(sources))})",
+            parameters=(recipient_lookup, *(source.seq for source in sources)),
+        )
         for claim in claims:
             if claim.source not in sources:
                 raise IdentityConflict("harness delivery names another message at this sequence")
             for disposition in steps(claim.lifecycle):
                 # The revision fence refuses a step if the native owner moved the claim meanwhile.
-                claim = self.transition_preengagement(
-                    claim.assignment_id, disposition, expected_revision=claim.revision,
+                claim = self.transition_in(
+                    db, claim.assignment_id, disposition, expected_revision=claim.revision,
                 ).value
 
     def transition_preengagement(
@@ -120,22 +124,33 @@ class AssignmentStore:
         expected_revision: int,
     ) -> Applied[WakeAssignment]:
         with self.session.writing() as db:
-            current = self.get(assignment_id)
-            if current.revision != expected_revision:
-                raise StaleRevision("claim revision changed")
-            lifecycle = current.lifecycle.preengagement(disposition)
-            after = replace(
-                current,
-                updated_at_ms=self.session.now(current.updated_at_ms),
-                revision=current.revision + 1,
-                lifecycle=lifecycle,
-            )
-            WakeAssignment.update(
-                db,
-                where="assignment_id=? AND revision=?",
-                parameters=(assignment_id, expected_revision),
-                lifecycle=after.lifecycle,
-                updated_at_ms=after.updated_at_ms,
-                revision=after.revision,
-            )
-            return Applied(after)
+            return self.transition_in(db, assignment_id, disposition, expected_revision=expected_revision)
+
+    def transition_in(
+        self,
+        db: sqlite3.Connection,
+        assignment_id: AssignmentId,
+        disposition: type[AssignmentState],
+        *,
+        expected_revision: int,
+    ) -> Applied[WakeAssignment]:
+        """One preengagement step inside the caller's coordinator write."""
+        current = self.get(assignment_id)
+        if current.revision != expected_revision:
+            raise StaleRevision("claim revision changed")
+        lifecycle = current.lifecycle.preengagement(disposition)
+        after = replace(
+            current,
+            updated_at_ms=self.session.now(current.updated_at_ms),
+            revision=current.revision + 1,
+            lifecycle=lifecycle,
+        )
+        WakeAssignment.update(
+            db,
+            where="assignment_id=? AND revision=?",
+            parameters=(assignment_id, expected_revision),
+            lifecycle=after.lifecycle,
+            updated_at_ms=after.updated_at_ms,
+            revision=after.revision,
+        )
+        return Applied(after)

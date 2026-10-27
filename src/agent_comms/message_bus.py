@@ -235,8 +235,9 @@ class MessageBus[Writes: Publisher]:
         steps: Callable[[AssignmentState], tuple[type[AssignmentState], ...]],
     ) -> None:
         lookup = self._registry.require(name).incarnation.require_recorded().lookup
-        with Coordination(str(CoordinationStore.path_in(self.bus.path.parent))) as store:
-            store.assignments.settle_harness_inputs(lookup, references, steps)
+        with Coordination(str(CoordinationStore.path_in(self.bus.path.parent))) as store, \
+                store.session.writing() as db:
+            store.assignments.settle_harness_inputs(db, lookup, references, steps)
 
     def mark_read_through(
         self, name: str, sequence: int, *, target: NamedTarget = AnyChannel.target(),
