@@ -142,3 +142,22 @@ def test_carry_keeps_every_original_and_never_requeues_an_attempt(
     # the attempted record has no new execution permission.
     store.step(comms)
     assert store.history(attempted.owner) == [attempted]
+
+
+def test_carry_refuses_to_activate_an_intent_from_settled_history(
+        private_comms, original_restart_json, tmp_path):
+    import pytest
+    from cutover.carry_restart_queue import RestartQueueRows
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.locked_store import LiveFilesRequest
+
+    path, pending = next(iter(original_restart_json.items()))
+    destination = path.parents[1] / "settled" / str(pending.owner.lookup) / f"{pending.id}.json"
+    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.rename(destination)
+    original = destination.read_bytes()
+    carry = RestartQueueRows(LiveFilesRequest(private_comms.root), tmp_path / 'spill')
+    with pytest.raises(RelationViolationError, match='settled restart'):
+        carry.carry(apply=False)
+    assert destination.read_bytes() == original
+    assert not queue.RestartQueue(private_comms.root).path.exists()

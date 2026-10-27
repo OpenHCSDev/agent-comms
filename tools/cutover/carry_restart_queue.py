@@ -11,8 +11,8 @@ from agent_comms.child_process import Platform
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
-from agent_comms.lifecycle_capability import Pending
-from agent_comms.locked_store import DurableFile, FileStore, PatternFile, RootFile, RuntimeFile
+from agent_comms.lifecycle_capability import Active, Pending
+from agent_comms.locked_store import DurableFile, FileStore, PatternFile, RegistryFile, RootFile, RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.restart_queue import DIRECTORY, QueuedRestart, RestartQueue
 from agent_comms.store_files import MultiFileStore
@@ -47,6 +47,8 @@ class RestartQueueRows(Carry):
             )
             if path not in locations:
                 raise RelationViolationError(f"Restart record has another owner or id: {path}")
+            if path == locations[1] and record.state.items_with(Active, record):
+                raise RelationViolationError("A settled restart cannot grant a new active attempt")
             records.append((path, record))
         return tuple(records)
 
@@ -56,7 +58,7 @@ class RestartQueueRows(Carry):
             return Carried(0)
         if not apply:
             return Carried(len(originals))
-        MaintenanceBarrier(self.root / "registry.json").read().require_held_by(
+        MaintenanceBarrier(RegistryFile.path_in(self.root)).read().require_held_by(
             MaintenanceHolder.current(), "Carry original restart intents")
         store = RestartQueue(self.root)
         with OriginalRestartWriter.at(self.root).guarded_write(), store.watcher_claim.claimed():

@@ -28,6 +28,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, RestartId, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
+from .locked_store import RuntimeFile
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceHolder
 from .native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
@@ -57,7 +58,6 @@ class RestartState(LifecycleCapability, DeclaredFamily, affix="Restart"):
 
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
-        # A terminal write interrupted before its move is still settled.
         return previous
 
     def restart(self, comms: Comms, record: QueuedRestart) -> Iterator[QueuedRestart]:
@@ -214,6 +214,12 @@ class RestartQueued(CliResult, ToolResult):
         shower.show_done(f"{label}: runs when {self.restart.name} is idle", title)
 
 
+class RestartQueueWatcher(ProcessSingleton, RuntimeFile):
+    """The queue reader's process claim is runtime state, never carried content."""
+
+    filename: ClassVar[str] = f"{DIRECTORY}/watcher.lock"
+
+
 @dataclass(frozen=True, slots=True)
 class RestartQueue(DurableStore):
     """One atomic row transition; active membership is computed from its state.
@@ -228,17 +234,17 @@ class RestartQueue(DurableStore):
     tables = RestartRows
 
     def __post_init__(self) -> None:
-        self.directory.mkdir(mode=0o700, exist_ok=True)
+        PrivateDirectoryRole.make_parents(self.directory)
         PrivateDirectoryRole.require(
             self.directory.lstat(), RelationViolationError("Restart queue directory must be private"))
 
     @property
     def directory(self) -> Path:
-        return self.root / DIRECTORY
+        return self.path.parent
 
     @property
-    def watcher_claim(self) -> ProcessSingleton:
-        return ProcessSingleton(self.directory / "watcher.lock")
+    def watcher_claim(self) -> RestartQueueWatcher:
+        return RestartQueueWatcher(RestartQueueWatcher.path_in(self.root))
 
     @staticmethod
     def _active(db: sqlite3.Connection, **key: object) -> list[QueuedRestart]:
