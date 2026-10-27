@@ -2184,10 +2184,11 @@ class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
         return cls.count_module(cls.tree(source, filename))
 
 
-class GodClassExcess(InventoryMeasure[dict[MemberCount, int]]):
+class GodClassExcess(Advisory, InventoryMeasure[dict[MemberCount, int]]):
     """Independent class lines beyond 500 in Black's layout, including newly introduced classes.
     Lines are counted after the revision's own Black configuration formats the file, so
-    formatting a class never reads as growth while Unformatted asks for exactly that."""
+    formatting a class never reads as growth while Unformatted asks for exactly that.
+    Size is an ownership lead, not evidence of a restated fact, so it warns."""
 
     threshold = 500
 

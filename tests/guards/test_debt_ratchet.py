@@ -259,8 +259,13 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
 
 
 @pytest.fixture(params=["src/agent_comms", "src/toad"])
-def repo(tmp_path: Path, request) -> Repository:
-    return Repository(tmp_path, request.param)
+def repo(tmp_path: Path, request, monkeypatch) -> Repository:
+    # Checker processes and their dependencies belong to this test's environment.
+    # A prior run with an unavailable checker must not supply this run's findings.
+    monkeypatch.setattr(ContentCache, "directory", tmp_path / "measure-cache")
+    checkout = tmp_path / "repository"
+    checkout.mkdir()
+    return Repository(checkout, request.param)
 
 
 def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, monkeypatch) -> None:
@@ -595,17 +600,17 @@ def test_class_growth_cannot_be_cancelled_by_another_class(repo: Repository) -> 
     base = repo.commit({"classes.py": module(owner("Growing", 501), owner("Shrinking", 600))})
     head = repo.commit({"classes.py": module(owner("Growing", 502), owner("Shrinking", 500))})
     status, report = repo.compare(base, head, GodClassExcess)
-    assert status == 1
+    assert status == 0
     assert report["delta"][GodClassExcess.at(f"{repo.root}/classes.py").member("Growing").text] == 1
     assert report["delta"][GodClassExcess.at(f"{repo.root}/classes.py").member("Shrinking").text] == -100
 
 
 @pytest.mark.parametrize("before", [0, 500])
-def test_new_or_crossing_god_class_is_refused(repo: Repository, before: int) -> None:
+def test_new_or_crossing_god_class_is_reported_without_refusal(repo: Repository, before: int) -> None:
     base = repo.commit({"owners.py": owner("New", before)} if before else {})
     head = repo.commit({"owners.py": owner("New", 501)})
     status, report = repo.compare(base, head, GodClassExcess)
-    assert status == 1
+    assert status == 0
     assert report["base"][GodClassExcess.at(f"{repo.root}/owners.py").member("New").text] == 0
     assert report["delta"][GodClassExcess.at(f"{repo.root}/owners.py").member("New").text] == 1
 
@@ -619,14 +624,14 @@ def test_class_move_keeps_baseline_and_new_small_owner_has_no_class_debt(repo: R
     assert report["delta"][GodClassExcess.at(f"{repo.root}/new.py").member("Existing").text] == 0
     assert report["delta"][GodClassExcess.at(f"{repo.root}/new.py").member("NewOwner").text] == 0
     grown = repo.commit({"new.py": module(owner("Existing", 502), owner("NewOwner", 26))})
-    assert repo.compare(moved, grown, GodClassExcess)[0] == 1
+    assert repo.compare(moved, grown, GodClassExcess)[0] == 0
 
 
-def test_moved_class_growth_is_rejected(repo: Repository) -> None:
+def test_moved_class_growth_is_reported_without_refusal(repo: Repository) -> None:
     base = repo.commit({"old.py": owner("Existing", 500)})
     head = repo.commit({"old.py": None, "new.py": owner("Existing", 501)})
     status, report = repo.compare(base, head, GodClassExcess)
-    assert status == 1
+    assert status == 0
     assert report["delta"][GodClassExcess.at(f"{repo.root}/new.py").member("Existing").text] == 1
 
 
@@ -649,7 +654,7 @@ def test_nested_and_duplicate_named_classes_keep_separate_baselines(repo: Reposi
     base = repo.commit({"one.py": nested, "two.py": owner("Inner", 500)})
     head = repo.commit({"one.py": nested, "two.py": owner("Inner", 501)})
     status, report = repo.compare(base, head, GodClassExcess)
-    assert status == 1
+    assert status == 0
     assert report["delta"][GodClassExcess.at(f"{repo.root}/one.py::Outer.Inner").text] == 0
     assert report["delta"][GodClassExcess.at(f"{repo.root}/two.py").member("Inner").text] == 1
 
