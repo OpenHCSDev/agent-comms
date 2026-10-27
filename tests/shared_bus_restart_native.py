@@ -90,7 +90,7 @@ def configured_stage(arguments, configured, snapshot, root, *, continue_existing
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
     service = prepare_native_comms(wire(stage/'wire'))
-    root_id = service.registry.prepare_native_root().namespace
+    root_id = service.registry.store.prepare_native_root().namespace
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_AGENT_BIN=str(binary),
@@ -810,7 +810,7 @@ async def run(arguments):
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
     service = prepare_native_comms(wire(stage/'wire'))
-    root_id = service.registry.prepare_native_root().namespace
+    root_id = service.registry.store.prepare_native_root().namespace
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS='restart-local/fixture')

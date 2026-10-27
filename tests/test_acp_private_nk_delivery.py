@@ -40,7 +40,7 @@ def _private_comms(tmp_path):
         Thread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     owner = comms.registry.declare(Thread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model')))
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
             owner.incarnation.lookup, committed=True

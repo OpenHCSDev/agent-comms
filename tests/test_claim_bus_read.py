@@ -91,7 +91,7 @@ def selected_turn(private_comms, private_directory):
     resource.write_text("value = 1\n")
     for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
         comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
-    root_id = comms.registry.prepare_native_root().namespace
+    root_id = comms.registry.store.prepare_native_root().namespace
     record_context(comms, "Alice", 1)
     message = publish_initial(comms, "sender", "#team", "@Alice investigate")
     record_context(comms, "Alice", 2)

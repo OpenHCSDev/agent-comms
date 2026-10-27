@@ -1444,7 +1444,7 @@ class FreshInstall(Install[FreshRehearsal]):
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> CreatedRun:
         self.checkout_target()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        wire(self.root).registry.prepare_native_root()
+        RegistryStore.at(self.root).prepare_native_root()
         report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
         with self.staged.services_stopped(self.installed) as stopped:

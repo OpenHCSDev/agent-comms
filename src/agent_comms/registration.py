@@ -15,7 +15,6 @@ from .field_codec import GoalId, ThreadLookup, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
-from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
@@ -131,14 +130,6 @@ class Registration:
                     f"the created fork {child.runtime} was not registered."
                 )
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
-
-    def prepare_native_root(self) -> PrivateRegistryGuard:
-        """Prepare native authority, then its complete runtime outside the registry lock."""
-        with self.store.guarded_write():
-            self.store.read_snapshot_unlocked().purpose.require_write()
-            guard = self.store.private_guard_unlocked().prepare_native(self.store.path)
-        guard.prepare_runtime()
-        return guard
 
     def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
         """Declare or resume one child and its own goal under the registry's lock."""

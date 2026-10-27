@@ -47,7 +47,7 @@ def alice_batch(*sent: tuple[str, str]):
         comms = prepare_native_comms(wire(root))
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(Path(dirname)), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
-        root_id = comms.registry.prepare_native_root().namespace
+        root_id = comms.registry.store.prepare_native_root().namespace
         messages = [publish_initial(comms, "sender", target, text) for target, text in sent]
         with Coordination(str(root / "coordination.sqlite3")) as store:
             deliveries = [comms.bus.bus.delivery(m.seq) for m in messages]

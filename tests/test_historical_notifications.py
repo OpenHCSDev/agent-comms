@@ -37,7 +37,7 @@ def archived_notification(tmp_path, *, thread_registration):
         comms.registry.declare(Thread('sender', frozenset(), Checkout(tmp_path), created_at=10.0))
         comms.registry.declare(Thread('reader', frozenset(), Checkout(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
         comms.registry.declare(Thread('agent', frozenset(), Checkout(tmp_path), created_at=12.0 if comms is old else 212.0))
-    root_id = old.registry.prepare_native_root().namespace
+    root_id = old.registry.store.prepare_native_root().namespace
     messages = (
         publish_initial(old, "sender", "agent", "authored pending delivery"),
         publish_initial(old, "sender", "reader", "painted historical delivery"),

@@ -71,14 +71,14 @@ class RootLaunch(ABC):
 
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
         """Explicit owner launch prepares registry authority, then native tables."""
-        from .registration import Registration
+        from .registry_store import RegistryStore
 
         if agent_bin == NativeArguments.default_binary:
             agent_bin = runtime.native_entrypoint
         else:
             agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
         root = self.child_root
-        Registration(RegistryFile.path_in(root)).prepare_native_root()
+        RegistryStore.at(root).prepare_native_root()
         return agent_bin
 
     @abstractmethod

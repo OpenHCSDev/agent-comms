@@ -50,7 +50,7 @@ def test_native_root_checks_relative_and_absolute_ancestor_permissions(
         assert not candidate.registry.store.guard_path.exists()
     monkeypatch.chdir(tmp_path)
     safe = prepare_native_comms(wire(Path("safe-relative")))
-    assert safe.registry.prepare_native_root().namespace == PrivateRegistryGuard.load(safe.registry.store.path).namespace
+    assert safe.registry.store.prepare_native_root().namespace == PrivateRegistryGuard.load(safe.registry.store.path).namespace
 
 
 @pytest.mark.skipif(os.name == "posix", reason="Windows private-bus fail-closed contract")

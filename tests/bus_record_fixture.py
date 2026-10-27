@@ -37,7 +37,7 @@ RENAMED_RECIPIENT_LOOKUP = ThreadLookup("e" * 32)
 
 def prepare_native_comms(comms: Comms) -> Comms:
     """Validate native-root authority before installing data or opening a coordinator."""
-    comms.registry.prepare_native_root()
+    comms.registry.store.prepare_native_root()
     return comms
 
 

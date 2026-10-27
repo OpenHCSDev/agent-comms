@@ -85,7 +85,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     store = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 9999)
     for name in lookups:
         store.participants.register(lookups[name], committed=True)
-    return comms, store, comms.registry.prepare_native_root().namespace, lookups
+    return comms, store, comms.registry.store.prepare_native_root().namespace, lookups
 
 
 def _public_messages(comms: Comms) -> tuple[Message, ...]:

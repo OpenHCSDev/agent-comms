@@ -344,6 +344,14 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             named = NamedTurn(record) if cut.snapshot.holds_turn(record.identity) else RetiredTurn()
             return change(named)
 
+    def prepare_native_root(self) -> PrivateRegistryGuard:
+        """Commit this store's namespace before preparing runtime tables outside its writer."""
+        with self.guarded_write():
+            self.read_revision_unlocked().document.purpose.require_write()
+            guard = self.private_guard_unlocked().prepare_native(self.path)
+        guard.prepare_runtime()
+        return guard
+
     def privacy(self) -> RegistryPrivacy:
         """Capture namespace authority without lending its lock to a consumer."""
         with self.guarded_read():

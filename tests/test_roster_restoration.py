@@ -140,7 +140,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     old.registry.declare(missing)
     # The registry assigns storage roots at declaration; restoration must leave that thread alone.
     live = current.registry.declare(live)
-    root_id = current.registry.prepare_native_root().namespace
+    root_id = current.registry.store.prepare_native_root().namespace
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         live_before = store.participants.register(

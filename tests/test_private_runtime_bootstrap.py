@@ -16,7 +16,7 @@ from agent_comms.threads import Thread
 
 def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.prepare_native_root()
+    comms.registry.store.prepare_native_root()
     comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
     database = comms.root / "coordination.sqlite3"
     with sqlite3.connect(database) as db:

@@ -60,7 +60,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             comms.registry.declare(
                 Thread(name, frozenset({'team'}), Checkout(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
             )
-        root_id = comms.registry.prepare_native_root().namespace
+        root_id = comms.registry.store.prepare_native_root().namespace
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         initial = comms.bus.bus.delivery(message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
