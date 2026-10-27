@@ -221,7 +221,8 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
         assert CommanderStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take()
         before = tool_call(hook, server, comms, db, time.time())
         assert sum(phase_name in line for line in before) == 1
-        comms.goals.update_goal("worker", CreateProblemGoalAction(
+        # The worker holds P1 and P2 already; the idle outsider takes the phase order.
+        comms.goals.update_goal("outsider", CreateProblemGoalAction(
             problem="P3", commander="lead", request=request, assigner=lead,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
             text="Start the ready bus writer phase", review_at=RecordedEventTime(time.time() + 3600),

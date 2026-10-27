@@ -43,8 +43,8 @@ from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
-    PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason, StrikeTodo, Todo,
-    VoidStrikeTodo,
+    Assignment, ExpectedProblem, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason,
+    StrikeTodo, Todo, VoidStrikeTodo,
 )
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -139,19 +139,22 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
             'Keep changes with their author', creator=lead, assigner=lead.incarnation, owner=worker,
             generation=shared_work_goal_id, review_at=RecordedEventTime(now + 3600),
             order=order, request=request)
-    # Both current IDs change, as they do when Core hands work out again.
-    for problem in ('P1', 'P2'):
-        row = c.goals.todos.get(problem)
-        c.goals.todos.assign(
-            problem, expected_revision=row.revision, owner=worker,
-            assigner=lead.incarnation, generation=reissued_work_goal_id,
-            review_at=RecordedEventTime(now + 3600), order=order.reissued(now + 1),
-            request=request)
-    c.goals.todos.create(
-        'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
-        'Keep unrelated work separate', creator=lead, assigner=lead.incarnation, owner=worker,
-        generation=other_work_goal_id, review_at=RecordedEventTime(now + 3600),
-        order=order.reissued(now + 2), request=request)
+    # Both current IDs change, as they do when Core hands work out again: one order, one write.
+    c.goals.todos.assign(
+        tuple(ExpectedProblem(problem, c.goals.todos.get(problem).revision)
+              for problem in ('P1', 'P2')), owner=worker,
+        assigner=lead.incarnation, generation=reissued_work_goal_id,
+        review_at=RecordedEventTime(now + 3600), order=order.reissued(now + 1),
+        request=request)
+    # Core now refuses unrelated work to a unit holding an order; a bus saved before that rule
+    # can still hold both, so worker's unrelated P3 is written as that saved row.
+    with c.goals.todos.writing() as db:
+        Todo.ordered(
+            'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
+            'Keep unrelated work separate', lead.incarnation,
+            Assignment.of(worker.incarnation, lead.incarnation, other_work_goal_id),
+            RecordedEventTime(now + 3600), order.reissued(now + 2), request,
+        ).insert_if_absent(db)
     row = c.goals.todos.get('P2')
     assert {related.id for related in c.goals.todos.related_problems(row)} == {'P1', 'P2'}
     c.goals.todos.apply('P2', ReleaseTodo(

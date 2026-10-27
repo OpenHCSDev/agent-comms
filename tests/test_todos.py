@@ -54,6 +54,7 @@ from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment,
     ChangeTodoState,
+    ExpectedProblem,
     ClaimOrder,
     ClosedListedPullRequest,
     CommitDelivery,
@@ -148,8 +149,8 @@ def _assign_process(root: str, checkout: str, name: str, created: float, gate) -
     store = TodoStore(Path(root))
     gate.wait(timeout=5)
     try:
-        row = store.assign(
-            "P1", expected_revision=1,
+        row, = store.assign(
+            (ExpectedProblem("P1", 1),),
             owner=thread(name, Path(root), created), assigner=thread("lead", Path(root), 1.0).incarnation,
             generation=assignment_goal_id, request=store.get("P1").request.require(),
             review_at=RecordedEventTime(1000.0), order=order(SourceRepository.of(Path(checkout))),
@@ -585,6 +586,11 @@ def test_order_is_merged_only_when_every_linked_request_merged(pr_commander, git
             'The installed application shows the linked repair working correctly'))
         for number in numbers:
             todo = adopt_pr(ctx, todo.id, number)
+        # The checks read this snapshot; the lead holds one order at a time, so its hold goes
+        # before the next linked problem is ordered to it.
+        ctx.comms.goals.todos.apply(todo.id, ReleaseTodo(
+            todo.revision, CoreWatcherIncarnation.watcher(), todo.held(),
+            StrikeReason('The fixture moves the lead to the next linked problem it checks.')))
         return todo
 
     def observed(todo):

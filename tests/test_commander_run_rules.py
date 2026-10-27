@@ -8,7 +8,7 @@ from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import Todo, TodoStore
+from agent_comms.todos import ExpectedProblem, Todo, TodoStore
 from agent_comms.order_runs import ApplicationOrderRun
 from test_todos import order, thread
 
@@ -46,20 +46,21 @@ def test_clean_transfers_keep_history_and_third_owner_requires_a_trace(tmp_path,
         'Repair the thread list',
         creator=lead, assigner=lead.incarnation, owner=lead, generation=one_goal_id,
         request=request, review_at=RecordedEventTime(1000), order=order(source_repository))
-    second = store.assign('P1', expected_revision=first.revision,
+    second, = store.assign((ExpectedProblem('P1', first.revision),),
         owner=thread('second', tmp_path, 2), assigner=lead.incarnation, generation=two_goal_id,
             request=request,
         review_at=RecordedEventTime(1000), order=order(source_repository))
     assert second.strike_count == 0
-    kwargs = dict(expected_revision=second.revision, owner=thread('third', tmp_path, 3),
+    kwargs = dict(owner=thread('third', tmp_path, 3),
         assigner=lead.incarnation, generation=three_goal_id, request=request,
             review_at=RecordedEventTime(1000), order=order(source_repository))
+    problems = (ExpectedProblem('P1', second.revision),)
     with pytest.raises(ValueError):
-        store.assign('P1', **kwargs)
+        store.assign(problems, **kwargs)
     # Source existence belongs to the commander boundary, not a Core record.
     traced = FileLine('source-not-local-to-core.py', 999999)
-    third = store.assign('P1', traced=traced, **kwargs)
+    third, = store.assign(problems, traced=traced, **kwargs)
     assert [old.name for old in third.assignment.previous_owners] == ['lead', 'second']
-    assert store.assign('P1', traced=traced, **kwargs) == third
+    assert store.assign(problems, traced=traced, **kwargs) == (third,)
 
 

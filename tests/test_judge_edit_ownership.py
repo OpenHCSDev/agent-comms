@@ -17,7 +17,9 @@ from agent_comms.order_tools import CommsVerdictTool
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.storage_rules import StorageRule
-from agent_comms.todos import AcceptedVerdict, SendBackVerdict, StrikeReason
+from agent_comms.todos import (
+    AcceptedVerdict, Assignment, SendBackVerdict, StrikeReason, Todo,
+)
 from agent_comms.tool_caller import ThreadCaller
 from test_judge_dropped import recorded_edit, unjudged
 from test_todos import order
@@ -31,13 +33,17 @@ def two_orders(held_commander, cited_source):
     ctx = held_commander
     lead = ctx.comms.registry.require(ctx.commander)
     worker = ctx.comms.registry.require("worker")
-    ctx.comms.goals.todos.create(
-        "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead,
-        assigner=lead.incarnation, owner=worker, generation=GoalId.mint(),
-        request=NewestOpenRequest().for_order(ctx.comms.goals.todos, lead.incarnation),
-        review_at=RecordedEventTime(time.time() + 1000),
-        order=replace(order(cited_source), id=OrderId.mint(), at=RecordedEventTime(20.0)),
-    )
+    # Core refuses a unit a second, unrelated order; a bus saved before that rule can hold
+    # one, so the newer P2 is written as that saved row.
+    request = NewestOpenRequest().for_order(ctx.comms.goals.todos, lead.incarnation)
+    with ctx.comms.goals.todos.writing() as db:
+        Todo.ordered(
+            "P2", ctx.repos[0].github, "Repair the second workflow", lead.incarnation,
+            Assignment.of(worker.incarnation, lead.incarnation, GoalId.mint()),
+            RecordedEventTime(time.time() + 1000),
+            replace(order(cited_source), id=OrderId.mint(), at=RecordedEventTime(20.0)),
+            request,
+        ).insert_if_absent(db)
     rule = StorageRule.load(ctx.root)
     checkout = {problem: rule.problem_checkouts(rule.roots_of(worker), problem)[0]
                 for problem in ("P1", "P2")}
