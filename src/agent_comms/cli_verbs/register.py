@@ -4,6 +4,7 @@ from agent_comms.child_process import NoProcess
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.child_process import ProcessState
 from agent_comms.cli_command import CliCommand
+from agent_comms.repo import Checkout
 from agent_comms.cli_commands import NameArgument
 from agent_comms.cli_commands import RegisteredResult
 from agent_comms.cli_commands import _tags
@@ -28,7 +29,7 @@ import dataclasses
 @dataclass(frozen=True, kw_only=True)
 class RegisterCliCommand(NameArgument, CliCommand):
     help = "Register a thread"
-    worktree: Annotated[str, Argument(flags=("--worktree",))]
+    worktree: Annotated[Checkout, Argument(flags=("--worktree",))]
     tags: Annotated[
         frozenset[str],
         Normalize(_tags),

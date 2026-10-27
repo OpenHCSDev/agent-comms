@@ -3,19 +3,21 @@
 
 from agent_comms.repo import Checkout
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.locked_store import LiveFilesRequest
+from agent_comms.locked_store import LiveFilesRequest, RegistryFile
+from agent_comms.registration import Registration
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.field_codec import InputId
 from agent_comms.turn_item import FreshNativeId
-from agent_comms.historical_views import HistoricalMessage, HistoryArchive
+from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
 from agent_comms.installer.backup import bus_files
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.messages import Message
@@ -34,12 +36,13 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.transcript_routes import DisplayText
 from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.store_files import StoreOwner
 from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('exists', [False, True])
 def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
-    archive = HistoryArchive(Bus.path_in(tmp_path))
+    archive = HistoryArchive.at(tmp_path)
     if exists:
         archive.path.write_text('[]')
     with pytest.raises(HistoricalSourceChanged):
@@ -49,7 +52,7 @@ def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
 
 
 def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
-    archive = HistoryArchive(Bus.path_in(tmp_path))
+    archive = HistoryArchive.at(tmp_path)
     assert archive.sources() == ()
     assert not archive.path.exists()
 
@@ -397,3 +400,57 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     live.registry.rename("alice", "new-alice")
     assert FieldCodec.encode(source.provenance) == before
     assert live.views.historical_threads("alice")
+
+
+
+def _attach_preserved_source(destination: Path, original: Path) -> None:
+    HistoryArchive.at(destination).attach(original)
+
+
+def test_snapshot_preparation_allows_another_process_to_attach_and_keeps_both_sources(tmp_path):
+    from test_locked_store import process
+
+    old = setup(tmp_path / "old")
+    other = setup(tmp_path / "other")
+    live = setup(tmp_path / "live", 0)
+    before = root_bytes(old.root), root_bytes(other.root)
+
+    class ConcurrentSource(HistorySource):
+        def retain(self, destination):
+            assert destination not in HistoryArchive.archived_roots(live.root)
+            with process(_attach_preserved_source, live.root, other.root):
+                pass
+            return super().retain(destination)
+
+    source = live.bus.history.attach(old.root, source_read=ConcurrentSource.capture_original(old.root))
+    sources = live.bus.history.sources()
+    assert {item.original_root for item in sources} == {str(old.root), str(other.root)}
+    assert len(sources) == 2 and source in sources
+    for item in sources:
+        item.validate()
+        assert Path(item.root).parent == HistoryArchive.archive_directory(live.root)
+    assert not any(StoreOwner.is_staging(path) for path in HistoryArchive.archive_directory(live.root).iterdir())
+    assert (root_bytes(old.root), root_bytes(other.root)) == before
+
+
+def test_uncertain_catalog_publication_preserves_the_promoted_snapshot(tmp_path, monkeypatch):
+    old = setup(tmp_path / "old")
+    live = setup(tmp_path / "live", 0)
+    archive = live.bus.history
+    before = root_bytes(old.root)
+    replace_file = os.replace
+
+    def uncertain_replace(source, destination, *args, **kwargs):
+        replace_file(source, destination, *args, **kwargs)
+        if Path(destination) == archive.path:
+            raise OSError("catalog publication acknowledgement lost")
+
+    monkeypatch.setattr(os, "replace", uncertain_replace)
+    with pytest.raises(OSError, match="acknowledgement lost"):
+        archive.attach(old.root)
+    assert archive.sources() == ()
+    retained, = archive.archived_roots(live.root)
+    assert Bus(Bus.path_in(retained)).revision() == old.bus.bus.revision()
+    assert Registration(RegistryFile.path_in(retained)).snapshot().threads.keys() == old.registry.snapshot().threads.keys()
+    assert not any(StoreOwner.is_staging(path) for path in HistoryArchive.archive_directory(live.root).iterdir())
+    assert root_bytes(old.root) == before

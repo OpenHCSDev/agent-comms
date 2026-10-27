@@ -14,7 +14,6 @@ from agent_comms.field_codec import MalformedRecord
 from agent_comms.display_references import CurrentDisplayReferences, HistoricalDisplayReference
 from agent_comms.historical_views import HistorySource
 from agent_comms.registry_document import HistoricalRootPurpose
-from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
@@ -131,7 +130,7 @@ def test_current_reference_membership_and_lookup_share_the_retained_registry(com
 def test_current_reference_source_projection_keeps_historical_identity(comms, declare_reference):
     original = declare_reference()
     references = comms.views.viewer_snapshot(Checkout(comms.root.parent)).references
-    source = HistorySource.capture_original(comms.root, RegistryProvenance.capture(references.registry))
+    source = HistorySource.capture_original(comms.root)
     restored = pickle.loads(pickle.dumps(references, protocol=5))
     recorded = restored.for_source(source)
     assert not isinstance(recorded, CurrentDisplayReferences)

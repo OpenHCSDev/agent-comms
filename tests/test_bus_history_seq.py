@@ -80,7 +80,7 @@ def test_archived_database_pages_read_only(tmp_path):
     live = channel_bus(tmp_path / "live")
     registry = Registration(RegistryFile.path_in(live.bus.path.parent))
     registry.declare(Thread("author", frozenset({"history"}), Checkout(tmp_path)))
-    source = HistoryArchive(Bus.path_in(tmp_path / "reader")).attach(live.bus.path.parent)
+    source = HistoryArchive.at(tmp_path / "reader").attach(live.bus.path.parent)
     archive = Path(source.root)
     archived = MessageBus(archive, Registration(RegistryFile.path_in(archive)), Publisher)
     archived.bus.path.chmod(0o400)
