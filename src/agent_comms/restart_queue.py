@@ -25,7 +25,7 @@ from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, RestartId, WireOmitDefault
+from .field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .locked_store import RuntimeFile
@@ -174,7 +174,7 @@ class RestartRows(StoreRows):
 
 
 @dataclass(frozen=True)
-class QueuedRestart(RestartRows, TypedTable):
+class QueuedRestart(RecordMember, RestartRows, TypedTable):
     id: Annotated[RestartId, FrozenColumn(primary_key=True)]
     selection: Annotated[OwnerRestartSelection, FrozenColumn()]
     target: Annotated[RestartTarget, FrozenColumn()]
@@ -193,6 +193,11 @@ class QueuedRestart(RestartRows, TypedTable):
         Index(("active", "owner_birth", "id")),
         Index(("pending", "id")),
     )
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        """The public restart record keeps its original plain-field wire shape."""
+        return False
 
     @property
     def name(self) -> str:

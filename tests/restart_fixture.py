@@ -59,6 +59,6 @@ def original_restart_json(private_comms, dead_owner_restart):
                               if record is terminal else 'active')
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         path = parent / f'{record.id if record is terminal else record.owner.lookup}.json'
-        path.write_text(json.dumps(FieldCodec.encode(record)))
+        path.write_text(json.dumps(FieldCodec.encode_fields(record)))
         paths.append(path)
     return {path: record for path, record in zip(paths, (pending, attempted, terminal, interrupted), strict=True)}
