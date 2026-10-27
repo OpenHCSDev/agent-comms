@@ -24,7 +24,7 @@ from agent_comms.comms import Comms, wire
 from conftest import accept_initial
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.assignment_states import EngagedAssignment
+from agent_comms.assignment_states import EngagedAssignment, FullPendingAssignment, TriagePendingAssignment
 from agent_comms.wake_policy import FullWake
 from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
@@ -69,7 +69,10 @@ def _accepted(
             recipient.recipient_lookup,
             committed=True,
         )
-    (assignment,) = accept_initial(comms.bus, root_id, message.seq, store)
+    assignment, = (
+        selected for row in accept_initial(comms.bus, root_id, message.seq, store)
+        for selected in row.lifecycle.items_with(FullPendingAssignment, row)
+    )
     return initial, assignment
 
 
@@ -350,7 +353,7 @@ def test_many_frozen_members_do_not_become_selected_authority(
     comms, store, index, root_id = _root(tmp_path, recipients=recipients)
     try:
         # The chosen owner has one selected source among the large frozen N;
-        # no-wake members remain absent from its mandatory selected context.
+        # Other owners' triage claims remain absent from its selected context.
         initial, assignment = _accepted(comms, store, root_id, "#team", "@member000 do this")
         owner = _owner(comms, "member000")
         result = _projection(index, store, owner, 0, initial.message.seq)(
@@ -400,11 +403,12 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         with pytest.raises(IdentityConflict):
             passive.lifecycle.require_engageable()
         observer = comms.registry.require("member001").incarnation.lookup
-        assert not WakeAssignment.select(
+        observer_rows = WakeAssignment.select(
             store.session._connection,
             where="recipient_lookup=? AND wire_seq=?",
             parameters=(observer, initial.message.seq),
         )
+        assert [type(row.lifecycle) for row in observer_rows] == [TriagePendingAssignment]
         owner = _owner(comms, "member000")
         store.create(
             "wire-awareness-reply",

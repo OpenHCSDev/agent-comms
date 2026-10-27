@@ -266,7 +266,7 @@ class Registration:
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         """Every registration commits here, after inheritance kept a redeclared thread's
         roots; the registry assigns a new thread its storage roots in this one place."""
-        change.prepare_participant(self.store.path.parent)
+        change.prepare_participant(self.store)
         thread = change.thread
         change = replace(change, thread=replace(
             thread, storage_roots=thread.storage_roots.assigned(self.storage_rule, thread.name)))

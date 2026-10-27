@@ -187,9 +187,8 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("selected source is outside the captured window")
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
-        with self.registry.store.read_now():
-            privacy = self.registry.store.private_guard_unlocked()
-            root_id = privacy.namespace
+        privacy = self.registry.store.privacy_now()
+        root_id = privacy.namespace
         lookup = assignment.recipient_lookup
         page = self.index.page(
             recipient_lookup=lookup,
@@ -266,12 +265,11 @@ class OptionalAwarenessProjection:
         self, path: os.PathLike[str], lookup: ThreadLookup, owner: Thread
     ) -> None:
         registry = self.registry
-        with registry.store.read_now():
-            snapshot = registry.store.read_snapshot_unlocked()
-            RegistryOwner(
-                thread=owner,
-                claimed_generation=self.expected_claimed_generation,
-            ).require_snapshot(snapshot, "current registry owner turn changed")
+        snapshot = registry.store.snapshot_now()
+        RegistryOwner(
+            thread=owner,
+            claimed_generation=self.expected_claimed_generation,
+        ).require_snapshot(snapshot, "current registry owner turn changed")
         # A new read transaction, not the earlier candidate/decision snapshot,
         # observes a supported SQL generation advance during the optional read.
         with CoordinationStore.opened_reader(Path(path), StoreBusy()) as db:

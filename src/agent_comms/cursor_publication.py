@@ -23,13 +23,13 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
+from .coordination_errors import DeferredRead
 from .coordinator import Coordination
 from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .diagnostics import PublicationMeasurements
 from .field_codec import InputId
 from .message_bus import MessageBus
 from .native_entries import NativeEvidenceScope
-from .private_registry_guard import RegistryPrivacy
 from .publisher import ResponseWrites
 from .runtime import RuntimeServer
 
@@ -109,9 +109,8 @@ class CursorPublication:
 
     def scope(self, thread_name: str, session_id: str) -> CursorScope:
         registry = self.comms.registry.store
-        with registry.guarded_read():
-            privacy = registry.private_guard_unlocked()
-            return privacy.cursor_scope(registry.read_snapshot_unlocked(), thread_name, session_id)
+        snapshot, privacy, _ = registry.snapshot_with_authority()
+        return privacy.cursor_scope(snapshot, thread_name, session_id)
 
     async def observe(
         self, thread_name: str, session_id: str, *, defer_busy: bool = False,
@@ -144,7 +143,7 @@ class CursorPublication:
                 bus, wire_root_id=root_id, owner_name=thread_name,
                 source_reads=source_reads,
             )
-        except BlockingIOError:
+        except DeferredRead:
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             if defer_busy and current == scope:
                 raise
@@ -161,7 +160,7 @@ class CursorPublication:
     async def trusted_metadata(
         self, thread_name: str, session_id: str,
     ) -> tuple[CursorAdvancedUpdate, ...]:
-        privacy = await Coordination.run_worker(partial(RegistryPrivacy.capture, self.comms.root))
+        privacy = await Coordination.run_worker(self.comms.registry.store.privacy)
         return await privacy.cursor_metadata(self, thread_name, session_id)
 
     async def observed_metadata(
@@ -181,7 +180,7 @@ class CursorPublication:
             observed = await self.observe(
                 thread_name, session_id, defer_busy=True, advance=advance
             )
-        except BlockingIOError:
+        except DeferredRead:
             # Busy observation is not a new fact. A settled native operation
             # requires another read when the lock clears, without input replay.
             if selected_status is not None:

@@ -20,7 +20,6 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
-from agent_comms.private_path import FileRevision
 from agent_comms.store_files import (
     DEFAULT_STORE_CONTENTION, StoreContention,
 )
@@ -50,12 +49,8 @@ class NativeCapture(ExitStack, StoredBusReader):
         try:
             self.activity = self.activity_clocks()
             store = self.bus._registry.store
-            with self.measurements.operation("file_exclusion"), store.guarded_read():
-                self.privacy = store.private_guard_unlocked()
-                source = store._capture_unlocked()
-                self.registry_revision = source.revision, FileRevision.capture(store.guard_path)
             with self.measurements.operation("registry_snapshot"):
-                self.registry = store._decode_snapshot(source)
+                self.registry, self.privacy, self.registry_revision = store.snapshot_with_authority()
             return self
         except BaseException:
             self.close()

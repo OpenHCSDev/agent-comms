@@ -125,15 +125,6 @@ class RegistryPrivacy(ABC):
 
 
 
-    @staticmethod
-    def capture(root: Path) -> RegistryPrivacy:
-        """Read original privacy authority under its registry's existing lock."""
-        from .registry_store import RegistryStore
-
-        registry = RegistryStore.at(root)
-        with registry.guarded_read():
-            return registry.private_guard_unlocked()
-
     @abstractmethod
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,

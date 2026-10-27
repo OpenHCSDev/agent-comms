@@ -139,7 +139,7 @@ class RegistryEdit:
         for name in restored:
             InitialRegistration(
                 thread=self.document.require(name), status=self.document.status(name),
-            ).prepare_participant(self.store.path.parent)
+            ).prepare_participant(self.store)
         return restored
 
     def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
@@ -243,6 +243,30 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def snapshot(self) -> RegistrySnapshot:
         source, = self._copy_sources(self)
         return self._decode_snapshot(source)
+
+    def privacy(self) -> RegistryPrivacy:
+        """Capture namespace authority without lending its lock to a consumer."""
+        with self.guarded_read():
+            return self.private_guard_unlocked()
+
+    def privacy_now(self) -> RegistryPrivacy:
+        """Optional reads refuse contention rather than waiting for a writer."""
+        with self.read_now():
+            return self.private_guard_unlocked()
+
+    def snapshot_now(self) -> RegistrySnapshot:
+        with self.read_now():
+            source = self._capture_unlocked()
+        return self._decode_snapshot(source)
+
+    def snapshot_with_authority(self) -> tuple[
+        RegistrySnapshot, RegistryPrivacy, tuple[FileObservation, FileObservation],
+    ]:
+        with self.guarded_read():
+            privacy = self.private_guard_unlocked()
+            source = self._capture_unlocked()
+            revision = source.revision, FileRevision.capture(self.guard_path)
+        return self._decode_snapshot(source), privacy, revision
 
     def snapshot_with_pair[T, U](
         self, first: LockedStore[T], second: LockedStore[U],

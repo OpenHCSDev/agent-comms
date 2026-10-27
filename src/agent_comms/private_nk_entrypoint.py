@@ -46,10 +46,10 @@ class RootLaunch(ABC):
         The registry guard owns the native namespace; the installed pin owns
         the package. No bus-file metadata participates in either decision.
         """
-        from .private_registry_guard import RegistryPrivacy
+        from .registry_store import RegistryStore
 
         root = route.observe_root()
-        return RegistryPrivacy.capture(root).launch(root)
+        return RegistryStore.at(root).privacy().launch(root)
 
     @property
     @abstractmethod
@@ -150,8 +150,7 @@ class PrivateNkLaunch(RootLaunch):
 
         Bus(Bus.path_in(self.validated_root)).revision()
         registry = RegistryStore(RegistryFile.path_in(self.validated_root))
-        with registry.guarded_read():
-            registry.private_guard_unlocked().require_root(
-                self.wire_root_id, IdentityConflict("Native registry namespace changed"),
-            )
+        registry.privacy().require_root(
+            self.wire_root_id, IdentityConflict("Native registry namespace changed"),
+        )
         return self.native_package
