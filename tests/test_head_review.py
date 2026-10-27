@@ -17,9 +17,11 @@ from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequest
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
-    HeadReviewTimerUp, IdlePullRequest, OrderlessUnreviewedHead, OrderRefusingStandingRule,
-    ReviewTimerUp, StuckMerge,
+    HeadReviewTimerUp, IdlePullRequest, OrderlessPullRequest, OrderlessUnreviewedHead,
+    OrderRefusingStandingRule, ReviewTimerUp, StuckMerge,
 )
+from agent_comms.repo import Checkout
+from agent_comms.threads import Thread
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
@@ -514,3 +516,61 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
     assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")
     assert "idle 60 min" in found[9] and found[9].endswith(" -> land or supersede it")
     assert "idle 0 min" in found[7] and found[7].endswith(" -> merge main into it")
+
+
+def working_on(comms, source, tmp_path, name, branch):
+    """A registered thread whose own worktree has ``branch`` checked out."""
+    worktree = tmp_path / f"{name}-checkout"
+    source.git(source.checkout, "worktree", "add", "-q", "-b", branch, str(worktree))
+    comms.registry.declare(Thread(name, frozenset(), Checkout(worktree)))
+
+
+def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(
+        head_bus, reviewed_source, tmp_path):
+    """2026-10-27: agent-comms#3535 sat BLOCKED on red debt checks with auto-merge armed and
+    no order linking it. No IDLE line could see it and its UNSTICK line named nobody, so its
+    author learned only when Tristan asked. Work outside the order system is on the board,
+    naming whoever has its branch checked out; a request an order links stays that order's."""
+    comms, github, ready = head_bus
+    hour = datetime.fromtimestamp(time.time() - 3600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    working_on(comms, reviewed_source, tmp_path, "author", "fix/head-9")
+    working_on(comms, reviewed_source, tmp_path, "armer", "fix/armed")
+    github.put(ready.repo, UnmergedListedPullRequest(
+        9, "fix/head-9", "e" * 40, hour, "main", reviewable_times=(hour,),
+        merge_blocks=(FailedCheckMergeBlock(hour, "debt-src"),)))
+    github.put(ready.repo, DraftListedPullRequest(
+        11, "fix/nobody", "f" * 40, hour, "main", reviewable_times=(hour,)))
+    github.put(ready.repo, UnmergedListedPullRequest(
+        12, "fix/armed", "a" * 40, hour, "main", reviewable_times=(hour,), armed_times=(hour,),
+        merge_blocks=(FailedCheckMergeBlock(hour, "debt-src"),)))
+    todo = comms.goals.todos.get("P2")
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity, PullRequestLink(ready.repo, ready.pr),
+                      held.generation).record(comms.goals, todo.id)
+    found = {rule.request.pr: rule.line()
+             for rule in OrderlessPullRequest.scan_orderless(comms.goals, ProgressRead(()))}
+    # The ordered request is its order's line; the armed one is StuckMerge's.
+    assert set(found) == {9, 11}
+    assert found[9].startswith(
+        f"UNORDERED {ready.repo.to_wire()}#9 {'e' * 9} (author): required check debt-src failed")
+    assert found[9].endswith(" -> fix debt-src at its owner; order author")
+    assert found[11].startswith(
+        f"UNORDERED {ready.repo.to_wire()}#11 {'f' * 9} (no order, and no registered thread has"
+        " its branch checked out): head unmoved")
+    assert found[11].endswith(" -> order its author or close it with a reason")
+    stuck, = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
+    assert stuck.request.pr == 12
+    assert stuck.line().endswith(" -> fix debt-src at its owner at armer")
+
+
+def test_another_commanders_linked_request_stays_off_the_orderless_board(head_bus):
+    """The 2026-10-25 guarantee holds: a request an open order links is never orderless.
+    The orders read are every commander's open orders, so another commander's linked
+    request is its own board's line, never this one's."""
+    comms, github, ready = head_bus
+    todo = comms.goals.todos.get("P2")
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity, PullRequestLink(ready.repo, ready.pr),
+                      held.generation).record(comms.goals, todo.id)
+    assert ready.pr not in {rule.request.pr for rule in
+                            OrderlessPullRequest.scan_orderless(comms.goals, ProgressRead(()))}
