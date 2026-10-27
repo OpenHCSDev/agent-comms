@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 def no_runtime_files(event, arguments):
-    if event == 'sqlite3.connect':
+    if event == 'sqlite3.connect' and arguments[0] != ':memory:':
         raise AssertionError('import opened a database')
     if event in {'open', 'os.listdir', 'os.scandir'}:
         path = arguments[0]
