@@ -110,9 +110,7 @@ def reserve_foreground_owner(
         comms.registry.store.privacy().require_root(
             wire_root_id, RelationViolationError("Native namespace changed before owner reservation"),
         )
-        canonical = edit.document.canonical_name(owner.name)
-        if canonical != owner.name or edit.document.taken(canonical):
-            raise RelationViolationError("Foreground recipient already exists")
+        edit.document.require_fresh_name(owner.name)
         comms.registry._declare_in(edit, owner)
     return ForegroundOwner(root, wire_root_id, owner.name, native_package)
 

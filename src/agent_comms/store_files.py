@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -24,6 +24,7 @@ from contextlib import (
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
+from functools import partial
 from pathlib import Path
 from typing import Annotated, TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
 
@@ -688,18 +689,36 @@ class AtomicFile:
     mode: int = PrivateFileRole.permissions
 
     @contextmanager
-    def staged(self) -> Iterator[BinaryIO]:
+    def _staging(self) -> Iterator[tuple[BinaryIO, Path]]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary = StoreOwner.stage_file(self.path)
         try:
             with os.fdopen(descriptor, "wb") as output:
                 os.chmod(temporary, self.mode)
-                yield output
-                output.flush()
-                os.fsync(output.fileno())
-            self._publish(temporary)
+                yield output, temporary
         finally:
             temporary.unlink(missing_ok=True)
+
+    @staticmethod
+    def _finish(output: BinaryIO) -> None:
+        output.flush()
+        os.fsync(output.fileno())
+        output.close()
+
+    @contextmanager
+    def staged(self) -> Iterator[BinaryIO]:
+        with self._staging() as (output, temporary):
+            yield output
+            self._finish(output)
+            self._publish(temporary)
+
+    @contextmanager
+    def prepared(self, data: bytes) -> Iterator[Callable[[], None]]:
+        """Sync content before lending its bounded publication; discard an unused stage."""
+        with self._staging() as (output, temporary):
+            output.write(data)
+            self._finish(output)
+            yield partial(self._publish, temporary)
 
     def write_text(self, text: str) -> None:
         self.write_bytes(text.encode("utf-8"))

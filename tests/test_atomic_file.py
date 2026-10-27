@@ -61,3 +61,16 @@ def test_exclusive_publication_never_replaces_an_existing_destination(tmp_path):
         ExclusiveAtomicFile(target).write_text("replacement")
     assert target.read_text() == "original"
     assert set(tmp_path.iterdir()) == {target}
+
+
+def test_prepared_content_is_private_until_publication_and_unused_stages_disappear(tmp_path):
+    target = tmp_path / "value"
+    target.write_bytes(b"original")
+    with AtomicFile(target).prepared(b"next") as publish:
+        assert target.read_bytes() == b"original"
+        publish()
+        assert target.read_bytes() == b"next"
+    with AtomicFile(target).prepared(b"unused"):
+        assert target.read_bytes() == b"next"
+    assert target.read_bytes() == b"next"
+    assert set(tmp_path.iterdir()) == {target}

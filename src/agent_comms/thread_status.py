@@ -142,6 +142,9 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
         self.require_mutable(name)
         return ProcessThreadStatus()
 
+    def require_deleting(self) -> None:
+        raise RelationViolationError("Thread has not entered permanent deletion.")
+
     def for_deletion(self) -> ThreadStatus:
         return DeletingThreadStatus()
 
@@ -365,6 +368,9 @@ class ArchivedThreadStatus(ThreadStatus):
 class DeletingThreadStatus(ThreadStatus):
     def in_view(self, visibility: RosterVisibility) -> bool:
         return False
+
+    def require_deleting(self) -> None:
+        pass
 
     def require_mutable(self, name: str) -> None:
         raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")

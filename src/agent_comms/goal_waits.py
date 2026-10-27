@@ -274,7 +274,7 @@ class GoalWaitReview:
             and owner.turn_lease == self.turn
             and goals.waits.resolve(owner.goal) == self.wait
             for owner in snapshot.threads_for(self.owner.incarnation.require_recorded())
-            if self._same_thread(snapshot, owner, self.owner)
+            if snapshot.same_thread(owner, self.snapshot, self.owner)
         )
 
     def _current_goal(self, owner: Thread) -> bool:
@@ -282,14 +282,6 @@ class GoalWaitReview:
         return any(
             self.wait.current_for(goal, owner.incarnation.require_recorded())
             for goal in owner.goal.active()
-        )
-
-    def _same_thread(self, snapshot: RegistrySnapshot, actual: Thread, expected: Thread) -> bool:
-        """Ignore display metadata, but retain the original process and input/turn epochs."""
-        return (
-            actual.same_launch(expected)
-            and actual.same_turn(expected)
-            and snapshot.same_authority(actual.name, self.snapshot, expected.name)
         )
 
     def require_current(self, goals: Goals, owner: Thread) -> None:
@@ -358,7 +350,7 @@ class GoalInputReview(GoalWaitReview):
         snapshot = goals.registry.snapshot()
         before = self.snapshot
         return all(any(
-            self._same_thread(snapshot, actual, before.require(target.incarnation.name))
+            snapshot.same_thread(actual, before, before.require(target.incarnation.name))
             for actual in snapshot.threads_for(target.incarnation)
         ) for target in self.targets)
 

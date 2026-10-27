@@ -88,8 +88,7 @@ class DeleteThreadsTagDisposition(TagDisposition):
 
     def apply(self, channels, tag, cohort):
         selected = self.deletion_cohort(channels, tag, cohort)
-        with channels.registry.store.editing() as edit:
-            channels.threads._delete_in(edit, selected)
+        channels.threads._delete_originals(selected)
         channels._apply_tag_change(tag, None, tuple(thread for thread in cohort
                                                      if thread not in selected))
         return TagChangeResult(tag, True, tuple(thread.incarnation for thread in selected))
