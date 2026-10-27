@@ -29,6 +29,7 @@ from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import wire
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.coordination_cohort import sealed_cohort_assignments
+from agent_comms.assignment_states import TriagePendingAssignment
 from agent_comms.envelope_claim_transitions import UnclaimedResource
 from agent_comms.coordinator import Coordination
 from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -123,6 +124,9 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
                 await _accept_visible_deliveries(
                     bus, root_id, store.session.path, beta.incarnation.lookup, owner_name="beta"
                 )
+                alpha_before = sealed_cohort_assignments(store, alpha.incarnation.lookup)
+                assert len(alpha_before) == 1
+                assert alpha_before[0].lifecycle == TriagePendingAssignment()
             options = encode_request(
                 SelectedWriteRequest(
                     message.seq, message.message_id, str(resource), "after second pid\n"
@@ -152,7 +156,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
                     ).fetchone()[0]
                     == 1
                 )
-                assert sealed_cohort_assignments(store, alpha.incarnation.lookup) == ()
+                assert sealed_cohort_assignments(store, alpha.incarnation.lookup) == alpha_before
         finally:
             if attached is not None:
                 await attached.shutdown()

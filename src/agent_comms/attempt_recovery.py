@@ -64,7 +64,7 @@ from .registration import Registration
 from .threads import Thread
 
 if TYPE_CHECKING:
-    from agent_comms.coordination_session import NativeBoundary
+    from agent_comms.coordination_session import NativeCapture
     from agent_comms.owner_lifecycle import OwnerLifecycle, OwnerRelease, OwnerReleaseEvidence
 
 _OWNER_LOSS_ISSUER = object()
@@ -76,26 +76,26 @@ class VerifiedOwnerLoss(ABC):
 
     release: OwnerReleaseEvidence
     _store: Coordination = field(repr=False)
-    boundary: NativeBoundary = field(repr=False)
+    boundary: NativeCapture = field(repr=False)
     _issuer: object = field(default=_OWNER_LOSS_ISSUER, init=False, repr=False)
     _active: bool = field(default=True, init=False, repr=False)
 
     @classmethod
     @contextmanager
-    def _observing(cls, store: Coordination) -> Iterator[tuple[Callable[[str], OwnerRelease], NativeBoundary]]:
+    def _observing(cls, store: Coordination) -> Iterator[tuple[Callable[[str], OwnerRelease], NativeCapture]]:
         from agent_comms.comms import wire
 
         if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = wire(store.session.path.parent)
-        with (store.session.boundary(comms.bus) as boundary,
+        with (store.session.capture(comms.bus) as boundary,
               comms.owners.releases.reading() as releases):
             NativeRuntimeTable.require_installed(store.session._connection)
             yield releases, boundary
 
     @staticmethod
     def _released(
-        releases: Callable[[str], OwnerRelease], boundary: NativeBoundary, lookup: ThreadLookup,
+        releases: Callable[[str], OwnerRelease], boundary: NativeCapture, lookup: ThreadLookup,
     ) -> OwnerRelease:
         try:
             return releases(boundary.registry.by_lookup[lookup].name)
@@ -113,7 +113,7 @@ class VerifiedOwnerLoss(ABC):
     @classmethod
     @contextmanager
     def observe_owner_release(
-        cls, store: Coordination, owner: Thread, boundary: NativeBoundary,
+        cls, store: Coordination, owner: Thread, boundary: NativeCapture,
         releases: Callable[[str], OwnerRelease],
     ) -> Iterator[ReleasedOwnerLoss]:
         NativeRuntimeTable.require_installed(store.session._connection)
@@ -146,7 +146,7 @@ class VerifiedOwnerLoss(ABC):
     @classmethod
     @contextmanager
     def observe_acquired_release(
-        cls, store: Coordination, execution_id: str, boundary: NativeBoundary,
+        cls, store: Coordination, execution_id: str, boundary: NativeCapture,
         releases: Callable[[str], OwnerRelease],
     ) -> Iterator[VerifiedAttemptOwnerLoss]:
         """Prove loss inside the caller's existing registry and release-store observation."""
@@ -404,7 +404,7 @@ class RecoveryMonitorCapability:
         if not path.exists():
             return  # Goal claims can exist without a selected native execution.
         with Coordination(str(path)) as store:
-            with (store.session.boundary(lifecycle.bus) as boundary,
+            with (store.session.capture(lifecycle.bus) as boundary,
                   lifecycle.releases.reading() as releases):
                 for owner in owners:
                     cls.recover_released_triage(store, owner, boundary, releases)
@@ -420,7 +420,7 @@ class RecoveryMonitorCapability:
 
     @classmethod
     def recover_released_triage(
-        cls, store: Coordination, owner: Thread, boundary: NativeBoundary,
+        cls, store: Coordination, owner: Thread, boundary: NativeCapture,
         releases: Callable[[str], OwnerRelease],
     ) -> None:
         if not NativeRuntimeInput.present(store.session._connection):
@@ -445,7 +445,7 @@ class RecoveryMonitorCapability:
                 if current.reference.recorded:
                     continue
                 loss.require_input_loss(current)
-                with boundary.current(), store.session.writing() as db:
+                with boundary.registry_cut.current(), store.session.writing() as db:
                     stage.fail_claims(store, db)
 
     @classmethod

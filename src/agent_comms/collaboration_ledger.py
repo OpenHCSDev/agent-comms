@@ -13,7 +13,8 @@ class CollaborationLedger(SharedLedger):
     registry: Registration
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:
-        with self.registry.store.reading_snapshot() as registry:
+        with self.registry.store.current_snapshot() as cut:
+            registry = cut.snapshot
             if registry.canonical_name(author) not in registry.threads:
                 raise UnregisteredThreadError(f"Author {author!r} is not registered.")
             super().merge(updates, author)

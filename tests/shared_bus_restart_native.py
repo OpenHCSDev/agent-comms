@@ -12,7 +12,7 @@ from agent_comms.restart_scope import OwnersNamed
 
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_session import NativeCapture
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
@@ -272,7 +272,7 @@ async def configured_pure_channel(arguments):
                         assert all(row.lifecycle.mode.triage for row in claims)
                         receipts = []
                         for original in originals:
-                            with NativeBoundary(service.bus) as boundary, store.session.read():
+                            with NativeCapture(service.bus) as boundary, store.session.read():
                                 initial = service.bus.bus.delivery(original.seq)
                                 sealed = _claim_record(db, initial, boundary.privacy)
                             assert {row.assignment_id for row in sealed.assignments} == {

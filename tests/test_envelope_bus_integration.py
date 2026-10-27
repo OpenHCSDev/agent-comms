@@ -22,7 +22,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_session import NativeCapture
 from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, NativeClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import EverythingScope, FullLimit, JsonlFormat
@@ -53,7 +53,7 @@ def acquire_message(
     comms: Comms, name: str, path: Path, turn_id: TurnId, input_id: InputId,
 ) -> Message:
     """Publish one scoped tool acquisition through the production claim writer."""
-    with NativeBoundary(comms.bus) as boundary:
+    with NativeCapture(comms.bus) as boundary:
         owner = boundary.registry.require(name)
         scope = NativeClaim(
             owner_claimed_generation=boundary.registry.claim_generation(name),
@@ -72,7 +72,7 @@ def release_messages(comms: Comms, messages: tuple[Message, ...]) -> None:
     """Retire the actual acquisition records, not caller-authored release paths."""
     claims = tuple(message.claim_transition.claimed(resource)
                    for message in messages for resource in message.claim_transition.claims)
-    with NativeBoundary(comms.bus) as boundary:
+    with NativeCapture(comms.bus) as boundary:
         comms.bus.publisher.release_resources(boundary, claims, "Finished test tool operation")
 
 

@@ -49,7 +49,7 @@ from .execution_states import CompletedExecution
 
 if TYPE_CHECKING:
     from .attempt_states import TerminalAttempt
-    from .coordination_session import NativeBoundary
+    from .coordination_session import NativeCapture
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,7 +244,7 @@ class RecoverySnapshot:
 
     def settle(
         self, session, outcome, reason_code: ReasonCode,
-        boundary: NativeBoundary | None = None,
+        boundary: NativeCapture | None = None,
     ) -> None:
         db = session._connection
         execution, attempt = self.execution, self.attempt
@@ -311,7 +311,7 @@ class RecoverySnapshot:
             pointer_revision=self.pointer_revision + 1,
         )
 
-    def finish_publications(self, session, boundary: NativeBoundary) -> None:
+    def finish_publications(self, session, boundary: NativeCapture) -> None:
         """Release this one native attempt only when every original route settled."""
         from .coordination_tables.executions import CurrentExecutions
 
@@ -349,7 +349,7 @@ class RecoverySnapshot:
             execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(), pointer_revision=self.pointer_revision + 1,
         )
 
-    def release_resources(self, boundary: NativeBoundary, outcome: TerminalAttempt) -> None:
+    def release_resources(self, boundary: NativeCapture, outcome: TerminalAttempt) -> None:
         """Release the durable generations acquired by this exact final attempt.
 
         No live selected turn or in-memory tool claim list is needed. A claim

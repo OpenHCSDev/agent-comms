@@ -51,6 +51,7 @@ from .read_basis import (
 from .read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
+from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
 from .store_files import AtomicFile, SourceTier
@@ -62,7 +63,6 @@ if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .history_views import HistoryViews
     from .presentation import BusPresentation, WireRevision
-    from .registry_document import RegistrySnapshot
     from .threads import Thread
 
 
@@ -146,16 +146,16 @@ class ConversationHistoryView:
     def _read_revision(cls, views: HistoryViews, target: NamedTarget,
                        worktree: Checkout) -> ConversationRevision:
         viewer = views.messaging.user_identity(worktree)
-        with views.registry.store.reading(views.channels.catalog):
-            snapshot = views.registry.store.read_snapshot_unlocked()
-            stores = views.revision()
-            return ConversationRevision(
-                stores, cls._selection(
-                    views, snapshot, views.channels.catalog._read_unlocked(),
-                    snapshot.require(viewer.name), target, worktree,
-                    FileRevision.capture(views.bus.history.path),
-                ),
-            )
+        document, catalog, stores = views.registry.store.read_pair_observed(
+            views.channels.catalog, views.revision)
+        snapshot = RegistrySnapshot.capture(document)
+        return ConversationRevision(
+            stores, cls._selection(
+                views, snapshot, catalog,
+                snapshot.require(viewer.name), target, worktree,
+                FileRevision.capture(views.bus.history.path),
+            ),
+        )
 
     @classmethod
     @abstractmethod
@@ -483,10 +483,10 @@ class HistoryArchive(DurableFile, LockedFile, SourceTier):
                 catalog_revision = FileRevision.capture(catalog_path)
                 original_bus = Bus(Bus.path_in(source_root))
                 if source_read is None:
-                    with Registration(RegistryFile.path_in(source_root)).store.reading() as registry:
-                        original = HistorySource.capture_original(
-                            source_root, RegistryProvenance.capture(registry),
-                        )
+                    registry = Registration(RegistryFile.path_in(source_root)).store.read()
+                    original = HistorySource.capture_original(
+                        source_root, RegistryProvenance.capture(registry),
+                    )
                 else:
                     source_read.require_original(source_root)
                     original = source_read

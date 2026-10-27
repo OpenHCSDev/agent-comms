@@ -9,7 +9,7 @@ from functools import partial
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_session import NativeCapture
 from agent_comms.envelope_claim_transitions import NativeClaim, WakeClaims
 from agent_comms.field_codec import ClaimId, InputId, TurnId
 from agent_comms.messages import ClaimNoticeKind
@@ -28,7 +28,7 @@ def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
         )
 
     def acquire(name, resources, operation: ClaimId):
-        with NativeBoundary(comms.bus) as boundary:
+        with NativeCapture(comms.bus) as boundary:
             owner = boundary.registry.require(name)
             scope = NativeClaim(
                 owner_claimed_generation=boundary.registry.claim_generation(name),

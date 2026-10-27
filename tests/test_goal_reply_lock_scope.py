@@ -38,7 +38,7 @@ from agent_comms.threads import Thread
 from agent_comms.goal_scope import OneGoal
 
 
-class RegistryProbeBus(Bus):
+class RegistryProbeBus(Bus, declared_name=None):
     """A second open file description tries to take the real registry lock."""
 
     def __init__(self, path, registry_path):
@@ -70,7 +70,7 @@ class RegistryProbeBus(Bus):
                 db.set_trace_callback(None)
 
 
-class AfterReadBus(Bus):
+class AfterReadBus(Bus, declared_name=None):
     """Change real state once the real query snapshot closes, before publication."""
 
     def __init__(self, path, change):

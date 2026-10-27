@@ -16,7 +16,6 @@ from agent_comms.coordination_errors import (
     CoordinationBeginUnavailable,
     CoordinationReadUnavailable,
     IntegrityViolationError,
-    StaleFence,
 )
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
@@ -26,9 +25,9 @@ from agent_comms.store_files import (
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus
+    from .registry_store import RegistryCut
     from .registry_document import RegistrySnapshot
     from .private_registry_guard import RegistryPrivacy
-    from .private_path import FileObservation
 
 
 def system_clock() -> int:
@@ -48,46 +47,32 @@ class NativeCapture(ExitStack, StoredBusReader):
     def path(self) -> Path:
         return self.bus.bus.path
 
+    @property
+    def registry(self) -> RegistrySnapshot:
+        return self.registry_cut.snapshot
+
+    @property
+    def privacy(self) -> RegistryPrivacy:
+        return self.registry_cut.privacy
+
     def __enter__(self) -> Self:
         try:
             self.activity = self.activity_clocks()
             with self.measurements.operation("registry_snapshot"):
-                self.registry, self.privacy, self.registry_revision = self.enter_context(
-                    self.registry_capture())
+                self.registry_cut = self.enter_context(self.registry_capture())
             return self
         except BaseException:
             self.close()
             raise
 
-    def registry_capture(self) -> AbstractContextManager[tuple[
-        RegistrySnapshot, RegistryPrivacy, tuple[FileObservation, FileObservation],
-    ]]:
+    def registry_capture(self) -> AbstractContextManager[RegistryCut]:
         return nullcontext(self.bus._registry.store.snapshot_with_authority())
 
 
-class NativeBoundary(NativeCapture):
-    """A detached decision copy whose writes verify the captured registry revision."""
-
-    @contextmanager
-    def current(self) -> Iterator[None]:
-        """Exclude registry writers for one write made from this decision's copy.
-
-        A registry write after the copy refuses the write, naming the change.
-        """
-        store = self.bus._registry.store
-        with store.guarded_read():
-            if store.revision_unlocked() != self.registry_revision:
-                raise StaleFence(
-                    "native registry revision changed after this decision read it")
-            yield
-
-
-class NativeCommit(NativeBoundary):
+class NativeCommit(NativeCapture):
     """Keep a current decoded cut through a bounded write decision."""
 
-    def registry_capture(self) -> AbstractContextManager[tuple[
-        RegistrySnapshot, RegistryPrivacy, tuple[FileObservation, FileObservation],
-    ]]:
+    def registry_capture(self) -> AbstractContextManager[RegistryCut]:
         return self.bus._registry.store.current_snapshot()
 
 
@@ -126,13 +111,13 @@ class CoordinationSession(CoordinationStore):
 
     @contextmanager
     def settlement(
-        self, boundary: NativeBoundary | None = None
+        self, boundary: NativeCapture | None = None
     ) -> Iterator[None]:
         """Standalone settlement owns SQL only, never native file resources."""
         with self.writing():
             yield None
 
-    def release_resources(self, snapshot, outcome, boundary: NativeBoundary) -> None:
+    def release_resources(self, snapshot, outcome, boundary: NativeCapture) -> None:
         """Standalone attempts cannot acquire native file claims."""
 
     @contextmanager
@@ -165,24 +150,21 @@ class NativeCoordinationSession(CoordinationSession):
             publisher.ClaimWrites,
         )
 
-    def boundary(self, bus: MessageBus) -> NativeBoundary:
-        return self._boundary(bus, NativeBoundary)
-
     def committing(self, bus: MessageBus) -> NativeCommit:
         return self._boundary(bus, NativeCommit)
 
     @contextmanager
     def settlement(
-        self, boundary: NativeBoundary | None = None
-    ) -> Iterator[NativeBoundary]:
+        self, boundary: NativeCapture | None = None
+    ) -> Iterator[NativeCapture]:
         """Acquire a native boundary, or borrow the caller's already held one."""
         with self.committing(self.bus) if boundary is None else nullcontext(boundary) as acquired:
             if acquired.bus.bus.path.parent.resolve() != self.path.parent.resolve():
                 raise IntegrityViolationError("settlement boundary belongs to another coordinator")
-            with acquired.current(), self.writing():
+            with acquired.registry_cut.current(), self.writing():
                 yield acquired
 
-    def release_resources(self, snapshot, outcome, boundary: NativeBoundary) -> None:
+    def release_resources(self, snapshot, outcome, boundary: NativeCapture) -> None:
         snapshot.release_resources(boundary, outcome)
 
 

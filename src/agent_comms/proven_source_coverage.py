@@ -24,7 +24,7 @@ from .bus_publication import Delivered
 from .bus_source_page import CoveragePage
 from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from .coordination_cohort import AcceptedCohort, _claim_record
-from .coordination_session import NativeBoundary
+from .coordination_session import NativeCapture
 from .field_codec import FieldCodec, RootId, ThreadLookup
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
@@ -232,7 +232,7 @@ class SourceCoverage:
     def _read(
         self, request: CoveragePage, prefix: SourcePrefix, source_reads: NativeEvidenceScope,
     ) -> ProvenSourceCoverage:
-        with source_reads.borrow(), NativeBoundary(self.bus) as boundary:
+        with source_reads.borrow(), NativeCapture(self.bus) as boundary:
             boundary.privacy.require_root(self.wire_root_id, IdentityConflict("Coverage native namespace changed"))
             if self.store.session._connection.in_transaction:
                 raise IdentityConflict("source coverage requires a committed coordinator snapshot")

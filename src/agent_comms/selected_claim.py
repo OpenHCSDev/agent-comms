@@ -126,8 +126,8 @@ def _selected_claim_boundary(
     """
     if store.session.path.resolve() != (CoordinationStore.path_in(comms.root)).resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    with comms.registry.store.guarded_read():
-        registry = comms.registry.store.read_snapshot_unlocked()
+    with comms.registry.store.current_snapshot() as cut:
+        registry = cut.snapshot
         canonical = registry.canonical_name(owner_name)
         try:
             captured = RegistryOwner.capture(
@@ -137,7 +137,7 @@ def _selected_claim_boundary(
         except StaleFence as error:
             raise IdentityConflict("Selected wake owner stopped or changed") from error
         owner, generation = captured.thread, captured.claimed_generation
-        privacy = comms.registry.store.private_guard_unlocked()
+        privacy = cut.privacy
         privacy.require_root(
             claim_scope.wire_root_id, IdentityConflict("Selected wake belongs to another namespace"))
         with checking(), comms.bus.bus.reading() as source:

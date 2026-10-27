@@ -16,7 +16,7 @@ import pytest
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_session import NativeCapture
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
@@ -47,7 +47,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
         resource = WritableFileClaim(Path("new/nested/file.py"))
         def acquire(name):
-            with NativeBoundary(c.bus) as boundary:
+            with NativeCapture(c.bus) as boundary:
                 owner = boundary.registry.require(name)
                 scope = NativeClaim(owner_claimed_generation=boundary.registry.claim_generation(name),
                                     operation_id=ClaimId.mint(), turn_id=turns[name],
@@ -60,7 +60,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         assert c.bus.bus.claim_projection()[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
             acquire("b")
-        with NativeBoundary(c.bus) as boundary:
+        with NativeCapture(c.bus) as boundary:
             c.bus.publisher.release_resources(boundary, (committed,), "Release unused creation")
         assert acquire("b").owner == "b"
 
@@ -85,7 +85,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
         ))
 
     def acquire(comms, name):
-        with NativeBoundary(comms.bus) as boundary:
+        with NativeCapture(comms.bus) as boundary:
             owner = boundary.registry.require(name)
             scope = NativeClaim(
                 owner_claimed_generation=boundary.registry.claim_generation(name),
@@ -107,7 +107,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
     assert not first.live(copied.registry.snapshot())
     second = acquire(copied, "holder-b")
     assert second.owner == "holder-b" and second.generation != first.generation
-    with NativeBoundary(copied.bus) as boundary:
+    with NativeCapture(copied.bus) as boundary:
         copied.bus.publisher.release_resources(boundary, (first,), "Late old release")
     assert copied.bus.bus.claim_projection()[second.resource] == second
     assert original.bus.bus.revision() == original_revision

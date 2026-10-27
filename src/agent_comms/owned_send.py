@@ -20,7 +20,7 @@ from agent_comms.send_outcome import AuthorityChangedSend, SendBoundary, SendOut
 from . import agent_events as events
 from .agent_backend import InputStartListener
 from .channel_coding_tools import CodingToolOwner
-from .coordination_session import NativeBoundary, NativeCommit
+from .coordination_session import NativeCapture, NativeCommit
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
 from .field_codec import ClaimId, InputId, TurnId
@@ -138,7 +138,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
             raise SelectedToolDenied(str(error)) from error
 
     def claim_resource(self, store, turn, resource, slot: ClaimId):
-        with NativeBoundary(self.comms.bus) as boundary:
+        with NativeCapture(self.comms.bus) as boundary:
             snapshot = boundary.registry
             self.verify(store, turn, snapshot)
             owner = snapshot.require(self.owner_name)
@@ -146,7 +146,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
             scope = NativeClaim(owner_claimed_generation=self.claim_generation,
                                 operation_id=slot, turn_id=self.turn,
                                 input_id=turn.command.input_id)
-            with boundary.current():
+            with boundary.registry_cut.current():
                 return boundary.bus.publisher._publish_acquisition_unlocked(
                     snapshot, owner, canonical, scope, activity=boundary.activity)
 

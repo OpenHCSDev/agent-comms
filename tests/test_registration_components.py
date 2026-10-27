@@ -119,58 +119,24 @@ def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path, *, thr
 
 
 @pytest.mark.skipif(os.name != "posix", reason="nonblocking shared flock acceptance")
-def test_registry_readers_share_lock_and_exclude_writer(tmp_path):
+def test_current_cut_excludes_writer_and_releases_for_later_metadata(tmp_path):
     from test_locked_store import assert_writer_excluded
     registry = Registration(tmp_path / "registry.json")
     registry.register(owner(tmp_path, registry=registry))
     other = RegistryStore(registry.store.path)
-    with registry.store.reading():
-        with other.read_now():
-            assert other._read_unlocked().threads["owner"].name == "owner"
+    with registry.store.current_snapshot() as cut:
+        assert other.read().threads["owner"].name == "owner"
         assert_writer_excluded(other.path)
-    with _store_lock(other.path, ExclusiveLock(), StoreLockContention(0)):
-        assert other._read_unlocked().threads["owner"].name == "owner"
+    registry.register(replace(cut.snapshot.require("owner"), task=GivenThreadText("changed")))
+    assert registry.require("owner").task == GivenThreadText("changed")
+    assert cut.snapshot.require("owner").task != registry.require("owner").task
 
 
 def test_lifecycle_document_survives_fresh_process_restart(tmp_path):
-    program = """
-import json, os, sys
-from dataclasses import replace
-from pathlib import Path
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.threads import Thread
-from agent_comms.registration import Registration
-from agent_comms.field_codec import FieldCodec, TurnId
-import time
-time.time = lambda: 1000.0
-root=Path(sys.argv[1]);root.mkdir()
-from agent_comms.thread_text import ForkedParent, GivenThreadText
-r=Registration(root/'registry.json')
-steps=[]
-def capture():
-    row = json.loads(r.store.path.read_text().replace(str(root), '<root>'))
-    row['turns'] = {name: FieldCodec.encode(thread.turn_state.active)
-                    for name, thread in r.snapshot().threads.items()}
-    for turn in row['turns'].values():
-        if turn is not None: turn['started_at'] = '<clock>'
-    assert Registration(r.store.path).snapshot() == r.snapshot()
-    steps.append(row)
-r.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
-r.register(Thread('child', frozenset(), str(root), parent=ForkedParent('owner'), created_at=20.0));capture()
-r.register(replace(r.require('owner'), title=GivenThreadText('metadata')));capture()
-r.lease_local_turn('owner',TurnId(sys.argv[2]));capture()
-r.release_turn(r.require('owner').turn_lease);capture()
-r.rename('owner','renamed');capture()
-r.unregister('renamed');capture()
-r.archive('renamed');capture()
-r.begin_delete('renamed');capture()
-r.remove('renamed');capture()
-print(json.dumps(steps,sort_keys=True))
-"""
     first = TurnId.mint()
     result = subprocess.run(
-        [sys.executable, "-c", program, str(tmp_path / "current"), str(first)],
+        [sys.executable, str(Path(__file__).with_name("registration_lifecycle_child.py")),
+         str(tmp_path / "current"), str(first)],
         env=dict(os.environ, PYTHONPATH=str(Path(__file__).parents[1] / "src")),
         capture_output=True,
         text=True,

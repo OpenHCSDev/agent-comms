@@ -65,7 +65,7 @@ from agent_comms.child_process import (
 from agent_comms.command import Command
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleAudience, RuleFile
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_session import NativeCapture
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import MissingSourceLine, TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import (
@@ -4901,7 +4901,7 @@ class ClaimOrder(TodoCommand):
 
     def record(self, goals: Goals, problem: str) -> Todo:
         """Retain the publication's actual address before saving its content identity."""
-        with NativeBoundary(goals.bus) as boundary:
+        with NativeCapture(goals.bus) as boundary:
             current = goals.todos.get(problem)
             target = IncarnationThreadTarget(
                 goals.todos.owner_request(current.request.require()).commander)
@@ -4913,7 +4913,7 @@ class ClaimOrder(TodoCommand):
                 target=target.selected_name(boundary.registry),
             )
             prepared = replace(self, claim=replace(self.claim, message=message))
-            with boundary.current():
+            with boundary.registry_cut.current():
                 return super(ClaimOrder, prepared).record(goals, problem)
 
     def changed(self, current: Todo) -> Todo:

@@ -139,7 +139,7 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
                     snapshot.publication_evidence, frozen.exact_target
                 ) is not None:
                     continue
-                with boundary.current(), store.session.writing() as db:
+                with boundary.registry_cut.current(), store.session.writing() as db:
                     snapshot = store.get(current_id)
                     _require_cohort_assignments(store, bus, snapshot, boundary.privacy)
                     intent, obligation = snapshot.require_publishing_intent(
@@ -258,7 +258,7 @@ class LiveResponseOwner(RegistryOwner):
         self, store: Coordination, bus: MessageBus
     ) -> tuple[RecoverySnapshot, ...]:
         """Complete only exact retained replies before this owner starts new work."""
-        with store.session.boundary(bus) as boundary:
+        with store.session.capture(bus) as boundary:
             self.require_snapshot(
                 boundary.registry, "response owner changed before retained resolution"
             )
@@ -410,11 +410,11 @@ def prepare_fenced_response(
     _require_bound_stores(bus, store)
     if not payload:
         raise ValueError("response payload must be nonempty")
-    with store.session.boundary(bus) as boundary:
+    with store.session.capture(bus) as boundary:
         registry_snapshot = boundary.registry
         owner_witness.require_live(registry_snapshot, fence)
         # The boundary's registry revision is current for this whole write.
-        with boundary.current(), store.session.writing() as db:
+        with boundary.registry_cut.current(), store.session.writing() as db:
             snapshot = _require_final_owner(store, bus, fence, boundary.privacy, owner_witness, exact_target)
             execution = snapshot.execution
             obligation = snapshot.require_wire_response(exact_target)
@@ -505,7 +505,7 @@ def _settle_fenced_response(
     # Dispatch, append and Tx2 each write under the boundary's one registry
     # revision; a registry write between them refuses the next. SQL's current
     # owner generation remains guarded by the transaction fence.
-    with store.session.boundary(bus) as boundary:
+    with store.session.capture(bus) as boundary:
         registry_snapshot = boundary.registry
         owner_witness.require_live(registry_snapshot, fence)
         wire_root_id = boundary.privacy.namespace
@@ -514,7 +514,7 @@ def _settle_fenced_response(
             # A durable dispatch barrier BEFORE the external append distinguishes
             # a first attempt from a lost response/crash. If it commits but the
             # process dies before appending, no automatic retry is authorized.
-            with boundary.current(), store.session.writing() as db:
+            with boundary.registry_cut.current(), store.session.writing() as db:
                 ResponseTable.require_installed(db)
                 terminal = _terminal_replay(store, fence, bus, boundary.privacy, owner_witness, exact_target)
                 if terminal is not None:
@@ -534,7 +534,7 @@ def _settle_fenced_response(
                     first_dispatch = True
                 elif not prior.matches(wire_root_id, fence, exact_target):
                     raise IdentityConflict("response dispatch belongs to another root or owner")
-        with boundary.current(), store.session.writing() as db:
+        with boundary.registry_cut.current(), store.session.writing() as db:
             ResponseTable.require_installed(db)
             terminal = _terminal_replay(store, fence, bus, boundary.privacy, owner_witness, exact_target)
             if terminal is not None:

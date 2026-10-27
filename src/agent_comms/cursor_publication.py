@@ -109,8 +109,8 @@ class CursorPublication:
 
     def scope(self, thread_name: str, session_id: str) -> CursorScope:
         registry = self.comms.registry.store
-        snapshot, privacy, _ = registry.snapshot_with_authority()
-        return privacy.cursor_scope(snapshot, thread_name, session_id)
+        cut = registry.snapshot_with_authority()
+        return cut.privacy.cursor_scope(cut.snapshot, thread_name, session_id)
 
     async def observe(
         self, thread_name: str, session_id: str, *, defer_busy: bool = False,

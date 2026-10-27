@@ -46,7 +46,7 @@ from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from .wake import OrdinaryControl, resolve_wake_cohort
 
 if TYPE_CHECKING:
-    from .coordination_session import NativeBoundary
+    from .coordination_session import NativeCapture
     from .registration import Registration
     from .threads import Thread
 
@@ -112,7 +112,7 @@ class ClaimWrites(Publisher):
     """Publishes claim envelopes."""
 
     def release_resources(
-        self, boundary: NativeBoundary, claims: Sequence[ClaimOwner], wording: str,
+        self, boundary: NativeCapture, claims: Sequence[ClaimOwner], wording: str,
     ) -> None:
         """Release only still-current acquisitions, in bounded whole-set envelopes.
 
@@ -194,9 +194,9 @@ class InitialWrites(Publisher):
         """Hold the registry/catalog cut; check source conditions in the append transaction."""
         with (
             self.opened_activity() as activity,
-            self.channels.reading(self.registry.store) as catalog,
+            self.registry.store.current_pair(self.channels) as cut,
         ):
-            snapshot = self.registry.snapshot()
+            snapshot, catalog = cut.snapshot, cut.peer
             sender, target, require_channel = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog, activity=activity,
                 destination=destination)

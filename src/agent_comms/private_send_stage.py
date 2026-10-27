@@ -361,7 +361,7 @@ class FullNativeSend(NativeSendStage):
 
     async def fail_unknown(self, bus, owner, witness) -> None:
         def settle(store):
-            with self.progress.using_attempts(store), store.session.boundary(bus) as boundary:
+            with self.progress.using_attempts(store), store.session.capture(bus) as boundary:
                 witness.require_live(boundary.registry, self.fence)
                 self.progress.fail_unknown(boundary)
 
