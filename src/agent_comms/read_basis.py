@@ -1180,21 +1180,13 @@ class CapturedSelection:
         return cls(snapshot, catalog, activity, viewer, reads, document)
 
     @classmethod
-    @contextmanager
-    def reading(
+    def load(
         cls, registry: Registration, catalog: ChannelCatalog,
         reads: ReadLedger, viewer: DisplayViewer, activity: ActivityClocks,
-    ) -> Iterator[CapturedSelection]:
-        """Capture identity, membership and reads, then release their guards.
-
-        The yielded value does not borrow the fleet's locks for caller work.
-        """
-        with registry.store.reading_snapshot() as snapshot, catalog.reading() as channels:
-            with reads.reading() as read_document:
-                selected = cls.capture(
-                    snapshot, channels, reads, read_document, viewer, activity
-                )
-        yield selected
+    ) -> CapturedSelection:
+        """Use one consistent source cut without borrowing locks for decoding."""
+        snapshot, channels, read_document = registry.store.snapshot_with_pair(catalog, reads)
+        return cls.capture(snapshot, channels, reads, read_document, viewer, activity)
 
     @property
     def channels(self) -> Channels:

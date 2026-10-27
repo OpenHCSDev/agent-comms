@@ -124,10 +124,9 @@ class ReadLedger(SingleFileStore, Sealed, ThreadOwnedState, CarriedDocument[Read
                           snapshot: RegistryProvenance) -> ReadDocument:
         owners = tuple(snapshot.threads[snapshot.canonical_name(viewer)].incarnation.recorded_names(snapshot))
         conversations = (AllConversation(), *conversation.recorded_keys(snapshot))
-        with self.guarded_read():
-            return self._read_using(lambda data: FieldCodec.decode_selected(ReadDocument, data,
-                {(ReadDocument, "messages"): owners, (ReadCursor, "conversations"): conversations},
-                fields=("messages", "bus_identity")))
+        return self._read_using(lambda data: FieldCodec.decode_selected(ReadDocument, data,
+            {(ReadDocument, "messages"): owners, (ReadCursor, "conversations"): conversations},
+            fields=("messages", "bus_identity")))
 
     @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:

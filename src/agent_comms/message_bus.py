@@ -120,9 +120,10 @@ class MessageBus[Writes: Publisher]:
 
     @contextmanager
     def snapshot(self, viewer: DisplayViewer = AnonymousViewer()) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
-        with self.bus.reading() as source, CapturedSelection.reading(
-            self._registry, self._channels, self.reads, viewer, source.activity_clocks(),
-        ) as basis:
+        with self.bus.reading() as source:
+            basis = CapturedSelection.load(
+                self._registry, self._channels, self.reads, viewer, source.activity_clocks(),
+            )
             yield basis, source
 
     def inbox(

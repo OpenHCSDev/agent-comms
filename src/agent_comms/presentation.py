@@ -409,10 +409,11 @@ class ReadThrough(ChannelReadMark):
 
     @contextmanager
     def reading(self, presentation, target, viewer):
-        with presentation.bus.opened_activity() as activity, CapturedSelection.reading(
-            presentation.registry, presentation.catalog, presentation.bus.reads,
-            NamedViewer(viewer), activity,
-        ) as basis:
+        with presentation.bus.opened_activity() as activity:
+            basis = CapturedSelection.load(
+                presentation.registry, presentation.catalog, presentation.bus.reads,
+                NamedViewer(viewer), activity,
+            )
             displayed = self.expected_scope.require_displayed()
             if basis.scope(target) != self.expected_scope:
                 raise DMPaintedBoundChanged()
@@ -445,9 +446,10 @@ class BusPresentation:
         self, viewer: str, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
-        with self.bus.opened_activity() as activity, CapturedSelection.reading(
-            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer), activity,
-        ) as basis:
+        with self.bus.opened_activity() as activity:
+            basis = CapturedSelection.load(
+                self.registry, self.catalog, self.bus.reads, NamedViewer(viewer), activity,
+            )
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
                 {}, {}, goals=self.goals, unread={}, channel_unread={}, visibility=visibility,

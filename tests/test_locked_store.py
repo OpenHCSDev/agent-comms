@@ -73,6 +73,21 @@ def _record(path, start, prefix):
         record(RuntimeInfoStore(path), observation(f"{prefix}-{index}"))
 
 
+def _replace_captured_documents(root):
+    RegistryStore(root / "registry.json").mark_historical()
+    for name in ("first", "second"):
+        record(RuntimeInfoStore(root / name), observation("successor"))
+
+
+class RegistryWithConcurrentDecoder(RegistryStore):
+    """A real competing writer runs after capture and before any decoding."""
+
+    def _decode_snapshot(self, source):
+        with process(_replace_captured_documents, self.path.parent):
+            pass
+        return super()._decode_snapshot(source)
+
+
 def _record_under_wire(path, ready):
     with _store_lock(path.parent / 'wire', ExclusiveLock(), StoreGuard.contention):
         store = RuntimeInfoStore(path)
@@ -142,6 +157,20 @@ def test_current_observation_persistence_and_noop(tmp_path):
     assert store.path.stat() == before
     assert clear(store, "goal", timestamp=122.0)
     assert store.read() == RuntimeInfoDocument()
+
+
+def test_related_snapshots_keep_their_cut_and_release_writers_before_decode(tmp_path):
+    first = RuntimeInfoStore(tmp_path / "first")
+    second = RuntimeInfoStore(tmp_path / "second")
+    for store in (first, second):
+        record(store, observation("original"))
+    registry = RegistryWithConcurrentDecoder(tmp_path / "registry.json")
+    snapshot, left, right = registry.snapshot_with_pair(first, second)
+    snapshot.purpose.require_write()
+    assert left.observations == right.observations == {"original": observation("original")}
+    assert set(first.read().observations) == set(second.read().observations) == {
+        "original", "successor",
+    }
 
 
 def test_mode_preserved_and_new_inode_published(tmp_path):
