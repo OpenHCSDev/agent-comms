@@ -219,7 +219,11 @@ class DeckStart(DealtDeck):
             f"Read each of these {len(parts)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
-            " until each one is read. This order is given once per session start or compaction;"
+            " until each one is read. Then, before your next action, check what you did since"
+            " your last start or compaction against them and say, one line each, every rule you"
+            " broke and the action that broke it, and fix what you can: reading alone is passive,"
+            " the audit is what finds the breaks (on 2026-10-27 one reread found six broken rules"
+            " in one session). This order is given once per session start or compaction;"
             " a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(part) for part in parts),
             reader.header(self),
