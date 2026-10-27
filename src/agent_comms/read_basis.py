@@ -322,6 +322,7 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 
 if TYPE_CHECKING:
+    import sqlite3
     from .bus import Bus, BusReader, BusSnapshot
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -397,6 +398,20 @@ class ReadCursor:
 
     unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
     read_sql = f"NOT ({unread_sql})"
+
+    @classmethod
+    def unread_rule(cls) -> str:
+        """Which joined request rows this cursor still counts; a human read is the whole rule."""
+        return cls.unread_sql
+
+    @staticmethod
+    def basis_of(cursors: Iterable[ReadCursor]) -> type[ReadCursor]:
+        """One route query applies one cursor rule to every actor it reads."""
+        basis, = {type(cursor) for cursor in cursors}
+        return basis
+
+    def attach(self, db: sqlite3.Connection, root: Path) -> None:
+        """A human read needs no store beyond the bus snapshot."""
 
     floor_sql = """actor_floor AS MATERIALIZED (
         SELECT actor,target,max(high_water) AS high_water

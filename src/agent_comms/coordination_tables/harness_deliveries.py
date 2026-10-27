@@ -18,7 +18,7 @@ from agent_comms.field_codec import MessageId, ThreadLookup
 from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import Column, ForeignKey, FrozenColumn, ImmutableRows, NoDelete
+from agent_comms.typed_table import Column, ForeignKey, FrozenColumn, ImmutableRows, Index, NoDelete
 
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
@@ -36,6 +36,8 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     unique = (("bridge", "recipient_lookup", "seq"),)
+    indexes = (Index(("recipient_lookup", "seq", "message_id"), unique=False, where=None),)
+    """The inbox asks per delivered message whether any bridge attempted it for this recipient."""
 
     @classmethod
     def references(cls):

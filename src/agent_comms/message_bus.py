@@ -143,6 +143,8 @@ class MessageBus[Writes: Publisher]:
         cursor = after.cursor()
         traversal = after.traversal()
         with self.bus.reading() as source:
+            with source.observing() as db:
+                seen.attach(db, self.bus.path.parent)
             unread = source.unseen_deliveries(
                 snapshot, delivery, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
                 traversal=traversal,

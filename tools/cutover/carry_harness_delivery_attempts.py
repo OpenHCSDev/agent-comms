@@ -1,7 +1,8 @@
 """Carry bridge journal delivery attempts into the coordinator, then retire the journal tables.
 
 The bus owns each message, so an attempt keeps its seq and id, never the journal's payload copy;
-the seq is read the way the retired journal declaration indexed it. A Codex unit can hold two
+the seq is read the way the retired journal declaration indexed it. Every journal must be bound to
+the bus the files were taken from, or the carry refuses before any write. A Codex unit can hold two
 journals of one bridge and recipient (its thread-named and its session-named binding): they carry
 as one set, and one message stored twice must agree or the carry refuses. Bridges read attempts
 only from the coordinator, so this runs before any bridge restarts on this runtime.
@@ -10,6 +11,7 @@ only from the coordinator, so this runs before any bridge restarts on this runti
 from collections.abc import Iterable
 from contextlib import closing
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.cli_bridges.shared import Binding, BridgeDeliveryStore, BridgeStateTable
@@ -68,7 +70,12 @@ class HarnessDeliveryAttempts(Carry):
             with closing(BridgeDeliveryStore.read_snapshot(path)) as db:
                 if not {table.name for table in SQLiteTableName.stored(db)} & self.retired:
                     continue
-                lookup = Binding.require(db).owner.require_recorded().lookup
+                binding = Binding.require(db)
+                if Path(binding.root) != self.files.source_root():
+                    raise RelationViolationError(
+                        f"{resource.path} is bound to {binding.root}, not {self.files.source_root()}; "
+                        "its attempts are another bus's evidence")
+                lookup = binding.owner.require_recorded().lookup
                 found.append(CarriedJournal(
                     resource,
                     tuple(HarnessDelivery(bridge, lookup, row.id, row.seq, row.outcome, row.monitor)

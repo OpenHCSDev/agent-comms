@@ -399,7 +399,7 @@ def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_canno
     assert len({resource.path for resource in resources}) == 2
     practice = PracticeCopy(root, tmp_path / "practice")
     practice.include(tuple(originals))
-    copied = RetainedCopyRequest(practice.path)
+    copied = RetainedCopyRequest(practice.path, root)
     probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,))
     copied_paths = tuple(copied.location(resource) for resource in resources)
     planned = subprocess.run(

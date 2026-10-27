@@ -1266,7 +1266,7 @@ class PreparedMigration(Extendable):
 class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> CarriedRehearsal:
         copied = practice.copy.path
-        files = RetainedCopyRequest(copied)
+        files = RetainedCopyRequest(copied, practice.original_root)
         home = practice.scratch / "home"
         RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .input_key import InputKeyText
+from .agent_inbox import TakenInputStart
 
 from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTool, PublishingToolRequest, ReadTool, SubjectBinding, ThreadReadTool, ThreadToolRequest, ToolRequest, tool_field
 from .order_tools import MessagePublished
@@ -1059,7 +1060,7 @@ class CommsInboxTool(ToolRequest):
         review = self.standby.review(comms, thread)
         page = comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
-            bounds=PageBounds(limit=self.limit),
+            after=TakenInputStart(), bounds=PageBounds(limit=self.limit),
         )
         messages = page.page.messages
         unresolved = tuple(comms.goals.unresolved_inputs(thread))

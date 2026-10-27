@@ -173,8 +173,8 @@ class RouteCounts:
     def unseen_counts(self, registry, deliveries, seen, *, after: int = 0):
         counts = {actor: {} for actor in deliveries}
         rows = self._route_rows(RouteUnread, registry, deliveries, seen, after,
-            f'''SELECT actor,target,sender,count(*) AS count FROM cursors
-            WHERE {ReadCursor.unread_sql} GROUP BY actor,target,sender''')
+            f'''SELECT actor,target,sender,count(*) AS count FROM cursors AS request
+            WHERE {ReadCursor.basis_of(seen.values()).unread_rule()} GROUP BY actor,target,sender''')
         for row in rows:
             conversation = deliveries[row.actor].conversation(row.sender, row.target)
             counts[row.actor][conversation] = counts[row.actor].get(conversation, 0) + row.count
@@ -191,7 +191,7 @@ class RouteCounts:
             f''', unread AS (
                 SELECT request.seq,request.target,request.sender,message.mentions
                 FROM cursors AS request CROSS JOIN "{Message.table.declared_name}" AS message USING(seq)
-                WHERE actor=? AND {ReadCursor.unread_sql}
+                WHERE actor=? AND {type(seen).unread_rule()}
             ) SELECT seq,target FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)
             ORDER BY seq {traversal.seq_order} LIMIT ?''',
             (delivery.actor, *values, traversal.upper, traversal.upper, limit)))
