@@ -47,6 +47,7 @@ from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .repo import Checkout
 from .registry_document import RegistrySnapshot
+from .registry_store import RegistryEdit
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerGenerationChangedRefusal,
@@ -384,14 +385,15 @@ class OwnerLifecycle:
         )
         if thread.process_alive:
             return thread
-        return self._register_owner(thread, identity)
+        with self.registry.store.editing() as edit:
+            return self._register_owner(edit, thread, identity)
 
     def _register_owner(
-        self, previous: Thread, identity: ProcessIdentity,
+        self, edit: RegistryEdit, previous: Thread, identity: ProcessIdentity,
         initial_input: LaunchInput = LaunchInput(),
     ) -> Thread:
         """Reserve one owner and its first input before releasing the child's start gate."""
-        owner = self.registry.reserve_owner(previous, identity)
+        owner = self.registry.reserve_owner(edit, previous, identity)
         owned = owner.thread
         initial_input.record_first_input(partial(
             InputDispositions(self.root).record, owner=owned.name, target=owned.name,
@@ -516,26 +518,18 @@ class OwnerLifecycle:
 
     def _stop_selection(self, name: str) -> tuple[Thread, int] | None:
         """Settle an owner that needs no signal, or capture the one that does."""
-        with self.registry.store.guarded_write():
-            snapshot = self.registry.snapshot()
-            thread = self.registry.require(name)
+        with self.registry.store.editing() as edit:
+            snapshot = edit.original.snapshot
+            thread = edit.document.require(name)
             thread.role.require_executable(
                 RelationViolationError("Only agent threads can be stopped.")
             )
             if thread.process_identity.allows_owner_start():
                 if not snapshot.status(thread.name).stopped:
-                    self.registry.unregister(thread.name)
+                    edit.document.unregister(thread.name)
+                    edit.commit()
                 return None
             return thread, snapshot.claim_generation(thread.name)
-
-    def _settle_local_owner(self, thread: Thread) -> None:
-        """Settle this process under the caller's existing stop-selection lock."""
-        if ThreadLaunch.called_by(
-            thread.name, canonicalize=lambda caller: self.registry.require(caller).name,
-        ):
-            self._release_current_owner_unlocked(thread.name)
-        else:
-            self.registry.unregister(thread.name)
 
     def fence_stop(self, *names: str) -> tuple[tuple[Thread, int], ...]:
         owners = tuple(owner for name in dict.fromkeys(names)
@@ -599,12 +593,12 @@ class OwnerLifecycle:
             output=partial(OwnerProcessOutput.open, self.root, thread),
             room_for_start=partial(self.registry.storage_rule.room_for_start, thread, self.root),
         )
-        with self.registry.store.guarded_write():
+        with self.registry.store.editing() as edit:
             recorded = RootRuntimeStore.at(self.root).read().host.observed(self.root)
             if recorded != host or not recorded.alive():
                 raise RelationViolationError("Worker host retired before owner registration")
-            owned = self._register_owner(thread, host, initial_input)
-            owner = self.registry.snapshot().owner_identity(owned.name)
+            owned = self._register_owner(edit, thread, host, initial_input)
+            owner = edit.original.snapshot.owner_identity(owned.name)
         OwnerConnection.exchange(self.root, host, StartOwnerRuntimeRequest(
             thread=owned.name, launch=RetainedOwnerLaunch(host, str(launch_runtime.interpreter), env),
             owner=owner,
@@ -630,9 +624,9 @@ class OwnerLifecycle:
 
     def retire_host(self) -> None:
         """Retire the physical host only after every logical owner detached."""
-        with self.registry.store.guarded_write():
-            snapshot = self.registry.snapshot()
-            RootRuntimeStore.at(self.root).retire_host(lambda process: not snapshot.process_owners(process))
+        with self.registry.store.current_snapshot() as cut:
+            RootRuntimeStore.at(self.root).retire_host(
+                lambda process: not cut.snapshot.process_owners(process))
 
     def complete_session(
         self, owner: OwnerIdentity, expected: OwnerIdentity, process: ProcessIdentity, before: int,
@@ -654,21 +648,13 @@ class OwnerLifecycle:
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
         caller = ThreadLaunch.current().name
-        with self.registry.store.guarded_write():
-            canonical = self.registry.require(name).name
-            if self.registry.require(caller).name != canonical:
+        with self.registry.store.editing() as edit:
+            owner = edit.document.require(name)
+            canonical = owner.name
+            if edit.document.require(caller).name != canonical:
                 raise RelationViolationError(f"Thread {caller!r} cannot release {canonical!r}.")
-            self._release_current_owner_unlocked(canonical)
-
-    def _release_current_owner_unlocked(self, canonical: str) -> None:
-        snapshot = self.registry.snapshot()
-        owner = snapshot.threads[canonical]
-        owner.process_identity.require_release_by(ProcessIdentity.capture(os.getpid()))
-        before = snapshot.claim_generation(canonical)
-        self._retire_owner_unlocked(owner, before)
-
-    def _retire_owner_unlocked(self, thread: Thread, before: int) -> None:
-        """Share retirement only after the caller's distinct identity checks."""
-        self.registry.unregister(thread.name)
-        after = self.registry.snapshot()
-        self.releases.record(after, ((thread, before),))
+            owner.process_identity.require_release_by(ProcessIdentity.capture(os.getpid()))
+            before = edit.original.snapshot.claim_generation(canonical)
+            edit.document.unregister(canonical)
+            edit.commit()
+            self.releases.record(edit.original.snapshot, ((owner, before),))

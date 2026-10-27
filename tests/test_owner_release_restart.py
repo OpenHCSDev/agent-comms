@@ -142,7 +142,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert native.provider.posts == 0
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_lifecycle import NoRelease, OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
 from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.threads import Thread
@@ -200,7 +200,10 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     snapshot = comms.registry.snapshot()
     assert snapshot.statuses[declared.name].stopped
     assert snapshot.threads[declared.name].process_identity == NoProcess()
-    assert comms.owners.releases.read_many((declared.name,))[declared.name].current(snapshot, declared, generation)
+    release = comms.owners.releases.read_many((declared.name,))[declared.name]
+    assert isinstance(release, NoRelease)
+    assert not release.current(snapshot, declared, generation)
+    assert snapshot.claim_generation(declared.name) > generation
 
     waiting = comms.registry.declare(Thread('waiting', frozenset(), Checkout(tmp_path)))
     before = comms.registry.snapshot().claim_generation(waiting.name)

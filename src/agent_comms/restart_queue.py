@@ -174,7 +174,7 @@ class RestartTarget:
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)
         current = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), self.launch_runtime)
+            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), LaunchRuntime.running())
         )
         if not self.is_current_watcher or self.runtime != current:
             raise ValueError("Watcher target runtime changed")

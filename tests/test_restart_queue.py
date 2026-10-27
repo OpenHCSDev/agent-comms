@@ -101,7 +101,7 @@ async def test_restore_owner_keeps_blocked_goal_unchanged(
         assert comms.registry.require('worker').goal == blocked
         repeated = await asyncio.to_thread(command.apply, comms)
         assert repeated.exit_code() == 0
-        assert not repeated.reconnect_targets()
+        assert repeated.reconnect_targets() == ('worker',)
         assert comms.registry.require('worker').require_process().pid == pid
         assert comms.registry.require('worker').goal == blocked
     finally:

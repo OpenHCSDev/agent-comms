@@ -202,6 +202,19 @@ class RegistryEdit:
             ).prepare_participant(self.store)
         return restored
 
+    def fence_idle_owners(
+        self, selected: Sequence[tuple[Thread, int]]
+    ) -> tuple[tuple[Thread, int], ...]:
+        """Commit all original idle owner fences together, or change none."""
+        fenced = tuple(
+            (thread, self.document.fence_idle_owner(
+                thread, expected_claimed_generation=generation
+            ))
+            for thread, generation in selected
+        )
+        self.commit()
+        return fenced
+
     def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
         current = owner.require_source_snapshot(self.original.snapshot)
         status = self.document.status(current.name)

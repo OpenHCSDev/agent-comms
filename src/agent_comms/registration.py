@@ -174,28 +174,27 @@ class Registration:
             ))
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
 
-    def reserve_owner(self, original: Thread, process: ProcessIdentity) -> RegistryOwner:
+    def reserve_owner(self, edit: RegistryEdit, original: Thread, process: ProcessIdentity) -> RegistryOwner:
         """Reserve one process against the exact stopped launch it prepared.
 
-        The registry transaction, not a root-wide lock, prevents concurrent
-        starters from replacing each other's reservation. Unrelated metadata
-        comes from the current declaration rather than the launch's old copy.
+        The caller's RegistryEdit joins the host check, reservation and first
+        input in one transaction. Concurrent starters cannot replace each other's
+        reservation; unrelated metadata comes from this current document.
         """
-        with self.store.editing() as edit:
-            current = edit.document.require(original.name)
-            if not current.same_launch(original):
-                raise RelationViolationError("Owner launch changed before process reservation.")
-            if current.process_alive:
-                raise RelationViolationError("Thread already has a live owner process.")
-            edit.document.status(current.name).require_visible(
-                "Only visible agent threads can be started.")
-            owned = replace(current.without_turn(), process_identity=process)
-            change = self._commit_registration(edit, edit.document.prepare_registration(
-                owned, _DEFAULT_PRESENCE, new_owner=True))
-            return RegistryOwner(
-                thread=change.thread,
-                claimed_generation=edit.document.entry(change.thread.name).claimed_generation,
-            )
+        current = edit.document.require(original.name)
+        if not current.same_launch(original):
+            raise RelationViolationError("Owner launch changed before process reservation.")
+        if current.process_alive:
+            raise RelationViolationError("Thread already has a live owner process.")
+        edit.document.status(current.name).require_visible(
+            "Only visible agent threads can be started.")
+        owned = replace(current.without_turn(), process_identity=process)
+        change = self._commit_registration(edit, edit.document.prepare_registration(
+            owned, _DEFAULT_PRESENCE, new_owner=True))
+        return RegistryOwner(
+            thread=change.thread,
+            claimed_generation=edit.document.entry(change.thread.name).claimed_generation,
+        )
 
     @contextmanager
     def external_process(self, name: str, process: ProcessIdentity):
@@ -348,20 +347,6 @@ class Registration:
     set_work_state = changing(RegistryDocument.set_work_state)
     observe_offered_tools = changing(RegistryDocument.observe_offered_tools)
     set_commander_project = changing(RegistryDocument.set_commander_project)
-
-    def fence_idle_owners(
-        self, selected: Sequence[tuple[Thread, int]]
-    ) -> tuple[tuple[Thread, int], ...]:
-        """Commit all original idle owner fences together, or change none."""
-        with self.store.editing() as edit:
-            fenced = tuple(
-                (thread, edit.document.fence_idle_owner(
-                    thread, expected_claimed_generation=generation
-                ))
-                for thread, generation in selected
-            )
-            edit.commit()
-            return fenced
 
     unregister = changing(RegistryDocument.unregister)
     archive = changing(RegistryDocument.archive)
