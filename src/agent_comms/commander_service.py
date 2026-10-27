@@ -39,9 +39,13 @@ class CommanderService(ServiceSender):
 
     @classmethod
     def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
-        """The live request holders whose current incarnation owns commander work."""
+        """The threads the registry names commander that are live and owed service.
+
+        Command moves with the registry, never with an old request: a thread that stood down
+        keeps its parked orders and requests, and gets no heartbeat or vibe check for them."""
+        snapshot = registry.snapshot()
         return tuple(
             thread
-            for thread in registry.all_threads().values()
+            for thread in snapshot.commander_project.commanders(snapshot)
             if cls.requested_by(thread, goals)
         )

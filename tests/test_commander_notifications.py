@@ -10,6 +10,8 @@ from multiprocessing import Pipe
 
 import pytest
 
+from agent_comms.registry_document import RegisteredCommanderProject
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_hud import (
@@ -444,3 +446,16 @@ def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(n
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms, "lead")} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
+
+
+def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(notification_bus):
+    """The registry names the commander; an old open request does not make one."""
+    comms = notification_bus
+    lead = comms.registry.require("lead")
+    assert lead.name in {thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+    assert CommanderHeartbeat.requested_by(lead, comms.goals)
+    comms.registry.set_commander_project(RegisteredCommanderProject(
+        comms.registry.require("worker").incarnation, ()))
+    assert CommanderHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
+    assert "lead" not in {
+        thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
