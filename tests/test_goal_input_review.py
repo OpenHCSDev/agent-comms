@@ -190,7 +190,7 @@ def test_standby_accepts_inbox_keys_delivered_since_the_inbox_cut(tmp_path, monk
     ledger.record(BusInputKey(late.seq), seq=late.seq, owner="worker", claim_scope=claim_scope,
                   target="worker", text=late.body)
     review = CommsInboxTool.invoke(
-        comms, {"thread": "worker", "ack": False,
+        comms, {"thread": "worker",
                 "standby": {"goal_id": goal.id, "wait_for": ["parent"]}},
         caller=ThreadCaller("worker"))["standby_review"]
     keys = review["reviewed_inputs"]

@@ -7,6 +7,8 @@ import os
 import socket
 import sqlite3
 from contextlib import closing
+from dataclasses import replace
+from functools import partial
 from html import escape
 import json
 
@@ -27,21 +29,30 @@ from agent_comms.cli_bridges.claude_protocol import (
     ForeignAttachment, KnownTurn,
 )
 from agent_comms.cli_bridges.shared import (
-    Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding,
+    Binding, MonitorPart, ForeignMonitorFrame, Options, Watch, StoredBinding,
     MonitorObservation,
     GivenBinding, MONITOR_FRAME,
 )
-from agent_comms.harness_delivery_states import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
+from agent_comms.harness_delivery_states import (
+    DeliveredOutcome, EmittedOutcome, MismatchedMonitor, ObservedMonitor, ReceivingMonitor,
+    UnconfirmedOutcome, UnrecordedMonitor,
+)
+from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.message_reference import BridgeStart, MessageReference
+from agent_comms.field_codec import FieldCodec
+from agent_comms.message_reference import BridgeStart
 from agent_comms.runtime_updates import HiddenItem
 from agent_comms.turn_item import NativeTurnId
-from agent_comms.messages import InfoKind, Message, TaskAttachment
-from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
+
+
+async def stored_attempts(bridge) -> tuple[HarnessDelivery, ...]:
+    """This bridge's attempts for its recipient, as the coordinator stores them."""
+    return await bridge.coordinator_read(lambda db: tuple(HarnessDelivery.select(
+        db, bridge=type(bridge), recipient_lookup=bridge.recipient_lookup, order_by=("seq",))))
 
 
 @pytest.mark.asyncio
@@ -59,7 +70,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
         await selected.options.operation.prepare(selected)
         fresh = comms.messaging.send(
             'peer', 'viewer', 'after binding, already read in Toad').message
-        comms.messaging.acknowledge('viewer', (fresh.reference,))
+        comms.bus.mark_read_through('viewer', fresh.seq)
         user_reads = comms.bus.reads.read()
         bridge_socket, monitor_socket = socket.socketpair()
         bridge_peer = MonitorPeer(*await asyncio.open_connection(sock=bridge_socket))
@@ -76,8 +87,8 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
                 for update in notification(line).updates(ClaudeSession()):
                     await update.observed(selected)
-                row, = DeliveryRow.select(db)
-                assert row.message.reference == fresh.reference
+                row, = await stored_attempts(selected)
+                assert row.reference == fresh.reference
                 assert row.outcome is DeliveredOutcome
                 assert isinstance(row.monitor, ObservedMonitor)
                 assert comms.bus.reads.read() == user_reads
@@ -87,14 +98,13 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 for update in notification(line, record_id='second-delivery').updates(
                         ClaudeSession()):
                     await update.observed(selected)
-                assert {row.message.reference for row in DeliveryRow.select(db)} == {
-                    fresh.reference, unread.reference,
-                }
-                assert all(row.outcome is DeliveredOutcome for row in DeliveryRow.select(db))
-                assert all(isinstance(row.monitor, ObservedMonitor)
-                           for row in DeliveryRow.select(db))
-                assert [item.reference for item in comms.bus.inbox('viewer').page.messages] == [
-                    before.reference]
+                rows = await stored_attempts(selected)
+                assert {row.reference for row in rows} == {fresh.reference, unread.reference}
+                assert all(row.outcome is DeliveredOutcome for row in rows)
+                assert all(isinstance(row.monitor, ObservedMonitor) for row in rows)
+                # The agent's view drops what its harness took; the user's read changed nothing.
+                assert [item.reference for item in comms.bus.inbox(
+                    'viewer', after=TakenInputStart()).page.messages] == [before.reference]
         finally:
             if watching is not None:
                 watching.cancel()
@@ -129,17 +139,16 @@ def bridge(comms, tmp_path):
 def emitted_delivery(bridge):
     def emit(body, target='viewer'):
         message = bridge.comms.messaging.send('claude-code', target, body).message
-        delivery = DeliveryRow(message.message_id, json.dumps(message.to_wire()),
-            EmittedOutcome, ReceivingMonitor(len(bridge.incoming_frame(message).parts)))
-        with bridge.db:
-            delivery.insert(bridge.db)
-        return delivery
+        delivery = replace(bridge.attempt(message, EmittedOutcome),
+                           monitor=ReceivingMonitor(len(bridge.incoming_frame(message).parts)))
+        assert asyncio.run(bridge.coordinator_write(lambda _, db: delivery.first_write(db)))
+        return message
     return emit
 
 
 @pytest.mark.asyncio
 async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge):
-    """Real SQLite contention on mark_delivered leaves this attempt uncertain only."""
+    """Real SQLite contention on the confirmation write leaves this attempt uncertain only."""
     first, second = (bridge.comms.messaging.send('peer', 'viewer', body).message
                      for body in ('first message', 'second message'))
     path = CoordinationStore.path_in(bridge.comms.root)
@@ -166,7 +175,7 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
                             await update.observed(bridge)
                     finally:
                         held.execute('ROLLBACK')
-                uncertain, = DeliveryRow.select(bridge.db, id=first.message_id)
+                uncertain, = await bridge.attempts(first.message_id)
                 assert uncertain.outcome is EmittedOutcome
                 assert uncertain.monitor == ReceivingMonitor(1)
                 assert not attachment.done()
@@ -174,14 +183,14 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
                 line = (await reader.readline()).decode().rstrip('\n')
                 for update in notification(line, record_id='healthy-second').updates(ClaudeSession()):
                     await update.observed(bridge)
-                confirmed, = DeliveryRow.select(bridge.db, id=second.message_id)
+                confirmed, = await bridge.attempts(second.message_id)
                 assert confirmed.monitor == ObservedMonitor('healthy-second', 1792168805.123)
                 assert confirmed.outcome is DeliveredOutcome
                 assert not attachment.done()
                 # Reopening starts after the journal's latest attempt, never at the
                 # uncertain first message. Its original outcome remains untouched.
-                assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(second.reference)
-                assert DeliveryRow.select(bridge.db, id=first.message_id) == [uncertain]
+                assert await bridge.resume_after() == BridgeStart(second.reference)
+                assert await bridge.attempts(first.message_id) == (uncertain,)
         finally:
             writer.close()
             await writer.wait_closed()
@@ -189,16 +198,6 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
             await asyncio.gather(attachment, return_exceptions=True)
             await peer.close()
 
-
-def test_resume_cursor_reads_seq_and_id_without_decoding_an_old_payload(bridge):
-    message = bridge.comms.messaging.send('claude-code', 'viewer', 'older wire shape').message
-    retired = {**message.to_wire(), 'task': {TaskAttachment.family_discriminator: 'RetiredTask'}}
-    with pytest.raises(MalformedRecord):
-        Message.from_wire(retired)
-    with bridge.db:
-        DeliveryRow(message.message_id, json.dumps(retired), DeliveredOutcome).insert(bridge.db)
-    assert DeliveryRow.resume_after(bridge.db, bridge.binding) == BridgeStart(
-        MessageReference(message.seq, message.message_id))
 
 @pytest.mark.asyncio
 async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(tmp_path):
@@ -313,8 +312,7 @@ def attachment_notification(line, record_id='notification-record'):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('record_factory', (notification, attachment_notification))
 async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_delivery, record_factory):
-    delivery = emitted_delivery('x' * 3000)
-    message = delivery.message
+    message = emitted_delivery('x' * 3000)
     state, binding = bridge.options.state, bridge.binding
     lines = [bridge.encode(part) for part in bridge.incoming_frame(message).parts]
     assert len(lines) == 7
@@ -323,8 +321,8 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
     for number in (6, 1, 3, 1, 5, 2):
         for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
             await update.observed(bridge)
-    assert [item.reference for item in bridge.comms.bus.inbox(binding.bus).page.messages] == [message.reference]
-    assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
+    attempt, = await stored_attempts(bridge)
+    assert attempt.outcome is EmittedOutcome
     bridge.db.close()
     with Binding.open(state) as db:
         reopened = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
@@ -332,18 +330,19 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         for number in (0, 4):
             for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert reopened.comms.bus.inbox(binding.bus).page.messages == ()
+        confirmed, = await reopened.attempts(message.message_id)
+        assert confirmed.outcome is DeliveredOutcome
         for line in lines:
             for update in record_factory(line, record_id='later-overlap').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert reopened.comms.bus.inbox(binding.bus).page.messages == ()
-        # Confirmation can beat the final socket-drain emission report.
-        confirmed, = DeliveryRow.select(db, id=message.message_id)
-        await confirmed.finish(reopened, EmittedOutcome)
-    with Binding.open(state) as db:
-        assert DeliveryRow.select(db)[0].outcome is DeliveredOutcome
-        assert DeliveryRow.select(db)[0].monitor == ObservedMonitor('record-4', 1792168805.123)
-        assert len(ObservedPart.select(db)) == 7
+        # Confirmation can beat the final socket-drain emission report: that report was
+        # decided from a row read before the confirmation, and must not overwrite it.
+        await reopened.finish(confirmed, partial(replace, outcome=EmittedOutcome))
+        stored, = await stored_attempts(reopened)
+        assert stored.outcome is DeliveredOutcome
+        assert stored.monitor == ObservedMonitor('record-4', 1792168805.123)
+        parts = await reopened.coordinator_read(lambda db: HarnessObservedPart.of(db, stored))
+        assert len(parts) == 7
 
 
 
@@ -407,22 +406,26 @@ def test_remote_control_session_record_decodes_without_updates():
 
 @pytest.mark.asyncio
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(bridge, emitted_delivery, capsys):
-    delivery = emitted_delivery('original')
-    frame = MonitorPart(id=delivery.id, sender=delivery.message.sender, number=1, total=1, body='different')
+    message = emitted_delivery('original')
+    frame = MonitorPart(id=message.message_id, sender=message.sender, number=1, total=1, body='different')
     await frame.confirm(bridge, ObservedMonitor('record', 1.))
-    assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
-    assert isinstance(DeliveryRow.select(bridge.db)[0].monitor, MismatchedMonitor)
+    stored, = await stored_attempts(bridge)
+    assert stored.outcome is EmittedOutcome
+    assert isinstance(stored.monitor, MismatchedMonitor)
     assert 'message remains pending' in capsys.readouterr().err
 
 
 def test_old_emission_has_no_invented_evidence_or_replay(bridge):
     message = bridge.comms.messaging.send('peer', 'viewer', 'retained').message
-    with bridge.db:
-        DeliveryRow(message.message_id, json.dumps(message.to_wire()), EmittedOutcome).insert(bridge.db)
-    assert isinstance(DeliveryRow.select(bridge.db)[0].monitor, UnrecordedMonitor)
-    assert not DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome).insert_if_absent(bridge.db).rowcount
-    assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
-    assert ObservedPart.select(bridge.db) == []
+    emitted = bridge.attempt(message, EmittedOutcome)
+    with Coordination(str(CoordinationStore.path_in(Path(bridge.binding.root)))) as store, \
+            store.session.writing() as db:
+        assert emitted.first_write(db)
+        assert not bridge.attempt(message, UnconfirmedOutcome).first_write(db)
+        stored, = emitted.stored(db)
+        assert isinstance(stored.monitor, UnrecordedMonitor)
+        assert stored.outcome is EmittedOutcome
+        assert HarnessObservedPart.of(db, stored) == ()
 
 
 @pytest.mark.asyncio
@@ -430,7 +433,7 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     from contextlib import aclosing
     import asyncio
     first=wired.messaging.send('PR111','fixer','first').message
-    async with aclosing(wired.watch('fixer', acknowledgment=ExplicitWatchAcknowledgment)) as stream:
+    async with aclosing(wired.watch('fixer')) as stream:
         assert (await anext(stream)).reference==first.reference
         pending=asyncio.create_task(anext(stream))
         try:
@@ -445,7 +448,7 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
                 pending.cancel()
                 await asyncio.gather(pending,return_exceptions=True)
     assert {m.reference for m in wired.bus.inbox('fixer').page.messages}=={first.reference,second.reference}
-    assert wired.messaging.acknowledge('fixer',(first.reference,))==1
+    wired.bus.mark_read_through('fixer', first.seq)
     assert [m.reference for m in wired.bus.inbox('fixer').page.messages]==[second.reference]
 
 
