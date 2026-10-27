@@ -294,6 +294,15 @@ class PrivateDirectoryRole(PrivateRole):
     permissions = 0o700
 
     @classmethod
+    def make_parents(cls, path: Path) -> None:
+        """Create every missing ancestor privately; existing ancestors keep their owner policy."""
+        missing = [parent for parent in (path, *path.parents) if not parent.exists()]
+        for parent in reversed(missing):
+            parent.mkdir(mode=cls.permissions, exist_ok=True)
+            cls.require(parent.lstat(), RelationViolationError("New directory is not private"))
+            Platform.current().sync_directory(parent.parent)
+
+    @classmethod
     def kind_flags(cls) -> int:
         return os.O_DIRECTORY
 

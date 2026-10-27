@@ -50,6 +50,11 @@ DIRECTORY = "owner-restart-queue"
 class RestartState(LifecycleCapability, DeclaredFamily, affix="Restart"):
     reason: Annotated[str, WireOmitDefault()] = ""
 
+    @classmethod
+    def membership_sql(cls, capability: type[LifecycleCapability]) -> str:
+        names = ", ".join(sql_literal(member) for member in cls.members_with(capability))
+        return f"json_extract({{state}}, '$.{cls.family_discriminator}') IN ({names})"
+
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
         # A terminal write interrupted before its move is still settled.
@@ -181,13 +186,12 @@ class QueuedRestart(RestartRows, TypedTable):
         + FieldCodec.record_key(OwnerIdentity, "incarnation") + "."
         + FieldCodec.record_key(ThreadIncarnationRecord, "created_at") + "')",
         check="owner_birth > 0"))
-    active: ClassVar[Generated] = Generated(bool, Column(
-        generated=f"json_extract(state, '$.{RestartState.family_discriminator}') IN (" + ", ".join(
-            sql_literal(member) for member in RestartState.members_with(Active)
-        ) + ")"))
+    active: ClassVar[Generated] = Generated(bool, Column(generated=RestartState.membership_sql(Active)))
+    pending: ClassVar[Generated] = Generated(bool, Column(generated=RestartState.membership_sql(Pending)))
     indexes = (
         Index(("owner_birth",), unique=True, where="active = 1"),
         Index(("active", "owner_birth", "id")),
+        Index(("pending", "id")),
     )
 
     @property
@@ -242,7 +246,7 @@ class RestartQueue(DurableStore):
 
     def _settle(self, db: sqlite3.Connection) -> None:
         """Dead pending owners settle atomically; attempted rows remain untouched."""
-        for record in self._active(db):
+        for record in QueuedRestart.select(db, pending=True):
             settled = record.state.settle(record)
             if settled != record:
                 settled.upsert(db)
@@ -294,8 +298,7 @@ class RestartQueue(DurableStore):
     def _ready(self) -> list[QueuedRestart]:
         with self.writing() as db:
             self._settle(db)
-            return [pending for record in self._active(db)
-                    for pending in record.state.items_with(Pending, record)]
+            return QueuedRestart.select(db, pending=True, order_by=("id",))
 
     def _attempt(self, comms: Comms, initial: QueuedRestart) -> tuple[QueuedRestart, ...]:
         with self.writing() as db:
@@ -345,18 +348,17 @@ class RestartQueue(DurableStore):
     def release_if_empty(self, held: TextIO) -> bool:
         # Enqueue and release share SQLite's writer transaction, so no request is orphaned.
         with self.writing() as db:
-            if any(record.state.items_with(Pending, record) for record in self._active(db)):
+            if QueuedRestart.select(db, pending=True, limit=1):
                 return False
             self.watcher_claim.release(held)
             return True
 
     def block_failed(self, error: Exception) -> None:
         with self.writing() as db:
-            for record in self._active(db):
-                for pending in record.state.items_with(Pending, record):
-                    pending.transition(BlockedRestart(
-                        reason=f"Watcher failed: {type(error).__name__}: {error}"
-                    )).upsert(db)
+            for record in QueuedRestart.select(db, pending=True):
+                record.transition(BlockedRestart(
+                    reason=f"Watcher failed: {type(error).__name__}: {error}"
+                )).upsert(db)
 
     async def run(self, comms: Comms) -> None:
         Platform.current().require_watched_procfs(

@@ -39,7 +39,7 @@ from agent_comms.locked_store import (
     UndeclaredFile,
 )
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
-from agent_comms.private_path import FileObservation, FileRevision, MissingFile
+from agent_comms.private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 from agent_comms.typed_table import WriterOwnedStore
@@ -290,7 +290,8 @@ class StoreBackup:
                     raise UpgradeRefused('Existing backup belongs to a different route')
                 backup.route_revision = FileRevision.capture(route)
             return backup
-        path.mkdir(mode=0o700, parents=True)
+        PrivateDirectoryRole.make_parents(path.parent)
+        path.mkdir(mode=PrivateDirectoryRole.permissions)
         AtomicFile(path / 'selected.json').write_text(json.dumps(FieldCodec.encode(
             selected, tuple[Annotated[Path, PathText], ...])))
         contents = backup.capture(resources)
