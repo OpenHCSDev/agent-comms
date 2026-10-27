@@ -6,14 +6,14 @@ attempts can declare these families without importing the bridge transport.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .cli_bridges.shared import CliBridge, DeliveryRow
+    from .cli_bridges.shared import CliBridge, DeliveryRow, LineMonitorBridge, MonitorPart
 
 
 class Outcome(DeclaredFamily, affix="Outcome"):
@@ -63,3 +63,48 @@ class DeliveredOutcome(FilteredOutcome):
 
 class EmittedOutcome(UnconfirmedOutcome):
     pass
+
+
+@dataclass(frozen=True)
+class MonitorEvidence(DeclaredFamily):
+    """Unsent and terminal observations cannot accept another delivery."""
+
+    async def confirm(self, bridge: LineMonitorBridge, delivery: DeliveryRow,
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class UnrecordedMonitor(MonitorEvidence):
+    pass
+
+
+@dataclass(frozen=True)
+class ReceivingMonitor(MonitorEvidence):
+    total: int
+
+    async def confirm(self, bridge: LineMonitorBridge, delivery: DeliveryRow,
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+        if notification.total != self.total:
+            return ()
+        parts = await bridge.observe_part(delivery, notification, record)
+        if len(parts) != self.total:
+            return ()
+        message = delivery.message
+        if (''.join(part.body for part in parts) != message.body
+                or any(part.sender != message.sender for part in parts)):
+            await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
+            return ()
+        await replace(delivery, monitor=record).finish(bridge, DeliveredOutcome)
+        return (message.exact_reply_target,)
+
+
+@dataclass(frozen=True)
+class MismatchedMonitor(MonitorEvidence):
+    reason: str
+
+
+@dataclass(frozen=True)
+class ObservedMonitor(MonitorEvidence):
+    record_id: str
+    timestamp: float

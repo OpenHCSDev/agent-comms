@@ -41,7 +41,10 @@ from agent_comms.child_process import (
 )
 from agent_comms.cli_arguments import CliArguments
 from agent_comms.cli_protocol import TaggedWire, WatchLine, raise_child_exit
-from agent_comms.harness_delivery_states import DeliveredOutcome, EmittedOutcome, FilteredOutcome, Outcome, UnconfirmedOutcome
+from agent_comms.harness_delivery_states import (
+    DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, MonitorEvidence, ObservedMonitor,
+    Outcome, ReceivingMonitor, UnconfirmedOutcome, UnrecordedMonitor,
+)
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import CoordinationError, DeferredRead, IdentityConflict
 from agent_comms.declared_family import DeclaredFamily
@@ -417,58 +420,6 @@ class Options:
         arguments.binding = arguments.binding_thread.request.from_arguments(arguments, bridge_type)
         return cls(**{declared.name: vars(arguments)[key]
                       for declared, key in FieldCodec.record_fields(cls)})
-
-
-@dataclass(frozen=True)
-class MonitorEvidence(DeclaredFamily):
-    """Unsent and terminal observations cannot accept another delivery."""
-
-    async def confirm(self, bridge: LineMonitorBridge, delivery: DeliveryRow,
-                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
-        return ()
-
-
-@dataclass(frozen=True)
-class UnrecordedMonitor(MonitorEvidence):
-    pass
-
-
-@dataclass(frozen=True)
-class ReceivingMonitor(MonitorEvidence):
-    total: int
-
-    async def confirm(self, bridge: LineMonitorBridge, delivery: DeliveryRow,
-                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
-        if notification.total != self.total:
-            return ()
-        part = ObservedPart(delivery.id, notification.number, notification.sender,
-                            notification.body, record.record_id, record.timestamp)
-        with bridge.db:
-            part.insert_if_absent(bridge.db)
-        await bridge.part_observed(delivery.id, notification.number)
-        if ObservedPart.count(bridge.db, id=delivery.id) != self.total:
-            return ()
-        parts = ObservedPart.select(bridge.db, id=delivery.id, order_by=('number',))
-        message = delivery.message
-        if (''.join(part.body for part in parts) != message.body
-                or any(part.sender != message.sender for part in parts)):
-            with bridge.db:
-                replace(delivery, monitor=MismatchedMonitor('Observed parts do not equal the original message')).upsert(bridge.db)
-            bridge.log(f'Monitor parts mismatch; message remains pending: {delivery.id}')
-            return ()
-        await replace(delivery, monitor=record).finish(bridge, DeliveredOutcome)
-        return (message.exact_reply_target,)
-
-
-@dataclass(frozen=True)
-class MismatchedMonitor(MonitorEvidence):
-    reason: str
-
-
-@dataclass(frozen=True)
-class ObservedMonitor(MonitorEvidence):
-    record_id: str
-    timestamp: float
 
 
 @dataclass(frozen=True)
@@ -1505,6 +1456,21 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
 
     async def part_observed(self, message_id: MessageId, number: int) -> None:
         await self.reader.part_observed(message_id, number)
+
+    async def observe_part(self, delivery: DeliveryRow, notification: MonitorPart,
+                           record: ObservedMonitor) -> tuple[ObservedPart, ...]:
+        """Record one transcript part as observed; every observed part of its message, in order."""
+        part = ObservedPart(delivery.id, notification.number, notification.sender,
+                            notification.body, record.record_id, record.timestamp)
+        with self.db:
+            part.insert_if_absent(self.db)
+        await self.part_observed(delivery.id, notification.number)
+        return tuple(ObservedPart.select(self.db, id=delivery.id, order_by=('number',)))
+
+    async def record_mismatch(self, delivery: DeliveryRow, reason: str) -> None:
+        with self.db:
+            replace(delivery, monitor=MismatchedMonitor(reason)).upsert(self.db)
+        self.log(f'Monitor parts mismatch; message remains pending: {delivery.id}')
 
     @staticmethod
     def encode(text: str) -> str:
