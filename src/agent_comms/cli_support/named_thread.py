@@ -7,6 +7,7 @@ from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.comms import Comms
 from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from dataclasses import dataclass
 from typing import Self
@@ -23,7 +24,7 @@ class NamedThreadCliCommand(ThreadBoundCliCommand, NamedCliCommand):
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
         return tuple(bound for member in cls.channel_members(resolved)
                      for bound in cls.thread_bindings(
                          comms, member.thread, member.status, OneChannel(resolved.channel.name), catalog=catalog))

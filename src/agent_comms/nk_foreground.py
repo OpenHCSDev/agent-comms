@@ -106,14 +106,14 @@ def reserve_foreground_owner(
     )
     # Foreground attempts must reserve a fresh name, never replace an owner
     # that may retain uncertain input. The registry owns that namespace check.
-    with comms.registry.store.guarded_write():
-        comms.registry.store.private_guard_unlocked().require_root(
+    with comms.registry.store.editing() as edit:
+        comms.registry.store.privacy().require_root(
             wire_root_id, RelationViolationError("Native namespace changed before owner reservation"),
         )
-        canonical = comms.registry.canonical_name(owner.name)
-        if canonical != owner.name or canonical in comms.registry.all_threads():
+        canonical = edit.document.canonical_name(owner.name)
+        if canonical != owner.name or edit.document.taken(canonical):
             raise RelationViolationError("Foreground recipient already exists")
-        comms.registry._declare_unlocked(owner)
+        comms.registry._declare_in(edit, owner)
     return ForegroundOwner(root, wire_root_id, owner.name, native_package)
 
 

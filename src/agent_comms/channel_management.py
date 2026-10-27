@@ -72,7 +72,8 @@ class ArchiveThreadsTagDisposition(TagDisposition):
         return f"Archive all stopped threads tagged with {self.tag_names(tag)}? Tags and history remain; active owners are refused."
 
     def apply(self, channels, tag, cohort):
-        channels.threads._archive_unlocked(cohort)
+        with channels.registry.store.editing() as edit:
+            channels.threads._archive_in(edit, cohort)
         return TagChangeResult(tag, False, archived_threads=tuple(thread.incarnation for thread in cohort))
 
 
@@ -87,7 +88,8 @@ class DeleteThreadsTagDisposition(TagDisposition):
 
     def apply(self, channels, tag, cohort):
         selected = self.deletion_cohort(channels, tag, cohort)
-        channels.threads._delete_unlocked(selected)
+        with channels.registry.store.editing() as edit:
+            channels.threads._delete_in(edit, selected)
         channels._apply_tag_change(tag, None, tuple(thread for thread in cohort
                                                      if thread not in selected))
         return TagChangeResult(tag, True, tuple(thread.incarnation for thread in selected))
@@ -185,13 +187,14 @@ class ChannelManagement:
 
     def _update_tags(self, name: str, choice: TagChoice) -> Thread:
         previous_channels = self.bus.channel_declarations()
-        with self.registry.store.guarded_write(), self.catalog.editing() as document:
-            thread = self.registry.require(name)
+        with self.registry.store.editing() as edit, self.catalog.editing() as document:
+            thread = edit.document.require(name)
             updated = replace(thread, tags=choice.for_child(thread.tags))
             for tag in updated.tags - document.tags:
                 document.require_available_tag_name(tag)
-            self.registry.register(updated, self.registry.status(thread.name))
-            updated = self.registry.require(thread.name)
+            self.registry._commit_registration(edit, edit.document.prepare_registration(
+                updated, edit.document.status(thread.name), new_owner=False))
+            updated = edit.document.require(thread.name)
             document.remember_tags(updated.tags)
         announcers = thread.role.executor(thread) if thread.tags != updated.tags else ()
         for announcer in announcers:
@@ -295,6 +298,7 @@ class ChannelManagement:
 
     def _apply_tag_change(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
-        with self.registry.store.guarded_write(), self.catalog.editing() as document:
+        with self.registry.store.editing() as edit, self.catalog.editing() as document:
             document.change_tag(name, replacement)
-            self.registry.change_tag(cohort, name, replacement)
+            edit.document.change_tag(cohort, name, replacement)
+            edit.commit()
