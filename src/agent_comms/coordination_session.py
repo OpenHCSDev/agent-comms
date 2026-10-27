@@ -24,6 +24,8 @@ from agent_comms.store_files import (
 )
 
 if TYPE_CHECKING:
+    from .attempt_states import TerminalAttempt
+    from .coordination_snapshot import RecoverySnapshot
     from .message_bus import MessageBus
     from .registry_store import RegistryCut
     from .registry_document import RegistrySnapshot
@@ -35,7 +37,18 @@ def system_clock() -> int:
     return time.time_ns() // 1_000_000
 
 
-class NativeCapture(ExitStack, StoredBusReader):
+class CoordinationCapture:
+    """Standalone settlement has SQL state and no native resources to release."""
+
+    def acquire(self, session: CoordinationSession) -> AbstractContextManager[CoordinationCapture]:
+        """An omitted capture is obtained from the session's declared storage family."""
+        return session.settlement_capture()
+
+    def release_resources(self, snapshot: RecoverySnapshot, outcome: TerminalAttempt) -> None:
+        """Standalone attempts have no native file claims."""
+
+
+class NativeCapture(CoordinationCapture, ExitStack, StoredBusReader):
     """Copy a native decision's registry cut, then release it before decoding."""
 
     def __init__(self, bus: MessageBus) -> None:
@@ -67,6 +80,17 @@ class NativeCapture(ExitStack, StoredBusReader):
 
     def registry_capture(self) -> AbstractContextManager[RegistryCut]:
         return nullcontext(self.bus._registry.store.snapshot_with_authority())
+
+    @contextmanager
+    def acquire(self, session: CoordinationSession) -> Iterator[Self]:
+        """Borrow this original decision; never refresh it during settlement."""
+        if self.bus.bus.path.parent.resolve() != session.path.parent.resolve():
+            raise IntegrityViolationError("settlement boundary belongs to another coordinator")
+        with self.registry_cut.current():
+            yield self
+
+    def release_resources(self, snapshot: RecoverySnapshot, outcome: TerminalAttempt) -> None:
+        snapshot.release_resources(self, outcome)
 
 
 class NativeCommit(NativeCapture):
@@ -111,14 +135,14 @@ class CoordinationSession(CoordinationStore):
 
     @contextmanager
     def settlement(
-        self, boundary: NativeCapture | None = None
-    ) -> Iterator[None]:
-        """Standalone settlement owns SQL only, never native file resources."""
-        with self.writing():
-            yield None
+        self, boundary: CoordinationCapture = CoordinationCapture(),
+    ) -> Iterator[CoordinationCapture]:
+        """The declared capture owns resources; this session owns the SQL transaction."""
+        with boundary.acquire(self) as acquired, self.writing():
+            yield acquired
 
-    def release_resources(self, snapshot, outcome, boundary: NativeCapture) -> None:
-        """Standalone attempts cannot acquire native file claims."""
+    def settlement_capture(self) -> AbstractContextManager[CoordinationCapture]:
+        return nullcontext(CoordinationCapture())
 
     @contextmanager
     def read(self) -> Iterator[None]:
@@ -154,18 +178,10 @@ class NativeCoordinationSession(CoordinationSession):
         return self._boundary(bus, NativeCommit)
 
     @contextmanager
-    def settlement(
-        self, boundary: NativeCapture | None = None
-    ) -> Iterator[NativeCapture]:
-        """Acquire a native boundary, or borrow the caller's already held one."""
-        with self.committing(self.bus) if boundary is None else nullcontext(boundary) as acquired:
-            if acquired.bus.bus.path.parent.resolve() != self.path.parent.resolve():
-                raise IntegrityViolationError("settlement boundary belongs to another coordinator")
-            with acquired.registry_cut.current(), self.writing():
-                yield acquired
-
-    def release_resources(self, snapshot, outcome, boundary: NativeCapture) -> None:
-        snapshot.release_resources(boundary, outcome)
+    def settlement_capture(self) -> Iterator[NativeCapture]:
+        """Fresh native settlement captures a current cut before any SQL effect."""
+        with self.committing(self.bus) as acquired, acquired.acquire(self):
+            yield acquired
 
 
 class ReadNativeCoordinationSession(NativeCoordinationSession):

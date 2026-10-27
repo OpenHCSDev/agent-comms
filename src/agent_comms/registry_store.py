@@ -10,8 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
-from functools import cached_property
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 

@@ -9,7 +9,7 @@ from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.bus import Bus
 from agent_comms.child_process import NoProcess
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.coordination_session import CoordinationSession
+from agent_comms.coordination_session import CoordinationCapture, CoordinationSession
 from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.selected_claim import publish_selected_resource_claim
@@ -35,7 +35,7 @@ def test_standalone_session_never_guesses_native_resources_from_bus_file(tmp_pat
     with StandaloneCoordination(tmp_path / "coordination.sqlite3") as store:
         assert type(store.session) is CoordinationSession
         with store.session.settlement() as boundary:
-            assert boundary is None
+            assert type(boundary) is CoordinationCapture
         assert Bus.path_in(tmp_path).read_text() == "not a native bus\n"
 
 
