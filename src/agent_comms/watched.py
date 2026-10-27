@@ -115,6 +115,8 @@ class ChangeSource(ABC):
 
 
 class FileSource(ChangeSource):
+    inode_events: ClassVar[int] = _DATA | _SELF
+
     @property
     def directory(self) -> Path:
         return self.path.parent
@@ -127,7 +129,13 @@ class FileSource(ChangeSource):
         # unrelated files' MODIFY/ATTRIB/CLOSE_WRITE (notably SQLite SHM).
         yield DirectoryWatch.observed(self.observed_directory(), _ENTRIES | _SELF)
         for revision in FileRevision.capture(self.path).revisions():
-            yield NativeWatch(self.path, revision.identity, _DATA | _SELF)
+            yield NativeWatch(self.path, revision.identity, self.inode_events)
+
+
+class FileLifetimeSource(FileSource):
+    """Physical replacement/removal, independent of a store's committed-write signal."""
+
+    inode_events = _SELF
 
 
 class DirectorySource(ChangeSource):

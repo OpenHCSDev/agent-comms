@@ -172,6 +172,22 @@ async def test_shared_host_restarts_one_session_without_stopping_its_siblings(tm
         replacement = await Coordination.run_worker(partial(
             RetainedOwnerLaunch.capture, OwnerRestartSelection.capture(after, names[1]), after, comms.root))
         assert replacement.environment == original.environment
+        await Coordination.run_worker(partial(
+            comms.threads.rename_managed_thread, names[2], "shared-renamed", owner=host,
+        ))
+        assert comms.registry.require(names[2]).name == "shared-renamed"
+        await client.shutdown()
+        client = CommsClient(comms, auto_wake=False)
+        client.on_connect(FakeClient())
+        await client.load_session(cwd=str(tmp_path), session_id="shared-renamed")
+        resumed = await client.prompt(
+            session_id="shared-renamed",
+            prompt=[TextContentBlock(type="text", text="FRESH_REOPENED_SHARED_INPUT")],
+        )
+        assert resumed.stop_reason == "end_turn"
+        retained = journals[names[2]].read_text()
+        assert f"FRESH_SHARED_INPUT_{names[2]}" in retained
+        assert "FRESH_REOPENED_SHARED_INPUT" in retained
         await Coordination.run_worker(partial(comms.owners.stop, names[0]))
         assert host.alive()
         assert comms.registry.require(names[0]).process_identity == NoProcess()

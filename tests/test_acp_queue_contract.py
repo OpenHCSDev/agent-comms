@@ -212,11 +212,11 @@ async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
     agent.inputs.bind_native_turn("beta", comms.registry.require("beta"))
     agent.inputs.ensure_live_drain("beta")
     drained = agent.inputs.drained["beta"]
-    drain = drained.drain_task
-    assert drained.queue_revision == 1 and drained.turn_open() and drain is not None
+    drain = drained.observer
+    assert drained.queue_revision == 1 and drained.turn_open() and drain.busy
     await agent.shutdown()
     assert "beta" not in agent.inputs.drained
-    assert drain.done()
+    assert not drain.busy
 
 
 async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_path):

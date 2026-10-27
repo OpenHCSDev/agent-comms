@@ -20,7 +20,7 @@ from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.locked_store import RegistryFile, SQLiteStorage
 from agent_comms.messages import InfoKind, Message
-from agent_comms.watched import ChangeSignal, FileSource
+from agent_comms.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.private_path import FileRevision
 from agent_comms.presentation import WireRevision
 from agent_comms.view_unread import (
@@ -114,6 +114,26 @@ async def test_replacement_source_wakes_without_missing_the_initial_observation(
         temporary.write_text("published target")
         temporary.replace(maintenance)
         await asyncio.wait_for(anext(observations), 1)
+
+
+async def test_file_lifetime_ignores_writes_and_observes_replacement(tmp_path):
+    source = tmp_path / "database"
+    source.write_text("original")
+    async with ChangeSignal.opened(FileLifetimeSource(source)) as changes:
+        changes.prepare()
+        waiting = asyncio.create_task(changes.wait())
+        try:
+            source.write_text("uncommitted bytes")
+            await asyncio.sleep(.05)
+            assert not waiting.done()
+            prepared = source.with_suffix(".prepared")
+            prepared.write_text("repaired source")
+            prepared.replace(source)
+            await asyncio.wait_for(waiting, 1)
+            assert source.read_text() == "repaired source"
+        finally:
+            waiting.cancel()
+            await asyncio.gather(waiting, return_exceptions=True)
 
 
 @pytest.fixture

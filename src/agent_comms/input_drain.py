@@ -56,7 +56,7 @@ from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress
 from .native_input_owner import RegistryOwner
 from .proven_source_coverage import SourcePrefix
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
-from .registry_document import RegistryEntry
+from .registry_document import RegistryDocument, RegistryEntry
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
 from .runtime import RuntimeServer
@@ -67,7 +67,7 @@ from .threads import Thread
 from .turn_context import TurnContext, UserFollowupSegment
 from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
 from .turn_terminal import OwnerStop
-from .watched import ChangeSignal, FileSource
+from .watched import ChangeSignal, FileLifetimeSource, FileSource
 
 if TYPE_CHECKING:
     from agent_comms.following_inputs import OwnerFollowingInputs
@@ -125,6 +125,9 @@ class InputObservation(ABC):
     runtime: RuntimeServer
     auto_wake: bool
     closing: bool
+    drained: dict[str, DrainedSession]
+    root_observer: BackgroundTask
+    observed_registry: asyncio.Task[RegistryDocument]
 
     @abstractmethod
     def state(self, session_id: str) -> DrainedSession: ...
@@ -133,9 +136,8 @@ class InputObservation(ABC):
         state = self.state(session_id)
         return state.turn_open() or state.turn_task.busy
 
-    def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
-        state = self.state(session_id)
-        if state.drain_task is task:
+    def _retire_observer(self, state: DrainedSession, task: asyncio.Task[None]) -> None:
+        if state.observer.owns(task):
             state.observation_watcher = None
 
     def wake_observer(self, session_id: str) -> None:
@@ -160,18 +162,19 @@ class InputObservation(ABC):
         task.add_done_callback(finished)
 
     def ensure_live_drain(self, session_id: str) -> None:
-        """Keep one background task per session pushing inbox messages live."""
+        """Share root observation, retaining an independent consumer for each session."""
         if self.closing:
             return
+        if not self.root_observer.busy:
+            self.root_observer = RunningBackgroundTask(self.runtime.background(self.observe_root()))
         state = self.state(session_id)
         if state.observing():
             return
 
         task = self.runtime.background(self.observe(session_id))
-        state.drain_task = task
-        task.add_done_callback(
-            lambda completed: self._retire_observer(session_id, completed)
-        )
+        state.observer = RunningBackgroundTask(task)
+        task.add_done_callback(partial(self._retire_observer, state))
+        self.root_observer.wake()
 
     async def _own_entry(self, session_id: str) -> RegistryEntryRevision:
         return await Coordination.run_worker(partial(
@@ -195,6 +198,51 @@ class InputObservation(ABC):
     ) -> RegistryEntry:
         return entry
 
+    def _read_observed_registry(self, names: tuple[str, ...]) -> RegistryDocument:
+        document = self.comms.registry.store.read()
+        for name in names:
+            document.entry_if_present(name)
+        return document
+
+    async def observe_root(self) -> None:
+        """One kernel registration and captured registry read feed the root's drains."""
+        bus = self.comms.bus.bus
+        sources = (
+            *(FileSource(path) for path in (
+                *bus.source_paths(self.comms.root), *CoordinationStore.source_paths(self.comms.root),
+            )),
+            FileLifetimeSource(bus.path),
+            FileLifetimeSource(CoordinationStore.path_in(self.comms.root)),
+        )
+        try:
+            async with aclosing(bus.watch_sources(*sources)) as observations:
+                async for watcher in observations:
+                    self.root_observer = WatchingObservationTask(
+                        cast(asyncio.Task[object], asyncio.current_task()), watcher,
+                    )
+                    targets = {session_id: state for session_id, state in self.drained.items()
+                               if state.observing()}
+                    names = tuple(self.sessions.require(session_id) for session_id in targets)
+                    read = asyncio.create_task(Coordination.run_worker(partial(
+                        self._read_observed_registry, names,
+                    )))
+                    try:
+                        await read
+                    except UNAVAILABLE_DRAIN_ERRORS:
+                        # Each consumer records failure against its own original owner.
+                        pass
+                    self.observed_registry = read
+                    for state in targets.values():
+                        if state.observing():
+                            state.observation_watcher = watcher
+                            state.observation_ready.set()
+        finally:
+            self.root_observer = BackgroundTask()
+            # A failed native registration cannot leave consumers waiting forever.
+            # Session retirement still owns turns, grants and queued input.
+            for state in tuple(self.drained.values()):
+                state.observer.cancel()
+
     async def observe(self, session_id: str) -> None:
         initial = await self._own_entry(session_id)
         state = self.state(session_id)
@@ -202,31 +250,30 @@ class InputObservation(ABC):
         bus = self.comms.bus.bus
         lookup = entry.thread.incarnation.require_recorded().lookup
         state.forget_observation()
-        sources = tuple(FileSource(path) for path in (
-            *bus.source_paths(self.comms.root), *CoordinationStore.source_paths(self.comms.root),
-        ))
-        async with aclosing(bus.watch_sources(*sources)) as observations:
-            async for watcher in observations:
-                state.observation_watcher = watcher
-                if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
-                    changed = await Coordination.run_worker(partial(
-                        state.idle_revision.has_unobserved_inputs, bus, lookup))
-                    if not changed:
-                        continue
-                try:
-                    read = await self._own_entry(session_id)
-                except UNAVAILABLE_DRAIN_ERRORS as error:
-                    thread = self.sessions.require(session_id)
-                    snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
-                    await record_drain_failure(
-                        self.comms, thread, snapshot.owner_identity(thread),
-                        FailedWakeDiagnostic, error,
-                    )
-                else:
-                    await self._observe_entry(session_id, read.entry, watcher)
+        while True:
+            await state.observation_ready.wait()
+            state.observation_ready.clear()
+            read = self.observed_registry
+            if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
+                changed = await Coordination.run_worker(partial(
+                    state.idle_revision.has_unobserved_inputs, bus, lookup))
+                if not changed:
+                    continue
+            try:
+                document = await asyncio.shield(read)
+                entry = document.entry(self.sessions.require(session_id))
+            except UNAVAILABLE_DRAIN_ERRORS as error:
+                thread = self.sessions.require(session_id)
+                snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+                await record_drain_failure(
+                    self.comms, thread, snapshot.owner_identity(thread),
+                    FailedWakeDiagnostic, error,
+                )
+            else:
+                await self._observe_entry(session_id, entry)
 
     async def _observe_entry(
-        self, session_id: str, entry: RegistryEntry, watcher: ChangeSignal,
+        self, session_id: str, entry: RegistryEntry,
     ) -> None:
         thread = self.sessions.require(session_id)
         try:
@@ -250,7 +297,7 @@ class InputObservation(ABC):
                     drained, self.effects.cursors.delivery(session_id).needs_refresh,
                     self.turn_live(session_id),
                 ):
-                    watcher.wake()
+                    state.notify_observer()
         except DEFERRED_DRAIN_ERRORS:
             pass
 
@@ -414,17 +461,58 @@ class StartedDrainTurn(AwaitingDrainTurn):
         await Coordination.run_worker(partial(inputs.finish_original_inputs, self.source.keys))
 
 
-class TurnTask:
-    """The session's idle task state; running tasks own their operations."""
+class BackgroundTask:
+    """An idle producer; running members own cancellation and joined retirement."""
 
     @property
     def busy(self) -> bool:
         return False
 
-    async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
+    def owns(self, task: asyncio.Task[object]) -> bool:
+        return False
+
+    def producers(self) -> tuple[asyncio.Task[object], ...]:
+        return ()
+
+    def cancel(self) -> None:
         pass
 
     async def stop(self) -> None:
+        self.cancel()
+        await join_retirement(asyncio.gather(*self.producers(), return_exceptions=True))
+
+    def wake(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class RunningBackgroundTask(BackgroundTask):
+    task: asyncio.Task[object]
+
+    @property
+    def busy(self) -> bool:
+        return not self.task.done() and not self.task.cancelling()
+
+    def owns(self, task: asyncio.Task[object]) -> bool:
+        return self.task is task
+
+    def producers(self) -> tuple[asyncio.Task[object], ...]:
+        return (self.task,)
+
+    def cancel(self) -> None:
+        self.task.cancel()
+
+
+@dataclass(frozen=True)
+class WatchingObservationTask(RunningBackgroundTask):
+    watcher: ChangeSignal
+
+    def wake(self) -> None:
+        self.watcher.wake()
+
+
+class TurnTask(BackgroundTask):
+    async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
         pass
 
     async def abort(self, backend: AgentBackend) -> None:
@@ -432,8 +520,7 @@ class TurnTask:
 
 
 @dataclass(frozen=True)
-class RunningTurnTask(TurnTask):
-    task: asyncio.Task[object]
+class RunningTurnTask(RunningBackgroundTask, TurnTask):
 
     @property
     def busy(self) -> bool:
@@ -441,10 +528,6 @@ class RunningTurnTask(TurnTask):
 
     async def prepare_cancel(self, transition: Callable[[], Awaitable[None]]) -> None:
         await transition()
-
-    async def stop(self) -> None:
-        self.task.cancel()
-        await asyncio.gather(self.task, return_exceptions=True)
 
     async def abort(self, backend: AgentBackend) -> None:
         await backend.abort(self.task)
@@ -457,9 +540,10 @@ class DrainedSession:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_task: TurnTask = field(default_factory=TurnTask)
-    drain_task: asyncio.Task[None] | None = None
+    observer: BackgroundTask = field(default_factory=BackgroundTask)
     wake_task: asyncio.Task[WakeOutcome] | None = None
     observation_watcher: ChangeSignal | None = None
+    observation_ready: asyncio.Event = field(default_factory=asyncio.Event)
     turn: DrainTurn = field(default_factory=NoDrainTurn)
     queued: dict[InputId, QueuedInput] = field(default_factory=dict)
     restored: dict[InputId, QueuedInput] = field(default_factory=dict)
@@ -535,11 +619,14 @@ class DrainedSession:
             return False
         return self.repeat_observation
 
-    def producers(self) -> tuple[asyncio.Task[None], ...]:
-        return tuple(task for task in (self.drain_task, self.wake_task) if task is not None)
+    def producers(self) -> tuple[asyncio.Task[object], ...]:
+        return (*self.observer.producers(),
+                *(task for task in (self.wake_task,) if task is not None))
 
     def retire_producers(self) -> None:
-        self.drain_task = self.wake_task = self.observation_watcher = None
+        self.observer = BackgroundTask()
+        self.wake_task = self.observation_watcher = None
+        self.observation_ready.clear()
         self.forget_observation()
         self.repeat_observation = False
 
@@ -547,7 +634,7 @@ class DrainedSession:
         return self.turn.is_open
 
     def observing(self) -> bool:
-        return self.drain_task is not None and not self.drain_task.done()
+        return self.observer.busy
 
     def wake_pending(self) -> bool:
         return self.wake_task is not None and not self.wake_task.done()
@@ -610,7 +697,7 @@ class OwnerSession(DrainedSession):
     def request_stop(self) -> None:
         self.stop.request()
 
-    def producers(self) -> tuple[asyncio.Task[None], ...]:
+    def producers(self) -> tuple[asyncio.Task[object], ...]:
         return (*super().producers(), self.auth_observer)
 
 
@@ -652,6 +739,7 @@ class InputDrain(InputObservation):
         self.effects = effects
         self.configuration = configuration
         self.drained: dict[str, DrainedSession] = {}
+        self.root_observer: BackgroundTask = BackgroundTask()
         self.queue_lock = asyncio.Lock()
         self.dispositions = InputDispositions(comms.root)
         self.auto_wake = auto_wake
@@ -886,6 +974,7 @@ class InputDrain(InputObservation):
     async def close(self) -> None:
         """Retire all producers only at host shutdown."""
         self.closing = True
+        await self.root_observer.stop()
         await self.close_sessions(tuple(self.drained.values()))
 
     async def close_sessions(self, states: tuple[DrainedSession, ...]) -> None:

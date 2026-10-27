@@ -3,6 +3,7 @@
 from agent_comms.repo import Checkout
 import asyncio
 import os
+import sqlite3
 import threading
 from contextlib import AsyncExitStack
 
@@ -13,25 +14,28 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinator import Coordination
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.private_path import FileRevision
-from agent_comms.store_files import ExclusiveLock, StoreGuard, _store_lock
 from agent_comms.threads import Thread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from bus_history import read_history
 from conftest import publish_initial
+from delivery_owner_fixture import start_headless_owner
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_observation_waits_for_the_held_bus_attachment(tmp_path):
+async def test_observation_waits_for_the_held_coordinator_snapshot(tmp_path):
     comms, agent, root_id = _session(tmp_path)
     held, release = threading.Event(), threading.Event()
 
     def holder():
-        with _store_lock(comms.bus.bus.path, ExclusiveLock(), StoreGuard.contention):
+        with sqlite3.connect(comms.root / "coordination.sqlite3", isolation_level=None) as db:
+            db.execute("BEGIN EXCLUSIVE")
             held.set()
             assert release.wait(5)
+            db.execute("ROLLBACK")
 
     owner = threading.Thread(target=holder)
     owner.start()
@@ -40,13 +44,15 @@ async def test_observation_waits_for_the_held_bus_attachment(tmp_path):
     # one waiter must leave the holder and the other observations intact.
     tasks = [asyncio.create_task(agent.inputs._observe_private_revision("beta", root_id))
              for _ in range(3)]
-    await asyncio.sleep(0.08)
-    assert not any(task.done() for task in tasks)
-    tasks[0].cancel()
-    await asyncio.sleep(0.04)
-    assert not any(task.done() for task in tasks[1:])
-    release.set()
-    owner.join(5)
+    try:
+        await asyncio.sleep(0.08)
+        assert not any(task.done() for task in tasks)
+        tasks[0].cancel()
+        await asyncio.sleep(0.04)
+        assert not any(task.done() for task in tasks[1:])
+    finally:
+        release.set()
+        owner.join(5)
     with pytest.raises(asyncio.CancelledError):
         await tasks[0]
     observed = await asyncio.wait_for(asyncio.gather(*tasks[1:]), 5)
@@ -91,6 +97,8 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
         acceptance=NoTurnAcceptance(),
     )
     async with AsyncExitStack() as resources:
+        resources.push_async_callback(agent.shutdown)
+        await start_headless_owner(agent, "beta", RetainedOwnerLaunch.configured())
         async with AsyncExitStack() as permits:
             assert await execution.acquire(resources, permits)
             progress = execution.progress
@@ -103,9 +111,8 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
                 ("committed progress", True),
             ]
             await progress.done(events.Done("refused", False))
-            # A real writer holds the bus, so the failure notice's worker waits
-            # on the flock while the turn is cancelled.
-            with _store_lock(comms.bus.bus.path, ExclusiveLock(), StoreGuard.contention):
+            # The committed bus writer holds SQL while the publication is cancelled.
+            with comms.bus.bus.writing():
                 task = asyncio.create_task(progress.publish_result())
                 await asyncio.sleep(0.04)
                 task.cancel()
