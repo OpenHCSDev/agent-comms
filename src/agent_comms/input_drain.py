@@ -200,6 +200,12 @@ class InputObservation(ABC):
     ) -> RegistryEntry:
         return entry
 
+    def _read_observed_registry(self, names: tuple[str, ...]) -> RegistryDocument:
+        document = self.comms.registry.store.read()
+        for name in names:
+            document.entry_if_present(name)
+        return document
+
     async def observe_root(self) -> None:
         """One kernel registration and captured registry read feed the root's drains."""
         bus = self.comms.bus.bus
@@ -214,14 +220,19 @@ class InputObservation(ABC):
             async with aclosing(bus.watch_sources(*sources)) as observations:
                 async for watcher in observations:
                     self.root_watcher = watcher
-                    read = asyncio.create_task(Coordination.run_worker(self.comms.registry.store.read))
+                    targets = {session_id: state for session_id, state in self.drained.items()
+                               if state.observing()}
+                    names = tuple(self.sessions.require(session_id) for session_id in targets)
+                    read = asyncio.create_task(Coordination.run_worker(partial(
+                        self._read_observed_registry, names,
+                    )))
                     try:
                         await read
                     except UNAVAILABLE_DRAIN_ERRORS:
                         # Each consumer records failure against its own original owner.
                         pass
                     self.observed_registry = read
-                    for state in tuple(self.drained.values()):
+                    for state in targets.values():
                         if state.observing():
                             state.observation_watcher = watcher
                             state.observation_ready.set()
