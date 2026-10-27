@@ -408,14 +408,6 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         with self.cache.decoding:
             return revision.snapshot
 
-    def read_snapshot_unlocked(self) -> RegistrySnapshot:
-        revision = self.read_revision_unlocked()
-        # Shared readers may be the first to ask for this revision's snapshot.
-        # Use the existing decode mutex for that one construction, not the
-        # whole caller's read lifetime.
-        with self.cache.decoding:
-            return revision.snapshot
-
     @property
     def guard_path(self) -> Path:
         return PrivateRegistryGuard.path_in(self.path.parent)
