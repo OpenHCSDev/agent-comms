@@ -52,6 +52,9 @@ class SelfRenaming:
 class Visible:
     """A presence that can be addressed, started and pinned in channels."""
 
+    def allows_owner_control(self) -> bool:
+        return True
+
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         pass
 
@@ -149,7 +152,7 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
         return DeletingThreadStatus()
 
     def allows_owner_control(self) -> bool:
-        return True
+        return False
 
     def allows_owner_start(self, *, process: ProcessState) -> bool:
         return self.allows_owner_control()
@@ -360,9 +363,6 @@ class ArchivedThreadStatus(ThreadStatus):
 
     def restored(self) -> ThreadStatus:
         return self
-
-    def allows_owner_control(self) -> bool:
-        return False
 
 
 class DeletingThreadStatus(ThreadStatus):

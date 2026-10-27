@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms.cli_bridges.history import AnySession, History, OfflineHistory
 from agent_comms.errors import RelationViolationError
+from agent_comms.cli_verbs.restore_owner import RestoreOwnerCliCommand
 from agent_comms.harness_install import Harness, PiHarness
 from agent_comms.importing import ImportLimits, KeptPiSession
 from agent_comms.repo import Checkout
@@ -128,6 +129,9 @@ def test_deleting_remains_fenced_while_cleanup_allows_unrelated_registry_writers
             other = workers.submit(comms.registry.declare, Thread(
                 "unrelated", frozenset(), Checkout(tmp_path)))
             other.result(timeout=2)
+            selected = comms.registry.require(original.name)
+            assert not RestoreOwnerCliCommand.available_for_thread(
+                selected, comms.registry.status(original.name))
             for operation in (comms.registry.unregister, comms.registry.archive,
                               comms.registry.remove, comms.owners.stop):
                 with pytest.raises(RelationViolationError):
