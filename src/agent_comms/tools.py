@@ -56,7 +56,7 @@ from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .presentation import ChannelView
+from .presentation import ChannelView, MessageNotification
 from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
 from .relationships import (
@@ -86,6 +86,7 @@ from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
+from .ui_model.observation import ReadNotifications
 from .tool_result import ToolResult
 from .work_branches import WorkBranch, WorkBranches
 
@@ -674,13 +675,59 @@ class CommsThreadsTool(ReadTool, ToolRequest):
     label = "Comms Threads"
     description = (
         "List agent threads with status and pending counts, plus one delivery summary "
-        "for each of this caller's recent sent messages."
+        "for each of this caller's recent sent messages; comms_message_outcomes reads one "
+        "message's recipients."
     )
     active_only: Annotated[bool, *tool_field("Exclude stopped threads")] = False
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadListing:
         threads = ThreadsCliCommand(active_only=self.active_only).apply(comms)
         return caller.listing(comms, threads.threads)
+
+
+@dataclass(frozen=True)
+class MessageOutcomes(ToolResult):
+    """One message once, then each recipient outcome its caller may read."""
+
+    message: Annotated[Message, WireForm]
+    outcomes: tuple[MessageNotification, ...]
+    remaining: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsMessageOutcomesTool(ReadTool, ToolRequest):
+    label = "Message outcomes"
+    description = (
+        "Read one message's recipient outcomes: the message once, then one page of recipient "
+        "rows ordered by recipient name, each with its delivery state, who it was shown to and "
+        "its answer. Pass after for the next page. A sender reads every recipient; a "
+        "recipient reads only its own row."
+    )
+    reference: Annotated[
+        MessageReference, *tool_field("The message's seq and message_id, as comms_threads lists them")
+    ]
+    limit: Annotated[int, *tool_field("Maximum recipient rows in this page")] = 100
+    after: Annotated[
+        str, *tool_field("Exclusive recipient name from the previous page's last row")
+    ] = ""
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> MessageOutcomes:
+        if self.limit < 1:
+            raise ToolRefusedError("limit must be positive.")
+        message, = comms.bus.bus.messages_for_references((self.reference,))
+        window = ReadNotifications(str(comms.root), (self.reference,)).read(comms)
+        viewer = caller.outcome_viewer(comms)
+        readable = sorted(
+            (outcome for outcome in window.outcomes.get((message.seq, message.message_id), ())
+             if viewer.includes(outcome.sender_lookup, outcome.recipient_identity)),
+            key=lambda outcome: outcome.recipient,
+        )
+        if not readable:
+            raise ToolRefusedError(
+                f"No recipient outcome of message {message.seq} is readable by this caller.")
+        following = [outcome for outcome in readable if outcome.recipient > self.after]
+        page = tuple(following[:self.limit])
+        return MessageOutcomes(message, page, len(following) - len(page))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -382,8 +382,8 @@ class SentMessageOutcome(MessageNotification):
 @dataclass(frozen=True, slots=True)
 class SentMessageSummary:
     """One sent message's recipient handling: its original reference and the totals
-    MessageNotification.summary reports. Each recipient's own outcome stays with the
-    reference's notification read, so the message is never repeated per recipient."""
+    MessageNotification.summary reports. comms_message_outcomes reads each recipient's
+    own outcome for that reference, so the message is never repeated per recipient."""
 
     reference: MessageReference
     summary: str

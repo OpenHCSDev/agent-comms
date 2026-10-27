@@ -11,7 +11,7 @@ from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
-from .presentation import SentMessageSummary, ThreadRecord
+from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 
@@ -46,6 +46,10 @@ class ToolCaller(ABC):
 
     @abstractmethod
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
+
+    @abstractmethod
+    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+        """Whose recipient outcomes this caller may read."""
 
     @abstractmethod
     def acting_name(self, default: str) -> str: ...
@@ -100,6 +104,9 @@ class NoThreadCaller(ToolCaller):
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         return ThreadListing(threads, ())
 
+    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+        return AllOutcomes()
+
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ToolCatalogResult(tools)
 
@@ -144,6 +151,9 @@ class ThreadCaller(ToolCaller):
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
         return ThreadListing(threads, SentMessageSummary.recent(presentation))
+
+    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+        return OwnerOutcomes.of(comms.registry.require(self.name))
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(

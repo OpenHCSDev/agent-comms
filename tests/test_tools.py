@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
+from agent_comms.errors import ToolRefusedError
 from agent_comms.presentation import MessageNotification, SentMessageSummary
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
@@ -147,6 +148,42 @@ class TestToolCatalog:
             "summary": MessageNotification.summary(outcomes),
         }]
         assert "track me" not in json.dumps(result["sent_messages"])
+
+    def test_message_outcomes_reads_one_message_once_and_pages_its_recipients(self, comms):
+        comms.channels.create_tag("team")
+        for name in ("sender", "alice", "bob", "carol"):
+            comms.registry.declare(Thread(
+                name=name, tags=frozenset({"team"}), worktree=Checkout(Path('/wt'))))
+        sent = comms.messaging.send("sender", "#team", "count me once").message
+        reference = {"seq": sent.seq, "message_id": str(sent.message_id)}
+
+        first = invoke_tool(comms, "comms_message_outcomes", {"reference": reference, "limit": 2},
+                            caller=ThreadCaller("sender"))
+        assert first["message"]["seq"] == sent.seq
+        assert json.dumps(first).count("count me once") == 1
+        names = [row["recipient_identity"]["canonical_thread"] for row in first["outcomes"]]
+        assert names == ["alice", "bob"] and first["remaining"] == 1
+        rest = invoke_tool(comms, "comms_message_outcomes",
+                           {"reference": reference, "limit": 2, "after": names[-1]},
+                           caller=ThreadCaller("sender"))
+        assert [row["recipient_identity"]["canonical_thread"] for row in rest["outcomes"]] == ["carol"]
+        assert rest["remaining"] == 0
+
+    def test_message_outcomes_shows_a_recipient_only_its_own_row_and_refuses_outsiders(self, comms):
+        comms.channels.create_tag("team")
+        for name in ("sender", "alice", "bob"):
+            comms.registry.declare(Thread(
+                name=name, tags=frozenset({"team"}), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(Thread(name='outsider', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        sent = comms.messaging.send("sender", "#team", "who sees what").message
+        reference = {"seq": sent.seq, "message_id": str(sent.message_id)}
+
+        own = invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
+                          caller=ThreadCaller("alice"))
+        assert [row["recipient_identity"]["canonical_thread"] for row in own["outcomes"]] == ["alice"]
+        with pytest.raises(ToolRefusedError, match="readable by this caller"):
+            invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
+                        caller=ThreadCaller("outsider"))
 
     def test_inbox_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
