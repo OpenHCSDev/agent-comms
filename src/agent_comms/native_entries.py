@@ -7,7 +7,7 @@ from .native_failures import NativePiUnavailable
 import json
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
 from itertools import repeat
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -20,10 +20,12 @@ from .native_pi import (
     NativeInputUncommitted,
     PrivateEvidenceRead,
 )
-from .native_session_files import BusTranscriptFile
+from .native_session_files import BusTranscriptFile, NativeSessionFiles
+from .store_files import AtomicFile
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
+    from .importing import ImportedConversation
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
@@ -233,6 +235,16 @@ class ImportedSessionWriter(DurableFile, BusTranscriptFile):
     filename = "imported_sessions/{session_id}.jsonl"
     stream: TextIO
     parent: NativeEntry
+
+    @classmethod
+    @contextmanager
+    def preparing(
+        cls, path: Path, snapshot: ImportedConversation, project: Path,
+    ) -> Iterator[Callable[[], None]]:
+        """Build and sync this imported journal before its registry publication begins."""
+        NativeSessionFiles.prepare_private_directory(path.parent)
+        with AtomicFile(path).prepared(snapshot.session_bytes(project)) as publish:
+            yield publish
 
     def append(self, message: ImportedMessage, timestamp: datetime) -> None:
         encoded = self.parent.imported_child(message, timestamp)

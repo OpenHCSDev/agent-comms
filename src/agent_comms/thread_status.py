@@ -52,6 +52,9 @@ class SelfRenaming:
 class Visible:
     """A presence that can be addressed, started and pinned in channels."""
 
+    def allows_owner_control(self) -> bool:
+        return True
+
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         pass
 
@@ -142,11 +145,14 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
         self.require_mutable(name)
         return ProcessThreadStatus()
 
+    def require_deleting(self) -> None:
+        raise RelationViolationError("Thread has not entered permanent deletion.")
+
     def for_deletion(self) -> ThreadStatus:
         return DeletingThreadStatus()
 
     def allows_owner_control(self) -> bool:
-        return True
+        return False
 
     def allows_owner_start(self, *, process: ProcessState) -> bool:
         return self.allows_owner_control()
@@ -358,13 +364,13 @@ class ArchivedThreadStatus(ThreadStatus):
     def restored(self) -> ThreadStatus:
         return self
 
-    def allows_owner_control(self) -> bool:
-        return False
-
 
 class DeletingThreadStatus(ThreadStatus):
     def in_view(self, visibility: RosterVisibility) -> bool:
         return False
+
+    def require_deleting(self) -> None:
+        pass
 
     def require_mutable(self, name: str) -> None:
         raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")

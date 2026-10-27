@@ -873,6 +873,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
     def unregister(self, name: str) -> None:
         name = self.require(name).name
+        self.status(name).require_mutable(name)
         self.status(name).withdraw_owner(self.owners, name)
         thread = self.threads[name]
         self.set_status(name, thread.execution.registered_status(thread, StoppedThreadStatus()))
@@ -888,6 +889,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
     def archive(self, name: str) -> None:
         name = self.require(name).name
+        self.status(name).require_mutable(name)
         self.status(name).withdraw_owner(self.owners, name)
         self.set_status(name, ArchivedThreadStatus())
         self.advance_claim(name)
@@ -922,7 +924,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     def remove_originals(self, originals: Sequence[Thread]) -> dict[str, tuple[str, ...]]:
         """Remove deleting declarations, detaching children; generations stay as the record."""
         self.require_originals(originals)
-        return {original.name: self.remove(original.name) for original in originals}
+        for original in originals:
+            self.status(original.name).require_deleting()
+        return {original.name: self._remove(original.name) for original in originals}
 
     def begin_delete(self, name: str) -> None:
         name = self.require(name).name
@@ -930,6 +934,11 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.advance_claim(name)
 
     def remove(self, name: str) -> tuple[str, ...]:
+        """Withdraw a mutable declaration; an in-progress deletion owns its completion."""
+        self.status(name).require_mutable(name)
+        return self._remove(name)
+
+    def _remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
         name = self.require(name).name
         detached = tuple(
@@ -1171,6 +1180,14 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
         return ClaimedIdentity(self.threads[canonical].incarnation, self.claim_generation(canonical))
+
+    def same_thread(self, actual: Thread, other: RegistrySnapshot, expected: Thread) -> bool:
+        """Keep one launch, turn and authority across preparation; ignore display metadata."""
+        return (
+            actual.same_launch(expected)
+            and actual.same_turn(expected)
+            and self.same_authority(actual.name, other, expected.name)
+        )
 
     def same_authority(self, name: str, other: RegistrySnapshot, other_name: str) -> bool:
         """One participant retains its owner, input claim and registered presence.

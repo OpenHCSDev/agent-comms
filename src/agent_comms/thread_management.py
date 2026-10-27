@@ -6,6 +6,7 @@ import asyncio
 import re
 from abc import abstractmethod
 from collections.abc import Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -16,7 +17,8 @@ from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
-from .native_session_files import NativeSessionFiles
+from .locked_store import PatternFile, RuntimeFile
+from .process_claim import ClaimHeldError, ProcessSingleton
 from .registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout
@@ -51,7 +53,6 @@ from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
 from .registry_provenance import RegistryNames
 from .session_file import RegistrySessionLocation
-from .store_files import AtomicFile
 from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
@@ -198,6 +199,16 @@ class ForkSpec(NewThreadSpec):
         )
 
 
+class ThreadDeletionClaim(ProcessSingleton, RuntimeFile, PatternFile):
+    """One cleanup controller per recorded participant; unrelated deletions remain independent."""
+
+    filename = ".thread-delete-{lookup}.lock"
+
+    @classmethod
+    def for_thread(cls, root: Path, thread: Thread) -> Self:
+        return cls(cls.path_in(root, lookup=thread.incarnation.require_recorded().lookup))
+
+
 @dataclass(frozen=True, slots=True)
 class ThreadDeleted(CliResult):
     deleted: str
@@ -249,20 +260,21 @@ class ThreadManagement:
             session_file=RegistrySessionLocation.from_path(session_path, self.root),
             title=snapshot.title,
         ))
-        with self.registry.store.editing() as edit:
-            if edit.document.taken(name):
-                raise ValueError(f"Thread name {name!r} is already reserved.")
-            self.registry.require_declaration_available(thread, StoppedThreadStatus())
-            self._write_imported_session(session_path, snapshot, project)
-            try:
-                self.registry._declare_in(edit, thread, StoppedThreadStatus())
-                self.bus.mark_delivered_through(name, self.bus.bus.revision())
-            except (OSError, ValueError, CoordinationError):
-                if name in self.registry:
-                    edit.document.remove(name)
-                    edit.commit()
-                session_path.unlink(missing_ok=True)
-                raise
+        self.registry.snapshot().require_fresh_name(name)
+        self.registry.require_declaration_available(thread, StoppedThreadStatus())
+        with ImportedSessionWriter.preparing(session_path, snapshot, project) as publish:
+            with self.registry.store.editing() as edit:
+                edit.document.require_fresh_name(name)
+                publish()
+                try:
+                    self.registry._declare_in(edit, thread, StoppedThreadStatus())
+                    self.bus.mark_delivered_through(name, self.bus.bus.revision())
+                except (OSError, ValueError, CoordinationError):
+                    if name in self.registry:
+                        edit.document.remove(name)
+                        edit.commit()
+                    session_path.unlink(missing_ok=True)
+                    raise
         return ThreadImported.of(name, session_path, snapshot)
 
     def rehome_thread(
@@ -276,29 +288,28 @@ class ThreadManagement:
         """
         snapshot = history.imported(limits)
         session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
-        with self.registry.store.editing() as edit:
-            current = edit.document.require(name)
-            current.execution.require_external()
-            self._write_imported_session(session_path, snapshot, current.worktree.path)
-            rehomed = replace(
-                current, execution=NativeThreadExecution, process_identity=NO_PROCESS,
-                session_file=RegistrySessionLocation.from_path(session_path, self.root),
-            )
-            self.registry.require_declaration_available(rehomed, StoppedThreadStatus())
-            bridge = snapshot.harness.retire_session(snapshot.source_id)
-            try:
-                self.registry._declare_in(edit, rehomed, StoppedThreadStatus())
-            except (OSError, ValueError, CoordinationError, RelationViolationError):
-                bridge.restore()
-                session_path.unlink(missing_ok=True)
-                raise
+        selected = self.registry.snapshot()
+        original = selected.require(name)
+        original.execution.require_external()
+        with ImportedSessionWriter.preparing(session_path, snapshot, original.worktree.path) as publish:
+            with self.registry.store.editing() as edit:
+                current = edit.document.require(name)
+                if not edit.original.snapshot.same_thread(current, selected, original):
+                    raise RelationViolationError("External owner changed while preparing its native session.")
+                rehomed = replace(
+                    current, execution=NativeThreadExecution, process_identity=NO_PROCESS,
+                    session_file=RegistrySessionLocation.from_path(session_path, self.root),
+                )
+                self.registry.require_declaration_available(rehomed, StoppedThreadStatus())
+                publish()
+                bridge = snapshot.harness.retire_session(snapshot.source_id)
+                try:
+                    self.registry._declare_in(edit, rehomed, StoppedThreadStatus())
+                except (OSError, ValueError, CoordinationError, RelationViolationError):
+                    bridge.restore()
+                    session_path.unlink(missing_ok=True)
+                    raise
         return ThreadImported.of(name, session_path, snapshot)
-
-    def _write_imported_session(
-        self, session_path: Path, snapshot: ImportedConversation, project: Path,
-    ) -> None:
-        NativeSessionFiles.prepare_private_directory(session_path.parent)
-        AtomicFile(session_path).write_bytes(snapshot.session_bytes(project))
 
     def claim_thread(
         self,
@@ -487,38 +498,50 @@ class ThreadManagement:
 
     def delete(self, name: str) -> ThreadDeleted:
         """Permanently delete one stopped or archived thread."""
-        with self.registry.store.editing() as edit:
-            return self._delete_in(edit, (edit.document.require(name),))[0]
+        return self._delete_originals((self.registry.require(name),))[0]
 
-    def _delete_in(self, edit: RegistryEdit, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:
+    def _delete_originals(self, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:
         """Remove stopped declarations and everything they own.
 
         The bus, goal history and uncertain-input records are the record and
         stay; their readers resolve a removed name as a deleted thread. Every
         refusal happens before the registry withdraws input permission.
         """
-        states = self.thread_owned_states
-        sessions = {}
-        for original in originals:
-            if original.process_alive:
-                raise RelationViolationError(
-                    f"Thread {original.name!r} still has a live process; stop it first."
-                )
-            sessions[original.name] = original.runtime.storage_files()
-            for files in sessions[original.name]:
-                files.require_unreferenced()
-        edit.document.begin_delete_originals(originals)
-        edit.commit()
-        for state in states:
-            state.remove_threads(originals)
-        # A failure from here leaves a Deleting declaration to retry, not orphans.
-        freed = {name: sum(item.delete() for item in files) for name, files in sessions.items()}
-        detached = edit.document.remove_originals(originals)
-        edit.commit()
-        return tuple(
-            ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
-            for original in originals
-        )
+        with ExitStack() as cleanup:
+            for original in originals:
+                try:
+                    cleanup.enter_context(ThreadDeletionClaim.for_thread(self.root, original).claimed())
+                except ClaimHeldError as error:
+                    raise RelationViolationError(
+                        f"Thread {original.name!r} already has a permanent-deletion controller.") from error
+            states = self.thread_owned_states
+            sessions = {}
+            for original in originals:
+                if original.process_alive:
+                    raise RelationViolationError(
+                        f"Thread {original.name!r} still has a live process; stop it first."
+                    )
+                sessions[original.name] = original.runtime.storage_files()
+                for files in sessions[original.name]:
+                    files.require_unreferenced()
+            with self.registry.store.editing() as edit:
+                edit.document.require_originals(originals)
+                for original in originals:
+                    if not edit.document.require(original.name).same_launch(original):
+                        raise RelationViolationError("Thread session changed while preparing permanent deletion.")
+                edit.document.begin_delete_originals(originals)
+                edit.commit()
+            for state in states:
+                state.remove_threads(originals)
+            # A failure from here leaves a Deleting declaration to retry, not orphans.
+            freed = {name: sum(item.delete() for item in files) for name, files in sessions.items()}
+            with self.registry.store.editing() as edit:
+                detached = edit.document.remove_originals(originals)
+                edit.commit()
+            return tuple(
+                ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
+                for original in originals
+            )
 
     def create(self, spec: NewThreadSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""

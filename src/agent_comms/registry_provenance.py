@@ -103,6 +103,11 @@ class RegistryNames(Generic[Member]):
         ``owner``'s own names; with no owner, any occupied text is taken."""
         return (name in self.threads or name in self.aliases) and self.canonical_name(name) != owner
 
+    def require_fresh_name(self, name: str) -> None:
+        """A new declaration cannot replace a current participant or permanent alias."""
+        if self.taken(name):
+            raise RelationViolationError(f"Thread name {name!r} is already reserved.")
+
     @staticmethod
     def thread_slug(text: str) -> str:
         """Characters a name cannot hold become "-", trimmed; empty text names a session."""
