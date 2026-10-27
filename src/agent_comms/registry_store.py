@@ -98,12 +98,10 @@ class RegistryRevision(CachedRegistry):
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryCut:
-    """One decoded registry and its original authority, with store-owned currentness."""
+class RegistrySelection:
+    """A decoded registry selection whose source stays current during dependent writes."""
 
     store: RegistryStore = field(repr=False, compare=False)
-    snapshot: RegistrySnapshot
-    privacy: RegistryPrivacy
     revision: tuple[FileObservation, FileObservation]
 
     def matches_current(self) -> bool:
@@ -134,15 +132,22 @@ class RegistryCut:
 
 
 @dataclass(frozen=True, slots=True)
+class RegistryCut(RegistrySelection):
+    """The complete decoded registry and its original namespace authority."""
+
+    snapshot: RegistrySnapshot
+    privacy: RegistryPrivacy
+
+
+@dataclass(frozen=True, slots=True)
 class RegistryPairCut[Peer](RegistryCut):
     peer: Peer
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryEntryRevision:
+class RegistryEntryRevision(RegistrySelection):
     """One thread's entry and the registry revision it was read from, under one lock."""
 
-    revision: tuple[FileObservation, FileObservation]
     entry: RegistryEntry
 
 
@@ -359,7 +364,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             privacy = self.private_guard_unlocked()
             source = self._capture_unlocked()
             revision = source.revision, FileRevision.capture(self.guard_path)
-        return RegistryCut(self, self._decode_snapshot(source), privacy, revision)
+        return RegistryCut(self, revision, self._decode_snapshot(source), privacy)
 
     def current_snapshot(self) -> AbstractContextManager[RegistryCut]:
         """Decode outside the guard, then retain a current cut for a bounded write.
@@ -375,7 +380,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             privacy = self.private_guard_unlocked()
             revision = registry.revision, FileRevision.capture(self.guard_path)
         return RegistryPairCut(
-            self, self._decode_snapshot(registry), privacy, revision,
+            self, revision, self._decode_snapshot(registry), privacy,
             other.read_copied(peer),
         )
 
@@ -432,7 +437,11 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         with self.guarded_read():
             source = self._capture_unlocked()
             revision = source.revision, FileRevision.capture(self.guard_path)
-        return RegistryEntryRevision(revision, self._decode_revision(source).document.entry(name))
+        return RegistryEntryRevision(self, revision, self._decode_revision(source).document.entry(name))
+
+    def current_entry(self, name: str) -> AbstractContextManager[RegistryEntryRevision]:
+        """Retain one current participant without materializing unrelated declarations."""
+        return RegistryEntryRevision.captured(partial(self.read_entry, name))
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)

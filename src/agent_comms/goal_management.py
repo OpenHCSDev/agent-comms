@@ -468,11 +468,11 @@ class Goals:
         original, = self.bus.bus.deliveries_for_references((reference,))
         if not review.wait.matches(original, incarnation):
             return False
-        with self.registry.store.guarded_write():
+        with self.registry.store.current_snapshot() as cut:
             owner.require_registry(self.registry)
             if not review.current_for(self):
                 return False
-            current, = self.registry.snapshot().threads_for(incarnation)
+            current, = cut.snapshot.threads_for(incarnation)
             goal = current.continuation_goal(owner.thread)
             return any(review.wait.current_for(actual, incarnation)
                        and review.wait.clear(self.waits) for actual in goal)

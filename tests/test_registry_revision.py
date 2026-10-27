@@ -12,6 +12,28 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
+@pytest.mark.parametrize("select", [
+    lambda store: store.read_entry("worker"),
+    lambda store: store.snapshot_with_authority(),
+])
+def test_dependent_selection_refuses_changed_authority_without_repeating_its_effect(tmp_path, select):
+    from agent_comms.coordination_errors import StaleFence
+
+    registry = Registration(tmp_path / "registry.json")
+    registry.register(Thread("worker", frozenset(), Checkout(tmp_path)))
+    selected = select(registry.store)
+    effects = []
+    with selected.current():
+        effects.append("original")
+    registry.unregister("worker")
+    with pytest.raises(StaleFence):
+        with selected.current():
+            effects.append("replayed")
+    assert effects == ["original"]
+    with type(selected).captured(lambda: select(registry.store)) as current:
+        assert current.matches_current()
+
+
 def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_path):
     from agent_comms.errors import RelationViolationError
     from agent_comms.field_codec import FieldCodec
