@@ -144,6 +144,20 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
         ))
 
     @classmethod
+    def require_references(cls, db: sqlite3.Connection,
+                           references: tuple[MessageReference, ...]) -> None:
+        """Every supplied full reference is a recorded identity; neither seq nor id alone."""
+        matches = ReferenceMatch.read(db.execute(
+            "SELECT identity.seq IS NOT NULL AS matched FROM json_each(?) AS supplied "
+            f'LEFT JOIN "{cls.declared_name}" AS identity '
+            "ON identity.seq=json_extract(supplied.value,'$[0]') "
+            "AND identity.message_id=json_extract(supplied.value,'$[1]')",
+            (json.dumps(tuple((reference.seq, reference.message_id) for reference in references)),),
+        ))
+        cls.require_matched(matches, RelationViolationError(
+            "Message reference does not match a recorded message identity"))
+
+    @classmethod
     def answering(
         cls, db: sqlite3.Connection, references: tuple[MessageReference, ...],
         route: NamedTarget, snapshot: RegistryProvenance,

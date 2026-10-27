@@ -37,7 +37,7 @@ from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOr
 from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
 from .message_reference import MessageReference
-from .messages import Message
+from .messages import Message, MessageInput
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
 from .typed_table import (
@@ -289,7 +289,7 @@ class InputDispositions(DurableStore):
                 parameters=(*owners, *(outcome.declared_name for outcome in outcomes)),
                 order_by=("seq",),
             )
-        messages = Bus(Bus.path_in(self.root)).messages_for_references(
+        messages = Bus(Bus.path_in(self.root)).input_messages_for_references(
             attempt.reference for attempt in attempts)
         return tuple(
             ReservedInput(
@@ -324,7 +324,7 @@ class InputDispositions(DurableStore):
 
 
     @staticmethod
-    def bus_key(message: Message, owner: Thread) -> InputKey:
+    def bus_key(message: MessageInput, owner: Thread) -> InputKey:
         return message.role.response_policy(message).disposition_key(message, owner)
 
     def record(

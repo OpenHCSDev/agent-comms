@@ -28,6 +28,7 @@ from agent_comms.bus_tables import (
 )
 from agent_comms.messages import (
     Addressed,
+    MessageInput,
     BusRow,
     ClaimOperations,
     HeldResources,
@@ -307,6 +308,16 @@ class BusReader(RouteCounts, ABC):
         if tuple(message.reference for message in messages) != references:
             raise RelationViolationError("Message reference does not match its bus record")
         return messages
+
+    def input_messages_for_references(
+        self, references: Iterable[MessageReference],
+    ) -> tuple[MessageInput, ...]:
+        """The input facts of exactly these recorded messages, in order, duplicates kept,
+        from one read cut; their attachments, reports and answers are never decoded."""
+        references = tuple(references)
+        with self.observing() as db:
+            MessageIdentitySource.require_references(db, references)
+            return tuple(MessageInput.read_from(db, reference.seq) for reference in references)
 
     def deliveries_for_references(
         self, references: Iterable[MessageReference],
