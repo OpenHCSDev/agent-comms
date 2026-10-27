@@ -11,6 +11,7 @@ from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.standing import Scrutinize
+from agent_comms.standing_rules import OwedAnswer
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -321,16 +322,18 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
 
     reply = ctx.root / "claim-status.txt"
     reply.write_text("Waiting on the review, owner lead.")
+    owed = {rule.message.message_id: rule for rule in OwedAnswer.opened(comms, ctx.commander)}
     capsys.readouterr()
     main(["say", "third", str(reply)], ctx)
     warning = capsys.readouterr().out
-    assert "WARNING: worker delivered P1" in warning
-    assert "WARNING: other delivered P2" in warning
+    for claimed in claims:
+        assert f"WARNING: {owed[claimed.order.claim.message.message_id].line()}" in warning
     assert store.get("P1") == claims[0]
     assert store.get("P2") == claims[1]
-    with pytest.raises(RecordProblems, match="worker delivered P1"):
+    with pytest.raises(RecordProblems) as refused:
         main(["say", "worker", str(reply), "--answers",
               claims[0].order.claim.message.message_id], ctx)
+    assert owed[claims[0].order.claim.message.message_id].cited in refused.value.problems
     assert store.get("P1") == claims[0]
     ask = comms.messaging.send(
         "worker", ctx.commander, "Which owner do I wait on?", type=QuestionKind,

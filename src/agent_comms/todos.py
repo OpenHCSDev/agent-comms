@@ -3669,7 +3669,7 @@ class AssignTodo(TodoOperation):
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         self.proposed.require_available_in(
             db, current.id, self.actor,
-            RegistryStore.at(store.root).read_snapshot_unlocked())
+            RegistryStore.at(store.root).snapshot())
         OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
@@ -4749,7 +4749,7 @@ class RestoreHolderTodo(TodoCommand):
     previous: Assignment
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
-        snapshot = RegistryStore.at(store.root).read_snapshot_unlocked()
+        snapshot = RegistryStore.at(store.root).snapshot()
         if not self.previous.running_holders(snapshot):
             raise TodoConflict(current)
         self.previous.require_available_in(db, current.id, self.actor, snapshot)
@@ -5719,10 +5719,12 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
-        """Rows read in the transaction read history through its connection; a conflict
+        """Decode the current registry before SQL, retaining its cut through assignment writes.
+
+        Rows read in the transaction read history through its connection; a conflict
         leaving it carries its row detached while that connection is still open."""
         try:
-            with (RegistryStore.at(self.root).guarded_read(),
+            with (RegistryStore.at(self.root).current_snapshot(),
                   super(TodoStore, self).writing() as connection):
                 try:
                     yield connection
@@ -5998,7 +6000,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.writing() as db:
             proposed.held().require_available_in(
                 db, todo_id, assigner,
-                RegistryStore.at(self.root).read_snapshot_unlocked())
+                RegistryStore.at(self.root).snapshot())
             OwnerRequest.require(db, id=request).require_open(identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
