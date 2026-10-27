@@ -67,6 +67,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
+    ExpectedProblem,
     OrderClaim,
     OrderMessage,
     PendingProblemOrder,
@@ -107,19 +108,20 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the held work').id
     now = time.time()
+    # One order covers both problems: Core refuses a unit a second, unrelated order.
+    order = PendingProblemOrder(
+        owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
+        check=OrderCheck(source.checkout, "printf 0", CountCheckResult(1)),
+        edits=("Repair the existing owner",), banned=("No second store",),
+        report="Report the result", at=RecordedEventTime(now - 3600),
+        first_call_deadline=RecordedEventTime(now + 3600),
+    )
     for problem in ("P1", "P2"):
         comms.goals.update_goal("worker", CreateProblemGoalAction(
             problem=problem, commander="lead", request=request,
             assigner=comms.registry.require('lead').incarnation,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
-            review_at=RecordedEventTime(now + 3600),
-            order=PendingProblemOrder(
-                owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
-                check=OrderCheck(source.checkout, "printf 0", CountCheckResult(1)),
-                edits=("Repair the existing owner",), banned=("No second store",),
-                report="Report the result", at=RecordedEventTime(now - 3600),
-                first_call_deadline=RecordedEventTime(now + 3600),
-            ),
+            review_at=RecordedEventTime(now + 3600), order=order,
         ))
     inputs = InputDispositions(comms.root)
     inputs.record(UNRESOLVED_INPUT_KEY, seq=None, owner="worker", claim_scope=1,
@@ -366,11 +368,15 @@ def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown
     assert state_cards(held_bus, Blocked) == (violation,)
 
 
-def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus):
+def test_an_order_to_a_blocked_goal_activates_it_and_keeps_its_group(held_bus):
     blocked_holder(held_bus)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
-    held_bus.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(todo, "lead"))
+    other = held_bus.goals.todos.get("P2")
+    # P2 shares P1's order, so the reissue carries it: a unit holds one order at a time.
+    held_bus.goals.update_goal("worker", replace(
+        ReissuedOrderGoalAction.for_todo(todo, "lead"),
+        together=(ExpectedProblem(other.id, other.revision),)))
     current = held_bus.registry.require("worker").goal.require()
     assert current.id == before.id and isinstance(current.state, ActiveGoal)
     assert {todo.id for todo in held_bus.goals.todos.for_goal(
@@ -413,7 +419,7 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
     todo = held_bus.goals.todos.get("P1")
     with pytest.raises(TodoConflict):
         held_bus.goals.todos.assign(
-            todo.id, expected_revision=todo.revision,
+            (ExpectedProblem(todo.id, todo.revision),),
             owner=held_bus.registry.require("outsider"), assigner=CoreWatcherIncarnation.watcher(),
             generation=todo.held().generation, request=todo.request.require(), review_at=todo.review_at,
             order=todo.order.checked().reissued(time.time()),
@@ -779,8 +785,10 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
         heartbeat.sender, "lead", held_bus.registry.snapshot(),
     )).read_opened(held_bus.bus.bus)
     message = next(message for message in page.messages if message.sender == heartbeat.sender)
-    assert all(line in message.body for line in expected)
-    assert question.reference.message_id in message.body
+    # The compact body truncates lines; the original board entries keep every complete alert.
+    board = tuple(entry.text for entry in message.task.board(held_bus, "lead"))
+    assert set(expected) <= set(board)
+    assert any(question.reference.message_id in text for text in board)
     print(message.body)
 
 

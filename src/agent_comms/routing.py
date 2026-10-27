@@ -21,6 +21,7 @@ from .goal_scope import AllGoals, GoalScope
 from .message_reference import MessageReference
 from .messages import PublicSender
 from .read_basis import DMDisplayScope, MessageDisplayScope
+from .response_policy import NO_ALIASES
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
@@ -179,7 +180,7 @@ class ScheduledTurn:
 
     @classmethod
     def incoming(
-        cls, message: Message, *, aliases: Mapping[str, str] | None = None
+        cls, message: Message, *, aliases: Mapping[str, str] = NO_ALIASES
     ) -> ScheduledTurn:
         guidance = message.role.response_policy(message).guidance(message, aliases=aliases)
         scope = CommandTarget.named(message.target).guidance_scope

@@ -61,11 +61,11 @@ def assigned(comms, scope, source, problem='P1', edits=('Fix the problem',)):
     return requested(comms, scope, source, problem, edits)
 
 
-def requested(comms, scope, source, problem='P1', edits=('Fix the problem',)):
+def requested(comms, scope, source, problem='P1', edits=('Fix the problem',), owner='worker'):
     request = comms.goals.todos.add_request(comms.registry.require('lead').incarnation,
         'Classify the failing source or fix its declared parent').id
     caller = ThreadCaller('lead')
-    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+    CommsTodoCreateTool(owner=owner, order=CreateProblemGoalAction(
         problem=problem, order=replace(order(source), scope=scope, edits=edits), request=request,
         review_at=RecordedEventTime(1000), commander='lead',
         assigner=comms.registry.require('lead').incarnation,
@@ -80,12 +80,16 @@ def test_held_orders_recall_holder_problem_scope_and_last_edit_from_the_store(
 ):
     assigned(private_comms, FIX_SCOPE, source_repository, 'P1',
              ('Reproduce the bounce first', 'Then stop and report; no src edit before it'))
+    # A unit holding an order takes no unrelated one, so the triage goes to its own unit.
+    (private_comms.root / 'triager').mkdir()
+    private_comms.registry.declare(
+        Thread('triager', frozenset(), Checkout(private_comms.root / 'triager')))
     requested(private_comms, TriageScope(), source_repository, 'P2',
-              ('Classify the failing source',))
+              ('Classify the failing source',), owner='triager')
     held = HeldOrders.of(TodoStore(private_comms.root), private_comms.registry.snapshot(), 'lead')
     assert sorted(hold.recalled() for hold in held.live) == [
+        'triager P2 triage: Classify the failing source',
         'worker P1 fix: Then stop and report; no src edit before it',
-        'worker P2 triage: Classify the failing source',
     ]
 
 

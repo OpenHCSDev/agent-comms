@@ -26,7 +26,8 @@ from .field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.todos import (
-    PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo, TodoCommand, TodoOperation,
+    ExpectedProblem, PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo,
+    TodoCommand, TodoOperation,
 )
 
 from .change_report import FileLine, NoSourceReference
@@ -553,7 +554,11 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         return replace(self, commander=commander.name, assigner=actor)
 
     @abstractmethod
-    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> Todo: ...
+    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> None:
+        """Write this order's Todos under one Todo transaction, inside this goal update."""
+
+    def problems(self) -> tuple[str, ...]:
+        return (self.problem,)
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         return goal.state.accept_order(self, goal, ctx)
@@ -601,14 +606,23 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(ProblemOrderGoalAction):
-    """The order's commander gives the problem to this thread."""
+    """The order's commander gives the problem, and the order's other open problems, to this
+    thread: one goal update and one Todo transaction for the whole group."""
 
     expected_revision: int
     traced: Annotated[FileLine | NoSourceReference, field_codec.WireOmitDefault()] = (
         NoSourceReference()
     )
-    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> Todo:
-        return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
+    together: Annotated[tuple[ExpectedProblem, ...], field_codec.WireOmitDefault()] = ()
+
+    def expected(self) -> tuple[ExpectedProblem, ...]:
+        return (ExpectedProblem(self.problem, self.expected_revision), *self.together)
+
+    def problems(self) -> tuple[str, ...]:
+        return tuple(expected.problem for expected in self.expected())
+
+    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> None:
+        ctx.goals.todos.assign(self.expected(),
             owner=ctx.thread, assigner=self.assigner,
             generation=generation, request=self.request, review_at=self.review_at, order=self.order,
             traced=self.traced)
@@ -644,8 +658,8 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: RepositoryName
     text: str
 
-    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> Todo:
-        return ctx.goals.todos.create(self.problem, self.repo, self.text,
+    def reserve(self, ctx: GoalActionContext, generation: GoalId) -> None:
+        ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
             assigner=self.assigner, generation=generation, request=self.request,
             review_at=self.review_at, order=self.order)

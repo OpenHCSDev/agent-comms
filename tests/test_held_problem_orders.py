@@ -18,7 +18,7 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     DeliveredProblemOrder, MergedListedPullRequest, OrderMessage, PullRequestCommit,
-    PullRequestLink, StrikeTodo,
+    PullRequestLink, StrikeTodo, UnitOccupied,
 )
 from agent_comms.work_branches import WorkBranches
 from agent_comms.owner_requests import NewestOpenRequest
@@ -168,9 +168,13 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     path.write_text(json.dumps(FieldCodec.encode(document)))
     before = ctx.comms.goals.todos.for_commander(ctx.incarnation)
     goal = ctx.comms.registry.require("worker").goal
-    with pytest.raises(SystemExit) as refused:
-        main(["send", "worker", str(path)], ctx)
-    assert "worker already holds orders P1; running units holding no order:" in str(refused.value)
+    # The busy-unit decision is the Todo transaction's own: --reassign passes the preflight's
+    # owner check, so the refusal comes from the write that would have given worker P2.
+    with pytest.raises(UnitOccupied) as refused:
+        main(["send", "worker", str(path), "--reassign",
+              "lead holds P2 only as its creator and must hand it to a unit"], ctx)
+    assert ("worker already holds orders P1 (assigned by lead); running units holding no order:"
+            in str(refused.value))
     assert ctx.comms.goals.todos.for_commander(ctx.incarnation) == before
     assert ctx.comms.goals.todos.get("P1") == original
     assert ctx.comms.registry.require("worker").goal == goal

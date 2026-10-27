@@ -23,7 +23,7 @@ from agent_comms.commander_hud import CommanderHud
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.comms import wire
-from agent_comms.errors import RelationViolationError, TodoError
+from agent_comms.errors import RelationViolationError, TodoConflict, TodoError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import (
     FieldCodec,
@@ -31,7 +31,7 @@ from agent_comms.field_codec import (
     OrderId,
     ToolCallId,
 )
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_actions import OrderGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
@@ -49,6 +49,8 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
+    ExpectedProblem,
+    IncomingWork,
     PendingProblemOrder,
     ProblemAllocation,
     ProgressRead,
@@ -212,7 +214,8 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert reissuer == fork.incarnation and reissuer.commanding_identity == parent.incarnation
     reissuer.require_may_change(saved)
     with store.snapshot() as db:
-        store.require_unit_in(db, saved.held().owner_identity, reissuer)
+        reissued(saved, reissuer).require_free(
+            db, saved.held().owner_identity, comms.registry.snapshot())
     print(f"Core send actor: {saved.held().parent}; problem commander: {saved.creator}")
     ctx = CommanderContext.read_root(comms.root).model_copy(
         update={"actor": CommanderForkCaller(fork.name)}
@@ -250,7 +253,13 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert store.get("P40") == saved
     # The ended fork's open order is the commander's to replace; nobody else's.
     with store.snapshot() as db:
-        store.require_unit_in(db, saved.held().owner_identity, parent.incarnation)
+        reissued(saved, parent.incarnation).require_free(
+            db, saved.held().owner_identity, comms.registry.snapshot())
+
+
+def reissued(todo, assigner):
+    """The incoming work of a resend of ``todo``'s own order by ``assigner``."""
+    return IncomingWork(assigner, frozenset({todo.id}), frozenset({todo.order.checked().id}))
 
 
 def record_edits(comms, source, count):
@@ -326,13 +335,15 @@ def test_open_unit_consumers_agree_on_one_assignment(fork_bus):
     other_birth = RecordedThreadIncarnation(owner.name, owner.wire_birth + 1)
     assert not store.holds_pending(other_birth)
     assert store.for_goal(other_birth, todo.held().generation) == ()
+    snapshot = comms.registry.snapshot()
+    sibling = reissued(todo, comms.registry.require("other").incarnation)
     with store.snapshot() as db:
-        store.require_unit_in(db, owner, todo.held().parent_identity)
-        store.require_unit_in(db, other_birth, comms.registry.require("other").incarnation)
+        reissued(todo, todo.held().parent_identity).require_free(db, owner, snapshot)
+        sibling.require_free(db, other_birth, snapshot)
         queries = []
         db.set_trace_callback(queries.append)
         with pytest.raises(TodoError, match="retained is assigned by lead"):
-            store.require_unit_in(db, owner, comms.registry.require("other").incarnation)
+            sibling.require_free(db, owner, snapshot)
         db.set_trace_callback(None)
         plan = db.execute("EXPLAIN QUERY PLAN " + queries[0]).fetchall()
         print("Shared open-unit query plan:", [tuple(row) for row in plan])
@@ -344,14 +355,14 @@ def test_a_sibling_fork_assigns_a_unit_whose_order_waits_on_install(fork_bus):
     store = comms.goals.todos
     todo = store.get("P40")
     owner = todo.held().owner_identity
-    sibling = comms.registry.require("other").incarnation
+    sibling = reissued(todo, comms.registry.require("other").incarnation)
     with store.snapshot() as db, pytest.raises(TodoError, match="finish or release"):
-        store.require_unit_in(db, owner, sibling)
+        sibling.require_free(db, owner, comms.registry.snapshot())
     with store.writing() as db:
         replace(todo, order=todo.order.merged("0" * 40), revision=todo.revision + 1).upsert(db)
     assert not store.get("P40").order.occupies_holder()
     with store.snapshot() as db:
-        store.require_unit_in(db, owner, sibling)
+        sibling.require_free(db, owner, comms.registry.snapshot())
 
 
 def test_a_value_error_refusal_prints_instead_of_a_traceback(fork_bus):
@@ -414,9 +425,125 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     )
     assert len(held) == 1 and held[0].holder == "worker"
     refused = next(result for result in results if result.returncode)
-    assert f"is assigned by {held[0].held().parent}" in refused.stderr
+    # One decision inside the Todo transaction: the loser always meets the winner's held order
+    # as other work, the same refusal the sequential sends below give.
+    assert occupied("worker", held[0]) in refused.stderr
     assert "Traceback" not in refused.stderr, refused.stderr
     print(refused.stderr.strip())
+
+
+def occupied(unit, todo):
+    """The busy-unit refusal for other work, up to its idle-unit hint."""
+    return (f"{unit} already holds orders {todo.id} (assigned by {todo.held().parent}); "
+            "running units holding no order:")
+
+
+def open_problem(comms, source, order, pid, owner):
+    """A problem the commander ordered to ``owner`` under its own order."""
+    lead = comms.registry.require("lead")
+    return comms.goals.todos.create(
+        pid, source.github, f"Repair {pid}", creator=lead, assigner=lead.incarnation,
+        owner=comms.registry.require(owner), generation=GoalId.mint(),
+        review_at=RecordedEventTime(time.time() + 600), order=replace(order, id=OrderId.mint()),
+        request=comms.goals.todos.get("P40").request.require(),
+    )
+
+
+def released(comms, todo):
+    """The problem with no holder, as Core's release leaves it."""
+    return comms.goals.todos.apply(todo.id, ReleaseTodo(
+        todo.revision, comms.registry.require("lead").incarnation, todo.held(),
+        StrikeReason("The fixture frees this problem so one order can name it.")))
+
+
+def test_sequential_fork_assignments_refuse_with_the_race_message(fork_bus, tmp_path):
+    comms, source, order = fork_bus
+    first, second = (command(comms, "order", "problem",
+                             document(tmp_path / f"{name}.json", replace(order, id=OrderId.mint())),
+                             "--to", "worker", "--where", "owner.py:2", "--fork", name)
+                     for name in ("fork-a", "fork-b"))
+    assert first.returncode == 0, first.stderr
+    held, = (todo for todo in comms.goals.todos.held_for_commander(
+        comms.registry.require("lead").incarnation) if todo.holder == "worker")
+    assert second.returncode != 0 and occupied("worker", held) in second.stderr
+
+
+@pytest.mark.parametrize("held_first", (True, False))
+def test_one_order_takes_a_new_problem_and_one_the_unit_holds_in_either_order(
+    fork_bus, tmp_path, held_first,
+):
+    """A group member the unit still holds under an older order is part of this order,
+    not other work, and every member is written by the one send."""
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    fresh = released(comms, store.get("P40"))
+    held = open_problem(comms, source, order, "P41", "worker")
+    group = (held.id, fresh.id) if held_first else (fresh.id, held.id)
+    sent = replace(order, id=OrderId.mint())
+    result = command(comms, "order", "send", "worker",
+                     document(tmp_path / "group.json", sent, group))
+    assert result.returncode == 0, result.stderr
+    for pid in group:
+        todo = store.get(pid)
+        assert todo.holder == "worker" and todo.order.checked().id == sent.id
+    goal = comms.registry.require("worker").goal.require()
+    assert {todo.id for todo in store.for_goal(
+        comms.registry.require("worker").incarnation, goal.id)} == set(group)
+
+
+def test_unrelated_held_work_refuses_the_same_assigner(fork_bus, tmp_path):
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    released(comms, store.get("P40"))
+    open_problem(comms, source, order, "P41", "worker")
+    fresh, held = store.get("P40"), store.get("P41")
+    goal = comms.registry.require("worker").goal
+    refused = command(comms, "order", "send", "worker",
+                      document(tmp_path / "other.json", replace(order, id=OrderId.mint()),
+                               (fresh.id,)))
+    assert refused.returncode != 0 and occupied("worker", held) in refused.stderr
+    assert (store.get(fresh.id), store.get(held.id)) == (fresh, held)
+    assert comms.registry.require("worker").goal == goal
+
+
+def test_a_sibling_forks_hold_refuses_the_whole_group(fork_bus, tmp_path):
+    """The group is one write: a sibling's hold on one member writes none of the others."""
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    first = released(comms, store.get("P40"))
+    sent = command(comms, "order", "send", "worker",
+                   document(tmp_path / "first.json", replace(order, id=OrderId.mint()),
+                            (first.id,)), "--fork", "fork-one")
+    assert sent.returncode == 0, sent.stderr
+    released(comms, open_problem(comms, source, order, "P41", "other"))
+    held, other = store.get(first.id), store.get("P41")
+    refused = command(comms, "order", "send", "worker",
+                      document(tmp_path / "group.json", replace(order, id=OrderId.mint()),
+                               (other.id, held.id)), "--fork", "fork-two")
+    assert refused.returncode != 0
+    assert (f"worker is assigned by fork-one on open order {held.order.checked().id} "
+            f"({held.id})") in refused.stderr
+    assert (store.get(held.id), store.get(other.id)) == (held, other)
+
+
+def test_a_stale_later_member_rolls_back_the_written_first_member(fork_bus, tmp_path):
+    """The first member passes and is written before a later member's stale revision refuses:
+    the one Todo transaction and the goal update roll back together, so nothing changes."""
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    first = released(comms, store.get("P40"))
+    stale = released(comms, open_problem(comms, source, order, "P41", "other"))
+    lead = comms.registry.require("lead")
+    goal = comms.registry.require("worker").goal
+    with pytest.raises(TodoConflict):
+        comms.goals.update_goal("worker", OrderGoalAction(
+            problem=first.id, expected_revision=first.revision,
+            together=(ExpectedProblem(stale.id, stale.revision - 1),),
+            assigner=lead.incarnation, commander=lead.name,
+            request=first.request.require(), review_at=RecordedEventTime(time.time() + 600),
+            order=replace(order, id=OrderId.mint())))
+    assert (store.get(first.id), store.get(stale.id)) == (first, stale)
+    assert comms.registry.require("worker").goal == goal
 
 
 def test_retained_schema_is_carried_under_maintenance_before_runtime_writes(fork_bus):
