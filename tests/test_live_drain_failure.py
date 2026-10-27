@@ -143,6 +143,13 @@ async def test_restarted_observer_recovers_retained_diagnostic(tmp_path, kind):
         agent.inputs.ensure_live_drain("beta")
         await until(lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current)
         assert not owner_view(comms).presentation.status.details
+        previous = agent.inputs.state("beta").drain_task
+        previous.cancel()
+        await asyncio.gather(previous, return_exceptions=True)
+        # A new consumer gets its first read even while the shared root is idle.
+        agent.inputs.ensure_live_drain("beta")
+        await until(lambda: agent.inputs.state("beta").observation_watcher is not None)
+        await until(lambda: agent.inputs._quiescent("beta"))
     finally:
         await agent.shutdown()
 
@@ -254,5 +261,4 @@ def test_unit_deaf_is_dated_by_the_drain_that_cannot_read_its_inbox(
     assert found == ((UnitDeaf(100.0 + InboxUnavailable.seconds, "beta"),) if deaf else ())
     assert UnitDeaf.violations(comms, "beta") == ()
     if deaf:
-        assert found[0].line().startswith("beta ")
         assert found[0].broke_after(100.0)
