@@ -32,14 +32,12 @@ from agent_comms.message_reference import (
     FirstUnreadStart,
     NewestUnreadStart,
     InboxStart,
-    MessageReference,
 )
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import (
     AnonymousViewer,
     CapturedSelection,
-    DisplayBasis,
     DisplayViewer,
     ListedDeliveries,
     NamedViewer,
@@ -144,7 +142,7 @@ class MessageBus[Writes: Publisher]:
         traversal = after.traversal()
         with self.bus.reading() as source:
             with source.observing() as db:
-                seen.attach(db, self.bus.path.parent)
+                seen = seen.attached(db, self.bus.path.parent, self._registry.store.privacy())
             unread = source.unseen_deliveries(
                 snapshot, delivery, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
                 traversal=traversal,
@@ -207,18 +205,6 @@ class MessageBus[Writes: Publisher]:
             selection.registry, {actor: delivery}, {actor: selection.seen(source)},
         )[actor])
         return counts
-
-    def delivered(self, name: str, references: Sequence[MessageReference]) -> DisplayBasis:
-        snapshot = self._registry.snapshot()
-        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        document = self.reads.read()
-        seen = self.reads.cursor(delivery.actor, snapshot, document=document)
-        messages = self.bus.messages_for_references(references)
-        return self.reads.capture(
-            name, tuple(message for message in messages if delivery.includes(message)
-                        and not delivery.has_read(seen, message, snapshot)),
-            snapshot, self.bus, document=document,
-        )
 
     def mark_read_through(
         self, name: str, sequence: int, *, target: NamedTarget = AnyChannel.target(),

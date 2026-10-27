@@ -128,9 +128,6 @@ class CheckRoot:
                     edit.document.advance_claim(name)
                     edit.document.owners.advance(name)
             edit.commit()
-        if messages:
-            for name in names:
-                copied.messaging.acknowledge_through(name, messages[-1].seq)
 
     def _session(self, original: Thread, root: Path, slot: str, project: Path) -> str:
         session = create_fresh_private_session(root, worktree=project, location=CheckSession, slot=slot)

@@ -221,10 +221,9 @@ class TaskPublished(ToolResult):
 
 @dataclass(frozen=True)
 class InboxPageRead(ToolResult):
-    """One unread page; only its returned references can be acknowledged."""
+    """One page of messages nothing took yet; reading it records nothing."""
 
     messages: tuple[Annotated[Message, WireForm], ...]
-    acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
     standby_review: Annotated[StandbyReview | NoStandbyReview, WireOmitDefault()] = (
@@ -1032,20 +1031,17 @@ class CommsHistoryTool(ReadTool, ToolRequest):
 class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
     description = (
-        "Fetch one oldest-first page of undelivered messages and unresolved native input "
-        "attempts for a thread. Optional target limits the conversation. ACK marks exactly "
-        "the returned message references; remaining counts unread messages in that snapshot "
-        "after this page's acknowledgment. "
-        "Call again to drain the next page. One oversized message is returned alone for "
+        "Fetch one oldest-first page of messages no harness attempted and no native input took, "
+        "and the unresolved input attempts, for a thread. Optional target limits the conversation. "
+        "Reading records nothing: a message leaves the page when its harness takes it, never "
+        "because a page showed it, and human read markers are never touched. remaining counts "
+        "the untaken messages after this page. One oversized message is returned alone for "
         "progress. Unresolved inputs remain UNKNOWN and are not paged. For standby, supply standby "
         "(goal_id and wait_for) to get standby_review: exact eligible keys and messages, "
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: Annotated[str, *tool_field("Thread name")]
     target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.address()
-    ack: Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = (
-        True
-    )
     limit: Annotated[int, *tool_field("Maximum messages in this page; must be positive")] = (
         100
     )
@@ -1062,13 +1058,9 @@ class CommsInboxTool(ToolRequest):
             thread, comms.registry.snapshot(), CommandTarget.named(target),
             after=TakenInputStart(), bounds=PageBounds(limit=self.limit),
         )
-        messages = page.page.messages
-        unresolved = tuple(comms.goals.unresolved_inputs(thread))
-        references = tuple(message.reference for message in messages)
-        acknowledged = comms.messaging.acknowledge(thread, references) if self.ack else 0
         return InboxPageRead(
-            messages, acknowledged, page.remaining + len(messages) - acknowledged,
-            unresolved, standby_review=review,
+            page.page.messages, page.remaining, tuple(comms.goals.unresolved_inputs(thread)),
+            standby_review=review,
         )
 
 

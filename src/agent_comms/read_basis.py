@@ -15,10 +15,9 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
 from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
@@ -293,36 +292,10 @@ class LineOutput:
         self.stream.flush()
 
 
-class WatchAcknowledgment(DeclaredFamily, affix="WatchAcknowledgment"):
-    """Who confirms that a streamed message reached its receiver."""
-
-    @classmethod
-    def line_output(cls, output: TextIO) -> Callable[[str], None]:
-        return partial(print, file=output, flush=True)  # Visibility precedes implicit acknowledgment.
-
-    @classmethod
-    @abstractmethod
-    def taken(cls, reads: ReadLedger, displayed: DisplayBasis) -> None: ...
-
-
-class OnReadWatchAcknowledgment(WatchAcknowledgment):
-    @classmethod
-    def taken(cls, reads: ReadLedger, displayed: DisplayBasis) -> None:
-        reads.mark_displayed(displayed.viewer, displayed)
-
-
-class ExplicitWatchAcknowledgment(WatchAcknowledgment):
-    @classmethod
-    def line_output(cls, output: TextIO) -> Callable[[str], None]:
-        return LineOutput(output).write
-
-    @classmethod
-    def taken(cls, reads: ReadLedger, displayed: DisplayBasis) -> None:
-        """The receiver confirms exact references through the existing read owner."""
-
-
 if TYPE_CHECKING:
     import sqlite3
+
+    from .private_registry_guard import RegistryPrivacy
     from .bus import Bus, BusReader, BusSnapshot
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -399,19 +372,19 @@ class ReadCursor:
     unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
     read_sql = f"NOT ({unread_sql})"
 
-    @classmethod
-    def unread_rule(cls) -> str:
+    def unread_rule(self) -> str:
         """Which joined request rows this cursor still counts; a human read is the whole rule."""
-        return cls.unread_sql
+        return self.unread_sql
 
     @staticmethod
-    def basis_of(cursors: Iterable[ReadCursor]) -> type[ReadCursor]:
+    def rule_of(cursors: Iterable[ReadCursor]) -> str:
         """One route query applies one cursor rule to every actor it reads."""
-        basis, = {type(cursor) for cursor in cursors}
-        return basis
+        rule, = {cursor.unread_rule() for cursor in cursors}
+        return rule
 
-    def attach(self, db: sqlite3.Connection, root: Path) -> None:
-        """A human read needs no store beyond the bus snapshot."""
+    def attached(self, db: sqlite3.Connection, root: Path, privacy: RegistryPrivacy) -> ReadCursor:
+        """A human read needs no store beyond the bus snapshot it is read from."""
+        return self
 
     floor_sql = """actor_floor AS MATERIALIZED (
         SELECT actor,target,max(high_water) AS high_water

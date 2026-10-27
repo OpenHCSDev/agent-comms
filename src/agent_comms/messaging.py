@@ -11,7 +11,6 @@ from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from .errors import (
     CommittedMessageError,
-    MessageAcknowledgmentError,
     RelationViolationError,
     UnreceivedAnswerError,
     UnregisteredThreadError,
@@ -162,27 +161,3 @@ class Messaging:
             Message(user.name, target.name, body, InfoKind, task=task, role=role),
             HumanOrigin.of(user), destination=target,
         )
-
-    def acknowledge(
-        self, name: str, references: Sequence[MessageReference]
-    ) -> int:
-        """Mark only the returned message references delivered.
-
-        The ledger owns its update lock and rejects a replaced bus; reading
-        the named messages uses the bus snapshot, not another exclusion path.
-        Every distinct reference must be newly deliverable; an incomplete basis
-        raises MessageAcknowledgmentError before any read fact is committed.
-        """
-        references = tuple(dict.fromkeys(references))
-        try:
-            basis = self.bus.delivered(name, references)
-        except RelationViolationError as error:
-            raise MessageAcknowledgmentError(self.registry.require(name).name, references) from error
-        if basis.message_count != len(references):
-            raise MessageAcknowledgmentError(basis.viewer, basis.uncovered(references))
-        self.bus.reads.mark_displayed(basis.viewer, basis)
-        return basis.message_count
-
-    def acknowledge_through(self, name: str, sequence: int) -> None:
-        # The bus owns snapshot capture and the ledger validates that source.
-        self.bus.mark_read_through(self.registry.require(name).name, sequence)

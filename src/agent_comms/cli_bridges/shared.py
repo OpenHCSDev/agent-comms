@@ -62,7 +62,6 @@ from agent_comms.message_reference import (
     InboxStart,
     MessageReference,
 )
-from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.registration import Registration
 from agent_comms.runtime_updates import ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -1131,8 +1130,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         child = await AttachedChild.start((
             str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
             '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(await self.resume_after())),
-            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+            '--after', json.dumps(FieldCodec.encode(await self.resume_after()))),
             stdio=StreamingChildStdio(input_enabled=False, limit=64 * 1024 * 1024))
         try:
             async for item in WatchLine.stream(child):

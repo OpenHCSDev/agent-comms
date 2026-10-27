@@ -37,6 +37,7 @@ from .importing import ThreadImported
 from .input_origin import InputProvenance
 from .maintenance_barrier import MaintenanceHeldError
 from .message_reference import MessageReference
+from .read_basis import LineOutput
 from .messages import (
     Message,
 )
@@ -189,11 +190,6 @@ class InboxResult(HistoryPageResult):
 
     def to_wire(self) -> dict[str, object]:
         return {**super().to_wire(), "pending": self.pending}
-
-
-@dataclass(frozen=True)
-class AcknowledgedResult(CliResult):
-    acknowledged: int
 
 
 @dataclass(frozen=True)
@@ -386,11 +382,10 @@ class WatchStream(CliResult):
     watch: WatchCliCommand
 
     def messages(self) -> AsyncIterator[Message]:
-        return self.comms.watch(self.watch.thread, acknowledgment=self.watch.acknowledgment,
-                                    after=self.watch.after)
+        return self.comms.watch(self.watch.thread, after=self.watch.after)
 
     def write(self, output: TextIO) -> int:
-        emit = self.watch.acknowledgment.line_output(output)
+        emit = LineOutput(output).write
         async def stream() -> None:
             async with aclosing(self.messages()) as messages:
                 async for message in messages:
