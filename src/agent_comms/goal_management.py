@@ -414,11 +414,11 @@ class Goals:
         owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
         goal = owner.goal.require_active()
         progress = f"{goal.progress}\n\n{note}" if goal.progress else note
-        self.registry._declare_in(
-            edit,
+        change = edit.document.prepare_registration(
             replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
-            snapshot.status(owner.name),
+            snapshot.status(owner.name), new_owner=False,
         )
+        self.registry._commit_registration(edit, change)
         return review.wait.clear(self.waits)
 
     def goal_execution(self, name: str) -> GoalExecution:

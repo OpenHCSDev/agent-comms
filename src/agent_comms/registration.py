@@ -399,7 +399,7 @@ class Registration:
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read this owner's recorded transitions without waiting on a registry writer;
         goal history's own transaction settles what the snapshot already shows."""
-        thread = self.snapshot().require(name)
+        thread = self.store.observed_entry(name).thread
         return GoalHistoryStore(self.store.path).history(
             thread.incarnation.wire_birth, thread.goal, scope
         )

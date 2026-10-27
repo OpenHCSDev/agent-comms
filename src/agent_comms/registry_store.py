@@ -443,6 +443,15 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         """Retain one current participant without materializing unrelated declarations."""
         return RegistryEntryRevision.captured(partial(self.read_entry, name))
 
+    def observed_entry(self, name: str) -> RegistryEntry:
+        """Observe one atomic declaration without a publication or execution permission.
+
+        History's LockFreeObserver may see either side of an in-flight replacement;
+        it can settle only an intent this complete declaration already shows.
+        Namespace/privacy validation still precedes even a cached capture.
+        """
+        return self.read_copied(self._capture_unlocked()).entry(name)
+
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
 

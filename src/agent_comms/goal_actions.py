@@ -184,14 +184,11 @@ class GoalAction[Result: GoalDeclaration](
         if goal == ctx.thread.goal:
             return goal
         self.before_publish(goal, ctx)
-        ctx.goals.registry._declare_in(
-            ctx.edit,
-            replace(
-                ctx.thread,
-                goal=goal,
-            ),
-            ctx.edit.document.status(ctx.thread.name),
+        change = ctx.edit.document.prepare_registration(
+            replace(ctx.thread, goal=goal),
+            ctx.edit.document.status(ctx.thread.name), new_owner=False,
         )
+        ctx.goals.registry._commit_registration(ctx.edit, change)
         if not self.preserve_wait:
             ctx.thread.goal.clear_wait(ctx.goals.waits)
         return goal
