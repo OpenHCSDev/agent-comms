@@ -143,7 +143,7 @@ class ThreadCaller(ToolCaller):
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
-        return ThreadListing(threads, presentation.sent_summaries())
+        return ThreadListing(threads, SentMessageSummary.recent(presentation))
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(

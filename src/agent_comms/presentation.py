@@ -389,9 +389,14 @@ class SentMessageSummary:
     summary: str
 
     @classmethod
-    def of(cls, reference: MessageReference, window: NotificationWindow) -> SentMessageSummary:
-        return cls(reference, MessageNotification.summary(
-            window.outcomes.get((reference.seq, reference.message_id), ())))
+    def recent(cls, presentation: ThreadPresentation) -> tuple[SentMessageSummary, ...]:
+        """One summary per recent sent source, from the presentation's captured window."""
+        window = presentation.notification_window
+        return tuple(
+            cls(reference, MessageNotification.summary(
+                window.outcomes.get((reference.seq, reference.message_id), ())))
+            for reference in presentation.sent_references
+        )
 
 
 class ChannelReadMark(ABC):

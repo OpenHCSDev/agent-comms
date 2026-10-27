@@ -16,7 +16,7 @@ from .notification_evidence import NoNotificationWindow, NotificationWindow
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
-    from .presentation import MessageNotification, SentMessageSummary
+    from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.transcripts import Transcripts
@@ -281,13 +281,6 @@ class ThreadPresentation(ThreadStatusDisplay):
             incoming_references=tuple(source.message.reference for source in window.sources),
             sent_references=tuple(source.message.reference for source in window.sent_sources),
         )
-
-    def sent_summaries(self) -> tuple[SentMessageSummary, ...]:
-        """One summary per recent sent source, from this presentation's captured window."""
-        from .presentation import SentMessageSummary
-
-        return tuple(SentMessageSummary.of(reference, self.notification_window)
-                     for reference in self.sent_references)
 
     @property
     def label(self) -> str:
