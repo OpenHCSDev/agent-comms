@@ -18,20 +18,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook
 
 
+class DefaultGate(ABC):
+    """The gated call every tool the family does not name decodes as."""
+
+
 @dataclass(frozen=True)
-class GatedCall(ClaudeToolHook, ABC):
-    """One tool call the read gate judges; each member says only what its tool means."""
+class GatedCall(ClaudeToolHook, DeclaredFamily):
+    """One tool call the read gate judges; a member names its tool in its declaration and
+    says only what that tool means."""
 
     @classmethod
     def of(cls, record: Mapping[str, object]) -> GatedCall:
-        """The boundary decode: a subagent's call, a Read, or any other tool."""
+        """The boundary decode: a subagent's call, a tool the family names, or any other."""
         if "agent_id" in record:
             return SubagentCall.decode(record)
-        kinds = {kind.tool: kind for kind in NamedToolCall.__subclasses__()}
-        return kinds.get(str(record["tool_name"]), OtherCall).decode(record)
+        return cls.member_or_default(record["tool_name"], DefaultGate).decode(record)
 
     @abstractmethod
     def judge(self) -> None:
@@ -47,17 +52,9 @@ class GatedCall(ClaudeToolHook, ABC):
 
 
 @dataclass(frozen=True)
-class NamedToolCall(GatedCall, ABC):
-    """A call whose tool the gate treats by name; every other tool is an OtherCall."""
-
-    tool: ClassVar[str]
-
-
-@dataclass(frozen=True)
-class ReadCall(NamedToolCall):
+class ReadCall(GatedCall, declared_name="Read"):
     """A Read is always allowed; a full Read of a dealt part counts it as read."""
 
-    tool = "Read"
     partial: ClassVar[tuple[str, ...]] = ("offset", "limit")
     """Read arguments that return less than the whole file."""
 
@@ -71,7 +68,7 @@ class ReadCall(NamedToolCall):
 
 
 @dataclass(frozen=True)
-class OtherCall(GatedCall):
+class OtherCall(GatedCall, DefaultGate):
     """Any other tool waits for every dealt part to be read."""
 
     def judge(self) -> None:
