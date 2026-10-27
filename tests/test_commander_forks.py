@@ -23,7 +23,7 @@ from agent_comms.commander_hud import CommanderHud
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.comms import wire
-from agent_comms.errors import RelationViolationError, TodoError
+from agent_comms.errors import RelationViolationError, TodoConflict, TodoError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import (
     FieldCodec,
@@ -31,7 +31,7 @@ from agent_comms.field_codec import (
     OrderId,
     ToolCallId,
 )
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_actions import OrderGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
@@ -49,6 +49,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
+    ExpectedProblem,
     IncomingWork,
     PendingProblemOrder,
     ProblemAllocation,
@@ -523,6 +524,26 @@ def test_a_sibling_forks_hold_refuses_the_whole_group(fork_bus, tmp_path):
     assert (f"worker is assigned by fork-one on open order {held.order.checked().id} "
             f"({held.id})") in refused.stderr
     assert (store.get(held.id), store.get(other.id)) == (held, other)
+
+
+def test_a_stale_later_member_rolls_back_the_written_first_member(fork_bus, tmp_path):
+    """The first member passes and is written before a later member's stale revision refuses:
+    the one Todo transaction and the goal update roll back together, so nothing changes."""
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    first = released(comms, store.get("P40"))
+    stale = released(comms, open_problem(comms, source, order, "P41", "other"))
+    lead = comms.registry.require("lead")
+    goal = comms.registry.require("worker").goal
+    with pytest.raises(TodoConflict):
+        comms.goals.update_goal("worker", OrderGoalAction(
+            problem=first.id, expected_revision=first.revision,
+            together=(ExpectedProblem(stale.id, stale.revision - 1),),
+            assigner=lead.incarnation, commander=lead.name,
+            request=first.request.require(), review_at=RecordedEventTime(time.time() + 600),
+            order=replace(order, id=OrderId.mint())))
+    assert (store.get(first.id), store.get(stale.id)) == (first, stale)
+    assert comms.registry.require("worker").goal == goal
 
 
 def test_retained_schema_is_carried_under_maintenance_before_runtime_writes(fork_bus):
