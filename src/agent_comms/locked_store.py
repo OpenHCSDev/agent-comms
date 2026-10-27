@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import stat
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
@@ -23,7 +24,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 from pydantic import JsonValue
 
 from .child_process import Platform
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationReadUnavailable, StaleRevision
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
@@ -1002,6 +1003,7 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], StoreLockOwner, declar
         self, change: Callable[[T], Iterable[DocumentChange[T, R]]],
     ) -> tuple[R, ...]:
         """Decode before exclusion; apply transitions once after their cut is current."""
+        deadline = time.monotonic() + self.contention.seconds
         while True:
             with self.guarded_read():
                 revision = self.revision_unlocked()
@@ -1009,6 +1011,8 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], StoreLockOwner, declar
             original = self.read_copied(source)
             with self.guarded_write():
                 if self.revision_unlocked() != revision:
+                    if time.monotonic() >= deadline:
+                        raise StaleRevision(f"Document kept changing before mutation: {self.path}")
                     continue
                 results = []
                 for changed in change(original):

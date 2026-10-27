@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 import pytest
 
 from agent_comms.locked_store import DocumentChange, LockedStore
+from agent_comms.coordination_errors import StaleRevision
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry_store import RegistryStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
@@ -102,6 +103,10 @@ class RuntimeWithConcurrentDecoder(RuntimeInfoStore, declared_name=None):
         return super()._decode_capture(source)
 
 
+class ImpatientRuntimeDecoder(RuntimeWithConcurrentDecoder, declared_name=None):
+    contention = StoreLockContention(0)
+
+
 def test_update_decodes_without_exclusion_and_never_applies_a_stale_change(tmp_path):
     path = tmp_path / "runtime_info.json"
     record(RuntimeInfoStore(path), observation("original"))
@@ -118,6 +123,9 @@ def test_update_decodes_without_exclusion_and_never_applies_a_stale_change(tmp_p
     expected = {"original", *(f"concurrent-{index}" for index in range(12))}
     assert applied == [frozenset(expected)]
     assert set(store.read().observations) == expected | {"local"}
+    with pytest.raises(StaleRevision):
+        ImpatientRuntimeDecoder(path).update(change)
+    assert applied == [frozenset(expected)]
 
 
 def _record_under_wire(path, ready):
