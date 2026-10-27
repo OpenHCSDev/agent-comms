@@ -5,8 +5,15 @@ from agent_comms.declared_family import DeclaredFamily
 
 
 class DeclaredChoice(DeclaredFamily):
-    title: ClassVar[str | None] = None
+    @classmethod
+    def choice_label(cls) -> str:
+        return cls.declared_name.replace("-", " ").replace("_", " ").title()
+
+
+class TitledChoice:
+    """A declared display title replaces the humanized family name."""
+    title: ClassVar[str]
 
     @classmethod
     def choice_label(cls) -> str:
-        return cls.title or cls.declared_name.replace("-", " ").replace("_", " ").title()
+        return cls.title
