@@ -93,13 +93,13 @@ class RegistryWithConcurrentDecoder(RegistryStore, declared_name=None):
 class RuntimeWithConcurrentDecoder(RuntimeInfoStore, declared_name=None):
     pending: list[str] = field(default_factory=lambda: ["concurrent"])
 
-    def _decode(self, data):
+    def _decode_capture(self, source):
         if self.pending:
             name = self.pending.pop()
             ready = event()
             with process(_record, self.path, ready, name):
                 ready.set()
-        return super()._decode(data)
+        return super()._decode_capture(source)
 
 
 def test_update_decodes_without_exclusion_and_never_applies_a_stale_change(tmp_path):

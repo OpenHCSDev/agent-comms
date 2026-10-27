@@ -972,7 +972,7 @@ class DocumentBytes:
             return cls(MissingFile(), b"")
 
 
-class CopyingStore(RankedStoreLock, declared_name=None):
+class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
     """Capture dependent documents together; release their guards before decoding."""
 
     def _capture_unlocked(self) -> DocumentBytes:
@@ -991,7 +991,7 @@ class CopyingStore(RankedStoreLock, declared_name=None):
             return captured
 
 
-class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
+class DocumentTransactions(CopyingStore, JsonDocument[T], StoreLockOwner, declared_name=None):
     """Document changes own their write guard, independent of path construction."""
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
@@ -1003,8 +1003,10 @@ class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
     ) -> tuple[R, ...]:
         """Decode before exclusion; apply transitions once after their cut is current."""
         while True:
-            revision = self.revision_unlocked()
-            original = self._read_unlocked()
+            with self.guarded_read():
+                revision = self.revision_unlocked()
+                source = self._capture_unlocked()
+            original = self.read_copied(source)
             with self.guarded_write():
                 if self.revision_unlocked() != revision:
                     continue
@@ -1043,7 +1045,7 @@ class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(CopyingStore, FileStore, LockedFile, DocumentTransactions[T], declared_name=None):
+class LockedStore(FileStore, LockedFile, DocumentTransactions[T], declared_name=None):
     """Each copy ends before decoding; each change owns its complete write."""
 
     def read(self) -> T:
