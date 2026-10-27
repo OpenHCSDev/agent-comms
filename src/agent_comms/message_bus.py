@@ -238,7 +238,7 @@ class MessageBus[Writes: Publisher]:
         with Coordination(str(CoordinationStore.path_in(self.bus.path.parent))) as store:
             store.assignments.settle_harness_inputs(lookup, references, steps)
 
-    def mark_delivered_through(
+    def mark_read_through(
         self, name: str, sequence: int, *, target: NamedTarget = AnyChannel.target(),
     ) -> None:
         if sequence < 0:

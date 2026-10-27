@@ -185,4 +185,4 @@ class Messaging:
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
         # The bus owns snapshot capture and the ledger validates that source.
-        self.bus.mark_delivered_through(self.registry.require(name).name, sequence)
+        self.bus.mark_read_through(self.registry.require(name).name, sequence)
