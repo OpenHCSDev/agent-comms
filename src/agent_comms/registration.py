@@ -266,10 +266,6 @@ class Registration:
         preserves omitted provenance and a current executor before applying the same
         registration effects. No pre-read can authorize a stale owner replacement.
         """
-        return self._declare_unlocked(thread, status)
-
-    def _declare_unlocked(self, thread: Thread, status: ThreadStatus = _DEFAULT_PRESENCE) -> Thread:
-        """Cross-store declarations share the registry's own edit transaction."""
         with self.store.editing() as edit:
             return self._declare_in(edit, thread, status)
 
@@ -295,7 +291,8 @@ class Registration:
         document, channels = self.store.read_pair(catalog)
         self._prepare_declaration(document, channels, thread, status)
 
-    def _declare_in(self, edit: RegistryEdit, thread: Thread, status: ThreadStatus) -> Thread:
+    def _declare_in(self, edit: RegistryEdit, thread: Thread,
+                    status: ThreadStatus = _DEFAULT_PRESENCE) -> Thread:
         with self._preparing_declaration(edit, thread, status) as change:
             return self._commit_registration(edit, change).thread
 
@@ -351,10 +348,6 @@ class Registration:
     unregister = changing(RegistryDocument.unregister)
     archive = changing(RegistryDocument.archive)
     begin_delete = changing(RegistryDocument.begin_delete)
-    archive_originals = changing(RegistryDocument.archive_originals)
-    begin_delete_originals = changing(RegistryDocument.begin_delete_originals)
-    remove_originals = changing(RegistryDocument.remove_originals)
-    change_tag = changing(RegistryDocument.change_tag)
     remove = changing(RegistryDocument.remove)
     heartbeat = changing(RegistryDocument.heartbeat)
     release_turn = changing(RegistryDocument.release_turn)

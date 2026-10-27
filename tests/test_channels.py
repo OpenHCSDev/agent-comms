@@ -223,7 +223,9 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
     assert 'remove' not in comms.channels.catalog.read().tags
     # An acquired cohort may predate unrelated metadata changes. Tag mutation
     # must use the locked current records, not write those older Thread values.
-    comms.registry.change_tag(originals, 'keep', 'renamed')
+    with comms.registry.store.editing() as edit:
+        edit.document.change_tag(originals, 'keep', 'renamed')
+        edit.commit()
     latest = comms.registry.require(current.name)
     assert latest.title == current.title and latest.task == current.task and latest.model == current.model
     assert latest.tags == frozenset({'renamed'})

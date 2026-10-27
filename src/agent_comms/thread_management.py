@@ -25,6 +25,7 @@ from .thread_status import StoppedThreadStatus
 from .view_unread import transcript_read_state
 
 if TYPE_CHECKING:
+    from .registry_store import RegistryEdit
     from .cli_bridges.history import History
     from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity
@@ -248,17 +249,18 @@ class ThreadManagement:
             session_file=RegistrySessionLocation.from_path(session_path, self.root),
             title=snapshot.title,
         ))
-        with self.registry.store.guarded_write():
-            if self.registry.snapshot().taken(name):
+        with self.registry.store.editing() as edit:
+            if edit.document.taken(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self.registry.require_declaration_available(thread, StoppedThreadStatus())
             self._write_imported_session(session_path, snapshot, project)
             try:
-                self.registry._declare_unlocked(thread, StoppedThreadStatus())
+                self.registry._declare_in(edit, thread, StoppedThreadStatus())
                 self.bus.mark_delivered_through(name, self.bus.bus.revision())
             except (OSError, ValueError, CoordinationError):
                 if name in self.registry:
-                    self.registry.remove(name)
+                    edit.document.remove(name)
+                    edit.commit()
                 session_path.unlink(missing_ok=True)
                 raise
         return ThreadImported.of(name, session_path, snapshot)
@@ -274,8 +276,8 @@ class ThreadManagement:
         """
         snapshot = history.imported(limits)
         session_path = ImportedSessionWriter.path_in(self.root, session_id=PiSessionId.fresh())
-        with self.registry.store.guarded_write():
-            current = self.registry.snapshot().require(name)
+        with self.registry.store.editing() as edit:
+            current = edit.document.require(name)
             current.execution.require_external()
             self._write_imported_session(session_path, snapshot, current.worktree.path)
             rehomed = replace(
@@ -285,7 +287,7 @@ class ThreadManagement:
             self.registry.require_declaration_available(rehomed, StoppedThreadStatus())
             bridge = snapshot.harness.retire_session(snapshot.source_id)
             try:
-                self.registry._declare_unlocked(rehomed, StoppedThreadStatus())
+                self.registry._declare_in(edit, rehomed, StoppedThreadStatus())
             except (OSError, ValueError, CoordinationError, RelationViolationError):
                 bridge.restore()
                 session_path.unlink(missing_ok=True)
@@ -325,13 +327,13 @@ class ThreadManagement:
 
     def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
         """Rename the bound caller's own thread, retaining its old aliases."""
-        with self.registry.store.guarded_write():
-            if self.registry.require(caller.name).auto_title_pending and (
+        with self.registry.store.editing() as edit:
+            if edit.document.require(caller.name).auto_title_pending and (
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
             ):
                 raise ValueError("Choose a concise topic title: at most 6 words and 48 characters.")
-            return self._rename_thread_unlocked(
-                caller.name, new_name, title=GivenThreadText(new_name.replace("-", " ").replace("_", " "))
+            return self._rename_thread_in(
+                edit, caller.name, new_name, title=GivenThreadText(new_name.replace("-", " ").replace("_", " "))
             )
 
     def set_project(self, name: str, path: str) -> ProjectChangeResult:
@@ -362,30 +364,32 @@ class ThreadManagement:
         self, name: str, display_name: str, *, owner: ProcessIdentity
     ) -> RenameThreadResult:
         """Rename a locally managed running thread after proving process ownership."""
-        with self.registry.store.guarded_write():
-            thread = self.registry.require(name)
+        with self.registry.store.editing() as edit:
+            thread = edit.document.require(name)
             if thread.process_identity != owner:
                 raise RelationViolationError(
                     f"Process {owner.pid} does not own thread {thread.name!r}."
                 )
-            new_name = self.registry.snapshot().claim_name(display_name, owner=thread.name)
-            return self._rename_thread_unlocked(thread.name, new_name, title=GivenThreadText(display_name))
+            new_name = edit.document.claim_name(display_name, owner=thread.name)
+            return self._rename_thread_in(edit, thread.name, new_name, title=GivenThreadText(display_name))
 
     def _rename_thread(
         self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
         # Every rename checks and changes the same current registry declaration.
-        with self.registry.store.guarded_write():
-            return self._rename_thread_unlocked(name, new_name, title=title)
+        with self.registry.store.editing() as edit:
+            return self._rename_thread_in(edit, name, new_name, title=title)
 
-    def _rename_thread_unlocked(
-        self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
+    def _rename_thread_in(
+        self, edit: RegistryEdit, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
-        previous, current = self.registry.rename(name, new_name)
-        thread = self.registry.require(current)
+        previous, current = edit.document.rename(name, new_name)
+        thread = edit.document.require(current)
         titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
         if titled != thread:
-            self.registry.register(titled, self.registry.status(current))
+            self.registry._commit_registration(edit, edit.document.prepare_registration(
+                titled, edit.document.status(current), new_owner=False))
+        edit.commit()
         changed = previous != current
         if changed:
             self.agents.activity.rename_thread(previous, current)
@@ -456,11 +460,12 @@ class ThreadManagement:
 
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
-        with self.registry.store.guarded_write():
-            self._archive_unlocked((self.registry.require(name),))
+        with self.registry.store.editing() as edit:
+            self._archive_in(edit, (edit.document.require(name),))
 
-    def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
-        self.registry.archive_originals(originals)
+    def _archive_in(self, edit: RegistryEdit, originals: Sequence[Thread]) -> None:
+        edit.document.archive_originals(originals)
+        edit.commit()
         self.agents.runtime_info.remove_threads(originals)
 
     @property
@@ -482,10 +487,10 @@ class ThreadManagement:
 
     def delete(self, name: str) -> ThreadDeleted:
         """Permanently delete one stopped or archived thread."""
-        with self.registry.store.guarded_write():
-            return self._delete_unlocked((self.registry.require(name),))[0]
+        with self.registry.store.editing() as edit:
+            return self._delete_in(edit, (edit.document.require(name),))[0]
 
-    def _delete_unlocked(self, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:
+    def _delete_in(self, edit: RegistryEdit, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:
         """Remove stopped declarations and everything they own.
 
         The bus, goal history and uncertain-input records are the record and
@@ -502,12 +507,14 @@ class ThreadManagement:
             sessions[original.name] = original.runtime.storage_files()
             for files in sessions[original.name]:
                 files.require_unreferenced()
-        self.registry.begin_delete_originals(originals)
+        edit.document.begin_delete_originals(originals)
+        edit.commit()
         for state in states:
             state.remove_threads(originals)
         # A failure from here leaves a Deleting declaration to retry, not orphans.
         freed = {name: sum(item.delete() for item in files) for name, files in sessions.items()}
-        detached = self.registry.remove_originals(originals)
+        detached = edit.document.remove_originals(originals)
+        edit.commit()
         return tuple(
             ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
             for original in originals
