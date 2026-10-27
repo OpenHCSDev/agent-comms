@@ -1,7 +1,7 @@
 """The caller bound at tool entry owns caller-relative tool behavior."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
@@ -11,7 +11,8 @@ from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
-from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
+from .bus_read import BusReader, OperatorOutcomes
+from .presentation import OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 
@@ -29,7 +30,7 @@ class ThreadListing(ToolResult):
     sent_messages: tuple[SentMessageSummary, ...]
 
 
-class ToolCaller(ABC):
+class ToolCaller(BusReader):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return self
 
@@ -46,10 +47,6 @@ class ToolCaller(ABC):
 
     @abstractmethod
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
-
-    @abstractmethod
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        """Whose recipient outcomes this caller may read."""
 
     @abstractmethod
     def acting_name(self, default: str) -> str: ...
@@ -88,15 +85,6 @@ class ToolCaller(ABC):
     def origin(self) -> AgentOrigin:
         """Who this caller's sends speak for; an agent speaks only for itself."""
         return AgentOrigin()
-
-
-class OperatorOutcomes:
-    """A caller speaking for the owner reads every recipient outcome, as the owner's UI does."""
-
-    __slots__ = ()
-
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        return AllOutcomes()
 
 
 @dataclass(frozen=True)

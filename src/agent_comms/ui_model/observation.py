@@ -41,6 +41,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
+from agent_comms.bus_read import BusReader, UiRead
 from agent_comms.child_process import join_retirement
 from agent_comms.commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
 from agent_comms.comms import Comms
@@ -60,7 +61,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_reference import MessageReference
 from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow
 from agent_comms.presentation import (
-    AllOutcomes, CoordinationSnapshot, MessageNotification, NoRevision, OutcomeViewer, ReadState,
+    CoordinationSnapshot, MessageNotification, NoRevision, ReadState,
     WireRevision,
 )
 from agent_comms.registry_document import RosterVisibility
@@ -615,15 +616,15 @@ class RefreshTranscript(ReadRequest):
 
 
 @dataclass(frozen=True)
-class ReadNotifications(ReadRequest):
-    """Recipient handling of the referenced original messages, as its viewer may see them.
-    The UI reads as the operator, who sees every outcome."""
+class ReadNotifications(UiRead[NotificationWindow], ReadRequest):
+    """Recipient handling of the referenced original messages, as its reader may see them.
+    The UI reads as the operator; an MCP caller reads under its own viewer."""
 
     references: tuple[MessageReference, ...]
-    viewer: OutcomeViewer = field(default_factory=AllOutcomes, kw_only=True)
 
-    def read(self, comms: Comms) -> NotificationWindow:
-        return comms.views.message_notifications_for_references(self.viewer, self.references)
+    def read_as(self, comms: Comms, reader: BusReader) -> NotificationWindow:
+        return comms.views.message_notifications_for_references(
+            reader.outcome_viewer(comms), self.references)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:
@@ -636,10 +637,11 @@ class ReadRecordedNotifications(ReadNotifications):
 
     source: str
 
-    def read(self, comms: Comms) -> NotificationWindow:
+    def read_as(self, comms: Comms, reader: BusReader) -> NotificationWindow:
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
-            return source.notification_references(sources, self.references, self.viewer)
+            return source.notification_references(
+                sources, self.references, reader.outcome_viewer(comms))
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:
