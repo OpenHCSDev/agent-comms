@@ -46,7 +46,9 @@ def main(root: Path, turn: TurnId) -> None:
     capture()
     registry.begin_delete("renamed")
     capture()
-    registry.remove("renamed")
+    with registry.store.editing() as edit:
+        edit.document.remove_originals((edit.document.threads["renamed"],))
+        edit.commit()
     capture()
     print(json.dumps(steps, sort_keys=True))
 

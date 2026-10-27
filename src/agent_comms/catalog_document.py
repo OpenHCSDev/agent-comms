@@ -71,12 +71,81 @@ class NoCatalog(CatalogAccess):
 
 
 @dataclass(slots=True)
-class CatalogDocument(CatalogAccess):
-    tags: frozenset[str] = frozenset()
+class CatalogPreferences(CatalogAccess):
+    """The channel preference map owns ordering, pin edits and cleanup."""
+
     preferences: dict[str, ChannelPreferences] = field(default_factory=dict)
-    saved_views: dict[str, SavedView] = field(default_factory=dict)
     list_order: type[ChannelSort] = NameChannelSort
 
+    def pinned_threads(self, channel: str) -> frozenset[str]:
+        return self.preferences.get(channel, ChannelPreferences()).pinned_threads
+
+
+    def pinned_members(self) -> dict[str, frozenset[str]]:
+        return {
+            name: value.pinned_threads
+            for name, value in self.preferences.items()
+            if value.pinned_threads
+        }
+
+
+    def set_preferences(self, name: str, activity: ActivityClocks, **changes) -> Channel:
+        channel = self.require_channel(name, activity)
+        preference = self.preferences.get(channel.name, ChannelPreferences(created_at=channel.created_at))
+        self.preferences[channel.name] = replace(preference, **changes)
+        return self.require_channel(channel.name, activity)
+
+
+    def set_list_order(self, order: type[ChannelSort]) -> type[ChannelSort]:
+        self.list_order = order
+        return order
+
+
+    def set_any_mode(self, name: str, enabled: bool, activity: ActivityClocks) -> Channel:
+        if type(enabled) is not bool:
+            raise ValueError("Channel any_mode must be boolean.")
+        unsupported = ValueError("Only existing exact tag channels support any_mode.")
+        try:
+            channel = self.require_channel(name, activity)
+        except UnknownChannelError as error:
+            raise unsupported from error
+        if not channel.exact:
+            raise unsupported
+        return self.set_preferences(name, activity, any_mode=enabled)
+
+
+    def set_thread_pinned(self, channel: str, thread: str, pinned: bool) -> None:
+        preference = self.preferences.get(channel, ChannelPreferences())
+        selected = preference.pinned_threads
+        selected = selected | {thread} if pinned else selected - {thread}
+        self.preferences[channel] = replace(preference, pinned_threads=selected)
+
+
+    def rename_thread(self, previous: str, current: str) -> None:
+        for name, preference in tuple(self.preferences.items()):
+            if previous in preference.pinned_threads:
+                self.preferences[name] = replace(
+                    preference, pinned_threads=(preference.pinned_threads - {previous}) | {current}
+                )
+
+
+    def remove_thread(self, thread: str) -> None:
+        for name in tuple(self.preferences):
+            self.set_thread_pinned(name, thread, False)
+
+
+    def remove_channel(self, name: str) -> None:
+        self.preferences.pop(name, None)
+        self.preferences = {
+            child: replace(p, parent=None) if p.parent == name else p
+            for child, p in self.preferences.items()
+        }
+
+
+@dataclass(slots=True)
+class CatalogDocument(CatalogPreferences):
+    tags: frozenset[str] = frozenset()
+    saved_views: dict[str, SavedView] = field(default_factory=dict)
     def __post_init__(self) -> None:
         self.validate()
 
@@ -100,6 +169,29 @@ class CatalogDocument(CatalogAccess):
                     raise ValueError("Channel parent relation cannot contain a cycle.")
                 visited.add(parent)
                 parent = self.preferences.get(parent, ChannelPreferences()).parent
+
+
+    def set_metadata(self, name: str, activity: ActivityClocks, *, parent: str | None, archived: bool) -> Channel:
+        current = self.require_channel(name, activity)
+        current.require_metadata()
+        if type(archived) is not bool:
+            raise ValueError("Channel archived state must be boolean.")
+        if parent is not None:
+            parent = ChannelTarget.normalize_name(parent)
+            try:
+                parent_channel = self.require_channel(parent, activity)
+            except UnknownChannelError as error:
+                raise ValueError(f"Unknown parent channel: {parent!r}") from error
+            parent_channel.require_parent()
+        result = self.set_preferences(name, activity, parent=parent, archived=archived)
+        self.validate_parents()
+        return result
+
+
+    def set_archived(self, name: str, archived: bool, activity: ActivityClocks) -> Channel:
+        channel = self.require_channel(name, activity)
+        return self.set_metadata(channel.name, activity, parent=channel.parent, archived=archived)
+
 
     @property
     def present_tags(self) -> frozenset[str]:
@@ -135,16 +227,6 @@ class CatalogDocument(CatalogAccess):
             kind.address() for kind in BuiltinChannelView.members_with(BuiltinChannelView)
             if kind.matches(tags)
         ) | frozenset(map(ChannelTarget.normalize_name, tags))
-
-    def pinned_threads(self, channel: str) -> frozenset[str]:
-        return self.preferences.get(channel, ChannelPreferences()).pinned_threads
-
-    def pinned_members(self) -> dict[str, frozenset[str]]:
-        return {
-            name: value.pinned_threads
-            for name, value in self.preferences.items()
-            if value.pinned_threads
-        }
 
     def require_available_name(self, name: str) -> None:
         if (bare := ChannelTarget.bare_name(name)) in self.saved_views:
@@ -187,7 +269,7 @@ class CatalogDocument(CatalogAccess):
         self.require_available_name(tag)
         self.remember_tags(frozenset({tag}))
 
-    def set_view(self, view: SavedView, activity: ActivityClocks) -> None:
+    def set_view(self, view: SavedView, activity: ActivityClocks) -> SavedView:
         unknown = view.predicate.tags - self.present_tags
         if unknown:
             raise ValueError(f"Unknown view tags: {', '.join(sorted(unknown))}")
@@ -207,6 +289,7 @@ class CatalogDocument(CatalogAccess):
                 "Historical target provenance can only come from saved-data migration."
             )
         self.saved_views[view.name] = view
+        return view
 
     def delete_view(self, name: str) -> None:
         name = ChannelTarget.bare_name(name)
@@ -218,64 +301,6 @@ class CatalogDocument(CatalogAccess):
             )
         del self.saved_views[name]
         self.remove_channel(ChannelTarget.normalize_name(name))
-
-    def set_preferences(self, name: str, activity: ActivityClocks, **changes) -> Channel:
-        channel = self.require_channel(name, activity)
-        preference = self.preferences.get(channel.name, ChannelPreferences(created_at=channel.created_at))
-        self.preferences[channel.name] = replace(preference, **changes)
-        return self.require_channel(channel.name, activity)
-
-    def set_metadata(self, name: str, activity: ActivityClocks, *, parent: str | None, archived: bool) -> Channel:
-        current = self.require_channel(name, activity)
-        current.require_metadata()
-        if type(archived) is not bool:
-            raise ValueError("Channel archived state must be boolean.")
-        if parent is not None:
-            parent = ChannelTarget.normalize_name(parent)
-            try:
-                parent_channel = self.require_channel(parent, activity)
-            except UnknownChannelError as error:
-                raise ValueError(f"Unknown parent channel: {parent!r}") from error
-            parent_channel.require_parent()
-        result = self.set_preferences(name, activity, parent=parent, archived=archived)
-        self.validate_parents()
-        return result
-
-    def set_any_mode(self, name: str, enabled: bool, activity: ActivityClocks) -> Channel:
-        if type(enabled) is not bool:
-            raise ValueError("Channel any_mode must be boolean.")
-        unsupported = ValueError("Only existing exact tag channels support any_mode.")
-        try:
-            channel = self.require_channel(name, activity)
-        except UnknownChannelError as error:
-            raise unsupported from error
-        if not channel.exact:
-            raise unsupported
-        return self.set_preferences(name, activity, any_mode=enabled)
-
-    def set_thread_pinned(self, channel: str, thread: str, pinned: bool) -> None:
-        preference = self.preferences.get(channel, ChannelPreferences())
-        selected = preference.pinned_threads
-        selected = selected | {thread} if pinned else selected - {thread}
-        self.preferences[channel] = replace(preference, pinned_threads=selected)
-
-    def rename_thread(self, previous: str, current: str) -> None:
-        for name, preference in tuple(self.preferences.items()):
-            if previous in preference.pinned_threads:
-                self.preferences[name] = replace(
-                    preference, pinned_threads=(preference.pinned_threads - {previous}) | {current}
-                )
-
-    def remove_thread(self, thread: str) -> None:
-        for name in tuple(self.preferences):
-            self.set_thread_pinned(name, thread, False)
-
-    def remove_channel(self, name: str) -> None:
-        self.preferences.pop(name, None)
-        self.preferences = {
-            child: replace(p, parent=None) if p.parent == name else p
-            for child, p in self.preferences.items()
-        }
 
     def change_tag(self, previous: str, current: str | None) -> None:
         self.require_changeable_tag(previous)

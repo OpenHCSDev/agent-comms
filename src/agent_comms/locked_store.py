@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import stat
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
@@ -23,7 +24,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 from pydantic import JsonValue
 
 from .child_process import Platform
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationReadUnavailable, StaleRevision
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
@@ -405,6 +406,10 @@ class JsonDocument(RootFile, ABC, Generic[T]):
     @abstractmethod
     def empty(self) -> T:
         """Return a fresh value for a missing document."""
+
+    def revision_unlocked(self) -> tuple[FileObservation, ...]:
+        """The physical source revision; owners of coupled files extend this answer."""
+        return (FileRevision.capture(self.path),)
 
     def _read_unlocked(self) -> T:
         return self._read_using(self._decode)
@@ -968,7 +973,7 @@ class DocumentBytes:
             return cls(MissingFile(), b"")
 
 
-class CopyingStore(RankedStoreLock, declared_name=None):
+class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
     """Capture dependent documents together; release their guards before decoding."""
 
     def _capture_unlocked(self) -> DocumentBytes:
@@ -987,7 +992,7 @@ class CopyingStore(RankedStoreLock, declared_name=None):
             return captured
 
 
-class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
+class DocumentTransactions(CopyingStore, JsonDocument[T], StoreLockOwner, declared_name=None):
     """Document changes own their write guard, independent of path construction."""
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
@@ -997,16 +1002,25 @@ class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
     def update_each[R](
         self, change: Callable[[T], Iterable[DocumentChange[T, R]]],
     ) -> tuple[R, ...]:
-        """Publish each declared transition under one uninterrupted writer hold."""
-        with self.guarded_write():
-            original = self._read_unlocked()
-            results = []
-            for changed in change(original):
-                if changed.document is not original:
-                    self._publish_unlocked(changed.document)
-                original = changed.document
-                results.append(changed.result)
-            return tuple(results)
+        """Decode before exclusion; apply transitions once after their cut is current."""
+        deadline = time.monotonic() + self.contention.seconds
+        while True:
+            with self.guarded_read():
+                revision = self.revision_unlocked()
+                source = self._capture_unlocked()
+            original = self.read_copied(source)
+            with self.guarded_write():
+                if self.revision_unlocked() != revision:
+                    if time.monotonic() >= deadline:
+                        raise StaleRevision(f"Document kept changing before mutation: {self.path}")
+                    continue
+                results = []
+                for changed in change(original):
+                    if changed.document is not original:
+                        self._publish_unlocked(changed.document)
+                    original = changed.document
+                    results.append(changed.result)
+                return tuple(results)
 
     def initialize(self, create: Callable[[], T]) -> T:
         """Publish a first value once; concurrent creators read the winner."""
@@ -1035,7 +1049,7 @@ class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(CopyingStore, FileStore, LockedFile, DocumentTransactions[T], declared_name=None):
+class LockedStore(FileStore, LockedFile, DocumentTransactions[T], declared_name=None):
     """Each copy ends before decoding; each change owns its complete write."""
 
     def read(self) -> T:

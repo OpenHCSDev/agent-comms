@@ -133,8 +133,8 @@ def test_restoring_same_named_view_keeps_current_predicate_and_original_target_h
     comms.channels.create_tag("api")
     current = ParticipantsView('engineering', ViewPredicate(AnyOfMatch, frozenset({'api'})), created_at=19)
     comms.channels.set_saved_view(current)
-    with comms.bus.opened_activity() as activity, comms.channels.catalog.editing() as document:
-        document.restore_missing(source, activity, existing=True)
+    with comms.bus.opened_activity() as activity:
+        comms.channels.catalog.restore_missing(source, activity)
     restored = comms.channels.catalog.read().saved_views["engineering"]
     assert restored.predicate == current.predicate
     assert restored.created_at == 19

@@ -28,7 +28,7 @@ from .goal_presentation import RunningExecution
 from .input_disposition import InputDispositions
 from .lifecycle_capability import Executing, LifecycleCapability
 from .locked_store import (
-    CopyingStore, DocumentBytes, DocumentChange, DocumentTransactions, DurableFile, LockedFile,
+    DocumentBytes, DocumentChange, DocumentTransactions, DurableFile, LockedFile,
     PatternFile,
 )
 from .message_reference import MessageReference
@@ -598,7 +598,7 @@ class TurnFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True)
-class LockedTurnFile(CopyingStore, SingleFileStore, TurnFile, LockedFile,
+class LockedTurnFile(SingleFileStore, TurnFile, LockedFile,
                      DocumentTransactions[ActiveTurn], DependentStateTier):
     """The writer lock of one turn file. A phase change takes this lock, never the
     registry's; a registry edit superseding the turn takes it before retiring the file."""

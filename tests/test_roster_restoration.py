@@ -108,10 +108,8 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
     before = new.bus.require_channel("#comms")
     old_files = {p: p.read_bytes() for p in old.root.glob("*.json")}
 
-    with new.bus.opened_activity() as activity, new.channels.catalog.editing() as document:
-        document.restore_missing(
-            old.channels.catalog.read(), activity, existing=True
-        )
+    with new.bus.opened_activity() as activity:
+        new.channels.catalog.restore_missing(old.channels.catalog.read(), activity)
     assert new.bus.require_channel("#comms") == before
     assert not new.bus.require_channel("#all").pinned
     for name in ("#nra", "#openhcs"):
@@ -119,10 +117,8 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
             name
         )
     assert old_files == {p: p.read_bytes() for p in old.root.glob("*.json")}
-    with new.bus.opened_activity() as activity, new.channels.catalog.editing() as document:
-        document.restore_missing(
-            old.channels.catalog.read(), activity, existing=True
-        )
+    with new.bus.opened_activity() as activity:
+        new.channels.catalog.restore_missing(old.channels.catalog.read(), activity)
     assert new.bus.require_channel("#comms") == before
     assert new.bus.require_channel("#nra").any_mode
 

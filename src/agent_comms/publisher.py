@@ -222,7 +222,7 @@ class InitialWrites(Publisher):
                 revision = hashlib.sha256(
                     repr((
                         FileRevision.capture(self.registry.store.path),
-                        self.channels.revision(),
+                        self.channels.revision_unlocked(),
                     )).encode()
                 ).hexdigest()
                 audience = freeze_audience(

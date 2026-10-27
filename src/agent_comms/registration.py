@@ -33,6 +33,8 @@ from .repo import Checkout
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .catalog_document import CatalogDocument
+    from .goals import GoalDeclaration
     from .agent_backend import RuntimeLocation
     from .goal_management import Goals
     from .selected_participant import SelectedParticipant
@@ -147,10 +149,8 @@ class Registration:
                 parent=ForkedParent(parent.name), model=parent.model,
                 thinking_level=parent.thinking_level, service_tier=parent.service_tier,
                 execution=CommanderForkExecution))
-            with self._preparing_declaration(edit, child, _DEFAULT_PRESENCE) as change:
-                goal = goals.fork_goal(parent, change.thread)
-                return self._commit_registration(edit, replace(
-                    change, thread=replace(change.thread, goal=goal))).thread
+            return self._declare_in(edit, child, _DEFAULT_PRESENCE,
+                prepare_goal=lambda prepared: goals.fork_goal(parent, prepared))
 
     def register_commanded_unit(
         self, name: str, commander: str, worktree: Checkout, process: ProcessIdentity,
@@ -282,19 +282,20 @@ class Registration:
         document, channels = self.store.read_pair(catalog)
         self._prepare_declaration(document, channels, thread, status)
 
-    def _declare_in(self, edit: RegistryEdit, thread: Thread,
-                    status: ThreadStatus = _DEFAULT_PRESENCE) -> Thread:
-        with self._preparing_declaration(edit, thread, status) as change:
-            return self._commit_registration(edit, change).thread
-
-    @contextmanager
-    def _preparing_declaration(self, edit: RegistryEdit, thread: Thread,
-                              status: ThreadStatus) -> Iterator[RegistrationChange]:
+    def _declare_in(
+        self, edit: RegistryEdit, thread: Thread, status: ThreadStatus = _DEFAULT_PRESENCE,
+        *, prepare_goal: Callable[[Thread], GoalDeclaration] = lambda prepared: prepared.goal,
+    ) -> Thread:
         catalog = ChannelCatalog.at(self.store.path.parent)
-        with catalog.editing() as channels:
+
+        def declare(channels: CatalogDocument) -> Thread:
             change = self._prepare_declaration(edit.document, channels, thread, status)
-            yield change
-            channels.remember_tags(change.thread.tags)
+            change = replace(change, thread=replace(change.thread, goal=prepare_goal(change.thread)))
+            result = self._commit_registration(edit, change).thread
+            channels.remember_tags(result.tags)
+            return result
+
+        return catalog.change(declare)
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         """Every registration commits here, after inheritance kept a redeclared thread's
