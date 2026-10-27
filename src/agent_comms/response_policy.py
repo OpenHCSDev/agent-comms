@@ -45,7 +45,13 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
     def recipients(
         self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> tuple[str, ...]:
-        """Resolve this policy's channel recipients."""
+        """Resolve the channel members who may contribute a response."""
+
+    def required_responders(
+        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
+    ) -> tuple[str, ...]:
+        """Resolve the channel members who owe a reply; a contributor need not owe one."""
+        return self.recipients(message, audience, aliases=aliases)
 
     @abstractmethod
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
@@ -102,13 +108,23 @@ class CollectivePolicy(ResponsePolicy):
 
 
 class MentionedPolicy(CollectivePolicy):
-    def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
+    def required_responders(
+        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
+    ) -> tuple[str, ...]:
+        """Only the addressed members owe a reply; the rest of the channel may contribute."""
+        mentioned = self.mentioned(message, aliases)
+        return tuple(name for name in dict.fromkeys(audience) if name in mentioned)
+
+    @staticmethod
+    def mentioned(message: Message, aliases: Mapping[str, str] | None) -> tuple[str, ...]:
+        """The committed canonical mentions, under their current names."""
         aliases = aliases or {}
-        names = ", ".join(
-            dict.fromkeys(
-                f"@{aliases.get(mention.thread, mention.thread)}" for mention in message.mentions
-            )
-        )
+        return tuple(dict.fromkeys(
+            aliases.get(mention.thread, mention.thread) for mention in message.mentions
+        ))
+
+    def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
+        names = ", ".join(f"@{name}" for name in self.mentioned(message, aliases))
         return (
             f"mentioned; addressed especially to: {names}; "
             "other channel members may contribute when involved or relevant; "
@@ -131,8 +147,11 @@ class ResponseEligibility(ProjectionSource):
 
     policy: ResponsePolicy
     recipients: tuple[str, ...] = ()
+    required_responders: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if len(self.recipients) != len(set(self.recipients)):
             raise ValueError("Response eligibility recipients must be unique.")
+        if not set(self.required_responders) <= set(self.recipients):
+            raise ValueError("A required responder must be an eligible recipient.")
         self.policy.validate_recipients(self.recipients)

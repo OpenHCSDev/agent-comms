@@ -984,7 +984,10 @@ class Message(Addressed, BusCapability, TurnOrigin):
         outside the channel cannot acquire delivery by being named.
         """
         policy = self.role.response_policy(self)
-        return ResponseEligibility(policy, policy.recipients(self, audience, aliases=aliases))
+        return ResponseEligibility(
+            policy, policy.recipients(self, audience, aliases=aliases),
+            policy.required_responders(self, audience, aliases=aliases),
+        )
 
     @property
     def exact_reply_target(self) -> str:

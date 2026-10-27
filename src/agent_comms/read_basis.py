@@ -1003,7 +1003,7 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
     def includes(self, message: Message) -> bool:
         return (message.sender in self.first_names or super().includes(message)
                 or (message.sender in self.second_names
-                    and bool(message.response_eligibility(tuple(self.first_names)).recipients)))
+                    and bool(message.response_eligibility(tuple(self.first_names)).required_responders)))
 
 
 @dataclass(frozen=True, slots=True)
