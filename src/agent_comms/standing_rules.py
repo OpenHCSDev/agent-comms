@@ -922,9 +922,11 @@ class StuckMerge(HeadLine, DatedStandingRule):
     def scan_pulls(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
         return tuple(
             cls(request=PullRequestHead(repo, row.number, row.head), blocks=blocks,
-                holders=tuple(dict.fromkeys(held.owner_identity
-                    for todo in pulls.linked(repo).get(row.number, ())
-                    for held in todo.current_holder.current_assignments())))
+                holders=tuple(dict.fromkeys((
+                    *(held.owner_identity
+                      for todo in pulls.linked(repo).get(row.number, ())
+                      for held in todo.current_holder.current_assignments()),
+                    *pulls.working_on(goals, repo, row)))))
             for repo in goals.registry.snapshot().commander_project.repository_names()
             for row in pulls.open(repo)
             for blocks in (row.stuck(),) if blocks
@@ -945,12 +947,16 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     """An open head, draft or ready, going nowhere outside the merge queue: unmoved for the
     idle window, or blocked by a conflict or a red required check. Armed heads are
     StuckMerge's; every other open request linked to one of this commander's orders is a
-    board item. Another commander's requests share the repositories, never this board."""
+    board item. Another commander's requests share the repositories, never this board; a
+    request no open order links is OrderlessPullRequest's."""
     request: PullRequestHead
     holders: tuple[ThreadIncarnation, ...] = field(compare=False)
     blocks: tuple[MergeBlock, ...] = field(compare=False)
     moved: float = field(compare=False)
     seconds: ClassVar[int] = 30 * 60
+    tag: ClassVar[str] = "IDLE"
+    unheld: ClassVar[str] = "no live holder"
+    unowned: ClassVar[str] = "land or supersede it"
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -988,14 +994,46 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
         return (*super().subjects(), *(UnitSubject(holder) for holder in self.holders))
 
     def line(self) -> str:
-        held = ", ".join(holder.name for holder in self.holders) or "no live holder"
+        held = ", ".join(holder.name for holder in self.holders) or self.unheld
         why = "; ".join(block.what() for block in self.blocks) or "head unmoved"
         actions = ((*(block.remedy() for block in self.blocks),
                     *(f"order {holder.name}" for holder in self.holders))
-                   or ("land or supersede it",))
-        return (f"IDLE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
+                   or (self.unowned,))
+        return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
                 f" {why}, idle {int((time.time() - self.moved) // 60)} min. who owns it, or are we"
                 f" pretending it doesn't exist? -> {'; '.join(actions)}")
+
+
+@dataclass(frozen=True)
+class OrderlessPullRequest(IdlePullRequest):
+    """An open head that no open order links, from any commander: work done outside the order
+    system, which no holder line would ever show. Its blocks and the threads working in a
+    checkout of its branch go on the board, so a red required check reaches whoever is working
+    on it. A head another commander's orders link stays on that commander's board, and an
+    armed head is StuckMerge's."""
+
+    tag: ClassVar[str] = "UNORDERED"
+    unheld: ClassVar[str] = "no order, and no registered thread has its branch checked out"
+    unowned: ClassVar[str] = "order its author or close it with a reason"
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_orderless(comms.goals, frame.pulls)
+
+    @classmethod
+    def scan_orderless(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
+        now = time.time()
+        orders = goals.todos.open_orders()
+        found = (
+            cls(request=PullRequestHead(repo, row.number, row.head),
+                holders=pulls.working_on(goals, repo, row),
+                blocks=row.merge_blocks, moved=row.reviewable_at)
+            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for linked in (pulls.linked_among(orders, repo),)
+            for row in pulls.open(repo) if row.number not in linked and not row.armed_times
+        )
+        return tuple(rule for rule in found if rule.began() <= now)
 
 
 @dataclass(frozen=True)
