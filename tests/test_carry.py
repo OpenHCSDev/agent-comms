@@ -381,25 +381,40 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
     assert all(saved.status(name).stopped for name in names[1:])
 
 
-def test_the_install_start_stops_owners_under_its_hold(comms, stack):
-    """The install's start holds the root and the outgoing runtime stops the owners under
-    that hold; the hold stays draining until the install releases it."""
-    from agent_comms.child_process import SpawnedProcess
+async def test_the_install_start_stops_owners_under_its_hold(
+    tmp_path, stack, native_runtime_package, source_programs,
+):
+    """An actual logical owner retires under the install hold without killing a fake PID."""
+    from agent_comms.comms import wire
+    from agent_comms.coordinator import Coordination
+    from agent_comms.launch_root import LaunchRoot
+    from agent_comms.native_arguments import GivenArguments, GivenBinary
+    from native_backend_fixture import NativeBackendFixture, native_backend_fixture
 
-    path = ledger_one_failure_short(comms.root)
-    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
-    with SpawnedProcess.launch(("sleep", "600")) as owner:
-        comms.registry.declare(replace(Thread("unit", frozenset(), Checkout(comms.root)),
-                                       process_identity=owner.identity),
-                               RunningThreadStatus())
-        with ExistingBusInstall.owners_stopped(comms.root, stack, stack) as owners:
-            assert owners.stopped == ["unit"]
-            assert stack.running_owners(comms.root) == []
-            assert maintenance.read().phase is DrainingPhase
-            owners.retired()
-            owners.release()
-            assert maintenance.read().phase is ReadyPhase
-    GoalAttemptStore.at(path.parent)
+    source_programs.bind(tmp_path)
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
+        comms = wire(native.root)
+        maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+        with LaunchRoot.from_path(comms.root).selected():
+            comms.registry.declare(Thread("unit", frozenset(), Checkout(tmp_path)))
+            await Coordination.run_worker(partial(
+                comms.owners.start, "unit", agent_bin=GivenBinary("pi"),
+                agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
+            ))
+            original = comms.registry.require("unit")
+
+            def stop_under_hold():
+                with ExistingBusInstall.owners_stopped(comms.root, stack, stack) as owners:
+                    assert owners.stopped == ["unit"]
+                    assert stack.running_owners(comms.root) == []
+                    assert not comms.registry.require("unit").process_alive
+                    assert maintenance.read().phase is DrainingPhase
+                    owners.retired()
+                    owners.release()
+                    assert maintenance.read().phase is ReadyPhase
+
+            await Coordination.run_worker(stop_under_hold)
+            assert not original.process_alive
 
 
 def test_a_command_line_that_dies_before_answering_refuses_with_its_own_error():

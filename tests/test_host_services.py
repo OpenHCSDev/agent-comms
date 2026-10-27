@@ -21,7 +21,7 @@ from agent_comms.active_route import (
     ActiveRoute,
     RouteFile,
     active_route_path,
-    route_directory,
+    ActiveRouteFile,
     route_new_bus,
 )
 from agent_comms.bus import Bus
@@ -364,8 +364,8 @@ def test_connector_refuses_a_different_published_bus(connector_service, tmp_path
     StoreBackup.copy_tree(service.launch.path, other)
     route = ActiveRoute(other, RecordedBusIdentity.capture(Bus.path_in(other)))
     path = active_route_path()
-    with route_directory(path) as directory:
-        RouteFile.read(path).replace(route, path, directory)
+    ActiveRouteFile(path).publish(
+        route, lambda current, publish, directory: current.replace(path, publish, directory))
 
     with pytest.raises(ServiceNotServingError, match="published route selects") as refused:
         service.serves()

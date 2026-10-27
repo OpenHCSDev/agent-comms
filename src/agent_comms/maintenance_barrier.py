@@ -13,9 +13,10 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, MutableMapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
+from contextvars import Context, ContextVar
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import Annotated, ClassVar, Literal, Self
 
 from .child_process import ProcessIdentity
 from .private_path import PrivateFileRole
@@ -226,8 +227,26 @@ class DeadHolderReleasedPhase(ReadyPhase):
 HOLDER_NONCE = "AGENT_COMMS_MAINTENANCE_HOLDER"
 
 
-class MaintenanceHolder(SubclassUnion):
-    """A process holds a ClaimId or holds nothing; only the environment has a wire spelling."""
+class MaintenanceSelection(ABC):
+    """A selected request claim or a view of the process's inherited environment."""
+
+    @abstractmethod
+    def resolved(self) -> MaintenanceHolder: ...
+
+
+class InheritedMaintenanceSelection(MaintenanceSelection):
+    def resolved(self) -> MaintenanceHolder:
+        return MaintenanceHolder.from_environment(os.environ)
+
+
+class MaintenanceHolder(SubclassUnion, MaintenanceSelection):
+    """One request's maintenance claim, or its process's inherited claim outside requests."""
+
+    _selected: ClassVar[ContextVar[MaintenanceSelection]] = ContextVar(
+        "maintenance_holder", default=InheritedMaintenanceSelection())
+
+    def resolved(self) -> MaintenanceHolder:
+        return self
 
     @abstractmethod
     def holds(self, nonce: ClaimId) -> bool: ...
@@ -241,14 +260,33 @@ class MaintenanceHolder(SubclassUnion):
 
     @classmethod
     def current(cls) -> MaintenanceHolder:
+        return cls._selected.get().resolved()
+
+    @classmethod
+    def from_environment(cls, environment: Mapping[str, str]) -> MaintenanceHolder:
         """Decode the process's maintenance authority at its environment boundary.
 
         An empty value is the old-runtime spelling of no holder (interpreter_operation.py:326).
         """
-        text = os.environ.get(HOLDER_NONCE)
+        text = environment.get(HOLDER_NONCE)
         if not text:
             return NoMaintenanceHolder()
         return MaintenanceClaimHolder(FieldCodec.decode(ClaimId, text))
+
+    @contextmanager
+    def selected(self) -> Iterator[Self]:
+        """A resident host's concurrent requests never borrow another request's claim."""
+        token = self._selected.set(self)
+        try:
+            yield self
+        finally:
+            self._selected.reset(token)
+
+    @classmethod
+    def in_context(cls, context: Context) -> Context:
+        """Carry this request's claim across a joined executor boundary."""
+        context.run(cls._selected.set, cls.current())
+        return context
 
     @staticmethod
     def outside(environment: Mapping[str, str]) -> dict[str, str]:
@@ -262,12 +300,13 @@ class MaintenanceHolder(SubclassUnion):
     def acting(self) -> Iterator[Self]:
         """This process, and every child it starts, acts as this holder while the block
         lasts, restoring its previous holder afterward."""
-        previous = MaintenanceHolder.current()
-        self.exported(os.environ)
-        try:
-            yield self
-        finally:
-            previous.exported(os.environ)
+        previous = MaintenanceHolder.from_environment(os.environ)
+        with self.selected():
+            self.exported(os.environ)
+            try:
+                yield self
+            finally:
+                previous.exported(os.environ)
 
 
 @dataclass(frozen=True)

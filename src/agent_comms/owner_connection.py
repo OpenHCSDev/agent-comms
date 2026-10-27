@@ -8,17 +8,18 @@ import os
 import socket
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, cast
 from abc import abstractmethod
 from collections.abc import Awaitable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from .command import Command
 from .declared_family import DeclaredFamily
 from .tool_result import DeclaredReply
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import AcpSessionId, FieldCodec, NullMember
+from .field_codec import AcpSessionId, FieldCodec, NullMember, WireOmitDefault
+from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .jsonl_stream import JsonlStreamReader
 from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
@@ -72,6 +73,7 @@ class RuntimeRequest(
 ):
     family_discriminator: ClassVar[str] = "action"
     thread: str
+    holder: Annotated[MaintenanceHolder, WireOmitDefault()] = NoMaintenanceHolder()
 
     @classmethod
     def proxy_payload(
@@ -128,7 +130,8 @@ class OwnerConnection:
                 connection.connect(str(address))
                 if not process.alive():
                     raise ConnectionError("Worker host exited before request dispatch")
-                connection.sendall((json.dumps(FieldCodec.encode(request)) + "\n").encode())
+                dispatched = replace(request, holder=MaintenanceHolder.current())
+                connection.sendall((json.dumps(FieldCodec.encode(dispatched)) + "\n").encode())
                 with connection.makefile("rb") as response:
                     line = response.readline()
                 if not line:

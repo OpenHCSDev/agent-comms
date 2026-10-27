@@ -18,10 +18,13 @@ from agent_comms.maintenance_barrier import (
     DrainingPhase,
     InstallingPhase,
     MaintenanceBarrier,
+    MaintenanceClaimHolder,
+    MaintenanceHolder,
     MaintenanceHeldError,
     MaintenanceOperator,
     MaintenancePhase,
     MaintenanceState,
+    NoMaintenanceHolder,
     PausedPhase,
 )
 from agent_comms.store_files import (
@@ -118,5 +121,41 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
             await asyncio.wait_for(attempt, 5)
         async with barrier.ingress_async() as status:
             status.require_open()
+
+
+async def test_concurrent_request_claims_do_not_change_each_others_permissions(tmp_path):
+    from agent_comms.coordinator import Coordination
+
+    barrier = MaintenanceBarrier(tmp_path / "registry.json")
+    held = barrier.begin(MaintenanceOperator.current())
+    selected, refused = asyncio.Event(), asyncio.Event()
+    environment = dict(os.environ)
+    original = MaintenanceHolder.current()
+
+    def admitted():
+        with barrier.allow_input():
+            return "allowed"
+
+    async def holder():
+        with MaintenanceClaimHolder(held.nonce).selected():
+            selected.set()
+            await refused.wait()
+            assert await Coordination.run_worker(admitted) == "allowed"
+
+    async def unrelated():
+        await selected.wait()
+        try:
+            with NoMaintenanceHolder().selected():
+                with pytest.raises(MaintenanceHeldError):
+                    await Coordination.run_worker(admitted)
+        finally:
+            refused.set()
+
+    try:
+        await asyncio.wait_for(asyncio.gather(holder(), unrelated()), 5)
+        assert MaintenanceHolder.current() == original
+        assert dict(os.environ) == environment
+    finally:
+        barrier.clear(held)
 
 

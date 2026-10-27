@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack, asynccontextmanager
-from contextvars import ContextVar
+from contextvars import Context, ContextVar
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
@@ -23,6 +23,7 @@ from .coordination_session import (
     system_clock,
 )
 from .execution_store import ExecutionStore
+from .maintenance_barrier import MaintenanceHolder
 from .participant_store import ParticipantStore
 from .store_files import DEFAULT_STORE_CONTENTION, StoreContention, StoreLock
 from .working_memory_annotations import WorkingMemoryAnnotations
@@ -114,6 +115,10 @@ class Coordination(ExecutionStore, AttemptStore):
                 cls._worker.reset(token)
 
     @staticmethod
+    def worker_context() -> Context:
+        return MaintenanceHolder.in_context(StoreLock.worker_context())
+
+    @staticmethod
     async def run_worker(operation: Callable[[], Result]) -> Result:
         """Wait for blocking work before its caller releases the enclosing resources.
 
@@ -122,7 +127,7 @@ class Coordination(ExecutionStore, AttemptStore):
         those operations must not depend on opening a coordinator connection.
         """
         pending = asyncio.get_running_loop().run_in_executor(
-            None, StoreLock.worker_context().run, operation
+            None, Coordination.worker_context().run, operation
         )
         return await join_retirement(pending)
 
@@ -285,7 +290,7 @@ class CoordinationWorker(CoordinationRoute):
         return self._apply(operation, self._reader)
 
     async def _submit(self, operation: Callable[[], Result]) -> Result:
-        pending = self._executor.submit(StoreLock.worker_context().run, operation)
+        pending = self._executor.submit(self.store_type.worker_context().run, operation)
         await join_retirement(asyncio.wrap_future(pending))
         return pending.result()
 

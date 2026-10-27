@@ -9,11 +9,10 @@ import shutil
 import sqlite3
 import stat
 import tempfile
-import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
-from contextlib import closing, contextmanager
+from contextlib import AbstractContextManager, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from functools import cache
 from importlib import import_module
@@ -24,7 +23,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 from pydantic import JsonValue
 
 from .child_process import Platform
-from .coordination_errors import CoordinationReadUnavailable, StaleRevision
+from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
@@ -38,6 +37,7 @@ from .store_files import (
     StoreLock,
     StoreLockFile,
     StoreLockOwner,
+    FileTransactions,
     RankedStoreLock,
     StoreOwner,
     is_store_lock,
@@ -406,10 +406,6 @@ class JsonDocument(RootFile, ABC, Generic[T]):
     @abstractmethod
     def empty(self) -> T:
         """Return a fresh value for a missing document."""
-
-    def revision_unlocked(self) -> tuple[FileObservation, ...]:
-        """The physical source revision; owners of coupled files extend this answer."""
-        return (FileRevision.capture(self.path),)
 
     def _read_unlocked(self) -> T:
         return self._read_using(self._decode)
@@ -992,7 +988,7 @@ class CopyingStore(RootFile, RankedStoreLock, declared_name=None):
             return captured
 
 
-class DocumentTransactions(CopyingStore, JsonDocument[T], StoreLockOwner, declared_name=None):
+class DocumentTransactions(CopyingStore, JsonDocument[T], FileTransactions, declared_name=None):
     """Document changes own their write guard, independent of path construction."""
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
@@ -1003,33 +999,36 @@ class DocumentTransactions(CopyingStore, JsonDocument[T], StoreLockOwner, declar
         self, change: Callable[[T], Iterable[DocumentChange[T, R]]],
     ) -> tuple[R, ...]:
         """Decode before exclusion; apply transitions once after their cut is current."""
-        deadline = time.monotonic() + self.contention.seconds
-        while True:
-            with self.guarded_read():
-                revision = self.revision_unlocked()
-                source = self._capture_unlocked()
-            original = self.read_copied(source)
-            with self.guarded_write():
-                if self.revision_unlocked() != revision:
-                    if time.monotonic() >= deadline:
-                        raise StaleRevision(f"Document kept changing before mutation: {self.path}")
-                    continue
-                results = []
-                for changed in change(original):
-                    if changed.document is not original:
-                        self._publish_unlocked(changed.document)
-                    original = changed.document
-                    results.append(changed.result)
-                return tuple(results)
+        def apply(original: T) -> tuple[R, ...]:
+            results = []
+            for changed in change(original):
+                if changed.document is not original:
+                    self._publish_unlocked(changed.document)
+                original = changed.document
+                results.append(changed.result)
+            return tuple(results)
+
+        return self.change_current(
+            self._capture_unlocked, lambda source: nullcontext(self.read_copied(source)), apply)
 
     def initialize(self, create: Callable[[], T]) -> T:
         """Publish a first value once; concurrent creators read the winner."""
-        with self.guarded_write():
-            if self.path.exists():
-                return self._read_unlocked()
+        def initialize() -> T:
             document = create()
             self._publish_unlocked(document)
             return document
+
+        def prepare(source: DocumentBytes) -> AbstractContextManager[Callable[[], T]]:
+            def existing(present: FileRevision) -> Callable[[], T]:
+                value = self.read_copied(source)
+                return lambda: value
+
+            return nullcontext(source.revision.either(existing, lambda: initialize))
+
+        def apply(ready: Callable[[], T]) -> T:
+            return ready()
+
+        return self.change_current(self._capture_unlocked, prepare, apply)
 
     def replace(self, value: T) -> None:
         """Publish a complete owned snapshot without reading the discarded one.
