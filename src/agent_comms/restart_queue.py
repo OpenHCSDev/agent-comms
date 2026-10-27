@@ -38,8 +38,8 @@ from .private_path import PrivateDirectoryRole
 from .process_claim import ClaimHeldError, ProcessSingleton
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .thread_identity import RecordedThreadIncarnation
-from .typed_table import Column, DurableStore, Generated, Index, StoreRows, TypedTable, sql_literal
+from .thread_identity import OwnerIdentity, RecordedThreadIncarnation, ThreadIncarnationRecord
+from .typed_table import Column, DurableStore, FrozenColumn, Generated, Index, StoreRows, TypedTable, sql_literal
 from .tool_result import ToolResult
 from .watched import ChangeSignal, FileSource
 
@@ -178,15 +178,19 @@ class RestartRows(StoreRows):
 
 @dataclass(frozen=True)
 class QueuedRestart(RestartRows, TypedTable):
-    id: Annotated[RestartId, Column(primary_key=True)]
-    selection: OwnerRestartSelection
-    target: RestartTarget
+    id: Annotated[RestartId, FrozenColumn(primary_key=True)]
+    selection: Annotated[OwnerRestartSelection, FrozenColumn()]
+    target: Annotated[RestartTarget, FrozenColumn()]
     state: RestartState
 
     owner_birth: ClassVar[Generated] = Generated(float, Column(
-        generated="json_extract(selection, '$.identity.incarnation.created_at')"))
+        generated="json_extract(selection, '$."
+        + FieldCodec.record_key(OwnerRestartSelection, "identity") + "."
+        + FieldCodec.record_key(OwnerIdentity, "incarnation") + "."
+        + FieldCodec.record_key(ThreadIncarnationRecord, "created_at") + "')",
+        check="owner_birth > 0"))
     active: ClassVar[Generated] = Generated(bool, Column(
-        generated="json_extract(state, '$.kind') IN (" + ", ".join(
+        generated=f"json_extract(state, '$.{RestartState.family_discriminator}') IN (" + ", ".join(
             sql_literal(member) for member in RestartState.members_with(Active)
         ) + ")"))
     indexes = (

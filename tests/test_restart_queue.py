@@ -157,8 +157,12 @@ def test_carry_keeps_every_original_and_never_requeues_an_attempt(
                             identity=comms.registry.snapshot().owner_identity('attempted')))
     terminal = replace(pending, id=RestartId.mint(),
                        state=queue.UncertainRestart(reason='retain ambiguous terminal'))
+    comms.registry.declare(Thread('interrupted', frozenset(), Checkout(comms.root)))
+    interrupted = replace(terminal, id=RestartId.mint(),
+                          selection=replace(pending.selection,
+                              identity=comms.registry.snapshot().owner_identity('interrupted')))
     paths = []
-    for record in (pending, attempted, terminal):
+    for record in (pending, attempted, terminal, interrupted):
         parent = directory / ('settled/' + str(record.owner.lookup)
                               if record is terminal else 'active')
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -167,17 +171,18 @@ def test_carry_keeps_every_original_and_never_requeues_an_attempt(
         paths.append(path)
     originals = tuple(path.read_bytes() for path in paths)
     carry = RestartQueueRows(LiveFilesRequest(comms.root), tmp_path / 'spill')
-    assert carry.carry(apply=False).changed == 3
+    assert carry.carry(apply=False).changed == 4
     assert not (directory / 'queue.sqlite3').exists()
     with maintenance_held(comms.root):
-        assert carry.carry(apply=True).changed == 3
+        assert carry.carry(apply=True).changed == 4
         assert tuple(path.read_bytes() for path in paths) == originals
         # A repeated carry verifies exact rows instead of minting or reclassifying them.
-        assert carry.carry(apply=True).changed == 3
+        assert carry.carry(apply=True).changed == 4
         store = queue.RestartQueue(comms.root)
         assert store.history(pending.owner) == [pending, terminal]
         assert store.history(attempted.owner) == [attempted]
-        assert carry.after_acceptance().changed == 3
+        assert store.history(interrupted.owner) == [interrupted]
+        assert carry.after_acceptance().changed == 4
         assert not any(path.exists() for path in paths)
         assert store.history(attempted.owner) == [attempted]
     # The original pending process is dead. The watcher can only settle it;
