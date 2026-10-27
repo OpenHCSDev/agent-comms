@@ -74,9 +74,14 @@ class ClaudeTranscriptHook(ClaudeHook):
 
     @property
     def parts(self) -> Path:
-        """The commander's sources, written by the session start hook beside the transcript;
-        they exist only in a commander session."""
+        """The sources dealt to a bound session, written by the session start hook beside the
+        transcript; they exist only in a session bound to a bus."""
         return Path(self.transcript_path).with_suffix(".reread")
+
+    @property
+    def parts_read(self) -> Path:
+        """The names of the dealt parts read in full since the last deal, one per line."""
+        return Path(self.transcript_path).with_suffix(".reread-done")
 
     def tail(self) -> list[bytes]:
         """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""
