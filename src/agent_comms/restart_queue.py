@@ -163,14 +163,6 @@ class RestartTarget:
         if Path(self.agent_bin).is_absolute() and not os.access(self.agent_bin, os.X_OK):
             raise ValueError("Target agent entrypoint is unavailable")
 
-    def require_current(self, comms: Comms) -> None:
-        self.require_available(comms)
-        current = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), self.launch_runtime)
-        )
-        if self.runtime != current:
-            raise ValueError("Queued target environment changed")
-
 
 class RestartRows(StoreRows):
     """The restart store discovers its rows through this membership declaration."""
@@ -320,7 +312,7 @@ class RestartQueue(DurableStore):
                 return ()  # Busy owners retain their pending request.
             else:
                 try:
-                    record.target.require_current(comms)
+                    record.target.require_available(comms)
                 except ValueError as error:
                     record = record.transition(BlockedRestart(reason=str(error)))
                 else:

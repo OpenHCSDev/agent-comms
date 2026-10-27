@@ -4,7 +4,6 @@ No source-side reader accepts the retired format. An attempted intent is copied
 as attempted, never turned back into pending. Delete this tool after acceptance.
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
@@ -12,7 +11,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.lifecycle_capability import Pending
-from agent_comms.locked_store import DurableFile, PatternFile, RootFile, RuntimeFile
+from agent_comms.locked_store import DurableFile, FileStore, PatternFile, RootFile, RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from agent_comms.restart_queue import DIRECTORY, QueuedRestart, RestartQueue
 from agent_comms.store_files import MultiFileStore
@@ -27,16 +26,10 @@ class OriginalRestartRecord(DurableFile, PatternFile):
         return frozenset(path for path in root.rglob(str(cls.pattern())) if path.is_file())
 
 
-@dataclass(frozen=True)
-class OriginalRestartWriter(RuntimeFile, MultiFileStore):
+class OriginalRestartWriter(FileStore, RuntimeFile, MultiFileStore):
     """The outgoing JSON writer's exact lock, retained only for this carry."""
 
-    root: Path
     filename: ClassVar[str] = f"{DIRECTORY}/queue"
-
-    @property
-    def path(self) -> Path:
-        return self.path_in(self.root)
 
 
 class RestartQueueRows(Carry):
@@ -65,7 +58,7 @@ class RestartQueueRows(Carry):
         MaintenanceBarrier(self.root / "registry.json").read().require_held_by(
             MaintenanceHolder.current(), "Carry original restart intents")
         store = RestartQueue(self.root)
-        with OriginalRestartWriter(self.root).guarded_write(), store.watcher_claim.claimed():
+        with OriginalRestartWriter.at(self.root).guarded_write(), store.watcher_claim.claimed():
             # Re-read after the outgoing writer is excluded; no intent is inferred from a path.
             originals = self.originals()
             with store.writing() as db:
@@ -80,7 +73,7 @@ class RestartQueueRows(Carry):
         if not originals:
             return Carried(0)
         store = RestartQueue(self.root)
-        with OriginalRestartWriter(self.root).guarded_write(), store.watcher_claim.claimed():
+        with OriginalRestartWriter.at(self.root).guarded_write(), store.watcher_claim.claimed():
             originals = self.originals()
             with store.snapshot() as db:
                 for _, record in originals:

@@ -1,46 +1,17 @@
 """Queued owner handoff wakes for registry and allocated queue entries."""
 
-from agent_comms.repo import Checkout
 import asyncio
-import json
-import subprocess
-import sys
 from contextlib import aclosing
 from dataclasses import replace
 
-import pytest
 
 import agent_comms.restart_queue as queue
-from agent_comms.bus import Bus
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec, RestartId
-from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
-from agent_comms.watched import DirectorySource, FileSource
-
-
-@pytest.fixture
-def dead_owner_restart(private_comms):
-    comms = private_comms
-    comms.registry.declare(Thread('worker', frozenset(), Checkout(comms.root)))
-    snapshot = comms.registry.snapshot()
-    with subprocess.Popen(
-        (sys.executable, '-c', 'import sys; sys.stdin.buffer.read(1)'), stdin=subprocess.PIPE,
-    ) as process:
-        identity = ProcessIdentity.capture(process.pid)
-        process.communicate(b'x', timeout=10)
-        assert process.returncode == 0
-    selection = OwnerRestartSelection(
-        snapshot.owner_identity('worker'), identity,
-        snapshot.claim_generation('worker'), sys.executable,
-    )
-    return queue.QueuedRestart(
-        RestartId.mint(), selection,
-        queue.RestartTarget(sys.executable, RestartEnvironment(), sys.executable),
-        queue.PendingRestart(),
-    )
-
+from agent_comms.bus import Bus
+from agent_comms.field_codec import FieldCodec, RestartId
+from agent_comms.watched import FileSource
+from restart_fixture import dead_owner_restart, original_restart_json
 
 def test_dead_owner_restart_settles_before_selection_checks(private_comms, dead_owner_restart):
     store = queue.RestartQueue(private_comms.root)
@@ -125,23 +96,23 @@ def test_attempted_and_terminal_records_never_return_to_pending(
         assert store._active(db) == [attempted]
 
 
-async def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
-    root = tmp_path / "wire"
-    root.mkdir()
-    directory = root / queue.DIRECTORY
-    directory.mkdir()
-    async with aclosing(Bus.watch_sources(
-        FileSource(root / "registry.json"), DirectorySource(directory),
-    )) as observations:
+async def test_inotify_wakes_for_registry_and_queue_changes(private_comms, dead_owner_restart):
+    comms = private_comms
+    store = queue.RestartQueue(comms.root)
+    sources = (FileSource(comms.registry.store.path),
+               *(FileSource(path) for path in type(store).source_paths(comms.root)))
+    async with aclosing(Bus.watch_sources(*sources)) as observations:
         await anext(observations)
-        (root / "registry.json").write_text("changed")
+        comms.registry.declare(Thread('wake', frozenset(), Checkout(comms.root)))
         await asyncio.wait_for(anext(observations), 1)
-        (directory / "next.json").write_text("queued")
+        with store.writing() as db:
+            dead_owner_restart.insert(db)
         await asyncio.wait_for(anext(observations), 1)
+        assert store.history(dead_owner_restart.owner) == [dead_owner_restart]
 
 
 def test_carry_keeps_every_original_and_never_requeues_an_attempt(
-    private_comms, dead_owner_restart, tmp_path,
+    private_comms, original_restart_json, tmp_path,
 ):
     from cutover.carry_restart_queue import RestartQueueRows
     from agent_comms.locked_store import LiveFilesRequest
@@ -149,26 +120,8 @@ def test_carry_keeps_every_original_and_never_requeues_an_attempt(
 
     comms = private_comms
     directory = comms.root / queue.DIRECTORY
-    directory.mkdir(mode=0o700)
-    pending = dead_owner_restart
-    comms.registry.declare(Thread('attempted', frozenset(), Checkout(comms.root)))
-    attempted = replace(pending, id=RestartId.mint(), state=queue.AttemptingRestart(),
-                        selection=replace(pending.selection,
-                            identity=comms.registry.snapshot().owner_identity('attempted')))
-    terminal = replace(pending, id=RestartId.mint(),
-                       state=queue.UncertainRestart(reason='retain ambiguous terminal'))
-    comms.registry.declare(Thread('interrupted', frozenset(), Checkout(comms.root)))
-    interrupted = replace(terminal, id=RestartId.mint(),
-                          selection=replace(pending.selection,
-                              identity=comms.registry.snapshot().owner_identity('interrupted')))
-    paths = []
-    for record in (pending, attempted, terminal, interrupted):
-        parent = directory / ('settled/' + str(record.owner.lookup)
-                              if record is terminal else 'active')
-        parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        path = parent / f'{record.id if record is terminal else record.owner.lookup}.json'
-        path.write_text(json.dumps(FieldCodec.encode(record)))
-        paths.append(path)
+    paths = tuple(original_restart_json)
+    pending, attempted, terminal, interrupted = original_restart_json.values()
     originals = tuple(path.read_bytes() for path in paths)
     carry = RestartQueueRows(LiveFilesRequest(comms.root), tmp_path / 'spill')
     assert carry.carry(apply=False).changed == 4
