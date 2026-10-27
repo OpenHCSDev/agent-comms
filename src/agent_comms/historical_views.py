@@ -3,7 +3,6 @@
 from __future__ import annotations
 from agent_comms.repo import Checkout
 
-import json
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
@@ -16,13 +15,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus import Bus
+from .child_process import Platform
 from .catalog_store import ChannelCatalog
 from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
-from .locked_store import DurableFile, LockedFile, RegistryFile, RootFile
+from .locked_store import DocumentChange, RegistryFile, RootFile
+from .maintenance_barrier import CarriedDocument
 from .message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -33,7 +34,7 @@ from .message_page import (
 from .messages import CarriesEnvelope, Message
 from .page_traversal import HistoryCursor, OlderTraversal
 from .presentation import MessageNotification
-from .private_path import FileObservation, FileRevision, ObservedPath
+from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (
     AnonymousViewer,
     ChannelDisplayIdentity,
@@ -54,7 +55,7 @@ from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import AtomicFile, SourceTier
+from .store_files import SingleFileStore, SourceTier
 from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
 from .transcript_routes import TranscriptRoutes
@@ -273,12 +274,42 @@ class HistorySource:
         return self.root
 
     @classmethod
-    def capture_original(cls, root: Path, provenance: RegistryProvenance) -> HistorySource:
-        """Capture the same owned source facts used to validate a sealed archive."""
+    def capture_original(cls, root: Path) -> HistorySource:
+        """The original namespace and its file revision come from the same registry cut."""
+        cut = Registration(RegistryFile.path_in(root)).store.snapshot_with_authority()
         identity = RecordedBusIdentity.capture(Bus.path_in(root))
         return cls(
             str(root), str(root), identity, identity, Bus(Bus.path_in(root)).revision(),
-            FileRevision.capture(RegistryFile.path_in(root)), provenance,
+            cut.revision[0], RegistryProvenance.capture(cut.snapshot),
+        )
+
+    def retain(self, destination: Path) -> HistorySource:
+        """Copy this original into an unpublished directory without changing its inputs."""
+        root = Path(self.original_root)
+        self.require_original(root)
+        catalog_path = ChannelCatalog.path_in(root)
+        catalog_revision = FileRevision.capture(catalog_path)
+        archived = Bus(Bus.path_in(destination))
+        Bus(Bus.path_in(root)).backup(archived.path)
+        for path in (RegistryFile.path_in(root), catalog_path):
+            if path.exists():
+                target = destination / path.name
+                shutil.copy2(path, target)
+                Platform.current().sync_file(target)
+        TranscriptRoutes(root).retain(destination)
+        Registration(RegistryFile.path_in(destination)).store.mark_historical()
+        self.require_original(root)
+        if FileRevision.capture(catalog_path) != catalog_revision:
+            raise ValueError("Historical catalog changed during snapshot; retry")
+        if archived.revision() != self.snapshot_bus_revision:
+            raise ValueError("Historical bus changed during snapshot; retry")
+        if not self.provenance.threads:
+            raise ValueError("Historical source has no identity declarations")
+        Platform.current().sync_directory(destination)
+        return HistorySource(
+            str(destination.resolve()), self.original_root, self.bus_identity,
+            RecordedBusIdentity.capture(archived.path), self.snapshot_bus_revision,
+            FileRevision.capture(RegistryFile.path_in(destination)), self.provenance,
         )
 
     def validate(self) -> None:
@@ -396,14 +427,15 @@ class HistoricalThread:
     thread: ThreadProvenance
 
 
-class HistoryArchive(DurableFile, LockedFile, SourceTier):
+class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]], SourceTier):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
     filename = "history_sources.json"
 
-    def __init__(self, bus_path: Path):
-        self.bus_path = bus_path
-        self.path = self.path_in(bus_path.parent)
+    record_type = tuple[HistorySource, ...]
+
+    def empty(self) -> tuple[HistorySource, ...]:
+        return ()
 
     @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
@@ -432,90 +464,53 @@ class HistoryArchive(DurableFile, LockedFile, SourceTier):
     @contextmanager
     def read_sources(self) -> Iterator[tuple[HistorySource, ...]]:
         """Decode one read's catalogue; reject changes without decoding it again."""
-        try:
-            stream = self.path.open('rb')
-        except FileNotFoundError:
-            yield ()
-            if self.path.exists():
-                raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
-            return
-        with stream:
-            revision = FileRevision.from_file(stream)
-            sources = FieldCodec.decode(tuple[HistorySource, ...], json.load(stream))
-        self._require_revision(revision)
+        captured = self._capture_unlocked()
+        sources = self.read_copied(captured)
+        self._require_revision(captured.revision)
         yield sources
-        self._require_revision(revision)
+        self._require_revision(captured.revision)
 
-    def _require_revision(self, revision: FileRevision) -> None:
+    def _require_revision(self, revision: FileObservation) -> None:
         if FileRevision.capture(self.path) != revision:
             raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
 
     def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
-        """Snapshot a preserved source, then publish it for ordinary display.
-
-        Only destination files are written. No Comms constructor, source locks,
-        inboxes, execution inputs, or source sequence allocator are touched.
-        A source is attached once. Its original bytes and identity survive.
-        """
-
-        from .historical_views import HistorySource
-
+        """Prepare a source without archive exclusion, then publish it exactly once."""
         source_root = source_root.resolve()
-        if source_root == self.bus_path.parent.resolve():
+        if source_root == self.path.parent.resolve():
             raise ValueError("The live bus cannot be its own history source")
-        with self.guarded_write():
-            sources = self.sources()
-            existing = next((s for s in sources if s.original_root == str(source_root)), None)
-            if existing is not None:
-                return existing
-            parent = self.archive_directory(self.bus_path.parent)
-            parent.mkdir(mode=0o700, exist_ok=True)
-            stage = Path(tempfile.mkdtemp(prefix="source-", dir=parent))
-            try:
-                paths = [
-                    source_root / name
-                    for name in (
-                        RegistryFile.filename,
-                        ChannelCatalog.filename,
-                    )
-                ]
-                catalog_path = ChannelCatalog.path_in(source_root)
-                catalog_revision = FileRevision.capture(catalog_path)
-                original_bus = Bus(Bus.path_in(source_root))
-                if source_read is None:
-                    registry = Registration(RegistryFile.path_in(source_root)).store.read()
-                    original = HistorySource.capture_original(
-                        source_root, RegistryProvenance.capture(registry),
-                    )
-                else:
-                    source_read.require_original(source_root)
-                    original = source_read
-                archived = Bus(Bus.path_in(stage))
-                original_bus.backup(archived.path)
-                for path in paths:
-                    if path.exists():
-                        shutil.copy2(path, stage / path.name)
-                TranscriptRoutes(source_root).retain(stage)
-                Registration(RegistryFile.path_in(stage)).store.mark_historical()
+        existing = next((s for s in self.sources() if s.original_root == str(source_root)), None)
+        if existing is not None:
+            return existing
+        PrivateDirectoryRole.make_parents(self.path.parent)
+        stage = Path(tempfile.mkdtemp(prefix=".history-source-", dir=self.path.parent))
+        try:
+            original = HistorySource.capture_original(source_root) if source_read is None else source_read
+            original.require_original(source_root)
+            catalog_revision = FileRevision.capture(ChannelCatalog.path_in(source_root))
+            prepared = original.retain(stage)
+            parent = self.archive_directory(self.path.parent)
+            target = parent / stage.name.removeprefix(".history-")
+
+            def publish(sources: tuple[HistorySource, ...]) -> DocumentChange[tuple[HistorySource, ...], HistorySource]:
+                existing = next((s for s in sources if s.original_root == str(source_root)), None)
+                if existing is not None:
+                    return DocumentChange(sources, existing)
                 original.require_original(source_root)
-                error = ValueError("Historical source changed during snapshot; retry")
-                if FileRevision.capture(catalog_path) != catalog_revision:
-                    raise error
-                if archived.revision() != original.snapshot_bus_revision:
-                    raise error
-                source = HistorySource(
-                    str(stage.resolve()), str(source_root),
-                    original.bus_identity, RecordedBusIdentity.capture(archived.path),
-                    original.snapshot_bus_revision,
-                    FileRevision.capture(RegistryFile.path_in(stage)), original.provenance,
-                )
-                if not source.provenance.threads:
-                    raise ValueError("Historical source has no identity declarations")
-                AtomicFile(self.path).write_text(json.dumps([FieldCodec.encode(item) for item in (*sources, source)]))
-                return source
-            except BaseException:
+                if FileRevision.capture(ChannelCatalog.path_in(source_root)) != catalog_revision:
+                    raise ValueError("Historical catalog changed before publication; retry")
+                PrivateDirectoryRole.make_parents(parent)
+                stage.rename(target)
+                Platform.current().sync_directory(parent)
+                Platform.current().sync_directory(self.path.parent)
+                source = replace(prepared, root=str(target.resolve()))
+                return DocumentChange((*sources, source), source)
+
+            return self.update(publish)
+        finally:
+            # A promoted directory may already be published; only the private stage is ours to discard.
+            if stage.exists():
                 shutil.rmtree(stage)
-                raise
 
     def page(self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         traversal = bounds.traversal

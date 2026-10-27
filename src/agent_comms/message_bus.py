@@ -101,7 +101,7 @@ class MessageBus[Writes: Publisher]:
     ):
         self.bus = Bus(Bus.path_in(root))
         self.reads = ReadLedger.at(root)
-        self.history = HistoryArchive(self.bus.path)
+        self.history = HistoryArchive.at(self.bus.path.parent)
         self._registry = registry
         self._channels = ChannelCatalog.at(root)
         self.publisher = publisher(self.bus, registry, self._channels, self.opened_activity)

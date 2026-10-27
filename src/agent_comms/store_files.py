@@ -394,7 +394,7 @@ class StoreLockTier(RankedStoreLock, declared_name=None):
 
 
 class SourceTier(StoreLockTier):
-    """HistoryArchive.attach holds history before registry (historical_views.py:472/492)."""
+    """Archive catalog publication has its own rank; snapshot copying holds no archive writer."""
 
     __slots__ = ()
 
