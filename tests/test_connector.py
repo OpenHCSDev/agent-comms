@@ -467,6 +467,33 @@ async def test_registration_accepts_only_the_claude_callback(client):
 async def test_connector_lists_every_tool(client, store, comms):
     token = await approved_token(client, comms)
     headers = {"Authorization": f"Bearer {token}"}
+    # A real client cannot reach tools/list without a valid initialization reply.
+    # An optional discovery probe may fail, but its JSON-RPC error needs a code.
+    discovery = await (await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": "discover", "method": "server/discover",
+    })).json()
+    assert discovery["id"] == "discover"
+    assert discovery["error"]["code"] == -32601
+    initialized = await (await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": "initialize", "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "connector-client", "version": "1"},
+        },
+    })).json()
+    assert initialized == {
+        "jsonrpc": "2.0", "id": "initialize", "result": {
+            "protocolVersion": "2025-06-18", "capabilities": {"tools": {"listChanged": False}},
+            "serverInfo": {"name": "agent-comms", "version": "1"},
+        },
+    }
+    ready = await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "method": "notifications/initialized",
+    })
+    assert ready.status == 202 and await ready.read() == b""
+    ping = await (await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": "ping", "method": "ping",
+    })).json()
+    assert ping == {"jsonrpc": "2.0", "id": "ping", "result": {}}
     listed = (await (await client.post("/mcp", json=LIST, headers=headers)).json())["result"]["tools"]
     family = CALLER.exposed()
     assert [tool["name"] for tool in listed] == list(family)
