@@ -27,7 +27,6 @@ from .turn_lease import (
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
-    from .owner_lifecycle import OwnerLifecycle
     from .registration import Registration
     from .registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
     from .thread_identity import GenerationCounter, OwnerIdentity
@@ -126,9 +125,6 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
         return ()
 
-    def settle_local_stop(self, lifecycle: OwnerLifecycle, thread: Thread) -> bool:
-        return thread.process_identity.allows_inactive_stop()
-
     def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
         return () if thread.process_alive else (thread,)
 
@@ -207,12 +203,6 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
 
     def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
         return thread.role.executor(thread) if thread.process_alive else ()
-
-    def settle_local_stop(self, lifecycle: OwnerLifecycle, thread: Thread) -> bool:
-        if not thread.process_identity.runs_here():
-            return False
-        lifecycle._settle_local_owner(thread)
-        return True
 
     def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
         return ()

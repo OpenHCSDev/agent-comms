@@ -14,6 +14,7 @@ from agent_comms.pi_counts import PiCount
 from agent_comms.runtime import socket_path
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.restart_scope import OwnersNamed
+from agent_comms.routing import NoTurnRouting
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.session_file import RegistrySessionLocation
 from native_backend_fixture import native_backend_fixture
@@ -84,7 +85,7 @@ async def test_busy_owner_restart_queues_and_runs_at_idle(
                 # The worker's own begin-turn transaction, so the live owner holds the turn.
                 with comms.registry.store.editing() as edit:
                     leased, _ = edit.lease_turn(
-                        edit.original.snapshot.require_active('worker'), TurnId.mint(), None)
+                        edit.original.snapshot.require_active('worker'), TurnId.mint(), NoTurnRouting())
                     edit.commit()
                 assert comms.registry.require('worker').executing
 

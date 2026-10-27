@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from .owner_cutover import OwnerCutover
     from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
     from .registry_document import RegistrySnapshot
+    from .registry_store import RegistryEdit
     from .threads import Thread
 
 
@@ -224,8 +225,8 @@ class FencedOwnerBatch:
         try:
             # Every original shares one grace period instead of waiting in turn.
             self.lifecycle._stop_processes(self.captured)
-            with self.lifecycle.registry.store.guarded_write():
-                snapshot = self.lifecycle.registry.snapshot()
+            with self.lifecycle.registry.store.current_snapshot() as cut:
+                snapshot = cut.snapshot
                 releases = self.lifecycle.releases.read_many(
                     tuple(thread.name for thread, _ in self.captured))
                 for (thread, generation), launch in zip(self.captured, self.launches, strict=True):
@@ -264,9 +265,9 @@ class ClaimedOwnerBatch:
     @classmethod
     def restart(cls, lifecycle: OwnerLifecycle, request: OwnerRestartRequest,
                 cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
-        with lifecycle.registry.store.guarded_write():
+        with lifecycle.registry.store.current_snapshot() as cut:
             cutover.require_restart_phase(lifecycle)
-            snapshot = lifecycle.registry.snapshot()
+            snapshot = cut.snapshot
             threads = request.scope.threads(snapshot)
             request.require_selection(snapshot, threads)
             cutover.require_selection(snapshot, threads)
@@ -283,9 +284,9 @@ class ClaimedOwnerBatch:
         ) for thread, _ in captured)
         if captured:
             cutover.require_launch(lifecycle)
-        with lifecycle.registry.store.guarded_write():
+        with lifecycle.registry.store.editing() as edit:
             cutover.require_restart_phase(lifecycle)
-            current = lifecycle.registry.snapshot()
+            current = edit.original.snapshot
             request.require_selection(current, threads)
             cutover.require_selection(current, threads)
             for thread, generation in captured:
@@ -295,9 +296,9 @@ class ClaimedOwnerBatch:
                 )
                 current.require_stopping_owner(thread, generation)
             authorized = cls(lifecycle, tuple(captured), launches, request, runtime)
-            fenced = authorized.fence()
+            fenced = authorized.fence(edit)
         return fenced.complete(cutover)
 
-    def fence(self) -> FencedOwnerBatch:
-        captured = self.lifecycle.registry.fence_idle_owners(self.captured)
+    def fence(self, edit: RegistryEdit) -> FencedOwnerBatch:
+        captured = edit.fence_idle_owners(self.captured)
         return FencedOwnerBatch(self.lifecycle, captured, self.launches, self.request, self.runtime)
