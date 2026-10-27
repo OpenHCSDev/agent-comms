@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .declared_choice import DeclaredChoice
 
 if TYPE_CHECKING:
     from .channel_management import ChannelManagement
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 
 
-class DisplayOrder(ABC):
+class DisplayOrder(DeclaredChoice, ABC):
     title: ClassVar[str]
 
     @classmethod
