@@ -450,7 +450,11 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         it can settle only an intent this complete declaration already shows.
         Namespace/privacy validation still precedes even a cached capture.
         """
-        return self.read_copied(self._capture_unlocked()).entry(name)
+        revision = self.revision_unlocked()
+        source = self._capture_unlocked()
+        if source.revision != revision[0] or self.revision_unlocked() != revision:
+            raise StaleFence("Registry changed during history observation; read history again")
+        return self.read_copied(source).entry(name)
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
