@@ -154,7 +154,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     claims = accept_initial(comms.bus, root_id, channel.seq, store)
     assert {row.recipient: type(row.lifecycle.mode) for row in claims} == expected
     assert channel.response_eligibility(("alice", "bob")).recipients == ("alice", "bob")
-    dm = comms.messaging.send_user_message(CommandTarget.named('bob'), "direct", worktree=str(tmp_path))
+    dm = comms.messaging.send_user_message(CommandTarget.named('bob'), "direct", worktree=Checkout(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
     assert list(comms.views.history_page(CommandTarget.named("bob"), viewer=NamedViewer(channel.sender)).messages)[-1] == dm
     dm_initial = comms.bus.bus.delivery(dm.seq)
@@ -205,7 +205,7 @@ def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Pa
     roots = [wire(comms.root), wire(comms.root)]
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [
-            pool.submit(service.messaging.send_user_message, CommandTarget.named("#team"), f"input-{n}", worktree=str(tmp_path))
+            pool.submit(service.messaging.send_user_message, CommandTarget.named("#team"), f"input-{n}", worktree=Checkout(tmp_path))
             for n, service in enumerate(roots)
         ]
         messages = [future.result(timeout=5) for future in futures]
