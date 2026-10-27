@@ -17,7 +17,7 @@ from typing import ClassVar, Self
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, TurnId
-from .locked_store import DocumentBytes, RegistryFile
+from .locked_store import DocumentBytes, LockedStore, RegistryFile
 from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -243,6 +243,15 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def snapshot(self) -> RegistrySnapshot:
         source, = self._copy_sources(self)
         return self._decode_snapshot(source)
+
+    def snapshot_with_pair[T, U](
+        self, first: LockedStore[T], second: LockedStore[U],
+    ) -> tuple[RegistrySnapshot, T, U]:
+        """Capture related files together; decode none while holding a guard."""
+        registry, first_source, second_source = self._copy_sources(self, first, second)
+        return (self._decode_snapshot(registry),
+                first._read_captured(lambda: first_source, first._decode_capture),
+                second._read_captured(lambda: second_source, second._decode_capture))
 
     def _decode_snapshot(self, source: DocumentBytes) -> RegistrySnapshot:
         revision = self._decode_revision(source)

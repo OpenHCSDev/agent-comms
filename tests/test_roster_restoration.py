@@ -13,6 +13,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.field_codec import TurnId
+from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
 from agent_comms.registry_document import ThreadRows
 
 from agent_comms.session_file import RegistrySessionLocation
@@ -170,20 +171,17 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             message = current.messaging.send_user_message(
                 CommandTarget.named('#comms'), "@live Reply once", worktree=Checkout(tmp_path)
             )
-        accept_initial(current.bus, root_id, message.seq, store)
-        assert tuple(
-            store.session._connection.execute(
-                "SELECT member_count, claim_count, sealed FROM claim_batch_receipts "
-                "WHERE wire_seq=?",
-                (message.seq,),
-            ).fetchone()
-        ) == (2, 1, 1)
-        assert [
-            tuple(row)
-            for row in store.session._connection.execute(
-                "SELECT recipient, disposition FROM wake_claims WHERE wire_seq=?", (message.seq,)
-            ).fetchall()
-        ] == [(live.name, "full_pending")]
+        assignments = accept_initial(current.bus, root_id, message.seq, store)
+        assert {row.recipient: type(row.lifecycle) for row in assignments} == {
+            live.name: FullPendingAssignment,
+            missing.name: TriagePendingAssignment,
+        }
+        # A saved notification is not permission to revive a stopped owner.
+        with pytest.raises(RelationViolationError):
+            current.registry.snapshot().require_active(missing.name)
+        assert (
+            store.participants.get(missing.incarnation.lookup).pointer.execution_id == NoPointedExecution()
+        )
         snapshot = current.registry.snapshot()
         assert current.registry.restore_stopped(source, (missing.name,)) == ()
         assert current.registry.snapshot() == snapshot

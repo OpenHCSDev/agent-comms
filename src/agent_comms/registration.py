@@ -419,12 +419,12 @@ class Registration:
 
     def require_lookup(self, lookup: ThreadLookup) -> Thread:
         """Resolve a recorded birth, refusing a missing reader by its lookup."""
-        with self.store.reading_snapshot() as snapshot:
-            try:
-                return snapshot.by_lookup[lookup]
-            except KeyError as error:
-                raise UnregisteredThreadError(
-                    f"Thread lookup {lookup!r} is not registered.") from error
+        snapshot = self.snapshot()
+        try:
+            return snapshot.by_lookup[lookup]
+        except KeyError as error:
+            raise UnregisteredThreadError(
+                f"Thread lookup {lookup!r} is not registered.") from error
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""

@@ -41,7 +41,7 @@ class CommanderStart(CommanderDeck):
         """Every session the commander's bridge binding does not rule out: a session bound to
         another bus thread (a Claude unit) never gets the commander's sources."""
         for record in WatchClaim(self.session_id).state().bindings():
-            snapshot = RegistryStore.at(Path(record.root)).read_snapshot_unlocked()
+            snapshot = RegistryStore.at(Path(record.root)).snapshot()
             subject = snapshot.require(record.bus)
             if not any(thread.incarnation == subject.incarnation
                        for thread in snapshot.commander_project.commanders(snapshot)):
@@ -77,7 +77,7 @@ class CommanderStart(CommanderDeck):
         """Each commander registered on a bus this session is bound to, with that bus's cut."""
         for record in WatchClaim(self.session_id).state().bindings():
             root = Path(record.root)
-            snapshot = RegistryStore.at(root).read_snapshot_unlocked()
+            snapshot = RegistryStore.at(root).snapshot()
             for thread in snapshot.commander_project.commanders(snapshot):
                 yield root, snapshot, thread
 
