@@ -48,13 +48,16 @@ class NativeCapture(ExitStack, StoredBusReader):
     def __enter__(self) -> Self:
         try:
             self.activity = self.activity_clocks()
-            store = self.bus._registry.store
             with self.measurements.operation("registry_snapshot"):
-                self.registry, self.privacy, self.registry_revision = store.snapshot_with_authority()
+                self.registry, self.privacy, self.registry_revision = self.enter_context(
+                    self.registry_capture())
             return self
         except BaseException:
             self.close()
             raise
+
+    def registry_capture(self):
+        return nullcontext(self.bus._registry.store.snapshot_with_authority())
 
 
 class NativeBoundary(NativeCapture):
@@ -72,6 +75,13 @@ class NativeBoundary(NativeCapture):
                 raise StaleFence(
                     "native registry revision changed after this decision read it")
             yield
+
+
+class NativeCommit(NativeBoundary):
+    """Admit a current decoded cut before the caller makes a bounded write decision."""
+
+    def registry_capture(self):
+        return self.bus._registry.store.current_snapshot()
 
 
 class CoordinationSession(CoordinationStore):
@@ -151,12 +161,15 @@ class NativeCoordinationSession(CoordinationSession):
     def boundary(self, bus: MessageBus) -> NativeBoundary:
         return self._boundary(bus, NativeBoundary)
 
+    def committing(self, bus: MessageBus) -> NativeCommit:
+        return self._boundary(bus, NativeCommit)
+
     @contextmanager
     def settlement(
         self, boundary: NativeBoundary | None = None
     ) -> Iterator[NativeBoundary]:
         """Acquire a native boundary, or borrow the caller's already held one."""
-        with self.boundary(self.bus) if boundary is None else nullcontext(boundary) as acquired:
+        with self.committing(self.bus) if boundary is None else nullcontext(boundary) as acquired:
             if acquired.bus.bus.path.parent.resolve() != self.path.parent.resolve():
                 raise IntegrityViolationError("settlement boundary belongs to another coordinator")
             with acquired.current(), self.writing():

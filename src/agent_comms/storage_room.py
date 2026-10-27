@@ -17,7 +17,7 @@ from sqlite3 import Connection
 from typing import Annotated, ClassVar
 
 from .activity import ActivityState
-from .child_process import ProcessIdentity
+from .child_process import ProcessIdentity, ResidentMemory
 from .declared_family import DeclaredFamily
 from .field_codec import RoomTicket
 from .store_files import StoreContention
@@ -178,24 +178,8 @@ class WorkMeasurement:
         self.worker.start()
 
     def resident(self):
-        if not self.process.alive():
-            return 0
-        tree = {self.process.pid}
-        rows = {}
-        for directory in self.rule.proc.glob('[0-9]*'):
-            try:
-                values = {line.partition(':')[0]: line.partition(':')[2].split()
-                          for line in (directory / 'status').read_text().splitlines()}
-                rows[int(directory.name)] = (int(values['PPid'][0]),
-                    max(int(values.get('VmRSS', ['0'])[0]),
-                        int(values.get('VmHWM', ['0'])[0])) * 1024)
-            except (FileNotFoundError, ProcessLookupError):
-                continue
-        pending = set(rows) - tree
-        while children := {pid for pid in pending if rows[pid][0] in tree}:
-            tree.update(children)
-            pending.difference_update(children)
-        return sum(rows[pid][1] for pid in tree if pid in rows)
+        return sum(max(row.resident, row.peak)
+                   for row in ResidentMemory.tree(self.process, self.rule.proc).values())
 
     def observe(self):
         while True:

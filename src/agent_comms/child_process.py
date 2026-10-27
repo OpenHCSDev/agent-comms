@@ -59,6 +59,47 @@ if TYPE_CHECKING:
 STOP_GRACE_SECONDS = 2.0
 
 
+@dataclass(frozen=True)
+class ResidentMemory:
+    """One procfs status sample, in bytes; kernel threads have no resident pages."""
+
+    parent: int = 0
+    resident: int = 0
+    peak: int = 0
+
+    @classmethod
+    def read(cls, directory: Path) -> ResidentMemory:
+        fields = {key: value.split() for line in (directory / "status").read_text().splitlines()
+                  for key, _, value in (line.partition(":"),)}
+        return cls(int(fields["PPid"][0]),
+                   int(fields.get("VmRSS", ("0",))[0]) * 1024,
+                   int(fields.get("VmHWM", ("0",))[0]) * 1024)
+
+    @classmethod
+    def tree(cls, process: ProcessIdentity, proc: Path) -> dict[int, ResidentMemory]:
+        """A sampled descendant set, guarded by the root's exact process birth."""
+        if not process.alive():
+            return {}
+        rows = {}
+        for directory in proc.glob("[0-9]*"):
+            try:
+                rows[int(directory.name)] = cls.read(directory)
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+        tree = {process.pid}
+        pending = set(rows) - tree
+        while children := {pid for pid in pending if rows[pid].parent in tree}:
+            tree.update(children)
+            pending.difference_update(children)
+        return {pid: rows[pid] for pid in tree & rows.keys()} if process.alive() else {}
+
+    @staticmethod
+    def proportional(directory: Path) -> int:
+        fields = {key: value.split() for line in (directory / "smaps_rollup").read_text().splitlines()
+                  for key, _, value in (line.partition(":"),) if key == "Pss"}
+        return int(fields["Pss"][0]) * 1024
+
+
 class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
 
@@ -196,6 +237,13 @@ class ProcessIdentity(RecordMember, ProcessState):
     def __post_init__(self) -> None:
         if self.pid <= 0 or self.start_time <= 0:
             raise ValueError("A positive PID and platform start time are required")
+
+    def memory(self, proc: Path = Path("/proc")) -> ResidentMemory:
+        platform = Platform.current()
+        platform.require(self)
+        result = ResidentMemory.read(proc / str(self.pid))
+        platform.require(self)
+        return result
 
     @classmethod
     def pid_argument(cls, value: str) -> dict[str, object]:

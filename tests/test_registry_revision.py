@@ -51,6 +51,12 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     reader = Registration(path)
     before = dict(reader.all_threads())
     statuses = {name: reader.status(name) for name in before}
+    cached = reader.store.cache.read_counts()
+    for _ in range(3):
+        Registration(path).store.read()
+    reused = reader.store.cache.read_counts()
+    assert reused.requests == cached.requests + 3
+    assert reused.captures == cached.captures and reused.decodes == cached.decodes
     with reader.store.reading() as document:
         stored = dict(document.statuses)
 
@@ -63,6 +69,8 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     AtomicFile(path).write_text(json.dumps(raw, indent=2))
 
     after = reader.all_threads()
+    changed = reader.store.cache.read_counts()
+    assert changed.captures == reused.captures + 1 and changed.decodes == reused.decodes + 1
     # Unchanged threads keep their decoded declarations and statuses.
     assert all(after[name] is before[name] for name in before)
     with reader.store.reading() as document:

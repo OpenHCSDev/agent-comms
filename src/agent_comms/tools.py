@@ -693,6 +693,25 @@ class CommsThreadsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsResourcesTool(ThreadReadTool):
+    label = "Host resources"
+    description = (
+        "Read a running thread's shared Python host memory, module and owner counts, "
+        "and cumulative registry read/capture/decode counts. Native model children "
+        "are separate from this shared host measurement."
+    )
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
+        from .owner_connection import OwnerConnection
+        from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
+        thread = comms.registry.require(caller.subject(self.thread))
+        return FieldCodec.decode(HostResources, OwnerConnection.exchange(
+            comms.root, thread.require_process(),
+            ReadHostResourcesRuntimeRequest(thread=thread.name),
+        ))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsWorkBranchesTool(ReadTool, ToolRequest):
     label = "Work branches"
     description = (

@@ -17,7 +17,7 @@ Each phase and its evidence on `origin/main` are declared in `src/agent_comms/pl
 | `loading_spinner` | Toad's top loading spinner is back; both were removed instead of keeping the top one | this document records the merged Toad commit | not recorded |
 | `commander_latency` | each `agent-comms-commander` verb answers in under 5 s (about 30 s now) | `test_commander_verb_answers_under_five_seconds` declared in `tests` | absent |
 | `delivery_latency` | a bus message is injected into the recipient's next tool call; delivery slowed at about 01:57 UTC on 2026-10-25 | `test_message_injects_into_next_tool_call` declared in `tests` | absent |
-| `ram_budget` | one worker host holds every unit owner as an object; stop multiplying package memory by the owner count | `test_fleet_memory_stays_under_its_cap` declared in `tests` | shared-host plan below; implementation and test absent |
+| `ram_budget` | one worker host holds every unit owner as an object; stop multiplying package memory by the owner count | `test_fleet_memory_stays_under_its_cap` declared in `tests` | real three/29-owner journey and resource budgets below; installed acceptance recorded separately |
 | `unflatten_modules` | plan the package structure of the flat modules in `src/agent_comms`, after the fleet is stable | class `PackageStructurePlan` declared in `plan_phases.py` | [package plan](PACKAGE-STRUCTURE-PLAN.md); implementation has its own declared phases |
 | `board_line_lock_text` | board lines say "LOCKS your writing verbs" although #3345 made `HeartbeatGated` (`commander/order.py:843`) print the board instead of refusing; the text must derive from what the gate does. JUDGE lines embed each verb's full argparse usage | no `LOCKS your writing verbs` in `src` (now `agent_comms_hooks/board.py:34`); no `verb\.usage\(\)` in `commander/standing.py` (now `:167`, `:382`) | 1; 2 |
 | `closed_unmerged_prs` | a standing rule flags a PR closed unmerged that still holds commits nobody landed (lost: toad #1080, #1095, the commander board page) | class `ClosedUnmergedPullRequest` declared under `src/agent_comms` | absent |
@@ -36,7 +36,7 @@ Each is done when a test pins the target, so a regression fails the suite rather
 
 ### ram_budget: one host, many owners
 
-Implementation owner: `unit-rambudget`, PR #3393. Commander direction: bus message
+Original implementation owner: `unit-rambudget`, PR #3393. Commander direction: bus message
 29756, superseding the cold-import diet. This is the plan checkpoint, not a
 working shared host or completion of the phase.
 
@@ -56,6 +56,40 @@ prove the owners were all idle, identify a heap leak, or establish the shared
 host's eventual cost. The installer separately reported 1067.705 s in owner
 start (bus message 29751); this plan does not treat that elapsed time as a heap
 profile or a proved RAM-gate call chain.
+
+**Implemented resource ownership.** `StorageRule` declares the shared control-host
+budget and per-owner native allowance; `fleet_memory_budget(owners)` derives the
+whole-fleet envelope. `HostMemoryHigh` checks the live root's exact process and
+descendants against those budgets on the existing heartbeat. It reports excess;
+it never kills a native process or replays an input. `comms_resources` reads the
+actual owning host through the existing owner socket, reporting its process birth,
+RSS/HWM/PSS, module/owner counts, whole-fleet RSS and registry request/capture/decode
+counts. `ResidentMemory` owns procfs decoding for that report, work admission's
+existing measurement and the existing test-process cleanup view.
+
+`test_fleet_memory_stays_under_its_cap` extends the existing hosted-owner journey
+at three and 29 owners: one exact host, concurrent native replies, independent
+saved histories, attachment, restart-one, rename, reopen/fresh reply, stop-one and
+host shutdown. Every collected host HWM and whole-fleet RSS sample obeys the
+declared budgets. Native children remain independent and are included in the
+fleet samples. Summed PSS is observational evidence, not an admission guarantee.
+The unchanged/changed-revision test observes no physical capture/decode for
+three unchanged reads and one capture/decode for an external replacement.
+
+The 2026-10-27 combined source run passed 43 cases in 76.08 s. The shared host
+peaked at 188.6 MiB RSS for three owners and 211.2 MiB for 29; the 29-owner forest
+sample used 4857.4 MiB RSS / 3303.2 MiB PSS across 32 processes, with 957 modules
+loaded in the one Python host. Source/result artifacts are retained in
+`codex-greentext/fleet-memory-final-measurement.json` and
+`fleet-memory-admitted-cut.log`. These are controlled-provider real-process
+workloads, not a claim about every model's or build tool's memory use.
+
+That run exposed a registry race before cursor commits. `RegistryStore.current_snapshot`
+now recaptures a changed read before admitting a bounded decision, decodes outside
+the guard, then retains the guard for the admitted write. `NativeCommit` composes
+that lifetime into cursor/cohort/resource-release commits and fresh settlements.
+Detached decisions retain `NativeBoundary.current` refusal checks. No operation
+or user input is retried after admission.
 
 #### Process state that must stop standing in for an owner
 
@@ -137,7 +171,8 @@ module bindings; neither should be disguised as an owner-local field.
    the real hosted-fleet path. This plan checkpoint does not choose an
    arbitrary killing limit or satisfy the phase merely by naming a test.
    Installation and live-message answers remain separate from source/merge
-   evidence. No pytest runs are authorized for this checkpoint.
+   evidence. The original planning checkpoint authorized no pytest; the owner's
+   later finish-the-phases goal authorizes the necessary combined integration run.
 
 The interrupted HUD extraction left no source changes. It is not retained as a
 separate deliverable: moving a display import does not remove 28 interpreters.

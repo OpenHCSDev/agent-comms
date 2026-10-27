@@ -113,18 +113,33 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
             ObservedProcess(current.process_identity).stop_sync()
 
 
-async def test_shared_host_restarts_one_session_without_stopping_its_siblings(tmp_path, native_workers):
+@pytest.mark.parametrize("owner_count", (3, 29))
+async def test_fleet_memory_stays_under_its_cap(tmp_path, native_workers, owner_count):
     from acp.schema import TextContentBlock
     from agent_comms.acp import CommsClient
     from agent_comms.owner_launch import RetainedOwnerLaunch
     from agent_comms.owner_lifecycle import OwnerRestartSelection
     from native_backend_fixture import NativeBackendFixture
     from delivery_owner_fixture import FakeClient
+    from agent_comms.tools import CommsResourcesTool
+    from agent_comms.tool_caller import NoThreadCaller
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.child_process import Platform, ResidentMemory
+    import json
 
     comms = wire(native_workers.root)
-    names = ("shared-a", "shared-b", "shared-c")
+    names = tuple(f"shared-{index}" for index in range(owner_count))
+    fresh_inputs = {name: f"FRESH_SHARED_INPUT_{name}:END" for name in names}
     client = CommsClient(comms, auto_wake=False)
     client.on_connect(FakeClient())
+    measurements = []
+    async def resources(name):
+        result = await Coordination.run_worker(partial(
+            CommsResourcesTool(thread=name).apply, comms, NoThreadCaller(),
+        ))
+        measurements.append(result)
+        print("HOST_RESOURCES", json.dumps(FieldCodec.encode(result)), flush=True)
+        return result
     try:
         for name in names:
             comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path),
@@ -134,6 +149,7 @@ async def test_shared_host_restarts_one_session_without_stopping_its_siblings(tm
                 agent_bin=GivenBinary(str(Path(sys.executable).with_name("pi-comms-native").resolve())),
                 agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
             ))
+            await resources(name)
         before = comms.registry.snapshot()
         host, = {before.require(name).require_process() for name in names}
         for name in names:
@@ -141,22 +157,31 @@ async def test_shared_host_restarts_one_session_without_stopping_its_siblings(tm
         gate = native_workers.provider.response_gate = asyncio.Event()
         async with asyncio.TaskGroup() as replies:
             pending = tuple(replies.create_task(client.prompt(
-                session_id=name, prompt=[TextContentBlock(type="text", text=f"FRESH_SHARED_INPUT_{name}")],
+                session_id=name, prompt=[TextContentBlock(type="text", text=fresh_inputs[name])],
             )) for name in names)
             try:
-                async with asyncio.timeout(15):
+                async with asyncio.timeout(60):
                     while native_workers.provider.posts < len(names):
                         await asyncio.sleep(.01)
                 assert native_workers.provider.posts == len(names)
             finally:
                 gate.set()
         assert all(reply.result().stop_reason == "end_turn" for reply in pending)
+        loaded = await resources(names[0])
+        assert loaded.owners == owner_count
+        children = ResidentMemory.tree(host, Path("/proc"))
+        print("FLEET_PROCESSES", json.dumps([
+            {"process": FieldCodec.encode(Platform.current().identity(pid)),
+             "memory": FieldCodec.encode(memory),
+             "proportional_bytes": ResidentMemory.proportional(Path("/proc") / str(pid))}
+            for pid, memory in children.items()
+        ]), flush=True)
         journals = {name: Path(comms.registry.require(name).runtime.read_key) for name in names}
         assert len(set(journals.values())) == len(names)
         for name, journal in journals.items():
             original_history = journal.read_text()
-            assert f"FRESH_SHARED_INPUT_{name}" in original_history
-            assert all(f"FRESH_SHARED_INPUT_{other}" not in original_history for other in names if other != name)
+            assert fresh_inputs[name] in original_history
+            assert all(fresh_inputs[other] not in original_history for other in names if other != name)
         selected = OwnerRestartSelection.capture(before, names[1])
         original = await Coordination.run_worker(partial(
             RetainedOwnerLaunch.capture, selected, before, comms.root))
@@ -186,8 +211,13 @@ async def test_shared_host_restarts_one_session_without_stopping_its_siblings(tm
         )
         assert resumed.stop_reason == "end_turn"
         retained = journals[names[2]].read_text()
-        assert f"FRESH_SHARED_INPUT_{names[2]}" in retained
+        assert fresh_inputs[names[2]] in retained
         assert "FRESH_REOPENED_SHARED_INPUT" in retained
+        await resources("shared-renamed")
+        assert all(not comms.registry.storage_rule.host_memory_exceeded(sample.memory)
+                   for sample in measurements)
+        assert all(sample.fleet_resident_bytes <= sample.fleet_budget_bytes
+                   for sample in measurements)
         await Coordination.run_worker(partial(comms.owners.stop, names[0]))
         assert host.alive()
         assert comms.registry.require(names[0]).process_identity == NoProcess()

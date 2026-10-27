@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 from .coordination_database import CoordinationStore
+from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, TurnId
 from .locked_store import DocumentBytes, LockedStore, RegistryFile
@@ -102,6 +103,15 @@ class RegistryEntryRevision:
 
 
 @dataclass(slots=True)
+class RegistryReadCounts:
+    """Cumulative requests, physical captures and decoded revisions in this process."""
+
+    requests: int = 0
+    captures: int = 0
+    decodes: int = 0
+
+
+@dataclass(slots=True)
 class RegistryCache:
     """The decoded registry belongs to its file, not to one store object.
 
@@ -118,6 +128,12 @@ class RegistryCache:
     # A successful guard check, keyed by the revisions of the three files it
     # reads. Unchanged files give the same answer; failures are never kept.
     guard: tuple[tuple, RegistryPrivacy] | None = None
+    counts: RegistryReadCounts = field(default_factory=RegistryReadCounts)
+    measurement: threading.Lock = field(default_factory=threading.Lock)
+
+    def read_counts(self) -> RegistryReadCounts:
+        with self.measurement:
+            return replace(self.counts)
 
     _by_path: ClassVar[dict[str, RegistryCache]] = {}
 
@@ -213,11 +229,17 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     def _capture_unlocked(self) -> DocumentBytes:
         self.private_guard_unlocked()  # before even a cache hit
-        capture = super()._capture_unlocked
+        with self.cache.measurement:
+            self.cache.counts.requests += 1
+        def capture(stale: CachedRegistry) -> DocumentBytes:
+            source = super(RegistryStore, self)._capture_unlocked()
+            with self.cache.measurement:
+                self.cache.counts.captures += 1
+            return source
         entry = self.cache.entry
         return entry.at(
             FileRevision.capture(self.path), lambda current: current.source,
-            lambda stale: capture(),
+            capture,
         )
 
     def _decode_capture(self, source: DocumentBytes) -> RegistryDocument:
@@ -238,6 +260,8 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             lambda present: FieldCodec.parse(source.content), lambda: self._encode(self.empty()))
         entry = RegistryRevision(source, stale.decoded(self, raw), raw)
         self.cache.entry = entry
+        with self.cache.measurement:
+            self.cache.counts.decodes += 1
         return entry
 
     def snapshot(self) -> RegistrySnapshot:
@@ -273,6 +297,25 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             source = self._capture_unlocked()
             revision = source.revision, FileRevision.capture(self.guard_path)
         return self._decode_snapshot(source), privacy, revision
+
+    @contextmanager
+    def current_snapshot(self) -> Iterator[tuple[
+        RegistrySnapshot, RegistryPrivacy, tuple[FileObservation, FileObservation],
+    ]]:
+        """Decode outside the guard, then retain a current cut for a bounded write.
+
+        A change before admission recaptures only this read. The caller has not
+        received a decision or performed any side effect yet.
+        """
+        deadline = time.monotonic() + self.contention.seconds
+        while True:
+            captured = self.snapshot_with_authority()
+            with self.guarded_read():
+                if self.revision_unlocked() == captured[2]:
+                    yield captured
+                    return
+            if time.monotonic() >= deadline:
+                raise StaleFence("Registry kept changing before a native decision could begin")
 
     def snapshot_with_pair[T, U](
         self, first: LockedStore[T], second: LockedStore[U],
