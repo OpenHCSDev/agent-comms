@@ -307,6 +307,11 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def _decode_capture(self, source: DocumentBytes) -> RegistryDocument:
         return self._decode_revision(source).document
 
+    def read_revision(self) -> RegistryRevision:
+        """Retain the captured document and its source without imposing live snapshot rules."""
+        source, = self._copy_sources(self)
+        return self._decode_revision(source)
+
     def read_revision_unlocked(self) -> RegistryRevision:
         return self._decode_revision(self._capture_unlocked())
 

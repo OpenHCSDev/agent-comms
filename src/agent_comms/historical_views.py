@@ -275,12 +275,12 @@ class HistorySource:
 
     @classmethod
     def capture_original(cls, root: Path) -> HistorySource:
-        """The original namespace and its file revision come from the same registry cut."""
-        cut = Registration(RegistryFile.path_in(root)).store.snapshot_with_authority()
+        """The original namespace and file revision come from the same retained document."""
+        captured = Registration(RegistryFile.path_in(root)).store.read_revision()
         identity = RecordedBusIdentity.capture(Bus.path_in(root))
         return cls(
             str(root), str(root), identity, identity, Bus(Bus.path_in(root)).revision(),
-            cut.revision[0], RegistryProvenance.capture(cut.snapshot),
+            captured.source.revision, RegistryProvenance.capture(captured.document),
         )
 
     def retain(self, destination: Path) -> HistorySource:

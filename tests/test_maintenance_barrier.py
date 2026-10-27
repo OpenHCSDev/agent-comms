@@ -107,19 +107,17 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
     hold = comms.owners.maintenance.begin(MaintenanceOperator.current())
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
-    with comms.registry.store.guarded_write():
-        cutover.require_restart_phase(comms.owners)
-        from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
+    cutover.require_restart_phase(comms.owners)
+    from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
 
-        with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
-            PreserveOwnerRuntime().require_restart_phase(comms.owners)
-        from agent_comms.lifecycle_capability import Pending
+    with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
+        PreserveOwnerRuntime().require_restart_phase(comms.owners)
+    from agent_comms.lifecycle_capability import Pending
 
-        assert refused.value.queue_state().items_with(Pending, refused.value)  # Idle reload remains queued, not UNKNOWN.
+    assert refused.value.queue_state().items_with(Pending, refused.value)
     comms.owners.maintenance.clear(hold)
-    with comms.registry.store.guarded_write():
-        with pytest.raises(RelationViolationError):
-            cutover.require_restart_phase(comms.owners)
+    with pytest.raises(RelationViolationError):
+        cutover.require_restart_phase(comms.owners)
 
 
 def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) -> None:
@@ -145,6 +143,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     )
     assert comms.agents.begin_turn("owner", TurnId('6db7d803e74f1ffa7d8f5adc0bf95b3e'))
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
+    comms.registry.declare(Thread("waiting", frozenset(), Checkout(tmp_path)))
     control = gate
     first = control.begin(MaintenanceOperator.current())
     assert first.phase == MaintenancePhase.member_named("draining") and first.generation == 1
@@ -157,8 +156,9 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
             TurnId('d15690f08a575024650b01ffac892cfd'),
             expected_generation=comms.registry.snapshot().claim_generation("owner"),
         )
-    with pytest.raises(RelationViolationError):
-        comms.owners.start("owner")
+    assert not comms.owners.start("owner").started
+    with pytest.raises(RelationViolationError, match="under maintenance"):
+        comms.owners.start("waiting")
     second = control.advance(first, MaintenancePhase.member_named("paused"))
     assert second.generation == 2
     with pytest.raises(RelationViolationError):
