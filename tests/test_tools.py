@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
+from agent_comms.presentation import MessageNotification
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
@@ -121,11 +122,11 @@ class TestToolCatalog:
         comms.registry.declare(Thread(name='listed', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         result = invoke_tool(comms, "comms_threads", {"active_only": True}, caller=NoThreadCaller())
         assert [thread["name"] for thread in result["threads"]] == ["listed"]
-        assert result["sent_notifications"] == []
+        assert result["sent_messages"] == []
         with pytest.raises(CallingThreadUnavailable):
             invoke_tool(comms, "comms_set_goal", {"text": "not authorized"}, caller=NoThreadCaller())
 
-    def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
+    def test_threads_tool_summarizes_each_recent_sent_message_once(self, comms, monkeypatch):
         # A tool consumes its bound caller, never a subsequently changed environment.
         monkeypatch.setenv("AGENT_COMMS_THREAD", "not-the-invoker")
         comms.registry.declare(Thread(name='sender', tags=frozenset(), worktree=Checkout(Path('/wt'))))
@@ -136,24 +137,16 @@ class TestToolCatalog:
 
         presentation = comms.views.thread_presentations(("sender",)).require("sender")
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
-        assert [row.message.reference for row in presentation.sent_notifications] == [sent.reference]
+        outcomes = presentation.notification_window.outcomes[sent.seq, sent.message_id]
+        assert [summary.reference for summary in presentation.sent_summaries()] == [sent.reference]
 
         result = invoke_tool(comms, "comms_threads", {}, caller=ThreadCaller("sender"))
-        assert [
-            (
-                row["message"]["seq"],
-                row["message"]["text"],
-                row["recipient_identity"]["canonical_thread"],
-                row["state"],
-            )
-            for row in result["sent_notifications"]
-        ] == [(
-            sent.seq, "track me", "recipient", {
-                "kind": "contextual_progress",
-                "details": [],
-                "proof": {"kind": "unrecorded_progress", "details": []},
-            },
-        )]
+        # One row per sent message, never one per recipient, and never the message body.
+        assert result["sent_messages"] == [{
+            "reference": {"seq": sent.seq, "message_id": str(sent.message_id)},
+            "summary": MessageNotification.summary(outcomes),
+        }]
+        assert "track me" not in json.dumps(result["sent_messages"])
 
     def test_inbox_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))

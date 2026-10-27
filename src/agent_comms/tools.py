@@ -673,8 +673,8 @@ class CommsGoalHistoryTool(ThreadReadTool):
 class CommsThreadsTool(ReadTool, ToolRequest):
     label = "Comms Threads"
     description = (
-        "List agent threads with status and pending counts, plus this caller's "
-        "recent sent-message delivery outcomes."
+        "List agent threads with status and pending counts, plus one delivery summary "
+        "for each of this caller's recent sent messages."
     )
     active_only: Annotated[bool, *tool_field("Exclude stopped threads")] = False
 

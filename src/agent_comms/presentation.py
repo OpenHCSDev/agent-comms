@@ -379,6 +379,21 @@ class SentMessageOutcome(MessageNotification):
     message: Message = field(kw_only=True)
 
 
+@dataclass(frozen=True, slots=True)
+class SentMessageSummary:
+    """One sent message's recipient handling: its original reference and the totals
+    MessageNotification.summary reports. Each recipient's own outcome stays with the
+    reference's notification read, so the message is never repeated per recipient."""
+
+    reference: MessageReference
+    summary: str
+
+    @classmethod
+    def of(cls, reference: MessageReference, window: NotificationWindow) -> SentMessageSummary:
+        return cls(reference, MessageNotification.summary(
+            window.outcomes.get((reference.seq, reference.message_id), ())))
+
+
 class ChannelReadMark(ABC):
     """A read request carries its own source cut and displayed-message selection."""
 

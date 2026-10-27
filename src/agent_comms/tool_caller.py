@@ -11,7 +11,7 @@ from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
-from .presentation import MessageNotification, ThreadRecord
+from .presentation import SentMessageSummary, ThreadRecord
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class ThreadListing(ToolResult):
     threads: tuple[Annotated[ThreadRecord, WireForm], ...]
-    sent_notifications: tuple[MessageNotification, ...]
+    sent_messages: tuple[SentMessageSummary, ...]
 
 
 class ToolCaller(ABC):
@@ -143,7 +143,7 @@ class ThreadCaller(ToolCaller):
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
-        return ThreadListing(threads, presentation.sent_notifications)
+        return ThreadListing(threads, presentation.sent_summaries())
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(
