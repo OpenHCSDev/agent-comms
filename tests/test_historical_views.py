@@ -36,6 +36,7 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.transcript_routes import DisplayText
 from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.store_files import StoreOwner
 from agent_comms.threads import Thread
 
 
@@ -401,6 +402,10 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     assert live.views.historical_threads("alice")
 
 
+def archive_paths(root: Path):
+    return HistoryArchive.archive_directory(root).iterdir()
+
+
 def _attach_preserved_source(destination: Path, original: Path) -> None:
     HistoryArchive.at(destination).attach(original)
 
@@ -415,6 +420,7 @@ def test_snapshot_preparation_allows_another_process_to_attach_and_keeps_both_so
 
     class ConcurrentSource(HistorySource):
         def retain(self, destination):
+            assert destination not in HistoryArchive.archived_roots(live.root)
             with process(_attach_preserved_source, live.root, other.root):
                 pass
             return super().retain(destination)
@@ -426,7 +432,7 @@ def test_snapshot_preparation_allows_another_process_to_attach_and_keeps_both_so
     for item in sources:
         item.validate()
         assert Path(item.root).parent == HistoryArchive.archive_directory(live.root)
-    assert not list(live.root.glob(".history-source-*"))
+    assert not any(StoreOwner.is_staging(path) for path in archive_paths(live.root))
     assert (root_bytes(old.root), root_bytes(other.root)) == before
 
 
@@ -449,5 +455,5 @@ def test_uncertain_catalog_publication_preserves_the_promoted_snapshot(tmp_path,
     retained, = archive.archived_roots(live.root)
     assert Bus(Bus.path_in(retained)).revision() == old.bus.bus.revision()
     assert Registration(RegistryFile.path_in(retained)).snapshot().threads.keys() == old.registry.snapshot().threads.keys()
-    assert not list(live.root.glob(".history-source-*"))
+    assert not any(StoreOwner.is_staging(path) for path in archive_paths(live.root))
     assert root_bytes(old.root) == before

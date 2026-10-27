@@ -21,7 +21,7 @@ from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, ScratchName
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
 from .message_page import (
@@ -55,7 +55,7 @@ from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import SingleFileStore, SourceTier
+from .store_files import SingleFileStore, SourceTier, StoreOwner
 from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
 from .transcript_routes import TranscriptRoutes
@@ -460,7 +460,8 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
         archives = cls.archive_directory(directory)
         if not archives.is_dir():
             return ()
-        return tuple(sorted(path for path in archives.iterdir() if path.is_dir()))
+        return tuple(sorted(path for path in archives.iterdir()
+                            if path.is_dir() and not StoreOwner.is_staging(path)))
 
     def sources(self) -> tuple[HistorySource, ...]:
         with self.read_sources() as sources:
@@ -486,15 +487,17 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
             raise ValueError("The live bus cannot be its own history source")
         for existing in HistorySource.matching_original(self.sources(), source_root):
             return existing
-        PrivateDirectoryRole.make_parents(self.path.parent)
-        stage = Path(tempfile.mkdtemp(prefix=".history-source-", dir=self.path.parent))
+        parent = self.archive_directory(self.path.parent)
+        PrivateDirectoryRole.make_parents(parent)
+        stage = Path(tempfile.mkdtemp(
+            prefix=StoreOwner.staging_name.format(name="source", token=""),
+            suffix=StoreOwner.staging_suffix, dir=parent))
         try:
             original = HistorySource.capture_original(source_root) if source_read is None else source_read
             original.require_original(source_root)
             catalog_revision = FileRevision.capture(ChannelCatalog.path_in(source_root))
             prepared = original.retain(stage)
-            parent = self.archive_directory(self.path.parent)
-            target = parent / stage.name.removeprefix(".history-")
+            target = parent / f"source-{ScratchName.mint()}"
 
             def publish(sources: tuple[HistorySource, ...]) -> DocumentChange[tuple[HistorySource, ...], HistorySource]:
                 for existing in HistorySource.matching_original(sources, source_root):
