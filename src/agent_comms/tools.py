@@ -65,18 +65,7 @@ from .relationships import (
     GoalMentionDiagnostic,
     RelationshipEdit,
 )
-from .restart_queue import (
-    QueuedRestart,
-)
-from .restart_queue import (
-    cancel as cancel_restart,
-)
-from .restart_queue import (
-    RestartQueued,
-)
-from .restart_queue import (
-    status as restart_status,
-)
+from .restart_queue import QueuedRestart, RestartQueued, RestartQueue
 from .send_result import CorrectionResult
 from .task_sources import (
     Constraint,
@@ -1043,7 +1032,8 @@ class CommsRestartQueueTool(ReadTool, ToolRequest):
     name: Annotated[str, *tool_field("Agent thread")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartAttempts:
-        return RestartAttempts(tuple(restart_status(comms, self.name)))
+        return RestartAttempts(tuple(RestartQueue(comms.root).history(
+            comms.registry.require(self.name).incarnation.require_recorded())))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1053,7 +1043,8 @@ class CommsCancelRestartTool(ToolRequest):
     name: Annotated[str, *tool_field("Agent thread")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartsCancelled:
-        return RestartsCancelled(tuple(cancel_restart(comms, self.name)))
+        return RestartsCancelled(tuple(RestartQueue(comms.root).cancel(
+            comms.registry.require(self.name).incarnation.require_recorded())))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -43,32 +43,31 @@ def dead_owner_restart(private_comms):
 
 
 def test_dead_owner_restart_settles_before_selection_checks(private_comms, dead_owner_restart):
-    store = queue.RestartQueue(private_comms.root / queue.DIRECTORY)
+    store = queue.RestartQueue(private_comms.root)
     owner = dead_owner_restart.selection.identity.incarnation.require_recorded()
-    with store.guarded_write():
-        store.save(dead_owner_restart)
-    queue.step(private_comms)
-    with store.guarded_read():
-        assert not tuple(store.active_records())
-        assert not store.active_path(owner).exists()
-        assert list(store.history(owner)) == [replace(
-            dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
-        )]
+    with store.writing() as db:
+        dead_owner_restart.insert(db)
+    store.step(private_comms)
+    with store.snapshot() as db:
+        assert not store._active(db)
+    assert store.history(owner) == [replace(
+        dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
+    )]
 
 
 def test_cancel_settles_dead_pending_owner_without_a_watcher(
     private_comms, dead_owner_restart,
 ):
-    store = queue.RestartQueue(private_comms.root / queue.DIRECTORY)
+    store = queue.RestartQueue(private_comms.root)
     owner = dead_owner_restart.selection.identity.incarnation.require_recorded()
-    with store.guarded_write():
-        store.save(dead_owner_restart)
-    queue.cancel(private_comms, 'worker')
-    with store.guarded_read():
-        assert not store.active_path(owner).exists()
-        assert list(store.history(owner)) == [replace(
-            dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
-        )]
+    with store.writing() as db:
+        dead_owner_restart.insert(db)
+    store.cancel(owner)
+    with store.snapshot() as db:
+        assert not store._active(db)
+    assert store.history(owner) == [replace(
+        dead_owner_restart, state=queue.StaleRestart(reason='Owner process exited'),
+    )]
 
 
 async def test_restore_owner_keeps_blocked_goal_unchanged(
@@ -108,27 +107,22 @@ async def test_restore_owner_keeps_blocked_goal_unchanged(
         await asyncio.to_thread(comms.owners.stop, 'worker')
 
 
-def test_history_keeps_interrupted_terminal_visible_until_step_settles_it(
+def test_attempted_and_terminal_records_never_return_to_pending(
     private_comms, dead_owner_restart,
 ):
-    comms = private_comms
-    owner = dead_owner_restart.selection.identity.incarnation.require_recorded()
-    record = replace(dead_owner_restart,
-                     state=queue.UncertainRestart(reason='interrupted terminal move'))
-    store = queue.RestartQueue(comms.root / queue.DIRECTORY)
-    active = store.active_path(owner)
-    with store.guarded_write():
-        active.write_text(json.dumps(FieldCodec.encode(record)))
-    original = active.read_bytes()
-    with store.guarded_read():
-        assert list(store.history(owner)) == [record]
-        assert not tuple(store.active_records())
-        assert active.read_bytes() == original
-    queue.step(comms)
-    assert not active.exists()
-    with store.guarded_read():
-        assert list(store.history(owner)) == [record]
-        assert store.settled_path(record).read_bytes() == original
+    store = queue.RestartQueue(private_comms.root)
+    owner = dead_owner_restart.owner
+    attempted = replace(dead_owner_restart, state=queue.AttemptingRestart())
+    terminal = replace(dead_owner_restart, id=RestartId.mint(),
+                       state=queue.UncertainRestart(reason='ambiguous owner restart'))
+    with store.writing() as db:
+        attempted.insert(db)
+        terminal.insert(db)
+    store.step(private_comms)
+    assert store.cancel(owner) == []
+    assert store.history(owner) == [attempted, terminal]
+    with store.snapshot() as db:
+        assert store._active(db) == [attempted]
 
 
 async def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
@@ -144,3 +138,49 @@ async def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
         await asyncio.wait_for(anext(observations), 1)
         (directory / "next.json").write_text("queued")
         await asyncio.wait_for(anext(observations), 1)
+
+
+def test_carry_keeps_every_original_and_never_requeues_an_attempt(
+    private_comms, dead_owner_restart, tmp_path,
+):
+    from cutover.carry_restart_queue import RestartQueueRows
+    from agent_comms.locked_store import LiveFilesRequest
+    from conftest import maintenance_held
+
+    comms = private_comms
+    directory = comms.root / queue.DIRECTORY
+    directory.mkdir(mode=0o700)
+    pending = dead_owner_restart
+    comms.registry.declare(Thread('attempted', frozenset(), Checkout(comms.root)))
+    attempted = replace(pending, id=RestartId.mint(), state=queue.AttemptingRestart(),
+                        selection=replace(pending.selection,
+                            identity=comms.registry.snapshot().owner_identity('attempted')))
+    terminal = replace(pending, id=RestartId.mint(),
+                       state=queue.UncertainRestart(reason='retain ambiguous terminal'))
+    paths = []
+    for record in (pending, attempted, terminal):
+        parent = directory / ('settled/' + str(record.owner.lookup)
+                              if record is terminal else 'active')
+        parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path = parent / f'{record.id if record is terminal else record.owner.lookup}.json'
+        path.write_text(json.dumps(FieldCodec.encode(record)))
+        paths.append(path)
+    originals = tuple(path.read_bytes() for path in paths)
+    carry = RestartQueueRows(LiveFilesRequest(comms.root), tmp_path / 'spill')
+    assert carry.carry(apply=False).changed == 3
+    assert not (directory / 'queue.sqlite3').exists()
+    with maintenance_held(comms.root):
+        assert carry.carry(apply=True).changed == 3
+        assert tuple(path.read_bytes() for path in paths) == originals
+        # A repeated carry verifies exact rows instead of minting or reclassifying them.
+        assert carry.carry(apply=True).changed == 3
+        store = queue.RestartQueue(comms.root)
+        assert store.history(pending.owner) == [pending, terminal]
+        assert store.history(attempted.owner) == [attempted]
+        assert carry.after_acceptance().changed == 3
+        assert not any(path.exists() for path in paths)
+        assert store.history(attempted.owner) == [attempted]
+    # The original pending process is dead. The watcher can only settle it;
+    # the attempted record has no new execution permission.
+    store.step(comms)
+    assert store.history(attempted.owner) == [attempted]

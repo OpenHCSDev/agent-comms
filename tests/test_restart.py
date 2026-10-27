@@ -91,15 +91,17 @@ async def test_busy_owner_restart_queues_and_runs_at_idle(
 
                 queued = QueueRestartCliCommand(name='worker').apply(comms).restart
                 assert queued.state == PendingRestart()
-                await asyncio.to_thread(restart_queue.step, comms)
-                assert restart_queue.status(comms, 'worker') == [queued]
+                await asyncio.to_thread(restart_queue.RestartQueue(comms.root).step, comms)
+                assert restart_queue.RestartQueue(comms.root).history(
+                    comms.registry.require('worker').incarnation.require_recorded()) == [queued]
                 assert comms.registry.require('worker').require_process() == process
 
                 comms.registry.release_turn(leased.require_turn_lease())
                 async with asyncio.timeout(30):
-                    while not isinstance(restart_queue.status(comms, 'worker')[-1].state,
+                    while not isinstance(restart_queue.RestartQueue(comms.root).history(
+                    comms.registry.require('worker').incarnation.require_recorded())[-1].state,
                                          RestartedRestart):
-                        await asyncio.to_thread(restart_queue.step, comms)
+                        await asyncio.to_thread(restart_queue.RestartQueue(comms.root).step, comms)
                         await asyncio.sleep(.1)
                 assert comms.registry.require('worker').require_process() != process
             finally:
