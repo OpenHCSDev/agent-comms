@@ -161,13 +161,15 @@ class TestToolCatalog:
                             caller=ThreadCaller("sender"))
         assert first["message"]["seq"] == sent.seq
         assert json.dumps(first).count("count me once") == 1
-        names = [row["recipient_identity"]["canonical_thread"] for row in first["outcomes"]]
-        assert names == ["alice", "bob"] and first["remaining"] == 1
+        assert len(first["outcomes"]) == 2 and first["remaining"] == 1
+        assert first["next"] == {"recipient": first["outcomes"][-1]["recipient_identity"]}
         rest = invoke_tool(comms, "comms_message_outcomes",
-                           {"reference": reference, "limit": 2, "after": names[-1]},
+                           {"reference": reference, "limit": 2, "after": first["next"]},
                            caller=ThreadCaller("sender"))
-        assert [row["recipient_identity"]["canonical_thread"] for row in rest["outcomes"]] == ["carol"]
-        assert rest["remaining"] == 0
+        assert len(rest["outcomes"]) == 1 and rest["remaining"] == 0
+        paged = [row["recipient_identity"]["canonical_thread"]
+                 for row in (*first["outcomes"], *rest["outcomes"])]
+        assert sorted(paged) == ["alice", "bob", "carol"]
 
     def test_message_outcomes_shows_a_recipient_only_its_own_row_and_refuses_outsiders(self, comms):
         comms.channels.create_tag("team")

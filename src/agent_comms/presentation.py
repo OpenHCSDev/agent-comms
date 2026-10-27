@@ -35,7 +35,10 @@ from .field_codec import (
     FieldCodec,
     JsonShapeFamily,
     JsonShapeMember,
+    NullMember,
     PresenceExclude,
+    RecordMember,
+    SubclassUnion,
     ThreadLookup,
     WatchPaths,
     WatchViews,
@@ -377,6 +380,44 @@ class MessageNotification:
 class SentMessageOutcome(MessageNotification):
     """The same typed outcome, with its original message required for context."""
     message: Message = field(kw_only=True)
+
+
+class RecipientCursor(SubclassUnion, affix=""):
+    """Where a page of one message's recipient outcomes starts; recipients are ordered by
+    their stable lookup, never by a display name."""
+
+    @abstractmethod
+    def following(
+        self, outcomes: Iterable[MessageNotification],
+    ) -> tuple[MessageNotification, ...]:
+        """The outcomes after this cursor, in recipient order."""
+
+    @staticmethod
+    def ordered(outcomes: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
+        return tuple(sorted(outcomes, key=lambda outcome: outcome.recipient_identity.recipient_lookup))
+
+
+@dataclass(frozen=True)
+class FirstRecipient(NullMember, RecipientCursor):
+    """No cursor given: start at the first recipient."""
+
+    def following(
+        self, outcomes: Iterable[MessageNotification],
+    ) -> tuple[MessageNotification, ...]:
+        return self.ordered(outcomes)
+
+
+@dataclass(frozen=True)
+class AfterRecipient(RecordMember, RecipientCursor):
+    """Start after this recipient, the last row of the previous page."""
+
+    recipient: FrozenRecipient
+
+    def following(
+        self, outcomes: Iterable[MessageNotification],
+    ) -> tuple[MessageNotification, ...]:
+        return tuple(outcome for outcome in self.ordered(outcomes)
+                     if outcome.recipient_identity.recipient_lookup > self.recipient.recipient_lookup)
 
 
 @dataclass(frozen=True, slots=True)

@@ -56,7 +56,7 @@ from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .presentation import ChannelView, MessageNotification
+from .presentation import AfterRecipient, ChannelView, FirstRecipient, MessageNotification, RecipientCursor
 from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
 from .relationships import (
@@ -692,6 +692,7 @@ class MessageOutcomes(ToolResult):
     message: Annotated[Message, WireForm]
     outcomes: tuple[MessageNotification, ...]
     remaining: int
+    next: RecipientCursor
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -699,17 +700,17 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
     label = "Message outcomes"
     description = (
         "Read one message's recipient outcomes: the message once, then one page of recipient "
-        "rows ordered by recipient name, each with its delivery state, who it was shown to and "
-        "its answer. Pass after for the next page. A sender reads every recipient; a "
-        "recipient reads only its own row."
+        "rows, each with its delivery state, who it was shown to and its answer. Pass the "
+        "result's next cursor as after for the next page. A sender reads every recipient; "
+        "a recipient reads only its own row."
     )
     reference: Annotated[
         MessageReference, *tool_field("The message's seq and message_id, as comms_threads lists them")
     ]
     limit: Annotated[int, *tool_field("Maximum recipient rows in this page")] = 100
     after: Annotated[
-        str, *tool_field("Exclusive recipient name from the previous page's last row")
-    ] = ""
+        RecipientCursor, *tool_field("The previous page's next cursor; omit for the first page")
+    ] = FirstRecipient()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessageOutcomes:
         if self.limit < 1:
@@ -717,17 +718,19 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
         message, = comms.bus.bus.messages_for_references((self.reference,))
         window = ReadNotifications(str(comms.root), (self.reference,)).read(comms)
         viewer = caller.outcome_viewer(comms)
-        readable = sorted(
-            (outcome for outcome in window.outcomes.get((message.seq, message.message_id), ())
-             if viewer.includes(outcome.sender_lookup, outcome.recipient_identity)),
-            key=lambda outcome: outcome.recipient,
+        readable = tuple(
+            outcome for outcome in window.outcomes.get((message.seq, message.message_id), ())
+            if viewer.includes(outcome.sender_lookup, outcome.recipient_identity)
         )
         if not readable:
             raise ToolRefusedError(
                 f"No recipient outcome of message {message.seq} is readable by this caller.")
-        following = [outcome for outcome in readable if outcome.recipient > self.after]
-        page = tuple(following[:self.limit])
-        return MessageOutcomes(message, page, len(following) - len(page))
+        following = self.after.following(readable)
+        page = following[:self.limit]
+        return MessageOutcomes(
+            message, page, len(following) - len(page),
+            AfterRecipient(page[-1].recipient_identity) if page else self.after,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
