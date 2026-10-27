@@ -116,15 +116,26 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 await asyncio.gather(task, return_exceptions=True)
 
 
-@pytest.mark.asyncio
-async def test_goal_published_during_preparation_is_current_at_reservation(tmp_path):
-    source = SourceRepository.create(tmp_path / 'source')
+@pytest.fixture
+async def prepared_owner(tmp_path):
     comms = installed_comms(tmp_path)
     for name in ('lead', 'worker'):
         comms.registry.declare(Thread(
             name, frozenset(), Checkout(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
+    agent = CommsAgent(comms, auto_wake=False)
+    try:
+        await agent.sessions.bind_owned(comms.registry.require('worker'), 'worker-session')
+        yield comms, agent
+    finally:
+        await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_goal_published_during_preparation_is_current_at_reservation(tmp_path, prepared_owner):
+    source = SourceRepository.create(tmp_path / 'source')
+    comms, agent = prepared_owner
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the turn owner').id
     initial = comms.goals.update_goal('worker', CreateProblemGoalAction(
@@ -134,7 +145,6 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         repo=RepositoryName.from_wire('org/repo'), text='Repair the turn owner',
     ))
     actor = comms.registry.require('lead').incarnation
-    agent = CommsAgent(comms, auto_wake=False)
     old = OwnedTurn(agent.turns, 'worker-session', 'worker', 'first input',
                     original_owner_input=True, original_goal_id=initial.id,
                     acceptance=NoTurnAcceptance())
@@ -180,17 +190,12 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path):
+async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path, prepared_owner):
     """The retry order's message is queued while the goal is blocked, so its owner input
     carries no active goal id and captures the blocked state; the order then makes the goal
     active, and that running turn keeps its tool calls."""
     source = SourceRepository.create(tmp_path / 'source')
-    comms = installed_comms(tmp_path)
-    for name in ('lead', 'worker'):
-        comms.registry.declare(Thread(
-            name, frozenset(), Checkout(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        ))
+    comms, agent = prepared_owner
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the blocked unit').id
     comms.goals.update_goal('worker', CreateProblemGoalAction(
@@ -203,7 +208,6 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
         'worker', BlockedGoalAction(block_reason='Backend turn ended without a result.')
     )
     actor = comms.registry.require('lead').incarnation
-    agent = CommsAgent(comms, auto_wake=False)
     # QueuedInputContext.active_goal_id of a blocked goal, as queued_input.py passes it.
     turn = OwnedTurn(agent.turns, 'worker-session', 'worker', 'retry order message',
                      original_owner_input=True,

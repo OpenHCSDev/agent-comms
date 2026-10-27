@@ -776,8 +776,8 @@ class DMDisplayBasis:
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
         user = registry.user_thread()
-        with registry.store.guarded_write():
-            snapshot = registry.store.read_snapshot_unlocked()
+        with registry.store.current_snapshot() as cut:
+            snapshot = cut.snapshot
             self.validate_for(
                 root, worktree, peer, through, snapshot,
                 RecordedBusIdentity.capture(bus.bus.path), user,

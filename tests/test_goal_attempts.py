@@ -29,7 +29,6 @@ from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, Succee
 from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore, GoalWorkDecision, ProviderUsageTotal, ReservationConflictError, StorageUncertainError
 from agent_comms.errors import UnresolvedAttemptError
-from agent_comms.maintenance_barrier import MaintenanceNotHeldError
 from agent_comms.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -432,10 +431,14 @@ def claimed_owner(comms):
         store = comms.goals.open_goal_store()
         generation = store.require_generation(owner.goal.require().id)
         store.claim_launch(store.reserve(generation.goal_id, generation.number))
+        child.terminate()
+        child.wait(timeout=5)
         yield owner
     finally:
-        comms.owners.stop("stopped-goal")
+        if child.poll() is None:
+            child.terminate()
         child.wait(timeout=5)
+        comms.owners.stop("stopped-goal")
 
 
 def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claimed_owner):
@@ -506,8 +509,8 @@ def test_incomplete_current_schema_is_not_repaired_or_regranted(store):
     with sqlite3.connect(store.path) as conn:
         GoalWorkDecision.drop(conn)
     before = store.path.read_bytes()
-    with pytest.raises(MaintenanceNotHeldError):
+    with pytest.raises(store.table_schema().schema_error):
         GoalAttemptStore.at(store.root)
-    with pytest.raises(MaintenanceNotHeldError):
+    with pytest.raises(store.table_schema().schema_error):
         GoalAttemptStore.initialize(store.root)
     assert store.path.read_bytes() == before
