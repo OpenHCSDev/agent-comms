@@ -426,14 +426,14 @@ class DeliveredInput(QueuedInput):
     ) -> int:
         """Acquire, recover and release entirely inside the joined worker."""
         entry = comms.registry.entry(name).entry
-        document = dispositions.unresolved(entry.names)
+        document = dispositions.unresolved((entry,))
         if not any(row.key not in live_keys
                    for row in document.unbound_wire_inputs(root_id).values()):
             return 0
         with comms.registry.store.current_entry(name) as cut:
             entry = cut.entry
             owner = entry.thread
-            document = dispositions.unresolved(entry.names)
+            document = dispositions.unresolved((entry,))
             rows = {
                 reference: row
                 for reference, row in document.unbound_wire_inputs(root_id).items()

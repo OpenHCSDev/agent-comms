@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
+from .bus import Bus
 from .bus_tables import MessageIdentitySource
+from .coordination_database import CoordinationStore
+from .coordination_tables.harness_deliveries import HarnessDelivery
+from .coordinator import Coordination
+from .harness_delivery_states import Outcome, UnconfirmedOutcome
 from .errors import RelationViolationError
 from .field_codec import GoalId, InputId, RootId, TurnId
 from .input_attempt import (
@@ -28,7 +33,7 @@ from .input_attempt import (
     UnresolvedInput,
 )
 from .input_key import InputKey, InputKeyText, TurnInputKey
-from .input_origin import InputOrigin, UnattributedInputOrigin
+from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
 from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
 from .message_reference import MessageReference
@@ -43,7 +48,7 @@ if TYPE_CHECKING:
     from .bus import BusReader
     from .channel_input_batch import SingleInputBatch
     from .private_registry_guard import RegistryPrivacy
-    from .registry_document import RegistrySnapshot
+    from .registry_document import RegistryEntry, RegistrySnapshot
     from .threads import Thread
     from .turn_lease import TurnLeaseFence
 
@@ -225,6 +230,10 @@ class InputDispositionRow(InputDispositionsRows, TypedTable):
     )
 
 
+def _names(entries: tuple[RegistryEntry, ...]) -> frozenset[str]:
+    return frozenset().union(*(entry.names for entry in entries))
+
+
 def _members(column: str, values) -> tuple[str, tuple]:
     plan, = InputDispositionRow._fields_named((column,))
     values = tuple(plan.encode(value) for value in values)
@@ -267,9 +276,48 @@ class InputDispositions(DurableStore):
     def lookup(self, key: InputKey) -> InputAttempt:
         return self.read((key,)).lookup(key)
 
-    def unresolved(self, owners: frozenset[str]) -> InputDocument:
-        where, parameters = _members("owner", sorted(owners))
-        return self._select(f"unresolved = 1 AND {where}", parameters)
+    def harness_attempts(self, entries: tuple[RegistryEntry, ...]) -> tuple[ReservedInput, ...]:
+        """Uncertain harness attempts for these entries' frozen incarnations, as the inputs
+        they are. Derived on every read and never stored by reading."""
+        owners = {entry.thread.incarnation.lookup: entry for entry in entries}
+        outcomes = Outcome.members_with(UnconfirmedOutcome)
+        with Coordination(str(CoordinationStore.path_in(self.root))) as store, store.session.read():
+            attempts = HarnessDelivery.select(
+                store.session._connection,
+                where=(f'"recipient_lookup" IN ({", ".join("?" for _ in owners)}) '
+                       f'AND "outcome" IN ({", ".join("?" for _ in outcomes)})'),
+                parameters=(*owners, *(outcome.declared_name for outcome in outcomes)),
+                order_by=("seq",),
+            )
+        messages = Bus(Bus.path_in(self.root)).messages_for_references(
+            attempt.reference for attempt in attempts)
+        return tuple(
+            ReservedInput(
+                self.bus_key(message, entry.thread), message.seq, entry.thread.name,
+                entry.claimed_generation, message.target, message.body,
+                origin=HarnessAttemptOrigin(attempt.bridge, attempt.reference),
+            )
+            for attempt, message in zip(attempts, messages, strict=True)
+            for entry in (owners[attempt.recipient_lookup],)
+        )
+
+    @staticmethod
+    def _owned_or_attempted(
+        owners: frozenset[str], attempted: tuple[ReservedInput, ...],
+    ) -> tuple[str, tuple]:
+        """Stored unresolved rows, and every stored row of an attempted key in any state."""
+        owned, owner_parameters = _members("owner", sorted(owners))
+        keys, key_parameters = _members("key", tuple(row.key for row in attempted))
+        return (f"(unresolved = 1 AND {owned}) OR {keys}",
+                (*owner_parameters, *key_parameters))
+
+    def unresolved(self, entries: tuple[RegistryEntry, ...]) -> InputDocument:
+        """Stored unresolved inputs plus uncertain harness attempts with no stored row.
+        A stored row wins in every state, so a completed input is never resurrected."""
+        owners = _names(entries)
+        attempted = self.harness_attempts(entries)
+        document = self._select(*self._owned_or_attempted(owners, attempted)).record(*attempted)
+        return InputDocument({row.key: row for row in document.unknown(owners)})
 
     def in_turn(self, turn_id: TurnId) -> InputDocument:
         return self._select('"turn_id" = ?', (turn_id,))
@@ -440,20 +488,23 @@ class InputDispositions(DurableStore):
 
     def dismiss_historical(
         self,
-        owners: frozenset[str],
+        entries: tuple[RegistryEntry, ...],
         *,
         scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
+        """Dismissing an uncertain harness attempt stores it, dismissed; nothing else is stored."""
+        owners = _names(entries)
+        attempted = self.harness_attempts(entries)
+
         def dismiss(document: InputDocument) -> DocumentChange[InputDocument, InputDocument]:
             changed = {
                 row.key: replace(row, notice_dismissed=True)
-                for row in document.unknown(owners)
+                for row in document.record(*attempted).unknown(owners)
                 if scope.historical_notice(row) and not row.notice_dismissed
             }
             return DocumentChange.to(
                 replace(document, rows={**document.rows, **changed}) if changed else document
             )
 
-        where, parameters = _members("owner", sorted(owners))
-        return self._update(f"unresolved = 1 AND {where}", parameters, dismiss).delivery_overview(
-            owners, scope=scope)
+        return self._update(*self._owned_or_attempted(owners, attempted), dismiss).record(
+            *attempted).delivery_overview(owners, scope=scope)

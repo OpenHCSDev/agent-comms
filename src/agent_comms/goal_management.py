@@ -185,11 +185,8 @@ class Goals(GoalWaitRecovery):
 
     def unresolved_inputs(self, name: str) -> tuple[UnresolvedInput, ...]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
-        rows = (
-            InputDispositions(self.root)
-            .unresolved(aliases := self.registry.entry(name).entry.names)
-            .unknown(aliases)
-        )
+        entry = self.registry.entry(name).entry
+        rows = InputDispositions(self.root).unresolved((entry,)).unknown(entry.names)
         return tuple(UnresolvedInput.of(row) for row in rows)
 
     def input_delivery(
@@ -200,23 +197,16 @@ class Goals(GoalWaitRecovery):
         scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
-        aliases = self.registry.entry(name).entry.names
-        return (
-            InputDispositions(self.root)
-            .unresolved(aliases)
-            .delivery_overview(
-                aliases, include_history=include_history, scope=scope
-            )
-        )
+        entry = self.registry.entry(name).entry
+        return InputDispositions(self.root).unresolved((entry,)).delivery_overview(
+            entry.names, include_history=include_history, scope=scope)
 
     def dismiss_historical_inputs(
         self, name: str, *, scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE
     ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
-        aliases = self.registry.entry(name).entry.names
         return InputDispositions(self.root).dismiss_historical(
-            aliases, scope=scope
-        )
+            (self.registry.entry(name).entry,), scope=scope)
 
     def goal_input_review(
         self, name: str, goal_id: GoalId, wait_for: Sequence[str]
@@ -242,7 +232,8 @@ class Goals(GoalWaitRecovery):
         )
         owners = captured.owners
         dispositions = InputDispositions(self.root)
-        unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
+        unknown = {row.key: row for row in
+                   dispositions.unresolved((snapshot.entry(thread.name),)).unknown(owners)}
         eligible = set()
         incarnation = thread.incarnation.require_recorded()
         lookup = incarnation.lookup
