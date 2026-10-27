@@ -14,7 +14,8 @@ from typing import AsyncIterator, Self
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
-from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
+from agent_comms.cli_protocol import EarlierItems
+from agent_comms.harness_delivery_states import Outcome, DeliveredOutcome
 from .history import CodexHistory, HarnessAddress, OnlineHistory
 from .shared import SessionBinding, IncomingFrame, TranscriptBridge, Options, run_bridge
 from agent_comms.runtime_updates import (

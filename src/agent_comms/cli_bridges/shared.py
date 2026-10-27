@@ -40,7 +40,8 @@ from agent_comms.child_process import (
     StreamingChildStdio,
 )
 from agent_comms.cli_arguments import CliArguments
-from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, FilteredOutcome, Outcome, TaggedWire, UnconfirmedOutcome, WatchLine, raise_child_exit
+from agent_comms.cli_protocol import TaggedWire, WatchLine, raise_child_exit
+from agent_comms.harness_delivery_states import DeliveredOutcome, EmittedOutcome, FilteredOutcome, Outcome, UnconfirmedOutcome
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import CoordinationError, DeferredRead, IdentityConflict
 from agent_comms.declared_family import DeclaredFamily

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, ClassVar
 
 from agent_comms.bus import Bus
-from agent_comms.cli_protocol import Outcome
+from agent_comms.harness_delivery_states import Outcome
 from agent_comms.messages import Message
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate

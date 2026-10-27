@@ -18,7 +18,7 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_protocol import Outcome
+from agent_comms.harness_delivery_states import Outcome
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, PathText

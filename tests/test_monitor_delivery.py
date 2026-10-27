@@ -32,7 +32,7 @@ from agent_comms.cli_bridges.shared import (
     MonitorObservation,
     GivenBinding, MONITOR_FRAME,
 )
-from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
+from agent_comms.harness_delivery_states import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec, MalformedRecord
