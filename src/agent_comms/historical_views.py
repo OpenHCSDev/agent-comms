@@ -283,6 +283,11 @@ class HistorySource:
             captured.source.revision, RegistryProvenance.capture(captured.document),
         )
 
+    @staticmethod
+    def matching_original(sources: tuple[HistorySource, ...], root: Path) -> Iterator[HistorySource]:
+        """Every archive of this original, in the catalog's declared order."""
+        return (source for source in sources if source.original_root == str(root))
+
     def retain(self, destination: Path) -> HistorySource:
         """Copy this original into an unpublished directory without changing its inputs."""
         root = Path(self.original_root)
@@ -479,8 +484,7 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
         source_root = source_root.resolve()
         if source_root == self.path.parent.resolve():
             raise ValueError("The live bus cannot be its own history source")
-        existing = next((s for s in self.sources() if s.original_root == str(source_root)), None)
-        if existing is not None:
+        for existing in HistorySource.matching_original(self.sources(), source_root):
             return existing
         PrivateDirectoryRole.make_parents(self.path.parent)
         stage = Path(tempfile.mkdtemp(prefix=".history-source-", dir=self.path.parent))
@@ -493,8 +497,7 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
             target = parent / stage.name.removeprefix(".history-")
 
             def publish(sources: tuple[HistorySource, ...]) -> DocumentChange[tuple[HistorySource, ...], HistorySource]:
-                existing = next((s for s in sources if s.original_root == str(source_root)), None)
-                if existing is not None:
+                for existing in HistorySource.matching_original(sources, source_root):
                     return DocumentChange(sources, existing)
                 original.require_original(source_root)
                 if FileRevision.capture(ChannelCatalog.path_in(source_root)) != catalog_revision:
