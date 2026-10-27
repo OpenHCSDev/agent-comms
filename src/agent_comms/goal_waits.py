@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import Connection
@@ -32,6 +31,7 @@ if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .goal_management import Goals
     from .registry_document import RegistrySnapshot
+    from .registry_store import RegistryEdit
     from .threads import Thread
 
 
@@ -290,9 +290,10 @@ class GoalWaitReview:
                 "Goal, dependency or wait changed during reply review; inspect it again."
             )
 
-    @contextmanager
-    def publishing_unanswered(self, goals: Goals) -> Iterator[bool]:
-        """Read without EX; hold it only after this owner's received cut still agrees."""
+    def publish_unanswered(
+        self, goals: Goals, publish: Callable[[RegistryEdit], tuple[str, ...]],
+    ) -> tuple[str, ...]:
+        """Publish once through the checked edit after an unlocked read proves silence."""
         owner = self.owner.incarnation.require_recorded()
         review = self
         while True:
@@ -300,18 +301,15 @@ class GoalWaitReview:
                 replied = self.wait.has_reply(source, owner)
                 through_seq = source.revision()
             if replied:
-                yield False
-                return
-            with goals.registry.store.guarded_write():
+                return ()
+            with goals.registry.store.editing() as edit:
                 if not review.current_for(goals):
                     try:
                         review = GoalWaitReview.capture(goals, owner)
                     except UnregisteredThreadError:
-                        yield False
-                        return
+                        return ()
                     if review.wait != self.wait or not review._current_goal(review.owner):
-                        yield False
-                        return
+                        return ()
                     # A new owner/turn fence needs a fresh silence read for this
                     # same wait. Re-evaluate here; a terminal callback runs once.
                     continue
@@ -319,8 +317,7 @@ class GoalWaitReview:
                 # Any new candidate needs another unlocked policy read, not a stale release.
                 if goals.bus.bus.received_after(owner.lookup, through_seq):
                     continue
-                yield True
-                return
+                return publish(edit)
 
     @property
     def goal_id(self) -> GoalId:

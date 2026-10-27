@@ -23,6 +23,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .goal_actions import (
     GoalAction,
     GoalActionContext,
+    GoalPublicationContext,
     GoalPrecondition,
     RuntimeInvocable,
     SentBackOrderGoalAction,
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
     from .messages import Message
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
+    from .registry_store import RegistryEdit
     from .thread_identity import ThreadIncarnation
 from .goal_presentation import (
     GoalExecution,
@@ -339,10 +341,8 @@ class Goals:
         if not closed:
             return ()
         # A failed read is a diagnostic, never evidence of silence.
-        with review.publishing_unanswered(self) as unchanged:
-            if not unchanged:
-                return ()
-            snapshot = self.registry.snapshot()
+        def release(edit: RegistryEdit) -> tuple[str, ...]:
+            snapshot = edit.original.snapshot
             owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
             if self.agents.is_working(owner.incarnation, snapshot):
                 return ()
@@ -356,7 +356,9 @@ class Goals:
                 f"Dependency wait group ({names}) has no independent worker. "
                 "Standby was released; inspect dependencies and continue useful work."
             )
-            return closed if self._release_reviewed_wait(review, note) else ()
+            return closed if self._release_reviewed_wait(edit, review, note) else ()
+
+        return review.publish_unanswered(self, release)
 
     def release_waits_after_terminal_turn(self, fence: TurnCompletion) -> tuple[str, ...]:
         """A completed turn may release silence observed outside the registry lock."""
@@ -386,10 +388,8 @@ class Goals:
         if any(self.agents.is_working(target.incarnation, review.snapshot)
                for target in wait.targets):
             return ()
-        with review.publishing_unanswered(self) as unchanged:
-            if not unchanged:
-                return ()
-            current = self.registry.snapshot()
+        def release(edit: RegistryEdit) -> tuple[str, ...]:
+            current = edit.original.snapshot
             sources = fence.idle_sources(current)
             if not sources or any(self.agents.is_working(target.incarnation, current)
                                   for target in wait.targets):
@@ -401,18 +401,21 @@ class Goals:
                 "Standby was released; inspect messages and UNKNOWN inputs, then "
                 "continue independent work or redelegate. No input was replayed."
             )
-            if self._release_reviewed_wait(review, note):
+            if self._release_reviewed_wait(edit, review, note):
                 actual_owner, = current.threads_for(owner.incarnation.require_recorded())
                 return (actual_owner.name,)
-        return ()
+            return ()
 
-    def _release_reviewed_wait(self, review: GoalWaitReview, note: str) -> bool:
-        """Publish a validated silent wait while its review owns the registry lock."""
-        snapshot = self.registry.snapshot()
+        return review.publish_unanswered(self, release)
+
+    def _release_reviewed_wait(self, edit: RegistryEdit, review: GoalWaitReview, note: str) -> bool:
+        """Publish a validated silent wait through the review's existing registry edit."""
+        snapshot = edit.original.snapshot
         owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
         goal = owner.goal.require_active()
         progress = f"{goal.progress}\n\n{note}" if goal.progress else note
-        self.registry.register(
+        self.registry._declare_in(
+            edit,
             replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
             snapshot.status(owner.name),
         )
@@ -509,5 +512,7 @@ class Goals:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
-        with self.registry.store.guarded_write():
-            yield action.apply(GoalActionContext(self, self.registry.require(name), actor))
+        with self.registry.store.editing() as edit:
+            yield action.apply(GoalPublicationContext(
+                self, edit.document.require(name), actor, edit=edit,
+            ))
