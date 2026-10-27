@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .field_codec import TranscriptRecordId
 
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState
@@ -109,5 +110,5 @@ class MismatchedMonitor(MonitorEvidence):
 
 @dataclass(frozen=True)
 class ObservedMonitor(MonitorEvidence):
-    record_id: str
+    record_id: TranscriptRecordId
     timestamp: float

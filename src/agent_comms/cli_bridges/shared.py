@@ -986,7 +986,7 @@ class BridgeLog(io.TextIOBase):
 
 
 @dataclass(eq=False, repr=False)
-class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
+class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOptions], declared_name=None):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     state_directory: ClassVar[Path]

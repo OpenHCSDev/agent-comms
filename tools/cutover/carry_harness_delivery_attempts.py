@@ -8,6 +8,8 @@ as one set, and one message stored twice must agree or the carry refuses. Bridge
 only from the coordinator, so this runs before any bridge restarts on this runtime.
 """
 
+import json
+import sqlite3
 from collections.abc import Iterable
 from contextlib import closing
 from dataclasses import dataclass
@@ -18,11 +20,17 @@ from agent_comms.cli_bridges.shared import Binding, BridgeDeliveryStore, BridgeS
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import MessageId
-from agent_comms.harness_delivery_states import MonitorEvidence, Outcome
+from agent_comms.field_codec import FieldCodec, MessageId, TranscriptRecordId
+from agent_comms.harness_delivery_states import EmittedOutcome, MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.typed_table import SQLiteTableName, TypedRow, WriterOwnedFile, WriterOwnedResource
+
+
+FORGED_OBSERVATION = "commander-skip-old-heartbeats"
+"""On 2026-10-20 at 03:50 two claude-code attempts (seq 6251 and 6252) were hand-marked delivered
+with this record id. No transcript record has it, so those attempts carry what is true of them:
+emitted, nothing observed. Nothing replays them and nothing counts them as entered context."""
 
 
 @dataclass(frozen=True)
@@ -30,7 +38,13 @@ class JournalAttempt(TypedRow):
     id: MessageId
     seq: int
     outcome: type[Outcome]
-    monitor: MonitorEvidence
+    monitor: str
+
+    def evidence(self) -> tuple[type[Outcome], MonitorEvidence]:
+        stored = json.loads(self.monitor)
+        if stored.get("record_id") == FORGED_OBSERVATION:
+            return EmittedOutcome, UnrecordedMonitor()
+        return self.outcome, FieldCodec.decode(MonitorEvidence, stored)
 
     query: ClassVar[str] = (
         "SELECT id, json_extract(payload, '$.seq') AS seq, outcome, monitor FROM delivery")
@@ -42,7 +56,7 @@ class JournalPart(TypedRow):
     number: int
     sender: str
     body: str
-    record_id: str
+    record_id: TranscriptRecordId
     timestamp: float
 
     query: ClassVar[str] = (
@@ -78,7 +92,7 @@ class HarnessDeliveryAttempts(Carry):
                 lookup = binding.owner.require_recorded().lookup
                 found.append(CarriedJournal(
                     resource,
-                    tuple(HarnessDelivery(bridge, lookup, row.id, row.seq, row.outcome, row.monitor)
+                    tuple(HarnessDelivery(bridge, lookup, row.id, row.seq, *row.evidence())
                           for row in JournalAttempt.read(db.execute(JournalAttempt.query))),
                     tuple(HarnessObservedPart(bridge, lookup, row.id, row.number, row.sender,
                                               row.body, row.record_id, row.timestamp)
@@ -93,12 +107,25 @@ class HarnessDeliveryAttempts(Carry):
         """One row per key across journals; one key stored with two values is refused."""
         kept: dict[tuple[object, ...], tuple[Row, WriterOwnedResource]] = {}
         for row, resource in rows:
-            first, source = kept.setdefault(tuple(row.key().values()), (row, resource))
+            first, source = kept.setdefault(row.identity(), (row, resource))
             if first != row:
                 raise RelationViolationError(
                     f"{source.path} and {resource.path} disagree on {first} and {row}; "
                     "refusing to choose")
         return tuple(row for row, _source in kept.values())
+
+    @staticmethod
+    def inserted[Row: (HarnessDelivery, HarnessObservedPart)](
+        db: sqlite3.Connection, rows: tuple[Row, ...],
+    ) -> None:
+        """Insert each row once; a row already carried must equal it, or the carry refuses."""
+        for row in rows:
+            stored = row.stored(db)
+            if not stored:
+                row.insert(db)
+            elif stored[0] != row:
+                raise RelationViolationError(f"Coordinator already holds {stored[0]}, not {row}; "
+                                             "refusing to choose")
 
     def carry(self, *, apply: bool) -> Carried:
         journals = self.journals()
@@ -112,13 +139,8 @@ class HarnessDeliveryAttempts(Carry):
                     if not table.present(db):
                         for statement in table.ddl():
                             db.execute(statement)
-                for row in (*attempts, *parts):
-                    stored = type(row).select(db, **row.key())
-                    if not stored:
-                        row.insert(db)
-                    elif stored[0] != row:
-                        raise RelationViolationError(
-                            f"{coordination} already holds {stored[0]}, not {row}; refusing to choose")
+                self.inserted(db, attempts)
+                self.inserted(db, parts)
             for journal in journals:
                 with closing(BridgeDeliveryStore.writer(self.files.location(journal.resource))) as db:
                     BridgeStateTable.install_schema(db, WriterOwnedFile())

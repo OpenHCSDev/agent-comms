@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.field_codec import MessageId, ThreadLookup
+from agent_comms.field_codec import MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference
@@ -40,7 +40,7 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     """The inbox asks per delivered message whether any bridge attempted it for this recipient."""
 
     @classmethod
-    def references(cls):
+    def references(cls) -> tuple[ForeignKey, ...]:
         return (ForeignKey(columns=("recipient_lookup",), target=Participants,
                            target_columns=("participant_lookup",)),)
 
@@ -48,13 +48,13 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
-    def key(self) -> dict[str, object]:
-        return {"bridge": self.bridge, "recipient_lookup": self.recipient_lookup,
-                "message_id": self.message_id}
+    def identity(self) -> tuple[type[HarnessSession], ThreadLookup, MessageId]:
+        return self.bridge, self.recipient_lookup, self.message_id
 
     def stored(self, db: sqlite3.Connection) -> tuple[Self, ...]:
         """This attempt as stored; one stored at another sequence is another message."""
-        rows = type(self).select(db, **self.key())
+        rows = type(self).select(db, bridge=self.bridge, recipient_lookup=self.recipient_lookup,
+                                 message_id=self.message_id)
         if rows and rows[0].seq != self.seq:
             raise IdentityConflict(
                 f"message {self.message_id} was attempted at {rows[0].seq}, not {self.seq}")
@@ -103,19 +103,23 @@ class HarnessObservedPart(ImmutableRows, CoordinatorRow, declared_name="harness_
     number: Annotated[int, FrozenColumn(primary_key=True, check="number > 0")]
     sender: str
     body: str
-    record_id: str
+    record_id: TranscriptRecordId
     timestamp: float
 
     @classmethod
-    def references(cls):
+    def references(cls) -> tuple[ForeignKey, ...]:
         return (ForeignKey(columns=("bridge", "recipient_lookup", "message_id"),
                            target=HarnessDelivery,
                            target_columns=("bridge", "recipient_lookup", "message_id")),)
 
-    def key(self) -> dict[str, object]:
-        return {"bridge": self.bridge, "recipient_lookup": self.recipient_lookup,
-                "message_id": self.message_id, "number": self.number}
+    def identity(self) -> tuple[type[HarnessSession], ThreadLookup, MessageId, int]:
+        return self.bridge, self.recipient_lookup, self.message_id, self.number
+
+    def stored(self, db: sqlite3.Connection) -> tuple[Self, ...]:
+        return tuple(type(self).select(db, bridge=self.bridge, recipient_lookup=self.recipient_lookup,
+                                       message_id=self.message_id, number=self.number))
 
     @classmethod
     def of(cls, db: sqlite3.Connection, delivery: HarnessDelivery) -> tuple[Self, ...]:
-        return tuple(cls.select(db, **delivery.key(), order_by=("number",)))
+        return tuple(cls.select(db, bridge=delivery.bridge, recipient_lookup=delivery.recipient_lookup,
+                                message_id=delivery.message_id, order_by=("number",)))
