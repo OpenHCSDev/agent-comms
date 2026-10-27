@@ -29,11 +29,11 @@ from pathlib import Path
 from typing import Annotated, TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
 
 from .child_process import LockHolder, Platform
-from .coordination_errors import CoordinationReadUnavailable, DeferredRead
+from .coordination_errors import CoordinationReadUnavailable, DeferredRead, StaleRevision
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import PathText
-from .private_path import FileIdentity, PrivateFileRole
+from .field_codec import PathText, ScratchName
+from .private_path import FileIdentity, FileObservation, FileRevision, OwnedDirectoryRole, PrivateFileRole
 from .process_claim import ExclusiveFlock, FlockMode, SharedFlock
 
 if TYPE_CHECKING:
@@ -383,6 +383,31 @@ class SingleFileStore(StoreLockOwner, declared_name=None):
         yield
 
 
+class FileTransactions(StoreLockOwner, declared_name=None):
+    """Prepare a captured file outside exclusion; mutate only its still-current cut."""
+
+    def revision_unlocked(self) -> tuple[FileObservation, ...]:
+        return (FileRevision.capture(self.path),)
+
+    def change_current[Captured, Prepared, Result](
+        self, capture: Callable[[], Captured],
+        prepare: Callable[[Captured], AbstractContextManager[Prepared]],
+        change: Callable[[Prepared], Result],
+    ) -> Result:
+        deadline = time.monotonic() + self.contention.seconds
+        while True:
+            with self.guarded_read():
+                revision = self.revision_unlocked()
+                captured = capture()
+            with prepare(captured) as prepared:
+                with self.guarded_write():
+                    if self.revision_unlocked() != revision:
+                        if time.monotonic() >= deadline:
+                            raise StaleRevision(f"File kept changing before mutation: {self.path}")
+                        continue
+                    return change(prepared)
+
+
 class MultiFileStore(StoreLockOwner, declared_name=None):
     """State spanning several files replaced together: one lock covers the set, and readers share it."""
 
@@ -690,14 +715,20 @@ class AtomicFile:
 
     @contextmanager
     def _staging(self) -> Iterator[tuple[BinaryIO, Path]]:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor, temporary = StoreOwner.stage_file(self.path)
+        descriptor, temporary = self._stage()
         try:
             with os.fdopen(descriptor, "wb") as output:
-                os.chmod(temporary, self.mode)
+                os.fchmod(output.fileno(), self.mode)
                 yield output, temporary
         finally:
-            temporary.unlink(missing_ok=True)
+            self._discard(temporary)
+
+    def _stage(self) -> tuple[int, Path]:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        return StoreOwner.stage_file(self.path)
+
+    def _discard(self, staged: Path) -> None:
+        staged.unlink(missing_ok=True)
 
     @staticmethod
     def _finish(output: BinaryIO) -> None:
@@ -734,10 +765,19 @@ class AtomicFile:
 
     def _publish(self, staged: Path) -> None:
         self._install(staged)
-        Platform.current().sync_directory(self.path.parent)
+        self._sync_directory()
 
     def _install(self, staged: Path) -> None:
+        self._replace(staged)
+
+    def _replace(self, staged: Path) -> None:
         os.replace(staged, self.path)
+
+    def _link(self, staged: Path) -> None:
+        os.link(staged, self.path)
+
+    def _sync_directory(self) -> None:
+        Platform.current().sync_directory(self.path.parent)
 
     def sync(self) -> None:
         """Sync an existing file without replacing an open database's inode."""
@@ -750,4 +790,47 @@ class ExclusiveAtomicFile(AtomicFile):
     """Create a new name atomically, refusing an existing destination."""
 
     def _install(self, staged: Path) -> None:
-        os.link(staged, self.path)
+        self._link(staged)
+        self._discard(staged)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DirectoryAtomicFile(AtomicFile):
+    """Atomic publication anchored to the publisher's checked directory descriptor."""
+
+    directory: int
+
+    def _stage(self) -> tuple[int, Path]:
+        temporary = self.path.with_name(StoreOwner.staging_name.format(
+            name=self.path.name, token=ScratchName.mint()) + StoreOwner.staging_suffix)
+        descriptor = PrivateFileRole.create(temporary.name, ValueError(
+            "Staged publication is not a private regular file"), dir_fd=self.directory)
+        return descriptor, temporary
+
+    def _discard(self, staged: Path) -> None:
+        try:
+            os.unlink(staged.name, dir_fd=self.directory)
+        except FileNotFoundError:
+            pass
+
+    def _replace(self, staged: Path) -> None:
+        self._require_directory()
+        os.replace(staged.name, self.path.name,
+                   src_dir_fd=self.directory, dst_dir_fd=self.directory)
+
+    def _link(self, staged: Path) -> None:
+        self._require_directory()
+        os.link(staged.name, self.path.name, src_dir_fd=self.directory,
+                dst_dir_fd=self.directory, follow_symlinks=False)
+
+    def _require_directory(self) -> None:
+        OwnedDirectoryRole.held(self.directory, self.path.parent,
+                                ValueError("Publication directory changed or is not owned"))
+
+    def _sync_directory(self) -> None:
+        self._require_directory()
+        os.fsync(self.directory)
+
+
+class ExclusiveDirectoryAtomicFile(DirectoryAtomicFile, ExclusiveAtomicFile):
+    """The same anchored publication, refusing an existing destination."""

@@ -39,7 +39,6 @@ from agent_comms.active_route import (
     RouteFile,
     RouteFileSelection,
     active_route_path,
-    route_directory,
 )
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
@@ -1020,9 +1019,9 @@ class Install[Rehearsed: Rehearsal](ABC):
     def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteFileSelection]:
         with StoresAndRouteBackupPhase().running(self.staged.commands.clock):
             backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
-            with route_directory(backup.route):
-                backup.require_route_revision()
-                selected = self.staged.probe(SelectedRouteProbe())
+            backup.require_route_revision()
+            selected = self.staged.probe(SelectedRouteProbe())
+            backup.require_route_revision()
             return backup, selected
 
     def checkout_target(self) -> None:

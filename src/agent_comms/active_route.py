@@ -10,8 +10,8 @@ import json
 import os
 import time
 from abc import ABC
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -25,19 +25,72 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
-from .store_files import DependentStateTier, SingleFileStore, StoreLockContention
+from .store_files import (
+    DependentStateTier, DirectoryAtomicFile, ExclusiveDirectoryAtomicFile,
+    FileTransactions, SingleFileStore, StoreLockContention,
+)
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
 
 @dataclass(frozen=True, slots=True)
-class ActiveRouteFile(SingleFileStore, DependentStateTier):
+class ActiveRouteFile(FileTransactions, SingleFileStore, DependentStateTier):
     """One route publication; competing installers spend a fresh bounded wait."""
 
     path: Path
 
     # Publishers exclude only each other while the first install publishes its route.
     contention = StoreLockContention(30.0)
+
+    @contextmanager
+    def _directory(self) -> Iterator[int]:
+        """Pin the publication directory without lending any caller a store lock."""
+        if self.path.name != RouteFile.filename or not self.path.is_absolute():
+            raise ValueError("active comms route requires its absolute route path")
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        refusal = ValueError("active comms route directory changed or is not owned")
+        directory = OwnedDirectoryRole.read(self.path.parent, refusal)
+        try:
+            OwnedDirectoryRole.held(directory, self.path.parent, refusal)
+            Platform.current().make_private_descriptor(directory, 0o700)
+            yield directory
+        finally:
+            os.close(directory)
+
+    def update[Value, Result](
+        self, read: Callable[[], Value], change: Callable[[Value, int], Result],
+    ) -> Result:
+        """Read/prepare outside exclusion, then change the still-current route."""
+        with self._directory() as directory:
+            def commit(original: Value) -> Result:
+                OwnedDirectoryRole.held(directory, self.path.parent,
+                                        ValueError("active comms route directory changed"))
+                return change(original, directory)
+            return self.change_current(lambda: None, lambda _: nullcontext(read()), commit)
+
+    def publish[Result](
+        self, route: ActiveRoute,
+        change: Callable[[RouteFile, Callable[[], None], int], Result],
+    ) -> Result:
+        """Stage and validate before EX; publication uses the current file's policy."""
+        payload = route.encoded()
+        route.launch().validate()
+        with self._directory() as directory:
+            @contextmanager
+            def prepare(_: None) -> Iterator[tuple[RouteFile, Callable[[], None]]]:
+                original = RouteFile.read(self.path)
+                with original.writer(self.path, directory).prepared(payload) as publish:
+                    route.launch().validate()
+                    yield original, publish
+
+            def commit(prepared: tuple[RouteFile, Callable[[], None]]) -> Result:
+                original, publish = prepared
+                OwnedDirectoryRole.held(directory, self.path.parent,
+                                        ValueError("active comms route directory changed"))
+                route.observe_root()
+                return change(original, publish, directory)
+
+            return self.change_current(lambda: None, prepare, commit)
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,15 +270,17 @@ def route_new_bus(route: ActiveRoute, path: Path) -> str:
     """Route to this bus unless the file already selects one: install's answer and the
     owner's repair. A replaced file is kept beside the new one under a backup name, so a
     live route is still only ever installed once."""
-    with _route_directory(route, path) as (path, directory):
-        return RouteFile.read(path).route_new_bus(route, path, directory)
+    return ActiveRouteFile(path).publish(
+        route, lambda current, publish, directory:
+        current.route_new_bus(route, path, publish, directory))
 
 
 class RouteFileSelection(DeclaredFamily, affix="Selection", declared_name=None):
     """The outgoing reader's validated choice owns whether this bus may be published."""
 
-    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
-        return RouteFile.read(path).route_new_bus(route, path, directory)
+    def publish(self, current: RouteFile, route: ActiveRoute, path: Path,
+                publish: Callable[[], None], directory: int) -> str:
+        return current.route_new_bus(route, path, publish, directory)
 
 
 @dataclass(frozen=True)
@@ -237,10 +292,11 @@ class NoRouteSelection(RouteFileSelection):
 class PublishedRouteSelection(RouteFileSelection):
     root: Annotated[Path, PathText]
 
-    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+    def publish(self, current: RouteFile, route: ActiveRoute, path: Path,
+                publish: Callable[[], None], directory: int) -> str:
         if self.root.resolve() != route.root.resolve():
             return f"kept {path}: it selects {self.root}"
-        return super().publish(route, path, directory)
+        return super().publish(current, route, path, publish, directory)
 
 
 class RouteFile(ABC):
@@ -270,15 +326,27 @@ class RouteFile(ABC):
         """Where install runs: the default root, where it creates a bus."""
         return LocalRoute.default().root
 
-    def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
+    def writer(self, path: Path, directory: int) -> DirectoryAtomicFile:
+        return DirectoryAtomicFile(path, directory=directory)
+
+    def replace(self, path: Path, publish: Callable[[], None], directory: int) -> Path:
         name = Path(self.filename)
         backup = path.with_name(
             f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{ScratchName.mint()}.bak{name.suffix}")
-        _publish_active_route_locked(route, path, directory, backup=backup)
+        OwnedDirectoryRole.held(directory, path.parent,
+                                ValueError("active comms route directory changed"))
+        os.link(path.name, backup.name, src_dir_fd=directory, dst_dir_fd=directory,
+                follow_symlinks=False)
+        try:
+            publish()
+        except (OSError, ValueError) as error:
+            raise RoutePublicationUnknownError(
+                "active comms route publication outcome UNKNOWN after replacement") from error
         return backup
 
-    def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
-        return f"replaced {path}; old route kept at {self.replace(route, path, directory)}"
+    def route_new_bus(self, route: ActiveRoute, path: Path,
+                      publish: Callable[[], None], directory: int) -> str:
+        return f"replaced {path}; old route kept at {self.replace(path, publish, directory)}"
 
     def outgoing_writer(self, outgoing: RootWriter, unposted: RootWriter) -> RootWriter:
         """Who posts install reports before install routes to its bus: the outgoing runtime,
@@ -296,8 +364,18 @@ class ReplaceableRoute(RouteFile):
 
 
 class AbsentRoute(RouteFile):
-    def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
-        _publish_active_route_locked(route, path, directory)
+    def writer(self, path: Path, directory: int) -> DirectoryAtomicFile:
+        return ExclusiveDirectoryAtomicFile(path, directory=directory)
+
+    def route_new_bus(self, route: ActiveRoute, path: Path,
+                      publish: Callable[[], None], directory: int) -> str:
+        try:
+            publish()
+        except FileExistsError as error:
+            raise ValueError("active comms route is already installed") from error
+        except (OSError, ValueError) as error:
+            raise RoutePublicationUnknownError(
+                "active comms route publication outcome UNKNOWN after link") from error
         return f"published {path}"
 
 
@@ -313,102 +391,6 @@ class SelectingRoute(RouteFile):
     def launch_root(self) -> Path:
         return self.current.root
 
-    def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
+    def route_new_bus(self, route: ActiveRoute, path: Path,
+                      publish: Callable[[], None], directory: int) -> str:
         return f"kept {path}: it selects {self.current.root}"
-
-
-@contextmanager
-def _route_directory(route: ActiveRoute, path: Path | None) -> Iterator[tuple[Path, int]]:
-    """The checked route path and its directory FD, held with route EX."""
-    path = active_route_path() if path is None else path
-    if path.name != RouteFile.filename or not path.is_absolute():
-        raise ValueError("active comms route requires its absolute route path")
-    FieldCodec.encode(route)
-    route.launch().validate()
-    with route_directory(path) as directory:
-        yield path, directory
-
-
-@contextmanager
-def route_directory(path: Path) -> Iterator[int]:
-    """One publisher's route snapshot or mutation. Only publishers take the route file's
-    lock; clients never do, so a reader cannot hold an install. A write that a published
-    route has left behind is refused by its store, under that store's write lock."""
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    refusal = ValueError("active comms route directory changed or is not owned")
-    with ActiveRouteFile(path).guarded_write():
-        directory = OwnedDirectoryRole.read(path.parent, refusal)
-        try:
-            OwnedDirectoryRole.held(directory, path.parent, refusal)
-            Platform.current().make_private_descriptor(directory, 0o700)
-            yield directory
-        finally:
-            os.close(directory)
-
-
-def _publish_active_route_locked(
-    route: ActiveRoute,
-    path: Path,
-    directory: int,
-    *,
-    backup: Path | None = None,
-) -> None:
-    """Publish through a checked directory FD already held with route EX: link a first route,
-    or move an unreadable one to ``backup`` and replace it."""
-    temporary: str | None = None
-    try:
-        refusal = ValueError("active comms route directory changed or is not owned")
-        OwnedDirectoryRole.held(directory, path.parent, refusal)
-        info = os.fstat(directory)
-        Platform.current().make_private_descriptor(directory, 0o700)
-        if backup is None and read_active_route(path) is not None:
-            raise ValueError("active comms route is already installed")
-        payload = route.encoded()
-        temporary = f".active-route-{ScratchName.mint()}.tmp"
-        fd = PrivateFileRole.create(
-            temporary, RouteFileNotPrivate(),
-            dir_fd=directory)
-        try:
-            view = memoryview(payload)
-            while view:
-                view = view[os.write(fd, view) :]
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-        route.launch().validate()
-        parent = path.parent.lstat()
-        if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
-            raise ValueError("active comms route directory changed before publication")
-        if backup is None:
-            try:
-                os.link(
-                    temporary,
-                    path.name,
-                    src_dir_fd=directory,
-                    dst_dir_fd=directory,
-                    follow_symlinks=False,
-                )
-            except FileExistsError as error:
-                raise ValueError("active comms route is already installed") from error
-            try:
-                os.unlink(temporary, dir_fd=directory)
-                temporary = None
-                os.fsync(directory)
-            except OSError as error:
-                raise RoutePublicationUnknownError(
-                    "active comms route publication outcome UNKNOWN after link"
-                ) from error
-        else:
-            os.link(path.name, backup.name, src_dir_fd=directory, dst_dir_fd=directory,
-                    follow_symlinks=False)
-            try:
-                os.replace(temporary, path.name, src_dir_fd=directory, dst_dir_fd=directory)
-                temporary = None
-                os.fsync(directory)
-            except OSError as error:
-                raise RoutePublicationUnknownError(
-                    "active comms route publication outcome UNKNOWN after replacement"
-                ) from error
-    finally:
-        if temporary is not None:
-            os.unlink(temporary, dir_fd=directory)

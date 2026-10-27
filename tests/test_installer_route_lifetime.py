@@ -19,7 +19,7 @@ from agent_comms.active_route import (
     PublishedRouteSelection,
     read_active_route,
     route_new_bus,
-    route_directory,
+    ActiveRouteFile,
 )
 from agent_comms.bus import Bus
 from agent_comms.child_process import SpawnedProcess
@@ -191,9 +191,12 @@ def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, rou
     original = old_route(path, route_bus)
     backup = StoreBackup.take(route_bus.root, path, (), tmp_path / "spill")
     replace = os.replace
+    failed = False
 
     def fail_route_replace(source, destination, **directories):
-        if destination == path.name:
+        nonlocal failed
+        if destination == path.name and not failed:
+            failed = True
             raise OSError(errno.EIO, "replace failed after retaining the old route")
         return replace(source, destination, **directories)
 
@@ -221,8 +224,8 @@ def test_a_client_call_never_holds_publication_and_the_bus_refuses_writes_held_b
         for name in ("sender", "recipient"):
             comms.registry.declare(Thread(
                 name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
-        with route_directory(path):
-            pass  # A publisher never waits on an open client call.
+        ActiveRouteFile(path).update(lambda: None, lambda original, directory: None)
+        # A publisher never waits on an open client call.
         bus = comms.bus.bus
         entered, release = Event(), Event()
 
@@ -273,6 +276,61 @@ def test_route_publication_neither_waits_for_nor_ends_an_old_toad_holding_the_di
     with SpawnedProcess.launch((sys.executable, "-c", ROUTE_HOLDER, str(directory), "toad"),
                                output=subprocess.PIPE) as holder:
         assert holder.process.stdout.readline() == b"held\n"
-        with route_directory(directory / "active-route.json"):
-            pass
+        ActiveRouteFile(directory / "active-route.json").update(
+            lambda: None, lambda original, held: None)
         assert holder.process.poll() is None
+
+
+@pytest.mark.parametrize("concurrent_change", ("publish", "replace-directory"))
+def test_preparation_lends_no_route_lock_and_commits_only_its_current_directory(
+    tmp_path, route_bus, monkeypatch, concurrent_change,
+):
+    """Pause actual staging I/O; a real publisher wins, or a replaced directory refuses."""
+    path = tmp_path / "state" / "active-route.json"
+    other_root = tmp_path / "other"
+    prepare_native_comms(wire(other_root))
+    preparing, released = Event(), Event()
+    fsync = os.fsync
+
+    def wait_for_other_publisher(fd):
+        held = os.readlink(f"/proc/self/fd/{fd}")
+        if not preparing.is_set() and held.startswith(str(path.parent) + "/") and held.endswith(".tmp"):
+            preparing.set()
+            assert released.wait(10), "route preparation was not released"
+        return fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", wait_for_other_publisher)
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        pending = workers.submit(route_new_bus, route_bus, path)
+        try:
+            assert preparing.wait(5)
+            if concurrent_change == "publish":
+                child = subprocess.run([
+                    sys.executable, "-c",
+                    "from pathlib import Path; import sys; "
+                    "from agent_comms.active_route import ActiveRoute, route_new_bus; "
+                    "from agent_comms.bus import Bus; "
+                    "from agent_comms.recorded_bus import RecordedBusIdentity; "
+                    "root=Path(sys.argv[1]); "
+                    "print(route_new_bus(ActiveRoute(root, "
+                    "RecordedBusIdentity.capture(Bus.path_in(root))), Path(sys.argv[2])))",
+                    str(other_root), str(path),
+                ], capture_output=True, text=True, timeout=8)
+                assert child.returncode == 0, child.stdout + child.stderr
+            else:
+                path.parent.rename(tmp_path / "retired-directory")
+                path.parent.mkdir(mode=0o700)
+                (path.parent / "keep").write_text("other owner")
+        finally:
+            released.set()
+        if concurrent_change == "publish":
+            assert pending.result(timeout=5).startswith("kept ")
+            assert read_active_route(path).root == other_root
+            assert path.stat().st_nlink == 1
+        else:
+            with pytest.raises(ValueError, match="directory changed"):
+                pending.result(timeout=5)
+            assert not path.exists()
+            assert (path.parent / "keep").read_text() == "other owner"
+            assert not (tmp_path / "retired-directory" / path.name).exists()
+        assert not tuple(tmp_path.rglob("*.tmp"))
