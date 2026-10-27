@@ -234,9 +234,7 @@ class HistoryViews:
         catalog = ChannelCatalog.at(source.root)
         incoming = catalog.read()
         with self.bus.opened_activity() as activity:
-            existing = self.channels.catalog.path.exists()
-            with self.channels.catalog.editing() as document:
-                document.restore_missing(incoming, activity, existing=existing)
+            self.channels.catalog.restore_missing(incoming, activity)
         return source
 
     def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:

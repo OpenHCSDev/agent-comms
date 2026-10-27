@@ -24,6 +24,7 @@ from .thread_management import ChangedTags, GivenTags
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .catalog_document import CatalogDocument
     from .thread_management import TagChoice, ThreadManagement
 
 
@@ -168,8 +169,7 @@ class ChannelManagement:
 
     def create_tag(self, name: str) -> Tag:
         tag = Tag(name)
-        with self.catalog.editing() as document:
-            document.create_tag(tag.name)
+        self.catalog.change(lambda document: document.create_tag(tag.name))
         return tag
 
     def update_tags(
@@ -186,15 +186,20 @@ class ChannelManagement:
 
     def _update_tags(self, name: str, choice: TagChoice) -> Thread:
         previous_channels = self.bus.channel_declarations()
-        with self.registry.store.editing() as edit, self.catalog.editing() as document:
+        with self.registry.store.editing() as edit:
             thread = edit.document.require(name)
-            updated = replace(thread, tags=choice.for_child(thread.tags))
-            for tag in updated.tags - document.tags:
-                document.require_available_tag_name(tag)
-            self.registry._commit_registration(edit, edit.document.prepare_registration(
-                updated, edit.document.status(thread.name), new_owner=False))
-            updated = edit.document.require(thread.name)
-            document.remember_tags(updated.tags)
+
+            def record(document: CatalogDocument) -> Thread:
+                updated = replace(thread, tags=choice.for_child(thread.tags))
+                for tag in updated.tags - document.tags:
+                    document.require_available_tag_name(tag)
+                self.registry._commit_registration(edit, edit.document.prepare_registration(
+                    updated, edit.document.status(thread.name), new_owner=False))
+                updated = edit.document.require(thread.name)
+                document.remember_tags(updated.tags)
+                return updated
+
+            updated = self.catalog.change(record)
         announcers = thread.role.executor(thread) if thread.tags != updated.tags else ()
         for announcer in announcers:
             channels = {
@@ -217,46 +222,42 @@ class ChannelManagement:
         return updated
 
     def set_saved_view(self, view: SavedView) -> SavedView:
-        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
-            document.set_view(view, activity)
-            result = document.saved_views[view.name]
-        return result
+        with self.bus.opened_activity() as activity:
+            return self.catalog.change(lambda document: document.set_view(view, activity))
 
     def delete_saved_view(self, name: str) -> None:
-        with self.catalog.editing() as document:
-            document.delete_view(name)
+        self.catalog.change(lambda document: document.delete_view(name))
 
     def set_channel_metadata(self, name: str, *, parent: str | None, archived: bool) -> Channel:
-        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
-            return document.set_metadata(name, activity, parent=parent, archived=archived)
+        with self.bus.opened_activity() as activity:
+            return self.catalog.change(lambda document: document.set_metadata(
+                name, activity, parent=parent, archived=archived))
 
     def set_channel_archived(self, name: str, archived: bool) -> Channel:
-        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
-            channel = document.require_channel(name, activity)
-            return document.set_metadata(channel.name, activity, parent=channel.parent, archived=archived)
+        with self.bus.opened_activity() as activity:
+            return self.catalog.change(lambda document: document.set_archived(name, archived, activity))
 
     def set_channel_any_mode(self, name: str, enabled: bool) -> Channel:
-        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
-            return document.set_any_mode(name, enabled, activity)
+        with self.bus.opened_activity() as activity:
+            return self.catalog.change(lambda document: document.set_any_mode(name, enabled, activity))
 
     def set_channel_sort(self, name: str, order: type[ThreadSort]) -> Channel:
-        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
-            return document.set_preferences(name, activity, order=order)
+        with self.bus.opened_activity() as activity:
+            return self.catalog.change(lambda document: document.set_preferences(name, activity, order=order))
 
     def set_channel_order(self, order: type[ChannelSort]) -> type[ChannelSort]:
-        with self.catalog.editing() as document:
-            document.list_order = order
-        return order
+        return self.catalog.change(lambda document: document.set_list_order(order))
 
     def set_channel_pinned(self, name: str, pinned: bool) -> Channel:
-        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
-            return document.set_preferences(name, activity, pinned=pinned)
+        with self.bus.opened_activity() as activity:
+            return self.catalog.change(lambda document: document.set_preferences(name, activity, pinned=pinned))
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
         with self.bus.opened_activity() as activity:
             thread = self.registry.require(name)
             snapshot = self.registry.snapshot()
-            with self.catalog.editing() as document:
+
+            def record(document: CatalogDocument) -> None:
                 view = document.require_channel(channel, activity)
                 if pinned:
                     thread.role.require_executable(ValueError(
@@ -268,6 +269,8 @@ class ChannelManagement:
                         raise ValueError(message)
                     snapshot.status(thread.name).require_visible(message)
                 document.set_thread_pinned(view.name, thread.name, pinned)
+
+            self.catalog.change(record)
 
     def rename_tag(self, name: str, new_name: str) -> None:
         Tag.validate(new_name)
@@ -297,7 +300,9 @@ class ChannelManagement:
 
     def _apply_tag_change(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
-        with self.registry.store.editing() as edit, self.catalog.editing() as document:
-            document.change_tag(name, replacement)
-            edit.document.change_tag(cohort, name, replacement)
-            edit.commit()
+        with self.registry.store.editing() as edit:
+            def record(document: CatalogDocument) -> None:
+                document.change_tag(name, replacement)
+                edit.document.change_tag(cohort, name, replacement)
+                edit.commit()
+            self.catalog.change(record)

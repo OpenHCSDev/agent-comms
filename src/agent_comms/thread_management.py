@@ -406,8 +406,7 @@ class ThreadManagement:
             self.agents.activity.rename_thread(previous, current)
             self.agents.runtime_info.rename_thread(previous, current)
             self.ledger.rename_thread(previous, current)
-            with self.catalog.editing() as document:
-                document.rename_thread(previous, current)
+            self.catalog.change(lambda document: document.rename_thread(previous, current))
         return RenameThreadResult(previous, current, changed)
 
     def heartbeat(self, name: str) -> None:
