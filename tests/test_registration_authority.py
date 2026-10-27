@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from test_locked_store import _hold_lock, event, process
+from test_locked_store import RegistryWithConcurrentDecoder, _hold_lock, event, process
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import TurnId, GoalId
@@ -111,6 +111,14 @@ def test_an_older_snapshot_reads_the_turn_its_thread_names_now(tmp_path):
     assert not first.turn_record.path.exists()
     assert first.turn_state.active.id == '16367aacb67a4a017c8da8ab95682ccb'
     assert first.turn_record.read() == second.turn_record.read()
+
+
+def test_turn_capture_releases_registry_writers_before_decoding(tmp_path):
+    registry = registered(tmp_path)
+    leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
+    reader = RegistryWithConcurrentDecoder(registry.store.path)
+    captured = reader.read_turn(leased.turn_record)
+    assert captured.id == leased.turn_record.read().id
 
 
 def test_a_phase_change_completes_while_another_process_reads_the_registry(tmp_path):
