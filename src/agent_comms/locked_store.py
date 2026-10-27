@@ -406,6 +406,10 @@ class JsonDocument(RootFile, ABC, Generic[T]):
     def empty(self) -> T:
         """Return a fresh value for a missing document."""
 
+    def revision_unlocked(self) -> tuple[FileObservation, ...]:
+        """The physical source revision; owners of coupled files extend this answer."""
+        return (FileRevision.capture(self.path),)
+
     def _read_unlocked(self) -> T:
         return self._read_using(self._decode)
 
@@ -999,10 +1003,10 @@ class DocumentTransactions(JsonDocument[T], StoreLockOwner, declared_name=None):
     ) -> tuple[R, ...]:
         """Decode before exclusion; apply transitions once after their cut is current."""
         while True:
-            source = DocumentBytes.capture(self.path)
-            original = self.read_copied(source)
+            revision = self.revision_unlocked()
+            original = self._read_unlocked()
             with self.guarded_write():
-                if FileRevision.capture(self.path) != source.revision:
+                if self.revision_unlocked() != revision:
                     continue
                 results = []
                 for changed in change(original):

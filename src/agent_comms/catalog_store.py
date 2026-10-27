@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, ClassVar
 from .catalog_document import CatalogDocument
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
-from .private_path import FileObservation, FileRevision
 from .store_files import CatalogTier, SingleFileStore
 from .thread_owned_state import ThreadOwnedState
 
@@ -28,9 +27,6 @@ class ChannelCatalog(SingleFileStore, ThreadOwnedState, CarriedDocument[CatalogD
 
     def empty(self) -> CatalogDocument:
         return CatalogDocument()
-
-    def revision(self) -> tuple[FileObservation]:
-        return (FileRevision.capture(self.path),)
 
     def change[R](self, mutation: Callable[[CatalogDocument], R]) -> R:
         """Copy and validate one catalog mutation through the shared document transaction."""
