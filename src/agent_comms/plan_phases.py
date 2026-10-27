@@ -1068,7 +1068,7 @@ class RamBudgetPhase(OwnerAsksPhase):
 class UnflattenModulesPhase(OwnerAsksPhase):
     """The package structure for the flat modules of ``src/agent_comms`` is a declared plan."""
 
-    evidence = ClassDeclared("PackageStructurePlan", ("src/agent_comms/plan_phases.py",))
+    evidence = ClassDeclared(PackageStructurePlan.__name__, ("src/agent_comms/plan_phases.py",))
 
 
 class PackageStructurePhase(PlanPhase, declared_name=None):
