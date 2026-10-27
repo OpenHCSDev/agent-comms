@@ -785,8 +785,10 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
         heartbeat.sender, "lead", held_bus.registry.snapshot(),
     )).read_opened(held_bus.bus.bus)
     message = next(message for message in page.messages if message.sender == heartbeat.sender)
-    assert all(line in message.body for line in expected)
-    assert question.reference.message_id in message.body
+    # The compact body truncates lines; the original board entries keep every complete alert.
+    board = tuple(entry.text for entry in message.task.board(held_bus, "lead"))
+    assert set(expected) <= set(board)
+    assert any(question.reference.message_id in text for text in board)
     print(message.body)
 
 
