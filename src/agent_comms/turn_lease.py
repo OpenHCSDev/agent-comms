@@ -27,12 +27,12 @@ from .field_codec import (
 from .goal_presentation import RunningExecution
 from .input_disposition import InputDispositions
 from .lifecycle_capability import Executing, LifecycleCapability
-from .locked_store import DurableFile, JsonDocument, LockedFile, PatternFile
+from .locked_store import CopyingStore, DocumentBytes, DurableFile, JsonDocument, LockedFile, PatternFile
 from .message_reference import MessageReference
 from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import NoTurnRouting, Routing
-from .store_files import DependentStateTier, RegistryLocking, store_lock_path
+from .store_files import DependentStateTier, RegistryLocking, SingleFileStore, store_lock_path
 from .thread_identity import (
     NoObservedTurn,
     ObservedTurn,
@@ -477,6 +477,10 @@ class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
     @abstractmethod
     def read(self) -> TurnDeclaration: ...
 
+    def read_copied(self, original: StoredTurnRecord, source: DocumentBytes) -> TurnDeclaration:
+        """A value-backed turn has no file to decode or retain."""
+        return self.read()
+
     @abstractmethod
     def without_claim(self) -> None: ...
 
@@ -590,7 +594,7 @@ class TurnFile(DurableFile, PatternFile):
 
 
 @dataclass(frozen=True)
-class LockedTurnFile(TurnFile, LockedFile, DependentStateTier):
+class LockedTurnFile(CopyingStore, SingleFileStore, TurnFile, LockedFile, DependentStateTier):
     """The writer lock of one turn file. A phase change takes this lock, never the
     registry's; a registry edit superseding the turn takes it before retiring the file."""
 
@@ -680,9 +684,12 @@ class StoredTurnRecord(Executing, TurnFile, JsonDocument[ActiveTurn], StoredTurn
         """
         from .registry_store import RegistryStore
 
-        with RegistryStore(self.registry_path).reading_snapshot() as registry:
-            current = registry.current_turn(self)
-            return self._read_unlocked() if current == self else current.read()
+        return RegistryStore(self.registry_path).read_turn(self)
+
+    def read_copied(self, original: StoredTurnRecord, source: DocumentBytes) -> TurnDeclaration:
+        if self == original:
+            return self._read_captured(lambda: source, self._decode_capture)
+        return self.read()
 
     @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:

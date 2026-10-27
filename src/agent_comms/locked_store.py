@@ -412,6 +412,9 @@ class JsonDocument(RootFile, ABC, Generic[T]):
     def _read_unlocked(self) -> T:
         return self._read_using(self._decode)
 
+    def _decode_capture(self, source: DocumentBytes) -> T:
+        return self._decode_bytes(source, self._decode)
+
     def _read_using(self, decode: Callable[[JsonValue], T]) -> T:
         return self._read_captured(
             lambda: DocumentBytes.capture(self.path),
@@ -964,29 +967,22 @@ class DocumentBytes:
             return cls(MissingFile(), b"")
 
 
-class CopyingStore[Snapshot](RankedStoreLock, declared_name=None):
+class CopyingStore(RankedStoreLock, declared_name=None):
     """Capture dependent documents together; release their guards before decoding."""
 
     def _capture_unlocked(self) -> DocumentBytes:
         return DocumentBytes.capture(self.path)
 
-    @abstractmethod
-    def _decode_capture(self, source: DocumentBytes) -> Snapshot:
-        """Decode the captured bytes after every source guard has closed."""
-
     @staticmethod
-    def _copy_sources(*sources: CopyingStore[object]) -> tuple[DocumentBytes, ...]:
+    def _copy_sources(*sources: CopyingStore) -> tuple[DocumentBytes, ...]:
         with StoreLock.ordered(*(source.guarded_read() for source in
                                  sorted(sources, key=RankedStoreLock.rank_key))):
             return tuple(source._capture_unlocked() for source in sources)
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(CopyingStore[T], FileStore, LockedFile, JsonDocument[T], declared_name=None):
+class LockedStore(CopyingStore, FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Each copy ends before decoding; each change owns its complete write."""
-
-    def _decode_capture(self, source: DocumentBytes) -> T:
-        return self._decode_bytes(source, self._decode)
 
     @contextmanager
     def reading(self, *sources) -> Iterator[T]:

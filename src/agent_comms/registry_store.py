@@ -35,7 +35,7 @@ from .session_file import RegistrySessionLocation
 from .store_files import RegistryLocking
 from .thread_identity import TurnIdentity
 from .threads import Thread
-from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
+from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord, TurnDeclaration
 
 
 class CachedRegistry(ABC):
@@ -243,6 +243,12 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
     def snapshot(self) -> RegistrySnapshot:
         source, = self._copy_sources(self)
         return self._decode_snapshot(source)
+
+    def read_turn(self, held: StoredTurnRecord) -> TurnDeclaration:
+        """Keep a named turn from retiring during capture, then decode after release."""
+        registry, turn = self._copy_sources(self, held.writers)
+        current = self._decode_snapshot(registry).current_turn(held)
+        return current.read_copied(held, turn)
 
     def privacy(self) -> RegistryPrivacy:
         """Capture namespace authority without lending its lock to a consumer."""
