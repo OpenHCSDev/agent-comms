@@ -13,6 +13,9 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
+
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
@@ -559,7 +562,7 @@ def subagent_hook(fork_bus, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("PATH", f"{scripts}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
     transcript = tmp_path / "commander.jsonl"
-    transcript.with_suffix(".reread").mkdir()
+    WatchClaim("commander").enrol(WatchRecord("lead", str(comms.root), (), tmp_path / "state"))
 
     def run(program, event):
         record = {"session_id": "commander", "hook_event_name": event,
@@ -598,3 +601,18 @@ def test_a_subagent_stop_is_refused_until_its_fork_records_then_archives_it(
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
     assert run(forks.stopped, "SubagentStop") == ""
     assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
+
+
+def test_a_subagent_of_a_session_that_is_not_commander_is_not_its_fork(fork_bus, tmp_path, monkeypatch, capsys):
+    """A Claude session bound to a unit, or to nothing, never conscripts its subagents."""
+    comms = fork_bus[0]
+    transcript = tmp_path / "unit.jsonl"
+    for bound in ((), (WatchRecord("worker", str(comms.root), (), tmp_path / "state"),)):
+        for record in bound:
+            WatchClaim("unit").enrol(record)
+        event = {"session_id": "unit", "hook_event_name": "SubagentStart",
+                 "transcript_path": str(transcript), "agent_id": "a2"}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        forks.started()
+        assert capsys.readouterr().out == ""
+        assert "claude-a2" not in comms.registry

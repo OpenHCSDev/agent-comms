@@ -19,34 +19,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
+from agent_comms_hooks import ClaudeHookProgram
+from agent_comms_hooks.skill import CommanderStart
 from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
-class CommanderDeck(ClaudeTranscriptHook):
-    """The slices the session start hook dealt beside the transcript, and the calls since."""
-
-    @property
-    def deck(self) -> Path:
-        return Path(self.transcript_path).with_suffix(".deck.json")
-
-    @property
-    def calls(self) -> Path:
-        """One byte per tool call since the deck was dealt. An append is atomic, so tool
-        calls that run in parallel each count once."""
-        return Path(self.transcript_path).with_suffix(".calls")
-
-
-@dataclass(frozen=True)
-class SliceReminder(CommanderDeck):
+class SliceReminder(CommanderStart):
     """Every `every` tool calls, the next slice of the deck; only a commander session has one."""
 
     every: ClassVar[int] = 5
 
-    def take(self) -> tuple[str, ...]:
+    def commanded(self) -> tuple[str, ...]:
         if not self.deck.exists():
-            return ()
+            return self.dealt()  # the session became commander after it started
         with self.calls.open("ab") as calls:
             calls.write(b".")
             count = calls.tell()
@@ -61,8 +47,8 @@ class DeafReminder(SliceReminder):
     """Beside the deck's slice, the RE-ARM line while this session's bridge has no Monitor
     reading it. The line rides the next tool call, never the bridge it reports dead."""
 
-    def take(self) -> tuple[str, ...]:
-        return super().take() + tuple(deaf.line() for deaf in WatchClaim(self.session_id).deaf())
+    def commanded(self) -> tuple[str, ...]:
+        return super().commanded() + tuple(deaf.line() for deaf in WatchClaim(self.session_id).deaf())
 
 
 @dataclass(frozen=True)
@@ -72,8 +58,8 @@ class BoardReminder(DeafReminder):
     The bridge derives current lines from Core and owns their delivery evidence.
     """
 
-    def take(self) -> tuple[str, ...]:
-        return super().take() + WatchClaim(self.session_id).state().board()
+    def commanded(self) -> tuple[str, ...]:
+        return super().commanded() + WatchClaim(self.session_id).state().board()
 
 
 class ReminderProgram(ClaudeHookProgram):

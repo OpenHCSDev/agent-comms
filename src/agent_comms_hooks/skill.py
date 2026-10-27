@@ -25,8 +25,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.slop import Slop
 from agent_comms.todos import TodoStore
 from agent_comms_hooks import ClaudeHookProgram
-from agent_comms_hooks.reread import CommanderDeck
-from agent_comms_hooks.watch import WatchClaim
+from agent_comms_hooks.watch import CommanderSession, WatchClaim
 
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
@@ -34,24 +33,34 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class CommanderDeck(CommanderSession):
+    """The slices the session start hook dealt beside the transcript, and the calls since."""
+
+    @property
+    def deck(self) -> Path:
+        return Path(self.transcript_path).with_suffix(".deck.json")
+
+    @property
+    def calls(self) -> Path:
+        """One byte per tool call since the deck was dealt. An append is atomic, so tool
+        calls that run in parallel each count once."""
+        return Path(self.transcript_path).with_suffix(".calls")
+
+
+@dataclass(frozen=True)
 class CommanderStart(CommanderDeck):
     part_chars: ClassVar[int] = 60_000
     """The most characters one Read of a part returns in full."""
-    def due(self) -> bool:
-        """Every session the commander's bridge binding does not rule out: a session bound to
-        another bus thread (a Claude unit) never gets the commander's sources."""
-        for record in WatchClaim(self.session_id).state().bindings():
-            snapshot = RegistryStore.at(Path(record.root)).snapshot()
-            subject = snapshot.require(record.bus)
-            if not any(thread.incarnation == subject.incarnation
-                       for thread in snapshot.commander_project.commanders(snapshot)):
-                return False
-        return True
-
     def take(self) -> tuple[str, ...]:
+        """What this hook says, said only in the session the registry names commander now."""
+        return self.commanded() if self.commands else ()
+
+    def commanded(self) -> tuple[str, ...]:
+        """A session start deals the deck."""
+        return self.dealt()
+
+    def dealt(self) -> tuple[str, ...]:
         """The order to read every part, once; the deck carries the sources after it."""
-        if not self.due():
-            return ()
         self.prepare()
         parts = sorted(self.parts.iterdir())
         return (

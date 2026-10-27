@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from agent_comms.process_claim import ProcessSingleton
+from agent_comms.registry_store import RegistryStore
+from agent_comms_hooks import ClaudeTranscriptHook
 from agent_comms_hooks.board import SessionBoard
 
 if TYPE_CHECKING:
@@ -219,6 +221,11 @@ class WatchState(ABC):
         """No session binding exists until this watch is enrolled."""
         return ()
 
+    def commands(self) -> bool:
+        """An unbound session commands nothing: the registry names the commander, and only
+        a binding can point at it."""
+        return False
+
     def board(self) -> tuple[str, ...]:
         """Only a running bridge can derive a board."""
         return ()
@@ -249,6 +256,14 @@ class RecordedWatch(WatchState):
 
     def bindings(self) -> tuple[WatchRecord, ...]:
         return (self.record,)
+
+    def commands(self) -> bool:
+        """Whether the registry names this binding's thread a commander, read now: command
+        moves between threads, so no session keeps its own copy of the answer."""
+        snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
+        bound = snapshot.require(self.record.bus)
+        return any(thread.incarnation == bound.incarnation
+                   for thread in snapshot.commander_project.commanders(snapshot))
 
     def connect(self, serve: Callable[[], Serve],
                 request: Callable[[Serve], SessionRequest]) -> None:
@@ -308,3 +323,11 @@ class LiveWatch(RecordedWatch):
 class LapsedWatch(RecordedWatch):
     def rearm(self, launch: Callable[[], None]) -> None:
         launch()
+
+
+class CommanderSession(ClaudeTranscriptHook):
+    """A hook that acts only in the session the registry currently names commander."""
+
+    @property
+    def commands(self) -> bool:
+        return WatchClaim(self.session_id).state().commands()
