@@ -6,6 +6,7 @@ import asyncio
 import re
 from abc import abstractmethod
 from collections.abc import Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -16,6 +17,8 @@ from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
+from .locked_store import PatternFile, RuntimeFile
+from .process_claim import ClaimHeldError, ProcessSingleton
 from .registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout
@@ -194,6 +197,16 @@ class ForkSpec(NewThreadSpec):
         return threads.registry.declare_child(
             parent, lambda current: self.child(current, location, threads),
         )
+
+
+class ThreadDeletionClaim(ProcessSingleton, RuntimeFile, PatternFile):
+    """One cleanup controller per recorded participant; unrelated deletions remain independent."""
+
+    filename = ".thread-delete-{lookup}.lock"
+
+    @classmethod
+    def for_thread(cls, root: Path, thread: Thread) -> Self:
+        return cls(cls.path_in(root, lookup=thread.incarnation.require_recorded().lookup))
 
 
 @dataclass(frozen=True, slots=True)
@@ -494,34 +507,41 @@ class ThreadManagement:
         stay; their readers resolve a removed name as a deleted thread. Every
         refusal happens before the registry withdraws input permission.
         """
-        states = self.thread_owned_states
-        sessions = {}
-        for original in originals:
-            if original.process_alive:
-                raise RelationViolationError(
-                    f"Thread {original.name!r} still has a live process; stop it first."
-                )
-            sessions[original.name] = original.runtime.storage_files()
-            for files in sessions[original.name]:
-                files.require_unreferenced()
-        with self.registry.store.editing() as edit:
-            edit.document.require_originals(originals)
+        with ExitStack() as cleanup:
             for original in originals:
-                if not edit.document.require(original.name).same_launch(original):
-                    raise RelationViolationError("Thread session changed while preparing permanent deletion.")
-            edit.document.begin_delete_originals(originals)
-            edit.commit()
-        for state in states:
-            state.remove_threads(originals)
-        # A failure from here leaves a Deleting declaration to retry, not orphans.
-        freed = {name: sum(item.delete() for item in files) for name, files in sessions.items()}
-        with self.registry.store.editing() as edit:
-            detached = edit.document.remove_originals(originals)
-            edit.commit()
-        return tuple(
-            ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
-            for original in originals
-        )
+                try:
+                    cleanup.enter_context(ThreadDeletionClaim.for_thread(self.root, original).claimed())
+                except ClaimHeldError as error:
+                    raise RelationViolationError(
+                        f"Thread {original.name!r} already has a permanent-deletion controller.") from error
+            states = self.thread_owned_states
+            sessions = {}
+            for original in originals:
+                if original.process_alive:
+                    raise RelationViolationError(
+                        f"Thread {original.name!r} still has a live process; stop it first."
+                    )
+                sessions[original.name] = original.runtime.storage_files()
+                for files in sessions[original.name]:
+                    files.require_unreferenced()
+            with self.registry.store.editing() as edit:
+                edit.document.require_originals(originals)
+                for original in originals:
+                    if not edit.document.require(original.name).same_launch(original):
+                        raise RelationViolationError("Thread session changed while preparing permanent deletion.")
+                edit.document.begin_delete_originals(originals)
+                edit.commit()
+            for state in states:
+                state.remove_threads(originals)
+            # A failure from here leaves a Deleting declaration to retry, not orphans.
+            freed = {name: sum(item.delete() for item in files) for name, files in sessions.items()}
+            with self.registry.store.editing() as edit:
+                detached = edit.document.remove_originals(originals)
+                edit.commit()
+            return tuple(
+                ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
+                for original in originals
+            )
 
     def create(self, spec: NewThreadSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""

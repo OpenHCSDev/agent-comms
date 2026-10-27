@@ -134,6 +134,8 @@ def test_deleting_remains_fenced_while_cleanup_allows_unrelated_registry_writers
                     operation(original.name)
             with pytest.raises(RelationViolationError):
                 comms.registry.register(original)
+            with pytest.raises(RelationViolationError):
+                comms.threads.delete(original.name)
             assert session.read_bytes() == b"saved original"
         result = deleted.result(timeout=5)
     assert result.deleted == original.name
