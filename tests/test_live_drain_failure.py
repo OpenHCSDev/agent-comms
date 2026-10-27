@@ -143,9 +143,7 @@ async def test_restarted_observer_recovers_retained_diagnostic(tmp_path, kind):
         agent.inputs.ensure_live_drain("beta")
         await until(lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current)
         assert not owner_view(comms).presentation.status.details
-        previous = agent.inputs.state("beta").drain_task
-        previous.cancel()
-        await asyncio.gather(previous, return_exceptions=True)
+        await agent.inputs.state("beta").observer.stop()
         # A new consumer gets its first read even while the shared root is idle.
         agent.inputs.ensure_live_drain("beta")
         await until(lambda: agent.inputs.state("beta").observation_watcher is not None)

@@ -421,11 +421,10 @@ class TestLiveDrain:
         await agent.prompt(
             session_id="proj", prompt=[TextContentBlock(type="text", text="!relay hi")]
         )
-        assert agent.inputs.state("proj").drain_task is not None
+        assert agent.inputs.state("proj").observing()
         await agent.cancel(session_id="proj")
         await asyncio.sleep(0.05)
-        assert agent.inputs.state("proj").drain_task is not None
-        assert not agent.inputs.state("proj").drain_task.done()
+        assert agent.inputs.state("proj").observing()
         await agent.shutdown()
 
 
