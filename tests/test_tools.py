@@ -150,6 +150,7 @@ class TestToolCatalog:
         assert "track me" not in json.dumps(result["sent_messages"])
 
     def test_message_outcomes_reads_one_message_once_and_pages_its_recipients(self, comms):
+        # The sender is a member of the channel; the frozen audience never lists its sender.
         comms.channels.create_tag("team")
         for name in ("sender", "alice", "bob", "carol"):
             comms.registry.declare(Thread(
@@ -171,6 +172,16 @@ class TestToolCatalog:
                  for row in (*first["outcomes"], *rest["outcomes"])]
         assert sorted(paged) == ["alice", "bob", "carol"]
 
+    def test_message_outcomes_gives_a_sender_its_message_with_no_recipients(self, comms):
+        comms.channels.create_tag("solo")
+        comms.registry.declare(Thread(name='sender', tags=frozenset({"solo"}), worktree=Checkout(Path('/wt'))))
+        sent = comms.messaging.send("sender", "#solo", "nobody else here").message
+        read = invoke_tool(comms, "comms_message_outcomes",
+                           {"reference": {"seq": sent.seq, "message_id": str(sent.message_id)}},
+                           caller=ThreadCaller("sender"))
+        assert read["message"]["seq"] == sent.seq
+        assert read["outcomes"] == [] and read["remaining"] == 0
+
     def test_message_outcomes_shows_a_recipient_only_its_own_row_and_refuses_outsiders(self, comms):
         comms.channels.create_tag("team")
         for name in ("sender", "alice", "bob"):
@@ -183,7 +194,7 @@ class TestToolCatalog:
         own = invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
                           caller=ThreadCaller("alice"))
         assert [row["recipient_identity"]["canonical_thread"] for row in own["outcomes"]] == ["alice"]
-        with pytest.raises(ToolRefusedError, match="readable by this caller"):
+        with pytest.raises(ToolRefusedError, match="is not readable by this caller"):
             invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
                         caller=ThreadCaller("outsider"))
 

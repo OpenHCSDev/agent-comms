@@ -1,4 +1,5 @@
 """Read real persisted notification assignments without scheduling a model."""
+from agent_comms.presentation import AllOutcomes
 from agent_comms.repo import Checkout
 from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
@@ -10,7 +11,7 @@ from agent_comms.threads import Thread
 def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     message = initial.message
-    per_message = comms.views.message_notifications_for_references((message.reference,))
+    per_message = comms.views.message_notifications_for_references(AllOutcomes(), (message.reference,))
     receipts = comms.views.thread_presentations(('beta',)).require('beta').notifications
     assert len(receipts) == 1
     acknowledgement = receipts[0]

@@ -60,7 +60,8 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_reference import MessageReference
 from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow
 from agent_comms.presentation import (
-    CoordinationSnapshot, MessageNotification, NoRevision, ReadState, WireRevision,
+    AllOutcomes, CoordinationSnapshot, MessageNotification, NoRevision, OutcomeViewer, ReadState,
+    WireRevision,
 )
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
@@ -615,12 +616,14 @@ class RefreshTranscript(ReadRequest):
 
 @dataclass(frozen=True)
 class ReadNotifications(ReadRequest):
-    """Recipient handling of the referenced original messages."""
+    """Recipient handling of the referenced original messages, as its viewer may see them.
+    The UI reads as the operator, who sees every outcome."""
 
     references: tuple[MessageReference, ...]
+    viewer: OutcomeViewer = field(default_factory=AllOutcomes, kw_only=True)
 
     def read(self, comms: Comms) -> NotificationWindow:
-        return comms.views.message_notifications_for_references(self.references)
+        return comms.views.message_notifications_for_references(self.viewer, self.references)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:
@@ -636,7 +639,7 @@ class ReadRecordedNotifications(ReadNotifications):
     def read(self, comms: Comms) -> NotificationWindow:
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
-            return source.notification_references(sources, self.references)
+            return source.notification_references(sources, self.references, self.viewer)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:

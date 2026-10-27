@@ -715,20 +715,16 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> MessageOutcomes:
         if self.limit < 1:
             raise ToolRefusedError("limit must be positive.")
-        message, = comms.bus.bus.messages_for_references((self.reference,))
-        window = ReadNotifications(str(comms.root), (self.reference,)).read(comms)
+        source, = comms.bus.bus.deliveries_for_references((self.reference,))
         viewer = caller.outcome_viewer(comms)
-        readable = tuple(
-            outcome for outcome in window.outcomes.get((message.seq, message.message_id), ())
-            if viewer.includes(outcome.sender_lookup, outcome.recipient_identity)
-        )
-        if not readable:
-            raise ToolRefusedError(
-                f"No recipient outcome of message {message.seq} is readable by this caller.")
-        following = self.after.following(readable)
+        if not viewer.sees(source):
+            raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")
+        window = ReadNotifications(str(comms.root), (self.reference,), viewer=viewer).read(comms)
+        following = self.after.following(
+            window.outcomes.get((source.message.seq, source.message.message_id), ()))
         page = following[:self.limit]
         return MessageOutcomes(
-            message, page, len(following) - len(page),
+            source.message, page, len(following) - len(page),
             AfterRecipient(page[-1].recipient_identity) if page else self.after,
         )
 
