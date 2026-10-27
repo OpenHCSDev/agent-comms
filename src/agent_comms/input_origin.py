@@ -127,14 +127,14 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
 
     @classmethod
     def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
-        snapshot, privacy, _ = comms.registry.store.snapshot_with_authority()
-        owner = cls._require_owner(snapshot, claim_scope)
-        root_id = privacy.namespace
+        cut = comms.registry.store.snapshot_with_authority()
+        owner = cls._require_owner(cut.snapshot, claim_scope)
+        root_id = cut.privacy.namespace
         comms.messaging.user_identity(owner.worktree)
-        snapshot, privacy, _ = comms.registry.store.snapshot_with_authority()
-        privacy.require_root(root_id, RelationViolationError("User input namespace changed before capture"))
-        owner = cls._require_owner(snapshot, claim_scope)
-        user = snapshot.user_thread().require(RelationViolationError("User input author was removed"))
+        cut = comms.registry.store.snapshot_with_authority()
+        cut.privacy.require_root(root_id, RelationViolationError("User input namespace changed before capture"))
+        owner = cls._require_owner(cut.snapshot, claim_scope)
+        user = cut.snapshot.user_thread().require(RelationViolationError("User input author was removed"))
         return cls(
             root_id=root_id, author=HumanOrigin.of(user),
             claimed_identity=claim_scope, project=owner.worktree, goal=owner.goal.captured,

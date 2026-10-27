@@ -79,7 +79,7 @@ def _replace_captured_documents(root):
         record(RuntimeInfoStore(root / name), observation("successor"))
 
 
-class RegistryWithConcurrentDecoder(RegistryStore):
+class RegistryWithConcurrentDecoder(RegistryStore, declared_name=None):
     """A real competing writer runs after capture and before any decoding."""
 
     def _decode_snapshot(self, source):

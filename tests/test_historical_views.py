@@ -92,7 +92,7 @@ def migrated(tmp_path):
     "method,args,reader",
     [
         ("channel_display_page", ("#team",), lambda live: dict(viewer=live.views.display_viewer(Checkout(live.root)))),
-        ("dm_display_page", (ThreadTarget("alice"),), lambda live: dict(worktree=str(live.root))),
+        ("dm_display_page", (ThreadTarget("alice"),), lambda live: dict(worktree=Checkout(live.root))),
         ("channel_display_page", ("#any",), lambda live: dict(viewer=live.views.display_viewer(Checkout(live.root)))),
     ],
 )

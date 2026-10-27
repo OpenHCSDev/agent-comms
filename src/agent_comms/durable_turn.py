@@ -31,7 +31,7 @@ from .attempt_states import (
 )
 from .attempt_store import AttemptStore
 from .coordination_errors import IdentityConflict
-from .coordination_session import NativeBoundary
+from .coordination_session import NativeCapture
 from .coordination_tables.attempts import ReplayFact
 from .coordination_tables.executions import ReplayAssessments
 from .coordinator import Coordination
@@ -152,7 +152,7 @@ class DurableTurn(MroDispatch):
         ).value.fence
         return self.fence
 
-    def fail_unknown(self, boundary: NativeBoundary):
+    def fail_unknown(self, boundary: NativeCapture):
         """Retire the reaped local backend without granting acceptance or replay.
 
         The caller holds the live registry owner boundary. Native execution has

@@ -459,7 +459,7 @@ class Goals:
 
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
         """Read the exact completed delivery before checking its original owner fence."""
-        with self.registry.store.guarded_read():
+        with self.registry.store.current_snapshot():
             owner.require_registry(self.registry)
             review = GoalWaitReview.capture(self, owner.thread.incarnation.require_recorded())
         incarnation = review.owner.incarnation.require_recorded()

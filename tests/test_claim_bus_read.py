@@ -26,7 +26,7 @@ from agent_comms.context_store import UNREAD_CONTEXT
 from conftest import accept_initial
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_session import NativeCapture
 from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
@@ -163,7 +163,7 @@ def acquire_tool_claim(
     comms: Comms, name: str, resource: Path, turn_id: TurnId,
     operation_id: ClaimId = DEFAULT_CLAIM_OPERATION,
 ):
-    with NativeBoundary(comms.bus) as boundary:
+    with NativeCapture(comms.bus) as boundary:
         owner = boundary.registry.require(name)
         scope = NativeClaim(
             owner_claimed_generation=boundary.registry.claim_generation(name),
@@ -177,7 +177,7 @@ def acquire_tool_claim(
 
 
 def release_tool_claim(comms: Comms, claim) -> None:
-    with NativeBoundary(comms.bus) as boundary:
+    with NativeCapture(comms.bus) as boundary:
         comms.bus.publisher.release_resources(boundary, (claim,), "Finished test tool operation")
 
 

@@ -1,5 +1,4 @@
 """Activity and viewer clocks are read-only projections of committed bus appends."""
-from agent_comms.store_files import ExclusiveLock, StoreGuard
 from agent_comms.activity_clocks import ChannelActivity
 from dataclasses import replace
 
@@ -62,45 +61,42 @@ def test_activity_rolls_back_with_its_original_append(bus):
     assert bus.revision() == 1
 
 
-def test_read_boundary_defers_instead_of_waiting_on_a_held_bus(private_comms):
-    """A read that cannot wait out another writer raises BlockingIOError from the
-    activity attach, so its caller defers instead of waiting with no end."""
+def test_read_capture_defers_when_coordinator_has_no_snapshot(private_comms):
+    """A coordinator table read reports contention without claiming absence."""
+    import sqlite3
     import threading
+    import time
 
+    from agent_comms.coordination_errors import CoordinationReadUnavailable
     from agent_comms.coordination_session import ReadNativeCoordinationSession
     from agent_comms.coordinator import Coordination
+    from agent_comms.field_codec import ThreadLookup
     from agent_comms.store_files import StoreBusy
-    from agent_comms.store_files import _store_lock
-
-    held, release, outcome = threading.Event(), threading.Event(), []
+    held, release = threading.Event(), threading.Event()
+    path = private_comms.root / "coordination.sqlite3"
+    with Coordination(str(path)):
+        pass
 
     def hold():
-        with _store_lock(private_comms.bus.bus.path, ExclusiveLock(), StoreGuard.contention):
+        with sqlite3.connect(path, isolation_level=None) as db:
+            db.execute("BEGIN EXCLUSIVE")
             held.set()
             release.wait(10)
-
-    def read():
-        try:
-            with Coordination(
-                str(private_comms.root / "coordination.sqlite3"), contention=StoreBusy(),
-                session_type=ReadNativeCoordinationSession,
-            ) as store, store.session.boundary(store.session.bus):
-                outcome.append("entered")
-        except BlockingIOError as error:
-            outcome.append(error)
+            db.execute("ROLLBACK")
 
     holder = threading.Thread(target=hold)
     holder.start()
-    assert held.wait(5)
-    reader = threading.Thread(target=read, daemon=True)
-    reader.start()
-    reader.join(5)
-    deferred = not reader.is_alive()
-    release.set()
-    holder.join()
-    reader.join(5)
-    assert deferred
-    assert isinstance(outcome[0], BlockingIOError)
+    try:
+        assert held.wait(5)
+        begun = time.monotonic()
+        with pytest.raises(CoordinationReadUnavailable), Coordination(
+            str(path), contention=StoreBusy(), session_type=ReadNativeCoordinationSession,
+        ) as store:
+            store.participants.get(ThreadLookup("b" * 32))
+        assert time.monotonic() - begun < 5
+    finally:
+        release.set()
+        holder.join(5)
 
 
 def test_open_boundary_never_holds_the_registry_against_its_writers(private_comms):
@@ -121,10 +117,10 @@ def test_open_boundary_never_holds_the_registry_against_its_writers(private_comm
             acquired.append(True)
 
     with Coordination(str(private_comms.root / "coordination.sqlite3")) as store, \
-            store.session.boundary(store.session.bus) as boundary:
+            store.session.capture(store.session.bus) as boundary:
         writer = threading.Thread(target=write, daemon=True)
         writer.start()
         writer.join(1)
         assert acquired == [True]
-        with pytest.raises(StaleFence, match="registry revision changed"), boundary.current():
+        with pytest.raises(StaleFence, match="registry revision changed"), boundary.registry_cut.current():
             pass

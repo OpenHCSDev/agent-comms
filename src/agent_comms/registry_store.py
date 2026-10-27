@@ -8,9 +8,9 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
@@ -92,6 +92,47 @@ class RegistryRevision(CachedRegistry):
     @cached_property
     def snapshot(self) -> RegistrySnapshot:
         return RegistrySnapshot.capture(self.document)
+
+
+@dataclass(frozen=True, slots=True)
+class RegistryCut:
+    """One decoded registry and its original authority, with store-owned currentness."""
+
+    store: RegistryStore = field(repr=False, compare=False)
+    snapshot: RegistrySnapshot
+    privacy: RegistryPrivacy
+    revision: tuple[FileObservation, FileObservation]
+
+    def matches_current(self) -> bool:
+        return self.store.revision_unlocked() == self.revision
+
+    @contextmanager
+    def current(self) -> Iterator[None]:
+        """Retain the original cut through a bounded dependent write; never refresh it."""
+        with self.store.guarded_read():
+            if not self.matches_current():
+                raise StaleFence("native registry revision changed after this decision read it")
+            yield
+
+    @classmethod
+    @contextmanager
+    def captured(cls, capture: Callable[[], Self]) -> Iterator[Self]:
+        """Recapture only before the caller receives its first current decision."""
+        cut = capture()
+        deadline = time.monotonic() + cut.store.contention.seconds
+        while True:
+            with cut.store.guarded_read():
+                if cut.matches_current():
+                    yield cut
+                    return
+            if time.monotonic() >= deadline:
+                raise StaleFence("Registry kept changing before a native decision could begin")
+            cut = capture()
+
+
+@dataclass(frozen=True, slots=True)
+class RegistryPairCut[Peer](RegistryCut):
+    peer: Peer
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,33 +330,33 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             source = self._capture_unlocked()
         return self._decode_snapshot(source)
 
-    def snapshot_with_authority(self) -> tuple[
-        RegistrySnapshot, RegistryPrivacy, tuple[FileObservation, FileObservation],
-    ]:
+    def snapshot_with_authority(self) -> RegistryCut:
         with self.guarded_read():
             privacy = self.private_guard_unlocked()
             source = self._capture_unlocked()
             revision = source.revision, FileRevision.capture(self.guard_path)
-        return self._decode_snapshot(source), privacy, revision
+        return RegistryCut(self, self._decode_snapshot(source), privacy, revision)
 
-    @contextmanager
-    def current_snapshot(self) -> Iterator[tuple[
-        RegistrySnapshot, RegistryPrivacy, tuple[FileObservation, FileObservation],
-    ]]:
+    def current_snapshot(self) -> AbstractContextManager[RegistryCut]:
         """Decode outside the guard, then retain a current cut for a bounded write.
 
         A change before the write begins recaptures only this read. The caller has not
         received a decision or performed any side effect yet.
         """
-        deadline = time.monotonic() + self.contention.seconds
-        while True:
-            captured = self.snapshot_with_authority()
-            with self.guarded_read():
-                if self.revision_unlocked() == captured[2]:
-                    yield captured
-                    return
-            if time.monotonic() >= deadline:
-                raise StaleFence("Registry kept changing before a native decision could begin")
+        return RegistryCut.captured(self.snapshot_with_authority)
+
+    def snapshot_pair[Peer](self, other: LockedStore[Peer]) -> RegistryPairCut[Peer]:
+        """One registry authority and related document, decoded after their capture."""
+        with self._capturing_sources(self, other) as (registry, peer):
+            privacy = self.private_guard_unlocked()
+            revision = registry.revision, FileRevision.capture(self.guard_path)
+        return RegistryPairCut(
+            self, self._decode_snapshot(registry), privacy, revision,
+            other._read_captured(lambda: peer, other._decode_capture),
+        )
+
+    def current_pair[Peer](self, other: LockedStore[Peer]) -> AbstractContextManager[RegistryPairCut[Peer]]:
+        return RegistryPairCut[Peer].captured(partial(self.snapshot_pair, other))
 
     def snapshot_with_pair[T, U](
         self, first: LockedStore[T], second: LockedStore[U],
@@ -338,11 +379,6 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         # whole caller's read lifetime.
         with self.cache.decoding:
             return revision.snapshot
-
-    @contextmanager
-    def reading_snapshot(self) -> Iterator[RegistrySnapshot]:
-        with self.guarded_read():
-            yield self.read_snapshot_unlocked()
 
     @property
     def guard_path(self) -> Path:

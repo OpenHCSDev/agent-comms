@@ -273,7 +273,8 @@ class TranscriptRoutes(DurableStore):
         ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)
         inputs = InputDispositions(log.path.parent)
         lookup = incarnation.lookup
-        with log.reading() as source, registry.store.reading_snapshot() as snapshot:
+        with log.reading() as source, registry.store.current_snapshot() as cut:
+            snapshot = cut.snapshot
             incarnation = lease.identity.incarnation.resolved(snapshot)
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
             if current.turn_lease != lease:

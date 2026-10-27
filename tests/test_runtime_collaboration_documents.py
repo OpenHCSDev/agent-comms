@@ -16,8 +16,8 @@ from agent_comms.threads import Thread
 @pytest.mark.parametrize("store_type", [RuntimeInfoStore, SharedLedger])
 def test_document_readers_keep_independent_snapshots(tmp_path, store_type):
     store = store_type(tmp_path / store_type.filename)
-    with store.reading() as first:
-        assert first == store_type(store.path).read() == store.empty()
+    first = store.read()
+    assert first == store_type(store.path).read() == store.empty()
     store.update(DocumentChange.to)
     assert store.read() == store.empty()
 

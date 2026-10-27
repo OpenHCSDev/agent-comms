@@ -974,22 +974,21 @@ class CopyingStore(RankedStoreLock, declared_name=None):
         return DocumentBytes.capture(self.path)
 
     @staticmethod
-    def _copy_sources(*sources: CopyingStore) -> tuple[DocumentBytes, ...]:
+    @contextmanager
+    def _capturing_sources(*sources: CopyingStore) -> Iterator[tuple[DocumentBytes, ...]]:
         with StoreLock.ordered(*(source.guarded_read() for source in
                                  sorted(sources, key=RankedStoreLock.rank_key))):
-            return tuple(source._capture_unlocked() for source in sources)
+            yield tuple(source._capture_unlocked() for source in sources)
+
+    @staticmethod
+    def _copy_sources(*sources: CopyingStore) -> tuple[DocumentBytes, ...]:
+        with CopyingStore._capturing_sources(*sources) as captured:
+            return captured
 
 
 @dataclass(frozen=True, slots=True)
 class LockedStore(CopyingStore, FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Each copy ends before decoding; each change owns its complete write."""
-
-    @contextmanager
-    def reading(self, *sources) -> Iterator[T]:
-        """Retain dependent source owners under each store's declared read guard."""
-        with StoreLock.ordered(*(source.guarded_read() for source in
-                                 sorted((*sources, self), key=RankedStoreLock.rank_key))):
-            yield self._read_unlocked()
 
     def read(self) -> T:
         return self._read_captured(lambda: self._copy_sources(self)[0], self._decode_capture)
@@ -998,6 +997,15 @@ class LockedStore(CopyingStore, FileStore, LockedFile, JsonDocument[T], declared
         first, second = self._copy_sources(self, other)
         return (self._read_captured(lambda: first, self._decode_capture),
                 other._read_captured(lambda: second, other._decode_capture))
+
+    def read_pair_observed[U, Observation](
+        self, other: LockedStore[U], observe: Callable[[], Observation],
+    ) -> tuple[T, U, Observation]:
+        """Capture two documents and a cheap observer token in the same source cut."""
+        with self._capturing_sources(self, other) as (first, second):
+            observed = observe()
+        return (self._read_captured(lambda: first, self._decode_capture),
+                other._read_captured(lambda: second, other._decode_capture), observed)
 
     def update[R](self, change: Callable[[T], DocumentChange[T, R]]) -> R:
         with self.guarded_write():

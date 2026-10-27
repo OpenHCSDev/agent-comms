@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordination_session import NativeCapture
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
 from agent_comms.field_codec import ClaimId, GoalId, InputId, TurnId
 from agent_comms.installer.backup import bus_files
@@ -53,7 +53,7 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     sent = comms.messaging.send("peer", "owner", "Declare the bus files").message
     resource = tmp_path / "owned.py"
     resource.write_text("owned\n")
-    with NativeBoundary(comms.bus) as boundary:
+    with NativeCapture(comms.bus) as boundary:
         owner = boundary.registry.require("owner")
         claim = comms.bus.publisher._publish_acquisition_unlocked(
             boundary.registry,

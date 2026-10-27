@@ -258,8 +258,8 @@ class GoalWaitReview:
 
     @staticmethod
     def capture(goals: Goals, incarnation: RecordedThreadIncarnation) -> GoalWaitReview:
-        with goals.registry.store.guarded_read():
-            snapshot = goals.registry.store.read_snapshot_unlocked()
+        with goals.registry.store.current_snapshot() as cut:
+            snapshot = cut.snapshot
             for owner in snapshot.threads_for(incarnation):
                 return GoalWaitReview(
                     snapshot, owner, goals.waits.resolve(owner.goal), owner.turn_lease,
