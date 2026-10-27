@@ -348,7 +348,7 @@ class RestartQueue(DurableStore):
     def release_if_empty(self, held: TextIO) -> bool:
         # Enqueue and release share SQLite's writer transaction, so no request is orphaned.
         with self.writing() as db:
-            if QueuedRestart.select(db, pending=True, limit=1):
+            if QueuedRestart.exists(db, pending=True):
                 return False
             self.watcher_claim.release(held)
             return True
