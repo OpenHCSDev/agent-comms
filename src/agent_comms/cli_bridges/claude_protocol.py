@@ -835,6 +835,10 @@ class AtisLatch(MetadataRecord, declared_name='atis-latch'):
     pass
 
 
+class HistorySuppression(MetadataRecord, declared_name='history-suppression'):
+    pass
+
+
 class LastPrompt(MetadataRecord, declared_name='last-prompt'):
     pass
 
