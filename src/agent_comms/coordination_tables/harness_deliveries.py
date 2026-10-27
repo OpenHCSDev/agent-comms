@@ -8,6 +8,7 @@ from these rows beside the claims, from one store.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self
 
@@ -83,6 +84,13 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
         assignments.settle_harness_inputs(
             db, self.recipient_lookup, (self.reference,), self.outcome.claim_steps)
         self.write(db)
+
+    def apply(self, change: Callable[[HarnessDelivery], HarnessDelivery],
+              assignments: AssignmentStore, db: sqlite3.Connection) -> HarnessDelivery:
+        """Change the attempt as stored inside this write, never the copy a caller read
+        earlier: a confirmation landing between that read and this write stays recorded."""
+        stored, = self.stored(db)
+        return stored.outcome.settle(change(stored), assignments, db)
 
     @classmethod
     def latest(cls, db: sqlite3.Connection, bridge: type[HarnessSession],

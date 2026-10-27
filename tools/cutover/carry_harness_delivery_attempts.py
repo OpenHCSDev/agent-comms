@@ -44,7 +44,8 @@ class JournalAttempt(TypedRow):
         stored = json.loads(self.monitor)
         if stored.get("record_id") == FORGED_OBSERVATION:
             return EmittedOutcome, UnrecordedMonitor()
-        return self.outcome, FieldCodec.decode(MonitorEvidence, stored)
+        monitor = FieldCodec.decode(MonitorEvidence, stored)
+        return monitor.proven_outcome(self.outcome), monitor
 
     query: ClassVar[str] = (
         "SELECT id, json_extract(payload, '$.seq') AS seq, outcome, monitor FROM delivery")

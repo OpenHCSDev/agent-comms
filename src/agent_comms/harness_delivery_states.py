@@ -6,7 +6,9 @@ attempts can declare these families without importing the bridge transport.
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, replace
+from functools import partial
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -14,16 +16,13 @@ from .field_codec import TranscriptRecordId
 
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState
-    from .cli_bridges.shared import CliBridge, LineMonitorBridge, MonitorPart
+    from .assignment_store import AssignmentStore
+    from .cli_bridges.shared import LineMonitorBridge, MonitorPart
     from .coordination_tables.harness_deliveries import HarnessDelivery
 
 
 class Outcome(DeclaredFamily, affix="Outcome"):
-    """Stored spellings stay the same; their owners perform confirmation."""
-
-    @classmethod
-    async def record(cls, bridge: CliBridge, delivery: HarnessDelivery) -> None:
-        await bridge.coordinator_write(replace(delivery, outcome=cls).record)
+    """Stored spellings stay the same; the stored outcome decides what may follow it."""
 
     @classmethod
     def claim_steps(cls, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
@@ -31,10 +30,11 @@ class Outcome(DeclaredFamily, affix="Outcome"):
         return ()
 
     @classmethod
-    async def finish(
-        cls, bridge: CliBridge, delivery: HarnessDelivery, observation: type[Outcome]
-    ) -> None:
-        await observation.record(bridge, delivery)
+    def settle(cls, successor: HarnessDelivery, assignments: AssignmentStore,
+               db: sqlite3.Connection) -> HarnessDelivery:
+        """An open attempt takes the successor and the claim steps its outcome proves."""
+        successor.record(assignments, db)
+        return successor
 
     @classmethod
     def entered_context(cls) -> bool:
@@ -45,10 +45,11 @@ class Outcome(DeclaredFamily, affix="Outcome"):
 
 class FilteredOutcome(Outcome):
     @classmethod
-    async def finish(
-        cls, bridge: CliBridge, delivery: HarnessDelivery, observation: type[Outcome]
-    ) -> None:
-        """The journal confirmed this row; a later emission cannot change that fact."""
+    def settle(cls, successor: HarnessDelivery, assignments: AssignmentStore,
+               db: sqlite3.Connection) -> HarnessDelivery:
+        """A settled attempt stays settled; a later emission or observation cannot change it."""
+        stored, = successor.stored(db)
+        return stored
 
 
 class UnconfirmedOutcome(Outcome):
@@ -77,6 +78,10 @@ class MonitorEvidence(DeclaredFamily):
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
         return ()
 
+    def proven_outcome(self, recorded: type[Outcome]) -> type[Outcome]:
+        """The outcome this observation proves; one that proves nothing leaves the recorded one."""
+        return recorded
+
 
 @dataclass(frozen=True)
 class UnrecordedMonitor(MonitorEvidence):
@@ -99,7 +104,7 @@ class ReceivingMonitor(MonitorEvidence):
                 or any(part.sender != message.sender for part in parts)):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
             return ()
-        await bridge.finish(replace(delivery, monitor=record), DeliveredOutcome)
+        await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
         return (message.exact_reply_target,)
 
 
@@ -112,3 +117,7 @@ class MismatchedMonitor(MonitorEvidence):
 class ObservedMonitor(MonitorEvidence):
     record_id: TranscriptRecordId
     timestamp: float
+
+    def proven_outcome(self, recorded: type[Outcome]) -> type[Outcome]:
+        """Only a complete, matching confirmation stores this, so the message entered context."""
+        return DeliveredOutcome

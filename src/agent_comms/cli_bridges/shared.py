@@ -1095,10 +1095,11 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         return max((self.binding.start, *(BridgeStart(reference) for reference in latest)),
                    key=lambda point: point.cursor())
 
-    async def finish(self, delivery: HarnessDelivery, outcome: type[Outcome]) -> None:
+    async def finish(self, delivery: HarnessDelivery,
+                     change: Callable[[HarnessDelivery], HarnessDelivery]) -> None:
         try:
-            await delivery.outcome.finish(self, delivery, outcome)
-            self.log(f'{outcome.declared_name}: {delivery.message_id}')
+            stored = await self.coordinator_write(partial(delivery.apply, change))
+            self.log(f'{stored.outcome.declared_name}: {delivery.message_id}')
         except DeferredRead as error:
             # Confirmation's exhausted store wait cannot retire the message's transport.
             self.log(f'Message {delivery.message_id} remains uncertain; not replayed: {error}')
@@ -1116,8 +1117,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         if not await self.coordinator_write(self.attempt(message, outcome).begin):
             return
         result = await message.task.delivered_by(self, message) if conversation else outcome
-        delivery, = await self.attempts(message.message_id)
-        await self.finish(delivery, result)
+        await self.finish(self.attempt(message, result), partial(replace, outcome=result))
 
     async def watch(self) -> None:
         await self.prepare_delivery()
@@ -1417,7 +1417,8 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return parts
 
     async def record_mismatch(self, delivery: HarnessDelivery, reason: str) -> None:
-        await self.coordinator_write(replace(delivery, monitor=MismatchedMonitor(reason)).record)
+        await self.coordinator_write(
+            partial(delivery.apply, partial(replace, monitor=MismatchedMonitor(reason))))
         self.log(f'Monitor parts mismatch; message remains pending: {delivery.message_id}')
 
     @staticmethod
@@ -1433,8 +1434,9 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
 
     async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
         parts = self.incoming_frame(message).parts
-        delivery, = await self.attempts(message.message_id)
-        await self.coordinator_write(replace(delivery, monitor=ReceivingMonitor(len(parts))).record)
+        receiving = partial(replace, monitor=ReceivingMonitor(len(parts)))
+        attempt = self.attempt(message, UnconfirmedOutcome)
+        await self.coordinator_write(partial(attempt.apply, receiving))
         for number, part in enumerate(parts, 1):
             await attachment.emit(message.message_id, number, self.encode(part), self.window_bytes)
         return EmittedOutcome
