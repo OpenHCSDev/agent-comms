@@ -31,7 +31,6 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .thread_identity import UserThreadRole
 from .repo import Checkout
 from .threads import Thread
 from .working_memory_policy import AnnotationDisclosureGrant
@@ -115,20 +114,9 @@ class Messaging:
         """What this owner's message to target answers among its running turn's inputs."""
         return owner.turn_lease.answered_inputs(self, owner, target)
 
-    def _register_user(self, worktree: Checkout) -> Thread:
-        name = self.registry.snapshot().claim_name("user")
-        thread = Thread(name, frozenset(), worktree, role=UserThreadRole)
-        self.registry.register(thread)
-        return thread
-
     def user_identity(self, worktree: Checkout) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
-        for thread in self.registry.user_thread().existing():
-            return thread
-        # The registry owns namespace allocation. Recheck under its canonical
-        # writer lock; an existing sender needs only the ordinary registry read.
-        with self.registry.store.guarded_write():
-            return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
+        return self.registry.user_thread().or_create(lambda: self.registry.claim_user(worktree))
 
     def send_user_message(self, target: NamedTarget, body: str, *, worktree: Checkout,
                           task: TaskAttachment = NoTaskAttachment()) -> Message:
