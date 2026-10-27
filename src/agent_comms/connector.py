@@ -55,7 +55,7 @@ from .errors import RelationViolationError, ToolRefusedError, UnregisteredThread
 from .coordination_errors import CoordinationError, Refused
 from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
-    boundary_decoder, projected,
+    RecordMember, boundary_decoder, projected,
 )
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
@@ -239,7 +239,7 @@ class ClientRegistrationReply(ClientRegistration):
 
 
 @dataclass(frozen=True)
-class McpResult:
+class McpResult(RecordMember):
     """An untagged JSON-RPC result. Ping has no additional fields."""
 
 
@@ -255,7 +255,7 @@ class McpReply(McpEnvelope):
 
 
 @dataclass(frozen=True)
-class McpError:
+class McpError(RecordMember):
     """A JSON-RPC error object; each kind of refusal declares its own code."""
 
     message: str
