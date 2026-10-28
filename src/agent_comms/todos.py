@@ -288,11 +288,13 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
         order = todo.order.checked()
         order.require_delivery(order_id)
         problems = self.preparation_problems(todo)
+        holder = todo.holder_state.previous_assignment().owner
         with RecordProblems.collecting(
-            problems, 'checkout', 'remove the order checkout with agent-comms checkout remove'):
+            problems, 'checkout',
+            f'remove the order checkout with agent-comms checkout --from {holder} remove {todo.id}'):
             UnitStorage.read(
                 comms.registry.storage_rule,
-                comms.registry.require(todo.holder_state.previous_assignment().owner),
+                comms.registry.require(holder),
             ).require_retired(todo.id)
         if problems:
             raise TodoProblems(problems)
