@@ -291,7 +291,8 @@ class CommanderHud(ToolResult):
         installed = InstalledBuild.read()
         edits = dict.fromkeys((todo.id for todo in held), 0) | {
             read.todo.id: read.read()
-            for read in OrderEditCountRead.judgeable(comms.root, frame.live, progress)
+            for read in OrderEditCountRead.judgeable(
+                comms.root, frame.live, progress, frame.workplaces)
         }
         units = []
         for state in states:

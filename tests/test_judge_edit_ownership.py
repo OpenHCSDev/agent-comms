@@ -45,8 +45,12 @@ def two_orders(held_commander, cited_source):
             request,
         ).insert_if_absent(db)
     rule = StorageRule.load(ctx.root)
-    checkout = {problem: rule.problem_checkouts(rule.roots_of(worker), problem)[0]
+    checkout = {problem: rule.order_checkout(rule.roots_of(worker), problem)
                 for problem in ("P1", "P2")}
+    for problem, path in checkout.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cited_source.git(cited_source.checkout, "worktree", "add", "-q", "-b",
+                         f"edit-ownership-{problem}", str(path))
     return ctx, checkout
 
 
@@ -56,7 +60,8 @@ def test_an_edit_belongs_to_the_order_whose_checkout_it_is_in(two_orders):
     recorded_edit(ctx, ToolCallId("p2-call"), str(checkout["P2"] / "two.py"), "TWO = 'second problem'")
     recorded_edit(ctx, ToolCallId("scratch-call"), str(ctx.root / "scratch" / "notes.md"), "notes for the PR")
     filed = [(edit.id, edit.problem) for edit in unjudged(ctx).values()]
-    assert sorted(filed) == [("p1-call", "P1"), ("p2-call", "P2"), ("scratch-call", "P2")]
+    assert sorted(filed) == [("p1-call", "P1"), ("p2-call", "P2")]
+    assert ctx.comms.goals.todos.get("P2").judged_calls == ()
 
 
 def test_a_send_back_leaves_the_edits_it_does_not_name_unjudged(two_orders):
@@ -88,10 +93,11 @@ def test_a_second_verdict_on_one_edit_is_refused(two_orders):
         store.apply("P1", replace(verdict, expected_revision=judged.revision))
 
 
-def test_an_edit_in_a_released_problems_checkout_joins_no_held_order(two_orders):
+def test_an_edit_in_an_unknown_problems_checkout_joins_no_held_order(two_orders, cited_source):
     ctx, checkout = two_orders
     released = checkout["P1"].with_name(checkout["P1"].name.replace("--P1", "--P9"))
-    recorded_edit(ctx, ToolCallId("p9-call"), str(released / "nine.py"), "NINE = 'released problem'")
+    cited_source.git(cited_source.checkout, "worktree", "add", "-q", "-b", "unknown-P9", str(released))
+    recorded_edit(ctx, ToolCallId("p9-call"), str(released / "nine.py"), "NINE = 'unknown problem'")
     recorded_edit(ctx, ToolCallId("p2-call"), str(checkout["P2"] / "two.py"), "TWO = 'second problem'")
     assert [(edit.id, edit.problem) for edit in unjudged(ctx).values()] == [("p2-call", "P2")]
 
