@@ -337,3 +337,63 @@ def test_missing_bus_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     with pytest.raises(sqlite3.OperationalError) as missing:
         comms.views.thread_presentations(("beta",)).require("beta")
     assert missing.value.sqlite_errorcode == sqlite3.SQLITE_CANTOPEN
+
+
+def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_index(tmp_path):  # noqa: F811
+    from conftest import accept_initial, publish_initial
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.registry_store import RegistryStore
+
+    root, root_id, comms, initial, _people = _root(tmp_path)
+    database = root / "coordination.sqlite3"
+    later = publish_initial(comms, "sender", "#team", "A second broadcast for the window")
+    with Coordination(str(database)) as store:
+        accept_initial(comms.bus, root_id, later.seq, store)
+    second = comms.bus.bus.delivery(later.seq)
+    sources = (initial, second, initial)
+    keys = tuple({"recipient_lookup": recipient.recipient_lookup, "wire_seq": source.message.seq,
+                  "message_id": source.message.message_id}
+                 for source in sources for recipient in source.recipients)
+    distinct = tuple(dict.fromkeys(tuple(key.values()) for key in keys))
+    assert len(distinct) >= 4 and len(keys) > len(distinct)
+    ordinary = NotificationAssignment.read(root, sources, viewer=AllOutcomes())
+    assert ordinary.rows
+    privacy = RegistryStore.at(root).privacy()
+    statements: list[str] = []
+    with Coordination(str(database)) as store, store.session.read():
+        connection = store.session._connection
+        unlimited, = WakeAssignment.requested_keys(connection, keys)
+        previous = connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 6)
+        connection.set_trace_callback(statements.append)
+        try:
+            bound = connection.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER)
+            batches = tuple(WakeAssignment.requested_keys(connection, keys))
+            limited = NotificationAssignment.capture(connection, sources, privacy, AllOutcomes())
+        finally:
+            connection.set_trace_callback(None)
+            connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, previous)
+        index, = (name for _seq, name, unique, *_rest in connection.execute(
+                      f'PRAGMA index_list("{WakeAssignment.declared_name}")')
+                  if unique and [column for _rank, _cid, column in connection.execute(
+                      f'PRAGMA index_info("{name}")')] == ["recipient_lookup", "wire_seq"])
+        claim_statements = [statement for statement in statements
+                            if statement.startswith("WITH requested") and "w AS MATERIALIZED" in statement]
+        plans = [[row[3] for row in connection.execute(f"EXPLAIN QUERY PLAN {statement}")]
+                 for statement in claim_statements]
+
+    assert len(batches) > 1
+    assert all(len(batch.bindings) <= bound for batch in batches)
+    assert sum(len(batch.bindings) for batch in batches) == 3 * len(distinct)
+    assert tuple(value for batch in batches for value in batch.bindings) == unlimited.bindings
+    assert limited.viewer == AllOutcomes() and limited.sources == sources
+    assert limited.rows == ordinary.rows
+    assert limited.attempts == ordinary.attempts
+    assert limited.evidence == ordinary.evidence
+    assert len({claim.assignment_id for claim, _evidence in limited.rows}) == len(limited.rows)
+    order = [(-claim.wire_seq, claim.recipient) for claim, _evidence in limited.rows]
+    assert order == sorted(order)
+    assert len(claim_statements) >= 2
+    for plan in plans:
+        assert any(detail.startswith(f"SEARCH {WakeAssignment.declared_name} USING INDEX {index}")
+                   for detail in plan), plan
+        assert not any(detail.startswith(f"SCAN {WakeAssignment.declared_name}") for detail in plan), plan

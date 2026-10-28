@@ -214,10 +214,6 @@ class ThreadPresentation(ThreadStatusDisplay):
     notifications: tuple[MessageNotification, ...] = ()
     read_identity: TranscriptReadIdentity | None = None
 
-    def presentation_fields(self) -> dict[str, object]:
-        return {declared.name: getattr(self, declared.name)
-                for declared in fields(ThreadPresentation)}
-
     def published(self) -> ThreadPresentation:
         """The value a viewer may receive: this presentation itself."""
         return self
@@ -284,10 +280,11 @@ class ThreadPresentation(ThreadStatusDisplay):
             for source in window.sources
             for notification in projected.outcomes[source.message.seq, source.message.message_id]
         )
-        return AcquiredThreadPresentation(**(self.presentation_fields() | {
-            "notifications": incoming,
-            "read_identity": window.read.identity,
-        }), notification_window=projected,
+        shown = replace(self, notifications=incoming, read_identity=window.read.identity)
+        return AcquiredThreadPresentation(
+            **{declared.name: getattr(shown, declared.name)
+               for declared in fields(ThreadPresentation)},
+            notification_window=projected,
             incoming_references=tuple(source.message.reference for source in window.sources),
             sent_references=tuple(source.message.reference for source in window.sent_sources))
 
@@ -308,7 +305,8 @@ class AcquiredThreadPresentation(ThreadPresentation):
     notification_window: NotificationWindow = field(kw_only=True)
 
     def published(self) -> ThreadPresentation:
-        return ThreadPresentation(**self.presentation_fields())
+        return ThreadPresentation(**{declared.name: getattr(self, declared.name)
+                                     for declared in fields(ThreadPresentation)})
 
     def sent_summaries(self) -> tuple[SentMessageSummary, ...]:
         """One summary per recent sent source, from this presentation's captured window."""

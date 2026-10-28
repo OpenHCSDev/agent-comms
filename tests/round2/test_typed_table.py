@@ -179,12 +179,19 @@ def test_declared_table_family(tmp_path):
         for row in (parent, child):
             row.insert(db)
             assert type(row).select(db) == [row]
+        # Requested keys join under IS, so a null key selects the null row, once.
+        null_key = {"key": "c", "weight": None}
+        assert TableChildRow.select_keys(db, (null_key, null_key)) == [child]
+        assert TableChildRow.select_keys(db, ({"key": "c", "weight": 3.25},)) == []
         with pytest.raises(sqlite3.IntegrityError):
             replace(child, key="bad", parent="missing").insert(db)
         with pytest.raises(TypeError):
             replace(parent, key="bool", count=True).insert(db)
         replace(child, weight=3.25).upsert(db)
         assert TableChildRow.one(db, key="c").weight == 3.25
+        assert TableChildRow.select_keys(db, (null_key,)) == []
+        assert TableChildRow.select_keys(db, ({"key": "c", "weight": 3.25},)) == [
+            replace(child, weight=3.25)]
         child.upsert(db)
         assert TableChildRow.one(db, key="c") == child
         TableChildRow.update(db, where="key=?", parameters=("c",), enabled=False)
