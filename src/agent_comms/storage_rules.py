@@ -77,7 +77,10 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
     def for_path(cls, rule: StorageRule, owner: Thread,
                  path: Path) -> Iterator[CheckoutAllocation]:
         allocated = rule.roots_of(owner).allocation_name
-        problem, _, suffix = path.name.removeprefix(f'{allocated}--').partition('--')
+        prefix = f'{allocated}--'
+        name = (path.name.removeprefix(prefix)
+                if path.parent == rule.checkout_base and path.name.startswith(prefix) else '')
+        problem, _, suffix = name.partition('--')
         for member in cls.members_with(cls):
             yield from member.read(owner, path, problem, suffix)
 
@@ -92,6 +95,14 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
                       repository: RepositoryName) -> bool:
         return self.owns_present(rule, owner, path)
+
+    def problems(self) -> tuple[str, ...]:
+        """Only a problem allocation reserves an edit boundary for a problem."""
+        return ()
+
+    def source_repositories(self, primary: RepositoryName,
+                            companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -110,11 +121,19 @@ class ProblemCheckoutAllocation(CheckoutAllocation):
     """A checkout allocated to one problem; ``verb`` is the command that creates it."""
 
     verb: ClassVar[str]
+    problem: str
+
+    def problems(self) -> tuple[str, ...]:
+        return (self.problem,)
+
+    def source_repositories(self, primary: RepositoryName,
+                            companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
+        return (primary,)
 
     @classmethod
     def read(cls, owner: Thread, path: Path, problem: str,
              suffix: str) -> Iterator[CheckoutAllocation]:
-        if path != owner.project_path and ProblemNumber.accepts(problem):
+        if ProblemNumber.accepts(problem):
             yield from cls.allocated(problem, suffix)
 
     @classmethod
@@ -159,6 +178,10 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
     verb: ClassVar[str] = 'repository-checkout'
     problem: str
     suffix: str
+
+    def source_repositories(self, primary: RepositoryName,
+                            companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
+        return companions
 
     @classmethod
     def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
@@ -241,14 +264,6 @@ class StorageRule(RoomAllocation, DurableFile):
         """The same problem's checkout of another repository, changed in lockstep with it."""
         checkout = self.order_checkout(roots, problem)
         return checkout.with_name(f'{checkout.name}--{repository.name}')
-
-    def checkout_problem(self, roots: StorageRoots, path: Path, other: str) -> str:
-        """The problem whose checkout holds path, read back from order_checkout's own name;
-        other for a path in no problem checkout."""
-        allocated = self.order_checkout(roots, '')
-        names = path.relative_to(allocated.parent).parts[:1] if path.is_relative_to(allocated.parent) else ()
-        return next((name.removeprefix(allocated.name).split('--')[0] for name in names
-                     if name.startswith(allocated.name)), other)
 
     def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""

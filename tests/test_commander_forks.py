@@ -9,13 +9,14 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
-from agent_comms.change_report import FileLine
+from agent_comms.change_report import FileLine, NamedRepository
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
@@ -33,6 +34,12 @@ from agent_comms.field_codec import (
 )
 from agent_comms.goal_actions import OrderGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.held_orders import HeldOrders
+from agent_comms.native_transcript import NativeTranscript
+from agent_comms.repository_name import RepositoryName
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.storage_rules import StorageRule
+from agent_comms.turn_digests import EditWorkplaces, OrderEditsRead, OrderEditCountRead, TurnsSince
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -43,21 +50,29 @@ from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsT
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
+    Assignment,
+    DraftListedPullRequest,
     ExpectedProblem,
+    FixScope,
+    FixShape,
     IncomingWork,
+    LocatedProblemFinding,
     PendingProblemOrder,
     ProblemAllocation,
     ProgressRead,
+    PullRequests,
+    PullRequestLink,
     ReleaseTodo,
     StrikeReason,
     SupersededVerdict,
     Todo,
+    UnlocatedProblemFinding,
 )
 from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration
@@ -310,18 +325,271 @@ def test_unjudged_reminder_names_each_order_with_edits(fork_bus):
 
 def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
     """Overload, the HUD and the judge read one judgeable owner: a merged head gates nothing."""
-    from agent_comms.held_orders import HeldOrders
     from agent_comms.todos import MergedProgress, NoCommitProgress
-    from agent_comms.turn_digests import OrderEditCountRead
 
     comms, source, _ = fork_bus
     record_edits(comms, source, 3)
     holds = HeldOrders.read(comms, "lead").live
     open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
+    workplaces = EditWorkplaces.capture(
+        comms, comms.registry.snapshot(), holds, tuple(hold.todo for hold in holds), ProgressRead())
     assert [read.read() for read in OrderEditCountRead.judgeable(
-        comms.root, holds, open_order)] == [3]
-    assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged)) == ()
+        comms.root, holds, open_order, workplaces)] == [3]
+    assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged, workplaces)) == ()
+
+
+@pytest.fixture
+def edit_sources(fork_bus, tmp_path, configured_repository):
+    """Two actual origins, a held Core-like source and its real allocated worktree."""
+    comms, source, _ = fork_bus
+    foreign = SourceRepository.create(tmp_path / "foreign", RepositoryName("example", "foreign"))
+    configured_repository(comms, source, foreign)
+    holder = comms.registry.require("retained")
+    rule = StorageRule.load(comms.root)
+    primary = rule.order_checkout(rule.roots_of(holder), "P40")
+    primary.parent.mkdir(parents=True, exist_ok=True)
+    source.git(source.checkout, "worktree", "add", "-q", "-b", "held-P40", str(primary))
+    return comms, source, foreign, primary
+
+
+def edit_workplaces(comms):
+    snapshot = comms.registry.snapshot()
+    holds = HeldOrders.of(comms.goals.todos, snapshot, "lead").live
+    history = comms.goals.todos.history_for_commander(snapshot.require("lead").incarnation)
+    return holds, EditWorkplaces.capture(comms, snapshot, holds, history, ProgressRead(history))
+
+
+def save_edit_order(comms, todo):
+    """Publish an actual retained order row, not a preselected workplace answer."""
+    with comms.goals.todos.writing() as db:
+        todo.upsert(db)
+
+
+def another_edit_order(comms):
+    """A saved multi-order state, supported for records predating one-unit/one-order."""
+    original = comms.goals.todos.get("P40")
+    lead = comms.registry.require("lead").incarnation
+    return Todo.ordered(
+        "P41", original.repo, "Independent second source change", lead,
+        Assignment.of(comms.registry.require("retained").incarnation, lead, GoalId.mint()),
+        RecordedEventTime(time.time() + 600),
+        replace(original.order.checked(), id=OrderId.mint(),
+                at=RecordedEventTime(time.time() + 10)), original.request.require(),
+    )
+
+
+def captured_edit_sources(comms, paths, session):
+    """Original external tool starts and an actual Pi journal, with the same edit paths."""
+    actor = comms.registry.require("retained").incarnation
+    timestamp = time.time()
+    stamp = datetime.fromtimestamp(timestamp, UTC).isoformat()
+    calls = tuple((ToolCallId(f"source-edit-{i}"), {
+        "path": str(path), "edits": [{"oldText": "", "newText": f"VALUE = {i}"}],
+    }) for i, path in enumerate(paths))
+    events = tuple(ToolStartTranscript(
+        position=i, tool_call_id=identity, tool_name="edit", timestamp=timestamp,
+        tool=ToolDeclaration.record("edit", arguments, call_id=identity),
+    ) for i, (identity, arguments) in enumerate(calls))
+    ExternalTranscript(comms.root, actor).finish(
+        turn_id=NativeTurnId("source-work"), item_id=NativeItemId("source-work"), events=events)
+    rows = (
+        {"type": "session", "version": 3, "id": "source-work", "timestamp": stamp},
+        {"type": "message", "id": "source-input", "timestamp": stamp,
+         "message": {"role": "user", "content": [{"type": "text", "text": "Edit these sources"}]}},
+        {"type": "message", "id": "source-tools", "parentId": "source-input", "timestamp": stamp,
+         "message": {"role": "assistant", "content": [
+             {"type": "toolCall", "id": identity, "name": "edit", "arguments": arguments}
+             for identity, arguments in calls]}},
+    )
+    session.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    return calls
+
+
+@pytest.mark.parametrize("execution", (NativeThreadExecution, ExternalThreadExecution))
+def test_edit_membership_preserves_native_and_external_foreign_records(edit_sources, tmp_path, execution):
+    comms, source, foreign, primary = edit_sources
+    scratch = StorageRule.load(comms.root).roots_of(comms.registry.require("retained")).scratch
+    paths = (primary / "owner.py", foreign.checkout / "owner.py", scratch / "comment.md",
+             scratch / "plugin" / "introspection_trace.py", scratch / "typemap" / "probe.py",
+             primary / "new_source.py", primary / "deleted_source.py")
+    deleted = paths[-1]
+    deleted.write_text("BEFORE = True\n")
+    deleted.unlink()
+    session = tmp_path / "original-native.jsonl"
+    calls = captured_edit_sources(comms, paths, session)
+    original_bytes = session.read_bytes()
+    before = comms.goals.todos.get("P40")
+    holds, workplaces = edit_workplaces(comms)
+    hold, = holds
+    holder = replace(hold.holder, execution=execution,
+                     session_file=RegistrySessionLocation.from_path(session, comms.root))
+    read = OrderEditsRead(
+        comms.root, holder, TurnsSince(before.order.checked().at.recorded_at("An order")),
+        before, workplaces[holder.incarnation])
+    expected = {calls[index][0] for index in (0, 5, 6)}
+    assert {edit.id for edit in read.read()} == expected
+    count = OrderEditCountRead(read.root, holder, read.bound, before, read.workplaces)
+    assert count.read() == len(expected)
+    assert comms.goals.todos.get("P40") == before
+    assert before.judged_calls == ()
+    assert session.read_bytes() == original_bytes
+    native = NativeTranscript(session)
+    native_events = tuple(event for turn in native.turns(TurnsSince(0)) for event in turn.events)
+    native_ids = {edit.id for event in native_events
+                  for edit in event.edit_calls(holder.name, "P40", 0)}
+    with ExternalTranscript(comms.root, holder.incarnation).reading() as external:
+        external_ids = {edit.id for turn in external.turns(TurnsSince(0)) for event in turn.events
+                        for edit in event.edit_calls(holder.name, "P40", 0)}
+    assert native_ids == external_ids == {identity for identity, _ in calls}
+
+
+@pytest.mark.parametrize("declare_companion", (
+    pytest.param(lambda order, location: replace(
+        order, scope=FixScope(FixShape(order.scope.shape.parents, (location,))),
+        finding=UnlocatedProblemFinding()), id="scope-unlocated-finding"),
+    pytest.param(lambda order, location: replace(
+        order, finding=LocatedProblemFinding(location)), id="located-finding"),
+))
+def test_canonical_primary_companion_and_released_roots_take_precedence(edit_sources, declare_companion):
+    comms, source, foreign, primary = edit_sources
+    store = comms.goals.todos
+    todo = store.get("P40")
+    owner = comms.registry.require("retained")
+    rule = StorageRule.load(comms.root)
+    roots = rule.roots_of(owner)
+    companion = rule.repository_checkout(roots, todo.id, foreign.github)
+    foreign.git(foreign.checkout, "worktree", "add", "-q", "-b", "companion-P40", str(companion))
+    # A qualified source declaration, not origin equality alone, authorizes the companion.
+    location = FileLine("owner.py", 2, NamedRepository(foreign.github))
+    save_edit_order(comms, replace(todo, order=declare_companion(todo.order, location)))
+    released = another_edit_order(comms)
+    save_edit_order(comms, released)
+    released_path = rule.order_checkout(roots, released.id)
+    source.git(source.checkout, "worktree", "add", "-q", "-b", "released-P41", str(released_path))
+    store.apply(released.id, ReleaseTodo(
+        released.revision, comms.registry.require("lead").incarnation, released.held(),
+        StrikeReason("The independent order is released; its checkout must not spill.")))
+    current = store.get("P40")
+    save_edit_order(comms, replace(current, order=replace(
+        current.order, check=replace(current.order.check, directory=released_path))))
+    _, workplaces = edit_workplaces(comms)
+    selected = workplaces[owner.incarnation]
+    assert selected.problems_for(str(primary / "new.py")) == frozenset(("P40",))
+    assert selected.problems_for(str(companion / "new.py")) == frozenset(("P40",))
+    assert selected.problems_for(str(released_path / "new.py")) == frozenset(("P41",))
+    # A registered foreign repository in an undeclared companion allocation stays unowned.
+    current = store.get("P40")
+    save_edit_order(comms, replace(current, order=replace(
+        current.order, scope=source.scope(), finding=UnlocatedProblemFinding())))
+    _, workplaces = edit_workplaces(comms)
+    assert workplaces[owner.incarnation].problems_for(str(companion / "new.py")) == frozenset()
+
+
+def test_misleading_primary_allocation_refuses_foreign_origin(edit_sources):
+    comms, source, foreign, _ = edit_sources
+    another = another_edit_order(comms)
+    save_edit_order(comms, another)
+    holder = comms.registry.require("retained")
+    rule = StorageRule.load(comms.root)
+    misleading = rule.order_checkout(rule.roots_of(holder), another.id)
+    foreign.git(foreign.checkout, "worktree", "add", "-q", "-b", "wrong-origin", str(misleading))
+    _, workplaces = edit_workplaces(comms)
+    assert workplaces[holder.incarnation].problems_for(str(misleading / "owner.py")) == frozenset()
+    # P41's later timestamp never wins the ambiguous shared pre-PR source either.
+    assert workplaces[holder.incarnation].problems_for(str(source.checkout / "owner.py")) == frozenset(("P40", "P41"))
+
+
+def test_noncanonical_worktree_needs_qualified_link_not_matching_origin(edit_sources, tmp_path, github_cli):
+    comms, source, _, _ = edit_sources
+    holder = comms.registry.require("retained")
+    linked = StorageRule.load(comms.root).roots_of(holder).scratch / "legacy-source"
+    linked.parent.mkdir(parents=True, exist_ok=True)
+    unrelated = tmp_path / "same-origin-no-link"
+    source.git(source.checkout, "worktree", "add", "-q", "-b", "linked-repair", str(linked))
+    source.git(source.checkout, "worktree", "add", "-q", "-b", "unlinked-work", str(unrelated))
+    _, workplaces = edit_workplaces(comms)
+    assert workplaces[holder.incarnation].problems_for(str(source.checkout / "new.py")) == frozenset(("P40",))
+    assert workplaces[holder.incarnation].problems_for(str(linked / "new.py")) == frozenset()
+    todo = comms.goals.todos.get("P40")
+    row = DraftListedPullRequest(number=132, branch="linked-repair", head=source.main_commit,
+                                 updated="2026-10-28T12:00:00Z", base="main", reviewable_times=())
+    github_cli.put(source.github, row, body="P40 source ownership")
+    save_edit_order(comms, replace(todo, order=replace(
+        todo.order, pull_requests=(PullRequestLink(source.github, row.number),))))
+    _, workplaces = edit_workplaces(comms)
+    selected = workplaces[holder.incarnation]
+    assert selected.problems_for(str(linked / "new.py")) == frozenset(("P40",))
+    assert selected.problems_for(str(unrelated / "new.py")) == frozenset()
+    assert selected.problems_for(str(source.checkout / "new.py")) == frozenset()
+    # The explicit retained source may be a different clone: it will not occur in the
+    # registered checkout's worktree list, but its own branch still has to match the PR.
+    separate = tmp_path / "explicit-source-clone"
+    source.git(tmp_path, "clone", "-q", str(source.remote), str(separate))
+    source.git(separate, "checkout", "-q", "-b", "linked-repair")
+    independent = SourceRepository.of(separate)
+    assert independent.github == source.github
+    pulls = PullRequests()
+    registered_trees = pulls.worktrees(source)
+    independent_trees = pulls.worktrees(independent)
+    assert str(linked) in registered_trees["linked-repair"]
+    assert str(separate) not in registered_trees["linked-repair"]
+    assert str(separate) in independent_trees["linked-repair"]
+    assert str(linked) not in independent_trees["linked-repair"]
+    assert pulls.worktrees(source) is registered_trees
+    assert pulls.worktrees(independent) is independent_trees
+    alias = SourceRepository.of(separate / ".." / separate.name)
+    assert alias.checkout != independent.checkout
+    assert pulls.worktrees(alias) is independent_trees
+    current = comms.goals.todos.get("P40")
+    save_edit_order(comms, replace(current, order=replace(
+        current.order, check=replace(current.order.check, directory=separate))))
+    _, workplaces = edit_workplaces(comms)
+    assert workplaces[holder.incarnation].problems_for(str(separate / "new.py")) == frozenset(("P40",))
+    source.git(separate, "checkout", "-q", "-b", "wrong-branch")
+    _, workplaces = edit_workplaces(comms)
+    assert workplaces[holder.incarnation].problems_for(str(separate / "new.py")) == frozenset()
+
+
+def test_ambiguous_pre_pr_work_never_picks_latest(edit_sources, tmp_path):
+    comms, source, _, primary = edit_sources
+    save_edit_order(comms, another_edit_order(comms))
+    session = tmp_path / "ambiguous.jsonl"
+    calls = captured_edit_sources(comms, (source.checkout / "owner.py", primary / "new.py"), session)
+    shown = command(comms, "judge", "show")
+    assert shown.returncode == 0, shown.stderr
+    assert calls[0][0] not in shown.stdout and calls[1][0] in shown.stdout
+    assert shown.stdout.splitlines()[-1] == "1 unjudged"
+    assert all(not todo.judged_calls for todo in comms.goals.todos.history_for_commander(
+        comms.registry.require("lead").incarnation))
+
+
+def test_missing_unknown_allocation_still_overrides_an_enclosing_source(edit_sources):
+    comms, source, _, _ = edit_sources
+    # A genuine source encloses the allocation base; no physical P999 checkout exists.
+    # The source cannot swallow a historical/deleted allocation by generic containment.
+    rule = replace(StorageRule.load(comms.root), checkout_base=source.checkout)
+    StorageRule.path_in(comms.root).write_text(json.dumps(FieldCodec.encode(rule)))
+    holder = comms.registry.require("retained")
+    missing = rule.order_checkout(rule.roots_of(holder), "P999")
+    assert not missing.exists()
+    _, workplaces = edit_workplaces(comms)
+    selected = workplaces[holder.incarnation]
+    assert selected.problems_for(str(source.checkout / "ordinary.py")) == frozenset(("P40",))
+    assert selected.problems_for(str(missing / "old.py")) == frozenset()
+
+
+def test_symlink_aliases_and_foreign_escapes_cannot_mint_membership(edit_sources, tmp_path):
+    comms, source, foreign, primary = edit_sources
+    alias = tmp_path / "alias"
+    alias.symlink_to(primary, target_is_directory=True)
+    escape = primary / "foreign.py"
+    escape.symlink_to(foreign.checkout / "owner.py")
+    holder = comms.registry.require("retained")
+    _, workplaces = edit_workplaces(comms)
+    selected = workplaces[holder.incarnation]
+    assert selected.problems_for(str(alias / "owner.py")) == frozenset()
+    assert selected.problems_for(str(escape)) == frozenset()
 
 
 def test_open_unit_consumers_agree_on_one_assignment(fork_bus):

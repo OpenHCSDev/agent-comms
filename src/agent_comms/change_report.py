@@ -240,6 +240,10 @@ class CitedRepository(DeclaredFamily, ABC, affix="Repository"):
     def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
         """The checkout and revisions this citation's lines are read from."""
 
+    def named_repositories(self) -> tuple[RepositoryName, ...]:
+        """Unqualified locations add no repository beyond the problem's primary."""
+        return ()
+
     @abstractmethod
     def qualified(self, location: str) -> str: ...
 
@@ -265,6 +269,9 @@ class NamedRepository(CitedRepository):
     def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
         return (Repo.selected(roots.project.require().repos, self.name.to_wire()).checkout,
                 MainRevision())
+
+    def named_repositories(self) -> tuple[RepositoryName, ...]:
+        return (self.name,)
 
     def qualified(self, location: str) -> str:
         return f"{self.name.to_wire()}:{location}"

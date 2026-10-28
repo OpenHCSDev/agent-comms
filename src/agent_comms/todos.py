@@ -982,12 +982,12 @@ class PullRequestUpdatePage:
 
 
 class PullRequests:
-    """GitHub facts for recorded links, cached within one board read."""
+    """Forge facts and checkout-local worktrees, cached within one board read."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
-        self._worktrees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
+        self._worktrees: dict[Path, Mapping[str, tuple[str, ...]]] = {}
         self._todos: dict[RepositoryName, dict[str, Todo]] = {}
         self.register(todos)
 
@@ -1085,18 +1085,23 @@ class PullRequests:
         return tuple(picked for number in self._open[repo]
                      for picked in self._read[repo, number].as_unmerged())
 
+    def worktrees(self, repository: Repo) -> Mapping[str, tuple[str, ...]]:
+        """One canonical local checkout's retained listing, not its forge namesake's."""
+        checkout = Checkout(repository.checkout).resolved().path
+        if checkout not in self._worktrees:
+            self._worktrees[checkout] = WorkBranches(checkout).worktrees()
+        return self._worktrees[checkout]
+
     def working_on(self, goals: Goals, repo: RepositoryName,
                    row: ListedPullRequest) -> tuple[ThreadIncarnation, ...]:
         """The registered threads with the request's branch checked out: who is working on it
-        when no order says so. One worktree read per repository in this frame."""
+        when no order says so. One worktree read per local checkout in this frame."""
         snapshot = goals.registry.snapshot()
-        reader = WorkBranches(Repo.selected(
-            snapshot.commander_project.require().repos, repo.to_wire()).checkout)
-        if repo not in self._worktrees:
-            self._worktrees[repo] = reader.worktrees()
+        repository = Repo.selected(snapshot.commander_project.require().repos, repo.to_wire())
+        reader = WorkBranches(repository.checkout)
         return tuple(dict.fromkeys(
             snapshot.require(name).incarnation
-            for checkout in reader.checkouts(snapshot, row.branch, self._worktrees[repo])
+            for checkout in reader.checkouts(snapshot, row.branch, self.worktrees(repository))
             for name in checkout.working()))
 
     def carry_reviews(self, goals: Goals, repo: RepositoryName) -> None:
@@ -2074,6 +2079,9 @@ class FamilyDeletion(OrderDeletion):
 
 @dataclass(frozen=True)
 class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
+    def source_locations(self) -> tuple[FileLine, ...]:
+        return ()
+
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         """An unlocated finding has no source reference to validate."""
 
@@ -2095,6 +2103,9 @@ class UnlocatedProblemFinding(ProblemFinding):
 @dataclass(frozen=True)
 class LocatedProblemFinding(ProblemFinding):
     where: FileLine
+
+    def source_locations(self) -> tuple[FileLine, ...]:
+        return (self.where,)
 
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         self.where.require_exists(roots, revision)
@@ -2349,6 +2360,10 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
             if get_origin(base) is OrderScope
         )
 
+    def source_locations(self) -> tuple[FileLine, ...]:
+        """Triage adds no implementation locations."""
+        return ()
+
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         """Triage has no implementation declarations to validate."""
 
@@ -2405,6 +2420,9 @@ class TriageScope(OrderScope[ReportDelivery]):
 @dataclass(frozen=True)
 class FixScope(OrderScope[CheckedDelivery]):
     shape: FixShape
+
+    def source_locations(self) -> tuple[FileLine, ...]:
+        return (*self.shape.parents, *self.shape.members)
 
     def completion_problems(self, run: OrderRun, request: SourceCompletion) -> dict[str, str]:
         return request.source.evidence_problems(request.evidence, run)
@@ -2490,6 +2508,15 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def source_roots(self, project: CommanderProject) -> SourceRoots:
         return OrderRoots(self.check.directory, project)
+
+    def source_repositories(self) -> tuple[RepositoryName, ...]:
+        """Companions are declared by qualified locations or explicit PR links."""
+        locations = (self.owner, *self.finding.source_locations(), *self.scope.source_locations())
+        return tuple(dict.fromkeys((
+            *(link.repo for link in self.pull_requests),
+            *(repository for location in locations
+              for repository in location.repository.named_repositories()),
+        )))
 
     def require_references(self, project: CommanderProject) -> None:
         roots, revision = self.source_roots(project), self.cited_revision
