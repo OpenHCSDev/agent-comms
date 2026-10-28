@@ -276,11 +276,18 @@ class OwnerReplyConnection(OwnerConnection):
 
     @classmethod
     def held(cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading) -> Self:
-        """A connection to exactly this registered native owner incarnation."""
+        """A connection to exactly this registered native owner incarnation.
+
+        The selected registration must be the held incarnation before its process is
+        asked for; the connection's own capture is then checked again, since the
+        registry may change between the two reads.
+        """
         thread = comms.registry.require(owner.name)
+        if thread.incarnation != owner:
+            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
+        reading.require_native_owner(thread)
         connection = cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
         connection.require_identity(owner)
-        reading.require_native_owner(thread)
         return connection
 
     @classmethod

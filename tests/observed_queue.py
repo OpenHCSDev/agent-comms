@@ -31,6 +31,8 @@ class ObservedQueue:
         return delivered()
 
     async def until(self, accepted: Callable[[Observed], bool]) -> Observed:
-        while not accepted(result := await self.next()):
-            pass
+        """One 30 s bound for the whole match, however many other results arrive first."""
+        async with asyncio.timeout(30):
+            while not accepted(result := await self.next()):
+                pass
         return result

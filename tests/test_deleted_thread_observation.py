@@ -89,12 +89,13 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
         comms.registry.remove('deleted')
         missing = None
         retired = None
-        while missing is None or retired is None:
-            result = await delivered.next()
-            if isinstance(result, ThreadsObserved) and 'deleted' in result.changed:
-                missing = result
-            elif isinstance(result, ViewsRetired):
-                retired = result
+        async with asyncio.timeout(30):
+            while missing is None or retired is None:
+                result = await delivered.next()
+                if isinstance(result, ThreadsObserved) and 'deleted' in result.changed:
+                    missing = result
+                elif isinstance(result, ViewsRetired):
+                    retired = result
         assert missing.activity['deleted'] == DeletedThread('deleted')
         assert isinstance(missing.results['deleted'], ThreadPresented)
         assert missing.results['deleted'].presentation == NoThreadPresentation()
