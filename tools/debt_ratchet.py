@@ -789,9 +789,10 @@ class CheckedRevision(SideCounts):
     @classmethod
     def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
                  side: type[Side]) -> tuple[type[Side], Counter[str]]:
-        return side, ContentCache.memo(
-            partial(cls.checked, repo, ref, head, root, selected, side),
-            cls.__name__, root, cls.inputs(repo, ref, head, root, selected), *selected)
+        """Each comparison runs the checker. A checker that reads installed packages (mypy)
+        depends on more than the committed tree, so its count is never stored by content;
+        the checker's own cache tracks those inputs."""
+        return side, cls.checked(repo, ref, head, root, selected, side)
 
     @classmethod
     def checked(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
@@ -891,6 +892,15 @@ class LintFindings(Advisory, CheckedRevision):
     def command(tree: Path, selected: list[str], side: type[Side]) -> list[str]:
         return ["ruff", "check", "--no-cache", "--output-format", "concise", *selected]
 
+    @classmethod
+    def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
+                 side: type[Side]) -> tuple[type[Side], Counter[str]]:
+        """Ruff reads only the revision's tree and the head's configuration, so its count is
+        stored under them."""
+        return side, ContentCache.memo(
+            partial(cls.checked, repo, ref, head, root, selected, side),
+            cls.__name__, root, cls.inputs(repo, ref, head, root, selected), *selected)
+
 
 class TypeErrors(CheckedRevision):
     """Mypy errors per changed file. Mypy checks the changed files and every module they import,
@@ -949,10 +959,9 @@ class ClientTypeErrors(SideCounts):
 
     @classmethod
     def findings(cls, repo: Path, ref: str, client: StackClient, side: type[Side]) -> tuple[type[Side], Counter[str]]:
-        commit = git(client.checkout, "rev-parse", "HEAD").decode().strip()
-        tree = git(repo, "rev-parse", f"{ref}:src").decode().strip()
-        return side, ContentCache.memo(partial(cls.checked, repo, ref, client, side),
-                                       cls.__name__, client.name, commit, tree)
+        """Mypy resolves the client's other imports from the installed environment, which no
+        content key names, so each comparison checks afresh under mypy's own cache."""
+        return side, cls.checked(repo, ref, client, side)
 
     @classmethod
     def checked(cls, repo: Path, ref: str, client: StackClient, side: type[Side]) -> Counter[str]:

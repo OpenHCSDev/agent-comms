@@ -45,10 +45,12 @@ from debt_ratchet import (
     AnyName,
     BooleanChainTerms,
     BuiltinHandlerTypeSwitch,
+    ClientTypeErrors,
     CodecSubclass,
     FamilyFlattened,
     ForeignAbsenceProbe,
     GodClassExcess,
+    HeadSide,
     LintFindings,
     LongBooleanChain,
     Measure,
@@ -65,6 +67,7 @@ from debt_ratchet import (
     Unformatted,
     compare,
 )
+from module_layers import StackClient
 
 pytestmark = pytest.mark.refactor_guard
 
@@ -823,6 +826,51 @@ def test_both_revisions_are_checked_under_the_head_configuration(repo: Repositor
     assert report["base"][LintFindings.at(f"{repo.root}/kept.py").text] == 1
     for measure in (TypeErrors, LintFindings, Unformatted):
         assert report["delta"][measure.at(f"{repo.root}/kept.py").text] == 0
+
+
+USES_EXTERNAL_VALUE = "import extdep\n\nvalue: int = extdep.VALUE\n"
+
+
+def typed_dependency(directory: Path, annotation: str, value: str) -> Path:
+    """An installed PEP 561 package outside every committed root, found through sys.path."""
+    package = directory / "extdep"
+    package.mkdir(parents=True)
+    (package / "py.typed").write_text("")
+    (package / "__init__.py").write_text(f"VALUE: {annotation} = {value}\n")
+    return directory
+
+
+def source_type_errors(repo: Repository, client: StackClient) -> int:
+    revision = repo.commit({"uses_external.py": USES_EXTERNAL_VALUE})
+    selected = [f"{repo.root}/uses_external.py"]
+    _, counted = TypeErrors.findings(repo.path, revision, revision, repo.root, selected, HeadSide)
+    return counted[selected[0]]
+
+
+def client_type_errors(repo: Repository, client: StackClient) -> int:
+    revision = repo.commit({"__init__.py": ""})
+    _, counted = ClientTypeErrors.findings(repo.path, revision, client, HeadSide)
+    return counted[f"{client.name}/src/uses_external.py"]
+
+
+@pytest.mark.parametrize("type_errors", [source_type_errors, client_type_errors])
+def test_type_counts_follow_the_installed_dependency_not_a_stored_count(
+    repo: Repository, tmp_path: Path, monkeypatch, type_errors
+) -> None:
+    """Mypy reads installed packages no content key names. With committed source, client and
+    configuration unchanged, switching the installed dependency must change the count, under
+    the same count-cache directory and mypy's own cache: hosted #3538 compared a base count
+    stored under a Core-only environment with a head count from the full stack."""
+    accepting = typed_dependency(tmp_path / "accepting", "int", "1")
+    rejecting = typed_dependency(tmp_path / "rejecting", "str", "'one'")
+    (tmp_path / "client").mkdir()
+    checkout = Repository(tmp_path / "client", "src")
+    checkout.commit({"uses_external.py": "import agent_comms\n" + USES_EXTERNAL_VALUE})
+    client = StackClient("probe-client", checkout.path)
+    monkeypatch.setenv("PYTHONPATH", search_path(accepting))
+    assert type_errors(repo, client) == 0
+    monkeypatch.setenv("PYTHONPATH", search_path(rejecting))
+    assert type_errors(repo, client) == 1
 
 
 def test_foreign_probes_and_codec_bases_use_ast_not_text(repo: Repository) -> None:
