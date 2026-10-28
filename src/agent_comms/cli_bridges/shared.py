@@ -1095,14 +1095,20 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         return max((self.binding.start, *(BridgeStart(reference) for reference in latest)),
                    key=lambda point: point.cursor())
 
+    @contextmanager
+    def uncertain_on_contention(self, message_id: MessageId) -> Iterator[None]:
+        """An exhausted store wait inside a confirmation leaves its attempt as stored: uncertain,
+        never replayed, and the transport keeps serving. Every other error propagates."""
+        try:
+            yield
+        except DeferredRead as error:
+            self.log(f'Message {message_id} remains uncertain; not replayed: {error}')
+
     async def finish(self, delivery: HarnessDelivery,
                      change: Callable[[HarnessDelivery], HarnessDelivery]) -> None:
-        try:
+        with self.uncertain_on_contention(delivery.message_id):
             stored = await self.coordinator_write(partial(delivery.apply, change))
             self.log(f'{stored.outcome.declared_name}: {delivery.message_id}')
-        except DeferredRead as error:
-            # Confirmation's exhausted store wait cannot retire the message's transport.
-            self.log(f'Message {delivery.message_id} remains uncertain; not replayed: {error}')
 
     async def prepare_delivery(self) -> None:
         """A transport may prepare its harness after the operation bound its reader."""
@@ -1306,9 +1312,12 @@ class MonitorPart(MonitorFrame, declared_name='part'):
         return self
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
-        targets = []
-        for delivery in await bridge.attempts(self.id):
-            targets.extend(await delivery.monitor.confirm(bridge, delivery, self, record))
+        """The whole confirmation (attempt read, observed parts, mismatch, final outcome) is one
+        contention boundary: a busy coordinator cannot tear down the monitor mid-confirmation."""
+        targets: list[str] = []
+        with bridge.uncertain_on_contention(self.id):
+            for delivery in await bridge.attempts(self.id):
+                targets.extend(await delivery.monitor.confirm(bridge, delivery, self, record))
         return tuple(targets)
 
 

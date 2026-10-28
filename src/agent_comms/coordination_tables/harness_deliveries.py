@@ -37,10 +37,10 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     outcome: Annotated[type[Outcome], Column(index=True)]
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
-    key_batch: ClassVar[int] = 32766 // 3
     unique = (("bridge", "recipient_lookup", "seq"),)
-    indexes = (Index(("recipient_lookup", "seq", "message_id"), unique=False, where=None),)
+    recipient_index: ClassVar[Index] = Index(("recipient_lookup", "seq", "message_id"))
     """The inbox asks per delivered message whether any bridge attempted it for this recipient."""
+    indexes = (recipient_index,)
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
@@ -98,13 +98,17 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     def for_recipients(cls, db: sqlite3.Connection,
                        keys: Sequence[tuple[ThreadLookup, MessageReference]]) -> tuple[Self, ...]:
         """Every bridge's attempt on exactly these (recipient, original) keys, each probed
-        through the recipient/seq/message index; no read walks the attempt history. Keys go
-        in batches that keep three parameters each under SQLite's variable limit."""
+        through the recipient index, whose declared terms name the compared columns; no read
+        walks the attempt history. Distinct keys go in batches the connection's own variable
+        limit admits."""
+        terms = cls.recipient_index.terms
+        batch_size = db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // len(terms)
+        probe = "(" + ",".join("?" for _ in terms) + ")"
         return tuple(sorted(
-            (row for batch in batched(keys, cls.key_batch) for row in cls.select(
+            (row for batch in batched(dict.fromkeys(keys), batch_size) for row in cls.select(
                 db,
-                where=("(recipient_lookup,seq,message_id) IN (VALUES "
-                       + ",".join("(?,?,?)" for _ in batch) + ")"),
+                where=(f"({cls.recipient_index.term_sql(cls)}) IN (VALUES "
+                       + ",".join(probe for _ in batch) + ")"),
                 parameters=tuple(value for lookup, reference in batch
                                  for value in (lookup, reference.seq, reference.message_id)),
             )),
