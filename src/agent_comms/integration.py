@@ -21,7 +21,7 @@ from .field_codec import FieldCodec, WireName
 from .head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, IntegrationSource, PullRequestHead
 from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
-from .repo import Checkout, GitCommandError, Repo
+from .repo import Checkout, DetachedStart, GitCommandError, Repo
 from .systemd_unit import AgentsSlice
 from .repository_name import RepositoryName
 from .test_lease import LeaseStart, TestLease
@@ -146,8 +146,7 @@ class IntegrationCheckout(Checkout):
             raise IntegrationFailed(f"Preserve existing qualification checkout: {path}")
         WorkBranches(repository.checkout).require_commits("origin", commit)
         path.parent.mkdir(parents=True, exist_ok=True)
-        Repo.git(repository.checkout, "worktree", "add", "--detach", str(path), commit, timeout=300)
-        created = cls(path)
+        created = cls.add(repository.checkout, path, DetachedStart(commit))
         created.require_editable()
         return created
 
@@ -170,6 +169,7 @@ class IntegrationCheckout(Checkout):
         Repo.git(self.path, "switch", "--detach", base)
         for head in heads:
             self.include(head)
+        self.prepare()
         return Repo.git(self.path, "rev-parse", "HEAD^{tree}").strip()
 
     def combine(self, base: str, heads: tuple[PullRequestHead, ...]) -> tuple[PullRequestHead, ...]:
