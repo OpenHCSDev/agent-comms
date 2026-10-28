@@ -60,10 +60,16 @@ class ProjectionSource(ProjectionOutputs):
 
     @staticmethod
     def writers_for(table: type[ProducedRow]) -> set[type[ProjectionSource]]:
-        """Reverse the writers' declarations, without discovering unrelated modules."""
+        """Reverse the writers' declarations of the owners registered when it is called,
+        without discovering unrelated modules.
+
+        Whether an owner writes the table is one answer for the whole owner, so it is asked
+        before that owner's writers are traversed: resolving a lazy declaration may register
+        more writers under that owner, and they are then part of the traversal instead of
+        invalidating it."""
         return {
             writer
             for owner, writers in tuple(ProjectionSource._declarations.items())
-            for writer in writers
             if table in owner.writes
+            for writer in writers
         }

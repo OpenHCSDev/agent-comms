@@ -144,6 +144,10 @@ startup = sys.argv[1]
 if startup != "table-first":
     importlib.import_module(startup)
 from agent_comms.messages import CommanderUpdatePosition
+if startup == "table-first":
+    # The cold direct call: nothing has completed the writer family yet.
+    from agent_comms.projection_source import ProjectionSource
+    ProjectionSource.writers_for(CommanderUpdatePosition)
 if startup == "agent_comms.cli_verbs.reconcile_stores":
     from agent_comms.producer_stamp import stamped_digests
     first = stamped_digests()[CommanderUpdatePosition.declared_name]
