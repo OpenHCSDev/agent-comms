@@ -72,17 +72,23 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
         self.insert(db)
         return True
 
+    def settle_claims(self, assignments: AssignmentStore, db: sqlite3.Connection) -> None:
+        """What this attempt means for the recipient's claim on its message: the claim left the
+        native queue, then took the steps this outcome proves. Each phase reads the claim as it
+        stands, so a claim accepted after the attempt ends where one that existed before it
+        would; a claim already settled keeps its state."""
+        for steps in (lambda state: state.harness_handoff(), self.outcome.claim_steps):
+            assignments.settle_harness_inputs(db, self.recipient_lookup, (self.reference,), steps)
+
     def begin(self, assignments: AssignmentStore, db: sqlite3.Connection) -> bool:
         """The claim leaves the native queue in the same write that stores the attempt, so no
         crash lets a later native owner replay it. False when it was already attempted."""
-        assignments.settle_harness_inputs(
-            db, self.recipient_lookup, (self.reference,), lambda state: state.harness_handoff())
+        self.settle_claims(assignments, db)
         return self.first_write(db)
 
     def record(self, assignments: AssignmentStore, db: sqlite3.Connection) -> None:
         """The attempt's outcome and the claim steps it declares commit together."""
-        assignments.settle_harness_inputs(
-            db, self.recipient_lookup, (self.reference,), self.outcome.claim_steps)
+        self.settle_claims(assignments, db)
         self.write(db)
 
     def apply(self, change: Callable[[HarnessDelivery], HarnessDelivery],
