@@ -694,7 +694,7 @@ class ReadResultObserved(ConfirmedDelivery):
             return ()
         return tuple(ClaudeMonitorFrame.decode_line(line) for line in lines)
 
-    async def observed(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
         return replace(self, targets=await bridge.read_export(self))
 
 

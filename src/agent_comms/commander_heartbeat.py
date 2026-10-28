@@ -72,11 +72,10 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
             failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error)
             now = time.time()
             for thread in self.commanders(comms.registry, comms.goals):
-                update = CommanderUpdate.report_failure(
+                for update in CommanderUpdate.report_failure(
                     thread.incarnation, failure,
                     CommanderUpdate.latest(comms, thread.incarnation), now=now,
-                )
-                if update is not None:
+                ):
                     update.send(comms, now, ())
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
@@ -95,25 +94,25 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
             for item in observed:
                 comms.goals.todos.record_merges(item.merged)
                 previous = CommanderUpdate.latest(comms, item.thread.incarnation)
-                known = frozenset(previous.handled) if previous else frozenset()
+                known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
                     comms, item.thread.name,
                     (*(rule for rule in item.rules if RulePing.capture(rule) not in known),
                      *(state for state in item.states
                        if state.attention() and UnitPing.capture(state) not in known)),
                 )
-                update = CommanderUpdate.derive(
+                for update in CommanderUpdate.derive(
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
                     tuple(rule for rule in item.rules if rule not in rejected), previous,
                     now=now,
-                    undisposed=(previous.undisposed(comms, item.thread.name,
-                                                    now - AwaitingCommander.seconds)
-                                if previous else ()),
+                    undisposed=tuple(
+                        ping for packet in previous
+                        for ping in packet.undisposed(comms, item.thread.name,
+                                                      now - AwaitingCommander.seconds)),
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
-                )
-                if update is not None:
+                ):
                     update.send(comms, now, item.hud.brief())
                 completed.append(item.thread.incarnation)
         finally:

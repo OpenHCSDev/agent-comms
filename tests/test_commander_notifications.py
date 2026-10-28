@@ -38,7 +38,6 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
-from agent_comms.transcript_events import FailedCallState, SucceededCallState
 from test_unit_state import recorded_turn
 
 pytest_plugins = ("test_holder_standing_rules",)
@@ -79,7 +78,7 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     notification_bus,
 ):
     comms = notification_bus
-    recorded_turn(comms, (SucceededCallState,) * 10)
+    recorded_turn(comms, (False,) * 10)
     original = (comms.root / 'state-source.jsonl').read_bytes()
     hud = beat(comms, states=state_cards(comms, UnitState))
     ServicePassStore.at(comms.root).heartbeat_passed((hud.commander,), (hud.commander,))
@@ -164,7 +163,7 @@ def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notificati
         def enforce(self, _comms, _commander):
             raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
 
-    recorded_turn(comms, (FailedCallState, FailedCallState))
+    recorded_turn(comms, (True, True))
     states = state_cards(comms, Spinning)
     rules = (RefusedRule("refused", 1.0, "review pending"),
              ServicePassFailing("independent", 1.0, "another source"))
@@ -203,12 +202,12 @@ def test_each_commander_gets_its_own_failure_packet(notification_bus):
     now = time.time()
     for name in ("lead", "worker"):
         commander = comms.registry.require(name).incarnation
-        update = CommanderUpdate.report_failure(commander, failure, None, now=now)
+        update, = CommanderUpdate.report_failure(commander, failure, (), now=now)
         update.send(comms, now, ())
-        latest = CommanderUpdate.latest(comms, commander)
+        latest, = CommanderUpdate.latest(comms, commander)
         assert latest.commander == commander
         assert latest.handled == (RulePing.capture(failure),)
-        assert CommanderUpdate.report_failure(commander, failure, latest, now=now + 1) is None
+        assert CommanderUpdate.report_failure(commander, failure, (latest,), now=now + 1) == ()
 
 
 def test_failure_packet_follows_commander_and_service_rename_aliases(notification_bus):
@@ -333,7 +332,7 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     assert first.body.startswith(CommanderUpdate.header)
     assert all(line in first.body for line in hud.brief())
     assert all(card.unit.name in first.body for card in hud.units)
-    assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == first.task
+    assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == (first.task,)
     beat(comms, (failing,), states=state_cards(comms, UnitState))
     unchanged, = notifications(comms)
     assert unchanged.reference == first.reference
@@ -413,7 +412,7 @@ def test_latest_observation_follows_commander_and_service_rename_aliases(notific
     comms.threads._rename_thread("lead", "renamed-lead")
     comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
     previous = CommanderUpdate.latest(comms, comms.registry.require("renamed-lead").incarnation)
-    assert previous == first.task
+    assert previous == (first.task,)
 
 
 def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification_bus, tmp_path):

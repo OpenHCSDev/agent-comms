@@ -181,8 +181,12 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     role: ClassVar[MessageRole]
     header: ClassVar[str] = "COMMANDER"
 
-    def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
-        return self if self.commander == commander else None
+    def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
+        return (self,) if self.commander == commander else ()
+
+    def changed_from(self, handled: tuple[Ping, ...], not_applied: tuple[str, ...]) -> bool:
+        """A complete read that differs from this packet clears what it no longer holds."""
+        return (self.handled, self.not_applied) != (handled, not_applied)
 
     @abstractmethod
     def lines(self, now: float) -> tuple[str, ...]:
@@ -228,38 +232,37 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
             raise RelationViolationError("Commander observations changed recipient incarnation")
 
     @classmethod
-    def latest(cls, comms: Comms, commander: ThreadIncarnation) -> CommanderUpdate | None:
+    def latest(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
+        """The newest packet addressed to that commander, or none."""
         snapshot = comms.registry.snapshot()
         messages = comms.bus.bus.latest_addressed(
             snapshot.names_for(CommanderService.sender), snapshot.names_for(commander.name),
         )
-        if not messages:
-            return None
-        message, = messages
-        return message.task.commander_update(commander)
+        return tuple(packet for message in messages
+                     for packet in message.task.commander_update(commander))
 
     @classmethod
     def owed(cls, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
         """The newest packet's lines still undisposed past ``cut``."""
-        latest = cls.latest(comms, comms.registry.require(commander).incarnation)
-        return latest.undisposed(comms, commander, cut) if latest else ()
+        return tuple(ping for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
+                     for ping in latest.undisposed(comms, commander, cut))
 
     @classmethod
     def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
         """The newest packet's board, derived at the moment of asking."""
-        latest = cls.latest(comms, comms.registry.require(commander).incarnation)
-        return latest.board(comms, commander) if latest else ()
+        return tuple(entry for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
+                     for entry in latest.board(comms, commander))
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
-               previous: CommanderUpdate | None, *, now: float,
+               previous: tuple[CommanderUpdate, ...], *, now: float,
                undisposed: tuple[Ping, ...] = (),
-               not_applied: tuple[str, ...] = ()) -> CommanderUpdate | None:
+               not_applied: tuple[str, ...] = ()) -> tuple[CommanderUpdate, ...]:
         """New lines wake the commander and unchanged lines are never restated. With nothing new,
         cleared lines are committed by a passive notice so a recurrence is new again; with
         nothing cleared either, nothing is sent."""
-        known = {ping.key: ping for ping in previous.handled} if previous else {}
+        known = {ping.key: ping for packet in previous for ping in packet.handled}
         # Equality ignores the start, so an unchanged observation keeps the start it had.
         began = {ping: ping.since for ping in known.values()}
         handled = tuple(sorted(
@@ -271,29 +274,29 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         ))
         new = tuple(ping for ping in handled if known.get(ping.key) != ping)
         if new:
-            return CommanderDecisions(
+            return (CommanderDecisions(
                 commander, handled, new,
                 tuple(ping for ping in undisposed if ping in handled), not_applied=not_applied,
-            )
-        if previous and (handled != previous.handled or not_applied != previous.not_applied):
-            return CommanderNotice(commander, handled, not_applied=not_applied)
-        return None
+            ),)
+        return tuple(CommanderNotice(commander, handled, not_applied=not_applied)
+                     for packet in previous if packet.changed_from(handled, not_applied))
 
     @classmethod
     def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
-                       previous: CommanderUpdate | None, *, now: float) -> CommanderUpdate | None:
+                       previous: tuple[CommanderUpdate, ...], *,
+                       now: float) -> tuple[CommanderUpdate, ...]:
         """A failed pass read no board, so it clears nothing: it adds only its own retained
         occurrence, once. Every handled line keeps its object and age for the next complete
         read to derive from."""
         ping = RulePing.capture(failure)
-        handled = previous.handled if previous else ()
+        handled = tuple(line for packet in previous for line in packet.handled)
         if ping in handled:
-            return None
+            return ()
         ping = replace(ping, since=ping.since.continued_from(now))
-        return CommanderDecisions(
+        return (CommanderDecisions(
             commander, (*handled, ping), (ping,), (),
-            not_applied=previous.not_applied if previous else (),
-        )
+            not_applied=tuple(line for packet in previous for line in packet.not_applied),
+        ),)
 
     def send(self, comms: Comms, now: float, brief: tuple[str, ...]) -> Message:
         from agent_comms.commander_heartbeat import CommanderHeartbeat

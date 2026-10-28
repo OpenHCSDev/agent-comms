@@ -1251,6 +1251,10 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
 
     output_type: ClassVar[type[ThreadOutput]] = ThreadOutput
 
+    async def confirm_delivery(self, update: ConfirmedDelivery) -> RuntimeUpdate:
+        """A transcript this bridge did not deliver into confirms nothing."""
+        return update
+
     async def publish_transcript(self) -> None:
         comms = self.comms
         output = self.output_type.for_comms(
@@ -1335,8 +1339,8 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
 
     @classmethod
     def naming(cls, directory: Path, reference: MessageReference) -> Self:
-        return cls(reference=reference,
-                   path=str(directory / f'{reference.seq}-{reference.message_id}.jsonl'))
+        return cls.model_validate(dict(
+            reference=reference, path=str(directory / f'{reference.seq}-{reference.message_id}.jsonl')))
 
     @classmethod
     def exported_at(cls, directory: Path, path: str) -> tuple[Self, ...]:
@@ -1477,13 +1481,20 @@ class ConfirmedDelivery(RuntimeUpdate):
         """Keep confirmed reply routes in transcript order, without a second input row."""
         output.delivered_targets(self.targets)
 
+    async def observed(self, bridge: TranscriptBridge) -> RuntimeUpdate:
+        return await bridge.confirm_delivery(self)
+
+    @abstractmethod
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
+        """This observation with the reply targets its delivery confirms through that bridge."""
+
 
 @dataclass(frozen=True)
 class MonitorObservation(ConfirmedDelivery):
     frame: MonitorFrame
     record: ObservedMonitor
 
-    async def observed(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
         return replace(self, targets=await self.frame.confirm(bridge, self.record))
 
 
@@ -1584,6 +1595,9 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     def exports(self) -> Path:
         """Where this session's messages too large for one event are read whole."""
         return self.options.state.absolute() / 'messages'
+
+    async def confirm_delivery(self, update: ConfirmedDelivery) -> RuntimeUpdate:
+        return await update.confirmed_by(self)
 
     async def read_export(self, read: ReadResultObserved) -> tuple[str, ...]:
         """A visible Read of this session's own export confirms the parts it shows, through the

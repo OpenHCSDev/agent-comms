@@ -533,7 +533,15 @@ class ToolEndTranscript(ToolTranscript):
 class CallState(DeclaredFamily, affix="CallState"):
     """Where one tool call stands in its unit's records."""
 
-    failed: ClassVar[bool] = False
+    @classmethod
+    def repeats_failure(cls, current: OrderCall, previous: OrderCall) -> bool:
+        """Only a failure can repeat one: a call still running or that succeeded repeats nothing."""
+        return False
+
+    @classmethod
+    def same_failed_digest(cls, current: str, previous: str) -> bool:
+        """The previous call, asked by a failed one: only a failure is the same failure."""
+        return False
 
 
 class RunningCallState(CallState):
@@ -545,7 +553,13 @@ class SucceededCallState(CallState):
 
 
 class FailedCallState(CallState):
-    failed = True
+    @classmethod
+    def repeats_failure(cls, current: OrderCall, previous: OrderCall) -> bool:
+        return previous.state.same_failed_digest(current.digest, previous.digest)
+
+    @classmethod
+    def same_failed_digest(cls, current: str, previous: str) -> bool:
+        return current == previous
 
 
 @dataclass(frozen=True)
@@ -554,6 +568,10 @@ class OrderCall:
     tool_name: str
     digest: str
     state: type[CallState]
+
+    def repeats_failure(self, previous: OrderCall) -> bool:
+        """This call failed the same way the previous one did."""
+        return self.state.repeats_failure(self, previous)
 
 
 @dataclass(frozen=True)

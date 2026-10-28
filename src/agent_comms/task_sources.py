@@ -225,9 +225,9 @@ class TaskAttachment(
     def require_annotation_grant(self):
         raise RelationViolationError("Original wire message has no human disclosure grant")
 
-    def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
-        """The commander observations this attachment carries for that commander."""
-        return None
+    def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
+        """The commander observations this attachment carries for that commander: none."""
+        return ()
 
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """How a harness bridge hands the message carrying this attachment to its session."""
