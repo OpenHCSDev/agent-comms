@@ -210,7 +210,8 @@ jobs:
           python -m pip install packaging
           python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
           uv lock --project stack --upgrade
-          UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv" uv sync --project stack --locked --extra dev
+          UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv" uv sync --project stack --locked
+          uv pip install --python "$GITHUB_WORKSPACE/.venv/bin/python" -e '.[dev]'
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       # Saved by debt-ratchet-cache.yml on main; entries are keyed by content, so any

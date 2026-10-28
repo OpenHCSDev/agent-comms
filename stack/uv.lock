@@ -63,19 +63,12 @@ dependencies = [
     { name = "textual", extra = ["syntax"] },
 ]
 
-[package.optional-dependencies]
-dev = [
-    { name = "agent-comms" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "agent-comms", editable = "../" },
-    { name = "agent-comms", extras = ["dev"], marker = "extra == 'dev'", editable = "../" },
     { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?branch=main" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?branch=main" },
 ]
-provides-extras = ["dev"]
 
 [[package]]
 name = "aiohappyeyeballs"

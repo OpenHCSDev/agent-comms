@@ -9,9 +9,6 @@ dependencies = [
     "textual[syntax]",
 ]
 
-[project.optional-dependencies]
-dev = ["agent-comms[dev]"]
-
 [tool.uv]
 package = false
 # This stack owns source selection, including Toad's transitive requirements.
