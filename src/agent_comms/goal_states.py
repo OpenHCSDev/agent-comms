@@ -158,7 +158,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
             raise ValueError(self.source.instruction())
 
 
-class BlockedState(GoalState, FromOpenGoal):
+class BlockedState(GoalState, FromOpenGoal, declared_name=None):
     @property
     def reason(self) -> str:
         return "reason unavailable"
