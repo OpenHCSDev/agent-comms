@@ -32,6 +32,7 @@ from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.wake_policy import FullWake
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
@@ -91,6 +92,13 @@ def test_harness_consumption_survives_human_display(archived_notification):
     _old, live, _source, _messages, _root_id = archived_notification
     human = live.registry.require("reader")
     assert human.role is UserThreadRole
+    # A Claude harness receives through a CLI bridge, so this case's agent is an external thread;
+    # the UI then reads its dialogue through ThreadViewRead.external, not a native transcript.
+    native = live.registry.require("agent")
+    live.registry.register(replace(native, execution=ExternalThreadExecution))
+    agent = live.registry.require("agent")
+    assert agent.execution is ExternalThreadExecution and agent.role is AgentThreadRole
+    assert agent.incarnation == native.incarnation
     # The human's own message to the agent is what the UI's human/agent dialogue page shows.
     shown = live.messaging.send_user_message(
         CommandTarget.named("agent"), "consumed, then displayed to the human", worktree=human.worktree)
