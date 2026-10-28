@@ -27,7 +27,7 @@ from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import (
     AnsweredSource, BusSchema, CommanderUpdatePosition, MessageIdentitySource,
 )
-from agent_comms.task_attachments.commander_pings import CommanderNotice
+from agent_comms.task_attachments.commander_pings import CommanderNotice, CommanderUpdate
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.messages import (
     BusProjectionTables,
@@ -137,6 +137,55 @@ def edit_inside(source: Path, owner: type, member: str | None = None) -> None:
         inserted = "pass  # changed producer implementation\n"
     lines.insert(first.lineno - 1, " " * first.col_offset + inserted)
     path.write_text("".join(lines))
+
+
+FIRST_POSITION_DIGEST = """
+import importlib, inspect, json, sys
+startup = sys.argv[1]
+if startup != "table-first":
+    importlib.import_module(startup)
+from agent_comms.bus_tables import CommanderUpdatePosition
+if startup == "agent_comms.cli_verbs.reconcile_stores":
+    from agent_comms.producer_stamp import stamped_digests
+    first = stamped_digests()[CommanderUpdatePosition.declared_name]
+else:
+    first = CommanderUpdatePosition.producer_digest()
+from agent_comms.messages import BusRecord
+from agent_comms.projection_source import ProjectionSource
+writers = ProjectionSource.writers_for(CommanderUpdatePosition)
+print(json.dumps(dict(
+    first=first, source=inspect.getfile(CommanderUpdatePosition),
+    kinds=sorted(kind.__name__ for kind in BusRecord.members_with(BusRecord) if kind in writers),
+)))
+"""
+STARTUPS = (
+    "table-first", "agent_comms.task_attachments.commander_pings", "agent_comms.worker",
+    "agent_comms.cli_verbs.reconcile_stores",
+)
+
+
+def first_position_digest(source: Path, startup: str) -> dict:
+    """The FIRST digest a fresh process computes for the commander position, from one startup."""
+    return json.loads(subprocess.run(
+        (sys.executable, "-P", "-c", FIRST_POSITION_DIGEST, startup),
+        check=True, capture_output=True, text=True, timeout=120,
+        env={**os.environ, "PYTHONPATH": str(source.parent)},
+    ).stdout)
+
+
+def test_the_first_commander_position_digest_does_not_depend_on_import_order(
+    projection_source: Path,
+) -> None:
+    """A table read before any task module is imported still commits to the task that
+    produces it; every startup path stamps one digest and one writer family."""
+    firsts = {startup: first_position_digest(projection_source, startup) for startup in STARTUPS}
+    assert all(Path(first["source"]).is_relative_to(projection_source) for first in firsts.values())
+    assert len({first["first"] for first in firsts.values()}) == 1
+    assert {tuple(first["kinds"]) for first in firsts.values()} == {
+        ("ClaimRecord", "KeyedPrivateRecord", "PrivateRecord", "PublicRecord")}
+    edit_inside(projection_source, CommanderUpdate, "projections")
+    for startup in STARTUPS[:2]:
+        assert first_position_digest(projection_source, startup)["first"] != firsts[startup]["first"]
 
 
 @pytest.mark.parametrize("owner", (TypedTable, TimestampText))
@@ -586,7 +635,7 @@ def commander_packet(bus, commander, body):
         task=CommanderNotice(commander, ()))))
 
 
-def test_commander_packet_positions_append_with_their_message_and_rebuild_from_it(bus):
+def test_commander_packet_positions_append_with_their_message_and_rebuild_from_it(bus, tmp_path):
     """Each typed packet's position is written in its own append; a taskless message from the
     same sender writes none, and only that table rebuilds from the original records."""
     lead, other = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation("other", 2.0)
@@ -622,22 +671,35 @@ def test_commander_packet_positions_append_with_their_message_and_rebuild_from_i
     Bus.install(bus.path)
     assert positions() == appended
     assert tuple(bus.lookup(record.seq) for record in (first, raw, theirs)) == (first, raw, theirs)
+    # A new bus installed from this history indexes the same packets from their copies.
+    copied = Bus.install(Bus.path_in(tmp_path / "history"), history=(first, raw, theirs))
+    with copied.observing() as db:
+        assert CommanderUpdatePosition.select(db, order_by=("seq",)) == appended
+        assert CommanderUpdatePosition.latest(db, lead.lookup) == (first.history_record,)
+        assert CommanderUpdatePosition.latest(db, other.lookup) == (theirs.history_record,)
+    for original in (first, raw, theirs):
+        kept = copied.lookup(original.seq)
+        assert (kept.reference, kept.body, kept.task) == (original.reference, original.body, original.task)
 
 
-def test_a_failed_append_leaves_no_commander_position(tmp_path, bus):
-    failure = RuntimeError("Broken publication implementation")
+def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, bus):
+    """The position is written inside the packet's own transaction; a real SQLite refusal
+    after it takes the header, task and position back together."""
     lead = RecordedThreadIncarnation("lead", 1.0)
+    written = []
 
     def build(seq, db):
         record_from(PrivateRecord, Message(
             "commander-heartbeat", "lead", "not committed", InfoKind, seq=seq,
             task=CommanderNotice(lead, ())),
         ).append_to(db, seq)
-        raise failure
+        written.append((seq, CommanderUpdatePosition.select(db)))
+        BusRow.require(db, seq=seq).insert(db)
 
-    with pytest.raises(RuntimeError) as failed:
+    with pytest.raises(sqlite3.IntegrityError):
         HumanOrigin("author", 1, Checkout(tmp_path)).append(bus, build)
-    assert failed.value is failure
+    (seq, positions), = written
+    assert positions == [CommanderUpdatePosition(seq, lead.lookup)]
     with closing(sqlite3.connect(bus.path)) as db:
         assert CommanderUpdatePosition.count(db) == 0
         assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
