@@ -1163,12 +1163,61 @@ def test_an_absence_moved_with_its_class_to_another_module_is_not_written(repo):
     base = repo.commit({"attempts.py": holder, "executions.py": "VALUE = 1\n"})
     moved = repo.commit({"attempts.py": "VALUE = 2\n", "executions.py": holder})
     status, report = repo.compare(base, moved, NoneAbsence)
+    assert status == 0
     assert report["introduced"][NoneAbsence.at(f"{repo.root}/executions.py").text] == []
     deleted = repo.commit({"attempts.py": holder, "executions.py": None})
     moved_out = repo.commit({"attempts.py": None, "owners.py": holder + "\n\n" + other})
     status, report = repo.compare(deleted, moved_out, NoneAbsence)
     assert status == 1
     assert report["introduced"][NoneAbsence.at(f"{repo.root}/owners.py").text] == [8]
+
+
+EXTRACTED_FROM = (
+    "class Request:\n    thread: str\n    before: int | None = None\n    archive: str | None = None\n"
+    "\n\nclass Other:\n    name: str\n"
+)
+HOLDER = "from .pages import Page\n\n\nclass Request:\n    thread: str\n    operation: Page\n"
+OTHER = "\n\nclass Other:\n    name: str\n"
+PAGE = (
+    "from typing import Annotated\n\n\nclass Page:\n"
+    "    before: Annotated[int | None, \"Read before this cursor\"] = None\n"
+    "    archive: str | None = None\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("holder", "pages", "written"),
+    [
+        (HOLDER + OTHER, PAGE, 0),
+        (HOLDER.replace("    operation", "    before: int | None = None\n    operation") + OTHER, PAGE, 1),
+        (HOLDER.replace("operation: Page", "operation: object") + OTHER, PAGE, 2),
+        (HOLDER + OTHER + "    page: Page\n", PAGE, 2),
+        (HOLDER + "\n\nPage = dict\n" + OTHER, PAGE, 2),
+        (HOLDER.replace(".pages", ".elsewhere") + OTHER, PAGE, 2),
+        (HOLDER + OTHER, PAGE.replace("before:", "earlier:"), 1),
+        (HOLDER + OTHER, PAGE.replace("int | None", "float | None"), 1),
+        (HOLDER + OTHER, PAGE.replace("archive: str | None = None", "archive: str | None = ''"), 1),
+        (HOLDER + OTHER, PAGE + "    limit: int | None = None\n", 1),
+        (HOLDER + OTHER, PAGE + "\n    def empty(self):\n        return self.before is None\n", 1),
+        (HOLDER.replace("import Page", "import Copy, Page").replace(
+            "operation: Page", "operation: Page\n    copy: Copy") + OTHER,
+         PAGE + "\n\nclass Copy:\n    before: int | None = None\n", 3),
+    ],
+    ids=["extracted", "retained", "unheld", "second_owner", "shadowed", "unresolved", "renamed",
+         "retyped", "redefaulted", "extra_field", "method", "copied_twice"],
+)
+def test_fields_extracted_into_the_one_new_held_class_are_moved_not_written(repo, holder, pages, written):
+    """An old class that now holds one new class in a typed field carries each field it lost
+    into that class unchanged; anything the proof does not cover is still written."""
+    base = repo.commit({"holder.py": EXTRACTED_FROM, "pages.py": "VALUE = 1\n"})
+    head = repo.commit({"holder.py": holder, "pages.py": pages})
+    status, report = repo.compare(base, head, NoneAbsence)
+    source, destination = (NoneAbsence.at(f"{repo.root}/{name}").text for name in ("holder.py", "pages.py"))
+    assert status == int(written > 0)
+    assert len(report["introduced"][destination]) == written
+    assert report["introduced"][source] == []
+    assert report["base"][source] == 2 and report["head"][destination] >= 2
+    assert report["delta"][destination] == report["head"][destination]
 
 
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):

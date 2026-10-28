@@ -182,8 +182,13 @@ class Measure(DeclaredFamily, affix="Measure"):
         return FileCount(cls, path)
 
     @classmethod
-    def blocks(cls, delta: Counts) -> bool:
+    def grown(cls, delta: Counts) -> bool:
+        """Whether any of this measure's counts grew."""
         return any(value > 0 for key, value in delta.items() if cls.owns(key))
+
+    @classmethod
+    def blocks(cls, delta: Counts) -> bool:
+        return cls.grown(delta)
 
     @classmethod
     def grew(cls, key: MeasureCount, grown: int) -> str:
@@ -1077,6 +1082,151 @@ class ScopeNames(ast.NodeVisitor):
         self.visit_named(node)
 
 
+type SitePlace = tuple[str, int, int, int, int]
+
+
+@dataclass(frozen=True)
+class DeclaredClass:
+    """One top-level class of one changed module at one revision, read for its fields."""
+
+    path: str
+    tree: ast.Module
+    node: ast.ClassDef
+
+    @classmethod
+    def top(cls, path: str, tree: ast.Module) -> dict[str, DeclaredClass]:
+        """The module's top-level classes; a name declared twice declares neither."""
+        named = Counter(node.name for node in tree.body if isinstance(node, ast.ClassDef))
+        return {node.name: cls(path, tree, node) for node in tree.body
+                if isinstance(node, ast.ClassDef) and named[node.name] == 1}
+
+    @cached_property
+    def fields(self) -> dict[str, ast.AnnAssign]:
+        """The class body's annotated names; a name annotated twice is no field of it."""
+        written = [statement for statement in self.node.body
+                   if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)]
+        named = Counter(typing.cast(ast.Name, statement.target).id for statement in written)
+        return {name: statement for statement in written
+                if named[name := typing.cast(ast.Name, statement.target).id] == 1}
+
+    def declared(self, field: str) -> tuple[str, str]:
+        """The field's type without typing.Annotated metadata, and its default, structurally."""
+        statement = self.fields[field]
+        annotated = DecoratorBinding.named("typing", "Annotated", self.tree, self.path)
+        match statement.annotation:
+            case ast.Subscript(value=value, slice=ast.Tuple(elts=[declared, *_])) if annotated.marks(value):
+                annotation: ast.expr = declared
+            case annotation:
+                pass
+        return ast.dump(annotation), ast.dump(statement.value) if statement.value else ""
+
+    def binds(self, name: str) -> bool:
+        """Whether the class body still binds ``name`` in any form."""
+        for statement in self.node.body:
+            match statement:
+                case ast.AnnAssign(target=ast.Name(id=bound)) | ast.FunctionDef(name=bound) | (
+                        ast.AsyncFunctionDef(name=bound)) | ast.ClassDef(name=bound) if bound == name:
+                    return True
+                case ast.Assign(targets=targets) if any(
+                        isinstance(target, ast.Name) and target.id == name for target in targets):
+                    return True
+        return False
+
+    def holding(self, held: DeclaredClass, base: DeclaredClass) -> tuple[str, ...]:
+        """The fields this class newly declares whose type is ``held``."""
+        binding = DecoratorBinding.named(
+            ".".join(DecoratorBinding.module_of(held.path)), held.node.name, self.tree, self.path)
+        return tuple(name for name, statement in self.fields.items()
+                     if name not in base.fields and binding.marks(statement.annotation)
+                     and self.bound_once(ast.unparse(statement.annotation).split(".")[0]))
+
+    def bound_once(self, name: str) -> bool:
+        """The module binds ``name`` once and imports nothing by star, so no other binding
+        can shadow it."""
+        bindings = 0
+        for node in ast.walk(self.tree):
+            match node:
+                case ast.alias(name="*"):
+                    return False
+                case ast.alias(name=imported, asname=alias):
+                    bindings += (alias or imported.split(".")[0]) == name
+                case ast.ClassDef(name=declared) | ast.FunctionDef(name=declared) | ast.AsyncFunctionDef(
+                        name=declared):
+                    bindings += declared == name
+                case ast.Name(id=declared, ctx=ast.Store()):
+                    bindings += declared == name
+        return bindings == 1
+
+
+class FieldExtraction:
+    """Fields a class gave up to the one new class it now holds in a typed field.
+
+    The held field's annotation is the provenance edge: an old class present at both
+    revisions newly declares one field typed as one class absent from the base, and no other
+    old class holds that class. Each field the old class lost, declared once in the new class
+    under the same name with the same type (typing.Annotated metadata aside) and the same
+    default, carries its occurrences there. Only occurrences inside that one proved field
+    declaration are credited, each spending one occurrence that left the old class, so a
+    retained field, an extra field, a method or a second copy is still written.
+    """
+
+    @staticmethod
+    def place(path: str, node: ast.AST) -> SitePlace:
+        return (path, node.lineno, node.col_offset,
+                typing.cast(int, node.end_lineno), typing.cast(int, node.end_col_offset))
+
+    @classmethod
+    def credit(cls, measure: type[CleanChangedLines], sources: list[ChangedSource],
+               left: list[ChangedSource], departed: Counter[tuple[str, str]]) -> Counter[SitePlace]:
+        """Each proved destination occurrence's credit; ``departed`` spends what it pays."""
+        existing = {name for source in [*sources, *left] for name in DeclaredClass.top(
+            source.path, source.base_tree)}
+        new = [held for source in sources
+               for name, held in DeclaredClass.top(source.path, source.tree).items()
+               if name not in existing]
+        edges = []
+        for source in sources:
+            before = DeclaredClass.top(source.path, source.base_tree)
+            for name, owner in DeclaredClass.top(source.path, source.tree).items():
+                if name in before:
+                    for held in new:
+                        edges.extend((before[name], owner, held) for _ in owner.holding(held, before[name]))
+        owners = Counter((base.path, base.node.name) for base, _, _ in edges)
+        holders = Counter((held.path, held.node.name) for _, _, held in edges)
+        credited: Counter[SitePlace] = Counter()
+        for base, owner, held in edges:
+            if owners[base.path, base.node.name] == holders[held.path, held.node.name] == 1:
+                for field in sorted(base.fields):
+                    if (not owner.binds(field) and field in held.fields
+                            and base.declared(field) == held.declared(field)):
+                        cls.transfer(measure, base, held, field, departed, credited)
+        return credited
+
+    @staticmethod
+    def transfer(measure: type[CleanChangedLines], base: DeclaredClass, held: DeclaredClass,
+                 field: str, departed: Counter[tuple[str, str]], credited: Counter[SitePlace]) -> None:
+        """One field's occurrences, paid one for one by those that left the old declaration."""
+        def occurrences(declared: DeclaredClass) -> Iterator[tuple[ast.AST, str, int]]:
+            inside = {id(node) for node in ast.walk(declared.fields[field])}
+            scopes = measure.scopes(declared.tree)
+            for node in measure.sites(declared.tree, declared.path):
+                if id(node) in inside and (count := measure.occurrences(node)):
+                    yield node, scopes[node], count
+
+        scope = f".{base.node.name}"
+        gave: Counter[str] = Counter()
+        for node, within, count in occurrences(base):
+            if within == scope:
+                gave[ast.unparse(node)] += count
+        for text in gave:
+            gave[text] = min(gave[text], departed[scope, text])
+        for node, _, count in occurrences(held):
+            paid = min(count, gave[ast.unparse(node)])
+            gave[ast.unparse(node)] -= paid
+            departed[scope, ast.unparse(node)] -= paid
+            credited[FieldExtraction.place(held.path, node)] += paid
+
+
 class CleanChangedLines(OccurrenceMeasure):
     """No occurrence may be written, even when another occurrence is deleted.
 
@@ -1103,8 +1253,9 @@ class CleanChangedLines(OccurrenceMeasure):
                 gone = measure.identities(source.base_tree, source.path)
                 gone.subtract(measure.identities(source.tree, source.path))
                 departed.update(+gone)
+            extracted = FieldExtraction.credit(measure, sources, left, departed)
             for source in sources:
-                found[measure.at(source.path)] = measure.changed_sites(source, departed)
+                found[measure.at(source.path)] = measure.changed_sites(source, departed, extracted)
         return found
 
     @staticmethod
@@ -1125,9 +1276,19 @@ class CleanChangedLines(OccurrenceMeasure):
         return found
 
     @classmethod
-    def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]]) -> list[int]:
+    def blocks(cls, delta: Counts) -> bool:
+        """Never on raw growth: Comparison.failed fails every introduced occurrence on its own,
+        and a moved or extracted occurrence grows its destination's raw count while writing
+        nothing. A new occurrence still fails through ``introduced`` even when an unrelated
+        deletion offsets the totals."""
+        return False
+
+    @classmethod
+    def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]],
+                      extracted: Counter[SitePlace]) -> list[int]:
         """The first changed line of each occurrence written there that the base lacks and no
-        changed module gave up; a moved occurrence spends the departure it came from."""
+        changed module gave up; a moved occurrence spends the departure it came from, and an
+        occurrence in a proved field extraction spends its credit."""
         scopes = cls.scopes(source.tree)
         unwritten = cls.identities(source.tree, source.path)
         unwritten.subtract(cls.identities(source.base_tree, source.path))
@@ -1140,7 +1301,10 @@ class CleanChangedLines(OccurrenceMeasure):
                 unwritten[identity] -= arrived
                 moved = min(arrived, departed[identity])
                 departed[identity] -= moved
-                sites.extend([min(touched)] * (arrived - moved))
+                place = FieldExtraction.place(source.path, node)
+                carried = min(arrived - moved, extracted[place])
+                extracted[place] -= carried
+                sites.extend([min(touched)] * (arrived - moved - carried))
         return sites
 
 
@@ -1241,16 +1405,18 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return sorted([*super().lines(source, filename), *cls.prose_lines(module)])
 
     @classmethod
-    def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]]) -> list[int]:
+    def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]],
+                      extracted: Counter[SitePlace]) -> list[int]:
         prose = cls.prose_lines(source) & source.lines
-        return [*super().changed_sites(source, departed), *prose]
+        return [*super().changed_sites(source, departed, extracted), *prose]
 
 
 @dataclass(frozen=True)
 class DecoratorBinding:
-    """The spellings one module binds to a declared decorator, read from its imports alone.
+    """The spellings one module binds to a declared name (a decorator, a field factory, a
+    class), read from its imports alone.
 
-    A decorator of the same name declared or imported from anywhere else marks nothing.
+    A name of the same spelling declared or imported from anywhere else marks nothing.
     """
 
     names: frozenset[str]
@@ -1258,9 +1424,18 @@ class DecoratorBinding:
     @classmethod
     def of(cls, decorator: typing.Callable[..., object], tree: ast.AST,
            filename: str) -> DecoratorBinding:
-        owner, name = decorator.__module__, decorator.__name__
+        return cls.named(decorator.__module__, decorator.__name__, tree, filename)
+
+    @staticmethod
+    def module_of(filename: str) -> tuple[str, ...]:
+        """The dotted module a source path imports as; ``src`` is the import root."""
         parts = Path(filename).with_suffix("").parts
-        module = parts[1:] if parts[:1] == ("src",) else parts
+        return parts[1:] if parts[:1] == ("src",) else parts
+
+    @classmethod
+    def named(cls, owner: str, name: str, tree: ast.AST, filename: str) -> DecoratorBinding:
+        """The spellings binding ``owner.name`` in the module at ``filename``."""
+        module = cls.module_of(filename)
         package = module[:-1]
         names = {name} if ".".join(module) == owner else set()
         for node in ast.walk(tree):
@@ -2880,7 +3055,7 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
                             changed.paired(after), introduced, {})
     # Only a grown measure is read for its sites, so a clean change pays for none.
     grown = [measure for measure in LocatedSource.members_with(LocatedSource)
-             if measure in measured and measure.blocks(comparison.delta)]
+             if measure in measured and measure.grown(comparison.delta)]
     if not grown:
         return comparison
     sources = GitMeasure.sources(repo, head, paths & python_paths(repo, head, root))
