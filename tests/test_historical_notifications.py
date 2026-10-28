@@ -87,11 +87,14 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
 
 def test_harness_consumption_survives_human_display(archived_notification):
     _old, live, _source, _messages, _root_id = archived_notification
-    shown = publish_initial(live, "sender", "reader", "consumed, then displayed")
-    lookup = live.registry.snapshot().threads["reader"].incarnation.require_recorded().lookup
+    # The harness recipient is the agent the send froze into its audience, never the human reader.
+    shown = publish_initial(live, "sender", "agent", "consumed, then displayed")
+    recipient, = live.bus.bus.delivery(shown.seq).recipients
+    assert recipient.canonical_thread == "agent"
     with Coordination(str(CoordinationStore.path_in(live.root))) as store, \
             store.session.writing() as db:
-        attempt = HarnessDelivery(ClaudeBridge, lookup, shown.message_id, shown.seq, DeliveredOutcome)
+        attempt = HarnessDelivery(ClaudeBridge, recipient.recipient_lookup, shown.message_id, shown.seq,
+                                  DeliveredOutcome)
         assert attempt.begin(store.assignments, db)
         attempt.record(store.assignments, db)
 
@@ -102,10 +105,10 @@ def test_harness_consumption_survives_human_display(archived_notification):
 
     consumed = notification()
     assert consumed.label == "Consumed" and consumed.state.consumed and not consumed.displayed_to
-    live.bus.mark_read_through("reader", shown.seq)
+    live.bus.mark_read_through("agent", shown.seq)
     displayed = notification()
     assert displayed.state == consumed.state
-    assert displayed.displayed_to == (live.registry.snapshot().threads["reader"].incarnation,)
+    assert displayed.displayed_to == (live.registry.snapshot().threads["agent"].incarnation,)
     assert MessageNotification.summary((displayed,)).endswith("Consumed 1/1 · Read 1/1")
 
 
