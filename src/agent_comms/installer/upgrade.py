@@ -960,7 +960,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             installed.require_uv()
         staged = TargetStack(tree.path, commands, runtime=runtime,
                              program=TargetProgram(tree.steps_package))
-        if runtime.interpreter != LaunchRuntime.running().interpreter:
+        if not runtime.runs_this_process:
             raise UpgradeRefused("The prepared install must run in its built target runtime")
         with StartingReportPublicationPhase().running(commands.clock):
             driver = member.driver(mode, report, root, installed, staged, target)
