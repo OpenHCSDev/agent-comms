@@ -4,12 +4,15 @@ tree with submodules needs no hand-forced removal."""
 import shutil
 import subprocess
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agent_comms.bus import Bus
 from agent_comms.change_report import FileLine
+from agent_comms.cli_commands import OrderCheckoutGrant
+from agent_comms.errors import TodoConflict
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
@@ -19,10 +22,11 @@ from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, LaunchCheckout, Repo, ScratchCheckout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_creation import RecordedCreationTime
+from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 from agent_comms.threads import Thread
 from agent_comms.todos import PendingProblemOrder, WithdrawTodo
-from cli_command import core
+from cli_command import core, core_process
 from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
@@ -59,9 +63,9 @@ def repository(tmp_path, monkeypatch):
     return main
 
 
-@pytest.fixture
-def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
-    """A held order and its real pinned-submodule repository, with a local origin."""
+@pytest.fixture(params=(NativeThreadExecution, ExternalThreadExecution), ids=("native", "external"))
+def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime, request):
+    """Both registered execution kinds use the explicit caller, without native launch state."""
     prepare_checkout_goal_id = GoalId.mint()
     (repository / "owner.py").write_text(SourceRepository.main_source)
     git(repository, "commit", "-qam", "Declare the order's source owner")
@@ -81,10 +85,10 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
     lead = comms.registry.declare(Thread(
         "lead", frozenset(), Checkout(tmp_path / "lead"), execution=ExternalThreadExecution))
     worker = comms.registry.declare(Thread(
-        "worker", frozenset(), Checkout(repository), execution=ExternalThreadExecution))
+        "worker", frozenset(), Checkout(repository), execution=request.param))
     comms.registry.set_commander_project(RegisteredCommanderProject(
         lead.incarnation, (Repo(checkout=repository, github=identity),)))
-    request = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
+    request_id = comms.goals.todos.add_request(lead.incarnation, "Prepare the pinned checkout").id
     now = time.time()
     order = PendingProblemOrder(
         owner=FileLine("owner.py", 1), scope=FIX_SCOPE,
@@ -95,10 +99,10 @@ def checkout_command_bus(repository, tmp_path, monkeypatch, installed_runtime):
         first_call_deadline=RecordedEventTime(now + 120))
     comms.goals.todos.create(
         "P1", identity, "Prepare the pinned checkout", creator=lead, owner=worker,
-        assigner=lead.incarnation, generation=prepare_checkout_goal_id, request=request,
+        assigner=lead.incarnation, generation=prepare_checkout_goal_id, request=request_id,
         review_at=RecordedEventTime(now + 3600), order=order)
-    monkeypatch.setenv("AGENT_COMMS_THREAD", worker.name)
-    monkeypatch.setenv("PI_WORKTREE", str(worker.worktree))
+    monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
+    monkeypatch.delenv("PI_WORKTREE", raising=False)
     return comms
 
 
@@ -140,7 +144,7 @@ def test_empty_project_does_not_become_the_callers_checkout(tmp_path, monkeypatc
 
 def test_checkout_add_prepares_the_order_repository_submodule(checkout_command_bus):
     comms = checkout_command_bus
-    result = core("--root", str(comms.root), "checkout", "add", "P1")
+    result = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
     assert result.returncode == 0, result.stderr
     rule = comms.registry.storage_rule
     path = rule.order_checkout(rule.initial_roots("worker"), "P1")
@@ -149,12 +153,12 @@ def test_checkout_add_prepares_the_order_repository_submodule(checkout_command_b
 
 def test_checkout_add_repairs_an_existing_checkout_with_a_missing_store(checkout_command_bus):
     comms = checkout_command_bus
-    first = core("--root", str(comms.root), "checkout", "add", "P1")
+    first = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
     assert first.returncode == 0, first.stderr
     rule = comms.registry.storage_rule
     checkout = Checkout(rule.order_checkout(rule.initial_roots("worker"), "P1"))
     pointer_without_store(checkout)
-    repaired = core("--root", str(comms.root), "checkout", "add", "P1")
+    repaired = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
     assert repaired.returncode == 0, repaired.stderr
     (module,) = checkout.submodules()
     assert module.usable()
@@ -165,7 +169,7 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
     checkout_command_bus, repository,
 ):
     comms = checkout_command_bus
-    added = core("--root", str(comms.root), "checkout", "add", "P1")
+    added = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
     assert added.returncode == 0, added.stderr
     rule = comms.registry.storage_rule
     path = rule.order_checkout(rule.initial_roots("worker"), "P1")
@@ -176,12 +180,12 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
         "The order is closed before its unit retires the checkout it worked in."))
     assert closed.assignment is None
     (path / "owner.py").write_text("an unpushed edit\n")
-    held = core("--root", str(comms.root), "checkout", "remove", "P1")
+    held = core_process("--root", str(comms.root), "checkout", "--from", "worker", "remove", "P1")
     assert held.returncode != 0
     assert "holds uncommitted work" in held.stdout + held.stderr
     assert path.is_dir()
     git(path, "checkout", "--", "owner.py")
-    removed = core("--root", str(comms.root), "checkout", "remove", "P1")
+    removed = core_process("--root", str(comms.root), "checkout", "--from", "worker", "remove", "P1")
     assert removed.returncode == 0, removed.stderr
     assert not path.exists()
     assert str(path) not in git(repository, "worktree", "list")
@@ -191,7 +195,7 @@ def test_checkout_add_reopens_retired_order_branch_with_its_commits(checkout_com
     comms = checkout_command_bus
     rule = comms.registry.storage_rule
     path = rule.order_checkout(rule.initial_roots("worker"), "P1")
-    added = core("--root", str(comms.root), "checkout", "add", "P1")
+    added = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
     assert added.returncode == 0, added.stderr
     (path / "unit-change.py").write_text("kept work\n")
     git(path, "add", "unit-change.py")
@@ -199,10 +203,10 @@ def test_checkout_add_reopens_retired_order_branch_with_its_commits(checkout_com
     commit = git(path, "rev-parse", "HEAD").strip()
     branch = git(path, "branch", "--show-current").strip()
 
-    removed = core("--root", str(comms.root), "checkout", "remove", "P1")
+    removed = core_process("--root", str(comms.root), "checkout", "--from", "worker", "remove", "P1")
     assert removed.returncode == 0, removed.stderr
     assert not path.exists()
-    restored = core("--root", str(comms.root), "checkout", "add", "P1")
+    restored = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
     assert restored.returncode == 0, restored.stderr
     assert git(path, "rev-parse", "HEAD").strip() == commit
     assert git(path, "branch", "--show-current").strip() == branch
@@ -224,12 +228,62 @@ def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
     assert not destination.exists()
     assert rule.owns_checkout(worker, destination, sibling.github)
     assert not rule.owns_checkout(worker, destination, RepositoryName("OpenHCSDev", "textual"))
-    result = core("--root", str(comms.root), "repository-checkout", "add", "P1",
-                  sibling.github.to_wire())
+    command = ("--root", str(comms.root), "repository-checkout", "--from", "worker")
+    result = core_process(*command, "add", "P1", sibling.github.to_wire())
     assert result.returncode == 0, result.stderr
     assert destination.name == "worker--P1--toad"
     assert Repo.of(destination).github == sibling.github
     assert destination in rule.checkouts_of(worker)
+    repaired = core_process(*command, "add", "P1", sibling.github.to_wire())
+    assert repaired.returncode == 0, repaired.stderr
+    retired = core_process(*command, "remove", "P1", sibling.github.to_wire())
+    assert retired.returncode == 0, retired.stderr
+    assert not destination.exists()
+    assert destination not in rule.checkouts_of(worker)
+
+
+@pytest.mark.parametrize("verb,arguments", (
+    ("checkout", ("P1",)),
+    ("repository-checkout", ("P1", "OpenHCSDev/agent-comms")),
+    ("goal-checkout", ()),
+))
+@pytest.mark.parametrize("caller", ((), ("--from", "unknown"), ("--from", "lead")))
+def test_checkout_refuses_missing_unknown_or_non_holder_before_git_mutation(
+    checkout_command_bus, repository, caller, verb, arguments,
+):
+    comms = checkout_command_bus
+    before = git(repository, "show-ref"), git(repository, "worktree", "list", "--porcelain")
+    arguments = arguments or (str(repository),)
+    result = core_process("--root", str(comms.root), verb, *caller, "add", *arguments)
+    assert result.returncode != 0, result.stdout
+    assert (git(repository, "show-ref"), git(repository, "worktree", "list", "--porcelain")) == before
+    assert not tuple(comms.registry.storage_rule.checkout_base.glob("*"))
+
+
+def test_checkout_grant_rejects_stale_incarnation_and_generation(checkout_command_bus, repository):
+    comms = checkout_command_bus
+    worker = comms.registry.require("worker")
+    current = comms.goals.todos.get("P1")
+    before = git(repository, "show-ref"), git(repository, "worktree", "list", "--porcelain")
+    stale = replace(worker, created_at=RecordedCreationTime(worker.created_at + 1))
+    with pytest.raises(TodoConflict):
+        OrderCheckoutGrant(stale, current).require()
+    with pytest.raises(TodoConflict):
+        current.require_assignee(worker.incarnation, GoalId.mint())
+    assert (git(repository, "show-ref"), git(repository, "worktree", "list", "--porcelain")) == before
+    assert not tuple(comms.registry.storage_rule.checkout_base.glob("*"))
+
+
+def test_checkout_remove_cannot_retire_another_callers_allocation(checkout_command_bus, repository):
+    comms = checkout_command_bus
+    added = core_process("--root", str(comms.root), "checkout", "--from", "worker", "add", "P1")
+    assert added.returncode == 0, added.stderr
+    before = git(repository, "worktree", "list", "--porcelain")
+    denied = core_process("--root", str(comms.root), "checkout", "--from", "lead", "remove", "P1")
+    assert denied.returncode != 0
+    assert git(repository, "worktree", "list", "--porcelain") == before
+    rule = comms.registry.storage_rule
+    assert rule.order_checkout(rule.initial_roots("worker"), "P1").is_dir()
 
 
 def config_only_store(checkout: Checkout) -> None:
