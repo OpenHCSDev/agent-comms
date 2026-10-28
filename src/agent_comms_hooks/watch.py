@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, TextIO
 
 from agent_comms.process_claim import ProcessSingleton
 from agent_comms.registry_store import RegistryStore
+from agent_comms.store_files import AtomicFile
 from agent_comms_hooks import ClaudeTranscriptHook
 from agent_comms_hooks.board import SessionBoard
 
@@ -90,14 +91,15 @@ class WatchRecord:
 @dataclass(frozen=True)
 class HeldClaim:
     """The open lock description that keeps a claim live. The kernel ties the flock to this
-    description, so a duplicate inherited through exec keeps the claim held."""
+    description, so a duplicate inherited through exec keeps the claim held. The lock file
+    carries no data: the holder publishes its record whole beside it, so a reader sees the
+    complete old record or the complete new one, never a truncated file."""
 
     lock: TextIO
+    saved: AtomicFile
 
     def record(self, record: WatchRecord) -> HeldClaim:
-        self.lock.truncate(0)
-        self.lock.write(record.to_json())
-        self.lock.flush()
+        self.saved.write_text(record.to_json())
         return self
 
     def inheritable(self) -> int:
@@ -127,6 +129,21 @@ class WatchClaim:
         key = hashlib.sha256(self.thread.encode()).hexdigest()
         return self.directory(self.home) / f"{key}.lock"
 
+    @staticmethod
+    def claims_in(directory: Path) -> tuple[Path, ...]:
+        """Every session's claim lock in ``directory``; reader and launch claims carry a
+        second suffix (``reader_claim``, ``launch_claim``)."""
+        return tuple(sorted(path for path in directory.glob("*.lock") if len(path.suffixes) == 1))
+
+    @staticmethod
+    def record_beside(claim: Path) -> Path:
+        """The saved re-arm record, published whole; the lock file only holds the flock."""
+        return claim.with_suffix(".record")
+
+    @property
+    def record_path(self) -> Path:
+        return self.record_beside(self.path)
+
     @property
     def socket_path(self) -> Path:
         # sockaddr_un is short. Keep the locator derived from the session claim.
@@ -155,14 +172,14 @@ class WatchClaim:
         """One watch per conversation, independent of --state and bus aliases."""
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with self.claim.claimed() as lock:
-            yield HeldClaim(lock).record(record)
+            yield HeldClaim(lock, AtomicFile(self.record_path)).record(record)
 
     @contextmanager
     def adopted(self, descriptor: int, record: WatchRecord) -> Iterator[HeldClaim]:
         """A replaced bridge's successor takes over the description its predecessor kept
         locked through exec, so the claim never reads as lapsed, and records its own command."""
         with self.claim.adopted(descriptor) as lock:
-            yield HeldClaim(lock).record(record)
+            yield HeldClaim(lock, AtomicFile(self.record_path)).record(record)
 
     @contextmanager
     def reader_held(self) -> Iterator[None]:
@@ -183,12 +200,11 @@ class WatchClaim:
         if not self.path.exists():
             return UnclaimedWatch()
         with self.claim.observed() as claim:
-            if claim.held:
-                return LiveWatch(self, WatchRecord.decode(**json.load(claim.file)))
-            text = claim.file.read()
-        if not text:
-            return UnclaimedWatch()
-        return LapsedWatch(self, WatchRecord.decode(**json.loads(text)))
+            held = claim.held
+        if not self.record_path.exists():
+            return ClaimingWatch() if held else UnclaimedWatch()
+        record = WatchRecord.decode(**json.loads(self.record_path.read_text()))
+        return LiveWatch(self, record) if held else LapsedWatch(self, record)
 
     def enrol(self, record: WatchRecord) -> None:
         with self.launching():
@@ -252,6 +268,17 @@ class WatchState(ABC):
 class UnclaimedWatch(WatchState):
     def rearm(self, launch: Callable[[], None]) -> None:
         raise SessionCommandError('Enroll this session before starting its Monitor')
+
+
+class ClaimingWatch(WatchState):
+    """A bridge holds the claim and is publishing its first record: it is serving, so it is
+    neither relaunched nor announced as down, and it has no binding to report yet."""
+
+    def rearm(self, launch: Callable[[], None]) -> None:
+        return
+
+    def announce_absence(self, announce: Callable[[], None]) -> bool:
+        return False
 
 
 @dataclass(frozen=True)

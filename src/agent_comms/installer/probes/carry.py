@@ -26,7 +26,7 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.locked_store import FilesRequest, RootFile
 from agent_comms.store_files import BorrowedStoreLock, is_store_lock
-from agent_comms.typed_table import TriggerKind, TypedTable, WriterOwnedStore
+from agent_comms.typed_table import ExternalStore, TriggerKind, TypedTable
 
 
 @dataclass(frozen=True)
@@ -66,11 +66,11 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     def root(self) -> Path:
         return self.files.root
 
-    writer_owned: ClassVar[tuple[type[WriterOwnedStore], ...]] = ()
+    writer_owned: ClassVar[tuple[type[ExternalStore], ...]] = ()
     """External durable declarations this step is allowed to read and carry."""
 
     @staticmethod
-    def writer_declarations(steps: Iterable[Carry | type[Carry]]) -> tuple[type[WriterOwnedStore], ...]:
+    def writer_declarations(steps: Iterable[Carry | type[Carry]]) -> tuple[type[ExternalStore], ...]:
         return tuple(dict.fromkeys(store for step in steps for store in step.writer_owned))
 
     precedes: ClassVar[tuple[type[Carry], ...]] = ()
@@ -127,8 +127,8 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
 
     def require_confined(self, path: Path) -> None:
         """A carry reaches its bus and exactly its declared external files, never aliases."""
-        external = {self.files.location(resource) for store in self.writer_owned
-                    for resource in store.resources(self.files)}
+        external = {member for store in self.writer_owned for resource in store.resources(self.files)
+                    for member in store.files(self.files.location(resource))}
         if (not path.is_relative_to(self.root) and path not in external) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
@@ -210,7 +210,7 @@ class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, Pa
     """Validate carried external rows in the target, at the selected live or copied paths."""
 
     files: FilesRequest
-    stores: tuple[type[WriterOwnedStore], ...]
+    stores: tuple[type[ExternalStore], ...]
 
     def run(self) -> tuple[Annotated[Path, PathText], ...]:
         paths: list[Path] = []

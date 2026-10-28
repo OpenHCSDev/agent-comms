@@ -16,7 +16,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -75,6 +75,7 @@ from agent_comms.typed_table import (
     DerivedColumn,
     StoredRowDerivation,
     TypedTable,
+    ExternalStore,
     WriterOwnedFile,
     WriterOwnedResource,
     WriterOwnedStore,
@@ -1254,6 +1255,54 @@ class BridgeDeliveryStore(WriterOwnedStore):
     @classmethod
     def table_schema(cls) -> type[TableSchema]:
         return BridgeStateTable
+
+
+class WatchRecordStore(ExternalStore):
+    """Every session's watch claim (``WatchClaim.directory``). A claim lock holds only its
+    flock; its re-arm record is published whole beside it. The lock bytes are retained so a
+    copy can read what an older runtime saved in them, but a lock is never content: changing
+    or restoring it would replace the inode its holder's flock lives on."""
+
+    @classmethod
+    def path(cls) -> Path:
+        return WatchClaim.directory(Path.home())
+
+    @classmethod
+    def resources(cls, files: FilesRequest) -> tuple[WriterOwnedResource, ...]:
+        directory = files.location(cls.resource(cls.retained_filename()))
+        return tuple(cls.resource(cls.retained_filename() / claim.name)
+                     for claim in WatchClaim.claims_in(directory))
+
+    @staticmethod
+    def files(path: Path) -> tuple[Path, ...]:
+        return (path, WatchClaim.record_beside(path))
+
+    @classmethod
+    def content_members(cls, path: Path) -> frozenset[Path]:
+        return frozenset(member for member in cls.files(path) if member.is_file())
+
+    @classmethod
+    def snapshot_members(cls, path: Path, observed: Mapping[Path, os.stat_result]) -> frozenset[Path]:
+        record = WatchClaim.record_beside(path)
+        return frozenset((record,)) if record in observed else frozenset()
+
+    @classmethod
+    def file_matches(cls, path: Path, name: Path, saved: Mapping[Path, str]) -> bool:
+        record = WatchClaim.record_beside(path)
+        retained = cls.relocated(path, name, record)
+        if retained not in saved:
+            return not record.exists()
+        return record.is_file() and cls.digest(record) == saved[retained]
+
+    @classmethod
+    def restore_file(cls, path: Path, name: Path, directory: Path, saved: Mapping[Path, str]) -> None:
+        record = WatchClaim.record_beside(path)
+        retained = cls.relocated(path, name, record)
+        if retained in saved:
+            cls._restore_member(directory / retained, record)
+        else:
+            record.unlink(missing_ok=True)
+        Platform.current().sync_directory(path.parent)
 
 
 class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
