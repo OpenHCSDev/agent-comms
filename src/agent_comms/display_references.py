@@ -6,13 +6,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import InitVar, dataclass, field
+from dataclasses import dataclass, field
 from functools import cached_property
 import re
 from types import MappingProxyType
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import SlicePolicy
+from agent_comms.registry_document import MappingRowsSlice, SnapshotRestored, WholeDocumentValue
 from agent_comms.thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
@@ -102,7 +104,7 @@ class ReferenceContext(ABC):
 
 @dataclass(frozen=True)
 class RootedReferences(ReferenceContext):
-    root: str
+    root: Annotated[str, SlicePolicy(WholeDocumentValue)]
     requires_observation = True
 
     async def acquire_from(self, read):
@@ -191,7 +193,7 @@ class DisplayReferences(RootedReferences):
 
 
 @dataclass(frozen=True)
-class CurrentDisplayReferences(DisplayReferences):
+class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
     """Current targets keep each member's current incarnation by name, read once from the
     registry cut, never the cut itself: every rendered line, link and draft holds its
     reference set, and a held cut pins every thread's whole registry record.
@@ -200,33 +202,24 @@ class CurrentDisplayReferences(DisplayReferences):
     """
 
     targets: Mapping[str, DisplayReference] = field(init=False)
-    registry: InitVar[RegistrySnapshot]
-    channels: tuple[str, ...] = ()
-    members: Mapping[str, ThreadIncarnation] = field(init=False, repr=False, compare=False)
+    members: Annotated[Mapping[str, ThreadIncarnation], SlicePolicy(MappingRowsSlice)] = field(
+        default_factory=dict, repr=False)
+    channels: Annotated[tuple[str, ...], SlicePolicy(WholeDocumentValue)] = ()
     current: Mapping[str, ThreadIncarnation] = field(init=False, repr=False, compare=False)
 
-    def __post_init__(self, registry: RegistrySnapshot) -> None:
-        self._derive({name: thread.incarnation for name, thread in registry.named_members()})
+    @classmethod
+    def from_registry(cls, root: str, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> Self:
+        return cls(root, {name: thread.incarnation for name, thread in registry.named_members()}, channels)
 
-    def _derive(self, members: Mapping[str, ThreadIncarnation]) -> None:
+    def __post_init__(self) -> None:
         """The target and lookup views of the one stored member map."""
-        object.__setattr__(self, "members", MappingProxyType(dict(members)))
+        object.__setattr__(self, "members", MappingRowsSlice.freeze(self.members))
         object.__setattr__(self, "current", MappingProxyType({
-            incarnation.require_recorded().lookup: incarnation for incarnation in members.values()}))
+            incarnation.require_recorded().lookup: incarnation for incarnation in self.members.values()}))
         targets: dict[str, DisplayReference] = {
-            name: ThreadDisplayReference(self.root, incarnation) for name, incarnation in members.items()}
+            name: ThreadDisplayReference(self.root, incarnation) for name, incarnation in self.members.items()}
         targets.update((name, ChannelDisplayReference(self.root, name)) for name in self.channels)
         object.__setattr__(self, "targets", MappingProxyType(targets))
-
-    def __reduce__(self) -> tuple[object, ...]:
-        """Restore the root, channels and member incarnations; rebuild the views from them."""
-        return object.__new__, (type(self),), {
-            "root": self.root, "channels": self.channels, "members": dict(self.members)}
-
-    def __setstate__(self, state: Mapping[str, object]) -> None:
-        object.__setattr__(self, "root", state["root"])
-        object.__setattr__(self, "channels", state["channels"])
-        self._derive(cast(Mapping[str, ThreadIncarnation], state["members"]))
 
     def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
         """Resolve an exact birth to its current name; a missing birth fails."""

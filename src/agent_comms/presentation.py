@@ -794,7 +794,7 @@ class CoordinationSnapshot:
             channel_unread={name: ExactUnread(count) for name, count in channel_unread.items()},
             last_sent=sent,
             thread_unread={name: UnobservedUnread() for name in threads},
-            references=CurrentDisplayReferences(str(root), registry, tuple(declarations)),
+            references=CurrentDisplayReferences.from_registry(str(root), registry, tuple(declarations)),
             channel_order=catalog.list_order, read_marker_notice=read_marker_notice,
         )
 
