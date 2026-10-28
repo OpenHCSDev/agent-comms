@@ -1,11 +1,10 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.14.8, <3.15"
 
 [manifest]
 overrides = [
     { name = "agent-comms", editable = "../" },
-    { name = "formbridge", git = "https://github.com/OpenHCSDev/formbridge.git?branch=main" },
     { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?branch=main" },
     { name = "ui-theme", git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main" },
@@ -333,7 +332,7 @@ wheels = [
 [[package]]
 name = "formbridge"
 version = "0.2.0"
-source = { git = "https://github.com/OpenHCSDev/formbridge.git?branch=main#ebe2fa9173428e2bd7154a0de23698757677c3c2" }
+source = { git = "https://github.com/OpenHCSDev/formbridge.git?rev=ebe2fa9173428e2bd7154a0de23698757677c3c2#ebe2fa9173428e2bd7154a0de23698757677c3c2" }
 dependencies = [
     { name = "docutils" },
     { name = "metaclass-registry" },
