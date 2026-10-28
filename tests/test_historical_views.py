@@ -270,6 +270,12 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert FieldCodec.value_schema(type[TranscriptReadIdentity])["enum"] == list(TranscriptReadIdentity.names())
     with pytest.raises(ValueError):
         FieldCodec.decode(TranscriptReadIdentity, {**FieldCodec.encode(read.identity), "kind": "unregistered"})
+    from agent_comms.order_tools import TranscriptPageRead
+    from test_transcript_pages import shared_page
+
+    recorded = shared_page(live, TranscriptPageRead(thread="alice", historical_source=source.key))
+    assert recorded.identity == read.identity
+    assert any(event.text == "original recorded answer" for event in recorded.page.events)
     rebound = live.transcripts.bind_page_read("recorded-alice", decoded)
     assert rebound.current_identity() == decoded
     assert any(event.text == "original recorded answer" for event in rebound.read().events)

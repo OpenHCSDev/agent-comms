@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import partial
@@ -31,7 +31,9 @@ from .message_page import (
     MessagePageRequest,
     PageBounds,
 )
+from .message_reference import MessageReference
 from .messages import CarriesEnvelope, Message
+from .notification_evidence import NotificationWindow
 from .page_traversal import HistoryCursor, OlderTraversal
 from .presentation import MessageNotification, OutcomeViewer
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
@@ -352,8 +354,9 @@ class HistorySource:
         source.validate()
         return source
 
-    def notification_references(self, sources: tuple[HistorySource, ...], references,
-                                viewer: OutcomeViewer):
+    def notification_references(self, sources: tuple[HistorySource, ...],
+                                references: Sequence[MessageReference],
+                                viewer: OutcomeViewer) -> NotificationWindow:
         """Read this namespace within its archive's current catalogue read, as this viewer
         may see it."""
 

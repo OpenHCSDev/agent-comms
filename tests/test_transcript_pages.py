@@ -12,6 +12,12 @@ from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import NativeTranscriptCursor, WireTranscriptCursor
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.acp_extension import TranscriptSnapshotUpdate
+from agent_comms.field_codec import FieldCodec
+from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import invoke_tool
+from agent_comms.ui_model.observation import ReadTranscript
 
 
 def transcript(path, count):
@@ -55,6 +61,44 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
             "worker", after=page.after, through=through).read()
         seen.extend(event.text for event in page.events)
     assert seen == [f"Record {i}" for i in range(105)]
+
+
+def shared_page(comms, operation: TranscriptPageRead) -> TranscriptSnapshotUpdate:
+    """One page operation served directly, inside the UI's root-bound envelope and through MCP:
+    all three carry the same page, draft and witness as the domain capture."""
+    expected = TranscriptSnapshotUpdate.from_read(comms.transcripts.capture_page_read(
+        operation.thread, before=operation.before, after=operation.after,
+        through=operation.through, historical_source=operation.historical_source))
+    direct = operation.read(comms)
+    assert ReadTranscript(str(comms.root), operation).read(comms) == direct == expected
+    assert invoke_tool(comms, operation.declared_name, FieldCodec.encode_fields(operation),
+                       caller=ThreadCaller(operation.thread)) == FieldCodec.encode(direct)
+    return direct
+
+
+def test_one_page_operation_pages_alike_for_the_ui_and_mcp(tmp_path):
+    path = tmp_path / "session.jsonl"
+    transcript(path, 45)
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+    snapshot = shared_page(comms, TranscriptPageRead(thread="worker"))
+    through = snapshot.page.after
+    seen = [event.text for event in snapshot.page.events]
+    pages = 1
+    while snapshot.page.has_older:
+        snapshot = shared_page(comms, TranscriptPageRead(thread="worker", before=snapshot.page.before))
+        seen[:0] = [event.text for event in snapshot.page.events]
+        pages += 1
+    assert pages > 1 and seen == [f"Record {i}" for i in range(45)]
+    seen = [event.text for event in snapshot.page.events]
+    while snapshot.page.has_newer:
+        snapshot = shared_page(comms, TranscriptPageRead(
+            thread="worker", after=snapshot.page.after, through=through))
+        seen.extend(event.text for event in snapshot.page.events)
+    assert seen == [f"Record {i}" for i in range(45)]
+    comms.registry.declare(Thread('quiet', frozenset(), Checkout(tmp_path)))
+    empty = shared_page(comms, TranscriptPageRead(thread="quiet"))
+    assert not empty.page.events and not empty.page.has_older and not empty.page.has_newer
 
 
 def test_oversized_message_and_file_identity(tmp_path):

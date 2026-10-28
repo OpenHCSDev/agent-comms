@@ -70,3 +70,21 @@ def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path): 
     assert state.active.phase.summary in comms.views.thread_presentations(('beta',)).require('beta').summary
     comms.agents.finish_turn(lease)
     assert not comms.views.thread_presentations(('beta',)).require('beta').status.working
+
+
+def test_a_live_batch_beyond_one_window_chunk_keeps_every_message(tmp_path):  # noqa: F811
+    """The live operation reads every 120-reference chunk into one window; no batch cap."""
+    from agent_comms.notification_evidence import NotificationWindow
+    from agent_comms.notification_reads import LiveNotificationRead
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    messages = [initial.message, *(
+        comms.messaging.send('sender', '#team', f'Batch {number}').message
+        for number in range(NotificationWindow.window_limit + 5)
+    )]
+    window = LiveNotificationRead(tuple(message.reference for message in messages)).read(comms)
+    assert set(window.outcomes) == {(message.seq, message.message_id) for message in messages}
+    for message in (messages[0], messages[-1]):
+        alone = LiveNotificationRead((message.reference,)).read(comms)
+        key = (message.seq, message.message_id)
+        assert window.outcomes[key] == alone.outcomes[key] and window.outcomes[key]

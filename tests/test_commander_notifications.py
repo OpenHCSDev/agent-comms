@@ -28,7 +28,12 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
-from agent_comms.ui_model.observation import ReadCommanderUnit, ReadRefused
+from agent_comms.field_codec import FieldCodec
+from agent_comms.order_tools import CommanderUnitRead
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import invoke_tool
+from agent_comms.work_branches import WorkBranchError
+from agent_comms.ui_model.observation import ReadOperation, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import (
@@ -87,9 +92,16 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     hud = beat(comms, states=state_cards(comms, UnitState))
     ServicePassStore.at(comms.root).heartbeat_passed((hud.commander,), (hud.commander,))
     card = next(card for card in hud.units if card.unit.name == 'worker')
-    request = ReadCommanderUnit(str(comms.root), hud.commander, card.unit,
-                               tuple(dict.fromkeys(order.order for order in card.orders)))
+    operation = CommanderUnitRead(commander=hud.commander, unit=card.unit,
+                                  orders=tuple(dict.fromkeys(order.order for order in card.orders)))
+    request = ReadOperation(str(comms.root), operation)
+    direct = operation.read(comms)
     detail = pickle.loads(pickle.dumps(request.read(comms)))
+    # The shared operation, the UI's root-bound envelope and the MCP boundary answer the same
+    # selected card with the same bounded records.
+    assert detail == direct
+    assert invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode_fields(operation),
+                       caller=ThreadCaller("lead")) == FieldCodec.encode(direct)
     assert detail.unit == card
     assert {order.card.problem for order in detail.orders} == {'P1', 'P2'}
     for order in detail.orders:
@@ -101,10 +113,10 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     assert 'contents' not in json.dumps(detail.activity)
     assert (comms.root / 'state-source.jsonl').read_bytes() == original
     for stale in (
-        replace(request, orders=()),
+        replace(request, operation=replace(operation, orders=())),
         replace(request, root=str(comms.root / 'other')),
-        replace(request, unit=replace(card.unit, created_at=card.unit.wire_birth + 1)),
-        replace(request, commander=card.unit),
+        replace(request, operation=replace(operation, unit=replace(card.unit, created_at=card.unit.wire_birth + 1))),
+        replace(request, operation=replace(operation, commander=card.unit)),
     ):
         assert isinstance(stale.answer(comms), ReadRefused)
     checkout = comms.goals.todos.get('P1').order.checked().check.directory
@@ -114,6 +126,10 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     try:
         metadata.write_text('gitdir: ./missing-original-git\n')
         assert isinstance(request.answer(comms), ReadRefused)
+        # MCP reaches the same nominal refusal, which the connector answers as a failed call.
+        with pytest.raises(WorkBranchError):
+            invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode_fields(operation),
+                        caller=ThreadCaller("lead"))
     finally:
         metadata.unlink()
         saved.rename(metadata)

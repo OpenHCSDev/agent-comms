@@ -35,16 +35,17 @@ from typing import TYPE_CHECKING, ClassVar, Self, final
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.acp_extension import (
-    GoalSnapshotReply,
     TranscriptDraftUpdate,
     TranscriptSnapshotUpdate,
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
+from agent_comms.bus_read import OperatorReader, OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
 from agent_comms.child_process import join_retirement
-from agent_comms.commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
+from agent_comms.owner_connection import OwnerConnection, OwnerReading, OwnerReplyConnection
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -54,19 +55,17 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
-from agent_comms.field_codec import FieldCodec, OrderId
-from agent_comms.historical_views import HistorySource
 from agent_comms.history_views import RetiredViews
-from agent_comms.message_reference import MessageReference
-from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow
+from agent_comms.notification_evidence import NotificationWindow
+from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
+from agent_comms.notification_reads import NotificationRead
 from agent_comms.presentation import (
-    AllOutcomes, CoordinationSnapshot, MessageNotification, NoRevision, OutcomeViewer, ReadState,
+    CoordinationSnapshot, MessageNotification, NoRevision, ReadState,
     WireRevision,
 )
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
-    ActivityView,
     CommanderFramesView,
     NotificationsView,
     RegistrationsView,
@@ -76,9 +75,9 @@ from agent_comms.revision_views import (
     StoresView,
 )
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_presentation import ThreadPresentation
-from agent_comms.transcripts import TranscriptCursor, TranscriptReadIdentity
-from agent_comms.ui_model.delivery import ReadDeliveryView
+from agent_comms.thread_presentation import AcquiredThreadPresentation, ThreadPresentation
+from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.transcripts import TranscriptReadIdentity
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
     SidebarModel,
@@ -94,7 +93,7 @@ if TYPE_CHECKING:
     from concurrent.futures import Future
     from multiprocessing.connection import Connection
 
-    from agent_comms.runtime import RuntimeConnection
+    from agent_comms.tool_result import ToolResult
     from agent_comms.transcripts import TranscriptRead
 
 
@@ -429,30 +428,21 @@ class ReadRequest(AwaitedRead):
 
 
 @dataclass(frozen=True)
-class ReadCommanderUnit(ReadRequest):
-    """Expand an exact published card, refusing a reused name or changed assignment."""
+class ReadOperation(ReadRequest):
+    """The UI's root and request witness around one root-free shared read."""
 
-    commander: ThreadIncarnation
-    unit: ThreadIncarnation
-    orders: tuple[OrderId, ...]
+    operation: UiRead
 
     @property
     def refusal_errors(self) -> tuple[type[Exception], ...]:
         return (*super().refusal_errors, ToolRefusedError, WorkBranchError)
 
-    def read(self, comms: Comms) -> CommanderUnitDetail:
-        snapshot = comms.registry.snapshot()
-        if not self.commander.current(snapshot) or not self.unit.current(snapshot):
-            raise ToolRefusedError("The selected commander or unit incarnation is no longer current")
-        hud = CommanderFrame.current(comms, self.commander.name)
-        for card in hud.units:
-            if card.unit == self.unit:
-                return card.detail(comms, self.commander, self.orders)
-        raise ToolRefusedError("The selected unit is no longer in this commander's published frame")
+    def read(self, comms: Comms) -> object:
+        return self.operation.read(comms)
 
 
 @dataclass(frozen=True)
-class OwnerRead(AwaitedRead):
+class OwnerRead(OwnerReading[object], AwaitedRead):
     """A read the live owner of thread incarnation ``owner`` answers over its socket.
 
     Served as it arrives, beside store reads; the owner's reply is decoded
@@ -486,25 +476,8 @@ class OwnerRead(AwaitedRead):
         except self.refusal_errors as error:
             return self.refused(error)
 
-    def connect(self, comms: Comms) -> RuntimeConnection:
-        from agent_comms.runtime import OwnerIdentityChangedError, OwnerReplyConnection, socket_path
-
-        owner = comms.registry.require(self.owner.name)
-        if owner.incarnation != self.owner:
-            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
-        return OwnerReplyConnection(
-            comms, owner.name, socket_path(comms.root, owner.require_process().pid),
-        )
-
     async def ask(self, comms: Comms) -> object:
-        connection = await asyncio.to_thread(self.connect, comms)
-        try:
-            return await self.read(connection)
-        finally:
-            await connection.close()
-
-    @abstractmethod
-    async def read(self, owner: RuntimeConnection) -> object: ...
+        return await OwnerReplyConnection.answer(comms, self.owner, self)
 
 
 @dataclass(frozen=True)
@@ -521,25 +494,16 @@ class CancelRead(ObservationRequest):
 
 @dataclass(frozen=True)
 class TranscriptRequest[ResultT](ReadRequest):
-    """Capture one bounded read; its owner keeps the page and witness together."""
+    """The UI's lifecycle around one shared page read: root, request id, how contention is
+    answered and which result it publishes. The page arguments belong to the operation."""
 
-    thread: str
-    before: TranscriptCursor | None = None
-    after: TranscriptCursor | None = None
-    through: TranscriptCursor | None = None
-    historical_source: str | None = None
+    operation: TranscriptPageRead
 
     def read(self, comms: Comms) -> ResultT:
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
 
     def page_read(self, comms: Comms) -> TranscriptRead:
-        return comms.transcripts.capture_page_read(
-            self.thread,
-            before=self.before,
-            after=self.after,
-            through=self.through,
-            historical_source=self.historical_source,
-        )
+        return self.operation.capture_as(comms, OperatorReader())
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> ResultT: ...
@@ -608,97 +572,32 @@ class RefreshTranscript(ReadRequest):
         )
         if read.content_current():
             return None
-        return ReadTranscript(
-            self.root, identity.requested_name, before=identity.before, after=identity.after,
+        operation = TranscriptPageRead(
+            thread=identity.requested_name, before=identity.before, after=identity.after,
             through=identity.through, historical_source=identity.historical_source,
-        ).read(comms)
+        )
+        return UnreadableHistory.outcome(lambda: operation.read(comms)).raised()
 
 
 @dataclass(frozen=True)
 class ReadNotifications(ReadRequest):
-    """Recipient handling of the referenced original messages, as its viewer may see them.
-    The UI reads as the operator, who sees every outcome."""
+    """The UI's root and request witness around one root-free notification operation."""
 
-    references: tuple[MessageReference, ...]
-    viewer: OutcomeViewer = field(default_factory=AllOutcomes, kw_only=True)
+    operation: NotificationRead
 
     def read(self, comms: Comms) -> NotificationWindow:
-        return comms.views.message_notifications_for_references(self.viewer, self.references)
-
-    def changed_since(self, comms: Comms, revision: WireRevision,
-                      previous: NotificationsRead) -> bool:
-        return previous.live_changed(comms, revision)
+        return self.operation.read(comms)
 
 
 @dataclass(frozen=True)
-class ReadRecordedNotifications(ReadNotifications):
-    """The selected archive's recorded handling, independent of today's recipients."""
+class ReadOwnerOperation(OwnerRead):
+    """The UI's envelope for an owner-live read: the operation's own reply, from the held owner."""
 
-    source: str
+    operation: OwnerLiveRead
 
-    def read(self, comms: Comms) -> NotificationWindow:
-        with comms.bus.history.read_sources() as sources:
-            source = HistorySource.require(sources, self.source)
-            return source.notification_references(sources, self.references, self.viewer)
-
-    def changed_since(self, comms: Comms, revision: WireRevision,
-                      previous: NotificationsRead) -> bool:
-        return revision.history != previous.revision.history
-
-
-@dataclass(frozen=True)
-class NotificationsRead:
-    """Where one notification read settled: its revision and the activity of every participant
-    its notifications name, captured before the read for participants already known and right
-    after it for new ones."""
-
-    revision: WireRevision
-    activity: Mapping[str, ObservedActivity | DeletedThread | None] = field(default_factory=dict)
-    notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
-
-    @classmethod
-    def of(cls, revision: WireRevision, comms: Comms,
-           known: Mapping[str, ObservedActivity | DeletedThread],
-           window: NotificationWindow,
-           ) -> NotificationsRead:
-        names = window.activity_names()
-        known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
-        return cls(revision, {name: known.get(name) for name in names}, window)
-
-    def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
-        """Read marks, participant activity or retained assignment evidence changed."""
-        current = (comms.views.observed_activity(revision, self.activity)
-                   if revision.changed_since(ActivityView(), self.revision)
-                   else self.activity)
-        return (any(current.get(name) != seen for name, seen in self.activity.items())
-                or self.notification_window.changed(comms, revision, self.revision))
-
-
-class UnreadableNotificationsRead(NotificationsRead):
-    """An unreadable read names no participants, so any later revision reads again."""
-
-    def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
-        return revision != self.revision
-
-
-@dataclass(frozen=True)
-class ReadOwnerGoal(OwnerRead):
-    """The owner's goal snapshot and the turn it read with it."""
-
-    async def read(self, owner: RuntimeConnection) -> GoalSnapshotReply:
-        return FieldCodec.decode(GoalSnapshotReply, await owner.request("goal_snapshot"))
-
-
-@dataclass(frozen=True)
-class ReadDeliveryOverview(OwnerRead):
-    """The owner's delivery notices, checked against its live queue."""
-
-    include_history: bool = False
-
-    async def read(self, owner: RuntimeConnection) -> ReadDeliveryView:
-        return ReadDeliveryView.from_wire(
-            await owner.request("input_dispositions", include_history=self.include_history)
-        )
+    async def read(self, owner: OwnerConnection) -> ToolResult:
+        request = OwnerReadRuntimeRequest(thread=owner.session_id, operation=self.operation)
+        return self.operation.decode_reply(await request.read(owner))
 
 
 @dataclass(frozen=True)
@@ -860,7 +759,7 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         for request in self.request.reads:
             previous = self.read_states.get(request)
-            if previous is not None and not request.changed_since(comms, revision, previous):
+            if previous is not None and not request.operation.changed_since(comms, revision, previous):
                 continue
             yield self.notifications(request, comms, revision, previous)
 
@@ -920,8 +819,11 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         changed = observed.changed_since(previous) | self.initial
         self.initial = frozenset()
         if changed:
+            # The reader keeps its acquired results for the next change check; a viewer
+            # receives only each changed result's published projection.
             yield replace(observed, changed=changed,
-                          results={name: value for name, value in results.items() if name in changed})
+                          results={name: value.published() for name, value in results.items()
+                                   if name in changed})
 
     def located(self, comms: Comms, revision: WireRevision, previous: ThreadsObserved) -> LocatedThreads:
         # Keep each completed stage when a later stored read fails, exactly as
@@ -1108,10 +1010,15 @@ class ThreadReadResult(PublishState, ABC):
     def same_as_presented(self, presented: ThreadPresented) -> bool:
         return False
 
+    def published(self) -> ThreadReadResult:
+        """What a viewer receives of this read: the read itself."""
+        return self
+
     @abstractmethod
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel: ...
 
-    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+    def collect_revision_inputs(self, name: str, readable: dict[str, AcquiredThreadPresentation],
+                                retry: set[str]) -> None:
         """Supply readable values and reads that must be tried again."""
 
     def same_status(self, presentation: ThreadPresentation) -> bool:
@@ -1129,10 +1036,14 @@ class ThreadPresented(ThreadReadResult):
         return (presented.presentation is self.presentation
                 or presented.presentation.same_observation(self.presentation))
 
+    def published(self) -> ThreadPresented:
+        return ThreadPresented(self.presentation.published())
+
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return ThreadStatusModel.known(name, self.presentation)
 
-    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+    def collect_revision_inputs(self, name: str, readable: dict[str, AcquiredThreadPresentation],
+                                retry: set[str]) -> None:
         self.presentation.collect_revision_input(name, readable)
 
     def same_status(self, presentation: ThreadPresentation) -> bool:
@@ -1152,7 +1063,8 @@ class ThreadBusy(ThreadReadResult):
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return owner.open(name)
 
-    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+    def collect_revision_inputs(self, name: str, readable: dict[str, AcquiredThreadPresentation],
+                                retry: set[str]) -> None:
         retry.add(name)
 
 
@@ -1164,8 +1076,8 @@ class ThreadsObserved(Observed):
     changed: frozenset[str]
     activity: Mapping[str, ObservedActivity | DeletedThread]
 
-    def revision_inputs(self) -> tuple[dict[str, ThreadPresentation], set[str]]:
-        readable: dict[str, ThreadPresentation] = {}
+    def revision_inputs(self) -> tuple[dict[str, AcquiredThreadPresentation], set[str]]:
+        readable: dict[str, AcquiredThreadPresentation] = {}
         retry: set[str] = set()
         for name, result in self.results.items():
             result.collect_revision_inputs(name, readable, retry)
