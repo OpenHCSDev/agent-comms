@@ -1,14 +1,16 @@
 """Real reserved inputs, source files and journals; no native/provider substitute."""
 from collections.abc import Callable
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
+import sqlite3
 
 import pytest
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import InputId
-from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.presentation import AllOutcomes
 from agent_comms.private_send_claim import PrivateSendClaim
@@ -69,6 +71,26 @@ async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Pa
             claim.commit(store, context)
             retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert retained == original
+
+
+async def test_later_corroborated_request_preserves_first_context_receipt(tmp_path: Path):
+    async with prepared_native_input(tmp_path) as claim:
+        context = recorded_input_context(claim)
+        await claim.context_committed(context)
+        files = claim.session.files(claim.selected.comms.root)
+        # Append through the declared journal owner, preserving its original file identity.
+        with closing(sqlite3.connect(files.input_proof)) as db, db:
+            first = NativeContextJournal.for_input(db, claim.input_id, context.request_generation)
+            assert first is not None
+            later = replace(first, request_generation=first.request_generation + 1,
+                            llm_context_digest='d' * 64, committed_at_ms=first.committed_at_ms + 1)
+            later.insert(db)
+        later_context = later.at(context.session_file, session_entry_start=context.session_entry_start)
+        await claim.context_committed(later_context)
+        with Coordination(claim.store_path) as store:
+            claim.commit(store, later_context)
+            retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
+            assert retained.require_context_proof() == context
 
 
 async def test_same_request_contradiction_cannot_replace_context_receipt(tmp_path: Path):
