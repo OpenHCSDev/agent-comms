@@ -3,6 +3,7 @@
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,9 +14,13 @@ import pytest
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
+from agent_comms.build_identity import RepositoryCommit
+from agent_comms.head_review import (
+    HeadReview, IntegrationInput, IntegrationSource, PullRequestHead, ReadPullRequestHead,
+)
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     HeadReviewTimerUp, IdlePullRequest, OrderlessPullRequest, OrderlessUnreviewedHead,
     OrderRefusingStandingRule, ReviewTimerUp, StuckMerge,
@@ -33,6 +38,7 @@ from agent_comms.todos import (
     HeadVerdict, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
+from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("test_holder_standing_rules", "github_fixture")
@@ -211,6 +217,102 @@ def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head
     assert not StoredHeadReview.head_reviews(comms.goals.todos, moved)
     assert not pulls.open(request.repo)[0].has_head_review
     assert not any(f"statuses/{head}" in call[1] for call in github.calls())
+
+
+@pytest.fixture
+def captured_input(reviewed_source: SourceRepository) -> IntegrationInput:
+    source = reviewed_source
+    return IntegrationInput((IntegrationSource(
+        RepositoryCommit(source.github, source.main_commit),
+        (PullRequestHead(source.github, source.number, source.branch_commit),),
+        source.git(source.checkout, "rev-parse", f"{source.branch_commit}^{{tree}}").strip(),
+    ),))
+
+
+def test_integration_metadata_is_canonical_and_ordinary_messages_have_no_digest(
+        captured_input: IntegrationInput) -> None:
+    inputs = captured_input
+    assert FieldCodec.decode(IntegrationInput, FieldCodec.parse(inputs.canonical)) == inputs
+    message = f"Combine the real source changes\n\n{inputs.trailer}\n"
+    assert IntegrationInput.from_message(message) == (inputs,)
+    assert IntegrationInput.digest_from_message(message) == inputs.digest
+    assert IntegrationInput.from_message("An ordinary substantive change\n") == ()
+    assert IntegrationInput.digest_from_message("An ordinary substantive change\n") == ""
+
+
+@pytest.mark.parametrize("damage", (
+    lambda trailer: trailer + "\n" + trailer,
+    lambda trailer: trailer.replace(": ", ":\t", 1),
+    lambda trailer: trailer.replace('"sources":', '"sources": ', 1),
+    lambda trailer: trailer + "\nUnrelated text after the trailer",
+    lambda trailer: trailer + "garbage",
+))
+def test_attempted_integration_metadata_never_falls_back_to_ordinary_mode(
+        captured_input: IntegrationInput, damage: Callable[[str], str]) -> None:
+    with pytest.raises(MalformedRecord):
+        IntegrationInput.from_message(damage(captured_input.trailer))
+
+
+def test_integration_metadata_refuses_duplicate_json_fields_and_unknown_shapes(
+        captured_input: IntegrationInput) -> None:
+    canonical = captured_input.canonical
+    duplicate = canonical[:-1] + "," + canonical[1:]
+    for payload in (duplicate, '{"sources":[],"unsupported_version":2}'):
+        with pytest.raises(MalformedRecord):
+            IntegrationInput.from_message(f"{IntegrationInput.trailer_name}: {payload}")
+
+
+def test_integration_source_refuses_duplicates_abbreviations_and_foreign_members(
+        captured_input: IntegrationInput) -> None:
+    source, = captured_input.sources
+    head, = source.heads
+    with pytest.raises(MalformedRecord):
+        replace(source, heads=(head, head))
+    with pytest.raises(MalformedRecord):
+        replace(source, baseline=replace(source.baseline, commit=source.baseline.commit[:9]))
+    with pytest.raises(MalformedRecord):
+        replace(source, heads=(replace(head, head=head.head[:9]),))
+    with pytest.raises(MalformedRecord):
+        replace(source, heads=(replace(head, repo=RepositoryName.from_wire("other/repository")),))
+    with pytest.raises(MalformedRecord):
+        IntegrationInput((source, source))
+    with pytest.raises(ToolRefusedError):
+        captured_input.require_repositories((source.repository, RepositoryName.from_wire("other/repository")))
+
+
+def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
+        captured_input: IntegrationInput, reviewed_source: SourceRepository, tmp_path: Path,
+        github_cli: GitHubFixture) -> None:
+    source = reviewed_source
+    companion = SourceRepository.create(tmp_path / "companion", RepositoryName.from_wire("example/client"))
+    client = IntegrationSource(
+        RepositoryCommit(companion.github, companion.main_commit),
+        (PullRequestHead(companion.github, companion.number, companion.branch_commit),),
+        companion.git(companion.checkout, "rev-parse", f"{companion.branch_commit}^{{tree}}").strip(),
+    )
+    inputs = IntegrationInput(tuple(sorted((*captured_input.sources, client), key=lambda row: row.repository.key)))
+    companion.git(companion.checkout, "checkout", "feature")
+    owner = companion.checkout / "owner.py"
+    owner.write_text(owner.read_text() + "new_export = True\n")
+    moved = companion.publish_change("Change the paired client", "owner.py")
+    changed = replace(client, heads=(replace(client.heads[0], head=moved),),
+                      candidate_tree=companion.git(companion.checkout, "rev-parse", f"{moved}^{{tree}}").strip())
+    updated = replace(inputs, sources=tuple(changed if row == client else row for row in inputs.sources))
+    core, = captured_input.sources
+    heads = tuple(PullRequestHead(source.github, source.number, source.git(
+        source.checkout, "commit-tree", core.candidate_tree,
+        "-p", source.main_commit, "-p", source.branch_commit,
+        "-m", f"Combine the substantive Core source\n\n{snapshot.trailer}",
+    ).strip()) for snapshot in (inputs, updated))
+    reader = WorkBranches(source.checkout)
+    before, after = (head.change_identity(reader, "main") for head in heads)
+    assert before.patch == after.patch
+    assert before.integration_digest == inputs.digest
+    assert after.integration_digest == updated.digest
+    assert before != after
+    # An author's canonical self-hash is source identity, never an accepted review.
+    github_cli.configure(source.github)
+    assert not any(HeadReview.accepted(head.repo, head.head) for head in heads)
 
 
 def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp_path):

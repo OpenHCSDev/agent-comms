@@ -365,6 +365,11 @@ query($owner: String!, $name: String!, $after: String) {
         self.require_commits("origin", base_head, head)
         return base_head
 
+    def commit_message(self, head: str) -> str:
+        """Read an immutable commit's message; its domain owner decodes any metadata."""
+        self.require_commits("origin", head)
+        return self._git("show", "--no-patch", "--format=%B", head)
+
     def pull_request_patch_id(self, base: str, head: str) -> str:
         base_head = self.pull_request_base(base, head)
         patch = self._git(

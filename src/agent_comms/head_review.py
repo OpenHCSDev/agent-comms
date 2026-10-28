@@ -5,12 +5,14 @@ Every path that posts that status goes through here.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 from collections.abc import Sequence
 
+from .build_identity import RepositoryCommit
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
@@ -40,6 +42,7 @@ class PullRequestChange:
     """Git's whitespace-preserving identity of a pull request's complete patch."""
 
     patch: str
+    integration_digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -94,7 +97,10 @@ class PullRequestHead:
         Verbatim patch IDs preserve Python indentation and whitespace in literals.
         The existing Git reader shares one base-head read and fetches missing objects.
         """
-        return PullRequestChange(reader.pull_request_patch_id(base, self.head))
+        return PullRequestChange(
+            reader.pull_request_patch_id(base, self.head),
+            IntegrationInput.digest_from_message(reader.commit_message(self.head)),
+        )
 
     def holds(self, commit: str) -> bool:
         return self.head.startswith(commit)
@@ -111,6 +117,93 @@ class PullRequestHead:
                 f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
             )
         return current
+
+
+@dataclass(frozen=True)
+class IntegrationSource:
+    """One repository's captured main, exact PR overlays and resulting Git tree."""
+
+    baseline: RepositoryCommit
+    heads: tuple[PullRequestHead, ...]
+    candidate_tree: Annotated[str, GitCommitText]
+
+    def __post_init__(self) -> None:
+        for commit in (self.baseline.commit, self.candidate_tree, *(head.head for head in self.heads)):
+            GitCommitText.decode(commit)
+            if len(commit) != 40 or commit != commit.lower():
+                raise MalformedRecord("Integration inputs require full lowercase 40-hex Git identities.")
+        if any(head.repo != self.repository for head in self.heads):
+            raise MalformedRecord("Every integration member must belong to its source repository.")
+        if len({head.pr for head in self.heads}) != len(self.heads):
+            raise MalformedRecord("An integration source cannot name a PR twice.")
+        if self.heads != tuple(sorted(self.heads, key=lambda head: head.pr)):
+            raise MalformedRecord("Integration members must be in PR-number order.")
+
+    @property
+    def repository(self) -> RepositoryName:
+        return self.baseline.repository
+
+
+@dataclass(frozen=True)
+class IntegrationInput:
+    """Immutable compared source cuts, bound by their carrier's reviewed Git commit.
+
+    This is not an authorization record. Exact-head review and draft state still decide
+    promotion. The canonical payload deliberately cannot contain its own carrier SHA.
+    """
+
+    sources: tuple[IntegrationSource, ...]
+    trailer_name: ClassVar[str] = "Agent-Comms-Integration"
+
+    def __post_init__(self) -> None:
+        repositories = tuple(source.repository for source in self.sources)
+        if not repositories or len(set(repositories)) != len(repositories):
+            raise MalformedRecord("Integration inputs require unique, nonempty repository sources.")
+        if repositories != tuple(sorted(repositories, key=lambda repo: repo.key)):
+            raise MalformedRecord("Integration sources must be in repository-name order.")
+
+    def require_repositories(self, repositories: tuple[RepositoryName, ...]) -> None:
+        """The actual stack declaration supplies coverage, never a caller's package roster."""
+        if {source.repository for source in self.sources} != set(repositories):
+            raise ToolRefusedError("Integration inputs omit a declared stack source or name an unknown one.")
+
+    def source(self, repository: RepositoryName) -> IntegrationSource:
+        selected = tuple(source for source in self.sources if source.repository == repository)
+        if len(selected) != 1:
+            raise ToolRefusedError(f"Integration inputs do not uniquely select {repository.to_wire()}.")
+        return selected[0]
+
+    @property
+    def canonical(self) -> str:
+        return FieldCodec.compact(FieldCodec.encode(self), sort_keys=True, allow_nan=False)
+
+    @property
+    def digest(self) -> str:
+        return hashlib.sha256(self.canonical.encode("utf-8")).hexdigest()
+
+    @property
+    def trailer(self) -> str:
+        return f"{self.trailer_name}: {self.canonical}"
+
+    @classmethod
+    def from_message(cls, message: str) -> tuple[IntegrationInput, ...]:
+        """Absent is ordinary; any attempted malformed/duplicate trailer refuses."""
+        lines = message.rstrip("\n").split("\n")
+        marked = tuple(line for line in lines if line.lstrip().startswith(cls.trailer_name))
+        if not marked:
+            return ()
+        prefix = f"{cls.trailer_name}: "
+        if len(marked) != 1 or not marked[0].startswith(prefix) or marked[0] != lines[-1]:
+            raise MalformedRecord("Integration metadata requires one final canonical trailer.")
+        payload = marked[0].removeprefix(prefix)
+        decoded = FieldCodec.decode(cls, FieldCodec.parse(payload))
+        if decoded.canonical != payload:
+            raise MalformedRecord("Integration metadata is not canonical.")
+        return (decoded,)
+
+    @classmethod
+    def digest_from_message(cls, message: str) -> str:
+        return "".join(inputs.digest for inputs in cls.from_message(message))
 
 
 @dataclass(frozen=True)
