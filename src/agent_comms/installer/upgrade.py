@@ -922,6 +922,7 @@ class PracticeBus:
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
+            runtime: LaunchRuntime,
             harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
@@ -957,7 +958,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
                 raise UpgradeRefused(f"No installed stack at {installed.python}")
             installed.require_runtime_wire()
             installed.require_uv()
-        staged = Stack.build(ScratchCheckout(tree.path), commands)
+        staged = TargetStack(tree.path, commands, runtime=runtime,
+                             program=TargetProgram(tree.steps_package))
+        if runtime.interpreter != LaunchRuntime.running().interpreter:
+            raise UpgradeRefused("The prepared install must run in its built target runtime")
         with StartingReportPublicationPhase().running(commands.clock):
             driver = member.driver(mode, report, root, installed, staged, target)
         with mode.owners_stopped(member, root, driver, staged, bridges) as report.owners:

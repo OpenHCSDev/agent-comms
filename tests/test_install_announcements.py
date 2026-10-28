@@ -63,6 +63,7 @@ def test_failed_rehearsal_does_not_publish_to_the_source_bus(private_comms, tmp_
         upgrade(
             source.checkout, private_comms.root, target, UnnamedInstaller(), RehearsalMode(), False,
             tmp_path / "spill", tmp_path / "scratch",
+            LaunchRuntime.running(),
             lambda stack: pytest.fail("A refused rehearsal cannot install harnesses"),
             InstallReport(),
         )
