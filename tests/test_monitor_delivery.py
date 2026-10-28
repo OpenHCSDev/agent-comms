@@ -584,6 +584,8 @@ async def test_only_visible_pages_of_the_exact_export_confirm(bridge):
     copied = export.parent.parent / 'copied.jsonl'
     shutil.copyfile(export, copied)
     whole = shown(text)
+    truncated = lines[-1][:-1]
+    assert truncated != lines[-1]
     # Only the one numbered empty row after the final LF is the Read's terminator.
     for path, read, label, error in (
         (export, whole, 'failed-read', True),
@@ -591,8 +593,7 @@ async def test_only_visible_pages_of_the_exact_export_confirm(bridge):
         (export, shown(other_export.read_text(newline='')), 'foreign-message', False),
         (export, shown('\n'.join(lines[:3])) + '\n5\t' + lines[4], 'numbering-gap', False),
         (export, shown('\n'.join([*lines[:5], lines[5][:100]])), 'truncated-line', False),
-        (export, shown('\n'.join([*lines[:-1], lines[-1][:100]]) + '\n'), 'truncated-final',
-         False),
+        (export, shown('\n'.join([*lines[:-1], truncated]) + '\n'), 'truncated-final', False),
         (export, shown(text.replace('\n', '\n\n', 1)), 'interior-empty', False),
         (export, shown(text + '\n'), 'two-terminal-empties', False),
         (export, whole.rpartition('\n')[0] + f'\n{len(lines) + 2}\t', 'terminal-gap', False),
