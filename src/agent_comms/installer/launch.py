@@ -120,6 +120,7 @@ class InstallReport(MroDispatch):
     def running(self, tree: TargetTree, clock: InstallClock) -> Iterator[None]:
         """Every writer runs installed artifacts from outside ``tree``, so the report follows
         the tree's cleanup and a cleanup failure is the install's failure."""
+        clock.phases[:0] = self.inherited_phases
         self.source = Repo(checkout=tree.path, github=CorePackage.repository)
         try:
             tree.__enter__()
@@ -128,7 +129,7 @@ class InstallReport(MroDispatch):
             finally:
                 with TreeClosePhase().running(clock):
                     tree.__exit__(*sys.exc_info())
-            lines = self.outcome.lines(tuple(self.inherited_phases))
+            lines = self.outcome.lines()
         except BaseException as error:
             self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
