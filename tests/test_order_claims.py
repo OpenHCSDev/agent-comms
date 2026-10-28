@@ -157,7 +157,7 @@ def unsent_claim(ctx):
     sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     request = CommsOrderDeliverTool(
         problem="P1", pull_request=1, head=sha, report=DeliveryReport(
-            "Killed the duplicated count decision; read its actual diff before accepting it."),
+            "Killed the stupid duplicated count decision; read its actual diff before accepting it."),
     )
     before = comms.bus.bus.revision()
     # The bus writer's own busy wait expires; nothing in the publisher or claim is patched.
@@ -248,7 +248,7 @@ def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(hel
     sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     request = CommsOrderDeliverTool(
         problem="P1", pull_request=1, head=sha, report=DeliveryReport(
-            "Killed the duplicated count decision; read its actual diff before accepting it."),
+            "Killed the stupid duplicated count decision; read its actual diff before accepting it."),
     )
     ThreadCaller("worker").invoke(request, comms)
     claimed = comms.goals.todos.get("P1")
