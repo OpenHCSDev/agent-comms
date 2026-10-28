@@ -17,11 +17,15 @@ from agent_comms.notification_reads import (
 )
 from agent_comms.order_tools import InputDeliveryRead
 from agent_comms.private_path import FileRevision
+from agent_comms.registry_provenance import DeletedThread
+from agent_comms.repo import Checkout
 from agent_comms.presentation import NoRevision, WireRevision
 from agent_comms.revision_views import (
     ActivityView, NotificationEvidenceView, NotificationsView, RegistrationsView,
     SidebarView, StatusView, StoresView,
 )
+from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.threads import Thread
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.tool_request import ToolRequest
 from agent_comms.tools import CommsMessageOutcomesTool
@@ -41,13 +45,69 @@ def test_notification_read_states_use_the_request_revision_contract(comms):
     assert not live.changed_since(comms, original, UnreadableNotificationsRead(original))
 
 
+TEAM = (("sender", AgentThreadRole), ("worker", AgentThreadRole), ("human", UserThreadRole),
+        ("archived", AgentThreadRole), ("gone", AgentThreadRole))
+
+
+def declare_team(comms: Comms, tmp_path: Path) -> MessageReference:
+    """One real #team message whose notifications name an agent, a human and two agents
+    that are archived or deleted afterwards."""
+    comms.channels.create_tag("team")
+    for name, role in TEAM:
+        comms.registry.declare(Thread(name, frozenset({"team"}), Checkout(tmp_path), role=role))
+    return comms.messaging.send("sender", "#team", "Who is still here?").message.reference
+
+
+def settled_read(comms: Comms, reference: MessageReference) -> tuple[WireRevision, NotificationsRead]:
+    revision = comms.views.revision()
+    window = LiveNotificationRead((reference,)).read(comms)
+    return revision, NotificationsRead.of(revision, comms, {}, window)
+
+
+def test_the_window_names_every_participant_and_activity_holds_only_projected_ones(comms, tmp_path):
+    reference = declare_team(comms, tmp_path)
+    comms.registry.archive("archived")
+    comms.registry.remove("gone")
+    revision, settled = settled_read(comms, reference)
+
+    names = settled.notification_window.activity_names()
+    assert {name for name, _role in TEAM} <= names
+    assert settled.activity.keys() == names - {"human", "archived"}
+    assert settled.activity["gone"] == DeletedThread("gone")
+    assert settled.activity["worker"] == comms.views.observed_activity(revision, ("worker",))["worker"]
+    assert not settled.live_changed(comms, revision)
+
+
+def test_an_archived_participant_becoming_visible_changes_the_read(comms, tmp_path):
+    reference = declare_team(comms, tmp_path)
+    comms.registry.archive("archived")
+    revision, settled = settled_read(comms, reference)
+    assert "archived" not in settled.activity
+
+    comms.registry.declare(Thread("archived", frozenset({"team"}), Checkout(tmp_path)))
+    later = comms.views.revision()
+    assert later.changed_since(ActivityView(), revision)
+    assert settled.live_changed(comms, later)
+
+
+def test_a_participant_deleted_after_the_read_changes_it(comms, tmp_path):
+    reference = declare_team(comms, tmp_path)
+    revision, settled = settled_read(comms, reference)
+    assert "gone" in settled.activity and settled.activity["gone"] != DeletedThread("gone")
+
+    comms.registry.remove("gone")
+    assert settled.live_changed(comms, comms.views.revision())
+
+
 def test_notification_read_only_acquires_activity_when_its_source_changed(comms, tmp_path):
+    reference = declare_team(comms, tmp_path)
+    comms.registry.archive("archived")
+    original, settled = settled_read(comms, reference)
+    assert {"human", "archived"} <= settled.notification_window.activity_names() - settled.activity.keys()
     marker = tmp_path / 'changed-source'
     marker.write_text('changed')
     source = FileRevision.capture(marker).revisions()
-    original = WireRevision.empty()
     assert replace(original, history=source).changed_since(NotificationsView(), original)
-    settled = NotificationsRead(original, {'absent-participant': None})
     calls = 0
 
     def count_reads(frame, event, argument):
@@ -60,7 +120,7 @@ def test_notification_read_only_acquires_activity_when_its_source_changed(comms,
     try:
         assert not settled.live_changed(comms, replace(original, reads=source))
         assert calls == 0
-        assert settled.live_changed(comms, replace(original, activity=source))
+        assert not settled.live_changed(comms, replace(original, activity=source))
         assert calls == 1
     finally:
         sys.setprofile(previous)

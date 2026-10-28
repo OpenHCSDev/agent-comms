@@ -32,12 +32,13 @@ class CapturedNotificationWindow(NotificationWindow):
 
 @dataclass(frozen=True)
 class NotificationsRead:
-    """Where one notification read settled: its revision and the activity of every participant
+    """Where one notification read settled: its revision and the activity of the participants
     its notifications name, captured before the read for participants already known and right
-    after it for new ones."""
+    after it for new ones. The window names every watched participant; activity holds only
+    the ones the registry projects, so a human or archived participant is absent from it."""
 
     revision: WireRevision
-    activity: Mapping[str, ObservedActivity | DeletedThread | None] = field(default_factory=dict)
+    activity: Mapping[str, ObservedActivity | DeletedThread] = field(default_factory=dict)
     notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
 
     @classmethod
@@ -47,14 +48,13 @@ class NotificationsRead:
            ) -> NotificationsRead:
         names = window.activity_names()
         known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
-        return cls(revision, {name: known.get(name) for name in names}, window)
+        return cls(revision, {name: known[name] for name in names if name in known}, window)
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
         """Read marks, participant activity or retained assignment evidence changed."""
-        current = (comms.views.observed_activity(revision, self.activity)
-                   if revision.changed_since(ActivityView(), self.revision)
-                   else self.activity)
-        return (any(current.get(name) != seen for name, seen in self.activity.items())
+        return ((revision.changed_since(ActivityView(), self.revision)
+                 and comms.views.observed_activity(
+                     revision, self.notification_window.activity_names()) != self.activity)
                 or self.notification_window.changed(comms, revision, self.revision))
 
 
