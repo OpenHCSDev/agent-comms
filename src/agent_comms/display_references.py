@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field, fields
+from dataclasses import InitVar, dataclass, field
 from functools import cached_property
 import re
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, cast
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.thread_identity import ThreadIncarnation
@@ -192,28 +192,42 @@ class DisplayReferences(RootedReferences):
 
 @dataclass(frozen=True)
 class CurrentDisplayReferences(DisplayReferences):
-    """Current targets retain their registry cut, not another identity index.
+    """Current targets keep each member's current incarnation by name, read once from the
+    registry cut, never the cut itself: every rendered line, link and draft holds its
+    reference set, and a held cut pins every thread's whole registry record.
 
     Recorded catalogs share name recognition but cannot resolve a live target.
     """
 
     targets: Mapping[str, DisplayReference] = field(init=False)
-    registry: RegistrySnapshot = field(repr=False, compare=False)
+    registry: InitVar[RegistrySnapshot]
     channels: tuple[str, ...] = ()
+    members: Mapping[str, ThreadIncarnation] = field(init=False, repr=False, compare=False)
+    current: Mapping[str, ThreadIncarnation] = field(init=False, repr=False, compare=False)
 
-    def __post_init__(self) -> None:
-        targets = {name: ThreadDisplayReference(self.root, thread.incarnation)
-                   for name, thread in self.registry.named_members()}
+    def __post_init__(self, registry: RegistrySnapshot) -> None:
+        self._derive({name: thread.incarnation for name, thread in registry.named_members()})
+
+    def _derive(self, members: Mapping[str, ThreadIncarnation]) -> None:
+        """The target and lookup views of the one stored member map."""
+        object.__setattr__(self, "members", MappingProxyType(dict(members)))
+        object.__setattr__(self, "current", MappingProxyType({
+            incarnation.require_recorded().lookup: incarnation for incarnation in members.values()}))
+        targets: dict[str, DisplayReference] = {
+            name: ThreadDisplayReference(self.root, incarnation) for name, incarnation in members.items()}
         targets.update((name, ChannelDisplayReference(self.root, name)) for name in self.channels)
         object.__setattr__(self, "targets", MappingProxyType(targets))
 
-    def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
-        """Restore declared inputs; rebuild the target view from their owners."""
-        return type(self), tuple(
-            getattr(self, declaration.name) for declaration in fields(self) if declaration.init
-        )
+    def __reduce__(self) -> tuple[object, ...]:
+        """Restore the root, channels and member incarnations; rebuild the views from them."""
+        return object.__new__, (type(self),), {
+            "root": self.root, "channels": self.channels, "members": dict(self.members)}
+
+    def __setstate__(self, state: Mapping[str, object]) -> None:
+        object.__setattr__(self, "root", state["root"])
+        object.__setattr__(self, "channels", state["channels"])
+        self._derive(cast(Mapping[str, ThreadIncarnation], state["members"]))
 
     def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
         """Resolve an exact birth to its current name; a missing birth fails."""
-        current = self.registry.by_lookup[incarnation.require_recorded().lookup]
-        return ThreadDisplayReference(self.root, current.incarnation)
+        return ThreadDisplayReference(self.root, self.current[incarnation.require_recorded().lookup])
