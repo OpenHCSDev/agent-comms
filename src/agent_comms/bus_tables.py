@@ -192,6 +192,27 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
 
 
 @dataclass(frozen=True)
+class CommanderUpdatePosition(messages.BusProjectionTables):
+    """Where each typed commander packet sits, by the commander birth it addresses. A rebuildable
+    search projection: the packet's content stays on its original message's task."""
+
+    seq: Annotated[int, Column(primary_key=True, references=TableReference(messages.BusRow, ("seq",)))]
+    commander_lookup: ThreadLookup
+    indexes = (Index(("commander_lookup", "seq")),)
+
+    @classmethod
+    def latest(cls, db: sqlite3.Connection, commander: ThreadLookup) -> tuple[messages.BusRecord, ...]:
+        """The newest packet for that commander through the covering index, decoded from its one
+        original record; a commander with no packet has none."""
+        positions = db.execute(
+            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
+                     'ORDER BY {seq} DESC LIMIT 1'),
+            (FieldCodec.encode(commander),))
+        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+
+@dataclass(frozen=True)
 class AnsweredSource(messages.BusProjectionTables):
     original: Annotated[int, Column(
         primary_key=True, references=TableReference(MessageIdentitySource, ("seq",)),

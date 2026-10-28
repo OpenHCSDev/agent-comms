@@ -14,6 +14,7 @@ from textwrap import shorten
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.bus_publication import AgentOrigin
+from agent_comms.class_fact import ClassFact
 from agent_comms.channel_targets import ThreadTarget
 
 from agent_comms.declared_family import DeclaredFamily
@@ -35,11 +36,15 @@ from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms_hooks.board import BoardEntry
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from agent_comms.bus import BusReader
     from agent_comms.cli_bridges.claude import ClaudeBridge
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
+    from agent_comms.projection_source import ProducedRow
     from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.typed_table import TypedTable
 
 
 @dataclass(frozen=True)
@@ -181,6 +186,16 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     role: ClassVar[MessageRole]
     header: ClassVar[str] = "COMMANDER"
 
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from agent_comms.bus_tables import CommanderUpdatePosition
+        return (CommanderUpdatePosition,)
+
+    def projections(self, message: Message) -> Iterator[TypedTable]:
+        """The packet's position under the commander birth it was published for."""
+        from agent_comms.bus_tables import CommanderUpdatePosition
+        yield CommanderUpdatePosition(message.seq, self.commander.require_recorded().lookup)
+
     def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         return (self,) if self.commander == commander else ()
 
@@ -233,11 +248,11 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     @classmethod
     def latest(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
-        """The newest packet addressed to that commander, or none."""
-        snapshot = comms.registry.snapshot()
-        messages = comms.bus.bus.latest_addressed(
-            snapshot.names_for(CommanderService.sender), snapshot.names_for(commander.name),
-        )
+        """The newest typed packet for that commander birth, or none. An independent message
+        to the commander, newer or not, is never this board's baseline."""
+        from agent_comms.bus_tables import CommanderUpdatePosition
+        with comms.bus.bus.observing() as db:
+            messages = CommanderUpdatePosition.latest(db, commander.require_recorded().lookup)
         return tuple(packet for message in messages
                      for packet in message.task.commander_update(commander))
 

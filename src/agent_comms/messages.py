@@ -1050,10 +1050,14 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         from .bus_display_index import BusDisplayIndex
         from .bus_route_counts import BusRouteCounts
         from .bus_tables import MessageIdentitySource, AnsweredSource
-        return (
+        # Task rows are written by the record that carries the task, so the record kinds own
+        # them too: that is what lets a carry replay old records into a new task row.
+        return tuple(dict.fromkeys((
             BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts,
             MessageIdentitySource, AnsweredSource,
-        )
+            *(row for task in TaskAttachment.members_with(TaskAttachment)
+              for owner in task.writer_declarations() for row in owner.writes),
+        )))
 
     def projections(self):
         from .bus_activity_index import BusActivityIndex
@@ -1071,6 +1075,7 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         yield MessageIdentitySource(self.seq, self.message_id, self.sender)
         for original in self.answers:
             yield AnsweredSource(original.seq, self.seq)
+        yield from self.task.projections(self)
 
 
     @property
