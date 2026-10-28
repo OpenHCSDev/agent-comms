@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import cached_property
 from itertools import batched
 from typing import TYPE_CHECKING, ClassVar
 
@@ -22,8 +23,20 @@ if TYPE_CHECKING:
     from .thread_identity import ThreadIncarnation
 
 
-type SourceEvidence = tuple[tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...],
-                             tuple[HarnessDelivery, ...]]
+@dataclass(frozen=True)
+class SourceEvidence:
+    """One original's captured claims and harness attempts, the attempts grouped once by
+    their frozen recipient. Equality over both is the window's change test."""
+
+    claims: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...] = ()
+    attempts: Mapping[ThreadLookup, tuple[HarnessDelivery, ...]] = field(default_factory=dict)
+
+    def consumed_progress(self, recipient: ThreadLookup,
+                          progress: DeliveryProgress) -> DeliveryProgress:
+        """The recipient's progress after each of its own attempts on this original."""
+        for attempt in self.attempts.get(recipient, ()):
+            progress = attempt.outcome.consumed_progress(progress)
+        return progress
 
 
 @dataclass(frozen=True)
@@ -41,31 +54,26 @@ class NotificationAssignmentRead:
     def empty(cls) -> NotificationAssignmentRead:
         return cls((), ())
 
-    def evidence_by_source(self) -> dict[MessageReference, SourceEvidence]:
+    @cached_property
+    def evidence(self) -> Mapping[MessageReference, SourceEvidence]:
+        """Each original's evidence, grouped once per captured window."""
         claims: dict[MessageReference, list[tuple[WakeAssignment, AssignmentActivityEvidence]]] = {
             source.message.reference: [] for source in self.sources
         }
-        attempts: dict[MessageReference, list[HarnessDelivery]] = {
-            source.message.reference: [] for source in self.sources
+        attempts: dict[MessageReference, dict[ThreadLookup, list[HarnessDelivery]]] = {
+            source.message.reference: {} for source in self.sources
         }
         for row in self.rows:
             claims.setdefault(row[0].source, []).append(row)
         for attempt in self.attempts:
-            attempts.setdefault(attempt.reference, []).append(attempt)
-        return {source: (tuple(claims[source]), tuple(attempts.get(source, ())))
+            attempts[attempt.reference].setdefault(attempt.recipient_lookup, []).append(attempt)
+        return {source: SourceEvidence(tuple(claims[source]), {
+                    lookup: tuple(rows) for lookup, rows in attempts[source].items()})
                 for source in claims}
 
     def differs_from(self, fresh: Mapping[MessageReference, SourceEvidence]) -> bool:
-        return any(previous != fresh.get(source, ((), ()))
-                   for source, previous in self.evidence_by_source().items())
-
-    def consumed_progress(self, source: Delivered, recipient: ThreadLookup,
-                          progress: DeliveryProgress) -> DeliveryProgress:
-        """The recipient's progress after every attempt on this exact (lookup, seq, id)."""
-        for attempt in self.attempts:
-            if (attempt.reference, attempt.recipient_lookup) == (source.message.reference, recipient):
-                progress = attempt.outcome.consumed_progress(progress)
-        return progress
+        return any(previous != fresh.get(source, SourceEvidence())
+                   for source, previous in self.evidence.items())
 
 
 @dataclass(frozen=True)

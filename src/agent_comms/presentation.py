@@ -310,18 +310,20 @@ class MessageNotification:
         if not keys:
             return CapturedNotificationWindow({}, (assignment_read,))
         rows = NotificationAssignment.resolve(root, assignment_read)
+        evidence = assignment_read.evidence
         read_marks = []
         reads = ReadLedger.at(root)
         document = reads.read()
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
-                if not viewer.includes(source.sender_lookup, outcome.recipient):
+                recipient = outcome.recipient()
+                if not viewer.includes(source.sender_lookup, recipient):
                     continue
-                observation = observations[outcome.recipient.recipient_lookup]
+                observation = observations[recipient.recipient_lookup]
                 notification = outcome.project(observation, source.sender_lookup)
-                state = assignment_read.consumed_progress(
-                    source, notification.recipient_identity.recipient_lookup, notification.state)
+                state = evidence[source.message.reference].consumed_progress(
+                    recipient.recipient_lookup, notification.state)
                 notification = replace(notification, state=state,
                                        changed=notification.changed or state.consumed)
                 displayed_to = observation.displayed_recipient(

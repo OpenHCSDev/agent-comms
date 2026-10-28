@@ -554,7 +554,7 @@ class DeliveredAssignment(
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
-        return activity.consumed_notification(notification, updated_at_ms)
+        return activity.answered(notification)
 
     notification_state = IgnoredProgress
 

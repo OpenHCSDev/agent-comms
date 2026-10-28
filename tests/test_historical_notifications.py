@@ -206,7 +206,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
         UnansweredResponse,
     )
     from agent_comms.notification_progress import (
-        QueuedProgress, SelectedConsumedProgress, SentProgress, ShownToModelProgress,
+        IgnoredProgress, QueuedProgress, SelectedConsumedProgress, SentProgress, ShownToModelProgress,
     )
 
     sent_activity = AssignmentActivity(
@@ -275,7 +275,9 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     assert queued.label.startswith("Queued ") and queued.state == QueuedProgress(1_000)
     assert consumed.label.startswith("Consumed ") and consumed.state == SelectedConsumedProgress(2_000)
     assert answered.label.startswith("Answered ") and answered.answered_at_ms == 3_000
-    assert delivered.label.startswith("Consumed ") and delivered.state == ShownToModelProgress(2_000)
+    # A delivered claim carries no consumed time of its own: without native or harness proof
+    # its message is not consumed, whatever the claim's update time says.
+    assert delivered.state == IgnoredProgress(SentProgress(1_000)) and not delivered.state.consumed
     assert delivered_answer.label.startswith("Answered ")
     assert delivered_answer.answer == MessageReference(99, reply_id)
     assert sent.recipient_identity == consumed.recipient_identity == answered.recipient_identity
@@ -307,7 +309,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         (original.reference,)
     ).outcomes[original.seq, original.message_id]
     assert unrelated.answers == ()
-    assert notification.label.startswith("Consumed ")
+    assert not notification.state.consumed
     assert notification.answer is None
 
     import os

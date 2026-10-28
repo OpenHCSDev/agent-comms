@@ -8,7 +8,7 @@ from these rows beside the claims, from one store.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self
 
@@ -91,6 +91,22 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
         earlier: a confirmation landing between that read and this write stays recorded."""
         stored, = self.stored(db)
         return stored.outcome.settle(change(stored), assignments, db)
+
+    @classmethod
+    def for_recipients(cls, db: sqlite3.Connection,
+                       keys: Sequence[tuple[ThreadLookup, MessageReference]]) -> tuple[Self, ...]:
+        """Every bridge's attempt on exactly these (recipient, original) keys, each probed
+        through the recipient/seq/message index; no read walks the attempt history."""
+        if not keys:
+            return ()
+        return tuple(cls.select(
+            db,
+            where=("(recipient_lookup,seq,message_id) IN (VALUES "
+                   + ",".join("(?,?,?)" for _ in keys) + ")"),
+            parameters=tuple(value for lookup, reference in keys
+                             for value in (lookup, reference.seq, reference.message_id)),
+            order_by=("seq", "recipient_lookup", "bridge"),
+        ))
 
     @classmethod
     def latest(cls, db: sqlite3.Connection, bridge: type[HarnessSession],

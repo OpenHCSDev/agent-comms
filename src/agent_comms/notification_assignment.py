@@ -26,7 +26,7 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .notification_evidence import NotificationAssignmentRead, NotificationWindow
+from .notification_evidence import NotificationAssignmentRead, NotificationWindow, SourceEvidence
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow
@@ -97,9 +97,8 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
     ) -> MessageNotification: ...
 
     @abstractmethod
-    def consumed_notification(
-        self, notification: MessageNotification, consumed_at_ms: int
-    ) -> MessageNotification: ...
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        """The notification with this recorded reply attached; consumption stays its proof's."""
 
 
 class UnansweredResponse(AssignmentResponse):
@@ -111,12 +110,8 @@ class UnansweredResponse(AssignmentResponse):
     def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
         return progress.consumed_notification(notification)
 
-    def consumed_notification(self, notification: MessageNotification, consumed_at_ms: int) -> MessageNotification:
-        return replace(
-            notification,
-            state=ShownToModelProgress(consumed_at_ms),
-
-        )
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        return notification
 
 
 @dataclass(frozen=True)
@@ -129,11 +124,10 @@ class AnsweredResponse(AssignmentResponse):
             notification, self.reference, self.received_at_ms
         )
 
-    def consumed_notification(self, notification: MessageNotification, consumed_at_ms: int) -> MessageNotification:
+    def answered(self, notification: MessageNotification) -> MessageNotification:
         return replace(
             notification,
-            state=AnsweredProgress(ShownToModelProgress(consumed_at_ms)),
-
+            state=AnsweredProgress(notification.state),
             answer=self.reference,
             answered_at_ms=self.received_at_ms,
         )
@@ -151,8 +145,8 @@ class AssignmentActivity:
     def completed_notification(self, notification: MessageNotification) -> MessageNotification:
         return self.response.completed_notification(self.progress, notification)
 
-    def consumed_notification(self, notification: MessageNotification, consumed_at_ms: int) -> MessageNotification:
-        return self.response.consumed_notification(notification, consumed_at_ms)
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        return self.response.answered(notification)
 
     def recorded_response(self, message: Delivered) -> Self:
         return replace(self, response=self.response.recorded(message))
@@ -211,17 +205,24 @@ class NotificationSource(DeclaredFamily, affix="NotificationSource"):
     def project(self, observation: RecipientActivity,
                 sender_lookup: ThreadLookup) -> MessageNotification: ...
 
+    @abstractmethod
+    def recipient(self) -> FrozenRecipient:
+        """The frozen publication recipient this source answers for."""
+
 
 @dataclass(frozen=True)
 class UnrecordedNotificationSource(NotificationSource):
-    recipient: FrozenRecipient
+    published: FrozenRecipient
     decision: RecipientDecision
+
+    def recipient(self) -> FrozenRecipient:
+        return self.published
 
     def project(
         self, observation: RecipientActivity, sender_lookup: ThreadLookup
     ) -> MessageNotification:
         return self.decision.initial_notification(
-            self.recipient, sender_lookup, observation=observation)
+            self.published, sender_lookup, observation=observation)
 
 
 @dataclass(frozen=True)
@@ -235,9 +236,9 @@ class NotificationAssignment(NotificationSource):
         reads = tuple(reads)
         sources = tuple({source.message.reference: source
                          for read in reads for source in read.sources}.values())
-        fresh = {}
+        fresh: dict[MessageReference, SourceEvidence] = {}
         for sources_chunk in NotificationWindow.chunks(sources):
-            fresh.update(cls.read(root, sources_chunk).evidence_by_source())
+            fresh.update(cls.read(root, sources_chunk).evidence)
         return tuple(read for read in reads if read.differs_from(fresh))
 
     @classmethod
@@ -334,13 +335,10 @@ class NotificationAssignment(NotificationSource):
             ),
             AssignmentActivityEvidence,
         )
-        attempts = HarnessDelivery.select(
-            connection,
-            where=f"seq IN ({','.join('?' for _ in sources)})",
-            parameters=tuple(source.message.seq for source in sources),
-            order_by=("seq", "recipient_lookup", "bridge"),
-        )
-        return NotificationAssignmentRead(sources, tuple(rows), tuple(attempts))
+        attempts = HarnessDelivery.for_recipients(connection, tuple(
+            (recipient.recipient_lookup, source.message.reference)
+            for source in sources for recipient in source.recipients))
+        return NotificationAssignmentRead(sources, tuple(rows), attempts)
 
     @classmethod
     def read(
@@ -365,7 +363,6 @@ class NotificationAssignment(NotificationSource):
     ) -> NoReturn:
         raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
-    @property
     def recipient(self) -> FrozenRecipient:
         return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
 
@@ -373,7 +370,7 @@ class NotificationAssignment(NotificationSource):
         self, observation: RecipientActivity, sender_lookup: ThreadLookup
     ) -> MessageNotification:
         return self.assignment.lifecycle.notification(
-            self.recipient,
+            self.recipient(),
             sender_lookup,
             observation=observation,
             activity=self.activity,
