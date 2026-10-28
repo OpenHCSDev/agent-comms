@@ -32,6 +32,7 @@ from .turn_item import NativeTurnId
 if TYPE_CHECKING:
     from .comms import Comms
     from .registry_document import RegistrySnapshot
+    from .repository_name import RepositoryName
     from .todos import OrderProgress
     from .transcript_sources import TranscriptSource
 
@@ -300,11 +301,16 @@ class EditWorkplaces:
                                         for repository in order.source_repositories()))
             for todo in history
         }
-        trees = {repo.github: pulls.worktrees(repo) for repo in repositories}
-        paths = {Path(path) for branches in trees.values()
-                 for worktrees in branches.values() for path in worktrees}
-        paths.update(order.check.directory for hold in holds
-                     for order in hold.todo.order.declarations)
+        trees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
+        for repo in repositories:
+            branches = trees.setdefault(repo.github, {})
+            for branch, worktrees in pulls.worktrees(repo).items():
+                branches[branch] = (*branches.get(branch, ()), *worktrees)
+        listed = {Path(path) for branches in trees.values()
+                  for worktrees in branches.values() for path in worktrees}
+        explicit = {order.check.directory for hold in holds
+                    for order in hold.todo.order.declarations}
+        paths = listed | explicit
         for hold in holds:
             roots = rule.roots_of(hold.holder)
             paths.add(rule.order_checkout(roots, hold.todo.id))
@@ -315,6 +321,15 @@ class EditWorkplaces:
         present = Checkout.git_roots(*paths)
         actual = {path: Repo.of(path) for path in present
                   if path.is_absolute() and Checkout(path).resolved().path == path}
+        # An explicit retained source may be a separate clone, not a worktree of the
+        # registered checkout. Read its existing worktree owner once, never per edit;
+        # only that already-declared root joins the branch facts, not arbitrary siblings.
+        for path in explicit - listed:
+            if path in actual and actual[path].github in trees:
+                branches = trees[actual[path].github]
+                for branch, worktrees in pulls.worktrees(actual[path]).items():
+                    if str(path) in worktrees:
+                        branches[branch] = (*branches.get(branch, ()), str(path))
         links = tuple(dict.fromkeys(link for hold in holds
                                     for order in hold.todo.order.declarations
                                     for link in order.pull_requests))

@@ -512,6 +512,19 @@ def test_noncanonical_worktree_needs_qualified_link_not_matching_origin(edit_sou
     assert selected.problems_for(str(linked / "new.py")) == frozenset(("P40",))
     assert selected.problems_for(str(unrelated / "new.py")) == frozenset()
     assert selected.problems_for(str(source.checkout / "new.py")) == frozenset()
+    # The explicit retained source may be a different clone: it will not occur in the
+    # registered checkout's worktree list, but its own branch still has to match the PR.
+    separate = tmp_path / "explicit-source-clone"
+    source.git(tmp_path, "clone", "-q", str(source.remote), str(separate))
+    source.git(separate, "checkout", "-q", "-b", "linked-repair")
+    current = comms.goals.todos.get("P40")
+    save_edit_order(comms, replace(current, order=replace(
+        current.order, check=replace(current.order.check, directory=separate))))
+    _, workplaces = edit_workplaces(comms)
+    assert workplaces[holder.incarnation].problems_for(str(separate / "new.py")) == frozenset(("P40",))
+    source.git(separate, "checkout", "-q", "-b", "wrong-branch")
+    _, workplaces = edit_workplaces(comms)
+    assert workplaces[holder.incarnation].problems_for(str(separate / "new.py")) == frozenset()
 
 
 def test_ambiguous_pre_pr_work_never_picks_latest(edit_sources, tmp_path):
