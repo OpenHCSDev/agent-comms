@@ -50,8 +50,9 @@ TEAM = (("sender", AgentThreadRole), ("worker", AgentThreadRole), ("human", User
 
 
 def declare_team(comms: Comms, tmp_path: Path) -> MessageReference:
-    """One real #team message whose notifications name an agent, a human and two agents
-    that are archived or deleted afterwards."""
+    """One real #team message from an agent sender, seen by a human and by three native
+    agent recipients; one of those is archived or deleted afterwards. The window names only
+    native recipients, so the sender and the human are never watched."""
     comms.channels.create_tag("team")
     for name, role in TEAM:
         comms.registry.declare(Thread(name, frozenset({"team"}), Checkout(tmp_path), role=role))
@@ -64,15 +65,16 @@ def settled_read(comms: Comms, reference: MessageReference) -> tuple[WireRevisio
     return revision, NotificationsRead.of(revision, comms, {}, window)
 
 
-def test_the_window_names_every_participant_and_activity_holds_only_projected_ones(comms, tmp_path):
+def test_the_window_names_native_recipients_and_activity_holds_only_projected_ones(comms, tmp_path):
     reference = declare_team(comms, tmp_path)
     comms.registry.archive("archived")
     comms.registry.remove("gone")
     revision, settled = settled_read(comms, reference)
 
     names = settled.notification_window.activity_names()
-    assert {name for name, _role in TEAM} <= names
-    assert settled.activity.keys() == names - {"human", "archived"}
+    assert names == {"worker", "archived", "gone"}
+    assert not names & {"sender", "human"}
+    assert settled.activity.keys() == names - {"archived"}
     assert settled.activity["gone"] == DeletedThread("gone")
     assert settled.activity["worker"] == comms.views.observed_activity(revision, ("worker",))["worker"]
     assert not settled.live_changed(comms, revision)
@@ -103,7 +105,7 @@ def test_notification_read_only_acquires_activity_when_its_source_changed(comms,
     reference = declare_team(comms, tmp_path)
     comms.registry.archive("archived")
     original, settled = settled_read(comms, reference)
-    assert {"human", "archived"} <= settled.notification_window.activity_names() - settled.activity.keys()
+    assert settled.notification_window.activity_names() - settled.activity.keys() == {"archived"}
     marker = tmp_path / 'changed-source'
     marker.write_text('changed')
     source = FileRevision.capture(marker).revisions()
