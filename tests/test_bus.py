@@ -24,7 +24,11 @@ from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.bus_activity_index import ActivityMaximum
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
-from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
+from agent_comms.bus_tables import (
+    AnsweredSource, BusSchema, CommanderUpdatePosition, MessageIdentitySource,
+)
+from agent_comms.task_attachments.commander_pings import CommanderNotice
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
@@ -574,6 +578,69 @@ def test_answer_projection_rebuild_preserves_sequence_links_and_public_reference
     assert bus.lookup(reply.seq).answers == (original.reference,)
     assert bus.replies((original.reference,)) == (reply,)
     assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == ()
+
+
+def commander_packet(bus, commander, body):
+    return bus.append(lambda seq, db: PublicRecord.from_message(Message(
+        "commander-heartbeat", commander.name, body, InfoKind, seq=seq,
+        task=CommanderNotice(commander, ()))))
+
+
+def test_commander_packet_positions_append_with_their_message_and_rebuild_from_it(bus):
+    """Each typed packet's position is written in its own append; a taskless message from the
+    same sender writes none, and only that table rebuilds from the original records."""
+    lead, other = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation("other", 2.0)
+    first = commander_packet(bus, lead, "first board")
+    raw = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("commander-heartbeat", "lead", "independent instruction", InfoKind, seq=seq)))
+    theirs = commander_packet(bus, other, "another commander's board")
+
+    def positions():
+        with bus.observing() as db:
+            return CommanderUpdatePosition.select(db, order_by=("seq",))
+
+    appended = positions()
+    assert appended == [CommanderUpdatePosition(first.seq, lead.lookup),
+                        CommanderUpdatePosition(theirs.seq, other.lookup)]
+    with bus.observing() as db:
+        assert CommanderUpdatePosition.latest(db, lead.lookup) == (first,)
+        assert CommanderUpdatePosition.latest(db, other.lookup) == (theirs,)
+        assert CommanderUpdatePosition.latest(db, RecordedThreadIncarnation("lead", 3.0).lookup) == ()
+    with bus.writer_connection() as db:
+        ProjectionProducer.update(
+            db, where="{projection}=?", parameters=(CommanderUpdatePosition.declared_name,),
+            producer_digest="0" * 64,
+        )
+        db.execute(f'DELETE FROM "{CommanderUpdatePosition.declared_name}"')
+        assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert CommanderUpdatePosition.select(db, order_by=("seq",)) == appended
+        before = db.total_changes
+        assert not BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert db.total_changes == before
+    with bus.writing() as db:
+        BusProjectionTables.reset_schema(db)
+    Bus.install(bus.path)
+    assert positions() == appended
+    assert tuple(bus.lookup(record.seq) for record in (first, raw, theirs)) == (first, raw, theirs)
+
+
+def test_a_failed_append_leaves_no_commander_position(tmp_path, bus):
+    failure = RuntimeError("Broken publication implementation")
+    lead = RecordedThreadIncarnation("lead", 1.0)
+
+    def build(seq, db):
+        record_from(PrivateRecord, Message(
+            "commander-heartbeat", "lead", "not committed", InfoKind, seq=seq,
+            task=CommanderNotice(lead, ())),
+        ).append_to(db, seq)
+        raise failure
+
+    with pytest.raises(RuntimeError) as failed:
+        HumanOrigin("author", 1, Checkout(tmp_path)).append(bus, build)
+    assert failed.value is failure
+    with closing(sqlite3.connect(bus.path)) as db:
+        assert CommanderUpdatePosition.count(db) == 0
+        assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
 
 
 def test_bulk_history_keeps_one_snapshot_across_pages(bus):

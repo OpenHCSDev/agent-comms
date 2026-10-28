@@ -19,7 +19,7 @@ from agent_comms.commander_hud import (
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
-from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
+from agent_comms.errors import OverdueHeadRefusalError, RelationViolationError, UnregisteredThreadError
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
@@ -37,6 +37,10 @@ from agent_comms.ui_model.unit_state import (
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.threads import Thread
 from test_holder_standing_rules import state_cards
 from test_unit_state import recorded_turn
 
@@ -208,6 +212,110 @@ def test_each_commander_gets_its_own_failure_packet(notification_bus):
         assert latest.commander == commander
         assert latest.handled == (RulePing.capture(failure),)
         assert CommanderUpdate.report_failure(commander, failure, (latest,), now=now + 1) == ()
+    # The worker's later packet is not the lead's board.
+    lead = comms.registry.require("lead").incarnation
+    lead_board, = CommanderUpdate.latest(comms, lead)
+    assert lead_board.commander == lead
+
+
+def independent_instruction(comms, body):
+    """A taskless message from the heartbeat's own sender, as raw alarms were published."""
+    return comms.bus.publisher.publish_ordinary(
+        Message(sender=CommanderHeartbeat.sender, target="lead", body=body,
+                type=InfoKind, role=ConversationRole()),
+        origin=AgentOrigin(), destination=ThreadTarget("lead"),
+    )
+
+
+def everything_to_lead(comms):
+    page = MessagePageRequest(DMDisplayScope.capture(
+        CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
+    )).read_opened(comms.bus.bus)
+    return {message.reference for message in page.messages}
+
+
+def test_an_independent_heartbeat_message_never_replaces_the_board(notification_bus):
+    comms = notification_bus
+    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    beat(comms, (failing,))
+    board, = notifications(comms)
+    raw = independent_instruction(comms, "Heartbeat pass failed: an old raw alarm")
+    lead = comms.registry.require("lead").incarnation
+    assert CommanderUpdate.latest(comms, lead) == (board.task,)
+    assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms, "lead")
+    assert lead_hud(comms).board == board.task.board(comms, "lead")
+    assert raw.reference in everything_to_lead(comms)
+    # The next pass derives from the typed board, so nothing is restated as new.
+    beat(comms, (failing,))
+    assert len(notifications(comms)) == 1
+
+
+def test_a_later_notice_is_the_baseline_and_keeps_the_lines_still_on_it(notification_bus):
+    comms = notification_bus
+    kept = ServicePassFailing("kept-rule", time.time(), "still failing")
+    cleared = ServicePassFailing("cleared-rule", time.time(), "now fixed")
+    beat(comms, (kept, cleared))
+    decisions, = notifications(comms)
+    beat(comms, (kept,))
+    _, notice = notifications(comms)
+    assert isinstance(notice.task, CommanderNotice)
+    assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == (notice.task,)
+    assert RulePing.capture(kept) in notice.task.handled
+    assert RulePing.capture(cleared) not in notice.task.handled
+    assert decisions.reference in everything_to_lead(comms)
+
+
+def test_a_raw_message_between_failures_does_not_restate_the_board(notification_bus):
+    comms = notification_bus
+    rules = (ServicePassFailing("independent", 1.0, "another source"),)
+    beat(comms, rules)
+    board, = notifications(comms)
+    failed_pass(comms, RuntimeError("down"))
+    independent_instruction(comms, "Heartbeat pass failed: down")
+    failed_pass(comms, RuntimeError("still down"))
+    assert len(notifications(comms)) == 2
+    ServicePassStore.at(comms.root).passed(BrokenHeartbeat.__name__)
+    beat(comms, rules)
+    *_, recovered = notifications(comms)
+    assert isinstance(recovered.task, CommanderNotice)
+    assert aged(recovered.task.handled) == aged(board.task.handled)
+    assert recovered.task.not_applied == board.task.not_applied
+
+
+def test_a_recreated_commander_inherits_no_board(notification_bus):
+    comms = notification_bus
+    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    beat(comms, (failing,))
+    board, = notifications(comms)
+    worktree = comms.registry.require("lead").worktree
+    comms.registry.unregister("lead")
+    comms.registry.remove("lead")
+    comms.registry.declare(Thread("lead", frozenset({"comms"}), worktree))
+    reborn = comms.registry.require("lead").incarnation
+    assert reborn != board.task.commander
+    assert CommanderUpdate.latest(comms, reborn) == ()
+    assert CommanderUpdate.latest(comms, board.task.commander) == (board.task,)
+    now = time.time()
+    update, = CommanderUpdate.report_failure(reborn, failing, (), now=now)
+    update.send(comms, now, ())
+    latest, = CommanderUpdate.latest(comms, reborn)
+    assert latest.commander == reborn and latest.handled == update.handled
+
+
+def test_only_the_heartbeat_publishes_a_packet_for_its_exact_commander(notification_bus):
+    comms = notification_bus
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    for sender, target, commander in (("worker", "lead", lead),
+                                      (CommanderHeartbeat.sender, "lead", worker)):
+        with pytest.raises(RelationViolationError):
+            comms.bus.publisher.publish_ordinary(
+                Message(sender=sender, target=target, body="forged board", type=InfoKind,
+                        role=CommanderNotice.role, task=CommanderNotice(commander, ())),
+                origin=AgentOrigin(), destination=ThreadTarget(target),
+            )
+    assert CommanderUpdate.latest(comms, lead) == ()
+    assert CommanderUpdate.latest(comms, worker) == ()
 
 
 def test_failure_packet_follows_commander_and_service_rename_aliases(notification_bus):
