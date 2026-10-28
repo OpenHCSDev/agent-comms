@@ -538,7 +538,8 @@ def test_noncanonical_worktree_needs_qualified_link_not_matching_origin(edit_sou
     assert str(linked) not in independent_trees["linked-repair"]
     assert pulls.worktrees(source) is registered_trees
     assert pulls.worktrees(independent) is independent_trees
-    alias = replace(independent, checkout=separate / ".." / separate.name)
+    alias = SourceRepository.of(separate / ".." / separate.name)
+    assert alias.checkout != independent.checkout
     assert pulls.worktrees(alias) is independent_trees
     current = comms.goals.todos.get("P40")
     save_edit_order(comms, replace(current, order=replace(
