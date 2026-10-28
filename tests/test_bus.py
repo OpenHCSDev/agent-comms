@@ -696,8 +696,11 @@ def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, b
         written.append((seq, CommanderUpdatePosition.select(db)))
         BusRow.require(db, seq=seq).insert(db)
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(HumanSendRefusedError) as refused:
         HumanOrigin("author", 1, Checkout(tmp_path)).append(bus, build)
+    cause = refused.value.__cause__
+    assert type(cause) is sqlite3.IntegrityError
+    assert "UNIQUE constraint failed: bus.seq" in str(cause)
     (seq, positions), = written
     assert positions == [CommanderUpdatePosition(seq, lead.lookup)]
     with closing(sqlite3.connect(bus.path)) as db:
