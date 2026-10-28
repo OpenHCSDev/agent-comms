@@ -389,6 +389,19 @@ class Thread(ThreadProvenance, CatalogSelection):
             project_resume_due=self.project_resume_due or self.executing,
         )
 
+    def continues_running_project(self, original: Thread) -> bool:
+        """A selected next project does not move this exact turn's execution directory."""
+        return self.worktree == original.worktree or (
+            self.project_resume_due
+            and self.turn_lease == original.require_turn_lease()
+            and self.ran_in(original.worktree)
+        )
+
+    @property
+    def accepts_following_input(self) -> bool:
+        """A changed project needs a fresh native turn, not the old child's inbox."""
+        return not self.project_resume_due and self.turn_state.active.phase.accepts_followup
+
     @property
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
