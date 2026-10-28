@@ -8,13 +8,12 @@ as one set, and one message stored twice must agree or the carry refuses. Bridge
 only from the coordinator, so this runs before any bridge restarts on this runtime.
 """
 
-import json
 import sqlite3
 from collections.abc import Iterable
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from agent_comms.cli_bridges.shared import Binding, BridgeDeliveryStore, BridgeStateTable
 from agent_comms.coordination_database import CoordinationStore
@@ -27,10 +26,20 @@ from agent_comms.locked_store import RootFile
 from agent_comms.typed_table import SQLiteTableName, TypedRow, WriterOwnedFile, WriterOwnedResource
 
 
-FORGED_OBSERVATION = "commander-skip-old-heartbeats"
-"""On 2026-10-20 at 03:50 two claude-code attempts (seq 6251 and 6252) were hand-marked delivered
-with this record id. No transcript record has it, so those attempts carry what is true of them:
-emitted, nothing observed. Nothing replays them and nothing counts them as entered context."""
+@dataclass(frozen=True)
+class KnownForgedObservation:
+    """The one retired corrupt monitor record. On 2026-10-20 at 03:50 two claude-code attempts
+    (seq 6251 and 6252) were hand-marked delivered with this record id, which no transcript record
+    has. They carry what is true of them: emitted, nothing observed, so nothing replays them and
+    nothing counts them as entered context. An input to this carry only, never a MonitorEvidence
+    member or a stored record; the codec refuses every other malformed observation."""
+
+    kind: Literal["observed_monitor"]
+    record_id: Literal["commander-skip-old-heartbeats"]
+    timestamp: float
+
+    def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:
+        return EmittedOutcome, UnrecordedMonitor()
 
 
 @dataclass(frozen=True)
@@ -41,11 +50,8 @@ class JournalAttempt(TypedRow):
     monitor: str
 
     def evidence(self) -> tuple[type[Outcome], MonitorEvidence]:
-        stored = json.loads(self.monitor)
-        if stored.get("record_id") == FORGED_OBSERVATION:
-            return EmittedOutcome, UnrecordedMonitor()
-        monitor = FieldCodec.decode(MonitorEvidence, stored)
-        return monitor.proven_outcome(self.outcome), monitor
+        return FieldCodec.decode(MonitorEvidence | KnownForgedObservation,
+                                 FieldCodec.parse(self.monitor)).evidence(self.outcome)
 
     query: ClassVar[str] = (
         "SELECT id, json_extract(payload, '$.seq') AS seq, outcome, monitor FROM delivery")

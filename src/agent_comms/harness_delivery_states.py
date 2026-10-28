@@ -79,9 +79,10 @@ class MonitorEvidence(DeclaredFamily):
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
         return ()
 
-    def proven_outcome(self, recorded: type[Outcome]) -> type[Outcome]:
-        """The outcome this observation proves; one that proves nothing leaves the recorded one."""
-        return recorded
+    def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:
+        """The outcome this observation proves, with the observation that proves it; one that
+        proves nothing leaves the recorded outcome."""
+        return recorded, self
 
 
 @dataclass(frozen=True)
@@ -119,6 +120,6 @@ class ObservedMonitor(MonitorEvidence):
     record_id: TranscriptRecordId
     timestamp: float
 
-    def proven_outcome(self, recorded: type[Outcome]) -> type[Outcome]:
+    def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:
         """Only a complete, matching confirmation stores this, so the message entered context."""
-        return DeliveredOutcome
+        return DeliveredOutcome, self
