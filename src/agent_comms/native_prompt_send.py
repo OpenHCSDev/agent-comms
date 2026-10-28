@@ -36,7 +36,7 @@ class PromptBoundary(ABC):
     @abstractmethod
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
 
-    async def context_committed(self, turn: TrackedTurnSession, context: NativeContextProof) -> None:
+    async def context_committed(self, context: NativeContextProof) -> None:
         """An unowned prompt has no durable recipient acknowledgement to advance."""
 
     def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:

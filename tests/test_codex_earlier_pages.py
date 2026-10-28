@@ -165,7 +165,7 @@ def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path
 
 async def test_draining_server_gets_the_same_turn_after_reconnecting(tmp_path):
     """Codex refuses a turn while draining and asks for it again; the input is delivered, not lost."""
-    from agent_comms.cli_protocol import DeliveredOutcome
+    from agent_comms.harness_delivery_states import AcceptedOutcome
     from agent_comms.messages import InfoKind, Message
 
     turns = []
@@ -202,7 +202,7 @@ async def test_draining_server_gets_the_same_turn_after_reconnecting(tmp_path):
             options = CodexOptions(Watch(), StoredBinding(), tmp_path / 'bridge', tmp_path, str(socket_path))
             bridge = CodexBridge(options, binding.address(), db)
             message = Message(sender='sender', target='cli', body='keep going', type=InfoKind)
-            assert await bridge.deliver(message) is DeliveredOutcome
+            assert await bridge.deliver(message) is AcceptedOutcome
         assert len(turns) == 2 and turns[0] == turns[1]
         assert turns[0]['clientUserMessageId'] == f'comms:{message.message_id}'
     finally:

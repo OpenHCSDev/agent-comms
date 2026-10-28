@@ -23,6 +23,8 @@ from agent_comms.typed_table import Column, ForeignKey, FrozenColumn, ImmutableR
 
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
+    from agent_comms.notification_progress import DeliveryProgress
+    from agent_comms.presentation import MessageNotification
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,12 +74,21 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
         self.insert(db)
         return True
 
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return self.monitor.consumed_progress(progress)
+
+    def arrival_count(self) -> int:
+        return self.monitor.arrival_count(self.outcome)
+
+    def arrival_label(self, notification: MessageNotification) -> str:
+        return self.monitor.arrival_label(self.outcome, notification)
+
     def settle_claims(self, assignments: AssignmentStore, db: sqlite3.Connection) -> None:
         """What this attempt means for the recipient's claim on its message: the claim left the
         native queue, then took the steps this outcome proves. Each phase reads the claim as it
         stands, so a claim accepted after the attempt ends where one that existed before it
         would; a claim already settled keeps its state."""
-        for steps in (lambda state: state.harness_handoff(), self.outcome.claim_steps):
+        for steps in (lambda state: state.harness_handoff(), self.monitor.claim_steps):
             assignments.settle_harness_inputs(db, self.recipient_lookup, (self.reference,), steps)
 
     def begin(self, assignments: AssignmentStore, db: sqlite3.Connection) -> bool:

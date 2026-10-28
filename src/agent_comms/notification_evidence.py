@@ -35,7 +35,7 @@ class SourceEvidence:
                           progress: DeliveryProgress) -> DeliveryProgress:
         """The recipient's progress after each of its own attempts on this original."""
         for attempt in self.attempts.get(recipient, ()):
-            progress = attempt.outcome.consumed_progress(progress)
+            progress = attempt.consumed_progress(progress)
         return progress
 
 

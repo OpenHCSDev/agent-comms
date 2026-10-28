@@ -500,7 +500,7 @@ class TrackedTurnSession(TurnSession):
         if event.input_id == self.command.input_id:
             self.context_commit = ObservedNativeCommit(event)
             context = await self.context_proof()
-            await self.prompt_send_boundary.context_committed(self, context)
+            await self.prompt_send_boundary.context_committed(context)
 
     async def assistant_started(self) -> None:
         await super().assistant_started()

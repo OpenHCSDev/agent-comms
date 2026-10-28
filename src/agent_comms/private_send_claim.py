@@ -228,7 +228,7 @@ class PrivateSendClaim(PromptBoundary):
             )
         return result
 
-    async def context_committed(self, turn: TrackedTurnSession, context: NativeContextProof) -> None:
+    async def context_committed(self, context: NativeContextProof) -> None:
         """Publish corroborated entry while the model is still running.
 
         The context journal is borrowed before coordinator locking, as on the
