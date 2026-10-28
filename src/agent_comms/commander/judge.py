@@ -546,12 +546,8 @@ class OkVerb(ReasonedVerb, QuotingVerb):
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
 @dataclass(frozen=True, kw_only=True)
-class ReviewingVerb(HeadVerdictVerb):
-    help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
-    verdict = UnderReviewHeadVerdict
-
-    def head_operation(self) -> HeadVerdict:
-        return self.verdict()
+class HeadOnlyVerb(HeadVerdictVerb, declared_name=None):
+    """Shared argument refusal for verdicts that only select an exact PR head."""
 
     def edit_problems(self) -> dict[str, str]:
         return super().edit_problems() | MalformedRecord(
@@ -567,7 +563,16 @@ class ReviewingVerb(HeadVerdictVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class QualifyVerb(ReasonedVerb, QuotingVerb, ReviewingVerb):
+class ReviewingVerb(HeadOnlyVerb):
+    help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
+    verdict = UnderReviewHeadVerdict
+
+    def head_operation(self) -> HeadVerdict:
+        return self.verdict()
+
+
+@dataclass(frozen=True, kw_only=True)
+class QualifyVerb(ReasonedVerb, QuotingVerb, HeadOnlyVerb):
     """Record a reasoned source decision using the existing head-only review boundary."""
 
     help = "the exact PR head's source stage is qualified, without permission to merge"
