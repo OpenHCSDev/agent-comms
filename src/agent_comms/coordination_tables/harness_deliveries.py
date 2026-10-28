@@ -10,7 +10,8 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Self
+from itertools import batched
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
@@ -36,6 +37,7 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     outcome: Annotated[type[Outcome], Column(index=True)]
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
+    key_batch: ClassVar[int] = 32766 // 3
     unique = (("bridge", "recipient_lookup", "seq"),)
     indexes = (Index(("recipient_lookup", "seq", "message_id"), unique=False, where=None),)
     """The inbox asks per delivered message whether any bridge attempted it for this recipient."""
@@ -96,16 +98,17 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     def for_recipients(cls, db: sqlite3.Connection,
                        keys: Sequence[tuple[ThreadLookup, MessageReference]]) -> tuple[Self, ...]:
         """Every bridge's attempt on exactly these (recipient, original) keys, each probed
-        through the recipient/seq/message index; no read walks the attempt history."""
-        if not keys:
-            return ()
-        return tuple(cls.select(
-            db,
-            where=("(recipient_lookup,seq,message_id) IN (VALUES "
-                   + ",".join("(?,?,?)" for _ in keys) + ")"),
-            parameters=tuple(value for lookup, reference in keys
-                             for value in (lookup, reference.seq, reference.message_id)),
-            order_by=("seq", "recipient_lookup", "bridge"),
+        through the recipient/seq/message index; no read walks the attempt history. Keys go
+        in batches that keep three parameters each under SQLite's variable limit."""
+        return tuple(sorted(
+            (row for batch in batched(keys, cls.key_batch) for row in cls.select(
+                db,
+                where=("(recipient_lookup,seq,message_id) IN (VALUES "
+                       + ",".join("(?,?,?)" for _ in batch) + ")"),
+                parameters=tuple(value for lookup, reference in batch
+                                 for value in (lookup, reference.seq, reference.message_id)),
+            )),
+            key=lambda row: (row.seq, row.recipient_lookup, row.bridge.declared_name),
         ))
 
     @classmethod
