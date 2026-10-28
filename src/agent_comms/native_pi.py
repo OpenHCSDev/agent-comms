@@ -322,6 +322,22 @@ class NativeContextJournal(
 class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Path
 
+    def require_continuation(self, context: NativeContextProof) -> None:
+        """Repeated requests may include this input; its first receipt stays immutable.
+
+        A different native entry or conflicting proof of the same request is not
+        another observation of that entry. Callers corroborate later generations
+        before this check; this comparison grants no native or replay authority.
+        """
+        if (self.input_commit, self.session_file, self.session_entry_start) != (
+            context.input_commit, context.session_file, context.session_entry_start
+        ):
+            raise IdentityConflict("Native context acknowledgement belongs to another entry")
+        if context.request_generation < self.request_generation:
+            raise IdentityConflict("Native context precedes its original acknowledgement")
+        if context.request_generation == self.request_generation and context != self:
+            raise IdentityConflict("Native request has contradictory context evidence")
+
     def corroborates_input(
         self, input_id: InputId, *, files: NativeSessionFiles,
         evidence: NativeEvidenceRead,

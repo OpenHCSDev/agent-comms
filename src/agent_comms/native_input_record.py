@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_entries import MessageEntry, RecordedEntry, TranscriptProjection
     from .native_runtime_input import NativeRuntimeInput
+    from .native_pi import NativeContextProof
     from .transcript_events import TranscriptEvent
 
 
@@ -402,6 +403,10 @@ class NativeContextReference(DeclaredFamily, affix="Reference"):
     def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         """An unrecorded context grants no committed-input identity."""
 
+    def acknowledge_context(self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof) -> None:
+        """The first verified entry is immutable; later settlement does not own it."""
+        row.write_context(db, context)
+
 
 @dataclass(frozen=True)
 class UnrecordedNativeInputReference(NativeContextReference):
@@ -440,6 +445,9 @@ class NativeInputReference(NativeContextReference):
             return result
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context reference is incomplete") from error
+
+    def acknowledge_context(self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof) -> None:
+        row.require_context_proof().require_continuation(context)
 
     def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         owner.require_recorded_reference(db, self)

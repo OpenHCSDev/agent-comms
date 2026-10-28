@@ -26,6 +26,7 @@ from agent_comms.errors import RelationViolationError
 if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .owned_send import OwnedSend
+    from .native_pi import NativeContextProof
     from .tracked_turn import TrackedTurnSession
 
 _MAX_SEND_SECONDS = 5.0
@@ -34,6 +35,9 @@ _MAX_SEND_SECONDS = 5.0
 class PromptBoundary(ABC):
     @abstractmethod
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
+
+    async def context_committed(self, turn: TrackedTurnSession, context: NativeContextProof) -> None:
+        """An unowned prompt has no durable recipient acknowledgement to advance."""
 
     def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:
         raise RelationViolationError("An unowned prompt cannot authorize following input")

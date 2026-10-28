@@ -18,7 +18,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordination_tables.responses import ResponseObligation
-from .declared_family import DeclaredFamily
+from .declared_family import ClassFact, DeclaredFamily
 from .field_codec import (
     FieldCodec,
     InputId,
@@ -60,7 +60,6 @@ from .selected_triage import (
 from .tool_denial import SelectedToolDenied
 from .typed_table import (
     Column,
-    FinalizedColumn,
     FrozenColumn,
     IntegerStorage,
     MonotoneColumns,
@@ -99,7 +98,6 @@ class PublishedReplyRevision(TypedRow):
 @dataclass(frozen=True)
 class NativeRuntimeInput(
     WriteOnceColumns,
-    FinalizedColumn,
     RequiredUpdateColumns,
     NoDelete,
     NativeInputRecord,
@@ -134,8 +132,13 @@ class NativeRuntimeInput(
             "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms FROM w"
         )
 
-    write_once_columns = ('sent_owner_claimed_generation', 'session_id', 'session_file')
-    finalized_column = 'session_entry_id'
+    @ClassFact
+    def write_once_columns(cls) -> tuple[str, ...]:
+        # The declared context group is immutable, not the later triage verdict.
+        return ('sent_owner_claimed_generation', 'session_id', 'session_file', 'verdict',
+                *(plan.name for plan in FieldCodec.field_plans(cls)
+                  if NativeContext.single(plan.annotation)))
+
     required_update_columns = ('sent_owner_claimed_generation',)
 
     @classmethod
@@ -320,22 +323,20 @@ class NativeRuntimeInput(
         "stage='triage' OR verdict IS NULL",
     )
 
-    def require_unproven(self, token_digest: str) -> None:
-        """Only the original reserved capability can acquire its first proof."""
-        if self.owner_token_digest != token_digest or self.reference.recorded:
-            raise StaleFence("native proof belongs to a different or already settled dispatch")
+    def require_dispatch(self, token_digest: str) -> None:
+        """Only the original dispatch may acknowledge context or settle its result."""
+        if self.owner_token_digest != token_digest:
+            raise StaleFence("native proof belongs to a different dispatch")
 
-    def commit_context(
-        self,
-        db: sqlite3.Connection,
-        context: NativeContextProof,
-        *,
-        verdict: TriageDecisionRecord = AbsentTriageDecisionRecord(),
-    ) -> None:
-        """Commit the context acknowledgement once against the original selected session."""
+    def commit_context(self, db: sqlite3.Connection, context: NativeContextProof) -> None:
+        """Retain the first corroborated context, independently of terminal settlement."""
         if context.input_id != self.input_id:
             raise StaleFence("native context belongs to another reserved input")
         self.require_session_identity().require_context(context)
+        self.reference.acknowledge_context(self, db, context)
+
+    def write_context(self, db: sqlite3.Connection, context: NativeContextProof) -> None:
+        """The unrecorded reference alone takes this first-write path."""
         updated = self.update(
             db,
             where="input_id=? AND session_entry_id IS NULL",
@@ -345,10 +346,19 @@ class NativeRuntimeInput(
             request_generation=NumberNativeColumn(context.request_generation),
             llm_context_digest=TextNativeColumn(context.llm_context_digest),
             committed_at_ms=NumberNativeColumn(context.committed_at_ms),
-            verdict=verdict,
         )
         if updated.rowcount != 1:
             raise StaleFence("native proof was previously committed")
+
+    def settle_verdict(self, db: sqlite3.Connection, verdict: TriageDecisionRecord) -> None:
+        """The decision follows context entry; neither transition overwrites the other."""
+        current = type(self).require(db, input_id=self.input_id)
+        current.reference.require_recorded()
+        current.verdict.require_undecided()
+        updated = self.update(db, where="input_id=? AND verdict IS NULL",
+                              parameters=(self.input_id,), verdict=verdict)
+        if updated.rowcount != 1:
+            raise StaleFence("native triage verdict was previously settled")
 
 class SelectedSlotState(DeclaredFamily, affix="Slot"):
     """Consumption is irreversible; only a matching live terminal can acknowledge it."""
