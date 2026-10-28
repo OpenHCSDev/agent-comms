@@ -17,7 +17,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from packaging.markers import Marker, default_environment
 from packaging.requirements import Requirement
@@ -139,13 +139,10 @@ class GitSelection:
 
 
 class GitPackageLocation:
-    """The repository root has no subdirectory field or direct-URL fragment."""
+    """The repository root has no native UV subdirectory field."""
 
     def fields(self) -> dict[str, str]:
         return {}
-
-    def suffix(self) -> str:
-        return ""
 
 
 @dataclass(frozen=True)
@@ -189,9 +186,6 @@ class SubdirectoryGitQuery(GitQuery, GitPackageLocation):
     def fields(self) -> dict[str, str]:
         return {self.declared_name: self.value}
 
-    def suffix(self) -> str:
-        return "#" + urlencode(self.fields(), quote_via=quote)
-
 
 @dataclass(frozen=True)
 class LockedGitLocation:
@@ -226,10 +220,6 @@ class LockedGitLocation:
         package, = locations or (GitPackageLocation(),)
         return cls(source._replace(query="", fragment="").geturl(), source.fragment, selector, package)
 
-    @property
-    def direct_url(self) -> str:
-        return f"git+{self.repository}@{self.revision}{self.package.suffix()}"
-
 
 class UvRecord(BaseModel):
     """Decode consumed TOML fields strictly and preserve every unrelated UV/tool option."""
@@ -244,6 +234,8 @@ class UvRecord(BaseModel):
 class UvSourceOptions(UvRecord):
     """Only fields consumed here are modeled; UV retains every other source option."""
 
+    marker: str = ""
+
     def materialize(self, original: Path, core: Path,
                     projects: dict[RepositoryName, tuple[Path, ProjectMetadata]], name: str) -> UvSourceOptions:
         return self
@@ -252,10 +244,10 @@ class UvSourceOptions(UvRecord):
         return self.model_dump(mode="python", by_alias=True, exclude_unset=True)
 
     def with_options(self, options: dict[str, object], marker: str) -> Self:
-        fields = self.model_dump(mode="python", by_alias=True, exclude_unset=True)
+        selected = type(self)(**{**options, **self.document()})
         if marker:
-            fields["marker"] = marker
-        return type(self)(**{**options, **fields})
+            selected.marker = marker
+        return selected
 
 
 class UvGitSource(UvSourceOptions):
@@ -273,7 +265,8 @@ class UvTrackedSource(UvGitSource):
         GitSource.require_branches(name, (self.branch,))
         checkout, metadata = projects[Repo.repository_url(self.git)]
         StackSources.require_package(metadata, name)
-        options = self.model_dump(mode="python", exclude=set(type(self).model_fields))
+        options = self.model_dump(mode="python", by_alias=True, exclude_unset=True,
+                                  exclude=set(type(self).model_fields) - set(UvSourceOptions.model_fields))
         return UvLocalSource.model_validate({**options, "path": str(checkout), "editable": True})
 
 
@@ -326,8 +319,9 @@ class UvProjectSettings(UvRecord):
         original = self.sources.get(name, UvSourceOptions())
         self.sources[name] = source.with_options(original.retained_options(), marker)
 
-    def override_git(self, name: str, marker: str, location: LockedGitLocation) -> None:
-        locked = Requirement(f"{name} @ {location.direct_url}")
+    def override_git(self, name: str, marker: str) -> None:
+        """The native source owns Git location; the root override only selects its name."""
+        locked = Requirement(name)
         if marker:
             locked.marker = Marker(marker)
         result: list[str] = []
@@ -339,7 +333,7 @@ class UvProjectSettings(UvRecord):
                 if requirement.specifier:
                     self.constraints = [*self.constraints, str(requirement)]
                 requirement.specifier = SpecifierSet()
-                requirement.url = locked.url
+                requirement.url = None
                 result.append(str(requirement))
             else:
                 result.append(text)
@@ -350,7 +344,6 @@ class UvProjectSettings(UvRecord):
 
 class UvProjectRoot(UvRecord):
     dependencies: list[str]
-    python: str = Field(default="", alias="requires-python")
 
 
 class UvProjectTools(UvRecord):
@@ -592,7 +585,7 @@ class GitSource(LockSource):
 
     def retain(self, name: str, marker: str, uv: UvProjectSettings) -> None:
         super().retain(name, marker, uv)
-        uv.override_git(name, marker, self.location)
+        uv.override_git(name, marker)
 
 
 class EditableSource(LockSource):

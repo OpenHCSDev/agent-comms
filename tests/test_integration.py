@@ -132,6 +132,8 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
     peer_head = peer.publish_change("Independent local source", *peer.write_files({
         Path("src/agent_comms/extra.py"): "extra = 1\n"}))
     peer.git(peer.checkout, "switch", "feature")
+    assert peer.git(peer.checkout, "ls-remote", "origin", f"refs/pull/{peer.number}/head").split() == [
+        peer_head, f"refs/pull/{peer.number}/head"]
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(peer.github, DraftListedPullRequest(
         peer.number, "second-local-source", peer_head, stamp, "main", reviewable_times=(stamp,)))
@@ -140,7 +142,8 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
         problem="P4", commander="lead", request=primary.request,
         assigner=pair.context.comms.registry.require("lead").incarnation,
         repo=peer.github, text="Include the existing local source",
-        order=replace(primary.order.checked(), pull_requests=(peer.link,)),
+        order=replace(primary.order.checked(), pull_requests=(peer.link,),
+                      check=replace(primary.order.check, directory=peer.checkout)),
         review_at=RecordedEventTime(9999999999.0)))
     inputs = integration.IntegrationRun(pair.checkout, pair.output, "actual main tuple").qualify(
         pair.context, ("P2", "P3", "P4"))
@@ -188,7 +191,7 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
     # The native config and its plugin are real baseline source, then migrated on feature.
     pair.client.git(pair.client.checkout, "switch", "main")
     project = tomllib.loads((pair.client.checkout / "pyproject.toml").read_text())
-    project["tool"] = {"mypy": {"plugins": ["mypy_source_plugin.py"]}}
+    project["tool"]["mypy"] = {"plugins": ["mypy_source_plugin.py"]}
     pair.client.commit_change("Declare the baseline native mypy plugin", *pair.client.write_files({
         Path("pyproject.toml"): tomli_w.dumps(project), Path("mypy_source_plugin.py"): plugin}))
     pair.client.git(pair.client.checkout, "push", "origin", "main")

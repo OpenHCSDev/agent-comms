@@ -27,10 +27,15 @@ from source_revision_fixture import SourceRepository
 pytest_plugins = ("test_holder_standing_rules", "integration_source_fixture")
 
 
-@pytest.mark.parametrize("dependencies,allowed", [((), True), (("idna==3.10",), False)])
+@pytest.mark.parametrize("dependencies,allowed,declared_python", [
+    pytest.param((), True, "", id="dependencies0-True"),
+    pytest.param(("idna==3.10",), False, "", id="dependencies1-False"),
+    pytest.param((), True, ">=3.14", id="requires-python"),
+])
 def test_private_project_preserves_settings_pins_and_refuses_external_migration(
     mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
-    dependencies: tuple[str, ...], allowed: bool, monkeypatch: pytest.MonkeyPatch, test_uv: Path,
+    dependencies: tuple[str, ...], allowed: bool, declared_python: str,
+    monkeypatch: pytest.MonkeyPatch, test_uv: Path,
 ) -> None:
     pair = mutual_sources
     # Edit the real source before capture, never rewrite the captured artifact or selectors.
@@ -39,6 +44,10 @@ def test_private_project_preserves_settings_pins_and_refuses_external_migration(
     document["project"]["dependencies"] = list(dependencies)
     stack = tomllib.loads((pair.core.checkout / "stack/pyproject.toml").read_text())
     stack["project"]["python"] = "unmodeled convenience spelling"
+    if declared_python:
+        stack["project"]["requires-python"] = declared_python
+    stack["tool"]["uv"]["sources"]["source-client"]["marker"] = "python_version >= '3.10'"
+    stack["tool"]["uv"]["sources"]["source-client"]["fixture-option"] = {"preserved": True}
     stack["tool"]["uv"]["overrides"] = ["unmodeled overrides"]
     stack["tool"]["uv"]["constraints"] = ["unmodeled constraints"]
     stack["tool"]["uv"]["indexes"] = [{"unmodeled": "indexes"}]
@@ -65,7 +74,8 @@ def test_private_project_preserves_settings_pins_and_refuses_external_migration(
             expected = tomllib.loads(before[0].decode())
             expected["tool"]["uv"]["sources"]["agent-comms"] = {"path": str(checker.core), "editable": True}
             expected["tool"]["uv"]["sources"]["source-client"] = {
-                "path": str(HeadSide.checkout(pair.output, pair.client.github)), "editable": True}
+                "path": str(HeadSide.checkout(pair.output, pair.client.github)), "editable": True,
+                "marker": "python_version >= '3.10'", "fixture-option": {"preserved": True}}
 
             assert tomllib.loads((checker.checkout / "stack/pyproject.toml").read_text()) == expected
             assert checker.lock.read_bytes() == before[1]
@@ -141,11 +151,14 @@ def common_checker(
     pair.client.git(pair.client.checkout, "switch", "feature")
     pair.client.git(pair.client.checkout, "merge", "--no-edit", "main")
     pair.core.git(pair.core.checkout, "switch", "main")
-    pair.core.write_files({Path("pyproject.toml"): pair.core.package_project("agent-comms",
+    core = tomllib.loads(pair.core.package_project("agent-comms",
         dependencies=("idna>=3.10,<4; python_version >= '3.10'",), extras={
-            "checking": ["idna<3.11", "six==1.16.0",
-                         f"checker-plugin @ git+{plugin.remote.as_uri()}@main#subdirectory=python%20package"]})})
+            "checking": ["idna<3.11", "six==1.16.0", "checker-plugin"]}))
+    plugin_source = {"git": plugin.remote.as_uri(), "branch": "main", "subdirectory": "python package"}
+    core["tool"]["uv"] = {"sources": {"checker-plugin": plugin_source}}
+    pair.core.write_files({Path("pyproject.toml"): tomli_w.dumps(core)})
     stack = tomllib.loads((pair.core.checkout / "stack/pyproject.toml").read_text())
+    stack["tool"]["uv"]["sources"]["checker-plugin"] = plugin_source
     stack["tool"]["uv"]["sources"]["source-client"]["git"] = pair.client.remote.as_uri()
     stack["project"]["dependencies"] = ["agent-comms>=0.0.1; python_version >= '3.10'", "source-client"]
     stack["tool"]["uv"]["override-dependencies"].append("agent-comms>=0.0.1; python_version >= '3.10'")
@@ -194,7 +207,8 @@ def test_complete_project_reconciles_shared_preferences_and_keeps_both_cuts_on_o
     assert source["subdirectory"] == "python package"
     override, = (Requirement(text) for text in private["tool"]["uv"]["override-dependencies"]
                  if Requirement(text).name == "checker-plugin")
-    assert override.url == f"git+{source['git']}@{source['rev']}#subdirectory=python%20package"
+    assert override.url is None and not override.specifier
+    assert source == bootstrap["checker-plugin"].source.project_source().document()
     for query in ("unknown=python", "subdirectory=python&subdirectory=other", "subdirectory=",
                   "branch=main&tag=release", "subdirectory=%00", "subdirectory=%ZZ", "branch="):
         with pytest.raises(ValueError, match="Git"):
@@ -264,9 +278,6 @@ def test_retained_runtime_checker_version_and_git_identity_refuse_actual_solve_d
             source["rev"] = commit
         else:
             source["subdirectory"] = "other package"  # Same repo/SHA/version, another actual project.
-        location = source["subdirectory"].replace(" ", "%20")
-        uv["override-dependencies"] = [f"{package} @ git+{source['git']}@{source['rev']}#subdirectory={location}"
-            if Requirement(text).name == package else text for text in uv["override-dependencies"]]
     else:
         # Changing the explicit private override is not an accepted waiver: the retained
         # source/version owner still detects the resulting genuine solver selection.

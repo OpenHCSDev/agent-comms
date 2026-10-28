@@ -1068,6 +1068,10 @@ class ScopeNames(ast.NodeVisitor):
         self.declares.add(node)
         self.generic_visit(node)
 
+    def visit_arg(self, node: ast.arg) -> None:
+        self.binds[node] = (node.arg,)
+        self.generic_visit(node)
+
     def visit_Name(self, node: ast.Name) -> None:
         match node.ctx:
             case ast.Store() | ast.Del():
@@ -1478,8 +1482,25 @@ class DecoratorBinding:
 
     @classmethod
     def of(cls, decorator: typing.Callable[..., object], tree: ast.AST,
-           filename: str) -> DecoratorBinding:
-        return cls.named(decorator.__module__, decorator.__name__, tree, filename)
+           filename: str, scope: str = "") -> DecoratorBinding:
+        return cls.named(decorator.__module__, decorator.__name__, tree, filename, scope)
+
+    @classmethod
+    def sites(cls, decorator: typing.Callable[..., object], tree: ast.AST,
+              filename: str) -> Iterator[ast.AST]:
+        """Walk outside functions whose enclosing scope proves the declared decorator."""
+        scopes = ScopeNames.of(tree)
+        pending = [tree]
+        while pending:
+            node = pending.pop()
+            match node:
+                case ast.FunctionDef(decorator_list=[_, *_] as decorators) | ast.AsyncFunctionDef(
+                        decorator_list=[_, *_] as decorators):
+                    marker = cls.of(decorator, tree, filename, scopes.found[node])
+                    if any(map(marker.marks, decorators)):
+                        continue
+            yield node
+            pending.extend(ast.iter_child_nodes(node))
 
     @staticmethod
     def module_of(filename: str) -> tuple[str, ...]:
@@ -1631,16 +1652,7 @@ class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
 
     @classmethod
     def sites(cls, tree: ast.AST, filename: str) -> Iterator[ast.AST]:
-        marker = DecoratorBinding.of(boundary_decoder, tree, filename)
-        pending = [tree]
-        while pending:
-            node = pending.pop()
-            match node:
-                case ast.FunctionDef(decorator_list=decorators) | ast.AsyncFunctionDef(
-                        decorator_list=decorators) if any(map(marker.marks, decorators)):
-                    continue
-            yield node
-            pending.extend(ast.iter_child_nodes(node))
+        return DecoratorBinding.sites(boundary_decoder, tree, filename)
 
     @staticmethod
     def occurrences(node: ast.AST) -> int:
@@ -2629,6 +2641,10 @@ class ForeignAbsenceProbe(PerFileOccurrenceMeasure):
     """Use the audit owner's explicit absence checks, not arbitrary truthiness."""
 
     occurrences = AuditForeignAbsenceProbe.count
+
+    @classmethod
+    def sites(cls, tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+        return DecoratorBinding.sites(boundary_decoder, tree, filename)
 
 
 class CodecSubclass(PerFileOccurrenceMeasure):

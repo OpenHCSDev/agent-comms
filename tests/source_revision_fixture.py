@@ -65,14 +65,22 @@ class SourceRepository(Repo):
         ).stdout.strip()
 
     @staticmethod
-    def package_project(name: str, *, dependencies: tuple[str, ...] = (),
-                        python: str = ">=3.10", extras: dict[str, list[str]] | None = None) -> str:
-        """One legitimate tiny source project, built by its standard backend in controls."""
+    def package_project(
+        name: str, *, dependencies: tuple[str, ...] = (), python: str = ">=3.10",
+        extras: dict[str, list[str]] | None = None, scripts: Mapping[str, str] = MappingProxyType({}),
+        build_system: Mapping[str, str | tuple[str, ...]] = MappingProxyType({
+            "requires": ("hatchling",), "build-backend": "hatchling.build",
+        }),
+    ) -> str:
+        """Build the actual src tree, independently of distribution or module spelling."""
         return tomli_w.dumps({
-            "build-system": {"requires": ["hatchling"], "build-backend": "hatchling.build"},
+            "build-system": dict(build_system),
             "project": {"name": name, "version": "0.0.1", "requires-python": python,
-                        "dependencies": list(dependencies), "optional-dependencies": extras or {}},
-            "tool": {"hatch": {"build": {"targets": {"wheel": {"packages": ["src"]}}}}},
+                        "dependencies": list(dependencies), "optional-dependencies": extras or {},
+                        "scripts": dict(scripts)},
+            "tool": {"hatch": {"build": {"targets": {"wheel": {
+                "only-include": ["src"], "sources": ["src"],
+            }}}}},
         })
 
     def write_files(self, files: Mapping[Path, str]) -> tuple[str, ...]:
