@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredOrder
 from .message_reference import MessageReference
@@ -30,10 +30,12 @@ class WaitingDelivery(DeliveryRank):
 
 
 class DeliveryProgress(ThreadPresentationStatus):
+    """Publication owns Delivered and the read ledger owns Read; progress answers only
+    whether the recipient's model took the message into its context."""
+
     label: ClassVar[str] = "Sent"
     detail: ClassVar[str] = ""
-    delivered: ClassVar[bool]
-    read: ClassVar[bool]
+    consumed: ClassVar[bool] = False
 
     def rank(self) -> int:
         return DeliveryRank.position_of(type(self))
@@ -41,31 +43,37 @@ class DeliveryProgress(ThreadPresentationStatus):
     def notification_label(self, notification: MessageNotification) -> str:
         return self.label
 
+    def harness_consumed(self) -> DeliveryProgress:
+        """This progress once a harness confirmed the message entered its session."""
+        return HarnessConsumedProgress()
 
-class PendingDelivery:
-    delivered: ClassVar[bool] = False
-    read: ClassVar[bool] = False
 
+class ConsumedDelivery(SettledDelivery):
+    """The harness or native runtime proved the message entered the model's context."""
 
-class ReadDelivery(SettledDelivery):
-    label: ClassVar[str] = "Read"
-    delivered: ClassVar[bool] = True
-    read: ClassVar[bool] = True
+    label: ClassVar[str] = "Consumed"
+    consumed: ClassVar[bool] = True
+
+    def harness_consumed(self) -> Self:
+        """An earlier proof already timed the entry; a harness confirmation adds nothing."""
+        return self
 
 
 @dataclass(frozen=True)
-class UnrecordedProgress(WaitingDelivery, PendingDelivery, DeliveryProgress):
+class HarnessConsumedProgress(ConsumedDelivery, DeliveryProgress):
+    """A harness confirmed context entry with no claim to time it; the attempt has no clock."""
+
+
+@dataclass(frozen=True)
+class UnrecordedProgress(WaitingDelivery, DeliveryProgress):
     """No recipient delivery has been recorded."""
 
 
 @dataclass(frozen=True)
-class HumanReadProgress(ReadDelivery, DeliveryProgress):
+class HumanReadProgress(SettledDelivery, DeliveryProgress):
     """Human display is not model-context input."""
 
-
-@dataclass(frozen=True)
-class InboxReadProgress(ReadDelivery, DeliveryProgress):
-    """An external agent's inbox display is its model read: delivery and read are one fact."""
+    label: ClassVar[str] = "Read"
 
 
 @dataclass(frozen=True)
@@ -74,12 +82,19 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     proof: DeliveryProgress
 
     @property
-    def delivered(self):
-        return self.proof.delivered
+    def consumed(self):
+        return self.proof.consumed
 
-    @property
-    def read(self):
-        return self.proof.read
+    def harness_consumed(self) -> DeliveryProgress:
+        return replace(self, proof=self.proof.harness_consumed())
+
+
+class PendingProgress(ContextualProgress):
+    """A pending claim adds no label of its own: once a harness proves entry, the proof is
+    the whole state."""
+
+    def harness_consumed(self) -> DeliveryProgress:
+        return self.proof.harness_consumed()
 
 
 class PassiveProgress(ContextualProgress):
@@ -88,14 +103,14 @@ class PassiveProgress(ContextualProgress):
 
 
 class IgnoredProgress(SettledDelivery, ContextualProgress):
-    label = ReadDelivery.label
+    label = ConsumedDelivery.label
 
     def notification_label(self, notification):
         return self.proof.notification_label(notification)
 
 
 class InterruptedProgress(ContextualProgress):
-    label = "Interrupted before read"
+    label = "Interrupted before consumed"
 
 
 class FailedProgress(ContextualProgress):
@@ -131,7 +146,7 @@ class AssignmentProgress(DeliveryProgress):
     def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification: ...
 
     @abstractmethod
-    def read_notification(self, notification: MessageNotification) -> MessageNotification: ...
+    def consumed_notification(self, notification: MessageNotification) -> MessageNotification: ...
 
     def answered_notification(self, notification: MessageNotification,
                               reference: MessageReference, answered_at_ms: int) -> MessageNotification:
@@ -140,7 +155,7 @@ class AssignmentProgress(DeliveryProgress):
 
 
 @dataclass(frozen=True)
-class SentProgress(WaitingDelivery, PendingDelivery, AssignmentProgress):
+class SentProgress(WaitingDelivery, AssignmentProgress):
     sent_at_ms: int
 
     @property
@@ -150,8 +165,8 @@ class SentProgress(WaitingDelivery, PendingDelivery, AssignmentProgress):
     def selected_notification(self, notification, *, busy):
         return replace(notification, state=SendingProgress(self.sent_at_ms) if busy else self)
 
-    def read_notification(self, notification):
-        raise ValueError("Read notification has no model-context proof")
+    def consumed_notification(self, notification):
+        raise ValueError("Consumed notification has no model-context proof")
 
 
 class SendingProgress(ActiveDelivery, SentProgress, WorkingThreadPresentationStatus):
@@ -164,28 +179,25 @@ class QueuedProgress(ActiveDelivery, SentProgress):
 
 
 @dataclass(frozen=True)
-class ShownToModelProgress(ReadDelivery, AssignmentProgress):
-    read_at_ms: int
+class ShownToModelProgress(ConsumedDelivery, AssignmentProgress):
+    consumed_at_ms: int
 
     @property
     def at_ms(self):
-        return self.read_at_ms
+        return self.consumed_at_ms
 
     def selected_notification(self, notification, *, busy):
-        state = ReadingProgress(self.read_at_ms) if busy else SelectedReadProgress(self.read_at_ms)
+        state = (ConsumingProgress(self.consumed_at_ms) if busy
+                 else SelectedConsumedProgress(self.consumed_at_ms))
         return replace(notification, state=state)
 
-    def read_notification(self, notification):
+    def consumed_notification(self, notification):
         return replace(notification, state=self)
 
 
-class SelectedReadProgress(ActiveDelivery, ShownToModelProgress):
+class SelectedConsumedProgress(ActiveDelivery, ShownToModelProgress):
     pass
 
 
-class ReadingProgress(SelectedReadProgress, WorkingThreadPresentationStatus):
-    pass
-
-
-class InterruptedReadProgress(WaitingDelivery, ShownToModelProgress):
+class ConsumingProgress(SelectedConsumedProgress, WorkingThreadPresentationStatus):
     pass

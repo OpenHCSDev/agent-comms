@@ -13,32 +13,59 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
+    from .coordination_tables.harness_deliveries import HarnessDelivery
+    from .field_codec import ThreadLookup
     from .message_reference import MessageReference
     from .notification_assignment import AssignmentActivityEvidence
+    from .notification_progress import DeliveryProgress
     from .presentation import MessageNotification, WireRevision
     from .thread_identity import ThreadIncarnation
 
 
+type SourceEvidence = tuple[tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...],
+                             tuple[HarnessDelivery, ...]]
+
+
 @dataclass(frozen=True)
 class NotificationAssignmentRead:
+    """A window's claims and its harness attempts, both keyed by the exact original.
+
+    A harness attempt is its own consumption evidence: a no-wake or passive recipient has no
+    claim for the attempt to move, and its message still entered the session."""
+
     sources: tuple[Delivered, ...]
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
+    attempts: tuple[HarnessDelivery, ...] = ()
 
     @classmethod
     def empty(cls) -> NotificationAssignmentRead:
         return cls((), ())
 
-    def rows_by_source(self) -> dict[MessageReference, tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]]:
-        grouped: dict[MessageReference, list[tuple[WakeAssignment, AssignmentActivityEvidence]]] = {
+    def evidence_by_source(self) -> dict[MessageReference, SourceEvidence]:
+        claims: dict[MessageReference, list[tuple[WakeAssignment, AssignmentActivityEvidence]]] = {
+            source.message.reference: [] for source in self.sources
+        }
+        attempts: dict[MessageReference, list[HarnessDelivery]] = {
             source.message.reference: [] for source in self.sources
         }
         for row in self.rows:
-            grouped.setdefault(row[0].source, []).append(row)
-        return {source: tuple(rows) for source, rows in grouped.items()}
+            claims.setdefault(row[0].source, []).append(row)
+        for attempt in self.attempts:
+            attempts.setdefault(attempt.reference, []).append(attempt)
+        return {source: (tuple(claims[source]), tuple(attempts.get(source, ())))
+                for source in claims}
 
-    def differs_from(self, fresh: Mapping[MessageReference, tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]]) -> bool:
-        return any(previous != fresh.get(source, ())
-                   for source, previous in self.rows_by_source().items())
+    def differs_from(self, fresh: Mapping[MessageReference, SourceEvidence]) -> bool:
+        return any(previous != fresh.get(source, ((), ()))
+                   for source, previous in self.evidence_by_source().items())
+
+    def consumed_progress(self, source: Delivered, recipient: ThreadLookup,
+                          progress: DeliveryProgress) -> DeliveryProgress:
+        """The recipient's progress after every attempt on this exact (lookup, seq, id)."""
+        for attempt in self.attempts:
+            if (attempt.reference, attempt.recipient_lookup) == (source.message.reference, recipient):
+                progress = attempt.outcome.consumed_progress(progress)
+        return progress
 
 
 @dataclass(frozen=True)

@@ -58,7 +58,7 @@ from .message_page import (
 )
 from .message_reference import MessageReference
 from .messages import Message
-from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
+from .notification_progress import ConsumedDelivery, DeliveryProgress, HumanReadProgress
 from .private_path import FileRevision
 from .read_basis import (
     AnonymousViewer,
@@ -213,11 +213,13 @@ class MessageNotification:
         ordered = cls.ordered(notifications)
         if not ordered:
             return "No recorded notification result"
-        delivered = sum(notification.state.delivered for notification in ordered)
-        read = sum(notification.state.read for notification in ordered)
+        # Each notification exists because the frozen publication addressed its recipient.
         total = len(ordered)
-        return (f"{ordered[0].label} · Delivered {delivered}/{total}"
-                f" · {ReadDelivery.label} {read}/{total}")
+        consumed = sum(notification.state.consumed for notification in ordered)
+        read = sum(bool(notification.displayed_to) for notification in ordered)
+        return (f"{ordered[0].label} · Delivered {total}/{total}"
+                f" · {ConsumedDelivery.label} {consumed}/{total}"
+                f" · {HumanReadProgress.label} {read}/{total}")
 
     @staticmethod
     def timed_state(label: str, timestamp_ms: int | None) -> str:
@@ -317,10 +319,11 @@ class MessageNotification:
                 if not viewer.includes(source.sender_lookup, outcome.recipient):
                     continue
                 observation = observations[outcome.recipient.recipient_lookup]
-                notification = observation.after_inbox_read(
-                    outcome.project(observation, source.sender_lookup),
-                    source, reads, document, snapshot
-                )
+                notification = outcome.project(observation, source.sender_lookup)
+                state = assignment_read.consumed_progress(
+                    source, notification.recipient_identity.recipient_lookup, notification.state)
+                notification = replace(notification, state=state,
+                                       changed=notification.changed or state.consumed)
                 displayed_to = observation.displayed_recipient(
                     notification, source, reads, document, snapshot
                 )

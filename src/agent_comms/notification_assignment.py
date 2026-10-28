@@ -14,6 +14,7 @@ from .bus import Bus
 from .coordination_database import CoordinationStore
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import CurrentExecutions
+from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
@@ -96,8 +97,8 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
     ) -> MessageNotification: ...
 
     @abstractmethod
-    def delivered_notification(
-        self, notification: MessageNotification, delivered_at_ms: int
+    def consumed_notification(
+        self, notification: MessageNotification, consumed_at_ms: int
     ) -> MessageNotification: ...
 
 
@@ -108,12 +109,12 @@ class UnansweredResponse(AssignmentResponse):
         )
 
     def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
-        return progress.read_notification(notification)
+        return progress.consumed_notification(notification)
 
-    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
+    def consumed_notification(self, notification: MessageNotification, consumed_at_ms: int) -> MessageNotification:
         return replace(
             notification,
-            state=ShownToModelProgress(delivered_at_ms),
+            state=ShownToModelProgress(consumed_at_ms),
 
         )
 
@@ -128,10 +129,10 @@ class AnsweredResponse(AssignmentResponse):
             notification, self.reference, self.received_at_ms
         )
 
-    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
+    def consumed_notification(self, notification: MessageNotification, consumed_at_ms: int) -> MessageNotification:
         return replace(
             notification,
-            state=AnsweredProgress(ShownToModelProgress(delivered_at_ms)),
+            state=AnsweredProgress(ShownToModelProgress(consumed_at_ms)),
 
             answer=self.reference,
             answered_at_ms=self.received_at_ms,
@@ -150,8 +151,8 @@ class AssignmentActivity:
     def completed_notification(self, notification: MessageNotification) -> MessageNotification:
         return self.response.completed_notification(self.progress, notification)
 
-    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
-        return self.response.delivered_notification(notification, delivered_at_ms)
+    def consumed_notification(self, notification: MessageNotification, consumed_at_ms: int) -> MessageNotification:
+        return self.response.consumed_notification(notification, consumed_at_ms)
 
     def recorded_response(self, message: Delivered) -> Self:
         return replace(self, response=self.response.recorded(message))
@@ -236,7 +237,7 @@ class NotificationAssignment(NotificationSource):
                          for read in reads for source in read.sources}.values())
         fresh = {}
         for sources_chunk in NotificationWindow.chunks(sources):
-            fresh.update(cls.read(root, sources_chunk).rows_by_source())
+            fresh.update(cls.read(root, sources_chunk).evidence_by_source())
         return tuple(read for read in reads if read.differs_from(fresh))
 
     @classmethod
@@ -333,7 +334,13 @@ class NotificationAssignment(NotificationSource):
             ),
             AssignmentActivityEvidence,
         )
-        return NotificationAssignmentRead(sources, tuple(rows))
+        attempts = HarnessDelivery.select(
+            connection,
+            where=f"seq IN ({','.join('?' for _ in sources)})",
+            parameters=tuple(source.message.seq for source in sources),
+            order_by=("seq", "recipient_lookup", "bridge"),
+        )
+        return NotificationAssignmentRead(sources, tuple(rows), tuple(attempts))
 
     @classmethod
     def read(

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .assignment_store import AssignmentStore
     from .cli_bridges.shared import LineMonitorBridge, MonitorPart
     from .coordination_tables.harness_deliveries import HarnessDelivery
+    from .notification_progress import DeliveryProgress
 
 
 class Outcome(DeclaredFamily, affix="Outcome"):
@@ -37,10 +38,10 @@ class Outcome(DeclaredFamily, affix="Outcome"):
         return successor
 
     @classmethod
-    def entered_context(cls) -> bool:
-        """Whether this attempt proves the message entered the harness context; an emitted,
-        unconfirmed or filtered attempt proves nothing."""
-        return False
+    def consumed_progress(cls, progress: DeliveryProgress) -> DeliveryProgress:
+        """The recipient's progress after this attempt; an emitted, unconfirmed or filtered
+        attempt proves no context entry and leaves it."""
+        return progress
 
 
 class FilteredOutcome(Outcome):
@@ -62,8 +63,8 @@ class DeliveredOutcome(FilteredOutcome):
         return state.harness_delivery()
 
     @classmethod
-    def entered_context(cls) -> bool:
-        return True
+    def consumed_progress(cls, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress.harness_consumed()
 
 
 class EmittedOutcome(UnconfirmedOutcome):

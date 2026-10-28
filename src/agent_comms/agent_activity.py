@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
-from .notification_progress import InboxReadProgress
 
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
@@ -53,9 +52,6 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return False
 
-    def after_inbox_read(self, notification, source, reads, document, snapshot):
-        return notification
-
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.displayed_recipient(
             source, notification.recipient_identity, snapshot, document=document
@@ -80,23 +76,6 @@ class RecordedRecipientActivity(RecipientActivity):
         return reads.historical_displayed_recipient(
             source.message, notification.recipient_identity, snapshot, document=document
         )
-
-
-@dataclass(frozen=True)
-class ExternalRecipientActivity(RecipientActivity):
-    incarnation: ThreadIncarnation
-
-    def after_inbox_read(self, notification, source, reads, document, snapshot):
-        if self.incarnation.current(snapshot) and reads.displayed_incarnation(
-            source.message, self.incarnation, snapshot, document=document
-        ):
-            return replace(
-                notification,
-                state=InboxReadProgress(),
-
-                changed=True,
-            )
-        return notification
 
 
 @dataclass(frozen=True)

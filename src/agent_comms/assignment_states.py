@@ -19,6 +19,7 @@ from .notification_progress import (
     IgnoredProgress,
     InterruptedProgress,
     PassiveProgress,
+    PendingProgress,
     UnrecordedProgress,
 )
 from .source_proof_requirement import ProvedByInput, SettledWithoutInput, SourceSettlement, Unproved
@@ -249,6 +250,8 @@ class EngageableAssignment:
 
 class PendingNotification(EngageableAssignment, Pending):
     """Pending relevance/full execution membership, not another display state."""
+
+    notification_state: ClassVar[type[ContextualProgress]] = PendingProgress
 
     def harness_handoff(self) -> tuple[type[AssignmentState], ...]:
         # Unbound DEFERRED is UNKNOWN input: never selected, so never replayed natively.
@@ -551,7 +554,7 @@ class DeliveredAssignment(
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
-        return activity.delivered_notification(notification, updated_at_ms)
+        return activity.consumed_notification(notification, updated_at_ms)
 
     notification_state = IgnoredProgress
 
