@@ -42,7 +42,8 @@ class CoordinatorVocabulary(DeclaredFamily, declared_name=None):
 
     @staticmethod
     def sql_values(names: Iterable[str]) -> str:
-        return ",".join(sql_literal(name) for name in names)
+        # Every fragment is an SQL IN domain: an unordered set, so declaration order stays out of the schema text.
+        return ",".join(sorted(sql_literal(name) for name in names))
 
     @classmethod
     def sql_members(cls, members: Iterable[type[DeclaredFamily]]) -> str:
