@@ -46,7 +46,9 @@ from agent_comms.harness_delivery_states import (
     Outcome, ReceivingMonitor, UnconfirmedOutcome,
 )
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_errors import CoordinationError, DeferredRead
+from agent_comms.coordination_errors import (
+    CoordinationBeginUnavailable, CoordinationError, CoordinationReadUnavailable, DeferredRead,
+)
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.coordination_database import CoordinationStore
@@ -1069,10 +1071,22 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
     async def coordinator_write[Result](
         self, operation: Callable[[AssignmentStore, sqlite3.Connection], Result],
     ) -> Result:
-        """Attempts and their claim steps share the coordinator's one write, under the bus hold."""
+        """Attempts and their claim steps share the coordinator's one write, under the bus hold.
+
+        A busy store while the coordinator and its transaction are still being acquired is
+        CoordinationBeginUnavailable: the operation and its commit never ran. Once acquired,
+        the operation, its commit and close keep their own errors; none is relabelled."""
         def write() -> Result:
-            with Coordination(str(CoordinationStore.path_in(Path(self.binding.root)))) as store, \
-                    store.session.writing() as db:
+            with ExitStack() as held:
+                try:
+                    store = held.enter_context(
+                        Coordination(str(CoordinationStore.path_in(Path(self.binding.root)))))
+                    db = held.enter_context(store.session.writing())
+                except CoordinationBeginUnavailable:
+                    raise
+                except CoordinationReadUnavailable as error:
+                    raise CoordinationBeginUnavailable(
+                        CoordinationBeginUnavailable.busy_message) from error
                 return operation(store.assignments, db)
         return await self.comms.bus.when_open(write)
 
@@ -1121,12 +1135,25 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         return await self.deliver(message)
 
     async def accept(self, message: messages.Message) -> None:
+        """Before its durable begin the message is held, never skipped: a store busy while the
+        begin is still being acquired waits and reacquires for the same message. After the
+        begin, the attempt is exactly as stored; contention leaves it uncertain, never re-sent."""
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        if not await self.coordinator_write(self.attempt(message, outcome).begin):
+        while True:
+            # A detached reader creates no attempt for a message it has not reached.
+            await self.prepare_delivery()
+            try:
+                begun = await self.coordinator_write(self.attempt(message, outcome).begin)
+                break
+            except CoordinationBeginUnavailable as error:
+                self.log(f'Message {message.message_id} waits for the coordinator: {error}')
+                await asyncio.sleep(Platform.current().store_lock_interval)
+        if not begun:
             return
-        result = await message.task.delivered_by(self, message) if conversation else outcome
-        await self.finish(self.attempt(message, result), partial(replace, outcome=result))
+        with self.uncertain_on_contention(message.message_id):
+            result = await message.task.delivered_by(self, message) if conversation else outcome
+            await self.finish(self.attempt(message, result), partial(replace, outcome=result))
 
     async def watch(self) -> None:
         await self.prepare_delivery()
@@ -1547,9 +1574,6 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         )
 
     async def accept(self, message: messages.Message) -> None:
-        # Wait before recording an attempt. Detachment never creates
-        # an attempt for a message that has not reached an attached reader.
-        await self.prepare_delivery()
         try:
             await super().accept(message)
         except (BrokenPipeError, ConnectionResetError) as error:

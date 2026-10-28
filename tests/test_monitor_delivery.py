@@ -45,6 +45,7 @@ from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.errors import RelationViolationError
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
@@ -205,6 +206,105 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
             await peer.close()
 
 
+async def begin_waits(capsys, message):
+    """The bridge's own log names the held message once the store's declared wait expires."""
+    seen = ''
+    while f'Message {message.message_id} waits for the coordinator' not in seen:
+        await asyncio.sleep(.01)
+        seen += capsys.readouterr().err
+
+
+def stored_attempts(db, bridge, message):
+    return tuple(HarnessDelivery.select(
+        db, bridge=type(bridge), recipient_lookup=bridge.recipient_lookup,
+        message_id=message.message_id))
+
+
+@pytest.mark.asyncio
+async def test_busy_begin_holds_the_same_message_until_the_store_frees(bridge, capsys):
+    """Real SQLite contention before the durable begin: the original is held with no attempt
+    and no frame, the attachment keeps serving, and after release the same message reaches
+    the reader exactly once; a later message needs no reconnect."""
+    held_message, later = (bridge.comms.messaging.send('peer', 'viewer', body).message
+                           for body in ('held message', 'later message'))
+    path = CoordinationStore.path_in(bridge.comms.root)
+    with Coordination(str(path)):
+        pass
+    async with attached_monitor(bridge, timeout=60) as reader:
+        with closing(sqlite3.connect(path, isolation_level=None)) as held:
+            held.execute('BEGIN EXCLUSIVE')
+            try:
+                accepting = asyncio.create_task(bridge.accept(held_message))
+                await begin_waits(capsys, held_message)
+                # The event loop still runs other work while the begin waits.
+                assert not accepting.done()
+                assert stored_attempts(held, bridge, held_message) == ()
+                with pytest.raises(TimeoutError):
+                    async with asyncio.timeout(.3):
+                        await reader.readline()
+            finally:
+                held.execute('ROLLBACK')
+        await accepting
+        line = await only_event(reader)
+        await observe(bridge, notification(line, record_id=transcript_record('held')).updates(
+            ClaudeSession()))
+        delivered, = await bridge.attempts(held_message.message_id)
+        assert delivered.outcome is DeliveredOutcome
+        await bridge.accept(later)
+        line = await only_event(reader)
+        await observe(bridge, notification(line, record_id=transcript_record('later')).updates(
+            ClaudeSession()))
+        confirmed, = await bridge.attempts(later.message_id)
+        assert confirmed.outcome is DeliveredOutcome
+    assert await bridge.attempts(held_message.message_id) == (delivered,)
+    assert await bridge.resume_after() == BridgeStart(later.reference)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_busy_begin_records_nothing_and_still_owes_the_original(bridge, capsys):
+    """Cancelling a begin blocked on real SQLite contention ends the wait: no attempt, no
+    frame, and the bridge still starts before the unstarted original."""
+    message = bridge.comms.messaging.send('peer', 'viewer', 'never begun').message
+    path = CoordinationStore.path_in(bridge.comms.root)
+    with Coordination(str(path)):
+        pass
+    start = await bridge.resume_after()
+    async with attached_monitor(bridge, timeout=60) as reader:
+        with closing(sqlite3.connect(path, isolation_level=None)) as held:
+            held.execute('BEGIN EXCLUSIVE')
+            try:
+                accepting = asyncio.create_task(bridge.accept(message))
+                await begin_waits(capsys, message)
+                accepting.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await accepting
+            finally:
+                held.execute('ROLLBACK')
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(.3):
+                await reader.readline()
+    assert await bridge.attempts(message.message_id) == ()
+    assert await bridge.resume_after() == start
+
+
+@pytest.mark.asyncio
+async def test_a_failure_after_the_write_is_entered_is_never_relabelled_unstarted(bridge):
+    """Negative contract control, not contention evidence: an operation that ran and then
+    raised keeps its own error, runs once, and its transaction rolls back."""
+    message = bridge.comms.messaging.send('peer', 'viewer', 'entered').message
+    calls = []
+
+    def entered(assignments, db):
+        calls.append(bridge.attempt(message, UnconfirmedOutcome).begin(assignments, db))
+        raise CoordinationReadUnavailable(CoordinationReadUnavailable.busy_message)
+
+    with pytest.raises(CoordinationReadUnavailable) as raised:
+        await bridge.coordinator_write(entered)
+    assert type(raised.value) is CoordinationReadUnavailable
+    assert calls == [True]
+    assert await bridge.attempts(message.message_id) == ()
+
+
 @pytest.mark.asyncio
 async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(tmp_path):
     from bus_record_fixture import prepare_native_comms
@@ -281,7 +381,7 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
 
 
 @asynccontextmanager
-async def attached_monitor(bridge):
+async def attached_monitor(bridge, timeout=15):
     """A real monitor socket answers the bridge's preparation probe."""
     bridge_socket, monitor_socket = socket.socketpair()
     peer = MonitorPeer(*await asyncio.open_connection(sock=bridge_socket))
@@ -289,7 +389,7 @@ async def attached_monitor(bridge):
     service = MonitorService(bridge, ProcessIdentity.capture(os.getpid()), lambda: None)
     attachment = asyncio.create_task(bridge.reader.attach(service, peer))
     try:
-        async with asyncio.timeout(15):
+        async with asyncio.timeout(timeout):
             await reader.readline()
             probe = MONITOR_FRAME.validate_json(await reader.readline())
             await probe.confirm(bridge, ObservedMonitor(transcript_record('probe'), 1.))
