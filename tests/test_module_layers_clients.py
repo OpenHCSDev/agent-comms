@@ -8,11 +8,56 @@ import sys
 from pathlib import Path
 
 from module_layers import OutgoingWire, Package, StackClient
+from agent_comms.head_review import BaseSide, HeadSide, Side
+from agent_comms.integration import IntegrationRun
+from agent_comms.todos import DraftListedPullRequest
+from github_fixture import GitHubFixture
+from integration_source_fixture import MutualSources
+
+pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_source_fixture")
 
 
 def write(path: Path, text: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
+
+
+def test_materialized_clients_check_matched_sources_and_both_mixed_sources_fail(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+) -> None:
+    pair = mutual_sources
+    inputs = IntegrationRun(pair.checkout, pair.output, "materialized module clients").qualify(pair.context, ("P2", "P3"))
+    core = inputs.source(pair.core.github)
+    base = BaseSide.require_materialized(pair.output, core)
+    head = HeadSide.require_materialized(pair.output, core)
+    files = tuple(sorted(pair.output.rglob(".git")))
+    base_clients = StackClient.materialized(base / "stack", pair.output, BaseSide, inputs)
+    head_clients = StackClient.materialized(head / "stack", pair.output, HeadSide, inputs)
+    assert tuple(sorted(pair.output.rglob(".git"))) == files  # No later fresh main clone.
+    assert Package(base, base_clients).missing_names == ()
+    assert Package(head, head_clients).missing_names == ()
+    assert {name for entry, name in Package(base, head_clients).missing_names} == {"new_api"}
+    assert {name for entry, name in Package(head, base_clients).missing_names} == {"old_api"}
+    assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
+
+
+def test_materialized_client_files_come_from_each_actual_cut(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+) -> None:
+    pair = mutual_sources
+    pair.client.git(pair.client.checkout, "mv", "src/workflow.py", "src/replacement.py")
+    commit = pair.client.publish_change("Move the candidate client file", "src")
+    stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(pair.client.github, DraftListedPullRequest(
+        pair.client.number, "feature", commit, stamp, "main", reviewable_times=(stamp,)))
+    inputs = IntegrationRun(pair.checkout, pair.output, "side-specific client files").qualify(pair.context, ("P2", "P3"))
+    cuts: dict[type[Side], set[str]] = {}
+    for side in (BaseSide, HeadSide):
+        core = side.require_materialized(pair.output, inputs.source(pair.core.github))
+        client, = StackClient.materialized(core / "stack", pair.output, side, inputs)
+        cuts[side] = {entry.path for entry in client.imports}
+    assert cuts[BaseSide] == {"src/workflow.py"}
+    assert cuts[HeadSide] == {"src/replacement.py"}
 
 
 def test_client_imports_root_reachability_and_name_missing_modules(tmp_path):

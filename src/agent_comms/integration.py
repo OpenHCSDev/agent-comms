@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -16,9 +17,10 @@ from .active_route import resolve_comms_route
 from .build_identity import RepositoryCommit
 from .commander.order import CommanderContext
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
+from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, WireName
-from .head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, IntegrationSource, PullRequestHead
+from .field_codec import FieldCodec, GitCommitText, WireName
+from .head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, IntegrationSource, PullRequestHead, Side
 from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, DetachedStart, GitCommandError, Repo
@@ -255,6 +257,220 @@ class TimedOutTestAttempt(TestAttempt):
 
 
 @dataclass(frozen=True)
+class TestedSources(DeclaredFamily, affix="Sources"):
+    """The actual tested Git graph and forge carrier, not a supplied source roster.
+
+    Event-specific ancestry and current-main rules live on their event declarations.
+    These transient values never enter Core's live records or authorize a review.
+    """
+
+    repository: Repo
+    tested: str
+    carrier: PullRequestHead
+    resolve_option: ClassVar[str] = "--resolve-ci-inputs"
+    revalidate_option: ClassVar[str] = "--revalidate-ci-inputs"
+
+    @classmethod
+    def options(cls) -> tuple[str, ...]:
+        return cls.resolve_option, cls.revalidate_option
+
+    @property
+    def parents(self) -> tuple[str, ...]:
+        return tuple(Repo.git(self.repository.checkout, "rev-list", "--parents", "-n", "1", self.tested).split()[1:])
+
+    @property
+    def baseline(self) -> str:
+        if len(self.parents) != 2:
+            raise IntegrationFailed("The tested comparison requires an actual two-parent merge")
+        return self.parents[0]
+
+    @property
+    def tree(self) -> str:
+        return Repo.git(self.repository.checkout, "rev-parse", f"{self.tested}^{{tree}}").strip()
+
+    @classmethod
+    def read(cls, checkout: Path) -> TestedSources:
+        repository = Repo.of(checkout)
+        if RepositoryName.from_wire(os.environ["GITHUB_REPOSITORY"]) != repository.github:
+            raise IntegrationFailed("The runner checkout origin is not the actual event repository")
+        tested = Repo.git(checkout, "rev-parse", "HEAD^{commit}").strip()
+        if os.environ["GITHUB_SHA"] != tested:
+            raise IntegrationFailed("The runner checkout is not the event's actual tested SHA")
+        GitCommitText.decode(tested)
+        document = FieldCodec.parse(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+        return cls.member_named(os.environ["GITHUB_EVENT_NAME"]).resolve(repository, tested, document)
+
+    @classmethod
+    @abstractmethod
+    def resolve(cls, repository: Repo, tested: str, document: object) -> TestedSources:
+        """Decode this foreign event once and prove its relationship to the tested Git graph."""
+
+    def require_carrier(self) -> None:
+        current = self.carrier.current()
+        if current.base != "main":
+            raise IntegrationFailed("The tested carrier no longer targets main")
+
+    def main_commit(self, source: IntegrationSource) -> str:
+        return source.baseline.commit
+
+    def materialize(self, directory: Path) -> IntegrationInput:
+        """Capture once from Git/forge, then use these same exact checkouts for every consumer."""
+        if not directory.is_relative_to(Path(os.environ["RUNNER_TEMP"]).resolve()):
+            raise IntegrationFailed("CI source artifacts belong under the runner's private temporary root")
+        directory.mkdir(parents=True, exist_ok=False)
+        payload = IntegrationInput.from_message(
+            WorkBranches(self.repository.checkout).commit_message(self.carrier.head))
+        urls = IntegrationInput.source_urls(self.repository, self.baseline, self.tested)
+        repositories = [self.repository]
+        for name, url in sorted(urls.items(), key=lambda item: item[0].key):
+            if name == self.repository.github:
+                raise IntegrationFailed("The stack repeats Core as a Git companion source")
+            checkout = directory / "repositories" / Path(*name.key)
+            checkout.parent.mkdir(parents=True, exist_ok=True)
+            Repo.git(self.repository.checkout, "clone", "--no-checkout", url, str(checkout), timeout=300)
+            repository = Repo.of(checkout)
+            if repository.github != name:
+                raise IntegrationFailed("A declared source clone has a different actual Git origin")
+            repositories.append(repository)
+        if payload:
+            inputs, = payload
+        else:
+            sources = [IntegrationSource(RepositoryCommit(self.repository.github, self.baseline),
+                                         (self.carrier,), self.tree)]
+            for repository in repositories[1:]:
+                commit = IntegrationSource.main_head(repository)
+                WorkBranches(repository.checkout).require_commits("origin", commit)
+                tree = Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
+                sources.append(IntegrationSource(RepositoryCommit(repository.github, commit), (), tree))
+            inputs = IntegrationInput(tuple(sorted(sources, key=lambda source: source.repository.key)))
+        self.validate(inputs, tuple(repositories))
+        for source in inputs.sources:
+            repository = Repo.selected(tuple(repositories), source.repository.to_wire())
+            IntegrationCheckout.create(repository, BaseSide.checkout(directory, source.repository), source.baseline.commit)
+            # The actual tested Core merge already carries all local parents. Fetching its
+            # earlier own PR head through refs/pull would instead fetch the new carrier.
+            if source.repository == self.repository.github:
+                IntegrationCheckout.create(repository, HeadSide.checkout(directory, source.repository), self.tested)
+            else:
+                head = IntegrationCheckout.create(repository, HeadSide.checkout(directory, source.repository), source.baseline.commit)
+                head.combine_sources(source.baseline.commit, source.heads)
+            for side in Side.sides():
+                side.require_materialized(directory, source)
+                checkout = side.checkout(directory, source.repository)
+                print(f"SOURCE {side.declared_name} {source.repository.to_wire()} "
+                      f"{Repo.git(checkout, 'rev-parse', 'HEAD').strip()} {checkout}", flush=True)
+        self.validate(inputs, tuple(repositories))
+        inputs.write(directory)
+        print(f"CI INPUT {inputs.digest}; source computation only, no review or merge permission", flush=True)
+        return inputs
+
+    def revalidate(self, directory: Path) -> IntegrationInput:
+        inputs = IntegrationInput.at(directory)
+        repositories = []
+        for source in inputs.sources:
+            for side in Side.sides():
+                side.require_materialized(directory, source)
+            repositories.append(Repo.of(BaseSide.checkout(directory, source.repository)))
+        self.validate(inputs, tuple(repositories))
+        print(f"CI INPUT REVALIDATED {inputs.digest}; no verdict posted", flush=True)
+        return inputs
+
+    def validate(self, inputs: IntegrationInput, repositories: tuple[Repo, ...]) -> None:
+        """Re-run at job exit: source checks compute, but never publish a verdict."""
+        self.require_carrier()
+        local = inputs.source(self.repository.github)
+        if local.baseline.commit != self.baseline or local.candidate_tree != self.tree:
+            raise IntegrationFailed("Tested base/tree differs from the frozen source input; recapture")
+        inputs.require_repositories(IntegrationInput.declared_repositories(
+            self.repository, self.baseline, self.tested))
+        payload = IntegrationInput.from_message(
+            WorkBranches(self.repository.checkout).commit_message(self.carrier.head))
+        if payload:
+            if payload != (inputs,):
+                raise IntegrationFailed("The tested carrier and materialized input disagree")
+            inputs.require_carrier(self.repository, self.carrier)
+        else:
+            # Ordinary mode is precisely one actual carrier plus unchanged captured mains.
+            if local.heads != (self.carrier,) or any(source.heads for source in inputs.sources
+                                                    if source.repository != self.repository.github):
+                raise IntegrationFailed("An ordinary comparison cannot supply companion overlays")
+        for source in inputs.sources:
+            repository = Repo.selected(repositories, source.repository.to_wire())
+            if IntegrationSource.main_head(repository) != self.main_commit(source):
+                raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
+            source.require_candidate(repository, self.carrier)
+
+
+class PullRequestSources(TestedSources, declared_name="pull_request"):
+    @classmethod
+    def resolve(cls, repository: Repo, tested: str, document: object) -> TestedSources:
+        match document:
+            case {"number": int(number), "pull_request": {"head": {"sha": str(head)}}}:
+                graph = cls(repository, tested, PullRequestHead(repository.github, number, head))
+            case _:
+                raise IntegrationFailed("Malformed pull_request source event")
+        if graph.parents != (graph.baseline, graph.carrier.head):
+            raise IntegrationFailed("The tested second parent is not the event's exact PR head")
+        graph.require_carrier()
+        return graph
+
+
+class MergeGroupSources(TestedSources, declared_name="merge_group"):
+    @classmethod
+    def resolve(cls, repository: Repo, tested: str, document: object) -> TestedSources:
+        match document:
+            case {"merge_group": {"head_sha": str(head), "base_sha": str(base), "head_ref": str(reference)}}:
+                # This is GitHub's queue protocol (also used by review-verdict), not a
+                # branch-name guess about which independent repositories belong together.
+                queued = re.search(r"/pr-([0-9]+)-", reference)
+                if queued is None or head != tested:
+                    raise IntegrationFailed("No actual queued carrier in this merge-group event")
+                carrier = PullRequestHead.at(repository.github, int(queued[1]))
+                graph = cls(repository, tested, PullRequestHead(carrier.repo, carrier.pr, carrier.head))
+            case _:
+                raise IntegrationFailed("Malformed merge_group source event")
+        if graph.baseline != base or not Repo.descends(repository.checkout, graph.carrier.head, tested):
+            raise IntegrationFailed("The tested queue graph does not contain its exact current carrier")
+        graph.require_carrier()
+        return graph
+
+
+class MainSources(TestedSources, declared_name="push"):
+    @staticmethod
+    def merged_carrier(repository: Repo, tested: str) -> PullRequestHead:
+        response = repository.github.rest(f"commits/{tested}/pulls", "--jq", "map(.number)")
+        if response.returncode:
+            raise IntegrationFailed(response.stderr.strip() or "Cannot read main's merged PR provenance")
+        numbers = FieldCodec.decode(tuple[int, ...], FieldCodec.parse(response.stdout))
+        rows = tuple(row for row in PullRequests().rows(repository.github, numbers)
+                     if row.base == "main" and any(merged.merge.oid == tested for merged in row.as_merged()))
+        if len(rows) != 1:
+            raise IntegrationFailed("Main cache requires one actual merged PR; direct/ambiguous commits refuse")
+        row, = rows
+        return PullRequestHead(repository.github, row.number, row.head)
+
+    @classmethod
+    def resolve(cls, repository: Repo, tested: str, document: object) -> TestedSources:
+        match document:
+            case {"ref": "refs/heads/main", "after": str(after)} if after == tested:
+                graph = cls(repository, tested, cls.merged_carrier(repository, tested))
+            case _:
+                raise IntegrationFailed("Main cache requires the actual main push event")
+        if graph.parents != (graph.baseline, graph.carrier.head):
+            raise IntegrationFailed("Main cache supports the actual two-parent merged PR, not a guessed cut")
+        return graph
+
+    def require_carrier(self) -> None:
+        if self.merged_carrier(self.repository, self.tested) != self.carrier:
+            raise IntegrationFailed("Main's uniquely identified merged carrier changed")
+
+    def main_commit(self, source: IntegrationSource) -> str:
+        if source.repository == self.repository.github:
+            return self.tested
+        return super().main_commit(source)
+
+
+@dataclass(frozen=True)
 class IntegrationRun:
     checkout: IntegrationCheckout
     output: Path
@@ -370,7 +586,7 @@ class IntegrationRun:
                  f"{original_message.rstrip()}\n\n{inputs.trailer}")
         commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
         IntegrationCheckout.create(registered_core, HeadSide.checkout(self.output, core.github), commit)
-        (self.output / "input.json").write_text(inputs.canonical + "\n")
+        inputs.write(self.output)
         print(f"QUALIFICATION ONLY {commit}; inputs {inputs.digest}; {self.output}; no review or merge permission", flush=True)
         return inputs
 
@@ -465,22 +681,28 @@ class IntegrationRun:
 
 def main() -> None:
     """Enter the existing CPU-slice owner before acquiring a transferable lease."""
+    if any(argument.partition("=")[0] in TestedSources.options() for argument in sys.argv[1:]):
+        raise SystemExit(run())
     command = ResidentManager.current().command((sys.executable, "-m", __name__, *sys.argv[1:]))
     os.execvpe(command[0], command, dict(os.environ))
 
 
 def run() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkout", type=Path, required=True)
+    parser.add_argument("--checkout", type=Path)
     parser.add_argument(
         "--output",
         type=Path,
-        required=True,
         help="new persistent directory for this run's two bounded logs",
     )
-    parser.add_argument("--risk", required=True)
-    parser.add_argument("--qualify", default="", metavar="PROBLEM",
-                        help="prepare sources from this actual primary order, without running tests")
+    parser.add_argument("--risk", default="")
+    operation = parser.add_mutually_exclusive_group()
+    operation.add_argument(TestedSources.resolve_option, type=Path, metavar="OUTPUT",
+                           help="materialize the actual GitHub event's exact compared sources; no bus")
+    operation.add_argument(TestedSources.revalidate_option, type=Path, metavar="OUTPUT",
+                           help="revalidate the same event/input and source heads before CI success")
+    operation.add_argument("--qualify", default="", metavar="PROBLEM",
+                           help="prepare sources from this actual primary order, without running tests")
     parser.add_argument("--with-problem", action="append", default=[], metavar="PROBLEM")
     parser.add_argument("--comms-root", type=Path,
                         help="the existing authorized root for stored-problem qualification")
@@ -496,6 +718,18 @@ def run() -> int:
     pytest_arguments = arguments.pytest_arguments
     if pytest_arguments[:1] == ["--"]:
         pytest_arguments = pytest_arguments[1:]
+    if arguments.resolve_ci_inputs or arguments.revalidate_ci_inputs:
+        if pytest_arguments or arguments.with_problem or arguments.comms_root or arguments.output or arguments.risk:
+            parser.error("CI source resolution does not accept tests, a bus root or local qualification options")
+        arguments.drop_on_failure.require_qualification()
+        graph = TestedSources.read((arguments.checkout or Path.cwd()).resolve())
+        if arguments.resolve_ci_inputs:
+            graph.materialize(arguments.resolve_ci_inputs.resolve())
+        else:
+            graph.revalidate(arguments.revalidate_ci_inputs.resolve())
+        return 0
+    if arguments.checkout is None or arguments.output is None or not arguments.risk:
+        parser.error("Local integration requires --checkout, --output and --risk")
     run = IntegrationRun(
         IntegrationCheckout(arguments.checkout.resolve()),
         arguments.output.resolve(),

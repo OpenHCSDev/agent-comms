@@ -1,8 +1,10 @@
 """Integration policy at real TOML/Git/gh boundaries; no patched Core methods."""
 
+import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 
@@ -28,6 +30,69 @@ pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_s
 def heads() -> tuple[PullRequestHead, ...]:
     repo = RepositoryName.from_wire("example/integration")
     return (PullRequestHead(repo, 7, "a" * 40), PullRequestHead(repo, 8, "b" * 40))
+
+
+@pytest.mark.parametrize("event", ("pull_request", "merge_group"))
+def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidates(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+    tmp_path: Path, event: str,
+) -> None:
+    pair = mutual_sources
+    inputs = integration.IntegrationRun(pair.checkout, pair.output, "CI source graph").qualify(pair.context, ("P2", "P3"))
+    carrier = pair.publish_carrier(github_cli)
+    local = inputs.source(pair.core.github)
+    # Actual synthetic merge: its own message deliberately has no source metadata.
+    tested = pair.core.git(pair.core.checkout, "commit-tree", local.candidate_tree,
+                           "-p", local.baseline.commit, "-p", carrier.head,
+                           "-m", "Synthetic PR/queue merge; no input metadata").strip()
+    checkout = integration.IntegrationCheckout.create(pair.core, tmp_path / "ci-checkout", tested)
+    assert IntegrationInput.from_message(Repo.git(checkout.path, "show", "--no-patch", "--format=%B", "HEAD")) == ()
+    documents = {
+        "pull_request": {"number": carrier.pr, "pull_request": {"head": {"sha": carrier.head}}},
+        "merge_group": {"merge_group": {"head_sha": tested, "base_sha": local.baseline.commit,
+                                        "head_ref": f"refs/heads/gh-readonly-queue/main/pr-{carrier.pr}-{carrier.head}"}},
+    }
+    document = tmp_path / "event.json"
+    document.write_text(json.dumps(documents[event]))
+    output = tmp_path / "resolved"
+    environment = {**os.environ, **ENVIRONMENT, "GITHUB_EVENT_NAME": event,
+                   "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
+                   "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
+                   "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    command = (sys.executable, "-m", "agent_comms.integration")
+    result = subprocess.run((*command, "--resolve-ci-inputs", str(output)), cwd=checkout.path,
+                            env=environment, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert IntegrationInput.at(output) == inputs
+    for source in inputs.sources:
+        for side in (BaseSide, HeadSide):
+            side.require_materialized(output, source)
+    original = pair.core.git(pair.core.checkout, "rev-parse", "HEAD").strip()
+    result = subprocess.run((*command, "--revalidate-ci-inputs", str(output)), cwd=checkout.path,
+                            env=environment, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    pair.client.git(pair.client.checkout, "push", "origin", "HEAD:main")
+    stale = subprocess.run((*command, "--revalidate-ci-inputs", str(output)), cwd=checkout.path,
+                           env=environment, capture_output=True, text=True, timeout=120)
+    assert stale.returncode != 0 and "main moved" in stale.stderr
+    assert pair.core.git(pair.core.checkout, "rev-parse", "HEAD").strip() == original
+    assert not any(call[:2] == ("pr", "merge") or "state=success" in call for call in github_cli.calls())
+
+
+def test_ci_event_refuses_unrelated_graph_and_carrier_without_materialization(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+) -> None:
+    pair = mutual_sources
+    carrier = PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit)
+    # main is not a two-parent PR test graph, regardless of plausible event text.
+    with pytest.raises(integration.IntegrationFailed, match="two-parent"):
+        integration.PullRequestSources.resolve(pair.core, pair.core.main_commit,
+            {"number": carrier.pr, "pull_request": {"head": {"sha": carrier.head}}})
+    with pytest.raises(integration.IntegrationFailed, match="queued carrier"):
+        integration.MergeGroupSources.resolve(pair.core, pair.core.main_commit,
+            {"merge_group": {"head_sha": pair.core.main_commit, "base_sha": pair.core.main_commit,
+                             "head_ref": "refs/heads/not-a-GitHub-queue-reference"}})
+    assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 
 def test_selection_uses_the_project_declaration_and_unions_existing_files(tmp_path: Path):

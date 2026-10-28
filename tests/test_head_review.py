@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
+from contextlib import chdir
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ import pytest
 
 
 from agent_comms.commander import judge, order
+from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.build_identity import RepositoryCommit
@@ -29,13 +31,14 @@ from agent_comms.standing_rules import (
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoError, ToolRefusedError
-from agent_comms.field_codec import FieldCodec, MalformedRecord, RecordProblems
+from agent_comms.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.work_branches import SourceGrowth, WorkBranches
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
     CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
-    NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
+    NoHeadOrder, OrderClaim, ProgressRead, PullRequestLink, PullRequests, RecordPullRequest, RejectedHeadVerdict,
     HeadVerdict, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
@@ -137,6 +140,136 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
     assert len(posts) == 4
     assert all("state=pending" in call for call in posts)
     assert not any(call[:2] == ("pr", "merge") for call in github.calls())
+
+
+@pytest.fixture
+def companion_checkout(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead],
+    reviewed_source: SourceRepository,
+    configured_repository: Callable[[Comms, *tuple[SourceRepository, ...]], order.Commander],
+    tmp_path: Path,
+) -> Path:
+    comms, github, primary = linked_head_bus
+    companion = SourceRepository.create(tmp_path / "companion", RepositoryName("example", "companion"))
+    configured_repository(comms, reviewed_source, companion)
+    stamp = "2026-10-24T00:00:00Z"
+    # The same PR number exists in both repositories: substituting todo.repo cannot pass.
+    github.put(companion.github, DraftListedPullRequest(
+        primary.pr, "feature", companion.branch_commit, stamp, "main", reviewable_times=(stamp,)))
+    owner = comms.registry.require(comms.goals.todos.get("P2").held().owner)
+    rule = comms.registry.storage_rule
+    checkout = rule.repository_checkout(rule.roots_of(owner), "P2", companion.github)
+    checkout.parent.mkdir(parents=True, exist_ok=True)
+    companion.git(companion.checkout, "worktree", "add", "--detach", str(checkout), companion.branch_commit)
+    return checkout
+
+
+def test_native_companion_link_preserves_claim_review_goal_and_is_idempotent(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead],
+    companion_checkout: Path,
+    claim_order: Callable[..., OrderClaim],
+) -> None:
+    comms, github, primary = linked_head_bus
+    claim_order("P2", pull_request=primary.pr, head=primary.head)
+    todo = comms.goals.todos.get("P2")
+    invoke(comms, primary, UnderReviewHeadVerdict(), OrderHeadReview.for_request(
+        (todo,), primary, UnquotedHeadReview.of))
+    before = comms.goals.todos.get("P2")
+    goal = comms.registry.require(before.held().owner).goal
+    reviews = StoredHeadReview.head_reviews(comms.goals.todos, primary)
+    link = PullRequestLink(SourceRepository.of(companion_checkout).github, primary.pr)
+    context = order.Commander.read_root(comms.root)
+    with chdir(companion_checkout):
+        order.main(["pr", before.id, "--existing", str(primary.pr)], context)
+    after = comms.goals.todos.get(before.id)
+    assert after == replace(before, revision=before.revision + 1, order=before.order.checked().linked_to(link))
+    assert type(after.order) is type(before.order)
+    assert comms.registry.require(after.held().owner).goal == goal
+    assert StoredHeadReview.head_reviews(comms.goals.todos, primary) == reviews
+    companion = PullRequestHead(link.repo, link.number, SourceRepository.git(companion_checkout, "rev-parse", "HEAD").strip())
+    assert PullRequests.linked_among((after,), link.repo) == {link.number: [after]}
+    assert PullRequests((after,)).linked(link.repo) == {link.number: [after]}
+    assert OrderHeadReview.holding((after,), companion) == (after,)
+    # Qualification reads these exact stored links, not a caller-provided pair roster.
+    assert {item.repo for item in after.order.checked().pull_requests} == {primary.repo, link.repo}
+    with chdir(companion_checkout):
+        order.main(["pr", before.id, "--existing", str(primary.pr)], context)
+    assert comms.goals.todos.get(before.id) == after
+    assert comms.registry.require(after.held().owner).goal == goal
+    assert StoredHeadReview.head_reviews(comms.goals.todos, primary) == reviews
+    assert not any(call[:2] in (("pr", "create"), ("pr", "merge")) for call in github.calls())
+    assert any(link.repo.to_wire() in argument for call in github.calls() for argument in call)
+
+
+def test_companion_metadata_cannot_create_edit_or_adopt_missing_pr(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
+) -> None:
+    comms, github, primary = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    context = order.Commander.read_root(comms.root)
+    with chdir(companion_checkout):
+        for arguments in (
+            ["--title", "Do not create a companion", "--body-file", "not-read.md"],
+            ["--existing", str(primary.pr), "--title", "Do not edit"],
+            ["--existing", "999999"],
+        ):
+            with pytest.raises((ValueError, TodoError, SystemExit, subprocess.CalledProcessError)):
+                order.main(["pr", before.id, *arguments], context)
+            assert comms.goals.todos.get(before.id) == before
+    assert not any(call[:2] in (("pr", "create"), ("pr", "edit"), ("pr", "merge")) for call in github.calls())
+
+
+def test_companion_metadata_refuses_another_owners_checkout(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
+) -> None:
+    comms, github, primary = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    companion = SourceRepository.of(companion_checkout)
+    other = comms.registry.require("lead")
+    rule = comms.registry.storage_rule
+    checkout = rule.repository_checkout(rule.roots_of(other), "P2", companion.github)
+    checkout.parent.mkdir(parents=True, exist_ok=True)
+    companion.git(companion_checkout, "worktree", "add", "--detach", str(checkout), "HEAD")
+    calls = github.calls()
+    with chdir(checkout), pytest.raises(ValueError, match="owned by"):
+        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Commander.read_root(comms.root))
+    assert comms.goals.todos.get(before.id) == before
+    assert github.calls() == calls
+
+
+def test_companion_metadata_refuses_an_unregistered_origin_before_forge_read(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
+    reviewed_source: SourceRepository,
+    configured_repository: Callable[[Comms, *tuple[SourceRepository, ...]], order.Commander],
+) -> None:
+    comms, github, primary = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    context = configured_repository(comms, reviewed_source)
+    calls = github.calls()
+    with chdir(companion_checkout), pytest.raises(ValueError, match="Unknown repository"):
+        order.main(["pr", before.id, "--existing", str(primary.pr)], context)
+    assert comms.goals.todos.get(before.id) == before
+    assert github.calls() == calls
+
+
+def test_companion_metadata_write_enforces_registration_revision_and_holder(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
+) -> None:
+    comms, _, primary = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    held = before.held()
+    worker = held.owner_identity
+    registered = PullRequestLink(SourceRepository.of(companion_checkout).github, primary.pr)
+    for command in (
+        RecordPullRequest(before.revision, worker, PullRequestLink(RepositoryName("unknown", "source"), 7), held.generation),
+        RecordPullRequest(before.revision + 1, worker, registered, held.generation),
+        RecordPullRequest(before.revision, worker, registered, GoalId.mint()),
+        RecordPullRequest(before.revision, RecordedThreadIncarnation("not-holder", 1.0),
+                          registered, held.generation),
+    ):
+        with pytest.raises((ValueError, TodoError)):
+            comms.goals.todos.apply(before.id, command)
+        assert comms.goals.todos.get(before.id) == before
 
 
 def test_qualification_withdraws_acceptance_without_claiming_to_disarm_the_request(head_bus):

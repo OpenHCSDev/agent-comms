@@ -41,6 +41,11 @@ def main():
             listed = data["requests"][parts[1]]["listed"]
             state = "open" if listed["kind"] in data["open_kinds"] else "closed"
             print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower(), state)
+        elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "pulls":
+            assert arguments[arguments.index("--jq") + 1] == "map(.number)"
+            print(json.dumps([entry["listed"]["number"] for entry in data["requests"].values()
+                              if entry["listed"].get("merge", {}).get("oid") == parts[1]
+                              or entry["listed"]["head"] == parts[1]]))
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
             print("{}")

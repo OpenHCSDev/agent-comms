@@ -1133,6 +1133,8 @@ class PullRequestSelection(DeclaredFamily, affix="PullRequestSelection"):
 class NewPullRequestSelection(PullRequestSelection):
     def run(self, ctx: Commander, todo: Todo, source: Repo,
             title: str, body_file: str) -> str:
+        if not source.holds(todo):
+            raise ValueError(f"Create this order's PR in {todo.repo.to_wire()}, not {source.github.to_wire()}.")
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
         return todo.order.checked().open_pull_request(
@@ -1152,7 +1154,7 @@ class ExistingPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if title or body_file:
             raise ValueError("--existing does not create or edit the PR; omit title and body.")
-        link = PullRequestLink.existing(todo.repo, self.number)
+        link = PullRequestLink.existing(source.github, self.number)
         ctx.comms.goals.todos.apply(todo.id, RecordPullRequest(
             todo.revision, ctx.incarnation, link, todo.held().generation))
         return link.url
@@ -1184,9 +1186,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         storage = ctx.comms.registry.storage_rule
         if not storage.owns_checkout(holder, source.checkout, source.github):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
-        if not source.holds(todo):
-            sys.exit(f'Refused: current checkout belongs to {source.github.to_wire()}, '
-                     f'not {todo.repo.to_wire()}.')
+        Repo.selected(ctx.repos, source.github.to_wire())
         print(self.existing.run(ctx, todo, source, self.title, self.body_file))
 
 

@@ -990,13 +990,13 @@ class PullRequests:
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
         self._worktrees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
-        self._todos: dict[RepositoryName, dict[str, Todo]] = {}
+        self._todos: dict[str, Todo] = {}
         self.register(todos)
 
     def register(self, todos: Sequence[Todo]) -> Self:
         """Register a frame's orders while preserving this read's existing GitHub facts."""
         for todo in todos:
-            self._todos.setdefault(todo.repo, {})[todo.id] = todo
+            self._todos[todo.id] = todo
         return self
 
     def retained_assignments(self, todo: Todo, assignment: Assignment) -> tuple[Assignment, ...]:
@@ -1055,7 +1055,7 @@ class PullRequests:
                     yield claim, request
 
     def linked(self, repo: RepositoryName) -> dict[int, list[Todo]]:
-        return self.linked_among(self._todos.get(repo, {}).values(), repo)
+        return self.linked_among(self._todos.values(), repo)
 
     @staticmethod
     def linked_among(todos: Iterable[Todo], repo: RepositoryName) -> dict[int, list[Todo]]:
@@ -4986,13 +4986,19 @@ class RecordPullRequest(TodoCommand):
     link: PullRequestLink
     generation: GoalId
 
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        if self.link.repo != current.repo:
+            # TodoStore.writing retains this registry cut through the actual SQL write.
+            project = RegistryStore.at(store.root).snapshot().commander_project.require()
+            Repo.selected(project.repos, self.link.repo.to_wire())
+
     def changed(self, current: Todo) -> Todo:
         current.require_actor(self.actor, self.generation)
-        if self.link.repo != current.repo:
-            raise TodoError("A recorded pull request must belong to the todo's repository.")
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
+        order.require_linkable()
+        current.state.require_open(current)
         return replace(current, revision=current.revision + 1, order=order.linked_to(self.link))
 
 

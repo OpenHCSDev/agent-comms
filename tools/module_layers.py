@@ -37,7 +37,9 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
+from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.installer.runtime_resolution import StackSources
+from agent_comms.repo import Repo
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
 from typing_names import TypingImports, TypingReference
@@ -315,6 +317,22 @@ class StackClient(StackSources):
                 ["git", "clone", "--quiet", "--depth", "1", "--branch", branch, url, str(checkout)],
                 check=True,
             )
+            clients.append(cls(name, checkout))
+        return tuple(clients)
+
+    @classmethod
+    def materialized(cls, stack: Path, directory: Path, side: type[Side],
+                     inputs: IntegrationInput) -> tuple[StackClient, ...]:
+        """Only this actual cut's declarations, from the already-frozen Git input.
+
+        A package absent on this side is absent here; the comparison owner forms the
+        selected-file union across the two returned sets, not a phantom main clone.
+        """
+        clients = []
+        for name, (url, branch) in cls.sources(stack).items():
+            source = inputs.source(Repo.repository_url(url))
+            checkout = side.require_materialized(directory, source)
+            cls.require_package(checkout, name)
             clients.append(cls(name, checkout))
         return tuple(clients)
 
@@ -682,9 +700,21 @@ def main() -> int:
     parser.add_argument(
         "--report", type=Path, help="with --check, also write the layer report to this file"
     )
+    parser.add_argument("--ci-inputs", type=Path,
+                        help="use the integration entrypoint's already-materialized exact source input")
     arguments = parser.parse_args()
     with tempfile.TemporaryDirectory() as clones:
-        package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones)))
+        if arguments.ci_inputs:
+            inputs = IntegrationInput.at(arguments.ci_inputs)
+            local = inputs.source(Repo.of(ROOT).github)
+            core = HeadSide.require_materialized(arguments.ci_inputs, local)
+            package = Package(core, StackClient.materialized(core / "stack", arguments.ci_inputs, HeadSide, inputs))
+            base = BaseSide.require_materialized(arguments.ci_inputs, local)
+            if arguments.base and Repo.git(ROOT, "rev-parse", arguments.base).strip() != local.baseline.commit:
+                raise ValueError("The outgoing wire must check this input's actual captured base")
+        else:
+            package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones)))
+            base = Path(clones) / "base"
         if not arguments.check:
             sys.stdout.write(package.markdown())
             return 0
@@ -692,7 +722,8 @@ def main() -> int:
             arguments.report.write_text(package.markdown())
         lacking = report(package)
         if arguments.base:
-            base = base_tree(arguments.base, Path(clones) / "base")
+            if not arguments.ci_inputs:
+                base = base_tree(arguments.base, base)
             print(f"outgoing wire against Core at {arguments.base}:")
             lacking = report(Package(base, (OutgoingWire.at(),))) or lacking
         return 1 if lacking else 0

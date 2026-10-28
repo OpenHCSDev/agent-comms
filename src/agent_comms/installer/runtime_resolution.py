@@ -34,6 +34,14 @@ class StackSources:
         return cls.declared_sources((stack / "pyproject.toml").read_text())
 
     @staticmethod
+    def require_package(checkout: Path, name: str) -> None:
+        """A stack key names the actual source project, not a package-to-PR roster."""
+        match tomllib.loads((checkout / "pyproject.toml").read_text()):
+            case {"project": {"name": str(actual)}} if canonicalize_name(actual) == canonicalize_name(name):
+                return
+        raise ValueError(f"{checkout} does not declare stack package {name}")
+
+    @staticmethod
     def require_compatible(baseline: str, candidate: str) -> None:
         """Local-source membership may change; external runtime requirements must agree.
 
