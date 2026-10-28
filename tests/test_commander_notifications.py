@@ -38,6 +38,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
+from agent_comms.transcript_events import SucceededCallState
 from test_unit_state import recorded_turn
 
 pytest_plugins = ("test_holder_standing_rules",)
@@ -78,7 +79,7 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     notification_bus,
 ):
     comms = notification_bus
-    recorded_turn(comms, 10)
+    recorded_turn(comms, (SucceededCallState,) * 10)
     original = (comms.root / 'state-source.jsonl').read_bytes()
     hud = beat(comms, states=state_cards(comms, UnitState))
     ServicePassStore.at(comms.root).heartbeat_passed((hud.commander,), (hud.commander,))

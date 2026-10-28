@@ -430,7 +430,10 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
             for at in todo.history.facts_for(todo.id).send_backs[:2]
         )
         calls = source.calls
-        repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest
+        # The same call failing twice is a repeated failure; a repeated success or a call
+        # still running is ordinary work, such as re-arming a watch with its one command.
+        repeats = (len(calls) >= 2 and calls[-1].state.failed and calls[-2].state.failed
+                   and calls[-1].digest == calls[-2].digest)
         if len(sends) < 2 and not repeats:
             return False
         commit_at = source.last_commit_at

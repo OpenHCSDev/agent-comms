@@ -533,6 +533,8 @@ class ToolEndTranscript(ToolTranscript):
 class CallState(DeclaredFamily, affix="CallState"):
     """Where one tool call stands in its unit's records."""
 
+    failed: ClassVar[bool] = False
+
 
 class RunningCallState(CallState):
     """Started; no result is recorded yet."""
@@ -543,7 +545,7 @@ class SucceededCallState(CallState):
 
 
 class FailedCallState(CallState):
-    pass
+    failed = True
 
 
 @dataclass(frozen=True)
