@@ -414,7 +414,7 @@ class MaterializedClients(ClientSources):
     @cached_property
     def metadata(self) -> dict[type[Side], dict[RepositoryName, ProjectMetadata]]:
         """One acquisition per actual immutable project, shared by all consumers here."""
-        environment = self.environment
+        _ = self.environment  # Prove the selected interpreter once before using its Python version.
         result: dict[type[Side], dict[RepositoryName, ProjectMetadata]] = {}
         core_source = self.inputs.source(CorePackage.repository)
         for side in Side.sides():
@@ -430,7 +430,7 @@ class MaterializedClients(ClientSources):
                     metadata = ProjectMetadata.acquire(checkout, uv=self.uv, python=self.python,
                         commands=self.commands, output=self.directory / "metadata")
                     self.require_package(metadata, packages[identity])
-                    ProjectMetadata.require_python(metadata.python, environment)
+                    ProjectMetadata.require_python(metadata.python)
                     projects[identity] = metadata
                 finally:
                     side.require_materialized(self.directory, source)

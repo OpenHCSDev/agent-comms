@@ -7,6 +7,7 @@ import tomllib
 from zipfile import ZipFile
 
 from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
 import pytest
 import tomli_w
 
@@ -64,7 +65,7 @@ def test_standard_backend_metadata_preserves_identity_python_and_all_optional_ed
     with pytest.raises(ValueError, match="not stack package"):
         StackSources.require_package(metadata, "different-package")
     with pytest.raises(ValueError, match="common interpreter"):
-        ProjectMetadata.require_python(metadata.python, {"python_full_version": "3.8.0"})
+        ProjectMetadata.require_python(SpecifierSet("<1"))
     environment = StackSources.marker_environment(Path(sys.executable))
     with pytest.raises(ValueError, match="selected common interpreter"):
         StackSources.marker_environment(tmp_path / "different-interpreter")

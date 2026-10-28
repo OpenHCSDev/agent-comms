@@ -1,6 +1,7 @@
 """Private full-project projection against real captured Git/forge inputs; no fake resolver."""
 
 from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 import os
 import sys
@@ -36,8 +37,19 @@ def test_private_project_preserves_settings_pins_and_refuses_external_migration(
     core_project = pair.core.checkout / "pyproject.toml"
     document = tomllib.loads(core_project.read_text())
     document["project"]["dependencies"] = list(dependencies)
+    stack = tomllib.loads((pair.core.checkout / "stack/pyproject.toml").read_text())
+    stack["project"]["python"] = "unmodeled convenience spelling"
+    stack["tool"]["uv"]["overrides"] = ["unmodeled overrides"]
+    stack["tool"]["uv"]["constraints"] = ["unmodeled constraints"]
+    stack["tool"]["uv"]["indexes"] = [{"unmodeled": "indexes"}]
+    stack["tool"]["fixture"] = {"dates": [date(2026, 10, 28)], "matrix": [{"enabled": False}]}
+    stack["tool"]["uv"]["index"] = [{"name": "fixture-index", "url": "https://pypi.org/simple",
+                                    "explicit": True, "authenticate": "always"}]
+    stack["tool"]["uv"]["sources"]["conditional-package"] = [
+        {"index": "fixture-index", "marker": "sys_platform == 'linux'"}]
     head = pair.core.publish_change("Declare this candidate runtime contract", *pair.core.write_files({
-        Path("pyproject.toml"): tomli_w.dumps(document)}))
+        Path("pyproject.toml"): tomli_w.dumps(document),
+        Path("stack/pyproject.toml"): tomli_w.dumps(stack)}))
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(pair.core.github, DraftListedPullRequest(
         pair.core.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
@@ -51,10 +63,10 @@ def test_private_project_preserves_settings_pins_and_refuses_external_migration(
         if allowed:
             checker.write_project()
             expected = tomllib.loads(before[0].decode())
-            expected["tool"]["uv"]["sources"] = {
-                "agent-comms": {"path": str(checker.core), "editable": True},
-                "source-client": {"path": str(HeadSide.checkout(pair.output, pair.client.github)), "editable": True},
-            }
+            expected["tool"]["uv"]["sources"]["agent-comms"] = {"path": str(checker.core), "editable": True}
+            expected["tool"]["uv"]["sources"]["source-client"] = {
+                "path": str(HeadSide.checkout(pair.output, pair.client.github)), "editable": True}
+
             assert tomllib.loads((checker.checkout / "stack/pyproject.toml").read_text()) == expected
             assert checker.lock.read_bytes() == before[1]
             monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
@@ -184,9 +196,12 @@ def test_complete_project_reconciles_shared_preferences_and_keeps_both_cuts_on_o
                  if Requirement(text).name == "checker-plugin")
     assert override.url == f"git+{source['git']}@{source['rev']}#subdirectory=python%20package"
     for query in ("unknown=python", "subdirectory=python&subdirectory=other", "subdirectory=",
-                  "branch=main&tag=release", "subdirectory=%00"):
+                  "branch=main&tag=release", "subdirectory=%00", "subdirectory=%ZZ", "branch="):
         with pytest.raises(ValueError, match="Git"):
             GitSource(git=f"{source['git']}?{query}#{source['rev']}").project_source()
+    for revision in ("", "a" * 7, "Z" * 40):
+        with pytest.raises(ValueError, match="Git"):
+            GitSource(git=f"{source['git']}?branch=main#{revision}").project_source()
     checker.resolve()
     locked = ResolvedLock.read(checker.lock).external(checker.local_names)
     assert locked["idna"].version == bootstrap["idna"].version

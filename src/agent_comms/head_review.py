@@ -90,10 +90,7 @@ class PullRequestHead:
                          '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
-        head, base, draft, state = read.stdout.split()
-        if state != "open":
-            raise ToolRefusedError(f"#{pr} is no longer an open source.")
-        return OpenPullRequestHead.drafted(draft)(repo, pr, head, base=base)
+        return OpenPullRequestHead.from_forge(repo, pr, read.stdout)
 
     def change_identity(self, reader: WorkBranches, base: str) -> PullRequestChange:
         """Compare the PR's patch, never the unrelated changes in its base tree.
@@ -149,11 +146,12 @@ class IntegrationSource:
 
     @staticmethod
     def main_head(repository: Repo) -> str:
-        rows = Repo.git(repository.checkout, "ls-remote", "--exit-code", "origin", "refs/heads/main").splitlines()
+        reference_name = f"refs/heads/{WorkBranches.main}"
+        rows = Repo.git(repository.checkout, "ls-remote", "--exit-code", "origin", reference_name).splitlines()
         if len(rows) != 1:
             raise ToolRefusedError(f"No unique main in {repository.github.to_wire()}")
         commit, reference = rows[0].split()
-        if reference != "refs/heads/main":
+        if reference != reference_name:
             raise ToolRefusedError("The remote answered with a different main reference")
         GitCommitText.decode(commit)
         if len(commit) != 40:
@@ -193,7 +191,7 @@ class IntegrationSource:
         for head in self.heads:
             if not head.same_pull_request(carrier):
                 current = head.current()
-                if current.base != "main":
+                if current.base != WorkBranches.main:
                     raise ToolRefusedError(f"#{head.pr} no longer targets captured main")
 
 
@@ -250,7 +248,7 @@ class IntegrationInput:
         """Git and forge prove this frozen input; Todo and verdict owners decide permission."""
         core = Repo.selected(repositories, carrier.repo.to_wire())
         current = carrier.current()
-        if current.base != "main":
+        if current.base != WorkBranches.main:
             raise ToolRefusedError("The integration carrier no longer targets main")
         self.require_carrier(core, carrier)
         for entry in self.sources:
@@ -420,6 +418,17 @@ class OpenPullRequestHead(ReadPullRequestHead):
 
     # GitHub's REST ``draft`` field as ``tostring`` renders it.
     forge_draft: ClassVar[str]
+    forge_state: ClassVar[str] = "open"
+
+    @classmethod
+    def from_forge(cls, repo: RepositoryName, pr: int, response: str) -> OpenPullRequestHead:
+        head, base, draft, state = response.split()
+        if state != cls.forge_state:
+            raise ToolRefusedError(f"#{pr} is no longer an open source.")
+        GitCommitText.decode(head)
+        if len(head) != 40:
+            raise ToolRefusedError("The forge head must be a full Git commit")
+        return cls.drafted(draft)(repo, pr, head, base=base)
 
     @classmethod
     def drafted(cls, draft: str) -> type[OpenPullRequestHead]:

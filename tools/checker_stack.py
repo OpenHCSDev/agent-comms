@@ -16,14 +16,14 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 import tomli_w
 
-from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.runtime_resolution import (
-    CorePackage, ResolvedLock, RuntimeResolution, StackSources, VersionedPackage,
+    CorePackage, PrivateUvProject, ResolvedLock, RuntimeResolution, StackSources, VersionedPackage,
 )
 from agent_comms.installer.upgrade import Stack
+from agent_comms.integration import RunnerEnvironment
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
 from module_layers import MaterializedClients
@@ -118,38 +118,16 @@ class CheckerStack(Stack, StackSources):
         original = self.core / "stack"
         project = self.checkout / "stack"
         project.mkdir(parents=True, exist_ok=False)
-        document: dict[str, object] = tomllib.loads((original / "pyproject.toml").read_text())
-        metadata = self.clients.projects(HeadSide)[CorePackage.repository]
-        match document:
-            case {"project": {"dependencies": list() as dependencies} as root,
-                  "tool": {"uv": {"sources": dict() as sources} as uv}}:
-                roots = FieldCodec.decode(list[str], dependencies)
-                if not any(canonicalize_name(Requirement(text).name) == metadata.name for text in roots):
-                    raise ValueError("The private checker requires the declared Core runtime root")
-                root["dependencies"] = [metadata.with_all_extras(text) for text in roots]
-                uv["override-dependencies"] = [metadata.with_all_extras(text) for text in
-                    FieldCodec.decode(list[str], uv.get("override-dependencies", []))]
-                for raw_name, value in tuple(sources.items()):
-                    name = canonicalize_name(FieldCodec.decode(str, raw_name))
-                    match value:
-                        case {"git": str(url), "branch": str(), **options}:
-                            source = self.inputs.source(Repo.repository_url(url))
-                            checkout = HeadSide.require_materialized(self.source_directory, source)
-                            self.require_package(self.clients.projects(HeadSide)[source.repository], name)
-                            sources[raw_name] = {**options, "path": str(checkout), "editable": True}
-                        case {"path": str(relative), **options}:
-                            checkout = (original / relative).resolve()
-                            if checkout != self.core or name != CorePackage.distribution:
-                                raise ValueError(f"Uncaptured local source {name}: {checkout}")
-                            sources[raw_name] = {**options, "path": str(checkout)}
-                        case _:
-                            # Pinned/index/archive sources remain exactly as declared.
-                            pass
-                for package in retained.values():
-                    package.constrain(uv)
-            case _:
-                raise ValueError("The candidate stack requires its actual source declarations")
-        (project / "pyproject.toml").write_text(tomli_w.dumps(document))
+        document = PrivateUvProject.read(original / "pyproject.toml")
+        projects = self.clients.projects(HeadSide)
+        document.enrich(projects[CorePackage.repository])
+        materialized = {identity: (
+            HeadSide.require_materialized(self.source_directory, self.inputs.source(identity)), metadata)
+            for identity, metadata in projects.items()}
+        document.materialize(original, self.core, materialized)
+        for package in retained.values():
+            package.constrain(document.tool.uv)
+        (project / "pyproject.toml").write_text(tomli_w.dumps(document.document()))
         shutil.copyfile(original / "uv.lock", self.lock)
 
     def resolve(self) -> None:
@@ -182,10 +160,13 @@ class CheckerStack(Stack, StackSources):
 
     def prepare(self) -> RuntimeResolution:
         prefix = self.runtime.prefix.resolve()
-        runner = Path(os.environ["RUNNER_TEMP"]).resolve()
-        if (not self.source_directory.resolve().is_relative_to(runner) or not prefix.is_relative_to(runner)
-                or not self.checkout.resolve().is_relative_to(self.source_directory.resolve())
-                or not (prefix / "pyvenv.cfg").is_file()):
+        runner = RunnerEnvironment.read().root.resolve()
+        for path in (self.source_directory.resolve(), prefix):
+            if not path.is_relative_to(runner):
+                raise ValueError("The common checker requires its isolated runner bootstrap prefix and input directory")
+        if not self.checkout.resolve().is_relative_to(self.source_directory.resolve()):
+            raise ValueError("The private checker project must be under its captured source directory")
+        if not (prefix / "pyvenv.cfg").is_file():
             raise ValueError("The common checker requires its isolated runner bootstrap prefix and input directory")
         self.require_uv()
         self.write_project()

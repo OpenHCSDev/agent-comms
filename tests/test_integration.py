@@ -212,18 +212,20 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
 
 
 def test_ci_event_refuses_unrelated_graph_and_carrier_without_materialization(
-    mutual_sources: MutualSources, github_cli: GitHubFixture,
+    mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
 ) -> None:
     pair = mutual_sources
     carrier = PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit)
     # main is not a two-parent PR test graph, regardless of plausible event text.
     with pytest.raises(integration.IntegrationFailed, match="two-parent"):
         integration.PullRequestSources.resolve(pair.core, pair.core.main_commit,
-            {"number": carrier.pr, "pull_request": {"head": {"sha": carrier.head}}})
+            {"number": carrier.pr, "pull_request": {"head": {"sha": carrier.head}}},
+            environment=integration.RunnerEnvironment(root=tmp_path))
     with pytest.raises(integration.IntegrationFailed, match="queued carrier"):
         integration.MergeGroupSources.resolve(pair.core, pair.core.main_commit,
             {"merge_group": {"head_sha": pair.core.main_commit, "base_sha": pair.core.main_commit,
-                             "head_ref": "refs/heads/not-a-GitHub-queue-reference"}})
+                             "head_ref": "refs/heads/not-a-GitHub-queue-reference"}},
+            environment=integration.RunnerEnvironment(root=tmp_path))
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 
