@@ -138,7 +138,7 @@ class IgnoredProgress(SettledDelivery, ContextualProgress):
         return self.proof.ignored_notification_label(notification)
 
 
-class TakenProgress(ContextualProgress):
+class TakenProgress(SettledDelivery, ContextualProgress):
     """A running turn took this message as one of its inputs; its proof says how far."""
 
     def notification_label(self, notification):
