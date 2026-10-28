@@ -32,9 +32,9 @@ from agent_comms.todos import (
     JudgedCall,
     ToolCallVerdict,
 )
-from .bus_read import OwnerLiveRead
+from .bus_read import BusReader, OwnerLiveRead, UiRead
 from .commander.vibe_check import OverloadDegradation
-from .commander_hud import CommanderHud
+from .commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
 from .comms import Comms
 from .coordinator import Coordination
 from .errors import ToolRefusedError
@@ -526,6 +526,33 @@ class InputDeliveryRead(
 
     def decode_reply(self, raw: object) -> DeliveryOverview:
         return FieldCodec.decode(DeliveryOverview, raw)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommanderUnitRead(
+    UiRead[CommanderUnitDetail], ReadTool, ToolRequest, declared_name="comms_commander_unit",
+):
+    """One unit's card on a commander's published frame, expanded with its orders' bounded
+    instructions, stories, commits and activity. The held incarnations and orders select the
+    exact card and witness it; they are never whose authority the read runs under."""
+
+    label = "Commander unit"
+    description = ("Expand one unit's card on a commander's published frame: its orders' "
+                   "bounded instructions, stories and commits, and its recent activity. "
+                   "Refuses when either incarnation or the unit's assignment changed.")
+    commander: Annotated[ThreadIncarnation, *tool_field("Commander incarnation whose frame shows the card")]
+    unit: Annotated[ThreadIncarnation, *tool_field("Unit incarnation on that card")]
+    orders: Annotated[tuple[OrderId, ...], *tool_field("The card's orders, exactly as published")]
+
+    def read_as(self, comms: Comms, reader: BusReader) -> CommanderUnitDetail:
+        snapshot = comms.registry.snapshot()
+        if not self.commander.current(snapshot) or not self.unit.current(snapshot):
+            raise ToolRefusedError("The selected commander or unit incarnation is no longer current")
+        hud = CommanderFrame.current(comms, self.commander.name)
+        for card in hud.units:
+            if card.unit == self.unit:
+                return card.detail(comms, self.commander, self.orders)
+        raise ToolRefusedError("The selected unit is no longer in this commander's published frame")
 
 
 @dataclass(frozen=True, kw_only=True)

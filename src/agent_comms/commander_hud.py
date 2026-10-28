@@ -142,7 +142,7 @@ class CommanderOrderDetail:
 
 
 @dataclass(frozen=True)
-class CommanderUnitDetail:
+class CommanderUnitDetail(ToolResult):
     """A lazy disclosure; activity uses the existing bounded turn wire projection."""
 
     unit: CommanderUnit

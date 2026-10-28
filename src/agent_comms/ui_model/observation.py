@@ -41,9 +41,9 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import OwnerLiveRead, OwnerReadRuntimeRequest
+from agent_comms.bus_read import OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
 from agent_comms.child_process import join_retirement
-from agent_comms.commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.owner_connection import OwnerConnection, OwnerReading, OwnerReplyConnection
@@ -56,7 +56,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
-from agent_comms.field_codec import FieldCodec, OrderId
+from agent_comms.field_codec import FieldCodec
 from agent_comms.history_views import RetiredViews
 from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
@@ -429,26 +429,17 @@ class ReadRequest(AwaitedRead):
 
 
 @dataclass(frozen=True)
-class ReadCommanderUnit(ReadRequest):
-    """Expand an exact published card, refusing a reused name or changed assignment."""
+class ReadOperation(ReadRequest):
+    """The UI's root and request witness around one root-free shared read."""
 
-    commander: ThreadIncarnation
-    unit: ThreadIncarnation
-    orders: tuple[OrderId, ...]
+    operation: UiRead
 
     @property
     def refusal_errors(self) -> tuple[type[Exception], ...]:
         return (*super().refusal_errors, ToolRefusedError, WorkBranchError)
 
-    def read(self, comms: Comms) -> CommanderUnitDetail:
-        snapshot = comms.registry.snapshot()
-        if not self.commander.current(snapshot) or not self.unit.current(snapshot):
-            raise ToolRefusedError("The selected commander or unit incarnation is no longer current")
-        hud = CommanderFrame.current(comms, self.commander.name)
-        for card in hud.units:
-            if card.unit == self.unit:
-                return card.detail(comms, self.commander, self.orders)
-        raise ToolRefusedError("The selected unit is no longer in this commander's published frame")
+    def read(self, comms: Comms) -> object:
+        return self.operation.read(comms)
 
 
 @dataclass(frozen=True)
