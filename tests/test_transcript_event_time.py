@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime
 
 import pytest
+from transcript_record_fixture import transcript_record
 
 from agent_comms.field_codec import MalformedRecord, RecordedTimestamp
 from agent_comms.native_entries import NativeEntry, TranscriptProjection
@@ -79,7 +80,7 @@ def test_external_source_without_a_time_refuses_before_event_construction(source
     from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD
     from agent_comms.recorded_time import UnrecordedTimeError
 
-    record = ({'uuid': 'record', 'position': 0} if source == 'claude' else
+    record = ({'uuid': transcript_record('record'), 'position': 0} if source == 'claude' else
               {'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant', 'content': []}})
     if stamp is None:
         record['timestamp'] = None

@@ -15,6 +15,8 @@ import json
 
 import pytest
 
+from transcript_record_fixture import transcript_record
+
 from conftest import declare_test_bus
 
 from agent_comms.installer.practice import PracticeCopy
@@ -82,7 +84,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
             async with asyncio.timeout(15):
                 await monitor_reader.readline()  # SessionReady, followed by the real probe.
                 probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
-                await probe.confirm(selected, ObservedMonitor('probe', 1.))
+                await probe.confirm(selected, ObservedMonitor(transcript_record('probe'), 1.))
                 watching = asyncio.create_task(selected.watch_child())
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
                 for update in notification(line).updates(ClaudeSession()):
@@ -95,7 +97,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 unread = comms.messaging.send(
                     'peer', 'viewer', 'delivery records this model read').message
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
-                for update in notification(line, record_id='second-delivery').updates(
+                for update in notification(line, record_id=transcript_record('second-delivery')).updates(
                         ClaudeSession()):
                     await update.observed(selected)
                 rows = await stored_attempts(selected)
@@ -164,14 +166,14 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
             async with asyncio.timeout(20):
                 await reader.readline()  # The real attachment's ready response.
                 probe = MONITOR_FRAME.validate_json(await reader.readline())
-                await probe.confirm(bridge, ObservedMonitor('probe', 1.))
+                await probe.confirm(bridge, ObservedMonitor(transcript_record('probe'), 1.))
                 await bridge.accept(first)
                 line = (await reader.readline()).decode().rstrip('\n')
                 # The store's declared wait expires; no method or error is patched.
                 with closing(sqlite3.connect(path, isolation_level=None)) as held:
                     held.execute('BEGIN EXCLUSIVE')
                     try:
-                        for update in notification(line, record_id='busy-first').updates(ClaudeSession()):
+                        for update in notification(line, record_id=transcript_record('busy-first')).updates(ClaudeSession()):
                             await update.observed(bridge)
                     finally:
                         held.execute('ROLLBACK')
@@ -181,10 +183,10 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
                 assert not attachment.done()
                 await bridge.accept(second)
                 line = (await reader.readline()).decode().rstrip('\n')
-                for update in notification(line, record_id='healthy-second').updates(ClaudeSession()):
+                for update in notification(line, record_id=transcript_record('healthy-second')).updates(ClaudeSession()):
                     await update.observed(bridge)
                 confirmed, = await bridge.attempts(second.message_id)
-                assert confirmed.monitor == ObservedMonitor('healthy-second', 1792168805.123)
+                assert confirmed.monitor == ObservedMonitor(transcript_record('healthy-second'), 1792168805.123)
                 assert confirmed.outcome is DeliveredOutcome
                 assert not attachment.done()
                 # Reopening starts after the journal's latest attempt, never at the
@@ -242,7 +244,7 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
             async with asyncio.timeout(15):
                 await monitor_reader.readline()
                 probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
-                await probe.confirm(bridge, ObservedMonitor('probe', 1.))
+                await probe.confirm(bridge, ObservedMonitor(transcript_record('probe'), 1.))
                 accepting = asyncio.create_task(bridge.accept(message))
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
                 await accepting
@@ -280,7 +282,7 @@ async def attached_monitor(bridge):
         async with asyncio.timeout(15):
             await reader.readline()
             probe = MONITOR_FRAME.validate_json(await reader.readline())
-            await probe.confirm(bridge, ObservedMonitor('probe', 1.))
+            await probe.confirm(bridge, ObservedMonitor(transcript_record('probe'), 1.))
             yield reader
     finally:
         writer.close()
@@ -293,7 +295,7 @@ def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
 
 
-def notification(line, record_id='notification-record'):
+def notification(line, record_id=transcript_record('notification-record')):
     return decoded_record(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
@@ -301,7 +303,7 @@ def notification(line, record_id='notification-record'):
                      '</event></task-notification>')))
 
 
-def attachment_notification(line, record_id='notification-record'):
+def attachment_notification(line, record_id=transcript_record('notification-record')):
     return decoded_record(dict(
         type='attachment', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         attachment=dict(type='queued_command', commandMode='task-notification',
@@ -319,7 +321,7 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
     assert all(len(line.encode('utf-16-le')) // 2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
     # Out-of-order observations and repeated history must not count twice.
     for number in (6, 1, 3, 1, 5, 2):
-        for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
+        for update in record_factory(lines[number], record_id=transcript_record(f'record-{number}')).updates(ClaudeSession()):
             await update.observed(bridge)
     attempt, = await stored_attempts(bridge)
     assert attempt.outcome is EmittedOutcome
@@ -328,19 +330,19 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         reopened = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
         await reopened.options.operation.prepare(reopened)
         for number in (0, 4):
-            for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
+            for update in record_factory(lines[number], record_id=transcript_record(f'record-{number}')).updates(ClaudeSession()):
                 await update.observed(reopened)
         confirmed, = await reopened.attempts(message.message_id)
         assert confirmed.outcome is DeliveredOutcome
         for line in lines:
-            for update in record_factory(line, record_id='later-overlap').updates(ClaudeSession()):
+            for update in record_factory(line, record_id=transcript_record('later-overlap')).updates(ClaudeSession()):
                 await update.observed(reopened)
         # Confirmation can beat the final socket-drain emission report: that report was
         # decided from a row read before the confirmation, and must not overwrite it.
         await reopened.finish(confirmed, partial(replace, outcome=EmittedOutcome))
         stored, = await stored_attempts(reopened)
         assert stored.outcome is DeliveredOutcome
-        assert stored.monitor == ObservedMonitor('record-4', 1792168805.123)
+        assert stored.monitor == ObservedMonitor(transcript_record('record-4'), 1792168805.123)
         parts = await reopened.coordinator_read(lambda db: HarnessObservedPart.of(db, stored))
         assert len(parts) == 7
 
@@ -361,14 +363,14 @@ def test_frame_cap_and_exact_reconstruction(body, sender):
 
 
 def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails():
-    record=decoded_record(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
+    record=decoded_record(dict(type='user',uuid=transcript_record('record'),timestamp='2026-10-16T16:40:05.123Z',
         sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
         message=dict(content='Another task producer')))
     assert isinstance(record.message.content[0].text,ForeignTaskNotification)
     assert record.updates(ClaudeSession())==()
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
-        decoded_record(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
+        decoded_record(dict(type='user',uuid=transcript_record('record'),timestamp='2026-10-16T16:40:05.123Z',
             sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
             message=dict(content='<task-notification>')))
     assert isinstance(ClaudeMonitorFrame.decode_line('ordinary unrelated monitor event'),ForeignMonitorFrame)
@@ -376,7 +378,7 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
 
 
 def queued_prompt(kind, prompt):
-    return decoded_record(dict(type='attachment', uuid='queued-record',
+    return decoded_record(dict(type='attachment', uuid=transcript_record('queued-record'),
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
         origin=dict(kind=kind), prompt=prompt)))
 
@@ -386,7 +388,7 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
     for kind in ('peer', 'human'):
         updates=queued_prompt(kind, 'Not a Monitor notification').updates(session)
         assert not any(isinstance(update, MonitorObservation) for update in updates)
-    hook=decoded_record(dict(type='attachment', uuid='foreign-record',
+    hook=decoded_record(dict(type='attachment', uuid=transcript_record('foreign-record'),
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='hook_success')))
     assert isinstance(hook.attachment, ForeignAttachment)
     assert hook.updates(ClaudeSession())==()
@@ -408,7 +410,7 @@ def test_remote_control_session_record_decodes_without_updates():
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(bridge, emitted_delivery, capsys):
     message = emitted_delivery('original')
     frame = MonitorPart(id=message.message_id, sender=message.sender, number=1, total=1, body='different')
-    await frame.confirm(bridge, ObservedMonitor('record', 1.))
+    await frame.confirm(bridge, ObservedMonitor(transcript_record('record'), 1.))
     stored, = await stored_attempts(bridge)
     assert stored.outcome is EmittedOutcome
     assert isinstance(stored.monitor, MismatchedMonitor)
