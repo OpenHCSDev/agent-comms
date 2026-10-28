@@ -231,8 +231,10 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
 
     @classmethod
     def sql_choices(cls) -> str:
-        """The members' names as an SQL ``IN`` list, derived from the declarations."""
-        return "(" + ",".join("'" + name.replace("'", "''") + "'" for name in cls.names()) + ")"
+        """The members' names as an SQL ``IN`` list, derived from the declarations.
+
+        SQL IN is an unordered set: stored schema text must not depend on import order."""
+        return "(" + ",".join(sorted("'" + name.replace("'", "''") + "'" for name in cls.names())) + ")"
 
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
