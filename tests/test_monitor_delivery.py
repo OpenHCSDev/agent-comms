@@ -214,12 +214,6 @@ async def begin_waits(capsys, message):
         seen += capsys.readouterr().err
 
 
-def stored_attempts(db, bridge, message):
-    return tuple(HarnessDelivery.select(
-        db, bridge=type(bridge), recipient_lookup=bridge.recipient_lookup,
-        message_id=message.message_id))
-
-
 @pytest.mark.asyncio
 async def test_busy_begin_holds_the_same_message_until_the_store_frees(bridge, capsys):
     """Real SQLite contention before the durable begin: the original is held with no attempt
@@ -238,7 +232,9 @@ async def test_busy_begin_holds_the_same_message_until_the_store_frees(bridge, c
                 await begin_waits(capsys, held_message)
                 # The event loop still runs other work while the begin waits.
                 assert not accepting.done()
-                assert stored_attempts(held, bridge, held_message) == ()
+                assert tuple(HarnessDelivery.select(
+                    held, bridge=type(bridge), recipient_lookup=bridge.recipient_lookup,
+                    message_id=held_message.message_id)) == ()
                 with pytest.raises(TimeoutError):
                     async with asyncio.timeout(.3):
                         await reader.readline()

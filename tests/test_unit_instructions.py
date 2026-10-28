@@ -1,4 +1,4 @@
-"""Every native unit's system prompt carries the indictment, every rule under its audience and the pattern index."""
+"""Every native unit's system prompt carries the indictment, the voice, every rule under its audience and the pattern index."""
 
 import pytest
 
@@ -12,7 +12,8 @@ from agent_comms.unit_instructions import UnitInstructions
 
 def test_unit_prompt_carries_every_rule_under_its_audience(tmp_path):
     text = UnitInstructions.prepare(tmp_path / "UNIT_SYSTEM.md").read_text(encoding="utf-8")
-    for source in (OWNER_INSTRUCTIONS, CommanderPackage.indictment(), Slop.catalog() / "README.md"):
+    for source in (OWNER_INSTRUCTIONS, CommanderPackage.indictment(), CommanderPackage.voice(),
+                   Slop.catalog() / "README.md"):
         assert source.read_text(encoding="utf-8").strip() in text, source
     grouped = dict(RuleAudience.grouped(RuleFile.packaged()))
     assert set(grouped) == {FleetAudience, CommanderAudience}

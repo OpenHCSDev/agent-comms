@@ -63,7 +63,6 @@ from agent_comms.child_process import (
     OrderCheckFailedError,
 )
 from agent_comms.command import Command
-from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleAudience, RuleFile
 from agent_comms.coordination_session import NativeCapture
 from agent_comms.declared_family import DeclaredFamily
@@ -2678,7 +2677,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                 *self.deletes.instructions(), *self.run.instructions(),
                 *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
                 "Banned: " + "; ".join(self.banned), "Report: " + self.report,
-                CommanderPackage.voice().read_text(encoding="utf-8").strip(),
                 *(audience.order_line(", ".join(rule.name for rule in rules))
                   for audience, rules in RuleAudience.grouped(RuleFile.packaged())))
 
