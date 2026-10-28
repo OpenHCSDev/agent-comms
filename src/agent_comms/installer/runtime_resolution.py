@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import sys
 import tomllib
@@ -109,6 +110,14 @@ class ProjectMetadata:
                 if Repo.git(checkout, "rev-parse", "HEAD").strip() != before or Repo.git(
                         checkout, "status", "--porcelain"):
                     raise ValueError(f"Backend moved or dirtied captured source: {checkout}")
+
+    def with_all_extras(self, requirement: str) -> str:
+        """Enrich only this package's existing root, preserving its complete requirement."""
+        selected = Requirement(requirement)
+        if canonicalize_name(selected.name) != self.name:
+            return requirement
+        selected.extras.update(self.extras)
+        return str(selected)
 
     @staticmethod
     def require_python(specifier: SpecifierSet, environment: dict[str, str]) -> None:
@@ -273,12 +282,44 @@ class LockSource(BaseModel):
     def tracked(self, name: str) -> tuple[str, ...]:
         return ()
 
+    def project_source(self) -> dict[str, str]:
+        raise ValueError("Local/virtual sources have no external retention projection")
+
+    def retained_options(self, options: dict[str, object]) -> dict[str, object]:
+        return options
+
+    def retain(self, name: str, marker: str, uv: dict[str, object]) -> None:
+        match uv:
+            case {"sources": dict() as sources}:
+                match sources.get(name, {}):
+                    case dict() as options:
+                        sources[name] = {**self.retained_options(options), **self.project_source(),
+                                         **({"marker": marker} if marker else {})}
+                    case _:
+                        raise ValueError(f"Ambiguous private source declarations for {name}")
+            case _:
+                raise ValueError("Private retention requires the existing UV sources table")
+
 
 class RegistrySource(LockSource):
     registry: str
 
     def pin(self, version: str, core: str) -> PackagePin:
         return PackagePin(version)
+
+    def project_source(self) -> dict[str, str]:
+        return {"index": "locked-" + hashlib.sha256(self.registry.encode()).hexdigest()}
+
+    def retain(self, name: str, marker: str, uv: dict[str, object]) -> None:
+        index = {"name": self.project_source()["index"], "url": self.registry, "explicit": True}
+        match uv.get("index", []):
+            case list() as indexes:
+                if index not in indexes:
+                    indexes.append(index)
+                uv["index"] = indexes
+            case _:
+                raise ValueError("Private UV indexes must retain their declared table array")
+        super().retain(name, marker, uv)
 
 
 class GitSource(LockSource):
@@ -300,10 +341,45 @@ class GitSource(LockSource):
             raise ValueError(f"{name} tracks {branches}, not main")
 
     def pin(self, version: str, core: str) -> PackagePin:
-        commit = urlsplit(self.git).fragment
-        if not commit:
+        return GitPin(version, self.project_source()["rev"])
+
+    def project_source(self) -> dict[str, str]:
+        source = urlsplit(self.git)
+        if not source.fragment:
             raise ValueError("A resolved Git lock entry must name its commit")
-        return GitPin(version, commit)
+        return {"git": source._replace(query="", fragment="").geturl(), "rev": source.fragment}
+
+    def retained_options(self, options: dict[str, object]) -> dict[str, object]:
+        # The locked revision replaces ONLY the old ref selector, never extra/index settings.
+        return {key: value for key, value in options.items() if key not in ("branch", "tag", "rev")}
+
+    def retain(self, name: str, marker: str, uv: dict[str, object]) -> None:
+        super().retain(name, marker, uv)
+        source = self.project_source()
+        # A transitive direct URL must also stop naming its old moving branch. The
+        # override fixes SOURCE only; VersionedPackage's constraint retains its version.
+        locked = Requirement(f"{name} @ git+{source['git']}@{source['rev']}")
+        if marker:
+            locked.marker = Marker(marker)
+        overrides = FieldCodec.decode(list[str], uv.get("override-dependencies", []))
+        result: list[str] = []
+        for text in overrides:
+            requirement = Requirement(text)
+            if canonicalize_name(requirement.name) == name:
+                # Preserve existing specifier constraints rather than discard them when
+                # replacing a source URL. Extras and markers remain on this override.
+                if requirement.specifier:
+                    constraints = FieldCodec.decode(list[str], uv.get("constraint-dependencies", []))
+                    constraints.append(str(requirement))
+                    uv["constraint-dependencies"] = constraints
+                requirement.specifier = SpecifierSet()
+                requirement.url = locked.url
+                result.append(str(requirement))
+            else:
+                result.append(text)
+        if not any(canonicalize_name(Requirement(text).name) == name for text in overrides):
+            result.append(str(locked))
+        uv["override-dependencies"] = result
 
 
 class EditableSource(LockSource):
@@ -326,10 +402,14 @@ class LockedPackage(BaseModel):
     name: str
     markers: list[str] = Field(default_factory=list, alias="resolution-markers")
 
+    def active(self) -> bool:
+        return not self.markers or any(Marker(marker).evaluate() for marker in self.markers)
+
     def selects(self, name: str, version: str) -> bool:
-        return canonicalize_name(self.name) == name and (
-            not self.markers or any(Marker(marker).evaluate() for marker in self.markers)
-        )
+        return canonicalize_name(self.name) == name and self.active()
+
+    def external(self) -> tuple[VersionedPackage, ...]:
+        return ()
 
 
 class VersionedPackage(LockedPackage):
@@ -338,6 +418,24 @@ class VersionedPackage(LockedPackage):
 
     def selects(self, name: str, version: str) -> bool:
         return super().selects(name, version) and self.version == version
+
+    def external(self) -> tuple[VersionedPackage, ...]:
+        return (self,) if self.active() else ()
+
+    def require_retained(self, actual: VersionedPackage) -> None:
+        if (canonicalize_name(self.name) != canonicalize_name(actual.name) or self.version != actual.version
+                or self.source.project_source() != actual.source.project_source()):
+            raise ValueError(f"Private solve changed retained source/version for {self.name}")
+
+    def constrain(self, uv: dict[str, object]) -> None:
+        marker = " or ".join(f"({marker})" for marker in self.markers)
+        requirement = Requirement(f"{canonicalize_name(self.name)}=={self.version}")
+        if marker:
+            requirement.marker = Marker(marker)
+        constraints = FieldCodec.decode(list[str], uv.get("constraint-dependencies", []))
+        constraints.append(str(requirement))
+        uv["constraint-dependencies"] = constraints
+        self.source.retain(canonicalize_name(self.name), marker, uv)
 
 
 class LocalPackage(LockedPackage):
@@ -355,6 +453,19 @@ class ResolvedLock(BaseModel):
         """Every package whose recorded source follows a branch, each named once."""
         return tuple(dict.fromkeys(
             name for entry in self.package for name in entry.source.tracked(entry.name)))
+
+    def external(self, excluded: frozenset[str]) -> dict[str, VersionedPackage]:
+        """Current-interpreter external evidence; local/virtual entries select themselves out."""
+        result: dict[str, VersionedPackage] = {}
+        for package in self.package:
+            for entry in package.external():
+                name = canonicalize_name(entry.name)
+                if name in excluded:
+                    continue
+                if name in result:
+                    raise ValueError(f"Lock selects ambiguous external entries for {name}")
+                result[name] = entry
+        return result
 
     def pins(self, selected: dict[str, str], core: str) -> dict[str, PackagePin]:
         result: dict[str, PackagePin] = {}

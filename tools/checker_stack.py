@@ -20,7 +20,9 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
-from agent_comms.installer.runtime_resolution import CorePackage, ResolvedLock, RuntimeResolution, StackSources
+from agent_comms.installer.runtime_resolution import (
+    CorePackage, ResolvedLock, RuntimeResolution, StackSources, VersionedPackage,
+)
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
@@ -77,15 +79,56 @@ class CheckerStack(Stack, StackSources):
         if before != after:
             raise ValueError("External runtime dependency migration requires an explicit compatible environment")
 
+    @cached_property
+    def bootstrap_lock(self) -> ResolvedLock:
+        return ResolvedLock.read(self.core / "uv.lock")
+
+    @cached_property
+    def runtime_locks(self) -> dict[type[Side], ResolvedLock]:
+        source = self.inputs.source(CorePackage.repository)
+        return {side: ResolvedLock.read(
+            side.require_materialized(self.source_directory, source) / "stack/uv.lock") for side in Side.sides()}
+
+    @cached_property
+    def shared_names(self) -> frozenset[str]:
+        runtime_names = {name for lock in self.runtime_locks.values() for name in lock.external(self.local_names)}
+        return frozenset(runtime_names & self.bootstrap_lock.external(self.local_names).keys())
+
+    @cached_property
+    def retained_packages(self) -> dict[str, VersionedPackage]:
+        """Derived disjoint lock evidence, never another editable selection ledger."""
+        excluded = self.local_names | self.shared_names
+        retained = self.bootstrap_lock.external(excluded)
+        for lock in self.runtime_locks.values():
+            for name, package in lock.external(excluded).items():
+                if name in retained:
+                    retained[name].require_retained(package)
+                retained[name] = package
+        return retained
+
+    def private_requirements(self) -> tuple[Requirement, ...]:
+        return self.active_requirements(
+            tomllib.loads((self.checkout / "stack/pyproject.toml").read_text()),
+            tuple(self.clients.projects(HeadSide).values()), self.clients.environment)
+
     def write_project(self) -> None:
-        """Preserve the full candidate document and pins; replace only its source entries."""
+        """Declare both complete root graphs and retained identities before the one solve."""
         self.require_runtime_compatibility()
+        retained = self.retained_packages  # Conflicting runtime-only locks refuse before prefix mutation.
         original = self.core / "stack"
         project = self.checkout / "stack"
         project.mkdir(parents=True, exist_ok=False)
         document: dict[str, object] = tomllib.loads((original / "pyproject.toml").read_text())
+        metadata = self.clients.projects(HeadSide)[CorePackage.repository]
         match document:
-            case {"tool": {"uv": {"sources": dict() as sources}}}:
+            case {"project": {"dependencies": list() as dependencies} as root,
+                  "tool": {"uv": {"sources": dict() as sources} as uv}}:
+                roots = FieldCodec.decode(list[str], dependencies)
+                if not any(canonicalize_name(Requirement(text).name) == metadata.name for text in roots):
+                    raise ValueError("The private checker requires the declared Core runtime root")
+                root["dependencies"] = [metadata.with_all_extras(text) for text in roots]
+                uv["override-dependencies"] = [metadata.with_all_extras(text) for text in
+                    FieldCodec.decode(list[str], uv.get("override-dependencies", []))]
                 for raw_name, value in tuple(sources.items()):
                     name = canonicalize_name(FieldCodec.decode(str, raw_name))
                     match value:
@@ -102,6 +145,8 @@ class CheckerStack(Stack, StackSources):
                         case _:
                             # Pinned/index/archive sources remain exactly as declared.
                             pass
+                for package in retained.values():
+                    package.constrain(uv)
             case _:
                 raise ValueError("The candidate stack requires its actual source declarations")
         (project / "pyproject.toml").write_text(tomli_w.dumps(document))
@@ -111,37 +156,29 @@ class CheckerStack(Stack, StackSources):
         # No --upgrade: unrelated release and revision pins survive the local-path projection.
         self.commands.run(self.uv, "lock", "--project", self.checkout / "stack", "--python", self.python)
 
-    def require_resolution(self, resolution: RuntimeResolution, original: ResolvedLock) -> None:
+    def require_resolution(self, resolution: RuntimeResolution) -> None:
         locked = ResolvedLock.read(self.lock)
-        names = {entry.name for entry in locked.package} - self.local_names
-        selected = {name: record.version for name, record in resolution.packages.items() if name in names}
+        external = locked.external(self.local_names)
+        selected = {name: record.version for name, record in resolution.packages.items()
+                    if name not in self.local_names}
         wanted = locked.pins(selected, resolution.core_commit)
         actual = {name: resolution.packages[name].pin() for name in selected}
         if actual != wanted:
             raise ValueError("The one actual checker environment differs from its private lock")
-        retained = {entry.name for entry in original.package} & selected.keys()
-        versions = {name: selected[name] for name in retained}
-        if original.pins(versions, resolution.core_commit) != locked.pins(versions, resolution.core_commit):
-            raise ValueError("Resolving local sources changed a retained external release/revision pin")
-        baseline = ResolvedLock.read(BaseSide.checkout(self.source_directory, CorePackage.repository) / "stack/uv.lock")
-        shared = {entry.name for entry in baseline.package} & selected.keys()
-        baseline_versions = {name: selected[name] for name in shared}
-        if baseline.pins(baseline_versions, resolution.core_commit) != locked.pins(baseline_versions, resolution.core_commit):
-            raise ValueError("Captured sides require different external release/revision pins")
-        # The existing bootstrap lock owns checker-only packages; the stack lock owns
-        # runtime packages. Their disjoint selection avoids inventing a merged pin roster.
-        bootstrap = ResolvedLock.read(self.core / "uv.lock")
-        checker_names = {entry.name for entry in bootstrap.package} - names - self.local_names
-        checker_versions = {name: record.version for name, record in resolution.packages.items()
-                            if name in checker_names}
-        if bootstrap.pins(checker_versions, resolution.core_commit) != {
-                name: resolution.packages[name].pin() for name in checker_versions}:
-            raise ValueError("Preparing runtime sources changed a locked checker-only package")
-        for side in Side.sides():
-            for requirement in self.requirements(side):
+        for name, package in self.retained_packages.items():
+            # A universal lock can include an unselected optional dependency. Constraints
+            # preserve its identity without inventing a request to install that extra.
+            if name in external:
+                package.require_retained(external[name])
+        for requirements in (*(self.requirements(side) for side in Side.sides()), self.private_requirements()):
+            for requirement in requirements:
                 record = resolution.packages[canonicalize_name(requirement.name)]
                 if not requirement.specifier.contains(record.version, prereleases=True):
                     raise ValueError(f"The common environment does not satisfy {requirement}")
+        for name in sorted(self.shared_names & selected.keys()):
+            preferences = [package.version for lock in (*self.runtime_locks.values(), self.bootstrap_lock)
+                           for key, package in lock.external(self.local_names).items() if key == name]
+            print(f"CHECKER SHARED {name}: original={preferences} solved={selected[name]}", flush=True)
 
     def prepare(self) -> RuntimeResolution:
         prefix = self.runtime.prefix.resolve()
@@ -152,16 +189,15 @@ class CheckerStack(Stack, StackSources):
             raise ValueError("The common checker requires its isolated runner bootstrap prefix and input directory")
         self.require_uv()
         self.write_project()
-        original = ResolvedLock.read(self.lock)
         self.resolve()
-        # Retain the bootstrap's Core dev/checker packages in this SAME isolated prefix.
+        # Both graphs belong to this solve; retaining stray files cannot substitute for roots.
         self.commands.run(self.uv, "sync", "--project", self.checkout / "stack", "--locked",
-                          "--inexact", "--no-editable", "--python", self.python,
+                          "--no-editable", "--python", self.python,
                           env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(self.runtime.prefix)})
         self.commands.run(self.uv, "pip", "check", "--python", self.python)
         commit = Repo.git(self.core, "rev-parse", "HEAD").strip()
         resolution = RuntimeResolution.capture(self, commit)
-        self.require_resolution(resolution, original)
+        self.require_resolution(resolution)
         resolution.save(self.runtime.prefix)
         digest = hashlib.sha256(self.lock.read_bytes()).hexdigest()
         bootstrap_digest = hashlib.sha256((self.core / "uv.lock").read_bytes()).hexdigest()
