@@ -32,53 +32,49 @@ def owner_reads():
         yield pytest.param(partial(ReadOwnerOperation, operation=operation()), id=operation.declared_name)
 
 
-async def readable(process: ObservationProcess) -> None:
-    """Wait until the observer's pipe has something to read, as the UI's event loop does."""
-    ready = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    loop.add_reader(process.fileno(), ready.set)
-    try:
-        async with asyncio.timeout(30):
-            await ready.wait()
-    finally:
-        loop.remove_reader(process.fileno())
+def empty_window(root) -> ReadNotifications:
+    return ReadNotifications(str(root), ())
 
 
 async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awaited_reads(comms, durable_home):
-    process = ObservationProcess(comms.route)
-    try:
-        await readable(process)
-        assert process.results()  # the first observation: the service is running
-        os.kill(process.process.pid, signal.SIGSTOP)  # the read below is still unanswered when it dies
-        waiting = asyncio.ensure_future(process.read(ReadNotifications(str(comms.root), ())))
-        await asyncio.sleep(0)
-        os.kill(process.process.pid, signal.SIGKILL)
-        with pytest.raises(ObserverDied) as died:
-            while True:
-                await readable(process)
-                process.results()
-        assert died.value.pid == process.process.pid and died.value.exit_status == -signal.SIGKILL
-        assert f"pid {process.process.pid}" in str(died.value) and "signal 9" in str(died.value)
-        with pytest.raises(ObserverDied) as awaited:
-            await waiting
-        assert awaited.value is died.value
+    async with ObservationProcess.awaited(comms.route) as process:
+        async with asyncio.timeout(30):
+            assert (await process.read(empty_window(comms.root))).outcomes == {}  # the service runs
+        child = process.process.pid
+        os.kill(child, signal.SIGSTOP)  # the read below stays unanswered until the child dies
+        waiting = asyncio.ensure_future(process.read(empty_window(comms.root)))
+        try:
+            async with asyncio.timeout(30):
+                _, stopped = await asyncio.to_thread(os.waitpid, child, os.WUNTRACED)
+            assert os.WIFSTOPPED(stopped)
+            await asyncio.sleep(0)
+            assert len(process.reads) == 1 and not waiting.done()
+            os.kill(child, signal.SIGKILL)
+            with pytest.raises(ObserverDied) as died:
+                async with asyncio.timeout(30):
+                    await waiting
+        finally:
+            if process.process.exitcode is None:
+                os.kill(child, signal.SIGKILL)
+            waiting.cancel()
+            await asyncio.gather(waiting, return_exceptions=True)
+        assert died.value.pid == child and died.value.exit_status == -signal.SIGKILL
+        assert f"pid {child}" in str(died.value) and "signal 9" in str(died.value)
         with pytest.raises(ObserverDied) as stopping:
             process.request(StopSidebar())  # what a closing view sends
         assert stopping.value is died.value
         with pytest.raises(ObserverDied) as later:
-            await process.read(ReadNotifications(str(comms.root), ()))
+            await process.read(empty_window(comms.root))
         assert later.value is died.value
-    finally:
-        process.close()
 
 
 async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms, durable_home):
-    with ObservationProcess.awaited(comms.route) as process:
+    async with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
             await process.read(ReadNotifications(
                 str(comms.root), (MessageReference(1, MessageId.mint("not-the-original")),)
             ))
-        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+        assert (await process.read(empty_window(comms.root))).outcomes == {}
 
 
 @pytest.mark.parametrize("read_type", owner_reads())
@@ -91,10 +87,10 @@ async def test_unavailable_owner_reads_preserve_the_observer(
     owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent))
     if declared:
         comms.registry.declare(owner)
-    with ObservationProcess.awaited(comms.route) as process:
+    async with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(refusal):
             await process.read(read_type(str(comms.root), owner.incarnation))
-        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+        assert (await process.read(empty_window(comms.root))).outcomes == {}
         assert process.process.is_alive()
         process.status.raise_if_failed()
 
@@ -106,10 +102,10 @@ async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read
     comms.registry.declare(owner)
     root = str(comms.root.parent / "another-wire") if other_root else str(comms.root)
     identity = owner.incarnation if other_root else RecordedThreadIncarnation(owner.name, 1.0)
-    with ObservationProcess.awaited(comms.route) as process:
+    async with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(StaleRevision if other_root else OwnerIdentityChangedError):
             await process.read(read_type(root, identity))
-        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+        assert (await process.read(empty_window(comms.root))).outcomes == {}
         assert process.process.is_alive()
         process.status.raise_if_failed()
 
@@ -121,11 +117,11 @@ async def test_external_owner_reads_refuse_before_waiting_for_a_socket(
     """An external bridge has a live process and no runtime socket: the read refuses with the
     original error instead of waiting for a socket that will never be served."""
     owner = declare_owner(comms, "external-owner", runtime_processes[0].identity, ExternalThreadExecution)
-    with ObservationProcess.awaited(comms.route) as process:
+    async with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
             async with asyncio.timeout(30):
                 await process.read(read_type(str(comms.root), owner.incarnation))
-        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+        assert (await process.read(empty_window(comms.root))).outcomes == {}
         assert process.process.is_alive()
         process.status.raise_if_failed()
 
@@ -133,14 +129,10 @@ async def test_external_owner_reads_refuse_before_waiting_for_a_socket(
 async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_exit_status(tmp_path, durable_home):
     not_a_wire = tmp_path / "not-a-wire"
     not_a_wire.write_text("")
-    process = ObservationProcess(LocalRoute(not_a_wire))
-    try:
+    async with ObservationProcess.awaited(LocalRoute(not_a_wire)) as process:
         with pytest.raises(ObserverDied) as died:
-            while True:
-                await readable(process)
-                process.results()
-        assert died.value.exit_status == 1
-        assert "Traceback" in died.value.error and "serve" in died.value.error
-        assert "exited with status 1" in str(died.value) and died.value.error in str(died.value)
-    finally:
-        process.close()
+            async with asyncio.timeout(30):
+                await process.read(empty_window(not_a_wire))
+    assert died.value.exit_status == 1
+    assert "Traceback" in died.value.error and "serve" in died.value.error
+    assert "exited with status 1" in str(died.value) and died.value.error in str(died.value)

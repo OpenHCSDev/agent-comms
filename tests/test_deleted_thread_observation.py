@@ -16,7 +16,7 @@ from agent_comms.ui_model.observation import (
     ThreadPresented, ThreadsObserved, ViewsRetired,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
-from test_observer_death import readable
+from observed_queue import ObservedQueue
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
@@ -80,47 +80,33 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
     declare(comms, 'surviving', 'deleted')
     original = comms.registry.require('deleted').incarnation
     names = frozenset({'surviving', 'deleted'})
-    with ObservationProcess(comms.route) as process:
+    delivered = ObservedQueue()
+    async with ObservationProcess(comms.route) as process:
+        process.start_receiving(delivered.observed, delivered.failed)
         process.request(ObserveThreads(names))
         process.request(ObserveViews(frozenset({original}), frozenset()))
-
-        async def until(accepted):
-            async with asyncio.timeout(30):
-                while True:
-                    await readable(process)
-                    for result in process.results():
-                        if accepted(result):
-                            return result
-
-        await until(lambda result: isinstance(result, ThreadsObserved) and result.changed == names)
+        await delivered.until(lambda result: isinstance(result, ThreadsObserved) and result.changed == names)
         comms.registry.remove('deleted')
         missing = None
         retired = None
-        async with asyncio.timeout(30):
-            while missing is None or retired is None:
-                await readable(process)
-                for result in process.results():
-                    if isinstance(result, ThreadsObserved) and 'deleted' in result.changed:
-                        missing = result
-                    elif isinstance(result, ViewsRetired):
-                        retired = result
+        while missing is None or retired is None:
+            result = await delivered.next()
+            if isinstance(result, ThreadsObserved) and 'deleted' in result.changed:
+                missing = result
+            elif isinstance(result, ViewsRetired):
+                retired = result
         assert missing.activity['deleted'] == DeletedThread('deleted')
         assert isinstance(missing.results['deleted'], ThreadPresented)
         assert missing.results['deleted'].presentation == NoThreadPresentation()
         assert retired.retired.threads == frozenset({original})
         surviving = comms.registry.require('surviving')
         comms.registry.declare(replace(surviving, title=GivenThreadText('Still updating after deletion')))
-        updated = await until(lambda result: isinstance(result, ThreadsObserved)
-                              and 'surviving' in result.changed)
+        updated = await delivered.until(lambda result: isinstance(result, ThreadsObserved)
+                                        and 'surviving' in result.changed)
         assert isinstance(updated.activity['surviving'], ObservedActivity)
         assert process.process.is_alive()
-        loop = asyncio.get_running_loop()
-        loop.add_reader(process.fileno(), process.results)
-        try:
-            async with asyncio.timeout(30):
-                assert await process.read(ReadNotifications(str(comms.root), ())) == {}
-        finally:
-            loop.remove_reader(process.fileno())
+        async with asyncio.timeout(30):
+            assert (await process.read(ReadNotifications(str(comms.root), ()))).outcomes == {}
 
 
 def test_one_revision_captures_each_thread_activity_once(comms):

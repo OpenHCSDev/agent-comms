@@ -45,7 +45,7 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from agent_comms.turn_context import RecordedContextManifest
-from test_observer_death import readable
+from observed_queue import ObservedQueue
 from test_turn_context_wire import corrupt_context_kind, manifest
 from agent_comms.threads import Thread
 
@@ -222,56 +222,23 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
     corrupt_context_kind(comms, "saved", "unavailable_future_segment")
     original = comms.contexts.path.read_bytes()
     original_bus = comms.bus.bus.path.read_bytes()
-    process = ObservationProcess(comms.route)
-    try:
-        await readable(process)
-        process.results()
+    delivered = ObservedQueue()
+    async with ObservationProcess(comms.route) as process:
+        process.start_receiving(delivered.observed, delivered.failed)
         process.request(ObserveSidebar(Checkout(comms.root.parent), True, True))
-        async with asyncio.timeout(30):
-            while True:
-                await readable(process)
-                results = process.results()
-                sidebar = next(
-                    (result for result in results if isinstance(result, SidebarObserved)), None
-                )
-                if sidebar is not None:
-                    break
+        await delivered.until(lambda result: isinstance(result, SidebarObserved))
         assert process.process.is_alive()
         process.request(ObserveThreads(frozenset({"saved"})))
-        async with asyncio.timeout(30):
-            while True:
-                await readable(process)
-                results = process.results()
-                threads = next(
-                    (result for result in results if isinstance(result, ThreadsObserved)), None
-                )
-                if threads is not None:
-                    break
+        threads = await delivered.until(lambda result: isinstance(result, ThreadsObserved))
         assert not isinstance(threads.results["saved"], ThreadUnavailable)
         # Only the request needing the damaged payload is refused, over the
         # same actual child/pipe that served the sidebar and thread reads.
-        damaged = asyncio.create_task(process.read(ReadRecordedContext(str(comms.root), "saved")))
-        await asyncio.sleep(0)
-        async with asyncio.timeout(30):
-            while not damaged.done():
-                await readable(process)
-                process.results()
-                await asyncio.sleep(0)
         with pytest.raises(StoredHistoryUnreadable):
-            await damaged
+            async with asyncio.timeout(30):
+                await process.read(ReadRecordedContext(str(comms.root), "saved"))
         # Serve a separate, readable request using the same actual pipe/child.
-        waiting = asyncio.create_task(process.read(ReadNotifications(str(comms.root), ())))
-        await asyncio.sleep(0)
         async with asyncio.timeout(30):
-            while not waiting.done():
-                await readable(process)
-                process.results()
-                # The pipe resolved the Future; let its awaiting Task resume.
-                # An unchanged error no longer emits an unrelated extra wake.
-                await asyncio.sleep(0)
-        assert await waiting == {}
+            assert (await process.read(ReadNotifications(str(comms.root), ()))).outcomes == {}
         assert process.process.is_alive()
         assert comms.contexts.path.read_bytes() == original
         assert comms.bus.bus.path.read_bytes() == original_bus
-    finally:
-        process.close()

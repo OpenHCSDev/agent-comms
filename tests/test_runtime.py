@@ -123,7 +123,9 @@ async def test_a_same_name_recreation_refuses_the_held_read_and_the_old_witness(
         try:
             comms.registry.unregister("held")
             comms.registry.begin_delete("held")
-            comms.registry.remove("held")
+            with comms.registry.store.editing() as edit:
+                edit.document.remove_originals((old,))
+                edit.commit()
             new = declare_owner(comms, "held", process)
             assert new.name == old.name and new.incarnation != old.incarnation
             assert comms.registry.require("held").incarnation == new.incarnation

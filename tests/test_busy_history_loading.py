@@ -57,7 +57,7 @@ def held_source(comms):
 async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
     comms, session = saved_history(tmp_path)
     original = session.read_bytes()
-    with ObservationProcess.awaited(comms.route) as process:
+    async with ObservationProcess.awaited(comms.route) as process:
         with held_source(comms):
             answer = ReadTranscript(str(comms.root), "saved", request_id=19).answer(comms)
             assert isinstance(answer, ReadBusy)
@@ -65,7 +65,7 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
             waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), "saved")))
             independent = asyncio.create_task(process.read(ReadNotifications(str(comms.root), ())))
             async with asyncio.timeout(15):
-                assert await independent == {}
+                assert (await independent).outcomes == {}
             assert not waiting.done()
             assert len(process.reads) == 1
             (request_id,) = process.reads
@@ -84,7 +84,7 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
 
 async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
     comms, _session = saved_history(tmp_path)
-    with ObservationProcess.awaited(comms.route) as process:
+    async with ObservationProcess.awaited(comms.route) as process:
         with held_source(comms):
             waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), "saved")))
             await asyncio.sleep(0.15)
@@ -93,7 +93,7 @@ async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
                 await waiting
             assert process.reads == {}
         async with asyncio.timeout(5):
-            assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+            assert (await process.read(ReadNotifications(str(comms.root), ()))).outcomes == {}
         assert process.reads == {}
 
 
@@ -112,10 +112,10 @@ async def test_awaited_scope_preserves_exit_and_closes_once(comms, monkeypatch, 
 
     monkeypatch.setattr(Connection, "close", closed)
     with pytest.raises(type(error)) as raised:
-        with process:
+        async with process:
             raise error
     assert raised.value is error
-    process.close()
+    await process.close()
     assert closes == [process.connection]
     assert process.connection.closed and process.process.exitcode == 0
 
@@ -206,8 +206,8 @@ async def test_owner_reply_uses_the_same_peer_retirement(comms):
 
 
 async def test_awaited_notifications_then_immediate_close_retires_successfully(comms):
-    with ObservationProcess.awaited(comms.route) as process:
-        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+    async with ObservationProcess.awaited(comms.route) as process:
+        assert (await process.read(ReadNotifications(str(comms.root), ()))).outcomes == {}
     assert process.connection.closed and process.process.exitcode == 0
     assert not process.reads
 
