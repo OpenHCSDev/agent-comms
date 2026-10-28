@@ -22,6 +22,7 @@ from agent_comms.todos import (
     PlainText,
     ProgressRead,
     PullRequestLink,
+    ResumeClaimOrder,
     HeadReviewed,
     HeadVerdict,
     NoHeadOrder,
@@ -382,7 +383,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         link = PullRequestLink(todo.repo, self.pull_request)
         for claim in todo.order.commander_claims():
             if claim.resumed_by(link, self.head, self.report.text):
-                resumed = ClaimOrder(todo.revision, actor, generation, claim).resume(
+                resumed = ResumeClaimOrder(todo.revision, actor, generation, claim).record(
                     comms.goals, todo.id)
                 return TodoChanged(resumed, resumed.strike_count)
         original = comms.bus.bus.lookup_message(todo.latest_message.message_id)

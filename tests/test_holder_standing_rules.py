@@ -67,6 +67,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
+    ResumeClaimOrder,
     ExpectedProblem,
     OrderClaim,
     OrderMessage,
@@ -232,8 +233,8 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
                 marker.rmdir()
                 marker.touch()
                 retained, = changed.order.commander_claims()
-                ClaimOrder(changed.revision, worker, changed.held().generation,
-                           retained).resume(comms.goals, todo.id)
+                ResumeClaimOrder(changed.revision, worker, changed.held().generation,
+                                 retained).record(comms.goals, todo.id)
                 assert comms.bus.bus.revision() == before + 1
                 assert comms.goals.todos.get(todo.id) == changed
             else:

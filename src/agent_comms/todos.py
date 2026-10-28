@@ -3313,16 +3313,18 @@ class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage fa
     """The todo store could not complete its write; its original cause is preserved."""
 
 
-class UnsentClaimError(TodoError):
-    """The Todo committed a delivery claim whose answer did not reach the bus."""
+class ClaimPublicationUnavailable(TodoError):  # noqa: N818 - domain-specific refusal outcome
+    """The Todo saved a delivery claim and its publication could not be completed; the bus
+    may or may not already hold the original."""
 
     def __init__(self, problem: str, claim: OrderClaim) -> None:
         self.problem = problem
         self.claim = claim
         super().__init__(
-            f"{problem}'s claim of {claim.head} (message {claim.message.message_id}) is recorded "
-            "on the Todo but was not published to its commander. Repeat the same "
-            "comms_order_deliver call, with the same pull request, head and report, to publish it.")
+            f"{problem}'s claim of {claim.head} (message {claim.message.message_id}) is saved, "
+            "but its publication to the commander could not be completed. Repeat the same "
+            "comms_order_deliver call, with the same pull request, head and report: it "
+            "publishes the claim once, or returns the original if it is already on the bus.")
 
 
 class NotOrderCommander(TodoError):  # noqa: N818 - domain-specific refusal outcome
@@ -5021,16 +5023,32 @@ class ClaimOrder(TodoCommand):
         order = current.order.checked().claimed(self.claim)
         return replace(current, order=order, revision=current.revision + 1)
 
-    def resume(self, goals: Goals, problem: str) -> Todo:
-        """Publish the retained claim from its frozen addresses; the Todo is not written.
+    def after_record(self, goals: Goals, changed: Todo) -> None:
+        """A storage refusal after the Todo committed leaves the claim saved with its
+        publication unresolved; a record the bus committed before its completion failed
+        stays CommittedMessageError, which carries that original."""
+        try:
+            goals.bus.publisher.publish_ordinary(
+                self.claim.message, destination=IncarnationThreadTarget(
+                    goals.todos.owner_request(changed.request.require()).commander),
+                origin=AgentOrigin())
+        except (OSError, sqlite3.Error) as error:
+            raise ClaimPublicationUnavailable(changed.id, self.claim) from error
 
-        The holder's birth and generation are checked as for a fresh claim. If the sender
-        or the commander's address changed since the claim was retained, this refuses:
-        following a renamed or reused thread name would change who the answer is from or to."""
+
+class ResumeClaimOrder(ClaimOrder):
+    """The identical deliver call publishes the order's current claim again, from its frozen
+    addresses; nothing is claimed again and the Todo is not written.
+
+    In the Todo transaction it requires the expected revision, the open state, the holder's
+    birth and generation, and this exact claim among the order's current claims, so a claim
+    replaced or reissued since the call read it, or never retained, refuses before any
+    publication. A sender or commander whose address changed since the claim was retained
+    refuses too: following a renamed or reused thread name would change who it is from or to."""
+
+    def record(self, goals: Goals, problem: str) -> Todo:
         with NativeCapture(goals.bus) as boundary:
             current = goals.todos.get(problem)
-            current.state.require_open(current)
-            current.require_assignee(self.actor, self.generation)
             target = IncarnationThreadTarget(
                 goals.todos.owner_request(current.request.require()).commander)
             target.require_publication(
@@ -5044,19 +5062,16 @@ class ClaimOrder(TodoCommand):
                     f"now {current_addresses[0]} -> {current_addresses[1]}; it is not resent "
                     "under another identity.")
             with boundary.registry_cut.current():
-                self.after_record(goals, current)
-        return current
+                return super(ClaimOrder, self).record(goals, problem)
 
-    def after_record(self, goals: Goals, changed: Todo) -> None:
-        """A storage refusal after the Todo committed leaves the claim retained but unsent;
-        a record the bus committed before its completion failed stays CommittedMessageError."""
-        try:
-            goals.bus.publisher.publish_ordinary(
-                self.claim.message, destination=IncarnationThreadTarget(
-                    goals.todos.owner_request(changed.request.require()).commander),
-                origin=AgentOrigin())
-        except (OSError, sqlite3.Error) as error:
-            raise UnsentClaimError(changed.id, self.claim) from error
+    def changed(self, current: Todo) -> Todo:
+        current.state.require_open(current)
+        current.require_assignee(self.actor, self.generation)
+        if self.claim not in current.order.commander_claims():
+            raise TodoError(
+                f"{current.id} does not hold the claim of {self.claim.head} "
+                f"(message {self.claim.message.message_id}); nothing is published.")
+        return current
 
 
 @dataclass(frozen=True)
