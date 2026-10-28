@@ -294,6 +294,7 @@ class EditWorkplaces:
         if not holds:
             return {}
         repositories = snapshot.commander_project.require().repos
+        registered = frozenset(repo.github for repo in repositories)
         rule = StorageRule.load(comms.root)
         todos = {todo.id: todo for todo in history}
         declared = {
@@ -319,13 +320,17 @@ class EditWorkplaces:
         # Qualify only captured Git roots, never nearest parents of individual events.
         # An alias cannot manufacture another problem allocation around the same source.
         present = Checkout.git_roots(*paths)
-        actual = {path: Repo.of(path) for path in present
-                  if path.is_absolute() and Checkout(path).resolved().path == path}
+        actual: dict[Path, Repo] = {}
+        for path in present:
+            if path.is_absolute() and Checkout(path).resolved().path == path:
+                repository = Repo.of(path)
+                if repository.github in registered:
+                    actual[path] = repository
         # An explicit retained source may be a separate clone, not a worktree of the
         # registered checkout. Read its existing worktree owner once, never per edit;
         # only that already-declared root joins the branch facts, not arbitrary siblings.
         for path in explicit - listed:
-            if path in actual and actual[path].github in trees:
+            if path in actual:
                 branches = trees[actual[path].github]
                 for branch, worktrees in pulls.worktrees(actual[path]).items():
                     if str(path) in worktrees:
@@ -337,26 +342,28 @@ class EditWorkplaces:
                     for repo in repositories
                     for row in pulls.rows(repo.github, tuple(
                         link.number for link in links if link.repo == repo.github))}
-        allocated: dict[Path, frozenset[str]] = {}
-        registered = frozenset(repo.github for repo in repositories)
         owners = {rule.order_checkout(rule.roots_of(thread), ''): thread
                   for thread in snapshot.threads.values()}
+        allocations: dict[Path, tuple[tuple[Thread, CheckoutAllocation], ...]] = {}
         for path in present:
-            allocations = tuple((thread, allocation)
-                                for prefix, thread in owners.items()
-                                if path.parent == prefix.parent and path.name.startswith(prefix.name)
-                                for allocation in CheckoutAllocation.for_path(rule, thread, path)
-                                if allocation.problems())
-            if allocations:
-                proved = frozenset(
-                    problem for thread, allocation in allocations
+            candidates = tuple((thread, allocation)
+                               for prefix, thread in owners.items()
+                               if path.parent == prefix.parent and path.name.startswith(prefix.name)
+                               for allocation in CheckoutAllocation.for_path(rule, thread, path)
+                               if allocation.problems())
+            if candidates:
+                allocations[path] = candidates
+        # Every recognized allocation reserves its boundary, even without registered Git proof.
+        allocated: dict[Path, frozenset[str]] = {path: frozenset() for path in allocations}
+        for path, repository in actual.items():
+            if path in allocations:
+                allocated[path] = frozenset(
+                    problem for thread, allocation in allocations[path]
                     for problem in allocation.problems()
-                    if path in actual and problem in todos
-                    and actual[path].github in registered
-                    and actual[path].github in allocation.source_repositories(
+                    if problem in todos
+                    and repository.github in allocation.source_repositories(
                         todos[problem].repo, declared[problem])
-                    and allocation.owns_declared(rule, thread, path, actual[path].github))
-                allocated[path] = proved
+                    and allocation.owns_declared(rule, thread, path, repository.github))
         workplaces: dict[ThreadIncarnation, EditWorkplaces] = {}
         for holder in dict.fromkeys(hold.holder.incarnation for hold in holds):
             sources: dict[Path, set[str]] = {}
@@ -370,15 +377,14 @@ class EditWorkplaces:
                     path = order.check.directory
                     # Explicit pre-PR source is valid only for its primary actual repository,
                     # and ceases being a generic workplace once that source has a PR link.
-                    if (todo.repo in registered and path in actual
-                            and actual[path].github == todo.repo
+                    if (path in actual and actual[path].github == todo.repo
                             and not any(link.repo == todo.repo for link in linked)):
                         sources.setdefault(path, set()).add(todo.id)
                 for link in linked:
                     if link not in requests:
                         continue  # Unregistered repositories cannot qualify a source boundary.
-                    for path in trees[link.repo].get(requests[link].branch, ()):
-                        root = Path(path)
+                    for worktree_path in trees[link.repo].get(requests[link].branch, ()):
+                        root = Path(worktree_path)
                         if root in actual and actual[root].github == link.repo:
                             sources.setdefault(root, set()).add(todo.id)
             workplaces[holder] = cls(rule, owners, allocated, {
