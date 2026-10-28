@@ -46,6 +46,8 @@ from .turn_context import RenderedInput
 from agent_comms.turn_input_source import SelectedOriginalInput
 
 if TYPE_CHECKING:
+    from .input_drain import InputDrain
+    from .owned_send import OwnedSend
     from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
     from .selected_session import SelectedSession
@@ -62,8 +64,22 @@ class PrivateSendClaim(PromptBoundary):
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
-    def following_original(self, prompt: str):
-        return SelectedOriginalInput.answering(prompt, self.selected.goal_permission)
+    def following_sender(self, inputs: InputDrain, session_id: str, prompt: str) -> OwnedSend:
+        """The committed prompt supplies following authority, never a later selection."""
+        from .goal_turn_permit import NoLaunchPermit
+        from .owned_send import OwnedSend
+
+        return OwnedSend(
+            comms=inputs.comms,
+            inputs=inputs,
+            goal_store=inputs.comms.goals.open_goal_store(),
+            session_id=session_id,
+            thread=self.owner.thread,
+            turn=self.owner.turn_lease.turn_id,
+            claim_generation=self.owner.claimed_generation,
+            original_source=SelectedOriginalInput.answering(prompt, self.selected.goal_permission),
+            goal_permit=NoLaunchPermit(),
+        )
 
     @property
     def bus(self) -> MessageBus:

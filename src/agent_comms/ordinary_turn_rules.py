@@ -48,7 +48,7 @@ class OrdinaryOwnerCheck(RuleCheck):
 
 
 class RunningOrdinaryOwnerCheck(OrdinaryOwnerCheck):
-    """Started tools retain their execution project; a selection is for the next turn."""
+    """The running turn retains its project; a selection is for the next turn."""
 
     def worktree_matches(self) -> bool:
         return self.current.continues_running_project(self.expected)

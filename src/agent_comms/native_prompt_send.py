@@ -23,6 +23,8 @@ from .coordination_errors import CoordinationError
 from agent_comms.errors import RelationViolationError
 
 if TYPE_CHECKING:
+    from .input_drain import InputDrain
+    from .owned_send import OwnedSend
     from .tracked_turn import TrackedTurnSession
 
 _MAX_SEND_SECONDS = 5.0
@@ -32,7 +34,7 @@ class PromptBoundary(ABC):
     @abstractmethod
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
 
-    def following_original(self, prompt: str):
+    def following_sender(self, inputs: InputDrain, session_id: str, prompt: str) -> OwnedSend:
         raise RelationViolationError("An unowned prompt cannot authorize following input")
 
 

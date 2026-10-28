@@ -10,8 +10,6 @@ from .field_codec import InputId
 from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
-from .owned_send import OwnedSend
-from agent_comms.goal_turn_permit import NoLaunchPermit
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import ClaimedIdentity
 from .turn_input_source import AcceptedFollowingInput
@@ -80,26 +78,17 @@ class OwnerFollowingInputs(FollowingInputs):
 
     async def open(self, session: TrackedTurnSession) -> None:
         inputs = self.inputs
-        thread = await Coordination.run_worker(partial(inputs.comms.registry.require, self.owner.name))
-        lease = thread.require_turn_lease()
-        original = session.prompt_send_boundary.following_original(session.command.message)
-        sender = OwnedSend(
-            comms=inputs.comms,
-            inputs=inputs,
-            goal_store=await Coordination.run_worker(inputs.comms.goals.open_goal_store),
-            session_id=self.session_id,
-            thread=thread,
-            turn=lease.turn_id,
-            claim_generation=lease.claimed_generation,
-            original_source=original,
-            goal_permit=NoLaunchPermit(),
-        )
+        sender = await Coordination.run_worker(partial(
+            session.prompt_send_boundary.following_sender,
+            inputs, self.session_id, session.command.message,
+        ))
+        lease = sender.thread.require_turn_lease()
         self.scope = LiveQueueScope(
             session_id=self.session_id,
             claimed_identity=ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
-            owner=thread.require_process(),
+            owner=sender.thread.require_process(),
         )
-        inputs.state(self.session_id).capture_first_source(original)
+        inputs.state(self.session_id).capture_first_source(sender.original_source)
         session.forward_inbox(self.inbox, sender)
         await self.ready(
             inputs, self.session_id,
