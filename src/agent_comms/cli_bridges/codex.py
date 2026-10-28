@@ -9,7 +9,9 @@ import struct
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import AsyncIterator, Self
+from typing import AsyncIterator, ClassVar, Self
+
+import aiohttp
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.messages import Message
@@ -25,6 +27,7 @@ from agent_comms.thread_identity import UnreportedTools
 from .codex_connection import CodexConnection
 from .codex_protocol import (
     DisplayOutput, ToolOutput, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
+    CodexDraining,
 )
 
 
@@ -67,6 +70,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
 
 class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
     state_directory = Path('.local/state/codex-comms-inbox')
+    reconnect_seconds: ClassVar[float] = 1.0
 
     def __init__(self, options: CodexOptions, address: SessionBinding, db: sqlite3.Connection) -> None:
         TranscriptBridge.__init__(self, options, address, db)
@@ -112,9 +116,23 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
                                                ThreadOutput(transcript, self.comms.agents)))
 
     async def deliver(self, message: Message) -> type[Outcome]:
-        async with CodexConnection.open(self.socket) as codex:
-            await codex.call(BusInput.for_message(self.thread, message.message_id, IncomingFrame(message).text))
-        return DeliveredOutcome
+        request = BusInput.for_message(self.thread, message.message_id, IncomingFrame(message).text)
+        retries = 0
+        while True:
+            try:
+                async with CodexConnection.open(self.socket) as codex:
+                    await codex.call(request)
+            except (CodexDraining, aiohttp.ClientConnectorError) as absent:
+                # Only these two prove no turn started: the connection never opened, or the server
+                # refused while draining and asks for the same turn after reconnecting.
+                if not retries:
+                    self.log(f'Codex unavailable ({absent}); sending {message.message_id} once it is back')
+                retries += 1
+                await asyncio.sleep(self.reconnect_seconds)
+                continue
+            if retries:
+                self.log(f'Codex is back; sent {message.message_id} after {retries} refused attempts')
+            return DeliveredOutcome
 
     async def show_sent(self, result: SendResult) -> None:
         async with CodexConnection.open(self.socket) as codex:

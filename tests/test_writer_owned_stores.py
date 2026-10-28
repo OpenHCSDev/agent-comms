@@ -32,7 +32,7 @@ def writer_owned_store(tmp_path):
         """The saved view's declaration, not a second schema in the test."""
 
     @dataclass(frozen=True)
-    class SavedTab(SavedTabTables, TypedTable, declared_name="open_tabs"):
+    class SavedTab(SavedTabTables, TypedTable):
         target: Annotated[CommandTarget, Column(primary_key=True)]
         position: int
 
@@ -62,13 +62,13 @@ def test_writer_owned_carry_refuses_an_undecodable_target_with_its_rowid(
     store, row = writer_owned_store
     with closing(SQLiteFile.writer(store.path())) as db, db:
         db.execute("PRAGMA ignore_check_constraints=ON")
-        db.execute('INSERT INTO open_tabs VALUES (?, ?)', (BARE_TARGET, 0))
+        db.execute(f'INSERT INTO "{row.declared_name}" VALUES (?, ?)', (BARE_TARGET, 0))
     original = store.path().read_bytes()
     with pytest.raises(RelationViolationError) as refused:
         store.practice_opening(LiveFilesRequest(tmp_path), tmp_path)
     text = str(refused.value)
     assert str(store.path()) in text
-    assert "open_tabs rowid 1 cannot decode" in text
+    assert f"{row.declared_name} rowid 1 cannot decode" in text
     assert "kind" in text
     assert store.path().read_bytes() == original
 
@@ -131,7 +131,7 @@ def writer_owned_step(writer_owned_store):
                 self.require_confined(path)
                 with closing(store.read_snapshot(path)) as db:
                     (count,) = db.execute(
-                        "SELECT count(*) FROM open_tabs WHERE target = ?", (BARE_TARGET,),
+                        f'SELECT count(*) FROM "{row.declared_name}" WHERE target = ?', (BARE_TARGET,),
                     ).fetchone()
                 changed += count
                 if apply and count:
@@ -152,7 +152,7 @@ def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
     store, row = writer_owned_store
     with closing(SQLiteFile.writer(store.path())) as db, db:
         db.execute("PRAGMA ignore_check_constraints=ON")
-        db.execute("INSERT INTO open_tabs VALUES (?, ?)", (BARE_TARGET, 0))
+        db.execute(f'INSERT INTO "{row.declared_name}" VALUES (?, ?)', (BARE_TARGET, 0))
     original = store.path().read_bytes()
     root = tmp_path / "bus"
     root.mkdir()
@@ -168,14 +168,14 @@ def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
 
     copy = PracticeCopy(root, tmp_path / "practice")
     copy.include(step.input_files())
-    copied_step = replace(step, files=RetainedCopyRequest(copy.path))
+    copied_step = replace(step, files=copy.request)
     copied_paths = tuple(copied_step.files.location(resource)
                          for resource in store.resources(copied_step.files))
     assert Carried(1, rewritten=copied_paths).for_step(copied_step).rewritten == (name,)
     with pytest.raises(RelationViolationError):
         copied_step.require_confined(store.path())
     assert copied_step.carry(apply=True).rewritten == (name,)
-    assert WriterOwnedOpeningProbe(RetainedCopyRequest(copy.path), (store,)).run() == copied_paths
+    assert WriterOwnedOpeningProbe(copy.request, (store,)).run() == copied_paths
     for copied_path in copied_paths:
         with closing(store.read_snapshot(copied_path)) as db:
             assert row.select(db)[0].target == ChannelTarget("#comms")
@@ -224,10 +224,11 @@ def test_writer_owned_carry_preserves_its_declaration_across_cli_and_worker_boun
     assert decoded == probe
     assert decoded.run() == (store.path(),)
     copied_root = tmp_path / "copied"
-    copied_probe = WriterOwnedOpeningProbe(RetainedCopyRequest(copied_root), (store,))
+    copied_probe = WriterOwnedOpeningProbe(RetainedCopyRequest(copied_root, tmp_path), (store,))
     copied_decoded = FieldCodec.decode(WriterOwnedOpeningProbe, FieldCodec.encode(copied_probe))
     assert copied_decoded.stores == (store,)
     assert copied_decoded.files.root == copied_root
+    assert copied_decoded.files.source_root() == tmp_path
     assert copied_decoded == copied_probe
 
 
@@ -242,7 +243,7 @@ def test_writer_owned_backup_preserves_primary_and_committed_wal_bytes(
     with closing(SQLiteFile.writer(store.path())) as db:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA ignore_check_constraints=ON")
-        db.execute("INSERT INTO open_tabs VALUES (?, ?)", (BARE_TARGET, 0))
+        db.execute(f'INSERT INTO "{row.declared_name}" VALUES (?, ?)', (BARE_TARGET, 0))
         db.commit()
         original = store.path().read_bytes()
         committed_wal = wal.read_bytes()
@@ -256,4 +257,4 @@ def test_writer_owned_backup_preserves_primary_and_committed_wal_bytes(
     assert store.path().read_bytes() == original
     assert wal.read_bytes() == committed_wal
     with closing(SQLiteFile.read_snapshot(store.path())) as db:
-        assert db.execute("SELECT target FROM open_tabs").fetchall()[0][0] == BARE_TARGET
+        assert db.execute(f'SELECT target FROM "{row.declared_name}"').fetchall()[0][0] == BARE_TARGET

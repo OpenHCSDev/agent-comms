@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property, lru_cache
@@ -82,11 +83,18 @@ class IssueBranchLink(BranchLink):
 class BranchCheckout(DeclaredFamily, affix="BranchCheckout"):
     """Where a branch is checked out; the owner is whoever works there."""
 
+    def working(self) -> tuple[str, ...]:
+        """The registered threads working in this checkout."""
+        return ()
+
 
 @dataclass(frozen=True)
 class ThreadBranchCheckout(BranchCheckout):
     threads: tuple[str, ...]
     worktree: str
+
+    def working(self) -> tuple[str, ...]:
+        return self.threads
 
 
 @dataclass(frozen=True)
@@ -551,6 +559,12 @@ query($owner: String!, $name: String!, $after: String) {
                 checked.setdefault(line.removeprefix("branch refs/heads/"), []).append(path)
         return {branch: tuple(paths) for branch, paths in checked.items()}
 
+    def checkouts(self, snapshot: RegistrySnapshot, branch: str,
+                  worktrees: Mapping[str, tuple[str, ...]]) -> tuple[BranchCheckout, ...]:
+        """Every checkout of ``branch`` among ``worktrees`` (as ``worktrees()`` reads them),
+        each naming the registered threads that work there."""
+        return tuple(self._checkout(snapshot, path) for path in worktrees.get(branch, ()))
+
     @staticmethod
     def _checkout(snapshot: RegistrySnapshot, worktree: str) -> BranchCheckout:
         resolved = str(Path(worktree).resolve())
@@ -627,7 +641,7 @@ query($owner: String!, $name: String!, $after: String) {
                         .isoformat()
                         .replace("+00:00", "Z"),
                         tuple(links.get(branch, ())),
-                        tuple(self._checkout(snapshot, path) for path in worktrees.get(branch, ())),
+                        self.checkouts(snapshot, branch, worktrees),
                     )
                 )
         return tuple(sorted(branches, key=lambda branch: branch.committed_at, reverse=True))

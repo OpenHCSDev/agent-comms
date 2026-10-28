@@ -30,6 +30,6 @@ class AttachSessionCliCommand(NameArgument, CliCommand, declared_name="attach-se
         current = ctx.registry.require(self.name)
         attached = ctx.threads.attach_session(
             current, self.session_file,
-            process=self.process.attachment_process(current.process_identity),
+            process=self.process.applied(current.process_identity),
         )
         return SessionAttachedResult(attached.name, attached.session_file, attached.process_identity)

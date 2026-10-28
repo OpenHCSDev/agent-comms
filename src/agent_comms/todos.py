@@ -986,6 +986,7 @@ class PullRequests:
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
+        self._worktrees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
         self._todos: dict[RepositoryName, dict[str, Todo]] = {}
         self.register(todos)
 
@@ -1082,6 +1083,20 @@ class PullRequests:
         self.rows(repo, numbers)
         return tuple(picked for number in self._open[repo]
                      for picked in self._read[repo, number].as_unmerged())
+
+    def working_on(self, goals: Goals, repo: RepositoryName,
+                   row: ListedPullRequest) -> tuple[ThreadIncarnation, ...]:
+        """The registered threads with the request's branch checked out: who is working on it
+        when no order says so. One worktree read per repository in this frame."""
+        snapshot = goals.registry.snapshot()
+        reader = WorkBranches(Repo.selected(
+            snapshot.commander_project.require().repos, repo.to_wire()).checkout)
+        if repo not in self._worktrees:
+            self._worktrees[repo] = reader.worktrees()
+        return tuple(dict.fromkeys(
+            snapshot.require(name).incarnation
+            for checkout in reader.checkouts(snapshot, row.branch, self._worktrees[repo])
+            for name in checkout.working()))
 
     def carry_reviews(self, goals: Goals, repo: RepositoryName) -> None:
         """Advance the frame's forge facts only after the existing verdict posts its carry."""
@@ -5945,6 +5960,11 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
         return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
                             reader=partial(self.held_in, unit=owner))
+
+    def open_orders(self) -> tuple[Todo, ...]:
+        """Every open order, whichever commander created it: their links say which requests
+        any commander's board already owns."""
+        return self._select("1", (), reader=self._open)
 
     def held_orders(self) -> tuple[Todo, ...]:
         return self._select("assignment IS NOT NULL", (),

@@ -269,7 +269,9 @@ class Thread(ThreadProvenance, CatalogSelection):
         ThreadWorkState, RegistrationPolicy(InheritPrevious), WireOmitDefault()
     ] = field(default_factory=ReadyThreadWorkState, kw_only=True)
     task: ThreadText = field(default_factory=NoThreadText)
-    process_identity: ProcessState = field(default_factory=NoProcess)
+    process_identity: Annotated[ProcessState, RegistrationPolicy(InheritApplied)] = field(
+        default_factory=NoProcess
+    )
     model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = field(
         default_factory=UndeclaredModel
     )
