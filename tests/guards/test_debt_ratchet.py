@@ -20,6 +20,7 @@ from process_tree_fixture import TREE, identities, ready
 
 from debt_ratchet import (
     AUDIT_SCRIPTS,
+    REPOSITORY,
     BannedVocabulary,
     BroadExceptDefault,
     BroadSwallow,
@@ -306,6 +307,9 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
         ["git", "archive", "HEAD", "--", "src/agent_comms"], timeout=20
     )
     subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=source, check=True, timeout=60)
+    # A Git archive carries no submodule: the complete producer stamp's child reaches the
+    # pinned audit only through the measurement's own source paths.
+    assert not (tmp_path / AUDIT_SCRIPTS.resolve().relative_to(REPOSITORY) / "audit").exists()
     dependency = tmp_path / "dependencies"
     dependency.mkdir()
     (dependency / "parent_only_dependency.py").write_text("VERSION = 7\n")

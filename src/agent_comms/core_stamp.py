@@ -40,14 +40,19 @@ class WheelStamp(CoreStamp):
     digests: dict[str, str]
 
     @classmethod
-    def of_source(cls, src: Path, commit: str) -> WheelStamp:
+    def of_source(
+        cls, src: Path, commit: str, *, source_paths: tuple[str, ...] = ()
+    ) -> WheelStamp:
         """Import the bus's declared schema once while building its immutable wheel.
 
         The custom hook requires the project's runtime dependencies in pyproject.toml;
         hatchling alone cannot import the application in an isolated build.
-        The child keeps the build environment's import path behind the source root.
+        The child imports from the source root, then the caller's revision import context
+        (an archived revision's pinned audit scripts), then the inherited import path.
         """
-        path = os.pathsep.join(filter(None, (str(src), os.environ.get("PYTHONPATH"))))
+        path = os.pathsep.join(
+            dict.fromkeys(filter(None, (str(src), *source_paths, os.environ.get("PYTHONPATH"))))
+        )
         return cls(
             commit,
             json.loads(
