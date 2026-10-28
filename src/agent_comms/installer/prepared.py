@@ -10,7 +10,6 @@ import sys
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.launch import InstallRun, stopped
-from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.upgrade import Stack, TargetTree
 from agent_comms.launch_runtime import LaunchRuntime
@@ -36,9 +35,6 @@ class PreparedInstall:
         tree = TargetTree(request.command.checkout, request.scratch, request.target)
         try:
             with InstallCommands() as commands:
-                StoreBackup.complete_interrupted(
-                    request.root, request.command.spill_dir,
-                    Stack(request.command.checkout, commands).restore_stores)
                 staged = Stack.build(ScratchCheckout(tree.path), commands)
             request.phases.extend(timing.launched() for timing in commands.clock.phases)
             with tempfile.TemporaryFile(mode="w+") as incoming:
