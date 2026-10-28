@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import atexit
 import inspect
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,8 +35,8 @@ import tomllib
 import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
-from functools import cached_property
+from dataclasses import dataclass, replace
+from functools import cache, cached_property
 from pathlib import Path
 
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
@@ -306,6 +308,32 @@ class StackClient(StackSources):
 
     name: str
     checkout: Path
+    compared: tuple[Path, ...] = ()
+    dependencies: tuple[Path, ...] = ()
+
+    @property
+    def import_paths(self) -> tuple[str, ...]:
+        return tuple(str(root / path) for root in (self.checkout, *self.dependencies)
+                     for path in ("src", "."))
+
+    def files_importing(self, module: str) -> list[str]:
+        """A selected path comes from either cut, but absence on this cut stays absent."""
+        clients = (self, *(StackClient(self.name, path) for path in self.compared))
+        return sorted({entry.path for client in clients for entry in client.imports
+                       if entry.module.partition(".")[0] == module
+                       and (self.checkout / entry.path).is_file()})
+
+    @classmethod
+    @cache
+    def revision(cls, repo: Path, head: str) -> tuple[StackClient, ...]:
+        """Ordinary local comparisons retain one head-declared main capture for both sides."""
+        if not Repo.git(repo, "ls-tree", "--name-only", head, "--", "stack/pyproject.toml"):
+            return ()
+        into = Path(tempfile.mkdtemp(prefix="debt-ratchet-clients-"))
+        atexit.register(shutil.rmtree, into, True)
+        (into / "stack").mkdir()
+        (into / "stack/pyproject.toml").write_text(Repo.git(repo, "show", f"{head}:stack/pyproject.toml"))
+        return cls.fetched(into / "stack", into)
 
     @classmethod
     def fetched(cls, stack: Path, into: Path) -> tuple[StackClient, ...]:
@@ -345,6 +373,47 @@ class StackClient(StackSources):
                 ast.parse(path.read_text(), relative)
             )
         return tuple(found)
+
+
+@dataclass(frozen=True)
+class ClientSources:
+    """The comparison's acquisition policy, passed to every measure before workers fork."""
+
+    def requires_clients(self, changed: set[str]) -> bool:
+        return False
+
+    def at(self, repo: Path, base: str, head: str, side: type[Side]) -> tuple[StackClient, ...]:
+        return StackClient.revision(repo, head)
+
+
+@dataclass(frozen=True)
+class MaterializedClients(ClientSources):
+    directory: Path
+    inputs: IntegrationInput
+
+    @classmethod
+    def read(cls, directory: Path) -> MaterializedClients:
+        return cls(directory, IntegrationInput.at(directory))
+
+    def requires_clients(self, changed: set[str]) -> bool:
+        # A companion can change while the local Core patch is unchanged.
+        return True
+
+    @cache
+    def at(self, repo: Path, base: str, head: str, side: type[Side]) -> tuple[StackClient, ...]:
+        source = self.inputs.source(Repo.of(repo).github)
+        if Repo.git(repo, "rev-parse", base).strip() != source.baseline.commit or (
+                Repo.git(repo, "rev-parse", f"{head}^{{tree}}").strip() != source.candidate_tree):
+            raise ValueError("Checker Core cuts do not match the materialized source input")
+        cuts = {cut: StackClient.materialized(
+                    cut.require_materialized(self.directory, source) / "stack",
+                    self.directory, cut, self.inputs) for cut in Side.sides()}
+        clients = tuple(client for found in cuts.values() for client in found)
+        return tuple(replace(client,
+                     compared=tuple(peer.checkout for peer in clients
+                                    if peer.name == client.name and peer.checkout != client.checkout),
+                     dependencies=tuple(peer.checkout for peer in cuts[side] if peer.checkout != client.checkout))
+                     for client in cuts[side])
 
 
 class OutgoingWire(StackClient):

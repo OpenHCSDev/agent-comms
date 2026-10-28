@@ -82,7 +82,10 @@ class StackSources:
                     match source:
                         case {"git": str(url), "branch": str(branch)}:
                             GitSource.require_branches(name, (branch,))
-                            found[FieldCodec.decode(str, name)] = (url, branch)
+                            identity = canonicalize_name(FieldCodec.decode(str, name))
+                            if identity in found:
+                                raise ValueError(f"The stack declares package {identity} twice")
+                            found[identity] = (url, branch)
                 return found
         raise ValueError("The stack declares no [tool.uv.sources] table")
 

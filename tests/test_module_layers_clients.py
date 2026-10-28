@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from module_layers import OutgoingWire, Package, StackClient
+from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
 from agent_comms.head_review import BaseSide, HeadSide, Side
 from agent_comms.integration import IntegrationRun
 from agent_comms.todos import DraftListedPullRequest
@@ -58,6 +58,27 @@ def test_materialized_client_files_come_from_each_actual_cut(
         cuts[side] = {entry.path for entry in client.imports}
     assert cuts[BaseSide] == {"src/workflow.py"}
     assert cuts[HeadSide] == {"src/replacement.py"}
+
+
+def test_materialized_selection_includes_peer_imports_but_not_absent_paths(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+) -> None:
+    pair = mutual_sources
+    files = pair.client.write_files({Path("src/workflow.py"): 'def run() -> str:\n    return "local"\n'})
+    commit = pair.client.publish_change("Keep the file while removing its candidate Core import", *files)
+    stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(pair.client.github, DraftListedPullRequest(
+        pair.client.number, "feature", commit, stamp, "main", reviewable_times=(stamp,)))
+    inputs = IntegrationRun(pair.checkout, pair.output, "selected file union").qualify(pair.context, ("P2", "P3"))
+    resource = MaterializedClients(pair.output, inputs)
+    core = inputs.source(pair.core.github)
+    head = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    for side in (BaseSide, HeadSide):
+        client, = resource.at(pair.core.checkout, core.baseline.commit, head, side)
+        assert client.files_importing("agent_comms") == ["src/workflow.py"]
+        assert client.checkout == side.checkout(pair.output, pair.client.github)
+    candidate, = resource.at(pair.core.checkout, core.baseline.commit, head, HeadSide)
+    assert candidate.imports == ()
 
 
 def test_client_imports_root_reachability_and_name_missing_modules(tmp_path):

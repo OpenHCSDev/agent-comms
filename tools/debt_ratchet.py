@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import atexit
 import dataclasses
 import enum
 import fcntl
@@ -21,7 +20,6 @@ import json
 import os
 import pickle
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -56,7 +54,7 @@ from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
-from module_layers import PACKAGE, StackClient
+from module_layers import PACKAGE, ClientSources, MaterializedClients, StackClient
 from stored_formats import StoredForm
 from typing_names import TypingImports, TypingReference
 from agent_comms.field_codec import FieldCodec, ViewExclusion, boundary_decoder, projected
@@ -195,7 +193,7 @@ class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
     @abstractmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
+              root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
         """Independent pieces of the comparison; compare() runs each in a separate process."""
 
     @classmethod
@@ -209,9 +207,10 @@ class Measure(DeclaredFamily, affix="Measure"):
         return base, head
 
     @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str,
+                clients: ClientSources = ClientSources()) -> tuple[Counts, Counts]:
         """Return independent before/after measurements for this declaration."""
-        parts = cls.parts(repo, base, head, changed, root)
+        parts = cls.parts(repo, base, head, changed, root, clients)
         return cls.combine([part() for part in parts], repo, base, head, changed, root)
 
 
@@ -311,7 +310,7 @@ class ChangeMeasure(Measure):
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
+              root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
         return (partial(cls.counted, repo, base, head, changed, root),)
 
     @classmethod
@@ -366,7 +365,7 @@ class InventoryMeasure[Reading](Measure):
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
+              root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
         before, after = cls.inventory(repo, base, root), cls.inventory(repo, head, root)
         shared = sorted((before & after) - ChangedPaths.of(repo, base, head).touched)
         shards = os.process_cpu_count() or 1
@@ -459,8 +458,8 @@ class CountedSource(GitMeasure):
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
-        return SyntaxPasses.parts(repo, base, head, changed, root)
+              root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
+        return SyntaxPasses.parts(repo, base, head, changed, root, clients)
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
@@ -611,7 +610,7 @@ class SyntaxPasses(InventoryMeasure[dict[type[CountedSource], int]]):
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
+              root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
         shards = os.process_cpu_count() or 1
         return tuple(partial(cls.side, side, repo, ref, paths[shard::shards])
                      for side in Side.sides() for ref in (side.ref(base, head),)
@@ -794,7 +793,7 @@ class CheckedRevision(SideCounts):
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
+              root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
         return tuple(partial(cls.findings, repo, ref, head, root, batch, side)
                      for side in Side.sides() for ref in (side.ref(base, head),)
                      for batch in cls.batches(sorted(changed & python_paths(repo, ref, root)))
@@ -897,31 +896,14 @@ class TypeErrors(CheckedRevision):
 
 
 class ClientTypeErrors(SideCounts):
-    """Mypy errors in each stack client file that imports agent_comms, checked against each
-    revision's package. Both sides read the same client commit, so the client's own errors cancel
-    and an error the head adds is a name or signature the client uses that the change took away:
-    #3110 deleted TurnState.settles as unused while Toad's conversation_turn.py:262 called it, and
-    only the running app found it."""
+    """Mypy growth across coherent Core/client source tuples in one checker environment.
+
+    Matched migrations intentionally compare different client code. Selection is the union
+    of both real cuts, with absent files absent and each cut's own configuration preserved.
+    Ordinary local comparisons retain the existing one-main client acquisition.
+    """
 
     finding = TypeErrors.finding
-
-    @staticmethod
-    @cache
-    def clients(repo: Path, head: str) -> tuple[StackClient, ...]:
-        """The head's stack clients, cloned once per run and read by both sides; a revision
-        declaring no stack has none."""
-        if not git(repo, "ls-tree", "--name-only", head, "--", "stack/pyproject.toml"):
-            return ()
-        into = Path(tempfile.mkdtemp(prefix="debt-ratchet-clients-"))
-        atexit.register(shutil.rmtree, into, True)
-        (into / "stack").mkdir()
-        (into / "stack/pyproject.toml").write_bytes(git(repo, "show", f"{head}:stack/pyproject.toml"))
-        return StackClient.fetched(into / "stack", into)
-
-    @staticmethod
-    def selected(client: StackClient) -> list[str]:
-        return sorted({entry.path for entry in client.imports
-                       if entry.module.partition(".")[0] == PACKAGE})
 
     @classmethod
     def findings(cls, repo: Path, ref: str, client: StackClient, side: type[Side]) -> tuple[type[Side], Counter[str]]:
@@ -932,7 +914,7 @@ class ClientTypeErrors(SideCounts):
 
     @classmethod
     def checked(cls, repo: Path, ref: str, client: StackClient, side: type[Side]) -> Counter[str]:
-        selected = cls.selected(client)
+        selected = client.files_importing(PACKAGE)
         cache = ContentCache.directory.with_name("debt-ratchet-mypy-clients") / client.name / side.declared_name
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-client-") as scratch:
             subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref, "src"),
@@ -943,7 +925,7 @@ class ClientTypeErrors(SideCounts):
                     cache, "--follow-imports=silent", "--ignore-missing-imports", *selected)),
                 cwd=client.checkout, timeout=600,
                 env={**os.environ, "MYPYPATH": os.pathsep.join(
-                    (str(Path(scratch, "src")), str(client.checkout / "src")))},
+                    (str(Path(scratch, "src")), *client.import_paths))},
             )
         output = cls.checker_output(result, f"{client.name} at {ref}")
         return Counter(f"{client.name}/{match[1]}" for match in cls.finding.finditer(output)
@@ -951,14 +933,14 @@ class ClientTypeErrors(SideCounts):
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
-        # Only a change to the package the clients import can change what they see.
-        if not any(path.startswith(f"src/{PACKAGE}/") for path in changed):
+              root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
+        # A matched resource also owns client-only changes, even with an unchanged Core patch.
+        if not any(path.startswith(f"src/{PACKAGE}/") for path in changed) and not clients.requires_clients(changed):
             return ()
         return tuple(partial(cls.findings, repo, side.ref(base, head), client, side)
-                     for client in cls.clients(repo, head)
-                     if cls.selected(client)
-                     for side in Side.sides())
+                     for side in Side.sides()
+                     for client in clients.at(repo, base, head, side)
+                     if client.files_importing(PACKAGE))
 
     @classmethod
     def measured(cls, found: dict[type[Side], Counter[str]], changed: set[str]) -> list[str]:
@@ -2652,7 +2634,7 @@ class DonePhaseBroken(Measure):
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
-              root: str) -> tuple[Callable[[], object], ...]:
+              root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
         declared = Path(inspect.getfile(PlanPhase)).resolve()
         if root != f"{declared.relative_to(REPOSITORY).parts[0]}/":
             return ()
@@ -2795,7 +2777,8 @@ class Comparison:
 
 
 def compare(repo: Path, base: str, head: str, root: str, workers: int,
-            measured: tuple[type[Measure], ...] = Measure.members_with(Measure)) -> Comparison:
+            measured: tuple[type[Measure], ...] = Measure.members_with(Measure),
+            clients: ClientSources = ClientSources()) -> Comparison:
     source_root = Path(root)
     if source_root.is_absolute() or ".." in source_root.parts or not source_root.parts:
         raise ValueError("--root must be a repository-relative source directory")
@@ -2807,9 +2790,9 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
     before: Counts = {}
     after: Counts = {}
     introduced: dict[FileCount, list[int]] = {}
-    # Every measure reads production Python paths only, so with none touched each would
-    # report no change.
-    if not touched & (production_paths(repo, base) | production_paths(repo, head)):
+    # Ordinary comparisons need a touched production path. Matched inputs can change
+    # an external client while leaving the local Core patch unchanged.
+    if not touched & (production_paths(repo, base) | production_paths(repo, head)) and not clients.requires_clients(touched):
         return Comparison(root, base, head, (), before, after, introduced, {})
 
     # A pass of a shared runner is measured once, by that runner.
@@ -2817,7 +2800,7 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
     # Forked workers start from this already-imported module instead of importing it again.
     with ForkedProcessPool(workers) as pool:
         parts = {measure: [pool.submit(part)
-                           for part in measure.parts(repo, base, head, paths, root)]
+                           for part in measure.parts(repo, base, head, paths, root, clients)]
                  for measure in measures}
         sites = [pool.submit(
             CleanChangedLines.introduced, repo, base, head,
@@ -2864,8 +2847,11 @@ def main() -> int:
     parser.add_argument("--head", required=True)
     parser.add_argument("--workers", type=int, default=os.process_cpu_count() or 1,
                         help="Pool width; a caller running ratchets in parallel narrows it")
+    parser.add_argument("--ci-inputs", type=Path,
+                        help="the integration entrypoint's exact materialized Core/client cuts")
     args = parser.parse_args()
-    result = compare(Path.cwd(), args.base, args.head, args.root, args.workers)
+    clients = MaterializedClients.read(args.ci_inputs) if args.ci_inputs else ClientSources()
+    result = compare(Path.cwd(), args.base, args.head, args.root, args.workers, clients=clients)
     # Flushed first: stdout is block-buffered into a pipe, and the growth lines must end the log.
     print(json.dumps(FieldCodec.project(result, "report"), indent=2), flush=True)
     # The failing step's last lines become check annotations (.github/run-step.sh merges

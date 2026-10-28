@@ -22,6 +22,8 @@ from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
 from fixture_git import ENVIRONMENT, SETTINGS
+from debt_ratchet import ClientTypeErrors, compare
+from module_layers import MaterializedClients
 
 pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_source_fixture")
 
@@ -79,6 +81,22 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     assert not any(call[:2] == ("pr", "merge") or "state=success" in call for call in github_cli.calls())
 
 
+def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources
+    inputs = integration.IntegrationRun(pair.checkout, pair.output, "real client checker tuple").qualify(pair.context, ("P2", "P3"))
+    source = inputs.source(pair.core.github)
+    head = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    clients = MaterializedClients(pair.output, inputs)
+    assert len(ClientTypeErrors.parts(pair.core.checkout, source.baseline.commit, head,
+                                     {"src/agent_comms/api.py"}, "src/", clients)) == 2
+    result = compare(pair.core.checkout, source.baseline.commit, head, "src", 1,
+                     measured=(ClientTypeErrors,), clients=clients)
+    assert not result.failed
+    assert all(value == 0 for value in result.delta.values())
+
+
 def test_ci_event_refuses_unrelated_graph_and_carrier_without_materialization(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
 ) -> None:
@@ -93,6 +111,14 @@ def test_ci_event_refuses_unrelated_graph_and_carrier_without_materialization(
             {"merge_group": {"head_sha": pair.core.main_commit, "base_sha": pair.core.main_commit,
                              "head_ref": "refs/heads/not-a-GitHub-queue-reference"}})
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
+
+
+def test_stack_source_identity_normalizes_package_spelling_and_refuses_duplicate_aliases() -> None:
+    source = '{git = "https://github.com/example/client.git", branch = "main"}'
+    assert StackSources.declared_sources(f'[tool.uv.sources]\nSource_Client = {source}\n') == {
+        "source-client": ("https://github.com/example/client.git", "main")}
+    with pytest.raises(ValueError, match="declares package source-client twice"):
+        StackSources.declared_sources(f'[tool.uv.sources]\nSource_Client = {source}\nsource-client = {source}\n')
 
 
 def test_selection_uses_the_project_declaration_and_unions_existing_files(tmp_path: Path):
