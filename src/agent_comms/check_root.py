@@ -140,7 +140,7 @@ class CheckRoot:
                     for thread in declarations.values():
                         AcceptanceFrontier(
                             wire_root_id=privacy.namespace,
-                            recipient_lookup=thread.incarnation.lookup,
+                            recipient_lookup=thread.incarnation.require_recorded().lookup,
                             through_seq=messages[-1].seq,
                         ).advance(db)
 
