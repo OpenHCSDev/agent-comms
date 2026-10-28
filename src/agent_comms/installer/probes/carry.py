@@ -40,9 +40,7 @@ class Carried:
     Store locks are excluded from that inventory and cannot authorize a rewrite."""
 
     def for_step(self, step: Carry) -> Carried:
-        resources = tuple(item for path in self.rewritten
-                          for item in RootFile.referenced_files(
-                              step.files, path))
+        resources = RootFile.referenced_files(step.files, self.rewritten)
         for resource in resources:
             step.require_confined(step.files.location(resource))
         return replace(self, rewritten=tuple(resource.path for resource in resources))
