@@ -141,7 +141,8 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
             frame.todos,
             len(tuple(ReviewTimerUp.conditions(comms, frame))),
             sum(read.read() for read in OrderEditCountRead.judgeable(
-                comms.root, frame.live, frame.pulls.progress(frame.todos, comms.registry))),
+                comms.root, frame.live, frame.pulls.progress(frame.todos, comms.registry),
+                frame.workplaces)), 
         )
 
     @classmethod

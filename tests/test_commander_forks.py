@@ -312,16 +312,18 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
     """Overload, the HUD and the judge read one judgeable owner: a merged head gates nothing."""
     from agent_comms.held_orders import HeldOrders
     from agent_comms.todos import MergedProgress, NoCommitProgress
-    from agent_comms.turn_digests import OrderEditCountRead
+    from agent_comms.turn_digests import EditWorkplaces, OrderEditCountRead
 
     comms, source, _ = fork_bus
     record_edits(comms, source, 3)
     holds = HeldOrders.read(comms, "lead").live
     open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
+    workplaces = EditWorkplaces.capture(comms, holds, tuple(hold.todo for hold in holds),
+                                        ProgressRead())
     assert [read.read() for read in OrderEditCountRead.judgeable(
-        comms.root, holds, open_order)] == [3]
-    assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged)) == ()
+        comms.root, holds, open_order, workplaces)] == [3]
+    assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged, workplaces)) == ()
 
 
 def test_open_unit_consumers_agree_on_one_assignment(fork_bus):

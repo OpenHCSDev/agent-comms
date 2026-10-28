@@ -18,12 +18,12 @@ from .external_transcript import ExternalTranscript, StoreRead
 from .field_codec import FieldCodec
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
-from .storage_rules import StorageRule
+from .repo import Checkout, Repo
+from .storage_rules import CheckoutAllocation, StorageRule
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
-from .thread_storage import StorageRoots
 from .threads import Thread
-from .todos import ProgressRead, Todo, TodoStore
+from .todos import ProgressRead, PullRequestLink, Todo, TodoStore
 from .tool_declaration import EditCall
 from .tool_result import ToolResult
 from .transcript_events import IncomingTranscript, TurnDigest
@@ -231,34 +231,39 @@ class OrderEditRead[Result](OrderRead[Result]):
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
         held = HeldOrders.read(comms, commander)
+        history = comms.goals.todos.history_for_commander(
+            comms.registry.require(commander).incarnation)
+        pulls = ProgressRead(history)
+        workplaces = EditWorkplaces.capture(comms, held.live, history, pulls)
         yield from cls.judgeable(
-            comms.root, held.live, ProgressRead().progress(held.todos, comms.registry))
+            comms.root, held.live, pulls.progress(held.todos, comms.registry), workplaces)
 
     @classmethod
     def judgeable(cls, root: Path, holds: Iterable[LiveHold],
-                  progress: Mapping[str, OrderProgress]) -> Iterator[Self]:
+                  progress: Mapping[str, OrderProgress],
+                  workplaces: Mapping[ThreadIncarnation, EditWorkplaces]) -> Iterator[Self]:
         """The reads a verdict can still clear: an order whose PR merged has no head left to
         judge, so its edits are nobody's review and its transcript is never read."""
-        return (read for read in cls.for_orders(root, holds) if progress[read.todo.id].judgeable)
+        return (read for read in cls.for_orders(root, holds, workplaces)
+                if progress[read.todo.id].judgeable)
 
     @classmethod
-    def for_orders(cls, root: Path, holds: Iterable[LiveHold]) -> Iterator[Self]:
+    def for_orders(cls, root: Path, holds: Iterable[LiveHold],
+                   workplaces: Mapping[ThreadIncarnation, EditWorkplaces]) -> Iterator[Self]:
         """Read each live hold's transcript from its canonical review cut; each edit is
         read under the one order its workplace names."""
         store = TodoStore(root)
-        rule = StorageRule.load(root)
-        holds = tuple(holds)
         for hold in holds:
             yield cls(
                 root, hold.holder, TurnsSince(store.unjudged_since(hold.todo)), hold.todo,
-                EditWorkplaces.of(rule, hold.holder, tuple(
-                    other.todo for other in holds if other.holder.name == hold.holder.name)),
+                workplaces[hold.holder.incarnation],
             )
 
     def owned(self, edits: Iterable[EditCall]) -> tuple[EditCall, ...]:
         judged = frozenset(self.todo.judged_calls)
-        return tuple(edit for edit in edits if edit.id not in judged
-                     and self.workplaces.order_of(edit.path) == self.todo.id)
+        return tuple(replace(edit, problem=self.todo.id) for edit in edits
+                     if edit.id not in judged
+                     and self.workplaces.problems_for(edit.path) == frozenset((self.todo.id,)))
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         since = self.bound.at
@@ -269,23 +274,115 @@ class OrderEditRead[Result](OrderRead[Result]):
 
 
 @dataclass(frozen=True)
-class EditWorkplaces:
-    """Which of one unit's held orders an edit belongs to. An edit inside a problem checkout
-    belongs to that problem, held or not, so a released problem's edits join no other order;
-    any other path (scratch, a shared checkout) belongs to the order the unit was given last.
-    Each edit is read under at most one order."""
+class EditWorkplace(Checkout):
+    """A qualified source boundary, or a reserved allocation with no qualified problem."""
 
-    rule: StorageRule
-    roots: StorageRoots
-    latest: str
+    problems: frozenset[str]
+
+    def contains(self, path: Path) -> bool:
+        # Lexical membership rejects aliases into a checkout; resolution rejects escapes
+        # through symlinks inside it. Missing edited files retain their known parent root.
+        return (path.is_absolute() and path.is_relative_to(self.path)
+                and path.resolve().is_relative_to(self.path))
+
+
+@dataclass(frozen=True)
+class EditWorkplaces:
+    """One read's derived boundaries. Allocations take precedence over generic source roots;
+    zero or multiple candidates never select a held order. Original edit records stay put."""
+
+    allocated: tuple[EditWorkplace, ...]
+    sources: tuple[EditWorkplace, ...]
 
     @classmethod
-    def of(cls, rule: StorageRule, holder: Thread, todos: tuple[Todo, ...]) -> Self:
-        return cls(rule, rule.roots_of(holder),
-                   max(todos, key=lambda todo: todo.order.checked().at.recorded_at("An order")).id)
+    def capture(cls, comms: Comms, holds: Iterable[LiveHold], history: tuple[Todo, ...],
+                pulls: ProgressRead) -> dict[ThreadIncarnation, EditWorkplaces]:
+        """Acquire source/forge facts once, then match edits without Git or network calls."""
+        holds = tuple(holds)
+        if not holds:
+            return {}
+        snapshot = comms.registry.snapshot()
+        repositories = snapshot.commander_project.require().repos
+        rule = StorageRule.load(comms.root)
+        todos = {todo.id: todo for todo in history}
+        declared = {
+            todo.id: tuple(dict.fromkeys(repository for order in todo.order.declarations
+                                        for repository in order.source_repositories()))
+            for todo in history
+        }
+        trees = {repo.github: pulls.worktrees(repo) for repo in repositories}
+        paths = {Path(path) for branches in trees.values()
+                 for worktrees in branches.values() for path in worktrees}
+        paths.update(order.check.directory for hold in holds
+                     for order in hold.todo.order.declarations)
+        for hold in holds:
+            roots = rule.roots_of(hold.holder)
+            paths.add(rule.order_checkout(roots, hold.todo.id))
+            paths.update(rule.repository_checkout(roots, hold.todo.id, repo)
+                         for repo in declared[hold.todo.id])
+        # Qualify only captured Git roots, never nearest parents of individual events.
+        # An alias cannot manufacture another problem allocation around the same source.
+        present = Checkout.git_roots(*paths)
+        actual = {path: Repo.of(path) for path in present
+                  if path.is_absolute() and Checkout(path).resolved().path == path}
+        links = tuple(dict.fromkeys(link for hold in holds
+                                    for order in hold.todo.order.declarations
+                                    for link in order.pull_requests))
+        requests = {PullRequestLink(repo.github, row.number): row
+                    for repo in repositories
+                    for row in pulls.rows(repo.github, tuple(
+                        link.number for link in links if link.repo == repo.github))}
+        allocated: list[EditWorkplace] = []
+        registered = frozenset(repo.github for repo in repositories)
+        for path in present:
+            allocations = tuple((thread, allocation)
+                                for thread in snapshot.threads.values()
+                                for allocation in CheckoutAllocation.for_path(rule, thread, path)
+                                if allocation.problems())
+            if allocations:
+                proved = frozenset(
+                    problem for thread, allocation in allocations
+                    for problem in allocation.problems()
+                    if path in actual and problem in todos
+                    and actual[path].github in registered
+                    and actual[path].github in allocation.source_repositories(
+                        todos[problem].repo, declared[problem])
+                    and allocation.owns_declared(rule, thread, path, actual[path].github))
+                allocated.append(EditWorkplace(path, proved))
+        workplaces: dict[ThreadIncarnation, EditWorkplaces] = {}
+        for holder in dict.fromkeys(hold.holder.incarnation for hold in holds):
+            sources: list[EditWorkplace] = []
+            for hold in holds:
+                if hold.holder.incarnation != holder:
+                    continue
+                todo = hold.todo
+                linked = tuple(link for order in todo.order.declarations
+                               for link in order.pull_requests)
+                for order in todo.order.declarations:
+                    path = order.check.directory
+                    # Explicit pre-PR source is valid only for its primary actual repository,
+                    # and ceases being a generic workplace once that source has a PR link.
+                    if (todo.repo in registered and path in actual
+                            and actual[path].github == todo.repo
+                            and not any(link.repo == todo.repo for link in linked)):
+                        sources.append(EditWorkplace(path, frozenset((todo.id,))))
+                for link in linked:
+                    if link not in requests:
+                        continue  # Unregistered repositories cannot qualify a source boundary.
+                    for path in trees[link.repo].get(requests[link].branch, ()):
+                        root = Path(path)
+                        if root in actual and actual[root].github == link.repo:
+                            sources.append(EditWorkplace(root, frozenset((todo.id,))))
+            workplaces[holder] = cls(tuple(allocated), tuple(sources))
+        return workplaces
 
-    def order_of(self, path: str) -> str:
-        return self.rule.checkout_problem(self.roots, Path(path), self.latest)
+    def problems_for(self, path: str) -> frozenset[str]:
+        original = Path(path)
+        allocated = tuple(root for root in self.allocated
+                          if original.is_absolute() and original.is_relative_to(root.path))
+        candidates = allocated if allocated else self.sources
+        return frozenset(problem for root in candidates if root.contains(original)
+                         for problem in root.problems)
 
 
 class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):

@@ -12,6 +12,8 @@ from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import OwedAnswer
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.turn_digests import EditWorkplaces
 from agent_comms.todos import (
     ClosedHeadReading, HeadReviewRecord, ProgressRead, StoredClosedHead, StoredHeadReview,
 )
@@ -30,6 +32,7 @@ class HeartbeatFrame(HeldOrders):
     answers: tuple[OwedAnswer, ...]
     closed: ClosedHeadReading
     head_reviews: Mapping[PullRequestHead, tuple[HeadReviewRecord, ...]]
+    workplaces: Mapping[ThreadIncarnation, EditWorkplaces]
 
     @classmethod
     def capture(cls, comms: Comms, commander: str, pulls: ProgressRead,
@@ -43,16 +46,19 @@ class HeartbeatFrame(HeldOrders):
             closed = StoredClosedHead.current(db, project.repository_names())
             reviews = StoredHeadReview.head_reviews_among(
                 db, (head.request for head in closed.lost))
+        plan = plans.read(
+            repository,
+            comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
+            tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
+        )
+        pulls.register(scan.todos)
         return cls(
             scan.live,
             scan.orphaned,
-            pulls.register(scan.todos),
-            plans.read(
-                repository,
-                comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
-                tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
-            ),
+            pulls,
+            plan,
             OwedAnswer.read_scan(comms, commander, scan),
             closed,
             reviews,
+            EditWorkplaces.capture(comms, scan.live, plan.todos, pulls),
         )
