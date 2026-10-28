@@ -342,28 +342,42 @@ def test_missing_bus_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
 def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_index(tmp_path):  # noqa: F811
     from conftest import accept_initial, publish_initial
     from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.native_runtime_input import NativeRuntimeTable
+    from agent_comms.notification_evidence import NotificationWindow
     from agent_comms.registry_store import RegistryStore
 
     root, root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
-    later = publish_initial(comms, "sender", "#team", "A second broadcast for the window")
-    with Coordination(str(database)) as store:
-        accept_initial(comms.bus, root_id, later.seq, store)
-    second = comms.bus.bus.delivery(later.seq)
-    sources = (initial, second, initial)
+    privacy = RegistryStore.at(root).privacy()
+    # The lowered limit still admits capture's own schema validation: each catalog read
+    # binds every declared object name and every table name of its schema.
+    limit = max(6, *(
+        len({name for row in schema.schema_rows() for name in row.schema_names})
+        + len(schema.schema_rows())
+        for schema in (privacy.coordinator_schema(), NativeRuntimeTable)))
+    key_fields = 3
+    originals = limit // (key_fields * len(initial.recipients)) + 1
+    assert originals + 1 <= NotificationWindow.window_limit
+    sources = [initial]
+    for index in range(originals - 1):
+        later = publish_initial(comms, "sender", "#team", f"Broadcast {index} for the window")
+        with Coordination(str(database)) as store:
+            accept_initial(comms.bus, root_id, later.seq, store)
+        sources.append(comms.bus.bus.delivery(later.seq))
+    sources = (*sources, initial)
     keys = tuple({"recipient_lookup": recipient.recipient_lookup, "wire_seq": source.message.seq,
                   "message_id": source.message.message_id}
                  for source in sources for recipient in source.recipients)
     distinct = tuple(dict.fromkeys(tuple(key.values()) for key in keys))
-    assert len(distinct) >= 4 and len(keys) > len(distinct)
+    assert key_fields * len(distinct) > limit and len(keys) > len(distinct)
     ordinary = NotificationAssignment.read(root, sources, viewer=AllOutcomes())
     assert ordinary.rows
-    privacy = RegistryStore.at(root).privacy()
     statements: list[str] = []
     with Coordination(str(database)) as store, store.session.read():
         connection = store.session._connection
         unlimited, = WakeAssignment.requested_keys(connection, keys)
-        previous = connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 6)
+        previous = connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, limit)
+        assert limit < previous
         connection.set_trace_callback(statements.append)
         try:
             bound = connection.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER)
@@ -383,7 +397,7 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
 
     assert len(batches) > 1
     assert all(len(batch.bindings) <= bound for batch in batches)
-    assert sum(len(batch.bindings) for batch in batches) == 3 * len(distinct)
+    assert sum(len(batch.bindings) for batch in batches) == key_fields * len(distinct)
     assert tuple(value for batch in batches for value in batch.bindings) == unlimited.bindings
     assert limited.viewer == AllOutcomes() and limited.sources == sources
     assert limited.rows == ordinary.rows
