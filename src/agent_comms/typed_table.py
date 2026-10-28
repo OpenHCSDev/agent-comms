@@ -18,6 +18,7 @@ import sqlite3
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
+from itertools import batched
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, is_dataclass
 from enum import Enum, IntEnum, IntFlag
@@ -2272,16 +2273,39 @@ class TypedTable(
                    f"{_identifier(stored)} TO {_identifier(declared.wire_name)}")
 
     @classmethod
+    def _bound(cls, inputs: Mapping[str, object]) -> tuple[tuple[str, ...], tuple[object, ...]]:
+        """Named query inputs resolved to their declared columns: the wire names and the
+        encoded values, paired in one order the declaration owns."""
+        selected = cls._fields_named(tuple(inputs))
+        return (tuple(_identifier(item.wire_name) for item in selected),
+                tuple(item.encode(inputs[item.name]) for item in selected))
+
+    @classmethod
     def _condition(
         cls, where: str, parameters: tuple, key: dict[str, object]
     ) -> tuple[str, tuple]:
         """Compile predicate field names and declared key values once."""
-        selected = cls._fields_named(tuple(key))
-        if selected:
-            where = "(" + where + ") AND " + " AND ".join(
-                f"{_identifier(item.wire_name)} IS ?" for item in selected)
-            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
+        columns, values = cls._bound(key)
+        if columns:
+            where = "(" + where + ") AND " + " AND ".join(f"{column} IS ?" for column in columns)
+            parameters = (*parameters, *values)
         return cls._sql(where), parameters
+
+    @classmethod
+    def select_keys(cls, db: sqlite3.Connection,
+                    keys: Sequence[Mapping[str, object]]) -> list[Self]:
+        """Rows equal to any of these named keys, as one row-value list per batch the
+        connection's variable limit admits; repeated keys are probed once."""
+        bound = tuple(dict.fromkeys(cls._bound(key) for key in keys))
+        if not bound:
+            return []
+        columns, = {columns for columns, _ in bound}
+        batch = db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // len(columns)
+        probe = "(" + ",".join("?" for _ in columns) + ")"
+        return [row for chunk in batched(bound, batch) for row in cls.iterate(db.execute(
+            f"SELECT {cls._select_list(cls)} FROM {_identifier(cls.declared_name)} "
+            f"WHERE ({','.join(columns)}) IN (VALUES {','.join(probe for _ in chunk)})",
+            tuple(value for _, values in chunk for value in values)))]
 
     @classmethod
     def _query(

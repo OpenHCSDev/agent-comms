@@ -40,6 +40,7 @@ from agent_comms.harness_delivery_states import (
     UnconfirmedOutcome, UnrecordedMonitor,
 )
 from agent_comms.agent_inbox import TakenInputStart
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
@@ -240,6 +241,7 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
         service = MonitorService(bridge, ProcessIdentity.capture(os.getpid()), lambda: None)
         attachment = asyncio.create_task(bridge.reader.attach(service, bridge_peer))
         accepting = None
+        human_reads = ReadLedger.at(comms.root).read()
         try:
             async with asyncio.timeout(15):
                 await monitor_reader.readline()
@@ -258,7 +260,12 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
                     confirmed, = WakeAssignment.select(store.session._connection,
                         recipient_lookup=lookup, wire_seq=message.seq)
                     assert type(confirmed.lifecycle) is DeliveredAssignment
-                assert comms.bus.inbox(bridge.binding.bus).page.messages == ()
+                # The harness took it, so the agent's page drops it; the human's unread view and
+                # read ledger are a different owner and do not move.
+                assert comms.bus.inbox(bridge.binding.bus, after=TakenInputStart()).page.messages == ()
+                assert message.reference in {
+                    item.reference for item in comms.bus.inbox(bridge.binding.bus).page.messages}
+                assert ReadLedger.at(comms.root).read() == human_reads
         finally:
             if accepting is not None:
                 accepting.cancel()

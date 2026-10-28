@@ -189,7 +189,7 @@ class RouteCounts:
         return tuple(self._route_rows(UnseenDelivery, registry, {delivery.actor: delivery},
             {delivery.actor: seen}, after,
             f''', unread AS (
-                SELECT request.seq,request.target,request.sender,message.mentions
+                SELECT request.seq,request.target,request.sender,{MessageInput.render('message.{mentions}')}
                 FROM cursors AS request CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
                 WHERE actor=? AND {seen.unread_rule()}
             ) SELECT seq,target FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)

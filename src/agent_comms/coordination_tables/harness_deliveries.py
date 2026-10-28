@@ -10,8 +10,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from itertools import batched
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
@@ -38,9 +37,8 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     unique = (("bridge", "recipient_lookup", "seq"),)
-    recipient_index: ClassVar[Index] = Index(("recipient_lookup", "seq", "message_id"))
+    indexes = (Index(("recipient_lookup", "seq", "message_id"), unique=False, where=None),)
     """The inbox asks per delivered message whether any bridge attempted it for this recipient."""
-    indexes = (recipient_index,)
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
@@ -97,21 +95,12 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     @classmethod
     def for_recipients(cls, db: sqlite3.Connection,
                        keys: Sequence[tuple[ThreadLookup, MessageReference]]) -> tuple[Self, ...]:
-        """Every bridge's attempt on exactly these (recipient, original) keys, each probed
-        through the recipient index, whose declared terms name the compared columns; no read
-        walks the attempt history. Distinct keys go in batches the connection's own variable
-        limit admits."""
-        terms = cls.recipient_index.terms
-        batch_size = db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // len(terms)
-        probe = "(" + ",".join("?" for _ in terms) + ")"
+        """Every bridge's attempt on exactly these (recipient, original) keys, probed through
+        the recipient/seq/message index; no read walks the attempt history."""
         return tuple(sorted(
-            (row for batch in batched(dict.fromkeys(keys), batch_size) for row in cls.select(
-                db,
-                where=(f"({cls.recipient_index.term_sql(cls)}) IN (VALUES "
-                       + ",".join(probe for _ in batch) + ")"),
-                parameters=tuple(value for lookup, reference in batch
-                                 for value in (lookup, reference.seq, reference.message_id)),
-            )),
+            cls.select_keys(db, tuple(
+                {"recipient_lookup": lookup, "seq": reference.seq, "message_id": reference.message_id}
+                for lookup, reference in keys)),
             key=lambda row: (row.seq, row.recipient_lookup, row.bridge.declared_name),
         ))
 

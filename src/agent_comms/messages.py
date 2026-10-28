@@ -361,6 +361,17 @@ class BusCapability(TypedRow, ProjectionSource):
         return tuple(base.table for base in cls.__mro__
                      if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
 
+    @classmethod
+    def render(cls, expression: str) -> str:
+        """Render {field} selectors through every capability table this declaration inherits,
+        so a field moved between capabilities never edits the statements that select it. A
+        selector no table declares is refused, never sent to SQLite as text."""
+        for table in cls.tables():
+            expression = table._sql(expression)
+        if unresolved := re.findall(r"\{(\w+)\}", expression):
+            raise ValueError(f"{cls.__name__} declares no field {sorted(set(unresolved))}")
+        return expression
+
     def rows(self) -> tuple[CapabilityRow, ...]:
         """Project declared Python fields without flattening their wire representations."""
         return tuple(

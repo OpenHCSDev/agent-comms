@@ -268,7 +268,7 @@ class BusReader(RouteCounts, ABC):
             order = "DESC" if descending else "ASC"
             members = ""
             if kinds:
-                members = ' AND type IN (' + ','.join('?' for _ in kinds) + ')'
+                members = MessageInput.render(' AND {type} IN (') + ','.join('?' for _ in kinds) + ')'
             rows = db.execute(
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
                 f'JOIN "{MessageInput.table.declared_name}" USING(seq) '

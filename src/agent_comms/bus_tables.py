@@ -272,7 +272,7 @@ class AnsweredSource(messages.BusProjectionTables):
         content = messages.MessageInput.table
         query = (
             'WITH matches AS (SELECT reply.seq, '
-            + content._sql('reply_message.{timestamp} AS timestamp ')
+            + content._sql('reply_message.{timestamp} AS {timestamp} ')
             + f'FROM "{identity}" AS reply '
             f'JOIN "{content.declared_name}" AS reply_message USING(seq) '
             f'WHERE reply.sender IN ({replying}) AND '
@@ -307,6 +307,6 @@ class AnsweredSource(messages.BusProjectionTables):
     ) -> float:
         row = cls._answer_rows(
             db, scope, since,
-            'SELECT COALESCE(MAX(timestamp),0.0) FROM matches',
+            messages.MessageInput.render('SELECT COALESCE(MAX({timestamp}),0.0) FROM matches'),
         ).fetchone()
         return FieldCodec.decode(float, row[0])

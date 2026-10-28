@@ -9,6 +9,7 @@ from __future__ import annotations
 from agent_comms.repo import Checkout
 
 from .bus_tables import AwaitingAnswerSource
+from .messages import MessageInput
 
 from .class_fact import ClassFact
 import asyncio
@@ -897,9 +898,16 @@ class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayS
         return f"({predicate}) AND ({other_predicate})", (*parameters, *other_parameters)
 
     @property
-    @abstractmethod
     def index_predicate(self) -> tuple[str, tuple]:
-        """Select this scope's members before applying the sequence limit."""
+        """Select this scope's members before applying the sequence limit, its field selectors
+        rendered through the message input's declared tables."""
+        condition, parameters = self.condition
+        return MessageInput.render(condition), parameters
+
+    @property
+    @abstractmethod
+    def condition(self) -> tuple[str, tuple]:
+        """This scope's membership over {field} selectors, with its parameters in order."""
 
     @property
     @abstractmethod
@@ -953,8 +961,8 @@ class DMDisplayScope(MessageDisplayScope):
         return cls.capture(first.name, second.name, snapshot)
 
     @property
-    def index_predicate(self) -> tuple[str, tuple]:
-        return self.address_predicate("sender", "target")
+    def condition(self) -> tuple[str, tuple]:
+        return self.address_predicate("{sender}", "{target}")
 
     def address_predicate(self, sender: str, target: str) -> tuple[str, tuple]:
         first, second = tuple(self.first_names), tuple(self.second_names)
@@ -983,10 +991,10 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
 
 
     @property
-    def index_predicate(self) -> tuple[str, tuple]:
+    def condition(self) -> tuple[str, tuple]:
         names = tuple(self.first_names | self.second_names)
         marks = ",".join("?" for _ in names)
-        return f"sender IN ({marks})", names
+        return f"{{sender}} IN ({marks})", names
 
     def includes(self, message: Message) -> bool:
         return (message.sender in self.first_names or super().includes(message)
@@ -1007,8 +1015,8 @@ class ListedDeliveries(MessageDisplayScope):
         return self.targets
 
     @property
-    def index_predicate(self) -> tuple[str, tuple]:
-        return "seq IN (" + ",".join("?" for _ in self.sequences) + ")", tuple(self.sequences)
+    def condition(self) -> tuple[str, tuple]:
+        return "{seq} IN (" + ",".join("?" for _ in self.sequences) + ")", tuple(self.sequences)
 
     def includes(self, message: Message) -> bool:
         return message.seq in self.sequences and self.scope.includes(message)
@@ -1037,9 +1045,9 @@ class ChannelDisplayScope(MessageDisplayScope):
                     for target in self.index_targets), default=0)
 
     @property
-    def index_predicate(self) -> tuple[str, tuple]:
+    def condition(self) -> tuple[str, tuple]:
         targets = tuple(self.index_targets)
-        return "target IN (" + ",".join("?" for _ in targets) + ")", targets
+        return "{target} IN (" + ",".join("?" for _ in targets) + ")", targets
 
     def identity(self, history_revision: FileObservation) -> ChannelDisplayIdentity:
         displayed = self.require_displayed()
@@ -1064,7 +1072,7 @@ class AllTargetsDisplayScope(AnyTargetDisplayScope, ChannelDisplayScope, declare
     targets: frozenset[str] = frozenset()
 
     @property
-    def index_predicate(self) -> tuple[str, tuple]:
+    def condition(self) -> tuple[str, tuple]:
         return "1", ()
 
     def includes(self, message: Message) -> bool:
@@ -1104,13 +1112,14 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
         return cls(channel.name, channel.history_targets, participant_names=names)
 
     @property
-    def index_predicate(self) -> tuple[str, tuple]:
+    def condition(self) -> tuple[str, tuple]:
         targets, names = tuple(self.targets), tuple(self.participant_names)
         target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
         mention_key = FieldCodec.field_plan(ThreadMention, "thread").key
-        return (f"target IN ({target_marks}) OR sender IN ({name_marks}) OR "
-                f"(target NOT LIKE '#%' AND target IN ({name_marks})) OR "
-                f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE json_extract(value,?) IN ({name_marks}))",
+        return (f"{{target}} IN ({target_marks}) OR {{sender}} IN ({name_marks}) OR "
+                f"({{target}} NOT LIKE '#%' AND {{target}} IN ({name_marks})) OR "
+                f"EXISTS (SELECT 1 FROM json_each({{mentions}}) "
+                f"WHERE json_extract(value,?) IN ({name_marks}))",
                 (*targets, *names, *names, f"$.{mention_key}", *names))
 
     def includes(self, message: Message) -> bool:
