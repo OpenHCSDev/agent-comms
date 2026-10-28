@@ -55,6 +55,8 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.private_path import PrivateDirectoryRole, PrivateFileRole
+from agent_comms.store_files import ExclusiveAtomicFile
 from agent_comms.message_reference import (
     BridgeBeginning,
     BridgePosition,
@@ -110,6 +112,7 @@ from .monitor import (
 
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
+    from .claude_protocol import ReadResultObserved
 
 
 class BridgeStateTable(DurableTables):
@@ -1285,6 +1288,10 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
         self, bridge: LineMonitorBridge, record: ObservedMonitor,
     ) -> tuple[str, ...]: ...
 
+    def exported_part(self, message_id: MessageId) -> tuple[MonitorPart, ...]:
+        """Only a body part of that message counts when read back from its export."""
+        return ()
+
 
 class MonitorProtocolFrame(MonitorFrame, declared_name=None):
     """A line the monitor writes itself; the transcript scan knows it by its protocol prefix."""
@@ -1302,6 +1309,69 @@ class MonitorProbe(MonitorProtocolFrame, declared_name='probe'):
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         await bridge.confirm_probe(self)
+        return ()
+
+
+class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
+    """The one bounded event for a message no single Monitor event holds.
+
+    Claude cuts each event line at 500 UTF-16 units and flushes a joined batch after 200 ms,
+    so a message spread over several lines can reach the model in pieces, one turn apart.
+    The message is instead the private file this notice names, read whole. Seeing the notice
+    proves only that the notice arrived; a visible Read of the file confirms the body."""
+
+    reference: InstanceOf[
+        Annotated[
+            MessageReference,
+            PlainValidator(partial(FieldCodec.decode, MessageReference)),
+            PlainSerializer(FieldCodec.encode),
+        ]
+    ]
+    path: str
+    instruction: Literal['This is one message. Read this complete file before acting on it.'] = (
+        'This is one message. Read this complete file before acting on it.')
+    reservation: ClassVar[int] = 0
+    """The notice's own window reservation; body parts number from one."""
+
+    @classmethod
+    def naming(cls, directory: Path, reference: MessageReference) -> Self:
+        return cls(reference=reference,
+                   path=str(directory / f'{reference.seq}-{reference.message_id}.jsonl'))
+
+    @classmethod
+    def exported_at(cls, directory: Path, path: str) -> tuple[Self, ...]:
+        """The notice whose export is exactly this path; any other path names none."""
+        seq, _, name = Path(path).name.partition('-')
+        if not seq.isdecimal():
+            return ()
+        try:
+            identity = FieldCodec.decode(MessageId, name.removesuffix('.jsonl'))
+        except field_codec.MalformedRecord:
+            return ()
+        notice = cls.naming(directory, MessageReference(int(seq), identity))
+        return (notice,) if notice.path == path else ()
+
+    def export(self, lines: tuple[str, ...]) -> None:
+        """Publish every encoded part, one per line, once. A file already at this path must
+        hold exactly these bytes: the bus message stays the source, never the file."""
+        data = ''.join(line + '\n' for line in lines).encode()
+        path = Path(self.path)
+        PrivateDirectoryRole.make_parents(path.parent)
+        try:
+            ExclusiveAtomicFile(path).write_bytes(data)
+        except FileExistsError:
+            refusal = RelationViolationError(f'Message export {path} is not this message')
+            with os.fdopen(PrivateFileRole.read(path, refusal), 'rb') as existing:
+                if existing.read() != data:
+                    raise refusal from None
+
+    def retire(self) -> None:
+        """A confirmed body's export is evidence nobody reads again."""
+        Path(self.path).unlink(missing_ok=True)
+
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
+        """The notice frees only its own reservation; it confirms no body."""
+        await bridge.part_observed(self.reference.message_id, self.reservation)
         return ()
 
 
@@ -1357,6 +1427,9 @@ class MonitorPart(MonitorFrame, declared_name='part'):
             raise ValueError('Monitor part number exceeds total')
         return self
 
+    def exported_part(self, message_id: MessageId) -> tuple[MonitorPart, ...]:
+        return (self,) if self.id == message_id else ()
+
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         """The whole confirmation (attempt read, observed parts, mismatch, final outcome) is one
         contention boundary: a busy coordinator cannot tear down the monitor mid-confirmation."""
@@ -1379,17 +1452,23 @@ MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())
 
 
 @dataclass(frozen=True)
-class MonitorObservation(RuntimeUpdate):
-    frame: MonitorFrame
-    record: ObservedMonitor
-    targets: tuple[str, ...] = ()
+class ConfirmedDelivery(RuntimeUpdate):
+    """A transcript observation that may confirm deliveries."""
 
-    async def observed(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
-        return replace(self, targets=await self.frame.confirm(bridge, self.record))
+    targets: tuple[str, ...] = field(default=(), kw_only=True)
 
     def publish(self, output: ThreadOutput) -> None:
         """Keep confirmed reply routes in transcript order, without a second input row."""
         output.delivered_targets(self.targets)
+
+
+@dataclass(frozen=True)
+class MonitorObservation(ConfirmedDelivery):
+    frame: MonitorFrame
+    record: ObservedMonitor
+
+    async def observed(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
+        return replace(self, targets=await self.frame.confirm(bridge, self.record))
 
 
 class TranscriptConfirmsDelivery:
@@ -1400,6 +1479,10 @@ class MonitorIncomingFrame(IncomingFrame):
     @property
     @abstractmethod
     def parts(self) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
+        """Put the whole message on the reader as one event."""
 
 
 class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
@@ -1481,6 +1564,29 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         # One reversible JSON string per line; no truncation or lost line breaks.
         return json.dumps(text, ensure_ascii=False)
 
+    @property
+    def exports(self) -> Path:
+        """Where this session's messages too large for one event are read whole."""
+        return self.options.state.absolute() / 'messages'
+
+    async def read_export(self, read: ReadResultObserved) -> tuple[str, ...]:
+        """A visible Read of this session's own export confirms the parts it shows, through the
+        same all-parts gate a Monitor event uses, which also owns whether this session attempted
+        the message. Any other file, or a read whose every line is not a part of the exported
+        message, confirms nothing."""
+        targets: list[str] = []
+        for notice in MonitorReadFile.exported_at(self.exports, read.path):
+            frames = read.frames()
+            parts = tuple(part for frame in frames
+                          for part in frame.exported_part(notice.reference.message_id))
+            if len(parts) != len(frames):
+                continue
+            for part in parts:
+                targets.extend(await part.confirm(self, read.record))
+            if targets:
+                notice.retire()
+        return tuple(targets)
+
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
         return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
 
@@ -1488,12 +1594,11 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return await self.reader.deliver(self, message)
 
     async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
-        parts = self.incoming_frame(message).parts
-        receiving = partial(replace, monitor=ReceivingMonitor(len(parts)))
+        frame = self.incoming_frame(message)
+        receiving = partial(replace, monitor=ReceivingMonitor(len(frame.parts)))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))
-        for number, part in enumerate(parts, 1):
-            await attachment.emit(message.message_id, number, self.encode(part), self.window_bytes)
+        await frame.emit_to(attachment, self.window_bytes, self.exports)
         return EmittedOutcome
 
     async def show_sent(self, result: SendResult) -> None:
