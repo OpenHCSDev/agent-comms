@@ -1064,11 +1064,30 @@ class ChangedSource:
 
 
 class ScopeNames(ast.NodeVisitor):
-    """Each node's enclosing class and function names, dotted, through the AST's own dispatch."""
+    """Each node's enclosing class and function names, dotted, through the AST's own dispatch,
+    with the names each node binds where it stands and the nodes that declare them: a class or
+    function, an import alias, an annotated name. A star import binds ``*``."""
 
     def __init__(self) -> None:
         self.found: dict[ast.AST, str] = {}
         self.scope = ""
+        self.binds: dict[ast.AST, tuple[str, ...]] = {}
+        self.declares: set[ast.AST] = set()
+
+    @classmethod
+    def of(cls, tree: ast.AST) -> ScopeNames:
+        names = cls()
+        names.visit(tree)
+        return names
+
+    def bindings(self, scope: str) -> dict[str, list[ast.AST]]:
+        """Every binding of each name in one lexical scope, in walk order."""
+        found: dict[str, list[ast.AST]] = {}
+        for node, names in self.binds.items():
+            if self.found[node] == scope:
+                for name in names:
+                    found.setdefault(name, []).append(node)
+        return found
 
     def generic_visit(self, node: ast.AST) -> None:
         self.found[node] = self.scope
@@ -1076,9 +1095,64 @@ class ScopeNames(ast.NodeVisitor):
 
     def visit_named(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
         self.found[node] = outer = self.scope
+        self.binds[node] = (node.name,)
+        self.declares.add(node)
         self.scope = f"{outer}.{node.name}"
         super().generic_visit(node)
         self.scope = outer
+
+    def visit_alias(self, node: ast.alias) -> None:
+        self.binds[node] = (node.asname or node.name.split(".")[0],)
+        self.declares.add(node)
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        match node.ctx:
+            case ast.Store() | ast.Del():
+                self.binds[node] = (node.id,)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        match node.target:
+            case ast.Name():
+                self.declares.add(node.target)
+        self.generic_visit(node)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        self.binds[node] = (node.name,) if node.name else ()
+        self.generic_visit(node)
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> None:
+        self.binds[node] = (node.name,) if node.name else ()
+        self.generic_visit(node)
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> None:
+        self.binds[node] = (node.name,) if node.name else ()
+        self.generic_visit(node)
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> None:
+        self.binds[node] = (node.rest,) if node.rest else ()
+        self.generic_visit(node)
+
+    def visit_TypeVar(self, node: ast.TypeVar) -> None:
+        self.binds[node] = (node.name,)
+        self.generic_visit(node)
+
+    def visit_ParamSpec(self, node: ast.ParamSpec) -> None:
+        self.binds[node] = (node.name,)
+        self.generic_visit(node)
+
+    def visit_TypeVarTuple(self, node: ast.TypeVarTuple) -> None:
+        self.binds[node] = (node.name,)
+        self.generic_visit(node)
+
+    def visit_Global(self, node: ast.Global) -> None:
+        self.binds[node] = tuple(node.names)
+        self.generic_visit(node)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        self.binds[node] = tuple(node.names)
+        self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self.visit_named(node)
@@ -1088,9 +1162,6 @@ class ScopeNames(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.visit_named(node)
-
-
-type SitePlace = tuple[str, int, int, int, int]
 
 
 class NominalProof:
@@ -1191,21 +1262,16 @@ class FieldExtraction:
     retained field, an extra field, a method or a second copy is still written.
     """
 
-    @staticmethod
-    def place(path: str, node: ast.AST) -> SitePlace:
-        return (path, node.lineno, node.col_offset,
-                typing.cast(int, node.end_lineno), typing.cast(int, node.end_col_offset))
-
     @classmethod
     def credit(cls, measure: type[CleanChangedLines], sources: list[ChangedSource],
-               left: list[ChangedSource], departed: Counter[tuple[str, str]]) -> Counter[SitePlace]:
+               left: list[ChangedSource], departed: Counter[tuple[str, str]]) -> Counter[ast.AST]:
         """Each proved destination occurrence's credit; ``departed`` spends what it pays."""
         existing = {name for source in [*sources, *left] for name in DeclaredClass.top(
             source.path, source.base_tree)}
         new = [held for source in sources
                for name, held in DeclaredClass.top(source.path, source.tree).items()
                if name not in existing]
-        edges = []
+        edges: list[tuple[DeclaredClass, DeclaredClass, DeclaredClass]] = []
         for source in sources:
             before = DeclaredClass.top(source.path, source.base_tree)
             for name, owner in DeclaredClass.top(source.path, source.tree).items():
@@ -1214,7 +1280,7 @@ class FieldExtraction:
                         edges.extend((before[name], owner, held) for _ in owner.holding(held, before[name]))
         owners = Counter((base.path, base.node.name) for base, _, _ in edges)
         holders = Counter((held.path, held.node.name) for _, _, held in edges)
-        credited: Counter[SitePlace] = Counter()
+        credited: Counter[ast.AST] = Counter()
         for base, owner, held in edges:
             if owners[base.path, base.node.name] == holders[held.path, held.node.name] == 1:
                 for field in sorted(base.fields):
@@ -1225,7 +1291,7 @@ class FieldExtraction:
 
     @staticmethod
     def transfer(measure: type[CleanChangedLines], base: DeclaredClass, held: DeclaredClass,
-                 field: str, departed: Counter[tuple[str, str]], credited: Counter[SitePlace]) -> None:
+                 field: str, departed: Counter[tuple[str, str]], credited: Counter[ast.AST]) -> None:
         """One field's occurrences, paid one for one by those that left the old declaration.
         The declarations are proved the same, so their parts pair node for node in walk order;
         parts whose raw shapes differ pair nothing."""
@@ -1243,7 +1309,7 @@ class FieldExtraction:
                     if identity[0] == scope:
                         paid = min(carried, departed[identity])
                         departed[identity] -= paid
-                        credited[FieldExtraction.place(held.path, new)] += paid
+                        credited[new] += paid
 
 
 class CleanChangedLines(OccurrenceMeasure):
@@ -1256,9 +1322,10 @@ class CleanChangedLines(OccurrenceMeasure):
     class moved between files, is the same occurrence moved, not a new one written.
     """
 
-    @staticmethod
+    @classmethod
     def introduced(
-        repo: Path, base: str, head: str, paths: tuple[str, ...], departed_from: tuple[str, ...],
+        cls: type[typing.Self], repo: Path, base: str, head: str, paths: tuple[str, ...],
+        departed_from: tuple[str, ...],
     ) -> dict[FileCount, list[int]]:
         """Each strict measure's sites on each path's changed lines. Occurrences that left the
         changed modules in ``departed_from`` (those present at the base) pay for the same
@@ -1266,7 +1333,7 @@ class CleanChangedLines(OccurrenceMeasure):
         sources = [ChangedSource.read(repo, base, head, path) for path in paths]
         left = [ChangedSource.departed(repo, base, head, path) for path in departed_from]
         found: dict[FileCount, list[int]] = {}
-        for measure in Measure.members_with(CleanChangedLines):
+        for measure in cls.members_with(cls):
             departed: Counter[tuple[str, str]] = Counter()
             for source in left:
                 gone = measure.identities(source.base_tree, source.path)
@@ -1311,7 +1378,7 @@ class CleanChangedLines(OccurrenceMeasure):
 
     @classmethod
     def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]],
-                      extracted: Counter[SitePlace]) -> list[int]:
+                      extracted: Counter[ast.AST]) -> list[int]:
         """The first changed line of each occurrence written there that the base lacks and no
         changed module gave up; a moved occurrence spends the departure it came from, and an
         occurrence in a proved field extraction spends its credit."""
@@ -1327,9 +1394,8 @@ class CleanChangedLines(OccurrenceMeasure):
                 unwritten[identity] -= arrived
                 moved = min(arrived, departed[identity])
                 departed[identity] -= moved
-                place = FieldExtraction.place(source.path, node)
-                carried = min(arrived - moved, extracted[place])
-                extracted[place] -= carried
+                carried = min(arrived - moved, extracted[node])
+                extracted[node] -= carried
                 sites.extend([min(touched)] * (arrived - moved - carried))
         return sites
 
@@ -1432,7 +1498,7 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
 
     @classmethod
     def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]],
-                      extracted: Counter[SitePlace]) -> list[int]:
+                      extracted: Counter[ast.AST]) -> list[int]:
         prose = cls.prose_lines(source) & source.lines
         return [*super().changed_sites(source, departed, extracted), *prose]
 
@@ -1486,57 +1552,25 @@ class DecoratorBinding:
         return cls(frozenset(spelling for spelling in names if spelling.split(".")[0] not in hidden))
 
     @staticmethod
-    def bound(node: ast.AST) -> tuple[str, ...]:
-        """The names one node binds where it stands; a star import binds ``*``."""
-        match node:
-            case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                return (name,)
-            case ast.alias(name="*"):
-                return ("*",)
-            case ast.alias(name=imported, asname=alias):
-                return (alias or imported.split(".")[0],)
-            case ast.Name(id=name, ctx=ast.Store() | ast.Del()):
-                return (name,)
-            case ast.ExceptHandler(name=str() as name) | ast.MatchAs(name=str() as name) | (
-                    ast.MatchStar(name=str() as name)) | ast.MatchMapping(rest=str() as name):
-                return (name,)
-            case ast.TypeVar(name=name) | ast.ParamSpec(name=name) | ast.TypeVarTuple(name=name):
-                return (name,)
-            case ast.Global(names=names) | ast.Nonlocal(names=names):
-                return tuple(names)
-        return ()
-
-    @classmethod
-    def bindings(cls, tree: ast.AST, scope: str) -> dict[str, list[ast.AST]]:
+    def bindings(tree: ast.AST, scope: str) -> dict[str, list[ast.AST]]:
         """Every binding of each name in one lexical module or class scope, as ScopeNames
-        places it; bindings inside nested functions and classes are theirs, not this scope's."""
-        found: dict[str, list[ast.AST]] = {}
-        for node, within in CleanChangedLines.scopes(tree).items():
-            if within == scope:
-                for name in cls.bound(node):
-                    found.setdefault(name, []).append(node)
-        return found
+        decodes it; bindings inside nested functions and classes are theirs, not this scope's."""
+        return ScopeNames.of(tree).bindings(scope)
 
-    @classmethod
-    def declarations(cls, tree: ast.AST, scope: str,
+    @staticmethod
+    def declarations(tree: ast.AST, scope: str,
                      body: list[ast.stmt]) -> dict[str, tuple[ast.AST, ast.stmt]]:
-        """Each name the scope binds exactly once, by an unconditional import, class, function
-        or annotated assignment written directly in its body, with that statement. A star
-        import leaves no name proved."""
-        bindings = cls.bindings(tree, scope)
+        """Each name the scope binds exactly once, by a declaring node that is one of its body's
+        statements or such a statement's direct child, with that statement. A star import
+        leaves no name proved."""
+        names = ScopeNames.of(tree)
+        bindings = names.bindings(scope)
         if "*" in bindings:
             return {}
-        direct: dict[int, ast.stmt] = {}
-        for statement in body:
-            match statement:
-                case ast.Import(names=aliases) | ast.ImportFrom(names=aliases):
-                    direct.update((id(alias), statement) for alias in aliases)
-                case ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
-                    direct[id(statement)] = statement
-                case ast.AnnAssign(target=ast.Name() as target):
-                    direct[id(target)] = statement
-        return {name: (node, direct[id(node)]) for name, (node, *others) in bindings.items()
-                if not others and id(node) in direct}
+        owners = {child: statement for statement in body
+                  for child in (statement, *ast.iter_child_nodes(statement))}
+        return {name: (node, owners[node]) for name, (node, *others) in bindings.items()
+                if not others and node in names.declares and node in owners}
 
     @classmethod
     def identity(cls, tree: ast.Module, filename: str, scope: str, expression: ast.expr) -> NominalProof:
