@@ -65,6 +65,7 @@ from agent_comms.todos import (
     PendingProblemOrder,
     ProblemAllocation,
     ProgressRead,
+    PullRequests,
     PullRequestLink,
     ReleaseTodo,
     StrikeReason,
@@ -517,6 +518,19 @@ def test_noncanonical_worktree_needs_qualified_link_not_matching_origin(edit_sou
     separate = tmp_path / "explicit-source-clone"
     source.git(tmp_path, "clone", "-q", str(source.remote), str(separate))
     source.git(separate, "checkout", "-q", "-b", "linked-repair")
+    independent = SourceRepository.of(separate)
+    assert independent.github == source.github
+    pulls = PullRequests()
+    registered_trees = pulls.worktrees(source)
+    independent_trees = pulls.worktrees(independent)
+    assert str(linked) in registered_trees["linked-repair"]
+    assert str(separate) not in registered_trees["linked-repair"]
+    assert str(separate) in independent_trees["linked-repair"]
+    assert str(linked) not in independent_trees["linked-repair"]
+    assert pulls.worktrees(source) is registered_trees
+    assert pulls.worktrees(independent) is independent_trees
+    alias = replace(independent, checkout=separate / ".." / separate.name)
+    assert pulls.worktrees(alias) is independent_trees
     current = comms.goals.todos.get("P40")
     save_edit_order(comms, replace(current, order=replace(
         current.order, check=replace(current.order.check, directory=separate))))

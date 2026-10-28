@@ -982,12 +982,12 @@ class PullRequestUpdatePage:
 
 
 class PullRequests:
-    """GitHub facts for recorded links, cached within one board read."""
+    """Forge facts and checkout-local worktrees, cached within one board read."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
-        self._worktrees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
+        self._worktrees: dict[Path, Mapping[str, tuple[str, ...]]] = {}
         self._todos: dict[RepositoryName, dict[str, Todo]] = {}
         self.register(todos)
 
@@ -1086,15 +1086,16 @@ class PullRequests:
                      for picked in self._read[repo, number].as_unmerged())
 
     def worktrees(self, repository: Repo) -> Mapping[str, tuple[str, ...]]:
-        """One registered repository's Git worktree listing shared by this entire read."""
-        if repository.github not in self._worktrees:
-            self._worktrees[repository.github] = WorkBranches(repository.checkout).worktrees()
-        return self._worktrees[repository.github]
+        """One canonical local checkout's retained listing, not its forge namesake's."""
+        checkout = Checkout(repository.checkout).resolved().path
+        if checkout not in self._worktrees:
+            self._worktrees[checkout] = WorkBranches(checkout).worktrees()
+        return self._worktrees[checkout]
 
     def working_on(self, goals: Goals, repo: RepositoryName,
                    row: ListedPullRequest) -> tuple[ThreadIncarnation, ...]:
         """The registered threads with the request's branch checked out: who is working on it
-        when no order says so. One worktree read per repository in this frame."""
+        when no order says so. One worktree read per local checkout in this frame."""
         snapshot = goals.registry.snapshot()
         repository = Repo.selected(snapshot.commander_project.require().repos, repo.to_wire())
         reader = WorkBranches(repository.checkout)
