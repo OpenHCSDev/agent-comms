@@ -320,8 +320,8 @@ class RootFile:
     @classmethod
     def referenced_files(cls, files: FilesRequest, paths: Collection[Path]
                          ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
-        """Absolute paths and retained names together, resolved in one inventory pass:
-        each pass scans the whole root, so resolving per path scales with the bus."""
+        """Resolve the collection together: each inventory pass scans the whole root,
+        so resolving separately for each path multiplies that work."""
         names = tuple(path for path in paths if not path.is_absolute())
         return cls.owned_files(files, (
             *(path for path in paths if path.is_absolute()), *cls.named_paths(files, names)))
@@ -333,6 +333,8 @@ class RootFile:
 
     @classmethod
     def named_paths(cls, files: FilesRequest, names: Collection[Path]) -> tuple[Path, ...]:
+        if not names:
+            return ()
         root = files.root
         declarations = cls.installation_declarations(files)
         known = {files.retained_name(owner, path): path for path, owner in declarations.items()}
@@ -353,6 +355,8 @@ class RootFile:
         undeclared existing file acquires content behavior without inventing a
         store declaration for it.
         """
+        if not paths:
+            return ()
         root = files.root
         declarations = cls.installation_declarations(files)
         primaries = cls.primaries_in(root)
