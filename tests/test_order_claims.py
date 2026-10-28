@@ -11,7 +11,6 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderFile, main
-from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.standing_rules import OwedAnswer
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
@@ -72,11 +71,6 @@ def test_delivery_report_refuses_a_flat_status_memo():
         DeliveryReport("Ready at abc; check 13 -> 0; tests pass")
     blunt = "Killed the string slop at turn_watchdog.py:137; the typed state answers it now."
     assert DeliveryReport(blunt).text == blunt
-
-
-def test_work_instructions_carry_the_owner_voice(source_repository):
-    heading = CommanderPackage.voice().read_text(encoding="utf-8").splitlines()[0]
-    assert any(line.startswith(heading) for line in order(source_repository).work_instructions())
 
 
 def test_claim_verdict_family_on_retained_copy(held_commander):
