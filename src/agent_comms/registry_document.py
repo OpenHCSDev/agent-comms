@@ -263,6 +263,18 @@ class SnapshotValue[Value](ThreadSlice[Value]):
         return policy
 
 
+class SnapshotRestored:
+    """Restoration copies each declared init field by its snapshot policy and re-enters the
+    constructor, so derived views are rebuilt rather than pickled."""
+    __slots__ = ()
+
+    def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
+        return type(self), tuple(
+            SnapshotValue.of(plan).copy(getattr(self, plan.name))
+            for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
+        )
+
+
 class OwnRow[Rows](SnapshotValue[Rows]):
     """The row under the thread's own name."""
 
@@ -1042,7 +1054,7 @@ class RegistryEntry:
 
 @SnapshotValue.required
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
+class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
     threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
     statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(MappingRowsSlice)]
@@ -1068,13 +1080,6 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     def by_lookup(self) -> Mapping[str, Thread]:
         return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
                                  for thread in self.threads.values()})
-
-    def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
-        """Worker restoration preserves scalar policy and re-enters the constructor."""
-        return type(self), tuple(
-            SnapshotValue.of(plan).copy(getattr(self, plan.name))
-            for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
-        )
 
     def owner_generation(self, name: str) -> int:
         return self.owner_generations[self.canonical_name(name)]
