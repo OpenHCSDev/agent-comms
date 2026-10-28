@@ -441,7 +441,7 @@ class HistoryViews:
         thread.execution.prepare_conversation(ThreadViewRead(
             self, thread, self.registry.require(viewer), checkpoint,
         ))
-        self.bus.mark_delivered_through(
+        self.bus.mark_read_through(
             viewer, self.latest_sequence(), target=ThreadTarget(thread.name),
         )
 

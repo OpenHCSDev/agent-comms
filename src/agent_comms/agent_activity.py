@@ -11,13 +11,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
-from .notification_progress import InboxReadProgress
+from .notification_progress import TakenProgress, WorkingTakenProgress
 
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
     from .bus_publication import Delivered
-    from .notification_progress import AssignmentProgress
+    from .notification_progress import AssignmentProgress, DeliveryProgress
     from .presentation import MessageNotification
     from .registration import Registration
     from .registry_document import RegistrySnapshot
@@ -53,9 +53,6 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return False
 
-    def after_inbox_read(self, notification, source, reads, document, snapshot):
-        return notification
-
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.displayed_recipient(
             source, notification.recipient_identity, snapshot, document=document
@@ -71,6 +68,12 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
             notification, busy=self.turn_started_by(updated_at_ms)
         )
 
+    def taken_response(
+        self, notification: MessageNotification, progress: DeliveryProgress,
+    ) -> MessageNotification:
+        """A message a running turn took, shown without a claim about current work."""
+        return replace(notification, state=TakenProgress(progress))
+
 
 @dataclass(frozen=True)
 class RecordedRecipientActivity(RecipientActivity):
@@ -80,23 +83,6 @@ class RecordedRecipientActivity(RecipientActivity):
         return reads.historical_displayed_recipient(
             source.message, notification.recipient_identity, snapshot, document=document
         )
-
-
-@dataclass(frozen=True)
-class ExternalRecipientActivity(RecipientActivity):
-    incarnation: ThreadIncarnation
-
-    def after_inbox_read(self, notification, source, reads, document, snapshot):
-        if self.incarnation.current(snapshot) and reads.displayed_incarnation(
-            source.message, self.incarnation, snapshot, document=document
-        ):
-            return replace(
-                notification,
-                state=InboxReadProgress(),
-
-                changed=True,
-            )
-        return notification
 
 
 @dataclass(frozen=True)
@@ -111,6 +97,12 @@ class LiveRecipientActivity(RecipientActivity):
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
+
+    def taken_response(
+        self, notification: MessageNotification, progress: DeliveryProgress,
+    ) -> MessageNotification:
+        state = (WorkingTakenProgress if self.activity.state.busy else TakenProgress)(progress)
+        return replace(notification, state=state)
 
 class AgentActivity:
     def __init__(self, root: Path, registry: Registration):

@@ -20,8 +20,6 @@ def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired
         assert {row.thread.name: row.pending.value for row in wired.views.list_threads()} == expected
 
     consistent()
-    references = tuple(message.reference for message in wired.bus.inbox(
-        "broadcast", CommandTarget.named("PR111"),
-    ).page.messages)
-    wired.messaging.acknowledge("broadcast", references)
+    shown = wired.bus.inbox("broadcast", CommandTarget.named("PR111")).page.messages
+    wired.bus.mark_read_through("broadcast", shown[-1].seq, target=CommandTarget.named("PR111"))
     consistent()

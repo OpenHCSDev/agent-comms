@@ -1,7 +1,7 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
 
-from agent_comms.presentation import AllOutcomes
+from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
@@ -18,14 +18,22 @@ from agent_comms.assignment_states import (
     CompletedAssignment,
     DeliveredAssignment,
     EngagedAssignment,
+    IgnoredAssignment,
 )
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import wire
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
+from agent_comms.coordinator import Coordination
+from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
 from agent_comms.field_codec import InputId, MessageId, TurnId
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.wake_policy import FullWake
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
@@ -62,6 +70,9 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     unpainted, = results.outcomes[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
     assert unpainted.displayed_to == ()
+    # A human display is Read and nothing else: no context entry rides along with it.
+    assert painted.state == unpainted.state and not painted.state.consumed
+    assert MessageNotification.summary((painted,)).endswith("Consumed 0/1 · Read 1/1")
     assert live.bus.reads.cursor("reader", live.registry.snapshot()) == ReadCursor()
     ledger = ReadLedger.at(source.root)
     document = ledger.read()
@@ -75,6 +86,61 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     })
     assert ledger.historical_displayed_recipient(messages[1], painted.recipient_identity,
                                                 newer_namespace, document=document) == ()
+
+
+def test_harness_consumption_survives_human_display(archived_notification):
+    """The human viewing an agent's conversation writes its own read, never the agent's receipt."""
+    _old, live, _source, _messages, _root_id = archived_notification
+    human = live.registry.require("reader")
+    assert human.role is UserThreadRole
+    # A Claude harness receives through a CLI bridge, so this case's agent is an external thread;
+    # the UI then reads its dialogue through ThreadViewRead.external, not a native transcript.
+    native = live.registry.require("agent")
+    live.registry.register(replace(native, execution=ExternalThreadExecution))
+    agent = live.registry.require("agent")
+    assert agent.execution is ExternalThreadExecution and agent.role is AgentThreadRole
+    assert agent.incarnation == native.incarnation
+    # The human's own message to the agent is what the UI's human/agent dialogue page shows.
+    shown = live.messaging.send_user_message(
+        CommandTarget.named("agent"), "consumed, then displayed to the human", worktree=human.worktree)
+    recipient, = live.bus.bus.delivery(shown.seq).recipients
+    assert recipient.canonical_thread == "agent"
+    with Coordination(str(CoordinationStore.path_in(live.root))) as store, \
+            store.session.writing() as db:
+        attempt = HarnessDelivery(ClaudeBridge, recipient.recipient_lookup, shown.message_id, shown.seq,
+                                  DeliveredOutcome)
+        assert attempt.begin(store.assignments, db)
+        attempt.record(store.assignments, db)
+
+    def notification():
+        current, = live.views.message_notifications_for_references(
+            AllOutcomes(), (shown.reference,)).outcomes[shown.seq, shown.message_id]
+        return current
+
+    def human_display():
+        return live.bus.reads.displayed_incarnation(
+            shown, human.incarnation, live.registry.snapshot(), document=None)
+
+    consumed = notification()
+    assert consumed.label == "Consumed" and consumed.state.consumed and not consumed.displayed_to
+    ledger = live.bus.reads.read()
+    assert human_display() == ()
+    # The UI's "mark read" on the agent's thread, as the registered human viewer.
+    live.views.mark_user_view_read("agent", worktree=human.worktree)
+    assert live.bus.reads.read() != ledger
+    assert human_display() == (human.incarnation,)
+    displayed = notification()
+    assert displayed.state == consumed.state and not displayed.displayed_to
+    assert MessageNotification.summary((displayed,)).endswith("Consumed 1/1 · Read 0/1")
+
+
+def test_native_context_commit_is_consumed():
+    from agent_comms.notification_assignment import AssignmentContextEvidence
+
+    progress = AssignmentContextEvidence.from_columns(2_000).progress(pending_at_ms=1_000, queued=False)
+    unshown = AssignmentContextEvidence.from_columns(None).progress(pending_at_ms=1_000, queued=False)
+    assert progress.consumed and progress.at_ms == 2_000
+    assert not unshown.consumed
 
 
 def test_response_evidence_rejects_mixed_sql_columns():
@@ -142,7 +208,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert recorded.label.startswith("Read ") and not recorded.state.working
+    assert recorded.label.startswith("Consumed ") and not recorded.state.working
     assert recorded.state.detail == ""
     live = assignment.notification(
         recipient,
@@ -151,11 +217,11 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert live.label.startswith("Read ") and not live.state.working
+    assert live.label.startswith("Consumed ") and not live.state.working
     assert live.state.detail == ""
 
 
-def test_sent_recipient_progresses_through_durable_read_and_answer(archived_notification):
+def test_sent_recipient_progresses_through_durable_consumption_and_answer(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.bus.delivery(messages[0].seq).recipients
     from agent_comms.message_reference import MessageReference
@@ -164,7 +230,12 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         AssignmentActivity,
         UnansweredResponse,
     )
-    from agent_comms.notification_progress import QueuedProgress, SentProgress, ShownToModelProgress, SelectedReadProgress
+    from agent_comms.activity import ActivityState, ObservedActivity, ReadyDrainReadiness
+    from agent_comms.agent_activity import LiveRecipientActivity
+    from agent_comms.notification_progress import (
+        IgnoredProgress, QueuedProgress, SelectedConsumedProgress, SentProgress, ShownToModelProgress,
+        TakenProgress, WorkingTakenProgress,
+    )
 
     sent_activity = AssignmentActivity(
         triage_inflight=False,
@@ -187,17 +258,17 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         activity=queued_activity,
         updated_at_ms=1_000,
     )
-    read_activity = replace(sent_activity, progress=ShownToModelProgress(2_000))
-    read = engagement.notification(
+    consumed_activity = replace(sent_activity, progress=ShownToModelProgress(2_000))
+    consumed = engagement.notification(
         recipient,
         SENDER,
         observation=RecordedRecipientActivity(),
-        activity=read_activity,
+        activity=consumed_activity,
         updated_at_ms=1_000,
     )
     reply_id = MessageId.mint("durable-reply")
     answered_activity = replace(
-        read_activity,
+        consumed_activity,
         response=AnsweredResponse(MessageReference(99, reply_id), 3_000),
     )
     answered = CompletedAssignment.build(
@@ -230,12 +301,45 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
 
     assert sent.label.startswith("Sent ") and sent.state == SentProgress(1_000)
     assert queued.label.startswith("Queued ") and queued.state == QueuedProgress(1_000)
-    assert read.label.startswith("Read ") and read.state == SelectedReadProgress(2_000)
+    assert consumed.label.startswith("Consumed ") and consumed.state == SelectedConsumedProgress(2_000)
     assert answered.label.startswith("Answered ") and answered.answered_at_ms == 3_000
-    assert delivered.label.startswith("Read ") and delivered.state == ShownToModelProgress(2_000)
+    # A delivered claim carries no consumed time of its own: without native or harness proof
+    # its message is not consumed, whatever the claim's update time says. A running turn took
+    # it; that is not a decision to ignore it.
+    assert delivered.state == TakenProgress(SentProgress(1_000)) and not delivered.state.consumed
+    assert delivered.label.startswith("Sent ")
+
+    # Only the captured live activity says whether the recipient is working now.
+    thread = old.registry.snapshot().threads[recipient.canonical_thread]
+    def observed(state):
+        return LiveRecipientActivity(thread, ObservedActivity(thread.name, state, readiness=ReadyDrainReadiness()))
+    def delivered_to(observation, activity):
+        return DeliveredAssignment.build(FullWake(), None, None).notification(
+            recipient, SENDER, observation=observation, activity=activity, updated_at_ms=2_000)
+    working = delivered_to(observed(ActivityState.WORKING), consumed_activity)
+    assert working.state == WorkingTakenProgress(ShownToModelProgress(2_000))
+    assert working.label.startswith("Seen, working ") and working.state.seen_working
+    idle = delivered_to(observed(ActivityState.IDLE), consumed_activity)
+    assert idle.label.startswith("Consumed ") and not idle.state.seen_working
+    unconsumed = delivered_to(observed(ActivityState.WORKING), sent_activity)
+    assert unconsumed.label.startswith("Sent ") and not unconsumed.state.seen_working
+    confirmed = replace(unconsumed, state=unconsumed.state.harness_consumed())
+    assert confirmed.label == "Seen, working" and confirmed.state.seen_working
+    # An explicit ignore decision is the only Seen, not answering.
+    ignored = IgnoredAssignment.build(FullWake(), None, None)
+    declined = ignored.notification(recipient, SENDER, observation=RecordedRecipientActivity(),
+                                    activity=consumed_activity, updated_at_ms=2_000)
+    assert declined.label.startswith("Seen, not answering ") and declined.state.seen_not_answering
+    unconfirmed = ignored.notification(recipient, SENDER, observation=RecordedRecipientActivity(),
+                                       activity=sent_activity, updated_at_ms=2_000)
+    assert unconfirmed.label == "Not answering" and not unconfirmed.state.seen_not_answering
+    assert unconfirmed.state == IgnoredProgress(SentProgress(1_000))
+    assert MessageNotification.summary((working, declined, unconfirmed, idle)) == (
+        "Seen, working 1 · Seen, not answering 1 · Delivered 4/4 · Consumed 3/4 · Read 0/4")
+    assert MessageNotification.summary((unconfirmed,)) == "Not answering · Delivered 1/1 · Consumed 0/1 · Read 0/1"
     assert delivered_answer.label.startswith("Answered ")
     assert delivered_answer.answer == MessageReference(99, reply_id)
-    assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
+    assert sent.recipient_identity == consumed.recipient_identity == answered.recipient_identity
 
 
 def test_delivered_assignment_uses_its_recorded_conversation_response(archived_notification):
@@ -264,7 +368,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         (original.reference,)
     ).outcomes[original.seq, original.message_id]
     assert unrelated.answers == ()
-    assert notification.label.startswith("Read ")
+    assert not notification.state.consumed
     assert notification.answer is None
 
     import os
@@ -368,13 +472,19 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     old, live, source, messages, _root_id = archived_notification
     old.registry.declare(replace(old.registry.require("agent"), execution=ExternalThreadExecution))
     unread = old.bus.inbox("agent").page.messages
-    assert old.bus.mark_delivered(
-        "agent", tuple(message.reference for message in unread)
-    ) == 1
+    lookup = old.registry.snapshot().threads["agent"].incarnation.require_recorded().lookup
+    # The bridge's own path: the attempt and the claim step it proves commit together.
+    with Coordination(str(CoordinationStore.path_in(old.root))) as store, \
+            store.session.writing() as db:
+        for message in unread:
+            attempt = HarnessDelivery(ClaudeBridge, lookup, message.message_id, message.seq,
+                                      DeliveredOutcome)
+            assert attempt.begin(store.assignments, db)
+            attempt.record(store.assignments, db)
     current, = old.views.message_notifications_for_references(AllOutcomes(), (messages[0].reference,)).outcomes[
         messages[0].seq, messages[0].message_id
     ]
-    assert current.label == "Read" and not current.displayed_to
+    assert current.label == "Consumed" and current.state.consumed and not current.displayed_to
     with live.bus.history.read_sources() as sources:
         archived, = source.notification_references(sources, (messages[0].reference,), AllOutcomes()).outcomes[
             messages[0].seq, messages[0].message_id

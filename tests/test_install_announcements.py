@@ -45,7 +45,7 @@ RESTARTED = RestartedService("Connector on port 1 for /bus", Path("/runtime/bin/
 ))
 def test_install_mode_decodes_the_launchers_single_boolean_wire_form(flags, mode, serialized):
     arguments = build_parser().parse_args(("install", *flags))
-    command = CliCommand.member_named(arguments.command).from_arguments(arguments)
+    command = arguments.command_declaration.from_arguments(arguments)
     assert type(command.mode) is mode
     encoded = FieldCodec.encode(command)
     assert encoded["rehearse"] is serialized and "mode" not in encoded
@@ -63,6 +63,7 @@ def test_failed_rehearsal_does_not_publish_to_the_source_bus(private_comms, tmp_
         upgrade(
             source.checkout, private_comms.root, target, UnnamedInstaller(), RehearsalMode(), False,
             tmp_path / "spill", tmp_path / "scratch",
+            LaunchRuntime.running(),
             lambda stack: pytest.fail("A refused rehearsal cannot install harnesses"),
             InstallReport(),
         )

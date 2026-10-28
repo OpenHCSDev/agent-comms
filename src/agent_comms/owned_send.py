@@ -14,6 +14,7 @@ from agent_comms.ordinary_turn_rules import (
     MissingTurnOwnerCheck,
     OrdinaryContextCheck,
     OrdinaryOwnerCheck,
+    RunningOrdinaryOwnerCheck,
 )
 from agent_comms.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
 
@@ -52,7 +53,6 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
     inputs: InputDrain
     goal_store: GoalAttemptStore
     session_id: str
-    thread: Thread
     turn: TurnId
     claim_generation: int
     original_source: OriginalTurnInput
@@ -78,8 +78,10 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
         canonical: str,
         source: TurnInputSource,
         text: str,
+        *,
+        check_type: type[OrdinaryOwnerCheck] = OrdinaryOwnerCheck,
     ) -> None:
-        OrdinaryOwnerCheck(
+        check_type(
             expected=self.thread,
             current=current,
             registry=snapshot,
@@ -130,6 +132,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
             current = self.require_owner(snapshot, canonical)
             self._check_owner(
                 current, snapshot, canonical, self.original_source, turn.command.message,
+                check_type=RunningOrdinaryOwnerCheck,
             )
             self._require_context(
                 self.original_source, current, self.comms.goals.goal_wait(canonical),
@@ -142,7 +145,7 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
             snapshot = boundary.registry
             self.verify(store, turn, snapshot)
             owner = snapshot.require(self.owner_name)
-            canonical = resource.normalized(owner.worktree.path)
+            canonical = resource.normalized(self.thread.worktree.path)
             scope = NativeClaim(owner_claimed_generation=self.claim_generation,
                                 operation_id=slot, turn_id=self.turn,
                                 input_id=turn.command.input_id)

@@ -22,10 +22,9 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar, Self
 from pydantic import TypeAdapter
 
 from agent_comms.agent_runtime import ReadsHistory
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import SubclassUnion
 from agent_comms.harness_install import (
-    ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness, PiHarness,
+    ClaudeCodeHarness, CodexHarness, Harness, HarnessSession, OpenCodeHarness, PiHarness,
 )
 from agent_comms.importing import ImportLimits, ImportSnapshot, ImportedConversation
 
@@ -35,12 +34,6 @@ from agent_comms.thread_text import AbsentText, GivenText, TextChoice, ThreadTex
 if TYPE_CHECKING:
     from .opencode_parts import SavedMessage
     from .opencode_protocol import Session
-
-
-class HarnessSession(DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
-    """A harness session's declared readers and bridges, selected by their capabilities."""
-
-    harness: ClassVar[type[Harness]]
 
 
 class History(ReadsHistory, HarnessSession, declared_name=None):

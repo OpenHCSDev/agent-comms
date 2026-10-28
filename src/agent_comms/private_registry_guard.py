@@ -157,6 +157,10 @@ class RegistryPrivacy(ABC):
         """Context evidence for every row in the captured assignment window ``w``."""
 
     @abstractmethod
+    def context_entered_sql(self, assignment: str) -> str:
+        """Whether a native input committed ``assignment``'s message to its session context."""
+
+    @abstractmethod
     def missing_notification_assignments(
         self, sources: Sequence[Delivered],
     ) -> NotificationAssignmentRead: ...
@@ -192,6 +196,10 @@ class PublicRegistry(RegistryPrivacy):
             "SELECT assignment_id,0 AS triage_inflight,"
             "NULL AS context_committed_at_ms FROM w"
         )
+
+    def context_entered_sql(self, assignment: str) -> str:
+        """A public root has no native inputs, so no native context entry."""
+        return "0"
 
     def missing_notification_assignments(
         self, sources: Sequence[Delivered],
@@ -269,6 +277,10 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
         NativeRuntimeTable.require_installed(connection)
         return NativeRuntimeInput.notification_context_sql()
+
+    def context_entered_sql(self, assignment: str) -> str:
+        members = f"({NativeRuntimeInput.source_membership_sql()})"
+        return f"EXISTS (SELECT 1 {NativeRuntimeInput.context_entered_from(members, assignment)})"
 
     def missing_notification_assignments(
         self, sources: Sequence[Delivered],

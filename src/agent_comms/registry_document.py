@@ -128,6 +128,23 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     def seen_at(self, name: str) -> float:
         return self.last_seen[self.require(name).name]
 
+    @abstractmethod
+    def owner_generation(self, name: str) -> int: ...
+
+    @abstractmethod
+    def claim_generation(self, name: str) -> int: ...
+
+    def entry(self, name: str) -> RegistryEntry:
+        thread = self.require(name)
+        return RegistryEntry(
+            thread=thread,
+            status=self.status(thread.name),
+            last_seen=self.last_seen[thread.name],
+            owner_generation=self.owner_generation(thread.name),
+            claimed_generation=self.claim_generation(thread.name),
+            names=self.names_for(thread.name),
+        )
+
     def visible_threads(
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
@@ -669,16 +686,11 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             thread.turn_record.without_claim()
         return self.claims.advance(name)
 
-    def entry(self, name: str) -> RegistryEntry:
-        thread = self.require(name)
-        return RegistryEntry(
-            thread=thread,
-            status=self.status(thread.name),
-            last_seen=self.last_seen[thread.name],
-            owner_generation=self.owners.generations[thread.name],
-            claimed_generation=self.claims.generations[thread.name],
-            names=self.names_for(thread.name),
-        )
+    def owner_generation(self, name: str) -> int:
+        return self.owners.generations[self.canonical_name(name)]
+
+    def claim_generation(self, name: str) -> int:
+        return self.claims.generations[self.canonical_name(name)]
 
     def entry_if_present(self, name: str) -> RegistryEntry | None:
         return self.entry(name) if self.canonical_name(name) in self.threads else None
@@ -1068,6 +1080,9 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     def by_lookup(self) -> Mapping[str, Thread]:
         return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
                                  for thread in self.threads.values()})
+
+    def owner_generation(self, name: str) -> int:
+        return self.owner_generations[self.canonical_name(name)]
 
     def claim_generation(self, name: str) -> int:
         """The allocated input generation follows this registry's alias lineage."""

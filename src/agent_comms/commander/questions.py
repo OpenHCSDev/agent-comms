@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.bus import BusReader
 from agent_comms.message_page import MessageReadRequest
-from agent_comms.messages import Message, MessageKind, NeedsAnswerKind
+from agent_comms.messages import Message, MessageInput, MessageKind, NeedsAnswerKind
 from agent_comms.read_basis import RepliesDisplayScope
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ class SenderMessages(MessageReadRequest[tuple[Message, ...]]):
     def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
         requesters = tuple(self.scope.second_names - self.scope.first_names)
         marks = ",".join("?" for _ in requesters)
-        predicate = f"sender IN ({marks}) AND " + Message.table._sql(
+        predicate = f"sender IN ({marks}) AND " + MessageInput.table._sql(
             "{timestamp} >= ? AND {timestamp} <= ?")
         return source.scoped_page(
             predicate, (*requesters, lower, self.before), upper=upper, descending=True,

@@ -1,5 +1,7 @@
 """Claude's decoder publishes the shared native tool preview, not a UI special case."""
 import pytest
+
+from transcript_record_fixture import transcript_record
 from agent_comms.cli_bridges.claude_protocol import ClaudeSession, KnownTurn, Live, TimedRecord, ToolResult, ToolUse
 from agent_comms.tool_calls import ToolCall
 from agent_comms.field_codec import FieldCodec
@@ -22,7 +24,7 @@ from agent_comms.tool_results import NoToolDiff
 ])
 def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, arguments, native, expected, title, patch):
     session=ClaudeSession(turn=KnownTurn('turn'), phase=Live())
-    record=TimedRecord(position=0,uuid='record',timestamp='2026-10-17T00:00:00+00:00')
+    record=TimedRecord(position=0,uuid=transcript_record('record'),timestamp='2026-10-17T00:00:00+00:00')
     tool=ToolUse(id='call',name=name,input=arguments)
     active,=tool.updates(record,session)
     draft=session.tools['call']

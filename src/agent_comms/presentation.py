@@ -58,7 +58,9 @@ from .message_page import (
 )
 from .message_reference import MessageReference
 from .messages import Message
-from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
+from .notification_progress import (
+    ConsumedDelivery, ConsumingProgress, DeliveryProgress, HumanReadProgress, WorkingTakenProgress,
+)
 from .private_path import FileRevision
 from .read_basis import (
     AnonymousViewer,
@@ -213,11 +215,21 @@ class MessageNotification:
         ordered = cls.ordered(notifications)
         if not ordered:
             return "No recorded notification result"
-        delivered = sum(notification.state.delivered for notification in ordered)
-        read = sum(notification.state.read for notification in ordered)
+        # Each notification exists because the frozen publication addressed its recipient.
         total = len(ordered)
-        return (f"{ordered[0].label} · Delivered {delivered}/{total}"
-                f" · {ReadDelivery.label} {read}/{total}")
+        consumed = sum(notification.state.consumed for notification in ordered)
+        read = sum(bool(notification.displayed_to) for notification in ordered)
+        counted = ((ConsumingProgress.label, sum(item.state.answering for item in ordered)),
+                   (WorkingTakenProgress.label, sum(item.state.seen_working for item in ordered)),
+                   (ConsumedDelivery.ignored_label, sum(item.state.seen_not_answering for item in ordered)))
+        leading = ordered[0]
+        return " · ".join((
+            *leading.state.summary_prefix(leading),
+            *(f"{label} {count}" for label, count in counted if count),
+            f"Delivered {total}/{total}",
+            f"{ConsumedDelivery.label} {consumed}/{total}",
+            f"{HumanReadProgress.label} {read}/{total}",
+        ))
 
     @staticmethod
     def timed_state(label: str, timestamp_ms: int | None) -> str:
@@ -308,19 +320,22 @@ class MessageNotification:
         if not keys:
             return CapturedNotificationWindow({}, (assignment_read,))
         rows = NotificationAssignment.resolve(root, assignment_read)
+        evidence = assignment_read.evidence
         read_marks = []
         reads = ReadLedger.at(root)
         document = reads.read()
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
-                if not viewer.includes(source.sender_lookup, outcome.recipient):
+                recipient = outcome.recipient()
+                if not viewer.includes(source.sender_lookup, recipient):
                     continue
-                observation = observations[outcome.recipient.recipient_lookup]
-                notification = observation.after_inbox_read(
-                    outcome.project(observation, source.sender_lookup),
-                    source, reads, document, snapshot
-                )
+                observation = observations[recipient.recipient_lookup]
+                notification = outcome.project(observation, source.sender_lookup)
+                state = evidence[source.message.reference].consumed_progress(
+                    recipient.recipient_lookup, notification.state)
+                notification = replace(notification, state=state,
+                                       changed=notification.changed or state.consumed)
                 displayed_to = observation.displayed_recipient(
                     notification, source, reads, document, snapshot
                 )

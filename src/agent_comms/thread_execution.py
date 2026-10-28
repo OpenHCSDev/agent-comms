@@ -184,12 +184,6 @@ class ExternalThreadExecution(ThreadExecution):
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         return status.external_presentation(thread.process_identity, ordinary)
 
-    @classmethod
-    def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):
-        from .agent_activity import ExternalRecipientActivity
-
-        return ExternalRecipientActivity(thread.incarnation)
-
 
 class CommanderForkExecution(ExternalThreadExecution):
     """A commander child uses its CLI inbox, not a native process or bridge."""

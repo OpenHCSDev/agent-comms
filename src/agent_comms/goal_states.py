@@ -158,10 +158,14 @@ class PausedGoal(OpenGoal, FromOpenGoal):
             raise ValueError(self.source.instruction())
 
 
-class BlockedState(GoalState, FromOpenGoal):
+class BlockedState(GoalState, FromOpenGoal, declared_name=None):
     @property
     def reason(self) -> str:
-        return "no reason recorded"
+        return "reason unavailable"
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import RetryableBlockExecution
+        return RetryableBlockExecution(source.goal.id, self.reason)
 
     def blocked_reasons(self) -> tuple[str, ...]:
         return (self.reason,)
@@ -184,10 +188,6 @@ class BlockedState(GoalState, FromOpenGoal):
 class BlockedGoal(BlockedState):
     block_reason: str
 
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import DecidedBlockExecution
-        return DecidedBlockExecution(source.goal.id, self.block_reason)
-
     def __post_init__(self) -> None:
         reason = self.block_reason
         if (type(reason) is not str or not reason.strip() or reason != reason.strip()
@@ -201,9 +201,7 @@ class BlockedGoal(BlockedState):
 
 @dataclass(frozen=True)
 class UnrecordedBlockGoal(BlockedState):
-    def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import UnrecordedBlockExecution
-        return UnrecordedBlockExecution(source.goal.id)
+    """A carried block whose reason was never recorded; its state says so, nothing invents one."""
 
 
 @dataclass(frozen=True)

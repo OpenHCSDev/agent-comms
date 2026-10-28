@@ -361,6 +361,17 @@ class BusCapability(TypedRow, ProjectionSource):
         return tuple(base.table for base in cls.__mro__
                      if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
 
+    @classmethod
+    def render(cls, expression: str) -> str:
+        """Render {field} selectors through every capability table this declaration inherits,
+        so a field moved between capabilities never edits the statements that select it. A
+        selector no table declares is refused, never sent to SQLite as text."""
+        for table in cls.tables():
+            expression = table._sql(expression)
+        if unresolved := re.findall(r"\{(\w+)\}", expression):
+            raise ValueError(f"{cls.__name__} declares no field {sorted(set(unresolved))}")
+        return expression
+
     def rows(self) -> tuple[CapabilityRow, ...]:
         """Project declared Python fields without flattening their wire representations."""
         return tuple(
@@ -619,7 +630,7 @@ class MessageRole(InlineRecord, RoleActivitySource):
     category: ClassVar[type[MessageCategory]]
 
     @abstractmethod
-    def response_policy(self, message: Message) -> ResponsePolicy: ...
+    def response_policy(self, message: MessageInput) -> ResponsePolicy: ...
 
     @abstractmethod
     def as_historical(self) -> MessageRole: ...
@@ -657,7 +668,7 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
 
 class InformationalMessage(RoleActivitySource):
 
-    def response_policy(self, message):
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
         return InformationalPolicy.instance()
 
     def counts_as_conversation(self):
@@ -701,7 +712,7 @@ class ConversationRole(ConversationActivity, SendableRole):
     def as_historical(self):
         return HistoricalConversationRole()
 
-    def response_policy(self, message):
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
         return (CommandTarget.named(message.target).response_policy(message)
                 if message.type.conversation_message else InformationalPolicy.instance())
 
@@ -765,7 +776,7 @@ class HistoricalRole:
     def notification_references(self, message):
         return ()
 
-    def response_policy(self, message):
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
         return InformationalPolicy.instance()
 
     def as_historical(self):
@@ -798,11 +809,11 @@ class PublicSender(NullMember):
 
 
 @dataclass(frozen=True, slots=True)
-class Message(Addressed, BusCapability, TurnOrigin):
-    """Declares one inter-thread message.
+class MessageInput(Addressed, BusCapability):
+    """The facts an input is keyed and written from: who, where, what text, which role.
 
-    The bus assigns ``seq`` (a monotonically increasing log position) at send
-    time; the hash-derived ``message_id`` is identity only and is not ordered.
+    Attachments, reports and answers belong to Message; this is never a whole message
+    and carries no content identity.
     """
 
     body: Annotated[str, WireName("text"), WireOrder(6)]
@@ -825,6 +836,16 @@ class Message(Addressed, BusCapability, TurnOrigin):
         WireOrder(10),
         PublicationExclude(),
     ] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Message(MessageInput, TurnOrigin):
+    """Declares one inter-thread message.
+
+    The bus assigns ``seq`` (a monotonically increasing log position) at send
+    time; the hash-derived ``message_id`` is identity only and is not ordered.
+    """
+
     task: Annotated[
         TaskAttachment, WireOmitDefault(), WireOrder(12)
     ] = field(default_factory=NoTaskAttachment)
@@ -839,14 +860,7 @@ class Message(Addressed, BusCapability, TurnOrigin):
         """Validate public references once, before appending their sequence-only projection."""
         from .bus_tables import MessageIdentitySource
 
-        for original in self.answers:
-            if not MessageIdentitySource.exists(
-                db, seq=original.seq, message_id=original.message_id,
-            ):
-                raise RelationViolationError(
-                    f"Answer reference {original.seq}:{original.message_id} does not match "
-                    "a recorded message identity"
-                )
+        MessageIdentitySource.require_references(db, self.answers)
 
     @classmethod
     def from_message(cls, message: Message, **capabilities: object) -> Self:

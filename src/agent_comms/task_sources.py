@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from .bus import BusReader
     from .cli_bridges.shared import CliBridge
-    from .cli_protocol import Outcome
+    from .harness_delivery_states import Outcome
     from .task_attachments.commander_pings import CommanderUpdate
     from .goal_management import Goals
     from .input_attempt import StoredInput

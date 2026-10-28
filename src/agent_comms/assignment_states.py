@@ -14,11 +14,11 @@ from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, T
 from .notification_progress import (
     CompletedProgress,
     ContextualProgress,
-    EngagedProgress,
     FailedProgress,
     IgnoredProgress,
     InterruptedProgress,
     PassiveProgress,
+    PendingProgress,
     UnrecordedProgress,
 )
 from .source_proof_requirement import ProvedByInput, SettledWithoutInput, SourceSettlement, Unproved
@@ -250,6 +250,8 @@ class EngageableAssignment:
 class PendingNotification(EngageableAssignment, Pending):
     """Pending relevance/full execution membership, not another display state."""
 
+    notification_state: ClassVar[type[ContextualProgress]] = PendingProgress
+
     def harness_handoff(self) -> tuple[type[AssignmentState], ...]:
         # Unbound DEFERRED is UNKNOWN input: never selected, so never replayed natively.
         return (DeferredAssignment,)
@@ -426,7 +428,6 @@ class BoundAssignment(ChangedNotification, AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
-    notification_state = EngagedProgress
     def wake_frame(self, source: Delivered, obligation: ResponseObligation | None) -> tuple[str, str]:
         if obligation is None:
             raise IdentityConflict("full wake frame requires the current response obligation")
@@ -551,9 +552,7 @@ class DeliveredAssignment(
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
-        return activity.delivered_notification(notification, updated_at_ms)
-
-    notification_state = IgnoredProgress
+        return activity.answered(observation.taken_response(notification, activity.progress))
 
     @classmethod
     def binding_expression(cls) -> str:

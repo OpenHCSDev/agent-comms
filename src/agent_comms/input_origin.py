@@ -12,6 +12,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import RootId
 from .goals import GoalCheckpoint
+from .harness_install import HarnessSession
 from .input_key import InputKey, InputKeyText
 from .message_reference import MessageReference
 from .repo import Checkout
@@ -110,6 +111,18 @@ class WireInputOrigin(InputOrigin):
 
     def require_ingress(self, comms, snapshot, claim_scope, controller):
         raise RelationViolationError("Wire input provenance belongs to its original routed producer")
+
+
+@dataclass(frozen=True)
+class HarnessAttemptOrigin(InputOrigin):
+    """A harness bridge attempted this message and never confirmed it entered context.
+
+    It was never a native ingress, so it inherits UndeliveredInput: native recovery,
+    which replays only unbound wire deliveries, can never take it.
+    """
+
+    bridge: type[HarnessSession]
+    reference: MessageReference
 
 
 @dataclass(frozen=True)

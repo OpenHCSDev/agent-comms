@@ -8,7 +8,6 @@ import pytest
 
 from agent_comms.locked_store import RegistryFile
 from agent_comms.comms import wire
-from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.registration import Registration
 from bus_record_fixture import append_reply
 from agent_comms.threads import Thread
@@ -31,8 +30,7 @@ async def test_real_message_bus_watch_recipient_suffix_and_rollback(bus):
     tasks = []
     async with AsyncExitStack() as resources:
         streams = {
-            name: await resources.enter_async_context(aclosing(messages.watch(
-                name, acknowledgment=ExplicitWatchAcknowledgment)))
+            name: await resources.enter_async_context(aclosing(messages.watch(name)))
             for name in ("target", "idle")
         }
         try:

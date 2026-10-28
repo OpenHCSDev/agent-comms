@@ -8,7 +8,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.turn_goal_permission import GoalPermission, TurnGoalPermission
+from agent_comms.turn_goal_permission import TurnGoalPermission
 
 from . import input_attempt
 from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
@@ -21,6 +21,8 @@ from .messages import Message
 from .ordinary_turn_rules import (
     AcceptedInputCheck,
     MissingAcceptedInputCheck,
+    OrdinaryOwnerCheck,
+    RunningOrdinaryOwnerCheck,
     UnboundOrdinaryInputRule,
     UnconsumedDependencyRule,
 )
@@ -131,6 +133,7 @@ class TurnInputSource(StartedInput, ABC):
     acceptance: TurnAcceptance
     goal_permission: TurnGoalPermission
     bypasses_goal_permit: ClassVar[bool] = False
+    owner_check: ClassVar[type[OrdinaryOwnerCheck]] = OrdinaryOwnerCheck
     origins: ClassVar[tuple[Message, ...]] = ()
 
     if TYPE_CHECKING:
@@ -156,7 +159,9 @@ class TurnInputSource(StartedInput, ABC):
         canonical = snapshot.canonical_name(sender.thread.name)
         try:
             current = sender.require_owner(snapshot, canonical)
-            sender._check_owner(current, snapshot, canonical, self, sent_text)
+            sender._check_owner(
+                current, snapshot, canonical, self, sent_text, check_type=self.owner_check,
+            )
             # The queue grants a send, not a running tool's lifetime. Once Pi
             # starts this exact input, StartedInput removes its queue entry.
             self.acceptance.require_current(
@@ -164,7 +169,7 @@ class TurnInputSource(StartedInput, ABC):
             )
         except ReservationViolationError as error:
             return sender._refusal(error.rule)
-        if self.defers_for_goal(sender.goal_permission, current.goal):
+        if self.defers_send(sender, current):
             return DeferredSend()
         wait = sender.comms.goals.goal_wait(canonical)
         try:
@@ -213,7 +218,7 @@ class TurnInputSource(StartedInput, ABC):
     def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return True
 
-    def defers_for_goal(self, original: GoalPermission, current: GoalDeclaration) -> bool:
+    def defers_send(self, sender: OwnedSend, current: Thread) -> bool:
         return False
 
 
@@ -362,6 +367,7 @@ class ScheduledOriginalInput(OriginalTurnInput, DirectInput):
 class FollowingTurnInput(TurnInputSource):
     keys: tuple[InputKey, ...]
     when_busy: ClassVar[type[BusyInputPolicy]] = SteerInputPolicy
+    owner_check = RunningOrdinaryOwnerCheck
 
     def continue_response(self, response, parts):
         """An actual following request may revise the turn's automatic answer."""
@@ -371,8 +377,12 @@ class FollowingTurnInput(TurnInputSource):
         row = next((dispositions.lookup(key) for key in self.keys), MissingInput())
         return DisplayText(row.source_text_or(text))
 
-    def defers_for_goal(self, original: GoalPermission, current: GoalDeclaration) -> bool:
-        return not original.allows(current)
+    def defers_send(self, sender: OwnedSend, current: Thread) -> bool:
+        """Keep unwritten input for a fresh turn in the selected project and goal."""
+        return (
+            sender.thread.worktree != current.worktree
+            or not sender.goal_permission.allows(current.goal)
+        )
 
 
 class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
