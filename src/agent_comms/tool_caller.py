@@ -130,7 +130,7 @@ class ThreadCaller(ToolCaller):
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
-        return ThreadListing(threads, SentMessageSummary.recent(presentation))
+        return ThreadListing(threads, presentation.sent_summaries())
 
     def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
         return OwnerOutcomes.of(comms.registry.require(self.name))

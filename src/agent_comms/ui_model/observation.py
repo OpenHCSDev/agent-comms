@@ -77,7 +77,7 @@ from agent_comms.revision_views import (
     StoresView,
 )
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_presentation import ThreadPresentation
+from agent_comms.thread_presentation import AcquiredThreadPresentation, ThreadPresentation
 from agent_comms.transcripts import TranscriptCursor, TranscriptReadIdentity
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
@@ -845,8 +845,11 @@ class ThreadReading(ReadingObservation[ObserveThreads]):
         changed = observed.changed_since(previous) | self.initial
         self.initial = frozenset()
         if changed:
+            # The reader keeps its acquired results for the next change check; a viewer
+            # receives only each changed result's published projection.
             yield replace(observed, changed=changed,
-                          results={name: value for name, value in results.items() if name in changed})
+                          results={name: value.published() for name, value in results.items()
+                                   if name in changed})
 
     def located(self, comms: Comms, revision: WireRevision, previous: ThreadsObserved) -> LocatedThreads:
         # Keep each completed stage when a later stored read fails, exactly as
@@ -1033,10 +1036,15 @@ class ThreadReadResult(PublishState, ABC):
     def same_as_presented(self, presented: ThreadPresented) -> bool:
         return False
 
+    def published(self) -> ThreadReadResult:
+        """What a viewer receives of this read: the read itself."""
+        return self
+
     @abstractmethod
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel: ...
 
-    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+    def collect_revision_inputs(self, name: str, readable: dict[str, AcquiredThreadPresentation],
+                                retry: set[str]) -> None:
         """Supply readable values and reads that must be tried again."""
 
     def same_status(self, presentation: ThreadPresentation) -> bool:
@@ -1054,10 +1062,14 @@ class ThreadPresented(ThreadReadResult):
         return (presented.presentation is self.presentation
                 or presented.presentation.same_observation(self.presentation))
 
+    def published(self) -> ThreadPresented:
+        return ThreadPresented(self.presentation.published())
+
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return ThreadStatusModel.known(name, self.presentation)
 
-    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+    def collect_revision_inputs(self, name: str, readable: dict[str, AcquiredThreadPresentation],
+                                retry: set[str]) -> None:
         self.presentation.collect_revision_input(name, readable)
 
     def same_status(self, presentation: ThreadPresentation) -> bool:
@@ -1077,7 +1089,8 @@ class ThreadBusy(ThreadReadResult):
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return owner.open(name)
 
-    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+    def collect_revision_inputs(self, name: str, readable: dict[str, AcquiredThreadPresentation],
+                                retry: set[str]) -> None:
         retry.add(name)
 
 
@@ -1089,8 +1102,8 @@ class ThreadsObserved(Observed):
     changed: frozenset[str]
     activity: Mapping[str, ObservedActivity | DeletedThread]
 
-    def revision_inputs(self) -> tuple[dict[str, ThreadPresentation], set[str]]:
-        readable: dict[str, ThreadPresentation] = {}
+    def revision_inputs(self) -> tuple[dict[str, AcquiredThreadPresentation], set[str]]:
+        readable: dict[str, AcquiredThreadPresentation] = {}
         retry: set[str] = set()
         for name, result in self.results.items():
             result.collect_revision_inputs(name, readable, retry)

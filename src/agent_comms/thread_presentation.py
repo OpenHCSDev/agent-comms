@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, NoReturn, Self
 
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError
@@ -12,11 +12,11 @@ from agent_comms.errors import RelationViolationError, RouteChangedError, Unregi
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
-from .notification_evidence import NoNotificationWindow, NotificationWindow
+from .notification_evidence import NotificationWindow
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
-    from .presentation import MessageNotification
+    from .presentation import MessageNotification, SentMessageSummary
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.transcripts import Transcripts
@@ -209,13 +209,22 @@ class ThreadStatusDisplay:
 
 @dataclass(frozen=True, slots=True)
 class ThreadPresentation(ThreadStatusDisplay):
-    """A thread's acquired presentation, or its declared absence."""
+    """What a viewer shows for a thread, or its declared absence: no acquired evidence."""
 
     notifications: tuple[MessageNotification, ...] = ()
     read_identity: TranscriptReadIdentity | None = None
-    incoming_references: tuple[MessageReference, ...] = ()
-    sent_references: tuple[MessageReference, ...] = ()
-    notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
+
+    def presentation_fields(self) -> dict[str, object]:
+        return {declared.name: getattr(self, declared.name)
+                for declared in fields(ThreadPresentation)}
+
+    def published(self) -> ThreadPresentation:
+        """The value a viewer may receive: this presentation itself."""
+        return self
+
+    def sent_summaries(self) -> tuple[SentMessageSummary, ...]:
+        """A presentation without acquired sources summarises no sent message."""
+        return ()
 
     def require(self, name: str) -> ThreadPresentation:
         """Require a presentation for a caller already bound to this thread."""
@@ -230,8 +239,9 @@ class ThreadPresentation(ThreadStatusDisplay):
         return replace(self, title=shown.title, marker=shown.marker,
                        summary=shown.summary, status=shown.status)
 
-    def collect_revision_input(self, name: str, readable: dict[str, ThreadPresentation]) -> None:
-        readable[name] = self
+    def collect_revision_input(self, name: str,
+                               readable: dict[str, AcquiredThreadPresentation]) -> None:
+        """Only acquired evidence can say whether a later revision changed it."""
 
     def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
                      name: str, sent_source_limit: int) -> ThreadPresentation:
@@ -257,34 +267,67 @@ class ThreadPresentation(ThreadStatusDisplay):
         return original.thread == current.thread and original.same_snapshot(current)
 
     def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
-        """Incoming and sent outcomes are views of one captured notification window."""
+        """Incoming and sent outcomes are views of one captured notification window, read
+        as the thread's owner may see them; the incoming outcomes carry public envelopes."""
         from .notification_assignment import NotificationAssignment
         from .presentation import MessageNotification, OwnerOutcomes
 
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
-        notification_read = NotificationAssignment.read(transcripts.root, sources)
+        notification_read = NotificationAssignment.read(
+            transcripts.root, sources, viewer=OwnerOutcomes.of(window.read.identity.thread))
         projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, sources, notification_read,
-            viewer=OwnerOutcomes.of(window.read.identity.thread),
-        )
+            transcripts.root, transcripts.registry, sources, notification_read)
         incoming = tuple(
-            replace(notification, message=source.message)
+            replace(notification, message=source.envelope)
             for source in window.sources
             for notification in projected.outcomes[source.message.seq, source.message.message_id]
         )
-        return replace(
-            self, notifications=incoming,
-            notification_window=projected,
-            read_identity=window.read.identity,
+        return AcquiredThreadPresentation(**(self.presentation_fields() | {
+            "notifications": incoming,
+            "read_identity": window.read.identity,
+        }), notification_window=projected,
             incoming_references=tuple(source.message.reference for source in window.sources),
-            sent_references=tuple(source.message.reference for source in window.sent_sources),
-        )
+            sent_references=tuple(source.message.reference for source in window.sent_sources))
 
     @property
     def label(self) -> str:
         return f"{self.marker} {self.title}".strip()
+
+
+@dataclass(frozen=True, slots=True)
+class AcquiredThreadPresentation(ThreadPresentation):
+    """A presentation together with the notification evidence it was acquired from.
+
+    The evidence stays with the reader that acquired it, for its change checks and sent
+    summaries; a viewer receives only the published ThreadPresentation."""
+
+    incoming_references: tuple[MessageReference, ...] = field(kw_only=True)
+    sent_references: tuple[MessageReference, ...] = field(kw_only=True)
+    notification_window: NotificationWindow = field(kw_only=True)
+
+    def published(self) -> ThreadPresentation:
+        return ThreadPresentation(**self.presentation_fields())
+
+    def sent_summaries(self) -> tuple[SentMessageSummary, ...]:
+        """One summary per recent sent source, from this presentation's captured window."""
+        from .presentation import MessageNotification, SentMessageSummary
+
+        return tuple(
+            SentMessageSummary(reference, MessageNotification.summary(
+                self.notification_window.outcomes.get((reference.seq, reference.message_id), ())))
+            for reference in self.sent_references
+        )
+
+    def collect_revision_input(self, name: str,
+                               readable: dict[str, AcquiredThreadPresentation]) -> None:
+        readable[name] = self
+
+    def __reduce_ex__(self, protocol: object) -> NoReturn:
+        raise TypeError(
+            "AcquiredThreadPresentation keeps private delivery evidence with its reader; "
+            "send its published() ThreadPresentation")
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,9 +343,6 @@ class NoThreadPresentation(ThreadPresentation):
 
     def for_status(self, name: str) -> ThreadPresentation:
         return self.with_paint(ThreadRetired().presentation(name))
-
-    def collect_revision_input(self, name: str, readable: dict[str, ThreadPresentation]) -> None:
-        pass
 
     def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
                      name: str, sent_source_limit: int) -> ThreadPresentation:
