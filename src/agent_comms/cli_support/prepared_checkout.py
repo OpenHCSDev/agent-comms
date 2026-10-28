@@ -8,10 +8,12 @@ from agent_comms.cli_commands import CheckoutResult
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
-from agent_comms.history_views import CallingThreadTarget
+from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import Normalize
 from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ThreadCaller
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -19,6 +21,14 @@ from typing import Annotated
 
 @dataclass(frozen=True, kw_only=True)
 class PreparedCheckoutCliCommand(CliCommand):
+    caller: Annotated[
+        ThreadCaller,
+        Normalize(FieldCodec.encode),
+        Argument(
+            flags=("--from",),
+            options={"type": ThreadCaller, "help": "Calling thread"},
+        ),
+    ]
     operation: Annotated[type[CheckoutOperation], Argument(flags=("operation",))]
 
     @abstractmethod
@@ -31,7 +41,7 @@ class PreparedCheckoutCliCommand(CliCommand):
         return grant.source()
 
     def apply(self, ctx: Comms) -> CliResult:
-        thread = CallingThreadTarget().thread(ctx.registry)
+        thread = ctx.registry.require(self.caller.own_thread())
         destination = self.destination(ctx.registry.storage_rule, thread)
         self.operation.apply(self, ctx, thread, destination)
         return CheckoutResult(destination)
