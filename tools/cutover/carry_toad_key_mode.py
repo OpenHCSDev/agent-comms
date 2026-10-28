@@ -1,7 +1,6 @@
 """Carry the saved Vim preference before the editable keymap replaces its wire field."""
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
