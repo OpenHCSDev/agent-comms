@@ -32,13 +32,13 @@ from agent_comms.ui_model.observation import ReadCommanderUnit, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import (
-    AwaitingApplicationRun, NoPendingClock, PendingClock, Stuck, UnitState,
+    AwaitingApplicationRun, NoPendingClock, PendingClock, Spinning, Stuck, UnitState,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
 from test_holder_standing_rules import state_cards
-from agent_comms.transcript_events import SucceededCallState
+from agent_comms.transcript_events import FailedCallState, SucceededCallState
 from test_unit_state import recorded_turn
 
 pytest_plugins = ("test_holder_standing_rules",)
@@ -116,27 +116,114 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
         saved.rename(metadata)
 
 
-def test_failed_heartbeat_pass_messages_commander_and_still_raises(notification_bus):
-    failure = RuntimeError("forced heartbeat pass failure")
+class BrokenHeartbeat(CommanderHeartbeat, declared_name=None):
+    def observe(self, comms):
+        raise RuntimeError("forced heartbeat pass failure")
 
-    class BrokenHeartbeat(CommanderHeartbeat, declared_name=None):
-        def observe(self, comms):
-            raise failure
 
-    comms = notification_bus
-    assert "lead" in {thread.name for thread in BrokenHeartbeat.commanders(comms.registry, comms.goals)}
+def failed_pass(comms, error):
+    """One failed pass in the coordinator's order: the store records it, then a fresh
+    watcher's callback runs; the original exception still escapes the pass."""
     heartbeat = BrokenHeartbeat()
     with pytest.raises(RuntimeError) as raised:
         heartbeat.watch_pass(lambda: nullcontext(comms))
-    assert raised.value is failure
-    heartbeat.failed(lambda: nullcontext(comms), raised.value)
+    ServicePassStore.at(comms.root).failed(BrokenHeartbeat.__name__, error)
+    heartbeat.failed(lambda: nullcontext(comms), error)
+    return raised.value
+
+
+def retained_failure(comms):
+    stored = ServicePassStore.at(comms.root).read().failing[BrokenHeartbeat.__name__]
+    return ServicePassFailing(BrokenHeartbeat.__name__, stored.since, stored.error)
+
+
+def aged(pings):
+    return tuple((ping, ping.since) for ping in pings)
+
+
+def test_failed_heartbeat_pass_publishes_one_typed_packet_and_still_raises(notification_bus):
+    comms = notification_bus
+    raised = failed_pass(comms, RuntimeError("first wording"))
+    assert str(raised) == "forced heartbeat pass failure"
+    failure = retained_failure(comms)
+    message, = notifications(comms)
+    assert message.sender == CommanderHeartbeat.sender and message.target == "lead"
+    assert isinstance(message.task, CommanderDecisions)
+    assert message.task.decisions == message.task.handled == (RulePing.capture(failure),)
+    assert failure.line() in message.body and "first wording" in message.body
+    # The same occurrence again, from a fresh watcher with new wording, is not new.
+    failed_pass(comms, ValueError("second wording"))
+    assert retained_failure(comms).since == failure.since
+    assert len(notifications(comms)) == 1
+
+
+def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notification_bus):
+    comms = notification_bus
+
+    class RefusedRule(ServicePassFailing):
+        def enforce(self, _comms, _commander):
+            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
+
+    recorded_turn(comms, (FailedCallState, FailedCallState))
+    states = state_cards(comms, Spinning)
+    rules = (RefusedRule("refused", 1.0, "review pending"),
+             ServicePassFailing("independent", 1.0, "another source"))
+    beat(comms, rules, states=states)
+    board, = notifications(comms)
+    assert board.task.not_applied and len(board.task.handled) == 2
+
+    failed_pass(comms, RuntimeError("source unreadable"))
+    _, failing = notifications(comms)
+    failure = RulePing.capture(retained_failure(comms))
+    assert isinstance(failing.task, CommanderDecisions)
+    assert aged(failing.task.handled[:-1]) == aged(board.task.handled)
+    assert failing.task.handled[-1] == failure and failing.task.decisions == (failure,)
+    assert failing.task.waiting == ()
+    assert failing.task.not_applied == board.task.not_applied
+
+    ServicePassStore.at(comms.root).passed(BrokenHeartbeat.__name__)
+    beat(comms, rules, states=state_cards(comms, Spinning))
+    _, _, recovered = notifications(comms)
+    assert isinstance(recovered.task, CommanderNotice)
+    assert aged(recovered.task.handled) == aged(board.task.handled)
+
+    # A new occurrence after the pass recovered is new, once.
+    failed_pass(comms, RuntimeError("source unreadable again"))
+    *_, again = notifications(comms)
+    assert again.task.decisions == (RulePing.capture(retained_failure(comms)),)
+    assert again.task.decisions != (failure,)
+    failed_pass(comms, RuntimeError("source unreadable again"))
+    assert len(notifications(comms)) == 4
+
+
+def test_each_commander_gets_its_own_failure_packet(notification_bus):
+    comms = notification_bus
+    ServicePassStore.at(comms.root).failed(BrokenHeartbeat.__name__, RuntimeError("down"))
+    failure = retained_failure(comms)
+    now = time.time()
+    for name in ("lead", "worker"):
+        commander = comms.registry.require(name).incarnation
+        update = CommanderUpdate.report_failure(commander, failure, None, now=now)
+        update.send(comms, now, ())
+        latest = CommanderUpdate.latest(comms, commander)
+        assert latest.commander == commander
+        assert latest.handled == (RulePing.capture(failure),)
+        assert CommanderUpdate.report_failure(commander, failure, latest, now=now + 1) is None
+
+
+def test_failure_packet_follows_commander_and_service_rename_aliases(notification_bus):
+    comms = notification_bus
+    failed_pass(comms, RuntimeError("down"))
+    first, = notifications(comms)
+    comms.threads._rename_thread("lead", "renamed-lead")
+    comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
+    failed_pass(comms, RuntimeError("still down"))
     page = MessagePageRequest(DMDisplayScope.capture(
-        CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
+        "renamed-heartbeat", "renamed-lead", comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
-    notices = tuple(message for message in page.messages if str(failure) in message.body)
-    assert len(notices) == 1
-    assert notices[0].sender == CommanderHeartbeat.sender
-    assert notices[0].target == "lead"
+    published = tuple(message for message in page.messages
+                      if isinstance(message.task, CommanderUpdate))
+    assert tuple(message.reference for message in published) == (first.reference,)
 
 
 def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_bus):
@@ -441,7 +528,7 @@ def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(n
     packet = CommanderDecisions(
         original.task.commander, original.task.handled, (), original.task.handled,
     )
-    message = packet.send(comms, time.time(), lead_hud(comms))
+    message = packet.send(comms, time.time(), lead_hud(comms).brief())
     assert sum(f"#{rule.request.pr} " in message.body for rule in rules) == 2
     assert max(map(len, message.body.splitlines())) < 300
     assert len(message.task.handled) == 12

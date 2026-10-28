@@ -27,7 +27,7 @@ from agent_comms.messages import (
     ConversationRole, InfoKind, Message, MessageRole, NoticeRole,
 )
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.standing_rules import StandingRule
+from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from agent_comms.cli_bridges.claude import ClaudeBridge
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
-    from agent_comms.commander_hud import CommanderHud
     from agent_comms.registry_document import RegistrySnapshot
 
 
@@ -189,12 +188,12 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def lines(self, now: float) -> tuple[str, ...]:
         """What this packet asks of the commander."""
 
-    def body(self, now: float, hud: CommanderHud) -> str:
+    def body(self, now: float, brief: tuple[str, ...]) -> str:
         """Scan first; original evidence remains in the same packet and expandable HUD."""
         stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%H:%M:%S UTC")
         return "\n".join((
             f"{self.header} · {self.commander.name} · {stamp} · {len(self.handled)} current",
-            *hud.brief(), "", *self.lines(now), "",
+            *brief, "", *self.lines(now), "",
             "Expand in Toad: F2 or /commander · units: original orders, story, commits, activity · board: every alert",
         ))
 
@@ -280,12 +279,28 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
             return CommanderNotice(commander, handled, not_applied=not_applied)
         return None
 
-    def send(self, comms: Comms, now: float, hud: CommanderHud) -> Message:
+    @classmethod
+    def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
+                       previous: CommanderUpdate | None, *, now: float) -> CommanderUpdate | None:
+        """A failed pass read no board, so it clears nothing: it adds only its own retained
+        occurrence, once. Every handled line keeps its object and age for the next complete
+        read to derive from."""
+        ping = RulePing.capture(failure)
+        handled = previous.handled if previous else ()
+        if ping in handled:
+            return None
+        ping = replace(ping, since=ping.since.continued_from(now))
+        return CommanderDecisions(
+            commander, (*handled, ping), (ping,), (),
+            not_applied=previous.not_applied if previous else (),
+        )
+
+    def send(self, comms: Comms, now: float, brief: tuple[str, ...]) -> Message:
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(now, hud),
+            body=self.body(now, brief),
             type=InfoKind, role=self.role, task=self,
         )
         return comms.bus.publisher.publish_ordinary(
