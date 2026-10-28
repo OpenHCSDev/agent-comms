@@ -59,6 +59,7 @@ from metaclass_registry.mro_dispatch import (
 )
 from module_layers import PACKAGE, ClientSources, MaterializedClients, StackClient
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.launch_runtime import LaunchRuntime
 from stored_formats import StoredForm
 from typing_names import TypingImports, TypingReference
 from agent_comms.field_codec import FieldCodec, ViewExclusion, boundary_decoder, projected
@@ -946,10 +947,11 @@ class ClientTypeErrors(SideCounts):
             # Native config plugins import Python too: both readers need the same cut,
             # not a baseline static path alongside candidate runtime imports.
             imports = (str(Path(scratch, "src")), *client.import_paths)
+            runtime = LaunchRuntime.from_interpreter(sys.executable)
             result = SpawnedProcess.run(
-                (sys.executable, "-m", *TypeErrors.mypy(
+                (str(runtime.interpreter), "-m", *TypeErrors.mypy(
                     cache, "--follow-imports=silent", "--ignore-missing-imports", *selected)),
-                cwd=client.checkout, timeout=600,
+                cwd=client.checkout, timeout=600, runtime=runtime,
                 env={**os.environ, "MYPYPATH": os.pathsep.join(imports),
                      "PYTHONPATH": os.pathsep.join((*imports, os.environ.get("PYTHONPATH", "")))},
             )
@@ -1042,11 +1044,11 @@ class ScopeNames(ast.NodeVisitor):
         names.visit(tree)
         return names
 
-    def bindings(self, scope: str) -> dict[str, list[ast.AST]]:
-        """Every binding of each name in one lexical scope, in walk order."""
+    def bindings(self, scope: str, before: tuple[ast.AST, ...] = ()) -> dict[str, list[ast.AST]]:
+        """Bindings in one scope, excluding declarations whose evaluation has not assigned them."""
         found: dict[str, list[ast.AST]] = {}
         for node, names in self.binds.items():
-            if self.found[node] == scope:
+            if node not in before and self.found[node] == scope:
                 for name in names:
                     found.setdefault(name, []).append(node)
         return found
@@ -1482,8 +1484,8 @@ class DecoratorBinding:
 
     @classmethod
     def of(cls, decorator: typing.Callable[..., object], tree: ast.AST,
-           filename: str, scope: str = "") -> DecoratorBinding:
-        return cls.named(decorator.__module__, decorator.__name__, tree, filename, scope)
+           filename: str, scope: str = "", before: tuple[ast.AST, ...] = ()) -> DecoratorBinding:
+        return cls.named(decorator.__module__, decorator.__name__, tree, filename, scope, before)
 
     @classmethod
     def sites(cls, decorator: typing.Callable[..., object], tree: ast.AST,
@@ -1496,7 +1498,7 @@ class DecoratorBinding:
             match node:
                 case ast.FunctionDef(decorator_list=[_, *_] as decorators) | ast.AsyncFunctionDef(
                         decorator_list=[_, *_] as decorators):
-                    marker = cls.of(decorator, tree, filename, scopes.found[node])
+                    marker = cls.of(decorator, tree, filename, scopes.found[node], (node,))
                     if any(map(marker.marks, decorators)):
                         continue
             yield node
@@ -1510,14 +1512,15 @@ class DecoratorBinding:
 
     @classmethod
     def named(cls, owner: str, name: str, tree: ast.AST, filename: str,
-              scope: str = "") -> DecoratorBinding:
+              scope: str = "", before: tuple[ast.AST, ...] = ()) -> DecoratorBinding:
         """The spellings binding ``owner.name`` in the module at ``filename``, as read from
-        ``scope``: a spelling whose root that scope rebinds names something else there."""
+        ``scope``: a spelling whose root that scope rebinds names something else there.
+        Decorators supply their own not-yet-bound definition; every other binding remains."""
         module = cls.module_of(filename)
         package = module[:-1]
         names: set[str] = set()
         body = typing.cast(ast.Module, tree).body
-        for bound, (declaration, statement) in cls.declarations(tree, "", body).items():
+        for bound, (declaration, statement) in cls.declarations(tree, "", body, before).items():
             match statement, declaration:
                 case ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef(), _ if (
                         ".".join(module) == owner and bound == name):
@@ -1531,23 +1534,23 @@ class DecoratorBinding:
                         names.add(f"{bound}.{name}")
                     if resolved == owner and imported == name:
                         names.add(bound)
-        hidden = cls.bindings(tree, scope).keys() if scope else frozenset()
+        hidden = cls.bindings(tree, scope, before).keys() if scope else frozenset()
         return cls(frozenset(spelling for spelling in names if spelling.split(".")[0] not in hidden))
 
     @staticmethod
-    def bindings(tree: ast.AST, scope: str) -> dict[str, list[ast.AST]]:
+    def bindings(tree: ast.AST, scope: str, before: tuple[ast.AST, ...] = ()) -> dict[str, list[ast.AST]]:
         """Every binding of each name in one lexical module or class scope, as ScopeNames
         decodes it; bindings inside nested functions and classes are theirs, not this scope's."""
-        return ScopeNames.of(tree).bindings(scope)
+        return ScopeNames.of(tree).bindings(scope, before)
 
     @staticmethod
     def declarations(tree: ast.AST, scope: str,
-                     body: list[ast.stmt]) -> dict[str, tuple[ast.AST, ast.stmt]]:
+                     body: list[ast.stmt], before: tuple[ast.AST, ...] = ()) -> dict[str, tuple[ast.AST, ast.stmt]]:
         """Each name the scope binds exactly once, by a declaring node that is one of its body's
         statements or such a statement's direct child, with that statement. A star import
         leaves no name proved."""
         names = ScopeNames.of(tree)
-        bindings = names.bindings(scope)
+        bindings = names.bindings(scope, before)
         if "*" in bindings:
             return {}
         owners = {child: statement for statement in body
