@@ -12,7 +12,7 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import AtomicFile
 from toad.key_modes import KeyMode, Standard, VimNormal
-from toad.preferences import ToadPreferences, ToadSettings, UiSettings
+from toad.preferences import SavedSettings, ToadSettings, UiSettings
 
 
 @dataclass(frozen=True)
@@ -28,10 +28,10 @@ class PreviousVimPreference:
 
 class ToadKeyMode(Carry):
     opened_files: ClassVar[tuple[type[RootFile], ...]] = ()
-    writer_owned = (ToadPreferences,)
+    writer_owned = (SavedSettings,)
 
     def carry(self, *, apply: bool) -> Carried:
-        resource, = ToadPreferences.resources(self.files)
+        resource, = SavedSettings.resources(self.files)
         path = self.files.location(resource)
         self.require_confined(path)
         if not path.exists():
