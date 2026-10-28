@@ -223,10 +223,19 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
                 asyncio.run(asyncio.wait_for(wait_for(registry_cut_held), timeout=2))
                 assert not future.done()
             if notification_fails:
+                # The bus committed the record; only its completion failed. That is never an
+                # unsent claim, and resuming returns the committed original's sequence.
                 with pytest.raises(CommittedMessageError) as failed:
                     future.result(timeout=5)
                 changed = comms.goals.todos.get(todo.id)
                 assert failed.value.record.seq == before + 1
+                marker.rmdir()
+                marker.touch()
+                retained, = changed.order.commander_claims()
+                ClaimOrder(changed.revision, worker, changed.held().generation,
+                           retained).resume(comms.goals, todo.id)
+                assert comms.bus.bus.revision() == before + 1
+                assert comms.goals.todos.get(todo.id) == changed
             else:
                 changed = future.result(timeout=5)
         delivery = comms.bus.bus.delivery(before + 1)
@@ -236,10 +245,11 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
         assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.recipients] == [
             (recipient, lead.require_recorded().lookup)]
         assert comms.goals.todos.get(todo.id) == changed
-        with comms.bus.bus.reading() as source:
-            retained = comms.goals.todos.get(todo.id).order.commander_claims()[0]
-            assert retained.original(source) == Message.from_message(delivery.message)
-            assert retained.original(source).mentions
+        retained = comms.goals.todos.get(todo.id).order.commander_claims()[0]
+        # The retained claim is the publication's content; the bus adds its sequence and the
+        # mentions it resolved.
+        assert retained.message.publication_snapshot == delivery.message.publication_snapshot
+        assert delivery.message.mentions
     else:
         with pytest.raises(HumanSendRefusedError):
             operation.record(comms.goals, todo.id)

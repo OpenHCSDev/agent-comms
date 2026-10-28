@@ -2988,8 +2988,9 @@ class OrderClaim:
         if not self.message.body.strip():
             raise TodoError("A delivery claim needs its report text.")
 
-    def original(self, source: BusReader) -> Message:
-        return Message.from_message(source.lookup_message(self.message.message_id).message)
+    def resumed_by(self, pull_request: PullRequestLink, head: str, report: str) -> bool:
+        """Only the identical deliver call resumes this claim's publication."""
+        return (self.pull_request, self.head, self.message.body) == (pull_request, head, report)
 
     def request(self) -> PullRequestHead:
         return PullRequestHead(self.pull_request.repo, self.pull_request.number, self.head)
@@ -3310,6 +3311,18 @@ class UnitOccupied(TodoError, RejectedEnforcementError):  # noqa: N818 - domain 
 
 class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
     """The todo store could not complete its write; its original cause is preserved."""
+
+
+class UnsentClaimError(TodoError):
+    """The Todo committed a delivery claim whose answer did not reach the bus."""
+
+    def __init__(self, problem: str, claim: OrderClaim) -> None:
+        self.problem = problem
+        self.claim = claim
+        super().__init__(
+            f"{problem}'s claim of {claim.head} (message {claim.message.message_id}) is recorded "
+            "on the Todo but was not published to its commander. Repeat the same "
+            "comms_order_deliver call, with the same pull request, head and report, to publish it.")
 
 
 class NotOrderCommander(TodoError):  # noqa: N818 - domain-specific refusal outcome
@@ -5008,11 +5021,42 @@ class ClaimOrder(TodoCommand):
         order = current.order.checked().claimed(self.claim)
         return replace(current, order=order, revision=current.revision + 1)
 
+    def resume(self, goals: Goals, problem: str) -> Todo:
+        """Publish the retained claim from its frozen addresses; the Todo is not written.
+
+        The holder's birth and generation are checked as for a fresh claim. If the sender
+        or the commander's address changed since the claim was retained, this refuses:
+        following a renamed or reused thread name would change who the answer is from or to."""
+        with NativeCapture(goals.bus) as boundary:
+            current = goals.todos.get(problem)
+            current.state.require_open(current)
+            current.require_assignee(self.actor, self.generation)
+            target = IncarnationThreadTarget(
+                goals.todos.owner_request(current.request.require()).commander)
+            target.require_publication(
+                self.claim.message, boundary.registry, goals.bus.require_channel)
+            retained = (self.claim.message.sender, self.claim.message.target)
+            current_addresses = (boundary.registry.canonical_name(self.claim.message.sender),
+                                 target.selected_name(boundary.registry))
+            if current_addresses != retained:
+                raise TodoError(
+                    f"{problem}'s retained claim was addressed {retained[0]} -> {retained[1]}, "
+                    f"now {current_addresses[0]} -> {current_addresses[1]}; it is not resent "
+                    "under another identity.")
+            with boundary.registry_cut.current():
+                self.after_record(goals, current)
+        return current
+
     def after_record(self, goals: Goals, changed: Todo) -> None:
-        goals.bus.publisher.publish_ordinary(
-            self.claim.message, destination=IncarnationThreadTarget(
-                goals.todos.owner_request(changed.request.require()).commander),
-            origin=AgentOrigin())
+        """A storage refusal after the Todo committed leaves the claim retained but unsent;
+        a record the bus committed before its completion failed stays CommittedMessageError."""
+        try:
+            goals.bus.publisher.publish_ordinary(
+                self.claim.message, destination=IncarnationThreadTarget(
+                    goals.todos.owner_request(changed.request.require()).commander),
+                origin=AgentOrigin())
+        except (OSError, sqlite3.Error) as error:
+            raise UnsentClaimError(changed.id, self.claim) from error
 
 
 @dataclass(frozen=True)
