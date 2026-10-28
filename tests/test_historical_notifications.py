@@ -86,9 +86,9 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
 
 
 def test_harness_consumption_survives_human_display(archived_notification):
+    """The human viewing an agent's conversation writes its own read, never the agent's receipt."""
     _old, live, _source, _messages, _root_id = archived_notification
-    # The harness recipient is the agent the send froze into its audience, never the human reader.
-    shown = publish_initial(live, "sender", "agent", "consumed, then displayed")
+    shown = publish_initial(live, "sender", "agent", "consumed, then displayed to the human")
     recipient, = live.bus.bus.delivery(shown.seq).recipients
     assert recipient.canonical_thread == "agent"
     with Coordination(str(CoordinationStore.path_in(live.root))) as store, \
@@ -103,13 +103,24 @@ def test_harness_consumption_survives_human_display(archived_notification):
             AllOutcomes(), (shown.reference,)).outcomes[shown.seq, shown.message_id]
         return current
 
+    human = live.registry.require("reader")
+    assert human.role is UserThreadRole
+
+    def human_display():
+        return live.bus.reads.displayed_incarnation(
+            shown, human.incarnation, live.registry.snapshot(), document=None)
+
     consumed = notification()
     assert consumed.label == "Consumed" and consumed.state.consumed and not consumed.displayed_to
-    live.bus.mark_read_through("agent", shown.seq)
+    ledger = live.bus.reads.read()
+    assert human_display() == ()
+    # The UI's "mark read" on the agent's thread, as the registered human viewer.
+    live.views.mark_user_view_read("agent", worktree=human.worktree)
+    assert live.bus.reads.read() != ledger
+    assert human_display() == (human.incarnation,)
     displayed = notification()
-    assert displayed.state == consumed.state
-    assert displayed.displayed_to == (live.registry.snapshot().threads["agent"].incarnation,)
-    assert MessageNotification.summary((displayed,)).endswith("Consumed 1/1 · Read 1/1")
+    assert displayed.state == consumed.state and not displayed.displayed_to
+    assert MessageNotification.summary((displayed,)).endswith("Consumed 1/1 · Read 0/1")
 
 
 def test_native_context_commit_is_consumed():
