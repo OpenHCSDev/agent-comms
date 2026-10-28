@@ -19,6 +19,7 @@ from agent_comms.assignment_states import (
     DeliveredAssignment,
     EngagedAssignment,
 )
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
@@ -88,7 +89,11 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
 def test_harness_consumption_survives_human_display(archived_notification):
     """The human viewing an agent's conversation writes its own read, never the agent's receipt."""
     _old, live, _source, _messages, _root_id = archived_notification
-    shown = publish_initial(live, "sender", "agent", "consumed, then displayed to the human")
+    human = live.registry.require("reader")
+    assert human.role is UserThreadRole
+    # The human's own message to the agent is what the UI's human/agent dialogue page shows.
+    shown = live.messaging.send_user_message(
+        CommandTarget.named("agent"), "consumed, then displayed to the human", worktree=human.worktree)
     recipient, = live.bus.bus.delivery(shown.seq).recipients
     assert recipient.canonical_thread == "agent"
     with Coordination(str(CoordinationStore.path_in(live.root))) as store, \
@@ -102,9 +107,6 @@ def test_harness_consumption_survives_human_display(archived_notification):
         current, = live.views.message_notifications_for_references(
             AllOutcomes(), (shown.reference,)).outcomes[shown.seq, shown.message_id]
         return current
-
-    human = live.registry.require("reader")
-    assert human.role is UserThreadRole
 
     def human_display():
         return live.bus.reads.displayed_incarnation(
