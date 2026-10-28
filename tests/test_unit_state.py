@@ -15,10 +15,13 @@ from agent_comms.commander_hud import CommanderFrame
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import ToolCallId
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
+from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
@@ -29,6 +32,7 @@ from agent_comms.transcript_events import (
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import (
+    AwaitingApplicationRun,
     AwaitingCommander,
     Blocked,
     DeliveredUnclosed,
@@ -43,7 +47,7 @@ from agent_comms.ui_model.unit_state import (
 )
 from test_holder_standing_rules import blocked_holder, publish, state_cards
 
-pytest_plugins = ("test_holder_standing_rules",)
+pytest_plugins = ("test_holder_standing_rules", "test_proof_build")
 
 
 def recorded_turn(comms, outcomes: tuple[type[CallState], ...], paths: tuple[str, ...] = ()):
@@ -117,11 +121,11 @@ def unread_checkout(comms, tmp_path):
     checkout = tmp_path / "unread-worker"
     checkout.mkdir()
     (checkout / ".git").write_text("gitdir: ./removed-git-directory\n")
-    comms.registry.register(replace(comms.registry.require("worker"), worktree=str(checkout)))
+    comms.registry.register(replace(comms.registry.require("worker"), worktree=Checkout(checkout)))
 
 
 @pytest.mark.parametrize("member", UnitState.worst_first(), ids=lambda member: member.__name__)
-def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
+def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member):
     comms = held_bus
     unit = "worker"
     with LaunchRoot.from_path(comms.root).selected():
@@ -164,6 +168,24 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
                         todo.order.id,
                     ),
                 )
+        elif member is AwaitingApplicationRun:
+            graph = next(graph for graph in request.getfixturevalue("proof_build_checkouts")
+                         if graph.repository.github == CorePackage.repository)
+            with comms.goals.todos.writing() as db:
+                for todo in comms.goals.todos.held_for_commander(
+                    comms.registry.require("lead").incarnation
+                ):
+                    checked = todo.order.checked()
+                    replace(
+                        todo,
+                        order=replace(
+                            checked,
+                            run=ApplicationOrderRun(
+                                "The real application shows the merged fix after a restart."),
+                            check=replace(checked.check, directory=graph.repository.checkout),
+                        ).merged(graph.installed),
+                        revision=todo.revision + 1,
+                    ).upsert(db)
         elif member is Moving:
             pass  # Assigned work, before its first-call deadline.
         else:
