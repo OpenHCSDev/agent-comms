@@ -1,6 +1,7 @@
 """A stack client's imports root reachability and fail on modules Core lacks."""
 
 import ast
+from collections.abc import Callable
 import os
 import shutil
 import subprocess
@@ -13,7 +14,7 @@ import tomli_w
 
 from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
 from debt_ratchet import ClientTypeErrors
-from agent_comms.head_review import BaseSide, HeadSide, Side
+from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.integration import IntegrationRun
 from agent_comms.todos import DraftListedPullRequest
 from github_fixture import GitHubFixture
@@ -29,6 +30,7 @@ def write(path: Path, text: str = "") -> None:
 
 def test_materialized_clients_check_matched_sources_and_both_mixed_sources_fail(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
+    materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],
 ) -> None:
     pair = mutual_sources
     inputs = IntegrationRun(pair.checkout, pair.output, "materialized module clients").qualify(pair.context, ("P2", "P3"))
@@ -36,8 +38,9 @@ def test_materialized_clients_check_matched_sources_and_both_mixed_sources_fail(
     base = BaseSide.require_materialized(pair.output, core)
     head = HeadSide.require_materialized(pair.output, core)
     files = tuple(sorted(pair.output.rglob(".git")))
-    base_clients = StackClient.materialized(base / "stack", pair.output, BaseSide, inputs)
-    head_clients = StackClient.materialized(head / "stack", pair.output, HeadSide, inputs)
+    resource = materialized_clients(pair.output, inputs)
+    base_clients = resource.cuts[BaseSide]
+    head_clients = resource.cuts[HeadSide]
     assert tuple(sorted(pair.output.rglob(".git"))) == files  # No later fresh main clone.
     assert Package(base, base_clients).missing_names == ()
     assert Package(head, head_clients).missing_names == ()
@@ -50,6 +53,7 @@ def test_materialized_clients_check_matched_sources_and_both_mixed_sources_fail(
 def test_actual_client_membership_stays_absent_on_its_own_cut(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
     baseline_has_client: bool, candidate_has_client: bool,
+    materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],
 ) -> None:
     pair = mutual_sources
     full = (pair.core.checkout / "stack/pyproject.toml").read_text()
@@ -70,7 +74,7 @@ def test_actual_client_membership_stays_absent_on_its_own_cut(
     github_cli.put(pair.core.github, DraftListedPullRequest(
         pair.core.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
     inputs = IntegrationRun(pair.checkout, pair.output, "actual added and removed client").qualify(pair.context, ("P2", "P3"))
-    resource = MaterializedClients(pair.output, inputs)
+    resource = materialized_clients(pair.output, inputs)
     core = inputs.source(pair.core.github)
     tested = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     for side, present in ((BaseSide, baseline_has_client), (HeadSide, candidate_has_client)):
@@ -83,6 +87,7 @@ def test_actual_client_membership_stays_absent_on_its_own_cut(
 
 def test_materialized_client_files_come_from_each_actual_cut(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
+    materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],
 ) -> None:
     pair = mutual_sources
     pair.client.git(pair.client.checkout, "mv", "src/workflow.py", "src/replacement.py")
@@ -92,9 +97,9 @@ def test_materialized_client_files_come_from_each_actual_cut(
         pair.client.number, "feature", commit, stamp, "main", reviewable_times=(stamp,)))
     inputs = IntegrationRun(pair.checkout, pair.output, "side-specific client files").qualify(pair.context, ("P2", "P3"))
     cuts: dict[type[Side], set[str]] = {}
+    resource = materialized_clients(pair.output, inputs)
     for side in (BaseSide, HeadSide):
-        core = side.require_materialized(pair.output, inputs.source(pair.core.github))
-        client, = StackClient.materialized(core / "stack", pair.output, side, inputs)
+        client, = resource.cuts[side]
         cuts[side] = {entry.path for entry in client.imports}
     assert cuts[BaseSide] == {"src/workflow.py"}
     assert cuts[HeadSide] == {"src/replacement.py"}
@@ -103,6 +108,7 @@ def test_materialized_client_files_come_from_each_actual_cut(
 @pytest.mark.parametrize("name", ("source-client", "source-renamed"))
 def test_materialized_selection_includes_peer_imports_but_not_absent_paths(
     mutual_sources: MutualSources, github_cli: GitHubFixture, name: str,
+    materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],
 ) -> None:
     pair = mutual_sources
     client_project = tomllib.loads((pair.client.checkout / "pyproject.toml").read_text())
@@ -123,7 +129,7 @@ def test_materialized_selection_includes_peer_imports_but_not_absent_paths(
     github_cli.put(pair.client.github, DraftListedPullRequest(
         pair.client.number, "feature", commit, stamp, "main", reviewable_times=(stamp,)))
     inputs = IntegrationRun(pair.checkout, pair.output, "selected file union").qualify(pair.context, ("P2", "P3"))
-    resource = MaterializedClients(pair.output, inputs)
+    resource = materialized_clients(pair.output, inputs)
     core = inputs.source(pair.core.github)
     head = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     for side in (BaseSide, HeadSide):

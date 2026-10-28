@@ -24,7 +24,7 @@ from agent_comms.installer.runtime_resolution import CorePackage, ResolvedLock, 
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
-from module_layers import StackClient
+from module_layers import MaterializedClients
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -58,21 +58,22 @@ class CheckerStack(Stack, StackSources):
         if not declared.accepts(self.commands.run(self.uv, "--version")):
             raise ValueError("The bootstrap checker must use Core's declared uv")
 
-    def projects(self, side: type[Side]) -> tuple[Path, ...]:
-        core = side.require_materialized(self.source_directory, self.inputs.source(CorePackage.repository))
-        clients = StackClient.materialized(core / "stack", self.source_directory, side, self.inputs)
-        return (core, *(client.checkout for client in clients))
+    @cached_property
+    def clients(self) -> MaterializedClients:
+        return MaterializedClients(self.source_directory, self.inputs, self.uv, self.python, self.commands)
 
     def requirements(self, side: type[Side]) -> tuple[Requirement, ...]:
-        core = side.checkout(self.source_directory, CorePackage.repository)
-        return tuple(requirement for project in (*self.projects(side), core / "stack")
-                     for requirement in self.runtime_requirements(
-                         tomllib.loads((project / "pyproject.toml").read_text()), self.local_names))
+        core = side.require_materialized(self.source_directory, self.inputs.source(CorePackage.repository))
+        # Identity validation and runtime selection borrow the SAME backend metadata objects.
+        projects = self.clients.projects(side)
+        return self.active_requirements(tomllib.loads((core / "stack/pyproject.toml").read_text()),
+            tuple(projects.values()), self.clients.environment)
 
     def require_runtime_compatibility(self) -> None:
         # Local package presence differs legitimately; only the real external contract agrees.
-        before = frozenset(map(str, self.requirements(BaseSide)))
-        after = frozenset(map(str, self.requirements(HeadSide)))
+        before, after = (frozenset(str(requirement) for requirement in self.requirements(side)
+                                  if canonicalize_name(requirement.name) not in self.local_names)
+                         for side in (BaseSide, HeadSide))
         if before != after:
             raise ValueError("External runtime dependency migration requires an explicit compatible environment")
 
@@ -91,7 +92,7 @@ class CheckerStack(Stack, StackSources):
                         case {"git": str(url), "branch": str(), **options}:
                             source = self.inputs.source(Repo.repository_url(url))
                             checkout = HeadSide.require_materialized(self.source_directory, source)
-                            self.require_package(checkout, name)
+                            self.require_package(self.clients.projects(HeadSide)[source.repository], name)
                             sources[raw_name] = {**options, "path": str(checkout), "editable": True}
                         case {"path": str(relative), **options}:
                             checkout = (original / relative).resolve()
@@ -138,10 +139,9 @@ class CheckerStack(Stack, StackSources):
             raise ValueError("Preparing runtime sources changed a locked checker-only package")
         for side in Side.sides():
             for requirement in self.requirements(side):
-                if requirement.marker is None or requirement.marker.evaluate():
-                    record = resolution.packages[canonicalize_name(requirement.name)]
-                    if not requirement.specifier.contains(record.version, prereleases=True):
-                        raise ValueError(f"The common environment does not satisfy {requirement}")
+                record = resolution.packages[canonicalize_name(requirement.name)]
+                if not requirement.specifier.contains(record.version, prereleases=True):
+                    raise ValueError(f"The common environment does not satisfy {requirement}")
 
     def prepare(self) -> RuntimeResolution:
         prefix = self.runtime.prefix.resolve()
@@ -175,14 +175,12 @@ def main() -> int:
     parser.add_argument("--ci-inputs", type=Path, required=True)
     args = parser.parse_args()
     directory = args.ci_inputs.resolve()
-    executable = shutil.which("uv")
-    if executable is None:
-        raise ValueError("Bootstrap Core's declared uv before preparing the checker stack")
+    executable = StackSources.frontend()
     inputs = IntegrationInput.at(directory)
     with InstallCommands() as commands:
         CheckerStack(checkout=directory / "checker", commands=commands, home=directory,
                      runtime=LaunchRuntime(Path(sys.executable)), source_directory=directory,
-                     inputs=inputs, uv_program=Path(executable)).prepare()
+                     inputs=inputs, uv_program=executable).prepare()
     return 0
 
 

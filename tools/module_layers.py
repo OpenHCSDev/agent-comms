@@ -40,7 +40,9 @@ from functools import cache, cached_property
 from pathlib import Path
 
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
-from agent_comms.installer.runtime_resolution import StackSources
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.runtime_resolution import CorePackage, ProjectMetadata, StackSources
+from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
@@ -325,7 +327,7 @@ class StackClient(StackSources):
 
     @classmethod
     @cache
-    def revision(cls, repo: Path, head: str) -> tuple[StackClient, ...]:
+    def revision(cls, repo: Path, head: str, uv: Path, python: Path) -> tuple[StackClient, ...]:
         """Ordinary local comparisons retain one head-declared main capture for both sides."""
         if not Repo.git(repo, "ls-tree", "--name-only", head, "--", "stack/pyproject.toml"):
             return ()
@@ -333,10 +335,12 @@ class StackClient(StackSources):
         atexit.register(shutil.rmtree, into, True)
         (into / "stack").mkdir()
         (into / "stack/pyproject.toml").write_text(Repo.git(repo, "show", f"{head}:stack/pyproject.toml"))
-        return cls.fetched(into / "stack", into)
+        with InstallCommands() as commands:
+            return cls.fetched(into / "stack", into, uv=uv, python=python, commands=commands)
 
     @classmethod
-    def fetched(cls, stack: Path, into: Path) -> tuple[StackClient, ...]:
+    def fetched(cls, stack: Path, into: Path, *, uv: Path, python: Path,
+                commands: InstallCommands) -> tuple[StackClient, ...]:
         """Shallow clones of every git source at its declared branch head."""
         clients = []
         for name, (url, branch) in StackClient.sources(stack).items():
@@ -345,12 +349,16 @@ class StackClient(StackSources):
                 ["git", "clone", "--quiet", "--depth", "1", "--branch", branch, url, str(checkout)],
                 check=True,
             )
+            metadata = ProjectMetadata.acquire(checkout, uv=uv, python=python,
+                                               commands=commands, output=into / "metadata")
+            cls.require_package(metadata, name)
             clients.append(cls(name, checkout))
         return tuple(clients)
 
     @classmethod
     def materialized(cls, stack: Path, directory: Path, side: type[Side],
-                     inputs: IntegrationInput) -> tuple[StackClient, ...]:
+                     inputs: IntegrationInput,
+                     metadata: dict[RepositoryName, ProjectMetadata]) -> tuple[StackClient, ...]:
         """Only this actual cut's declarations, from the already-frozen Git input.
 
         A package absent on this side is absent here; the comparison owner forms the
@@ -360,7 +368,7 @@ class StackClient(StackSources):
         for name, (url, branch) in cls.sources(stack).items():
             source = inputs.source(Repo.repository_url(url))
             checkout = side.require_materialized(directory, source)
-            cls.require_package(checkout, name)
+            cls.require_package(metadata[source.repository], name)
             clients.append(cls(name, checkout))
         return tuple(clients)
 
@@ -376,38 +384,84 @@ class StackClient(StackSources):
 
 
 @dataclass(frozen=True)
-class ClientSources:
+class ClientSources(StackSources):
     """The comparison's acquisition policy, passed to every measure before workers fork."""
 
     def requires_clients(self, changed: set[str]) -> bool:
         return False
 
     def at(self, repo: Path, base: str, head: str, side: type[Side]) -> tuple[StackClient, ...]:
-        return StackClient.revision(repo, head)
+        return StackClient.revision(repo, head, self.frontend(), Path(sys.executable))
 
 
 @dataclass(frozen=True)
 class MaterializedClients(ClientSources):
     directory: Path
     inputs: IntegrationInput
+    uv: Path
+    python: Path
+    commands: InstallCommands
 
     @classmethod
-    def read(cls, directory: Path) -> MaterializedClients:
-        return cls(directory, IntegrationInput.at(directory))
+    def read(cls, directory: Path, *, uv: Path, python: Path,
+             commands: InstallCommands) -> MaterializedClients:
+        return cls(directory, IntegrationInput.at(directory), uv, python, commands)
+
+    @cached_property
+    def environment(self) -> dict[str, str]:
+        return self.marker_environment(self.python)
+
+    @cached_property
+    def metadata(self) -> dict[type[Side], dict[RepositoryName, ProjectMetadata]]:
+        """One acquisition per actual immutable project, shared by all consumers here."""
+        environment = self.environment
+        result: dict[type[Side], dict[RepositoryName, ProjectMetadata]] = {}
+        core_source = self.inputs.source(CorePackage.repository)
+        for side in Side.sides():
+            core = side.require_materialized(self.directory, core_source)
+            packages = {core_source.repository: CorePackage.distribution,
+                        **{Repo.repository_url(url): name
+                           for name, (url, branch) in self.sources(core / "stack").items()}}
+            projects: dict[RepositoryName, ProjectMetadata] = {}
+            for identity in sorted(packages, key=lambda identity: identity.key):
+                source = self.inputs.source(identity)
+                checkout = side.require_materialized(self.directory, source)
+                try:
+                    metadata = ProjectMetadata.acquire(checkout, uv=self.uv, python=self.python,
+                        commands=self.commands, output=self.directory / "metadata")
+                    self.require_package(metadata, packages[identity])
+                    ProjectMetadata.require_python(metadata.python, environment)
+                    projects[identity] = metadata
+                finally:
+                    side.require_materialized(self.directory, source)
+            result[side] = projects
+        return result
+
+    def projects(self, side: type[Side]) -> dict[RepositoryName, ProjectMetadata]:
+        projects = self.metadata[side]
+        for identity in projects:
+            side.require_materialized(self.directory, self.inputs.source(identity))
+        return projects
+
+    @cached_property
+    def cuts(self) -> dict[type[Side], tuple[StackClient, ...]]:
+        core_source = self.inputs.source(CorePackage.repository)
+        return {side: StackClient.materialized(
+                    side.require_materialized(self.directory, core_source) / "stack",
+                    self.directory, side, self.inputs, self.projects(side)) for side in Side.sides()}
 
     def requires_clients(self, changed: set[str]) -> bool:
         # A companion can change while the local Core patch is unchanged.
         return True
 
-    @cache
     def at(self, repo: Path, base: str, head: str, side: type[Side]) -> tuple[StackClient, ...]:
         source = self.inputs.source(Repo.of(repo).github)
         if Repo.git(repo, "rev-parse", base).strip() != source.baseline.commit or (
                 Repo.git(repo, "rev-parse", f"{head}^{{tree}}").strip() != source.candidate_tree):
             raise ValueError("Checker Core cuts do not match the materialized source input")
-        cuts = {cut: StackClient.materialized(
-                    cut.require_materialized(self.directory, source) / "stack",
-                    self.directory, cut, self.inputs) for cut in Side.sides()}
+        for cut in Side.sides():
+            self.projects(cut)
+        cuts = self.cuts
         clients = tuple(client for found in cuts.values() for client in found)
         origins = {member.checkout(self.directory, source.repository): source.repository
                    for member in Side.sides() for source in self.inputs.sources}
@@ -775,17 +829,20 @@ def main() -> int:
     parser.add_argument("--ci-inputs", type=Path,
                         help="use the integration entrypoint's already-materialized exact source input")
     arguments = parser.parse_args()
-    with tempfile.TemporaryDirectory() as clones:
+    with tempfile.TemporaryDirectory() as clones, InstallCommands() as commands:
         if arguments.ci_inputs:
             inputs = IntegrationInput.at(arguments.ci_inputs)
             local = inputs.source(Repo.of(ROOT).github)
             core = HeadSide.require_materialized(arguments.ci_inputs, local)
-            package = Package(core, StackClient.materialized(core / "stack", arguments.ci_inputs, HeadSide, inputs))
+            resource = MaterializedClients(arguments.ci_inputs, inputs, StackSources.frontend(),
+                                           Path(sys.executable), commands)
+            package = Package(core, resource.cuts[HeadSide])
             base = BaseSide.require_materialized(arguments.ci_inputs, local)
             if arguments.base and Repo.git(ROOT, "rev-parse", arguments.base).strip() != local.baseline.commit:
                 raise ValueError("The outgoing wire must check this input's actual captured base")
         else:
-            package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones)))
+            package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones),
+                uv=StackSources.frontend(), python=Path(sys.executable), commands=commands))
             base = Path(clones) / "base"
         if not arguments.check:
             sys.stdout.write(package.markdown())

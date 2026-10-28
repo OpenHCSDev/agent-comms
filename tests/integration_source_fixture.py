@@ -1,8 +1,9 @@
 """One real Git/forge/Todo setup for matched source capture and promotion controls."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
+import sys
 import time
 
 import pytest
@@ -10,7 +11,8 @@ import pytest
 from agent_comms.commander.order import Commander, CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.head_review import PullRequestHead
+from agent_comms.head_review import IntegrationInput, PullRequestHead
+from agent_comms.installer.commands import InstallCommands
 from agent_comms.integration import IntegrationCheckout
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -19,6 +21,7 @@ from agent_comms.todos import DraftListedPullRequest, RecordPullRequest
 from fixture_git import ENVIRONMENT
 from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository
+from module_layers import MaterializedClients
 
 
 @dataclass(frozen=True)
@@ -53,10 +56,10 @@ def source_pair(
     core = SourceRepository.create(tmp_path / "matched-core", held_bus.goals.todos.get("P2").repo)
     client = SourceRepository.create(tmp_path / "matched-client", RepositoryName.from_wire("example/client"))
     core_files = core.write_files({
-        Path("pyproject.toml"): '[project]\nname = "agent-comms"\nversion = "0.0.1"\ndependencies = []\n',
+        Path("pyproject.toml"): core.package_project("agent-comms"),
         Path("stack/pyproject.toml"): (
             '[project]\nname = "fixture-stack"\nversion = "0.0.1"\ndependencies = ["agent-comms", "source-client"]\n'
-            '[tool.uv]\noverride-dependencies = ["packaging==26.0"]\n'
+            '[tool.uv]\npackage = false\noverride-dependencies = ["packaging==26.0"]\n'
             'constraint-dependencies = ["typing-extensions>=4.15"]\n'
             '[tool.uv.pip]\nstrict = true\n'
             '[tool.uv.sources]\nagent-comms = {path = "..", editable = true}\n'
@@ -70,7 +73,7 @@ def source_pair(
     core.publish_change("Declare the baseline Core API and actual stack source", *core_files)
     core.git(core.checkout, "push", "origin", "main")
     client_files = client.write_files({
-        Path("pyproject.toml"): '[project]\nname = "source-client"\nversion = "0.0.1"\ndependencies = []\n',
+        Path("pyproject.toml"): client.package_project("source-client"),
         Path("src/workflow.py"): 'from agent_comms.api import old_api\n\ndef run() -> str:\n    return old_api()\n',
     })
     client.publish_change("Declare the baseline client import", *client_files)
@@ -95,6 +98,15 @@ def source_pair(
         ))
     checkout = IntegrationCheckout.create(core, tmp_path / "qualification", core.main_commit)
     return MutualSources(context, core, client, checkout, tmp_path / "qualified-inputs")
+
+
+@pytest.fixture
+def materialized_clients(test_uv: Path) -> Iterator[Callable[[Path, IntegrationInput], MaterializedClients]]:
+    """The root test run supplies the actual frontend; every test owns one command lifetime."""
+    with InstallCommands() as commands:
+        def acquire(directory: Path, inputs: IntegrationInput) -> MaterializedClients:
+            return MaterializedClients(directory, inputs, test_uv, Path(sys.executable), commands)
+        yield acquire
 
 
 @pytest.fixture

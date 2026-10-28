@@ -6,6 +6,8 @@ import subprocess
 from typing import ClassVar, Self
 from tempfile import mkdtemp
 
+import tomli_w
+
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -60,6 +62,17 @@ class SourceRepository(Repo):
             ('git', *IDENTITY, '-C', str(repository), *arguments), input=text, text=True,
             capture_output=True, check=True, timeout=30,
         ).stdout.strip()
+
+    @staticmethod
+    def package_project(name: str, *, dependencies: tuple[str, ...] = (),
+                        python: str = ">=3.10", extras: dict[str, list[str]] | None = None) -> str:
+        """One legitimate tiny source project, built by its standard backend in controls."""
+        return tomli_w.dumps({
+            "build-system": {"requires": ["hatchling"], "build-backend": "hatchling.build"},
+            "project": {"name": name, "version": "0.0.1", "requires-python": python,
+                        "dependencies": list(dependencies), "optional-dependencies": extras or {}},
+            "tool": {"hatch": {"build": {"targets": {"wheel": {"packages": ["src"]}}}}},
+        })
 
     def write_files(self, files: Mapping[Path, str]) -> tuple[str, ...]:
         """Real source fixtures share file preparation, not a second source-selection mechanism."""

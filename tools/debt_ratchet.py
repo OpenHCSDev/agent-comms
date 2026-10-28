@@ -55,6 +55,7 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 from module_layers import PACKAGE, ClientSources, MaterializedClients, StackClient
+from agent_comms.installer.commands import InstallCommands
 from stored_formats import StoredForm
 from typing_names import TypingImports, TypingReference
 from agent_comms.field_codec import FieldCodec, ViewExclusion, boundary_decoder, projected
@@ -2852,8 +2853,10 @@ def main() -> int:
     parser.add_argument("--ci-inputs", type=Path,
                         help="the integration entrypoint's exact materialized Core/client cuts")
     args = parser.parse_args()
-    clients = MaterializedClients.read(args.ci_inputs) if args.ci_inputs else ClientSources()
-    result = compare(Path.cwd(), args.base, args.head, args.root, args.workers, clients=clients)
+    with InstallCommands() as commands:
+        clients = MaterializedClients.read(args.ci_inputs, uv=MaterializedClients.frontend(),
+            python=Path(sys.executable), commands=commands) if args.ci_inputs else ClientSources()
+        result = compare(Path.cwd(), args.base, args.head, args.root, args.workers, clients=clients)
     # Flushed first: stdout is block-buffered into a pipe, and the growth lines must end the log.
     print(json.dumps(FieldCodec.project(result, "report"), indent=2), flush=True)
     # The failing step's last lines become check annotations (.github/run-step.sh merges

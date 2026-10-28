@@ -21,7 +21,7 @@ pytest_plugins = ("test_holder_standing_rules", "integration_source_fixture")
 @pytest.mark.parametrize("dependencies,allowed", [((), True), (("idna==3.10",), False)])
 def test_private_project_preserves_settings_pins_and_refuses_external_migration(
     mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
-    dependencies: tuple[str, ...], allowed: bool, monkeypatch: pytest.MonkeyPatch,
+    dependencies: tuple[str, ...], allowed: bool, monkeypatch: pytest.MonkeyPatch, test_uv: Path,
 ) -> None:
     pair = mutual_sources
     # Edit the real source before capture, never rewrite the captured artifact or selectors.
@@ -37,7 +37,7 @@ def test_private_project_preserves_settings_pins_and_refuses_external_migration(
     with InstallCommands() as commands:
         checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
                                runtime=LaunchRuntime.running(), source_directory=pair.output,
-                               inputs=inputs, uv_program=Path("uv"))
+                               inputs=inputs, uv_program=test_uv)
         original = checker.core / "stack"
         before = (original / "pyproject.toml").read_bytes(), (original / "uv.lock").read_bytes()
         if allowed:
@@ -60,3 +60,42 @@ def test_private_project_preserves_settings_pins_and_refuses_external_migration(
         for side in (BaseSide, HeadSide):
             for source in inputs.sources:
                 side.require_materialized(pair.output, source)
+
+
+@pytest.mark.parametrize("requested", (False, True))
+def test_bootstrap_extra_is_runtime_only_when_the_virtual_root_requests_it(
+    mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
+    requested: bool, test_uv: Path,
+) -> None:
+    pair = mutual_sources
+    pair.core.git(pair.core.checkout, "switch", "main")
+    project = tomllib.loads((pair.core.checkout / "pyproject.toml").read_text())
+    project["project"]["optional-dependencies"] = {"checking": ["idna>=3.9"]}
+    stack = tomllib.loads((pair.core.checkout / "stack/pyproject.toml").read_text())
+    if requested:
+        stack["project"]["dependencies"] = ["agent-comms[checking]", "source-client"]
+    pair.core.publish_change("Declare actual baseline root and optional dependency", *pair.core.write_files({
+        Path("pyproject.toml"): tomli_w.dumps(project),
+        Path("stack/pyproject.toml"): tomli_w.dumps(stack)}))
+    pair.core.git(pair.core.checkout, "push", "origin", "main")
+    pair.core.git(pair.core.checkout, "switch", "feature")
+    pair.core.git(pair.core.checkout, "rebase", "main")
+    project["project"]["optional-dependencies"] = {"checking": ["idna>=3.10"]}
+    head = pair.core.publish_change("Change only the optional checker dependency", *pair.core.write_files({
+        Path("pyproject.toml"): tomli_w.dumps(project)}))
+    stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(pair.core.github, DraftListedPullRequest(
+        pair.core.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
+    inputs = IntegrationRun(pair.checkout, pair.output, "runtime root extras, not bootstrap extras").qualify(
+        pair.context, ("P2", "P3"))
+    with InstallCommands() as commands:
+        checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
+            runtime=LaunchRuntime.running(), source_directory=pair.output, inputs=inputs, uv_program=test_uv)
+        if requested:
+            with pytest.raises(ValueError, match="External runtime dependency migration"):
+                checker.require_runtime_compatibility()
+        else:
+            checker.require_runtime_compatibility()
+        before = checker.clients.projects(BaseSide)[pair.core.github]
+        after = checker.clients.projects(HeadSide)[pair.core.github]
+        assert before.requirements != after.requirements  # Complete metadata was never filtered away.

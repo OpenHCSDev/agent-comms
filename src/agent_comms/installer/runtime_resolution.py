@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import shutil
 import sys
 import tomllib
+from collections.abc import Iterable
 from dataclasses import dataclass
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from zipfile import ZipFile
 from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import parse_qs, urlsplit
 
-from packaging.markers import Marker
+from packaging.markers import Marker, default_environment
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
-from packaging.utils import canonicalize_name
+from packaging.utils import canonicalize_name, parse_wheel_filename
+from packaging.version import Version
 from pydantic import BaseModel, Field
 
 from agent_comms.declared_family import DeclaredFamily
@@ -20,10 +27,94 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
+    from agent_comms.installer.commands import InstallCommands
     from agent_comms.installer.upgrade import Stack
+
+
+@dataclass(frozen=True)
+class ProjectMetadata:
+    """An installable project's backend-produced wheel metadata, not its manifest dialect."""
+
+    name: str
+    version: Version
+    python: SpecifierSet
+    requirements: tuple[Requirement, ...]
+    extras: frozenset[str]
+
+    @classmethod
+    def from_wheel(cls, wheel: Path) -> ProjectMetadata:
+        name, version, _, _ = parse_wheel_filename(wheel.name)
+        with ZipFile(wheel) as archive:
+            entries = tuple(entry for entry in archive.infolist()
+                            if entry.filename.endswith(".dist-info/METADATA"))
+            if len(entries) != 1:
+                raise ValueError(f"{wheel} requires exactly one dist-info/METADATA")
+            entry, = entries
+            parent, separator, filename = entry.filename.partition("/")
+            if separator != "/" or filename != "METADATA":
+                raise ValueError(f"Malformed wheel metadata path: {entry.filename}")
+            identity, recorded_version = parent.removesuffix(".dist-info").rsplit("-", 1)
+            if canonicalize_name(identity) != name or Version(recorded_version) != version:
+                raise ValueError(f"Wheel metadata directory differs from {wheel.name}")
+            message = BytesParser(policy=policy.default).parsebytes(archive.read(entry))
+        if message.defects:
+            raise ValueError(f"Malformed wheel metadata: {message.defects}")
+        def required(header: str) -> str:
+            values = message.get_all(header, [])
+            if len(values) != 1 or not str(values[0]).strip():
+                raise ValueError(f"Wheel metadata requires exactly one {header}")
+            return str(values[0]).strip()
+        actual = canonicalize_name(required("Name"), validate=True)
+        actual_version = Version(required("Version"))
+        Version(required("Metadata-Version"))
+        if actual != name or actual_version != version:
+            raise ValueError(f"Wheel metadata identity differs from {wheel.name}")
+        python = message.get_all("Requires-Python", [])
+        if len(python) > 1:
+            raise ValueError("Duplicate Requires-Python metadata")
+        extra_values = tuple(canonicalize_name(str(value), validate=True)
+                             for value in message.get_all("Provides-Extra", []))
+        if len(set(extra_values)) != len(extra_values):
+            raise ValueError("Duplicate Provides-Extra metadata")
+        return cls(actual, actual_version, SpecifierSet(str(python[0]) if python else ""),
+                   tuple(Requirement(str(value)) for value in message.get_all("Requires-Dist", [])),
+                   frozenset(extra_values))
+
+    @classmethod
+    def acquire(cls, checkout: Path, *, uv: Path, python: Path,
+                commands: InstallCommands, output: Path) -> ProjectMetadata:
+        """Build once through the selected frontend; output never lives in a source cut."""
+        output = output.resolve()
+        checkout = checkout.resolve()
+        if output.is_relative_to(checkout):
+            raise ValueError("Wheel metadata output must be outside the captured source")
+        before = Repo.git(checkout, "rev-parse", "HEAD").strip()
+        if Repo.git(checkout, "status", "--porcelain"):
+            raise ValueError(f"Preserve dirty metadata source: {checkout}")
+        output.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(prefix="metadata-", dir=output) as temporary:
+            try:
+                commands.run(uv, "build", "--wheel", "--out-dir", temporary,
+                             "--python", python, checkout)
+                wheels = tuple(Path(temporary).glob("*.whl"))
+                if len(wheels) != 1:
+                    raise ValueError(f"Backend produced {len(wheels)} wheels for {checkout}, expected one")
+                wheel, = wheels
+                return cls.from_wheel(wheel)
+            finally:
+                if Repo.git(checkout, "rev-parse", "HEAD").strip() != before or Repo.git(
+                        checkout, "status", "--porcelain"):
+                    raise ValueError(f"Backend moved or dirtied captured source: {checkout}")
+
+    @staticmethod
+    def require_python(specifier: SpecifierSet, environment: dict[str, str]) -> None:
+        version = environment["python_full_version"]
+        if not specifier.contains(version, prereleases=True):
+            raise ValueError(f"The common interpreter {version} does not satisfy {specifier}")
 
 
 class StackSources:
@@ -34,12 +125,25 @@ class StackSources:
         return cls.declared_sources((stack / "pyproject.toml").read_text())
 
     @staticmethod
-    def require_package(checkout: Path, name: str) -> None:
-        """A stack key names the actual source project, not a package-to-PR roster."""
-        match tomllib.loads((checkout / "pyproject.toml").read_text()):
-            case {"project": {"name": str(actual)}} if canonicalize_name(actual) == canonicalize_name(name):
-                return
-        raise ValueError(f"{checkout} does not declare stack package {name}")
+    def require_package(metadata: ProjectMetadata, name: str) -> None:
+        """The actual backend, never a manifest spelling, owns the distribution identity."""
+        if metadata.name != canonicalize_name(name):
+            raise ValueError(f"Backend builds {metadata.name}, not stack package {name}")
+
+    @staticmethod
+    def frontend() -> Path:
+        executable = shutil.which("uv")
+        if executable is None:
+            raise ValueError("Bootstrap Core's declared uv before acquiring source metadata")
+        return Path(executable).absolute()
+
+    @staticmethod
+    def marker_environment(python: Path) -> dict[str, str]:
+        # Marker evaluation must describe the interpreter actually running both checkers.
+        # A different environment cannot borrow this process's platform or Python facts.
+        if not LaunchRuntime.from_interpreter(python).runs_this_process:
+            raise ValueError("Run metadata preparation in the selected common interpreter")
+        return dict(default_environment())
 
     @classmethod
     def require_compatible(cls, baseline: str, candidate: str) -> None:
@@ -57,28 +161,62 @@ class StackSources:
                         match source:
                             case {"git": str(), "branch": str()} | {"path": str()}:
                                 local_names.add(canonicalize_name(FieldCodec.decode(str, name)))
-        contracts = tuple(frozenset(map(str, cls.runtime_requirements(document, frozenset(local_names))))
+        environment = cls.marker_environment(Path(sys.executable))
+        contracts = tuple(frozenset(str(requirement) for requirement in cls.virtual_requirements(document)
+                                    if canonicalize_name(requirement.name) not in local_names
+                                    and cls.requirement_active(requirement, environment, ("",)))
                           for document in documents)
         if contracts[0] != contracts[1]:
             raise ValueError("External runtime dependency migration is unsupported by this common environment")
 
     @staticmethod
-    def runtime_requirements(document: dict[str, object], local_names: frozenset[str]) -> tuple[Requirement, ...]:
-        """Decode the supported external project contract once, for every package consumer."""
+    def virtual_requirements(document: dict[str, object]) -> tuple[Requirement, ...]:
+        """Only package=false roots have a declarative (non-wheel) runtime contract."""
         match document:
-            case {"project": {"dependencies": list() as dependencies, **project}}:
-                version = ".".join(map(str, sys.version_info[:3]))
-                python = FieldCodec.decode(str, project.get("requires-python", ""))
-                if not SpecifierSet(python).contains(version, prereleases=True):
-                    raise ValueError(f"The common interpreter {version} does not satisfy {python}")
-                requirements = []
-                for text in FieldCodec.decode(tuple[str, ...], dependencies):
-                    requirement = Requirement(text)
-                    requirement.name = canonicalize_name(requirement.name)
-                    if requirement.name not in local_names:
-                        requirements.append(requirement)
-                return tuple(requirements)
-        raise ValueError("A compared source requires explicit project runtime dependencies")
+            case {"project": {"dependencies": list() as dependencies, **project},
+                  "tool": {"uv": {"package": False}}}:
+                python = SpecifierSet(FieldCodec.decode(str, project.get("requires-python", "")))
+                ProjectMetadata.require_python(python, dict(default_environment()))
+                return tuple(map(Requirement, FieldCodec.decode(tuple[str, ...], dependencies)))
+        raise ValueError("A virtual runtime root requires tool.uv.package=false and project dependencies")
+
+    @staticmethod
+    def requirement_active(requirement: Requirement, environment: dict[str, str], extras: Iterable[str]) -> bool:
+        return requirement.marker is None or any(
+            requirement.marker.evaluate({**environment, "extra": extra}) for extra in extras)
+
+    @classmethod
+    def active_requirements(cls, document: dict[str, object], projects: tuple[ProjectMetadata, ...],
+                            environment: dict[str, str]) -> tuple[Requirement, ...]:
+        """Monotone local-extra closure, retaining original marked/extras-bearing edges."""
+        local = {project.name: project for project in projects}
+        if len(local) != len(projects):
+            raise ValueError("Captured package metadata contains duplicate distribution identities")
+        for project in projects:
+            ProjectMetadata.require_python(project.python, environment)
+        selected: dict[str, set[str]] = {}
+        pending = [requirement for requirement in cls.virtual_requirements(document)
+                   if cls.requirement_active(requirement, environment, ("",))]
+        active: set[Requirement] = set()
+        while pending:
+            requirement = pending.pop()
+            # Pending edges were admitted by their declaring package's active extras;
+            # virtual roots have only the base context.
+            active.add(requirement)
+            name = canonicalize_name(requirement.name)
+            if name not in local:
+                continue
+            project = local[name]
+            requested = {"", *(canonicalize_name(extra) for extra in requirement.extras)}
+            if not requested.difference({""}).issubset(project.extras):
+                raise ValueError(f"{name} does not provide requested extras {requirement.extras}")
+            previous = selected.setdefault(name, set())
+            added = requested - previous
+            if not added:
+                continue
+            previous.update(added)
+            pending.extend(edge for edge in project.requirements if cls.requirement_active(edge, environment, added))
+        return tuple(sorted(active, key=str))
 
     @staticmethod
     def declared_sources(document: str) -> dict[str, tuple[str, str]]:

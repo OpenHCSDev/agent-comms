@@ -1,5 +1,6 @@
 """Integration policy at real TOML/Git/gh boundaries; no patched Core methods."""
 
+from collections.abc import Callable
 from dataclasses import replace
 import json
 import os
@@ -89,6 +90,7 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
 
 def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_overlay(
     mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
+    materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],
 ) -> None:
     pair = mutual_sources
     head = pair.core.branch_commit
@@ -113,7 +115,7 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     assert core.baseline.commit == baseline
     assert core.heads == (PullRequestHead(pair.core.github, pair.core.number, head),)
     assert client.heads == () and client.baseline.commit == pair.client.main_commit
-    resource = MaterializedClients(output, inputs)
+    resource = materialized_clients(output, inputs)
     base = BaseSide.require_materialized(output, core)
     candidate = HeadSide.require_materialized(output, core)
     assert Package(base, resource.at(checkout.path, baseline, tested, BaseSide)).missing_names == ()
@@ -177,6 +179,7 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
 
 def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
+    materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],
 ) -> None:
     pair = mutual_sources
     plugin = ('from mypy.plugin import Plugin\nfrom agent_comms.api import old_api\n'
@@ -199,7 +202,7 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
     inputs = integration.IntegrationRun(pair.checkout, pair.output, "real client checker tuple and native plugins").qualify(pair.context, ("P2", "P3"))
     source = inputs.source(pair.core.github)
     head = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
-    clients = MaterializedClients(pair.output, inputs)
+    clients = materialized_clients(pair.output, inputs)
     assert len(ClientTypeErrors.parts(pair.core.checkout, source.baseline.commit, head,
                                      {"src/agent_comms/api.py"}, "src/", clients)) == 2
     result = compare(pair.core.checkout, source.baseline.commit, head, "src", 1,
@@ -340,11 +343,11 @@ def test_changed_main_during_source_review_refuses_the_frozen_input(
 
 def test_common_runtime_contract_allows_local_source_and_metadata_changes() -> None:
     baseline = ('[project]\nname="old-label"\nversion="1"\n'
-                'dependencies=["agent-comms", "old-client", "packaging>=25"]\n'
+                'dependencies=["agent-comms", "old-client", "packaging>=25"]\n[tool.uv]\npackage=false\n'
                 '[tool.uv.sources]\nagent-comms={path="..",editable=true}\n'
                 'old-client={git="https://github.com/example/old.git",branch="main"}\n')
     candidate = ('[project]\nname="new-label"\nversion="2"\n'
-                 'dependencies=["agent-comms", "new-client", "packaging>=25"]\n'
+                 'dependencies=["agent-comms", "new-client", "packaging>=25"]\n[tool.uv]\npackage=false\n'
                  '[tool.uv.sources]\nagent-comms={path="..",editable=true}\n'
                  'new-client={git="https://github.com/example/new.git",branch="main"}\n')
     StackSources.require_compatible(baseline, candidate)
@@ -352,8 +355,8 @@ def test_common_runtime_contract_allows_local_source_and_metadata_changes() -> N
 
 
 def test_common_runtime_contract_refuses_unsupported_external_dependency_migration() -> None:
-    baseline = '[project]\ndependencies=["packaging>=25"]\n'
-    candidate = '[project]\ndependencies=["packaging>=26"]\n'
+    baseline = '[project]\ndependencies=["packaging>=25"]\n[tool.uv]\npackage=false\n'
+    candidate = '[project]\ndependencies=["packaging>=26"]\n[tool.uv]\npackage=false\n'
     with pytest.raises(ValueError):
         StackSources.require_compatible(baseline, candidate)
 
