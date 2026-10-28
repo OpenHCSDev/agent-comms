@@ -32,6 +32,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.order_tools import CommanderUnitRead
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
+from agent_comms.work_branches import WorkBranchError
 from agent_comms.ui_model.observation import ReadOperation, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
@@ -121,6 +122,10 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     try:
         metadata.write_text('gitdir: ./missing-original-git\n')
         assert isinstance(request.answer(comms), ReadRefused)
+        # MCP reaches the same nominal refusal, which the connector answers as a failed call.
+        with pytest.raises(WorkBranchError):
+            invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode(operation),
+                        caller=ThreadCaller("lead"))
     finally:
         metadata.unlink()
         saved.rename(metadata)

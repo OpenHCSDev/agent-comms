@@ -15,7 +15,9 @@ from agent_comms.notification_read import NotificationsRead, UnreadableNotificat
 from agent_comms.notification_reads import (
     LiveNotificationRead, NotificationRead, RecordedNotificationRead,
 )
-from agent_comms.order_tools import InputDeliveryRead
+from agent_comms.order_tools import (
+    CommanderUnitRead, InputDeliveryRead, OwnerGoalRead, TranscriptPageRead,
+)
 from agent_comms.private_path import FileRevision
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.repo import Checkout
@@ -29,7 +31,16 @@ from agent_comms.threads import Thread
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.tool_request import ToolRequest
 from agent_comms.tools import CommsMessageOutcomesTool
-from agent_comms.ui_model.observation import ObserveNotifications, ReadNotifications
+from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
+from agent_comms.bus_read import OwnerLiveRead
+from agent_comms.commander_hud import CommanderUnitDetail
+from agent_comms.field_codec import OrderId
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.transcripts import NativeTranscriptCursor
+from agent_comms.ui_model.observation import (
+    ObserveNotifications, ReadNotifications, ReadOperation, ReadOwnerOperation,
+    ReadTranscript, ReadTranscriptUpdate, RefreshTranscript, SubscribeTranscript,
+)
 
 
 def test_notification_read_states_use_the_request_revision_contract(comms):
@@ -259,3 +270,78 @@ def test_notification_rank_overrides_follow_the_mro_without_changing_parent_rank
     assert ShownToModelProgress(100).rank() == DeliveryRank.position_of(SettledDelivery)
     assert SendingProgress(100).rank() == DeliveryRank.position_of(ActiveDelivery)
     assert SelectedConsumedProgress(100).rank() == DeliveryRank.position_of(ActiveDelivery)
+
+
+LEAD, WORKER = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation("worker", 2.0)
+ORDERS = (OrderId.mint(),)
+UI_ONLY_FIELDS = {"root", "request_id", "previous", "owner", "identity"}
+SHARED_UI_READS = [
+    CommanderUnitRead(commander=LEAD, unit=WORKER, orders=ORDERS),
+    TranscriptPageRead(thread="worker", before=NativeTranscriptCursor("session.jsonl", 7),
+                       historical_source="archive"),
+]
+
+
+@pytest.mark.parametrize("operation", SHARED_UI_READS, ids=["commander_unit", "transcript_page"])
+def test_shared_ui_reads_are_root_free_family_records_in_one_generic_envelope(operation):
+    encoded = FieldCodec.encode(operation)
+    assert not UI_ONLY_FIELDS & set(encoded)
+    assert FieldCodec.decode(UiRead, encoded) == operation
+    request = ReadOperation("root", operation, request_id=4)
+    assert FieldCodec.decode(ReadOperation, FieldCodec.encode(request)) == request
+    transported = pickle.loads(pickle.dumps(request))
+    assert transported == request and hash(transported) == hash(request)
+    assert {transported: "held"}[request] == "held" and len({request, transported}) == 1
+
+
+def test_the_owner_goal_is_a_root_free_owner_live_record_in_its_envelope():
+    operation = OwnerGoalRead(thread="worker")
+    encoded = FieldCodec.encode(operation)
+    assert not UI_ONLY_FIELDS & set(encoded)
+    assert FieldCodec.decode(OwnerLiveRead, encoded) == operation
+    request = ReadOwnerOperation("root", WORKER, operation=operation, request_id=4)
+    transported = pickle.loads(pickle.dumps(request))
+    assert transported == request and hash(transported) == hash(request)
+
+
+def test_witnesses_cursors_and_archive_each_distinguish_a_shared_read_request():
+    commander = ReadOperation("root", SHARED_UI_READS[0], request_id=4)
+    page = ReadOperation("root", SHARED_UI_READS[1], request_id=4)
+    distinct = (
+        replace(commander, root="other-root"),
+        replace(commander, request_id=5),
+        replace(commander, operation=replace(SHARED_UI_READS[0], unit=RecordedThreadIncarnation("worker", 3.0))),
+        replace(commander, operation=replace(SHARED_UI_READS[0], orders=(OrderId.mint(),))),
+        page,
+        replace(page, operation=replace(SHARED_UI_READS[1], before=NativeTranscriptCursor("session.jsonl", 8))),
+        replace(page, operation=replace(SHARED_UI_READS[1], historical_source="other-archive")),
+    )
+    assert len({commander, *distinct}) == 1 + len(distinct)
+
+
+def test_one_shared_read_in_two_root_envelopes_keeps_root_validation(comms):
+    operation = SHARED_UI_READS[1]
+    ours = ReadOperation(str(comms.root), operation)
+    foreign = ReadOperation(str(comms.root.parent / "another-wire"), operation)
+    assert ours.operation is foreign.operation and ours != foreign
+    ours.require_root(comms)
+    with pytest.raises(StaleRevision):
+        foreign.require_root(comms)
+
+
+def test_the_three_public_reads_are_cataloged_once_with_their_original_results():
+    sys.path.insert(0, str(Path(__file__).parent))
+    from test_tool_replies import result_type
+
+    tools = ToolRequest.members_with(ToolRequest)
+    native = NativeRequestTools.members_with(NativeRequestTools)
+    results = {CommanderUnitRead: CommanderUnitDetail, OwnerGoalRead: GoalSnapshotReply,
+               TranscriptPageRead: TranscriptSnapshotUpdate}
+    for operation, result in results.items():
+        assert tools.count(operation) == 1 and native.count(operation) == 1
+        assert result_type(operation) is result
+    assert set(ToolRequest.members_with(UiRead)) == {CommanderUnitRead, TranscriptPageRead}
+    assert set(ToolRequest.members_with(OwnerLiveRead)) == {InputDeliveryRead, OwnerGoalRead}
+    lifecycle = (ReadOperation, ReadOwnerOperation, ReadNotifications, ReadTranscript,
+                 SubscribeTranscript, ReadTranscriptUpdate, RefreshTranscript)
+    assert not set(lifecycle) & {*tools, *native}
