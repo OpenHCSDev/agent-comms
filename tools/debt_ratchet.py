@@ -963,7 +963,7 @@ class ClientTypeErrors(SideCounts):
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
               root: str, clients: ClientSources = ClientSources()) -> tuple[Callable[[], object], ...]:
         # A matched resource also owns client-only changes, even with an unchanged Core patch.
-        if not any(path.startswith(f"src/{PACKAGE}/") for path in changed) and not clients.requires_clients(changed):
+        if not any(path.startswith(f"src/{PACKAGE}/") for path in changed) and not clients.requires_clients():
             return ()
         return tuple(partial(cls.findings, repo, side.ref(base, head), client, side)
                      for side in Side.sides()
@@ -3171,7 +3171,7 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int,
     introduced: dict[FileCount, list[int]] = {}
     # Ordinary comparisons need a touched production path. Matched inputs can change
     # an external client while leaving the local Core patch unchanged.
-    if not touched & (production_paths(repo, base) | production_paths(repo, head)) and not clients.requires_clients(touched):
+    if not touched & (production_paths(repo, base) | production_paths(repo, head)) and not clients.requires_clients():
         return Comparison(root, base, head, (), before, after, introduced, {})
 
     # A pass of a shared runner is measured once, by that runner.

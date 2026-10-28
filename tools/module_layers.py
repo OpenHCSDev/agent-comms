@@ -387,7 +387,7 @@ class StackClient(StackSources):
 class ClientSources(StackSources):
     """The comparison's acquisition policy, passed to every measure before workers fork."""
 
-    def requires_clients(self, changed: set[str]) -> bool:
+    def requires_clients(self) -> bool:
         return False
 
     def at(self, repo: Path, base: str, head: str, side: type[Side]) -> tuple[StackClient, ...]:
@@ -450,7 +450,7 @@ class MaterializedClients(ClientSources):
                     side.require_materialized(self.directory, core_source) / "stack",
                     self.directory, side, self.inputs, self.projects(side)) for side in Side.sides()}
 
-    def requires_clients(self, changed: set[str]) -> bool:
+    def requires_clients(self) -> bool:
         # A companion can change while the local Core patch is unchanged.
         return True
 
