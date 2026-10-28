@@ -71,7 +71,7 @@ def shared_page(comms, operation: TranscriptPageRead) -> TranscriptSnapshotUpdat
         through=operation.through, historical_source=operation.historical_source))
     direct = operation.read(comms)
     assert ReadTranscript(str(comms.root), operation).read(comms) == direct == expected
-    assert invoke_tool(comms, operation.declared_name, FieldCodec.encode(operation),
+    assert invoke_tool(comms, operation.declared_name, FieldCodec.encode_fields(operation),
                        caller=ThreadCaller(operation.thread)) == FieldCodec.encode(direct)
     return direct
 

@@ -461,7 +461,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
         except (
             ToolRefusedError, RelationViolationError, CoordinationError, WorkBranchError,
-            Refused, ConnectionError, TimeoutError,
+            MalformedRecord, Refused, ConnectionError, TimeoutError,
         ) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)

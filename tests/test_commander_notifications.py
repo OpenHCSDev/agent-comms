@@ -96,7 +96,7 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     # The shared operation, the UI's root-bound envelope and the MCP boundary answer the same
     # selected card with the same bounded records.
     assert detail == direct
-    assert invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode(operation),
+    assert invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode_fields(operation),
                        caller=ThreadCaller("lead")) == FieldCodec.encode(direct)
     assert detail.unit == card
     assert {order.card.problem for order in detail.orders} == {'P1', 'P2'}
@@ -124,7 +124,7 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
         assert isinstance(request.answer(comms), ReadRefused)
         # MCP reaches the same nominal refusal, which the connector answers as a failed call.
         with pytest.raises(WorkBranchError):
-            invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode(operation),
+            invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode_fields(operation),
                         caller=ThreadCaller("lead"))
     finally:
         metadata.unlink()

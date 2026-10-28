@@ -1,5 +1,6 @@
 from agent_comms.repo import Checkout
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.declared_family import UnknownFamilyMember
+from agent_comms.field_codec import FieldCodec, GoalId, MalformedRecord
 
 """External contracts and adding commands without editing any consumer catalog."""
 
@@ -123,8 +124,6 @@ def test_runtime_wire_format_round_trip(parameters):
         {"action": "owner_read", "operation": {
             "tool": "comms_input_delivery", "include_history": "yes"}},
         {"action": "owner_read", "operation": {"tool": "comms_goal_history"}},
-        {"action": "goal_snapshot"},
-        {"action": "goal_snapshot", "operation": {"tool": "comms_owner_goal", "thread": ""}},
         {"action": "goal_history", "goal_id": 2},
         {"action": "edit_goal", "goal_id": None, "expected_revision": True, "text": "x"},
         {"action": "retry_goal"},
@@ -143,6 +142,19 @@ def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(param
     with pytest.raises(type(declared.value)) as refused:
         FieldCodec.decode(RuntimeRequest, payload)
     assert str(refused.value) == str(declared.value)
+
+
+@pytest.mark.parametrize("parameters", [
+    {"action": "goal_snapshot"},
+    {"action": "goal_snapshot", "operation": {"tool": "comms_owner_goal", "thread": ""}},
+], ids=["bare", "with_operation"])
+def test_the_deleted_goal_snapshot_command_is_an_undeclared_member(parameters):
+    with pytest.raises(UnknownFamilyMember) as undeclared:
+        RuntimeRequest.member_named("goal_snapshot")
+    with pytest.raises(MalformedRecord) as refused:
+        FieldCodec.decode(RuntimeRequest, {"thread": "owner", **parameters})
+    assert type(refused.value.__cause__) is UnknownFamilyMember
+    assert str(refused.value) == str(refused.value.__cause__) == str(undeclared.value)
 
 
 @pytest.mark.parametrize(
