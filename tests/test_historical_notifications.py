@@ -334,8 +334,9 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
                                        activity=sent_activity, updated_at_ms=2_000)
     assert unconfirmed.label == "Not answering" and not unconfirmed.state.seen_not_answering
     assert unconfirmed.state == IgnoredProgress(SentProgress(1_000))
-    assert MessageNotification.summary((working, declined, unconfirmed, idle)).endswith(
-        "Consumed 3/4 · Read 0/4 · Seen, working 1 · Seen, not answering 1")
+    assert MessageNotification.summary((working, declined, unconfirmed, idle)) == (
+        "Seen, working 1 · Seen, not answering 1 · Delivered 4/4 · Consumed 3/4 · Read 0/4")
+    assert MessageNotification.summary((unconfirmed,)) == "Not answering · Delivered 1/1 · Consumed 0/1 · Read 0/1"
     assert delivered_answer.label.startswith("Answered ")
     assert delivered_answer.answer == MessageReference(99, reply_id)
     assert sent.recipient_identity == consumed.recipient_identity == answered.recipient_identity

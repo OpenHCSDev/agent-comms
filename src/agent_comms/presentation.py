@@ -219,15 +219,17 @@ class MessageNotification:
         total = len(ordered)
         consumed = sum(notification.state.consumed for notification in ordered)
         read = sum(bool(notification.displayed_to) for notification in ordered)
-        answering = sum(notification.state.answering for notification in ordered)
-        working = sum(notification.state.seen_working for notification in ordered)
-        declined = sum(notification.state.seen_not_answering for notification in ordered)
-        return (f"{ordered[0].label} · Delivered {total}/{total}"
-                f" · {ConsumedDelivery.label} {consumed}/{total}"
-                f" · {HumanReadProgress.label} {read}/{total}"
-                + (f" · {ConsumingProgress.label} {answering}" if answering else "")
-                + (f" · {WorkingTakenProgress.label} {working}" if working else "")
-                + (f" · {ConsumedDelivery.ignored_label} {declined}" if declined else ""))
+        counted = ((ConsumingProgress.label, sum(item.state.answering for item in ordered)),
+                   (WorkingTakenProgress.label, sum(item.state.seen_working for item in ordered)),
+                   (ConsumedDelivery.ignored_label, sum(item.state.seen_not_answering for item in ordered)))
+        leading = ordered[0]
+        return " · ".join((
+            *leading.state.summary_prefix(leading),
+            *(f"{label} {count}" for label, count in counted if count),
+            f"Delivered {total}/{total}",
+            f"{ConsumedDelivery.label} {consumed}/{total}",
+            f"{HumanReadProgress.label} {read}/{total}",
+        ))
 
     @staticmethod
     def timed_state(label: str, timestamp_ms: int | None) -> str:

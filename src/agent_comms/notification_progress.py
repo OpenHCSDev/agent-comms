@@ -64,6 +64,14 @@ class DeliveryProgress(ThreadPresentationStatus):
         """How a busy recipient that took this message reads; without context proof, unchanged."""
         return self.notification_label(notification)
 
+    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+        """What a summary led by this state prints before its counts."""
+        return (notification.label,)
+
+    def counted_summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+        """The lead a counted wrapper prints; a consumed proof is already named by its count."""
+        return (notification.label,)
+
     def harness_consumed(self) -> DeliveryProgress:
         """This progress once a harness confirmed the message entered its session."""
         return HarnessConsumedProgress()
@@ -80,8 +88,11 @@ class ConsumedDelivery(SettledDelivery):
         """An earlier proof already timed the entry; a harness confirmation adds nothing."""
         return self
 
-    def working_notification_label(self, notification):
+    def working_notification_label(self, notification: MessageNotification) -> str:
         return WorkingTakenProgress.label
+
+    def counted_summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -107,7 +118,7 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     proof: DeliveryProgress
 
     @property
-    def consumed(self):
+    def consumed(self) -> bool:
         return self.proof.consumed
 
     def harness_consumed(self) -> DeliveryProgress:
@@ -131,17 +142,20 @@ class IgnoredProgress(SettledDelivery, ContextualProgress):
     label = DeliveryProgress.ignored_label
 
     @property
-    def seen_not_answering(self):
+    def seen_not_answering(self) -> bool:
         return self.proof.consumed
 
-    def notification_label(self, notification):
+    def notification_label(self, notification: MessageNotification) -> str:
         return self.proof.ignored_notification_label(notification)
+
+    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+        return self.proof.counted_summary_prefix(notification)
 
 
 class TakenProgress(SettledDelivery, ContextualProgress):
     """A running turn took this message as one of its inputs; its proof says how far."""
 
-    def notification_label(self, notification):
+    def notification_label(self, notification: MessageNotification) -> str:
         return self.proof.notification_label(notification)
 
 
@@ -151,11 +165,14 @@ class WorkingTakenProgress(ActiveDelivery, TakenProgress, WorkingThreadPresentat
     label = "Seen, working"
 
     @property
-    def seen_working(self):
+    def seen_working(self) -> bool:
         return self.proof.consumed
 
-    def notification_label(self, notification):
+    def notification_label(self, notification: MessageNotification) -> str:
         return self.proof.working_notification_label(notification)
+
+    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+        return self.proof.counted_summary_prefix(notification)
 
 
 class InterruptedProgress(ContextualProgress):
@@ -169,14 +186,14 @@ class FailedProgress(ContextualProgress):
 class AnsweredProgress(SettledDelivery, ContextualProgress):
     label = "Answered"
 
-    def notification_label(self, notification):
+    def notification_label(self, notification: MessageNotification) -> str:
         return notification.timed_state(self.label, notification.answered_at_ms)
 
 
 class CompletedProgress(AnsweredProgress):
     detail = "The response workflow completed."
 
-    def notification_label(self, notification):
+    def notification_label(self, notification: MessageNotification) -> str:
         return self.label
 
 class AssignmentProgress(DeliveryProgress):
@@ -184,7 +201,7 @@ class AssignmentProgress(DeliveryProgress):
     @abstractmethod
     def at_ms(self) -> int: ...
 
-    def notification_label(self, notification):
+    def notification_label(self, notification: MessageNotification) -> str:
         return notification.timed_state(self.label, self.at_ms)
 
     @abstractmethod
@@ -204,13 +221,13 @@ class SentProgress(WaitingDelivery, AssignmentProgress):
     sent_at_ms: int
 
     @property
-    def at_ms(self):
+    def at_ms(self) -> int:
         return self.sent_at_ms
 
-    def selected_notification(self, notification, *, busy):
+    def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification:
         return replace(notification, state=SendingProgress(self.sent_at_ms) if busy else self)
 
-    def consumed_notification(self, notification):
+    def consumed_notification(self, notification: MessageNotification) -> MessageNotification:
         raise ValueError("Consumed notification has no model-context proof")
 
 
@@ -228,21 +245,21 @@ class ShownToModelProgress(ConsumedDelivery, AssignmentProgress):
     consumed_at_ms: int
 
     @property
-    def at_ms(self):
+    def at_ms(self) -> int:
         return self.consumed_at_ms
 
-    def ignored_notification_label(self, notification):
+    def ignored_notification_label(self, notification: MessageNotification) -> str:
         return notification.timed_state(self.ignored_label, self.at_ms)
 
-    def working_notification_label(self, notification):
+    def working_notification_label(self, notification: MessageNotification) -> str:
         return notification.timed_state(WorkingTakenProgress.label, self.at_ms)
 
-    def selected_notification(self, notification, *, busy):
-        state = (ConsumingProgress(self.consumed_at_ms) if busy
+    def selected_notification(self, notification: MessageNotification, *, busy: bool) -> MessageNotification:
+        state: ShownToModelProgress = (ConsumingProgress(self.consumed_at_ms) if busy
                  else SelectedConsumedProgress(self.consumed_at_ms))
         return replace(notification, state=state)
 
-    def consumed_notification(self, notification):
+    def consumed_notification(self, notification: MessageNotification) -> MessageNotification:
         return replace(notification, state=self)
 
 
@@ -256,5 +273,9 @@ class ConsumingProgress(SelectedConsumedProgress, WorkingThreadPresentationStatu
     label = "Answering"
 
     @property
-    def answering(self):
+    def answering(self) -> bool:
         return True
+
+    def summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
+        """Its Answering count already names it."""
+        return ()
