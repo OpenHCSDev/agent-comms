@@ -2773,7 +2773,6 @@ class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
 
     @classmethod
     def external_members(cls, files: FilesRequest) -> Mapping[Path, type[RootFile]]:
-        cls.load_declarations()
         return {files.location(resource): store for store in cls.members_with(cls)
                 for resource in store.resources(files)}
 
@@ -2795,7 +2794,6 @@ class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
 
     @staticmethod
     def practice_openings(root: Path, excluding: tuple[type[ExternalStore], ...] = ()) -> None:
-        ExternalStore.load_declarations()
         stores = set(ExternalStore.members_with(ExternalStore)) - set(excluding)
         with TemporaryDirectory() as directory:
             for store in stores:
@@ -2814,9 +2812,10 @@ class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
             entry.load()
 
     @classmethod
-    def member_named(cls, name: object) -> type[Self]:
+    def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
+        """Every family query (names, CLI choices, decoding, lookup) sees the installed members."""
         cls.load_declarations()
-        return super().member_named(name)
+        return super()._member_declarations()
 
 
 class WriterOwnedStore(SQLiteStorage, ExternalStore, declared_name=None):
