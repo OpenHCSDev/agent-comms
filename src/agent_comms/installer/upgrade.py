@@ -55,7 +55,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import PathText
-from agent_comms.typed_table import WriterOwnedStore
+from agent_comms.typed_table import ExternalStore
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer.backup import (
@@ -147,7 +147,7 @@ from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.locked_store import (
-    BusFile, DeclaredFile, FilesRequest, LiveFilesRequest, RetainedCopyRequest, RootFile, UndeclaredFile,
+    BusFile, DeclaredFile, FilesRequest, LiveFilesRequest, RootFile, UndeclaredFile,
 )
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -220,7 +220,7 @@ def carried(
     files: FilesRequest,
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
     steps: tuple[StepRun, ...], expected: frozenset[Path],
-    external: tuple[type[WriterOwnedStore], ...] = (),
+    external: tuple[type[ExternalStore], ...] = (),
 ) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(files, external)
@@ -806,15 +806,14 @@ class TargetStack(Stack):
     program: TargetProgram = field(kw_only=True)
 
     @contextmanager
-    def borrowing(self, stores: tuple[type[WriterOwnedStore], ...],
+    def borrowing(self, stores: tuple[type[ExternalStore], ...],
                   files: FilesRequest) -> Iterator[TargetStack]:
         """The installer retains file locks through rollback; workers only borrow them."""
         if not stores:
             yield self
             return
         with ExitStack() as lifetime:
-            locks = tuple(lifetime.enter_context(store.retaining(files.location(resource)))
-                          for store in stores for resource in store.resources(files))
+            locks = tuple(lock for store in stores for lock in store.borrowed_locks(lifetime, files))
             program = self.program.borrowing(locks)
             lifetime.callback(self.commands.close_program, self.python, program)
             yield replace(self, program=program)
@@ -1226,7 +1225,7 @@ class PreparedMigration(Extendable):
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]
     read: BusReadBack
     files: FilesRequest
-    writer_stores: tuple[type[WriterOwnedStore], ...] = ()
+    writer_stores: tuple[type[ExternalStore], ...] = ()
 
     @property
     def root(self) -> Path:
@@ -1266,7 +1265,7 @@ class PreparedMigration(Extendable):
 class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def rehearsal(self, practice: PracticeBus, reconciled: tuple[Path, ...]) -> CarriedRehearsal:
         copied = practice.copy.path
-        files = RetainedCopyRequest(copied, practice.original_root)
+        files = practice.copy.request
         home = practice.scratch / "home"
         RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")

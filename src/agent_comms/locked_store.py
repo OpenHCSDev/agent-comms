@@ -541,34 +541,32 @@ class FilesRequest(DeclaredFamily, affix="Request"):
 
     @abstractmethod
     def source_root(self) -> Path:
-        """The bus root these files belong to; a record bound to another root is not theirs."""
+        """The live bus root these files are, or were copied from: what recorded paths name."""
 
 
 class LiveFilesRequest(FilesRequest):
     def location(self, resource: FileResource) -> Path:
         return resource.live(self.root)
 
-    def retained_name(self, owner: type[RootFile], path: Path) -> Path:
-        return owner.retained_name(self.root, path)
-
     def source_root(self) -> Path:
         return self.root
+
+    def retained_name(self, owner: type[RootFile], path: Path) -> Path:
+        return owner.retained_name(self.root, path)
 
 
 @dataclass(frozen=True)
 class RetainedCopyRequest(FilesRequest):
-    """A copy's files: the copy destination is root, the bus it was taken from is original_root."""
-
-    original_root: Annotated[Path, PathText]
+    source: Annotated[Path, PathText]
 
     def location(self, resource: FileResource) -> Path:
         return resource.retained(self.root)
 
+    def source_root(self) -> Path:
+        return self.source
+
     def retained_name(self, owner: type[RootFile], path: Path) -> Path:
         return path.relative_to(self.root)
-
-    def source_root(self) -> Path:
-        return self.original_root
 
 
 class LockedFile(RootFile, StoreLockOwner, declared_name=None):
