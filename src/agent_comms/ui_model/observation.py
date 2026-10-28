@@ -35,7 +35,6 @@ from typing import TYPE_CHECKING, ClassVar, Self, final
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.acp_extension import (
-    GoalSnapshotReply,
     TranscriptDraftUpdate,
     TranscriptSnapshotUpdate,
 )
@@ -56,7 +55,6 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
-from agent_comms.field_codec import FieldCodec
 from agent_comms.history_views import RetiredViews
 from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
@@ -596,14 +594,6 @@ class ReadNotifications(ReadRequest):
 
     def read(self, comms: Comms) -> NotificationWindow:
         return self.operation.read(comms)
-
-
-@dataclass(frozen=True)
-class ReadOwnerGoal(OwnerRead):
-    """The owner's goal snapshot and the turn it read with it."""
-
-    async def read(self, owner: OwnerConnection) -> GoalSnapshotReply:
-        return FieldCodec.decode(GoalSnapshotReply, await owner.request("goal_snapshot"))
 
 
 @dataclass(frozen=True)

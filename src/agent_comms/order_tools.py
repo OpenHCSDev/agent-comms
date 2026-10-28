@@ -32,6 +32,7 @@ from agent_comms.todos import (
     JudgedCall,
     ToolCallVerdict,
 )
+from .acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
 from .bus_read import BusReader, OwnerLiveRead, UiRead
 from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
@@ -526,6 +527,28 @@ class InputDeliveryRead(
 
     def decode_reply(self, raw: object) -> DeliveryOverview:
         return FieldCodec.decode(DeliveryOverview, raw)
+
+
+@dataclass(frozen=True, kw_only=True)
+class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], ThreadReadTool, declared_name="comms_owner_goal"):
+    """A unit's goal snapshot and the turn it was read with, answered by its live native owner
+    under the owner's own registration and session; the thread selector only finds the owner."""
+
+    label = "Owner goal"
+    description = ("Read a unit's current goal snapshot and the turn state its live native "
+                   "owner read with it.")
+
+    async def owned(self, ctx: RuntimeRequestContext) -> GoalSnapshotReply:
+        snapshot = await Coordination.run_worker(partial(
+            ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
+        ))
+        turn = await Coordination.run_worker(partial(
+            ctx.server.agent.turns.turn_state, ctx.session_id,
+        ))
+        return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
+
+    def decode_reply(self, raw: object) -> GoalSnapshotReply:
+        return FieldCodec.decode(GoalSnapshotReply, raw)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -52,7 +52,7 @@ from .pi_payloads import McpLiveAcknowledgement
 from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute, NoMessageRoute
 from .thread_identity import ClaimScoped, ThreadIncarnation
-from .tool_result import DeclaredReply
+from .tool_result import ToolResult
 from .transcripts import NativeCommittedPrefix, TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 from .turn_context import ContextManifest
 from .turn_lease import TurnState
@@ -138,7 +138,7 @@ class UpdateMetadata:
 
 
 @dataclass(frozen=True)
-class GoalSnapshotReply(DeclaredReply, GoalSnapshot):
+class GoalSnapshotReply(ToolResult, GoalSnapshot):
     """A goal request's reply: the owner's goal snapshot and its turn state."""
 
     execution: Annotated[GoalExecution, WireName("goalExecution")]

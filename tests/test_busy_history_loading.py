@@ -188,7 +188,8 @@ async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
 async def test_owner_reply_uses_the_same_peer_retirement(comms):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import ObservationService, ReadOwnerGoal
+    from agent_comms.order_tools import OwnerGoalRead
+    from agent_comms.ui_model.observation import ObservationService, ReadOwnerOperation
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
@@ -196,7 +197,8 @@ async def test_owner_reply_uses_the_same_peer_retirement(comms):
         # Owner reads live in the service's task group, which only its run enters.
         async with service.tasks:
             # A real missing-owner refusal still has to be sent through the shared endpoint.
-            request = ReadOwnerGoal(str(comms.root), UnrecordedThreadIncarnation("missing"), request_id=7)
+            request = ReadOwnerOperation(str(comms.root), UnrecordedThreadIncarnation("missing"),
+                                         request_id=7, operation=OwnerGoalRead())
             request.receive(service)
             asking = service.owner_reads[7]
             viewer.close()

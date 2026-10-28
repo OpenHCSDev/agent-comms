@@ -23,8 +23,6 @@ from pydantic import BaseModel, JsonValue
 
 from .acp_extension import (
     GoalSnapshotReply,
-    TurnChangedUpdate,
-    UpdateMetadata,
 )
 
 from .agent_event_updates import AcpEventConsumer
@@ -41,6 +39,7 @@ from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
+from .order_tools import OwnerGoalRead
 from .owner_connection import NoControllerToken, OwnerConnection, ResultRuntimeRequest, RuntimeRequest, RuntimeRequestContext
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
 from .thread_identity import ThreadIncarnation
@@ -292,19 +291,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
 
     async def result(self, ctx: RuntimeRequestContext) -> GoalSnapshotReply:
         await self.change(ctx)
-        snapshot = await Coordination.run_worker(partial(
-            ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
-        ))
-        turn = await Coordination.run_worker(partial(
-            ctx.server.agent.turns.turn_state, ctx.session_id,
-        ))
-        return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
-
-
-@dataclass(frozen=True, kw_only=True)
-class GoalSnapshotRuntimeRequest(GoalSnapshotResultRuntimeRequest):
-    async def change(self, ctx: RuntimeRequestContext) -> None:
-        pass
+        return await OwnerGoalRead().owned(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

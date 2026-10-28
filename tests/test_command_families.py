@@ -92,7 +92,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
             "tool": "comms_input_delivery", "thread": "", "include_history": False}},
         {"action": "dismiss_historical_inputs"},
         {"action": "goal_history", "goal_id": None},
-        {"action": "goal_snapshot"},
+        {"action": "owner_read", "operation": {"tool": "comms_owner_goal", "thread": ""}},
         {"action": "edit_goal", "goal_id": None, "expected_revision": 3, "text": "new goal"},
         {"action": "update_goal", "goal_id": None, "expected_revision": 3, "status": "paused"},
         {"action": "retry_goal", "goal_id": None, "expected_revision": 3},
@@ -123,6 +123,8 @@ def test_runtime_wire_format_round_trip(parameters):
         {"action": "owner_read", "operation": {
             "tool": "comms_input_delivery", "include_history": "yes"}},
         {"action": "owner_read", "operation": {"tool": "comms_goal_history"}},
+        {"action": "goal_snapshot"},
+        {"action": "goal_snapshot", "operation": {"tool": "comms_owner_goal", "thread": ""}},
         {"action": "goal_history", "goal_id": 2},
         {"action": "edit_goal", "goal_id": None, "expected_revision": True, "text": "x"},
         {"action": "retry_goal"},

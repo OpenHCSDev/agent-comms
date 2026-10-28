@@ -7,7 +7,9 @@ from dataclasses import replace
 import pytest
 from acp.schema import TextContentBlock
 
-from agent_comms.acp_extension import QueuePromptRequest, encode_request
+from agent_comms.acp_extension import (
+    GoalSnapshotReply, QueuePromptRequest, TurnChangedUpdate, UpdateMetadata, encode_request,
+)
 from agent_comms.child_process import NoProcess
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_key import AcpInputKey, BusInputKey
@@ -19,7 +21,9 @@ from agent_comms.input_attempt import (
     UnresolvedInput,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.order_tools import InputDeliveryRead
+from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goals import NoGoal
+from agent_comms.order_tools import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -150,6 +154,40 @@ async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_
         with pytest.raises(RelationViolationError):
             async with asyncio.timeout(30):
                 await asyncio.to_thread(InputDeliveryRead.invoke, comms, {"thread": "alpha"},
+                                        caller=ToolCaller.from_actor("sender"))
+
+
+async def test_mcp_and_the_ui_read_the_owner_goal_from_the_live_owner(tmp_path):
+    """The owner answers comms_owner_goal under its own registration and session: MCP and the
+    UI's owner envelope receive the owner's own projection, its turn metadata included, for an
+    empty goal and for a set one."""
+    async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
+        comms.registry.register(comms.registry.require("alpha"), RunningThreadStatus())
+        comms.agents.begin_turn("alpha", TurnId.mint(), "Held native fixture")
+        owner = comms.registry.require("alpha")
+        replies = []
+        for change in (lambda: None,
+                       lambda: comms.goals.update_goal("alpha", SetGoalAction(text="Ship the read"))):
+            change()
+            owned = GoalSnapshotReply.from_snapshot(
+                comms.goals.goal_snapshot("alpha"),
+                UpdateMetadata.of(TurnChangedUpdate(agent.turns.turn_state("alpha"))))
+            async with asyncio.timeout(30):
+                mcp = await asyncio.to_thread(
+                    OwnerGoalRead.invoke, comms, {"thread": "alpha"},
+                    caller=ToolCaller.from_actor("sender"))
+                ui = await ReadOwnerOperation(
+                    str(comms.root), owner.incarnation, OwnerGoalRead()).answer(comms)
+            assert mcp == FieldCodec.encode(owned)
+            assert ui.value == owned
+            assert ui.value.meta.batch.updates == (TurnChangedUpdate(agent.turns.turn_state("alpha")),)
+            replies.append(owned)
+        assert replies[0].goal == NoGoal()
+        assert replies[1].goal.text == "Ship the read"
+        comms.registry.register(replace(owner, process_identity=NoProcess()), StoppedThreadStatus())
+        with pytest.raises(RelationViolationError):
+            async with asyncio.timeout(30):
+                await asyncio.to_thread(OwnerGoalRead.invoke, comms, {"thread": "alpha"},
                                         caller=ToolCaller.from_actor("sender"))
 
 
