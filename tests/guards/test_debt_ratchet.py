@@ -74,9 +74,27 @@ pytestmark = pytest.mark.refactor_guard
 
 def test_measure_owner_rejects_a_new_absence() -> None:
     name = NoneAbsence.at("tools/example.py")
-    result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {}, {})
+    result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {name: [1]}, {})
     assert result.delta[name] == 1
     assert result.failed
+
+
+GROWN_ABSENCE = NoneAbsence.at("tools/example.py")
+
+
+@pytest.mark.parametrize(
+    ("introduced", "failed", "missing"),
+    [({}, True, [GROWN_ABSENCE]), ({GROWN_ABSENCE: []}, False, []), ({GROWN_ABSENCE: [1]}, True, [])],
+    ids=["unreported", "reported_none_new", "reported_new"],
+)
+def test_clean_lines_growth_fails_only_on_a_new_site_or_a_missing_report(introduced, failed, missing):
+    """Raw growth alone is a move; an explicit empty report says nothing is new, while an
+    absent report proves nothing."""
+    result = Comparison("tools", "base", "head", (), {GROWN_ABSENCE: 0}, {GROWN_ABSENCE: 1}, introduced, {})
+    assert result.delta[GROWN_ABSENCE] == 1
+    assert result.failed is failed
+    assert result.missing == missing
+    assert FieldCodec.project(result, "report")["missing"] == [key.text for key in missing]
 
 
 @pytest.mark.parametrize(
@@ -1202,9 +1220,21 @@ PAGE = (
         (HOLDER.replace("import Page", "import Copy, Page").replace(
             "operation: Page", "operation: Page\n    copy: Copy") + OTHER,
          PAGE + "\n\nclass Copy:\n    before: int | None = None\n", 3),
+        (HOLDER.replace("import Page", "import Page as Held").replace("operation: Page", "operation: Held")
+         + OTHER, PAGE.replace("import Annotated", "import Annotated as Meta").replace("Annotated[", "Meta["), 0),
+        (HOLDER.replace("from .pages import Page\n", "def load():\n    from .pages import Page\n") + OTHER,
+         PAGE, 2),
+        (HOLDER + "\n\ndef make():\n    Page = dict\n    return Page\n" + OTHER, PAGE, 0),
+        (HOLDER + OTHER, PAGE + "\n\nAnnotated = list\n", 1),
+        (HOLDER + OTHER, PAGE.replace("from typing import Annotated\n", "def typed():\n    from typing import Annotated\n"), 1),
+        (HOLDER + OTHER, PAGE + "\n\nPage = dict\n", 2),
+        (HOLDER + OTHER, PAGE + "    archive = ''\n", 1),
+        (HOLDER.replace("    operation: Page", "    operation: Page\n    before, extra = 1, 2") + OTHER, PAGE, 1),
     ],
     ids=["extracted", "retained", "unheld", "second_owner", "shadowed", "unresolved", "renamed",
-         "retyped", "redefaulted", "extra_field", "method", "copied_twice"],
+         "retyped", "redefaulted", "extra_field", "method", "copied_twice", "aliased_imports",
+         "nested_only_import", "unrelated_local_name", "annotated_rebound", "annotated_local_only",
+         "export_rebound", "field_rebound", "source_rebound_by_unpacking"],
 )
 def test_fields_extracted_into_the_one_new_held_class_are_moved_not_written(repo, holder, pages, written):
     """An old class that now holds one new class in a typed field carries each field it lost

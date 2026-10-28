@@ -191,6 +191,12 @@ class Measure(DeclaredFamily, affix="Measure"):
         return cls.grown(delta)
 
     @classmethod
+    def missing(cls, head: Counts, introduced: dict[FileCount, list[int]]) -> list[MeasureCount]:
+        """This measure's counts the comparison has no required evidence for; a measure that
+        needs none beyond its counts misses nothing."""
+        return []
+
+    @classmethod
     def grew(cls, key: MeasureCount, grown: int) -> str:
         """The line reporting one count's growth; the count words it."""
         return key.grew(grown)
@@ -1095,67 +1101,55 @@ class DeclaredClass:
 
     @classmethod
     def top(cls, path: str, tree: ast.Module) -> dict[str, DeclaredClass]:
-        """The module's top-level classes; a name declared twice declares neither."""
-        named = Counter(node.name for node in tree.body if isinstance(node, ast.ClassDef))
-        return {node.name: cls(path, tree, node) for node in tree.body
-                if isinstance(node, ast.ClassDef) and named[node.name] == 1}
+        """The module's classes whose module-level name is still that one declaration."""
+        return {name: cls(path, tree, statement)
+                for name, (_, statement) in DecoratorBinding.declarations(tree, "", tree.body).items()
+                if isinstance(statement, ast.ClassDef)}
+
+    @property
+    def scope(self) -> str:
+        return f".{self.node.name}"
 
     @cached_property
     def fields(self) -> dict[str, ast.AnnAssign]:
-        """The class body's annotated names; a name annotated twice is no field of it."""
-        written = [statement for statement in self.node.body
-                   if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)]
-        named = Counter(typing.cast(ast.Name, statement.target).id for statement in written)
-        return {name: statement for statement in written
-                if named[name := typing.cast(ast.Name, statement.target).id] == 1}
+        """The class body's annotated names bound by that annotation alone."""
+        return {name: statement for name, (_, statement) in DecoratorBinding.declarations(
+                    self.tree, self.scope, self.node.body).items()
+                if isinstance(statement, ast.AnnAssign)}
+
+    def binds(self, name: str) -> bool:
+        """Whether the class scope still binds ``name`` in any form."""
+        return name in DecoratorBinding.bindings(self.tree, self.scope)
+
+    @cached_property
+    def annotated(self) -> DecoratorBinding:
+        return DecoratorBinding.named("typing", "Annotated", self.tree, self.path)
+
+    def proved(self, field: str) -> bool:
+        """Whether the field's annotation reads as written: one spelled Annotated that does
+        not bind typing.Annotated at module level could mean anything."""
+        match self.fields[field].annotation:
+            case ast.Subscript(value=ast.Name(id="Annotated") | ast.Attribute(attr="Annotated") as value):
+                return self.annotated.marks(value)
+        return True
 
     def declared(self, field: str) -> tuple[str, str]:
         """The field's type without typing.Annotated metadata, and its default, structurally."""
         statement = self.fields[field]
-        annotated = DecoratorBinding.named("typing", "Annotated", self.tree, self.path)
         match statement.annotation:
-            case ast.Subscript(value=value, slice=ast.Tuple(elts=[declared, *_])) if annotated.marks(value):
+            case ast.Subscript(value=value, slice=ast.Tuple(elts=[declared, *_])) if self.annotated.marks(value):
                 annotation: ast.expr = declared
             case annotation:
                 pass
         return ast.dump(annotation), ast.dump(statement.value) if statement.value else ""
 
-    def binds(self, name: str) -> bool:
-        """Whether the class body still binds ``name`` in any form."""
-        for statement in self.node.body:
-            match statement:
-                case ast.AnnAssign(target=ast.Name(id=bound)) | ast.FunctionDef(name=bound) | (
-                        ast.AsyncFunctionDef(name=bound)) | ast.ClassDef(name=bound) if bound == name:
-                    return True
-                case ast.Assign(targets=targets) if any(
-                        isinstance(target, ast.Name) and target.id == name for target in targets):
-                    return True
-        return False
-
     def holding(self, held: DeclaredClass, base: DeclaredClass) -> tuple[str, ...]:
-        """The fields this class newly declares whose type is ``held``."""
+        """The fields this class newly declares whose type is the module-level binding of
+        ``held``."""
         binding = DecoratorBinding.named(
             ".".join(DecoratorBinding.module_of(held.path)), held.node.name, self.tree, self.path)
         return tuple(name for name, statement in self.fields.items()
-                     if name not in base.fields and binding.marks(statement.annotation)
-                     and self.bound_once(ast.unparse(statement.annotation).split(".")[0]))
-
-    def bound_once(self, name: str) -> bool:
-        """The module binds ``name`` once and imports nothing by star, so no other binding
-        can shadow it."""
-        bindings = 0
-        for node in ast.walk(self.tree):
-            match node:
-                case ast.alias(name="*"):
-                    return False
-                case ast.alias(name=imported, asname=alias):
-                    bindings += (alias or imported.split(".")[0]) == name
-                case ast.ClassDef(name=declared) | ast.FunctionDef(name=declared) | ast.AsyncFunctionDef(
-                        name=declared):
-                    bindings += declared == name
-                case ast.Name(id=declared, ctx=ast.Store()):
-                    bindings += declared == name
-        return bindings == 1
+                     if name not in base.fields and binding.marks(statement.annotation))
 
 
 class FieldExtraction:
@@ -1198,6 +1192,7 @@ class FieldExtraction:
             if owners[base.path, base.node.name] == holders[held.path, held.node.name] == 1:
                 for field in sorted(base.fields):
                     if (not owner.binds(field) and field in held.fields
+                            and base.proved(field) and held.proved(field)
                             and base.declared(field) == held.declared(field)):
                         cls.transfer(measure, base, held, field, departed, credited)
         return credited
@@ -1282,6 +1277,13 @@ class CleanChangedLines(OccurrenceMeasure):
         nothing. A new occurrence still fails through ``introduced`` even when an unrelated
         deletion offsets the totals."""
         return False
+
+    @classmethod
+    def missing(cls, head: Counts, introduced: dict[FileCount, list[int]]) -> list[MeasureCount]:
+        """A file with occurrences at the head but no introduced-site report is unproved: only
+        an explicit report, even an empty one, says no occurrence there is new."""
+        return [key for key, value in head.items()
+                if cls.owns(key) and value > 0 and key not in introduced]
 
     @classmethod
     def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]],
@@ -1414,9 +1416,10 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
 @dataclass(frozen=True)
 class DecoratorBinding:
     """The spellings one module binds to a declared name (a decorator, a field factory, a
-    class), read from its imports alone.
+    class), read from its module-level imports and declarations.
 
-    A name of the same spelling declared or imported from anywhere else marks nothing.
+    A name of the same spelling declared or imported from anywhere else marks nothing, and
+    neither does a spelling the module binds twice, conditionally or by star import.
     """
 
     names: frozenset[str]
@@ -1437,21 +1440,76 @@ class DecoratorBinding:
         """The spellings binding ``owner.name`` in the module at ``filename``."""
         module = cls.module_of(filename)
         package = module[:-1]
-        names = {name} if ".".join(module) == owner else set()
-        for node in ast.walk(tree):
-            match node:
-                case ast.Import(names=aliases):
-                    names.update(f"{alias.asname or alias.name}.{name}"
-                                 for alias in aliases if alias.name == owner)
-                case ast.ImportFrom(module=source, names=aliases, level=level):
+        names: set[str] = set()
+        body = typing.cast(ast.Module, tree).body
+        for bound, (declaration, statement) in cls.declarations(tree, "", body).items():
+            match statement, declaration:
+                case ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef(), _ if (
+                        ".".join(module) == owner and bound == name):
+                    names.add(name)
+                case ast.Import(), ast.alias(name=imported, asname=alias) if imported == owner:
+                    names.add(f"{alias or imported}.{name}")
+                case ast.ImportFrom(module=source, level=level), ast.alias(name=imported):
                     base = package[:len(package) - level + 1] if level else ()
                     resolved = ".".join((*base, source) if source else base)
-                    for alias in aliases:
-                        if f"{resolved}.{alias.name}" == owner:
-                            names.add(f"{alias.asname or alias.name}.{name}")
-                        if resolved == owner and alias.name == name:
-                            names.add(alias.asname or name)
+                    if f"{resolved}.{imported}" == owner:
+                        names.add(f"{bound}.{name}")
+                    if resolved == owner and imported == name:
+                        names.add(bound)
         return cls(frozenset(names))
+
+    @staticmethod
+    def bound(node: ast.AST) -> tuple[str, ...]:
+        """The names one node binds where it stands; a star import binds ``*``."""
+        match node:
+            case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                return (name,)
+            case ast.alias(name="*"):
+                return ("*",)
+            case ast.alias(name=imported, asname=alias):
+                return (alias or imported.split(".")[0],)
+            case ast.Name(id=name, ctx=ast.Store() | ast.Del()):
+                return (name,)
+            case ast.ExceptHandler(name=str() as name) | ast.MatchAs(name=str() as name) | (
+                    ast.MatchStar(name=str() as name)) | ast.MatchMapping(rest=str() as name):
+                return (name,)
+            case ast.TypeVar(name=name) | ast.ParamSpec(name=name) | ast.TypeVarTuple(name=name):
+                return (name,)
+            case ast.Global(names=names) | ast.Nonlocal(names=names):
+                return tuple(names)
+        return ()
+
+    @classmethod
+    def bindings(cls, tree: ast.AST, scope: str) -> dict[str, list[ast.AST]]:
+        """Every binding of each name in one lexical module or class scope, as ScopeNames
+        places it; bindings inside nested functions and classes are theirs, not this scope's."""
+        found: dict[str, list[ast.AST]] = {}
+        for node, within in CleanChangedLines.scopes(tree).items():
+            if within == scope:
+                for name in cls.bound(node):
+                    found.setdefault(name, []).append(node)
+        return found
+
+    @classmethod
+    def declarations(cls, tree: ast.AST, scope: str,
+                     body: list[ast.stmt]) -> dict[str, tuple[ast.AST, ast.stmt]]:
+        """Each name the scope binds exactly once, by an unconditional import, class, function
+        or annotated assignment written directly in its body, with that statement. A star
+        import leaves no name proved."""
+        bindings = cls.bindings(tree, scope)
+        if "*" in bindings:
+            return {}
+        direct: dict[int, ast.stmt] = {}
+        for statement in body:
+            match statement:
+                case ast.Import(names=aliases) | ast.ImportFrom(names=aliases):
+                    direct.update((id(alias), statement) for alias in aliases)
+                case ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
+                    direct[id(statement)] = statement
+                case ast.AnnAssign(target=ast.Name() as target):
+                    direct[id(target)] = statement
+        return {name: (node, direct[id(node)]) for name, (node, *others) in bindings.items()
+                if not others and id(node) in direct}
 
     def marks(self, decorator: ast.expr) -> bool:
         return ast.unparse(decorator) in self.names
@@ -2997,9 +3055,19 @@ class Comparison:
         return self.keyed(self.delta)
 
     @property
+    def missing(self) -> list[MeasureCount]:
+        """Counts whose measure's required evidence the comparison lacks."""
+        return [key for measure in Measure.members_with(Measure)
+                for key in measure.missing(self.head, self.introduced)]
+
+    @projected(view="report", name="missing")
+    def missing_report(self) -> list[str]:
+        return sorted(key.text for key in self.missing)
+
+    @property
     def failed(self) -> bool:
         return (any(measure.blocks(self.delta) for measure in Measure.members_with(Measure))
-                or any(self.introduced.values()))
+                or any(self.introduced.values()) or bool(self.missing))
 
 
 def compare(repo: Path, base: str, head: str, root: str, workers: int,
@@ -3087,6 +3155,8 @@ def main() -> int:
     for identity, lines in sorted(result.introduced_report.items()):
         if lines:
             print(f"introduced {identity} at lines {lines}", file=sys.stderr)
+    for identity in result.missing_report:
+        print(f"missing introduced-site report for {identity}", file=sys.stderr)
     return int(result.failed)
 
 
