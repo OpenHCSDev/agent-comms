@@ -62,6 +62,10 @@ class OperatorReader(OperatorOutcomes, BusReader):
 class BusRead[Result](ToolDeclaration, ABC):
     """A read of Core's stores, declared once with its arguments; boundaries derive it."""
 
+    def apply(self, comms: Comms, caller: BusReader) -> Result:
+        """The MCP boundary runs the read under its calling thread's authority."""
+        return self.read_as(comms, caller)
+
     @abstractmethod
     def read_as(self, comms: Comms, reader: BusReader) -> Result:
         """The read under the reader's authority."""
@@ -87,9 +91,6 @@ class OwnerLiveRead[Result: ToolResult = ToolResult](BusRead[Result], ABC):
     if TYPE_CHECKING:
         # The composed ThreadReadTool declares the field; an annotation here would shadow it.
         thread: str
-
-    def apply(self, comms: Comms, caller: BusReader) -> Result:
-        return self.read_as(comms, caller)
 
     def read_as(self, comms: Comms, reader: BusReader) -> Result:
         owner = comms.registry.require(reader.subject(self.thread)).incarnation
