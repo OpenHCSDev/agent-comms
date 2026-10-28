@@ -29,7 +29,7 @@ from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
 from agent_comms.cli_bridges.claude_protocol import (
-    ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
+    ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification, ReadResultObserved,
     ForeignAttachment, KnownTurn,
 )
 from agent_comms.cli_bridges.shared import (
@@ -495,9 +495,10 @@ def read_records(path, text, label, error=False):
     return (*read_started(session, path, label), *read_returned(session, text, label, error))
 
 
-def shown(lines, start=1):
-    """Claude's Read output: each line's number, a tab, then the line."""
-    return '\n'.join(f'{number}\t{line}' for number, line in enumerate(lines, start))
+def shown(text, start=1):
+    """Claude's Read output of physical text: each LF-separated row's number, a tab, then the
+    row. Text ending in LF, as a whole export does, shows the empty row after it numbered too."""
+    return '\n'.join(f'{number}\t{row}' for number, row in enumerate(text.split('\n'), start))
 
 
 async def observe(bridge, updates):
@@ -540,7 +541,7 @@ async def test_a_body_that_fits_one_event_goes_inline_and_exports_nothing(bridge
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('parts', (2, 23, 25, 46, 26))
+@pytest.mark.parametrize('parts', (2, 8, 23, 25, 46, 26))
 async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bridge, parts):
     """The saved slow orders' part counts, and the smallest message that no longer fits one
     event: one bounded notice before anything is confirmed, then the whole body from one
@@ -555,7 +556,8 @@ async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bri
         assert notice == MonitorReadFile.naming(bridge.exports, message.reference)
         export = Path(notice.path)
         assert stat.S_IMODE(export.stat().st_mode) == 0o600
-        lines = export.read_text().splitlines()
+        text = export.read_text(newline='')
+        lines = text.split('\n')[:-1]
         assert ''.join(ClaudeMonitorFrame.decode_line(item).body for item in lines) == body
         # The notice frees its own reservation and proves nothing about the body.
         await observe(bridge, notification(line, record_id=transcript_record('notice')).updates(
@@ -563,7 +565,7 @@ async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bri
         waiting, = await bridge.attempts(message.message_id)
         assert waiting.outcome is EmittedOutcome
         assert waiting.monitor == ReceivingMonitor(parts)
-        await observe(bridge, read_records(export, shown(lines), 'whole-read'))
+        await observe(bridge, read_records(export, shown(text), 'whole-read'))
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
     assert confirmed.monitor == ObservedMonitor(transcript_record('whole-read'), 1792168805.123)
@@ -577,25 +579,36 @@ async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bri
 async def test_only_visible_pages_of_the_exact_export_confirm(bridge):
     message, export = await exported(bridge, body_of(23))
     _, other_export = await exported(bridge, body_of(23) + 'y')
-    lines = export.read_text().splitlines()
+    text = export.read_text(newline='')
+    lines = text.split('\n')[:-1]
     copied = export.parent.parent / 'copied.jsonl'
     shutil.copyfile(export, copied)
-    for path, text, label, error in (
-        (export, shown(lines), 'failed-read', True),
-        (copied, shown(lines), 'foreign-path', False),
-        (export, shown(other_export.read_text().splitlines()), 'foreign-message', False),
-        (export, shown(lines[:3]) + '\n5\t' + lines[4], 'numbering-gap', False),
-        (export, shown(lines[:5] + [lines[5][:100]]), 'truncated-line', False),
+    whole = shown(text)
+    # Only the one numbered empty row after the final LF is the Read's terminator.
+    for path, read, label, error in (
+        (export, whole, 'failed-read', True),
+        (copied, whole, 'foreign-path', False),
+        (export, shown(other_export.read_text(newline='')), 'foreign-message', False),
+        (export, shown('\n'.join(lines[:3])) + '\n5\t' + lines[4], 'numbering-gap', False),
+        (export, shown('\n'.join([*lines[:5], lines[5][:100]])), 'truncated-line', False),
+        (export, shown('\n'.join([*lines[:-1], lines[-1][:100]]) + '\n'), 'truncated-final',
+         False),
+        (export, shown(text.replace('\n', '\n\n', 1)), 'interior-empty', False),
+        (export, shown(text + '\n'), 'two-terminal-empties', False),
+        (export, whole.rpartition('\n')[0] + f'\n{len(lines) + 2}\t', 'terminal-gap', False),
+        (export, shown(text + 'junk'), 'foreign-terminal', False),
     ):
-        await observe(bridge, read_records(path, text, label, error))
+        await observe(bridge, read_records(path, read, label, error))
         pending, = await bridge.attempts(message.message_id)
         assert pending.outcome is EmittedOutcome, label
         assert await bridge.coordinator_read(
             lambda db: HarnessObservedPart.of(db, pending)) == (), label
-    # Pages read out of order and repeated accumulate until every original part matches.
-    for start, stop, label in ((12, 23, 'last-page'), (12, 23, 'repeated-page'),
-                               (0, 12, 'first-page')):
-        await observe(bridge, read_records(export, shown(lines[start:stop], start + 1), label))
+    # Pages read out of order and repeated accumulate until every original part matches; a
+    # page reaching the end shows the terminator, a page stopping before it does not.
+    for page, start, label in (('\n'.join(lines[12:]) + '\n', 12, 'last-page'),
+                               ('\n'.join(lines[12:]), 12, 'repeated-page'),
+                               ('\n'.join(lines[:12]), 0, 'first-page')):
+        await observe(bridge, read_records(export, shown(page, start + 1), label))
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
     assert confirmed.monitor == ObservedMonitor(transcript_record('first-page'), 1792168805.123)
@@ -608,17 +621,17 @@ async def test_an_export_copy_at_another_sequence_confirms_nothing(bridge):
     """The same message id at another sequence is not the attempted reference, even when every
     byte and part matches: the export names its exact reference."""
     message, export = await exported(bridge, body_of(23))
-    lines = export.read_text().splitlines()
+    text = export.read_text(newline='')
     copy = Path(MonitorReadFile.naming(bridge.exports, MessageReference(
         message.seq + 1000, message.message_id)).path)
     shutil.copyfile(export, copy)
-    await observe(bridge, read_records(copy, shown(lines), 'wrong-sequence'))
+    await observe(bridge, read_records(copy, shown(text), 'wrong-sequence'))
     pending, = await bridge.attempts(message.message_id)
     assert pending.outcome is EmittedOutcome
     assert pending.monitor == ReceivingMonitor(23)
     assert await bridge.coordinator_read(lambda db: HarnessObservedPart.of(db, pending)) == ()
     assert export.exists() and copy.exists()
-    await observe(bridge, read_records(export, shown(lines), 'exact-sequence'))
+    await observe(bridge, read_records(export, shown(text), 'exact-sequence'))
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
     assert confirmed.monitor == ObservedMonitor(transcript_record('exact-sequence'), 1792168805.123)
@@ -628,10 +641,10 @@ async def test_an_export_copy_at_another_sequence_confirms_nothing(bridge):
 @pytest.mark.asyncio
 async def test_a_wrong_body_in_the_export_never_confirms(bridge, capsys):
     message, export = await exported(bridge, body_of(23))
-    lines = export.read_text().splitlines()
-    forged = lines[0].replace('xxxx', 'xxxy', 1)
-    assert forged != lines[0]
-    await observe(bridge, read_records(export, shown([forged, *lines[1:]]), 'wrong-body'))
+    text = export.read_text(newline='')
+    forged = text.replace('xxxx', 'xxxy', 1)
+    assert forged != text
+    await observe(bridge, read_records(export, shown(forged), 'wrong-body'))
     stored, = await bridge.attempts(message.message_id)
     assert stored.outcome is EmittedOutcome
     assert isinstance(stored.monitor, MismatchedMonitor)
@@ -656,11 +669,12 @@ async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, sepa
     message, export = await exported(bridge, body)
     lines = export.read_text(newline='').split('\n')[:-1]
     assert ''.join(ClaudeMonitorFrame.decode_line(line).body for line in lines) == body
-    # Two visible pages of the actual numbered Read output, the later page first.
+    # Two visible pages of the actual numbered Read output, the later page, reaching the end
+    # and its terminator, first.
     session = ClaudeSession()
-    for start, stop in ((10, len(lines)), (0, 10)):
+    for start, page in ((10, '\n'.join(lines[10:]) + '\n'), (0, '\n'.join(lines[:10]))):
         await observe(bridge, (*read_started(session, export, f'page-{start}'),
-                               *read_returned(session, shown(lines[start:stop], start + 1),
+                               *read_returned(session, shown(page, start + 1),
                                               f'page-{start}')))
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
@@ -673,7 +687,7 @@ async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, sepa
 @pytest.mark.parametrize('ending', ('succeeded', 'failed'))
 async def test_a_consumed_export_stays_until_no_other_read_of_it_is_open(bridge, ending):
     message, export = await exported(bridge, body_of(23))
-    text = shown(export.read_text().splitlines())
+    text = shown(export.read_text(newline=''))
     session = ClaudeSession()
     starts = (*read_started(session, export, 'first'), *read_started(session, export, 'second'))
     await observe(bridge, (*starts, *read_returned(session, text, 'first')))
@@ -721,7 +735,7 @@ async def test_an_export_leaf_symlink_refuses(bridge, tmp_path):
 async def test_an_export_refuses_other_bytes_at_its_path(bridge):
     message, export = await exported(bridge, body_of(23))
     notice = MonitorReadFile.naming(bridge.exports, message.reference)
-    notice.export(tuple(export.read_text().splitlines()))
+    notice.export(tuple(export.read_text(newline='').split('\n')[:-1]))
     with pytest.raises(RelationViolationError):
         notice.export(('"not this message"',))
 
@@ -729,13 +743,13 @@ async def test_an_export_refuses_other_bytes_at_its_path(bridge):
 @pytest.mark.asyncio
 async def test_an_uncertain_export_stays_and_reopening_never_replays_it(bridge):
     message, export = await exported(bridge, body_of(23))
-    lines = export.read_text().splitlines()
+    text = export.read_text(newline='')
     # The coordinator's declared wait expires on a held lock; the read stays unproved.
     path = CoordinationStore.path_in(bridge.comms.root)
     with closing(sqlite3.connect(path, isolation_level=None)) as held:
         held.execute('BEGIN EXCLUSIVE')
         try:
-            await observe(bridge, read_records(export, shown(lines), 'busy-read'))
+            await observe(bridge, read_records(export, shown(text), 'busy-read'))
         finally:
             held.execute('ROLLBACK')
     uncertain, = await bridge.attempts(message.message_id)
@@ -750,7 +764,7 @@ async def test_an_uncertain_export_stays_and_reopening_never_replays_it(bridge):
         assert await reopened.resume_after() == BridgeStart(message.reference)
         assert await reopened.attempts(message.message_id) == (uncertain,)
         # The same complete visible Read, seen after reopening, still confirms it.
-        await observe(reopened, read_records(export, shown(lines), 'later-read'))
+        await observe(reopened, read_records(export, shown(text), 'later-read'))
         confirmed, = await reopened.attempts(message.message_id)
         assert confirmed.outcome is DeliveredOutcome
         assert not export.exists()
@@ -1028,3 +1042,32 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
         output.end_turn(turn)
     assert comms.bus.pending_count("unit") == 0
     assert comms.bus.pending_count("lead") == 1
+
+
+@pytest.mark.parametrize(('rows', 'start', 'frames'), (
+    (('A', 'B', ''), 1, (MonitorPart, MonitorPart)),
+    (('A', 'B', ''), 7, (MonitorPart, MonitorPart)),
+    (('A', 'B'), 1, (MonitorPart, MonitorPart)),
+    (('A', '', 'B', ''), 1, (MonitorPart, ForeignMonitorFrame, MonitorPart)),
+    (('A', 'B', '', ''), 1, (MonitorPart, MonitorPart, ForeignMonitorFrame)),
+    (('A', 'junk'), 1, (MonitorPart, ForeignMonitorFrame)),
+    (('',), 1, (ForeignMonitorFrame,)),
+))
+def test_only_the_final_numbered_empty_row_is_the_read_terminator(rows, start, frames):
+    """Claude numbers the empty row after a file's final LF; that one row is not a record,
+    and every other empty or foreign row stays a frame the all-lines gate refuses."""
+    message = Message(sender='peer', target='viewer', type=InfoKind, body='x' * 30000,
+                      timestamp=1., seq=1)
+    first, second, *_ = (json.dumps(part, ensure_ascii=False)
+                         for part in ClaudeMonitorFrame(message).parts)
+    physical = dict(A=first, B=second)
+    text = shown('\n'.join(physical.get(row, row) for row in rows), start)
+    observed = ReadResultObserved('export', text, ObservedMonitor(transcript_record('read'), 1.),
+                                  frozenset())
+    assert tuple(type(frame) for frame in observed.frames()) == frames
+
+
+def test_a_gap_at_the_terminator_number_makes_no_line_count():
+    observed = ReadResultObserved('export', '1\t"x"\n3\t',
+                                  ObservedMonitor(transcript_record('read'), 1.), frozenset())
+    assert observed.frames() == ()

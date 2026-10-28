@@ -680,7 +680,10 @@ class ReadResultObserved(ConfirmedDelivery):
         """Claude shows each file line as its number, a tab, then the line. The leading
         numbered block is the file; numbers that do not run consecutively make no line count.
         Records end only at a physical LF: a JSON line may hold U+2028, U+0085 or other
-        characters str.splitlines would split on."""
+        characters str.splitlines would split on. A Read reaching the end of a file that ends
+        in LF also numbers the empty row after that LF: once the numbering holds, that one
+        final empty row is the tool's terminator, not a record. Any other row, empty or not,
+        stays a frame the all-lines gate judges."""
         numbers: list[int] = []
         lines: list[str] = []
         for row in self.text.split('\n'):
@@ -692,6 +695,8 @@ class ReadResultObserved(ConfirmedDelivery):
         start = numbers[0] if numbers else 0
         if numbers != list(range(start, start + len(numbers))):
             return ()
+        if len(lines) > 1 and lines[-1] == '':
+            lines.pop()
         return tuple(ClaudeMonitorFrame.decode_line(line) for line in lines)
 
     async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
