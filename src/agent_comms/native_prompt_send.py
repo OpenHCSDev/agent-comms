@@ -19,6 +19,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
 from .diagnostics import PublicationMeasurements
+from .field_codec import AcpSessionId
 from .coordination_errors import CoordinationError
 from agent_comms.errors import RelationViolationError
 
@@ -34,7 +35,7 @@ class PromptBoundary(ABC):
     @abstractmethod
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
 
-    def following_sender(self, inputs: InputDrain, session_id: str, prompt: str) -> OwnedSend:
+    def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:
         raise RelationViolationError("An unowned prompt cannot authorize following input")
 
 

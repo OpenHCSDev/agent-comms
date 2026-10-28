@@ -80,7 +80,7 @@ class OwnerFollowingInputs(FollowingInputs):
         inputs = self.inputs
         sender = await Coordination.run_worker(partial(
             session.prompt_send_boundary.following_sender,
-            inputs, self.session_id, session.command.message,
+            inputs, inputs.state(self.session_id).owned().identifier, session.command.message,
         ))
         lease = sender.thread.require_turn_lease()
         self.scope = LiveQueueScope(

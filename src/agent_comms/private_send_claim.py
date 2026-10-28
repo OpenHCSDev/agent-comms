@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.native_runtime_input import NativeRuntimeTable
-from .field_codec import InputId
+from .field_codec import AcpSessionId, InputId
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import (
@@ -24,6 +24,7 @@ from .diagnostics import (
     record_request_progress,
 )
 from .following_inputs import FollowingInputs
+from .goal_turn_permit import NoLaunchPermit
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import SelectedModel
@@ -35,6 +36,7 @@ from .native_prompt_send import PromptBoundary
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
+from .owned_send import OwnedSend
 from .text_digest import TextDigest
 from .tracked_turn import (
     NO_FOLLOWING_INPUTS,
@@ -47,7 +49,6 @@ from agent_comms.turn_input_source import SelectedOriginalInput
 
 if TYPE_CHECKING:
     from .input_drain import InputDrain
-    from .owned_send import OwnedSend
     from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
     from .selected_session import SelectedSession
@@ -64,11 +65,8 @@ class PrivateSendClaim(PromptBoundary):
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
-    def following_sender(self, inputs: InputDrain, session_id: str, prompt: str) -> OwnedSend:
+    def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:
         """The committed prompt supplies following authority, never a later selection."""
-        from .goal_turn_permit import NoLaunchPermit
-        from .owned_send import OwnedSend
-
         return OwnedSend(
             comms=inputs.comms,
             inputs=inputs,
