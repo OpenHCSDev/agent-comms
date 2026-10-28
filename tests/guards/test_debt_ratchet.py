@@ -318,10 +318,12 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
     revision = repo.commit(
         {
             "probe_record.py": (
-                "from dataclasses import dataclass\nfrom typing import ClassVar\n"
+                "from dataclasses import dataclass\nfrom typing import ClassVar, Literal\n"
                 "from parent_only_dependency import VERSION\n"
+                "from agent_comms.owner_protocol import CORE_COMMIT\n"
                 "@dataclass(frozen=True)\nclass Record:\n"
                 "    version: ClassVar[int] = VERSION\n    value: str\n"
+                "    commit: Literal[CORE_COMMIT]\n"
             )
         }
     )
@@ -332,6 +334,9 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
         tmp_path, revision, repo.root, {"src/agent_comms/probe_record.py"}
     )
     assert forms["agent_comms.probe_record.Record"].version == 7
+    # The archive holds no Git checkout: the protocol's commit is the revision the stamp
+    # factory was given, reached through the complete writer family without asking Git.
+    assert forms["agent_comms.probe_record.Record"].fields["commit"]["enum"] == [revision]
     assert os.environ["PYTHONPATH"] == inherited
 
 

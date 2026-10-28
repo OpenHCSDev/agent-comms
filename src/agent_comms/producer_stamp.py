@@ -1,10 +1,25 @@
 """The complete bus writer family and its build-time projection commitments."""
 
 import json
+import sys
 
-from agent_comms.bus import Bus as Bus
-from agent_comms.messages import BusRecord
-from agent_comms.typed_table import ProducedTable, ProducedRow
+from agent_comms import package_stamp
+from agent_comms.core_stamp import CoreStamp
+
+if __name__ == "__main__":
+    # The stamp factory's child names the commit it builds; it is bound before any module
+    # below reads STAMP, so an archived source never asks Git for its identity.
+    match sys.argv[1:]:
+        case [str(commit)]:
+            package_stamp.STAMP = CoreStamp(commit)
+        case []:
+            pass
+        case unexpected:
+            raise SystemExit(f"producer_stamp takes at most one commit, not {unexpected!r}")
+
+from agent_comms.bus import Bus as Bus  # noqa: E402
+from agent_comms.messages import BusRecord  # noqa: E402
+from agent_comms.typed_table import ProducedTable, ProducedRow  # noqa: E402
 
 
 def complete_writer_family() -> tuple[type[ProducedRow], ...]:
