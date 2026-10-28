@@ -28,6 +28,7 @@ from agent_comms.selected_turn import SelectedAttempt
 from agent_comms.selected_write_authority import NoSelectedWritePlans
 from agent_comms.text_digest import TextDigest
 from native_proof_cases import append_input_entry, recorded_context, write_proof_rows
+from conftest import accept_initial, publish_initial
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
@@ -115,10 +116,14 @@ class FailedHistory(ClaimedHistory):
 
 @asynccontextmanager
 async def prepared_native_input(
-    directory: Path, *, max_attempts: int = 1,
+    directory: Path, *, max_attempts: int = 1, source_bodies: tuple[str, ...] = (),
 ) -> AsyncIterator[PrivateSendClaim]:
     """Keep the real selected attempt and its bound input open for an owner operation."""
     root, root_id, comms, _initial, _people = _root(directory, direct=True)
+    for body in source_bodies:
+        message = publish_initial(comms, 'sender', 'beta', body)
+        with Coordination(root / 'coordination.sqlite3') as store:
+            accept_initial(comms.bus, root_id, message.seq, store)
     with closing(CursorDelivery()) as cursor_delivery:
         with Coordination(root / "coordination.sqlite3") as store:
             async with SelectedParticipant.select(

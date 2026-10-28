@@ -1,4 +1,5 @@
 """Real reserved inputs, source files and journals; no native/provider substitute."""
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -6,6 +7,7 @@ import pytest
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import InputId
 from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.presentation import AllOutcomes
@@ -39,11 +41,15 @@ def recorded_input_context(claim: PrivateSendClaim) -> NativeContextProof:
     return recorded_context(identity.path, record, session_entry_start=offset)
 
 
-async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Path):
-    async with prepared_native_input(tmp_path) as claim:
+@pytest.mark.parametrize('source_count', (1, 3))
+async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Path, source_count: int):
+    async with prepared_native_input(
+        tmp_path, source_bodies=tuple(f'Grouped source {index}' for index in range(source_count - 1)),
+    ) as claim:
         context = recorded_input_context(claim)
         comms = claim.selected.comms
         originals = tuple(row.source for row in claim.stage.assignments)
+        assert len(originals) == source_count
         before = comms.views.message_notifications_for_references(AllOutcomes(), originals)
         before_rows = tuple(row for rows in before.outcomes.values() for row in rows)
         assert before_rows and all(not row.state.consumed for row in before_rows)
@@ -76,11 +82,17 @@ async def test_same_request_contradiction_cannot_replace_context_receipt(tmp_pat
             assert retained.require_context_proof() == context
 
 
-async def test_uncorroborated_live_context_never_grants_consumption(tmp_path: Path):
+@pytest.mark.parametrize('corrupt', (
+    lambda context: replace(context, llm_context_digest='e' * 64),
+    lambda context: replace(context, input_id=InputId('00000000000000000000000000000001')),
+))
+async def test_uncorroborated_live_context_never_grants_consumption(
+    tmp_path: Path, corrupt: Callable[[NativeContextProof], NativeContextProof],
+):
     async with prepared_native_input(tmp_path) as claim:
         context = recorded_input_context(claim)
         with pytest.raises(IdentityConflict):
-            await claim.context_committed(replace(context, llm_context_digest='e' * 64))
+            await claim.context_committed(corrupt(context))
         with Coordination(claim.store_path) as store:
             retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert not retained.reference.recorded
