@@ -1,10 +1,11 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
-from agent_comms.presentation import AllOutcomes
+from agent_comms.presentation import AllOutcomes, OwnerOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 import sqlite3
+import sys
 from dataclasses import replace
 
 import pytest
@@ -53,6 +54,85 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.bus.revision() == wire_before
+
+
+def test_a_read_selects_only_its_viewers_claims_and_attempts_before_decoding(tmp_path):  # noqa: F811
+    from agent_comms.notification_assignment import AssignmentActivityEvidence
+
+    root, _root_id, comms, initial, people = _root(tmp_path)
+    lookups = {person.name: person.incarnation.lookup for person in people}
+    reference = initial.message.reference
+    everyone = NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
+    recipients = {recipient.canonical_thread: recipient.recipient_lookup
+                  for recipient in initial.recipients}
+    assert len(recipients) >= 2 and "sender" not in recipients
+    assert {claim.recipient for claim, _evidence in everyone.rows} == recipients.keys()
+    decoded = 0
+    decode = AssignmentActivityEvidence._decode_row.__func__.__code__
+
+    def count_decodes(frame, event, argument):
+        nonlocal decoded
+        if event == "call" and frame.f_code is decode:
+            decoded += 1
+
+    for name, lookup in recipients.items():
+        viewer = OwnerOutcomes(lookup)
+        decoded = 0
+        profiling = sys.getprofile()
+        sys.setprofile(count_decodes)
+        try:
+            own = NotificationAssignment.read(root, (initial,), viewer=viewer)
+        finally:
+            sys.setprofile(profiling)
+        assert decoded == 1
+        assert own.viewer == viewer and own.sources == (initial,)
+        assert own.rows == tuple(row for row in everyone.rows if row[0].recipient == name)
+        assert own.evidence[reference].claims == own.rows
+        assert own.evidence[reference].attempts == {
+            recipient: attempts for recipient, attempts in everyone.evidence[reference].attempts.items()
+            if recipient == lookup}
+    sender = NotificationAssignment.read(root, (initial,), viewer=OwnerOutcomes(lookups["sender"]))
+    assert sender.rows == everyone.rows
+    assert sender.evidence == everyone.evidence
+
+
+def test_invisible_recipients_allocate_no_placeholder_source(tmp_path):  # noqa: F811
+    root, _root_id, _comms, initial, people = _root(tmp_path)
+    lookups = {person.name: person.incarnation.lookup for person in people}
+    recipient = initial.recipients[0]
+    (source, outcomes), = NotificationAssignment.for_deliveries(
+        (initial,), (), OwnerOutcomes(recipient.recipient_lookup))
+    assert source is initial
+    assert [outcome.recipient() for outcome in outcomes] == [recipient]
+    (_source, all_outcomes), = NotificationAssignment.for_deliveries(
+        (initial,), (), OwnerOutcomes(lookups["sender"]))
+    assert [outcome.recipient() for outcome in all_outcomes] == list(initial.recipients)
+
+
+def test_retained_reads_refresh_only_for_changes_their_viewer_sees(tmp_path):  # noqa: F811
+    from agent_comms.assignment_states import DeferredAssignment
+    from agent_comms.coordination_cohort import sealed_cohort_assignments
+
+    root, _root_id, _comms, initial, people = _root(tmp_path)
+    lookups = {person.name: person.incarnation.lookup for person in people}
+    changed, unchanged = initial.recipients[:2]
+    reads = {
+        "changed": NotificationAssignment.read(
+            root, (initial,), viewer=OwnerOutcomes(changed.recipient_lookup)),
+        "foreign": NotificationAssignment.read(
+            root, (initial,), viewer=OwnerOutcomes(unchanged.recipient_lookup)),
+        "sender": NotificationAssignment.read(
+            root, (initial,), viewer=OwnerOutcomes(lookups["sender"])),
+        "operator": NotificationAssignment.read(root, (initial,), viewer=AllOutcomes()),
+    }
+    assert NotificationAssignment.changed(reads.values(), root) == ()
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        assignment, = sealed_cohort_assignments(store, changed.recipient_lookup)
+        store.assignments.transition_preengagement(
+            assignment.assignment_id, DeferredAssignment, expected_revision=assignment.revision)
+    refreshed = NotificationAssignment.changed(reads.values(), root)
+    assert {name for name, read in reads.items() if read in refreshed} == {
+        "changed", "sender", "operator"}
 
 
 @pytest.mark.parametrize('direct', [False, True])
