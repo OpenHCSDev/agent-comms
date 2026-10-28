@@ -2273,38 +2273,48 @@ class TypedTable(
                    f"{_identifier(stored)} TO {_identifier(declared.wire_name)}")
 
     @classmethod
-    def _bound(cls, inputs: Mapping[str, object]) -> tuple[tuple[str, ...], tuple[object, ...]]:
-        """Named query inputs resolved to their declared columns: the wire names and the
-        encoded values, paired in one order the declaration owns."""
-        selected = cls._fields_named(tuple(inputs))
-        return (tuple(_identifier(item.wire_name) for item in selected),
-                tuple(item.encode(inputs[item.name]) for item in selected))
+    def _bound(cls, inputs: Mapping[str, object]) -> tuple[tuple[_Field, ...], tuple[object, ...]]:
+        """Named query inputs resolved to their declared columns, in the declaration's own
+        field order whatever order the caller named them, with each value encoded."""
+        cls._fields_named(tuple(inputs))
+        selected = tuple(item for item in cls._columns if item.name in inputs)
+        return selected, tuple(item.encode(inputs[item.name]) for item in selected)
 
     @classmethod
     def _condition(
         cls, where: str, parameters: tuple, key: dict[str, object]
     ) -> tuple[str, tuple]:
         """Compile predicate field names and declared key values once."""
-        columns, values = cls._bound(key)
-        if columns:
-            where = "(" + where + ") AND " + " AND ".join(f"{column} IS ?" for column in columns)
+        selected, values = cls._bound(key)
+        if selected:
+            where = "(" + where + ") AND " + " AND ".join(
+                f"{_identifier(item.wire_name)} IS ?" for item in selected)
             parameters = (*parameters, *values)
         return cls._sql(where), parameters
 
     @classmethod
     def select_keys(cls, db: sqlite3.Connection,
                     keys: Sequence[Mapping[str, object]]) -> list[Self]:
-        """Rows equal to any of these named keys, as one row-value list per batch the
-        connection's variable limit admits; repeated keys are probed once."""
+        """Rows equal to any of these named keys under the same null-safe IS equality select()
+        uses: the requested keys drive an indexed join, one batch per the connection's own
+        variable limit, each distinct key probed once."""
         bound = tuple(dict.fromkeys(cls._bound(key) for key in keys))
         if not bound:
             return []
-        columns, = {columns for columns, _ in bound}
-        batch = db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // len(columns)
-        probe = "(" + ",".join("?" for _ in columns) + ")"
+        field_sets = {tuple(item.name for item in selected) for selected, _ in bound}
+        if len(field_sets) != 1:
+            raise ValueError(f"{cls.__name__} keys name different fields: {sorted(field_sets)}")
+        selected = bound[0][0]
+        table = _identifier(cls.declared_name)
+        aliases = tuple(f"k{index}" for index in range(len(selected)))
+        joined = " AND ".join(f"{table}.{_identifier(item.wire_name)} IS requested.{alias}"
+                              for item, alias in zip(selected, aliases, strict=True))
+        probe = "(" + ",".join("?" for _ in selected) + ")"
+        batch = db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // len(selected)
         return [row for chunk in batched(bound, batch) for row in cls.iterate(db.execute(
-            f"SELECT {cls._select_list(cls)} FROM {_identifier(cls.declared_name)} "
-            f"WHERE ({','.join(columns)}) IN (VALUES {','.join(probe for _ in chunk)})",
+            f"WITH requested({','.join(aliases)}) AS (VALUES {','.join(probe for _ in chunk)}) "
+            f"SELECT {cls.qualified(*cls.column_projection())} FROM requested "
+            f"JOIN {table} ON {joined}",
             tuple(value for _, values in chunk for value in values)))]
 
     @classmethod

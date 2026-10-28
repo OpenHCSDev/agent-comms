@@ -140,11 +140,11 @@ def bridge(comms, tmp_path):
 
 @pytest.fixture
 def emitted_delivery(bridge):
-    def emit(body, target='viewer'):
+    async def emit(body, target='viewer'):
         message = bridge.comms.messaging.send('claude-code', target, body).message
         delivery = replace(bridge.attempt(message, EmittedOutcome),
                            monitor=ReceivingMonitor(len(bridge.incoming_frame(message).parts)))
-        assert asyncio.run(bridge.coordinator_write(lambda _, db: delivery.first_write(db)))
+        assert await bridge.coordinator_write(lambda _, db: delivery.first_write(db))
         return message
     return emit
 
@@ -321,7 +321,7 @@ def attachment_notification(line, record_id=transcript_record('notification-reco
 @pytest.mark.asyncio
 @pytest.mark.parametrize('record_factory', (notification, attachment_notification))
 async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_delivery, record_factory):
-    message = emitted_delivery('x' * 3000)
+    message = await emitted_delivery('x' * 3000)
     state, binding = bridge.options.state, bridge.binding
     lines = [bridge.encode(part) for part in bridge.incoming_frame(message).parts]
     assert len(lines) == 7
@@ -415,7 +415,7 @@ def test_remote_control_session_record_decodes_without_updates():
 
 @pytest.mark.asyncio
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(bridge, emitted_delivery, capsys):
-    message = emitted_delivery('original')
+    message = await emitted_delivery('original')
     frame = MonitorPart(id=message.message_id, sender=message.sender, number=1, total=1, body='different')
     await frame.confirm(bridge, ObservedMonitor(transcript_record('record'), 1.))
     stored, = await stored_attempts(bridge)
