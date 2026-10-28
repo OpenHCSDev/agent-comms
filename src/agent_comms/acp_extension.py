@@ -698,7 +698,7 @@ class TranscriptDraftUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
-class TranscriptSnapshotUpdate(AgentCommsUpdate):
+class TranscriptSnapshotUpdate(AgentCommsUpdate, ToolResult):
     page: TranscriptPage
     identity: TranscriptReadIdentity
     draft: DraftRow | None = None

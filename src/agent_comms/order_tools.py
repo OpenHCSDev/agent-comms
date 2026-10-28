@@ -32,7 +32,7 @@ from agent_comms.todos import (
     JudgedCall,
     ToolCallVerdict,
 )
-from .acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
+from .acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate, TurnChangedUpdate, UpdateMetadata
 from .bus_read import BusReader, OwnerLiveRead, UiRead
 from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
@@ -61,6 +61,7 @@ from .tool_request import (
     tool_field,
 )
 from .tool_result import ToolResult
+from .transcripts import TranscriptCursor, TranscriptRead
 from .transcript_events import SentTranscript
 from .turn_digests import (
     ActivityTurnView,
@@ -549,6 +550,38 @@ class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], ThreadReadTool, declared_n
 
     def decode_reply(self, raw: object) -> GoalSnapshotReply:
         return FieldCodec.decode(GoalSnapshotReply, raw)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TranscriptPageRead(
+    UiRead[TranscriptSnapshotUpdate], ThreadReadTool, declared_name="comms_transcript_page",
+):
+    """One bounded transcript page with its current draft and the source witness that read it.
+    The cursors and historical source select the page; they never choose whose authority the
+    read runs under."""
+
+    label = "Transcript page"
+    description = ("Read one bounded page of a thread's transcript with its current draft. "
+                   "Send a returned cursor as before or after for the next page; "
+                   "historical_source reads an archived source.")
+    before: Annotated[TranscriptCursor | None, *tool_field("Read the page before this cursor")] = None
+    after: Annotated[TranscriptCursor | None, *tool_field("Read the page after this cursor")] = None
+    through: Annotated[TranscriptCursor | None, *tool_field("Read through this cursor")] = None
+    historical_source: Annotated[
+        str | None, *tool_field("Archived source to read instead of current history")
+    ] = None
+
+    def capture_as(self, comms: Comms, reader: BusReader) -> TranscriptRead:
+        return comms.transcripts.capture_page_read(
+            reader.subject(self.thread),
+            before=self.before,
+            after=self.after,
+            through=self.through,
+            historical_source=self.historical_source,
+        )
+
+    def read_as(self, comms: Comms, reader: BusReader) -> TranscriptSnapshotUpdate:
+        return TranscriptSnapshotUpdate.from_read(self.capture_as(comms, reader))
 
 
 @dataclass(frozen=True, kw_only=True)

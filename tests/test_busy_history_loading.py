@@ -12,6 +12,7 @@ import pytest
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.comms import wire
 from agent_comms.notification_reads import LiveNotificationRead
+from agent_comms.order_tools import TranscriptPageRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
@@ -60,10 +61,10 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
     original = session.read_bytes()
     async with ObservationProcess.awaited(comms.route) as process:
         with held_source(comms):
-            answer = ReadTranscript(str(comms.root), "saved", request_id=19).answer(comms)
+            answer = ReadTranscript(str(comms.root), TranscriptPageRead(thread="saved"), request_id=19).answer(comms)
             assert isinstance(answer, ReadBusy)
             assert answer.title == "History loading"
-            waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), "saved")))
+            waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), TranscriptPageRead(thread="saved"))))
             independent = asyncio.create_task(process.read(ReadNotifications(str(comms.root), LiveNotificationRead(()))))
             async with asyncio.timeout(15):
                 assert (await independent).outcomes == {}
@@ -87,7 +88,7 @@ async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
     comms, _session = saved_history(tmp_path)
     async with ObservationProcess.awaited(comms.route) as process:
         with held_source(comms):
-            waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), "saved")))
+            waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), TranscriptPageRead(thread="saved"))))
             await asyncio.sleep(0.15)
             waiting.cancel()
             with pytest.raises(asyncio.CancelledError):

@@ -40,7 +40,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
+from agent_comms.bus_read import OperatorReader, OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
 from agent_comms.child_process import join_retirement
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.comms import Comms
@@ -76,7 +76,8 @@ from agent_comms.revision_views import (
 )
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import AcquiredThreadPresentation, ThreadPresentation
-from agent_comms.transcripts import TranscriptCursor, TranscriptReadIdentity
+from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.transcripts import TranscriptReadIdentity
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
     SidebarModel,
@@ -493,25 +494,16 @@ class CancelRead(ObservationRequest):
 
 @dataclass(frozen=True)
 class TranscriptRequest[ResultT](ReadRequest):
-    """Capture one bounded read; its owner keeps the page and witness together."""
+    """The UI's lifecycle around one shared page read: root, request id, how contention is
+    answered and which result it publishes. The page arguments belong to the operation."""
 
-    thread: str
-    before: TranscriptCursor | None = None
-    after: TranscriptCursor | None = None
-    through: TranscriptCursor | None = None
-    historical_source: str | None = None
+    operation: TranscriptPageRead
 
     def read(self, comms: Comms) -> ResultT:
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
 
     def page_read(self, comms: Comms) -> TranscriptRead:
-        return comms.transcripts.capture_page_read(
-            self.thread,
-            before=self.before,
-            after=self.after,
-            through=self.through,
-            historical_source=self.historical_source,
-        )
+        return self.operation.capture_as(comms, OperatorReader())
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> ResultT: ...
@@ -580,10 +572,11 @@ class RefreshTranscript(ReadRequest):
         )
         if read.content_current():
             return None
-        return ReadTranscript(
-            self.root, identity.requested_name, before=identity.before, after=identity.after,
+        operation = TranscriptPageRead(
+            thread=identity.requested_name, before=identity.before, after=identity.after,
             through=identity.through, historical_source=identity.historical_source,
-        ).read(comms)
+        )
+        return UnreadableHistory.outcome(lambda: operation.read(comms)).raised()
 
 
 @dataclass(frozen=True)
