@@ -1075,9 +1075,8 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
 
     async def coordinator_read[Result](self, operation: Callable[[sqlite3.Connection], Result]) -> Result:
         def read() -> Result:
-            with Coordination(str(CoordinationStore.path_in(Path(self.binding.root)))) as store, \
-                    store.session.read():
-                return operation(store.session._connection)
+            with CoordinationStore.opened_reader(CoordinationStore.path_in(Path(self.binding.root))) as db:
+                return operation(db)
         return await self.comms.bus.when_open(read)
 
     async def attempts(self, message_id: MessageId) -> tuple[HarnessDelivery, ...]:

@@ -16,7 +16,6 @@ from .bus import Bus
 from .bus_tables import MessageIdentitySource
 from .coordination_database import CoordinationStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
-from .coordinator import Coordination
 from .harness_delivery_states import Outcome, UnconfirmedOutcome
 from .errors import RelationViolationError
 from .field_codec import GoalId, InputId, RootId, TurnId
@@ -37,7 +36,7 @@ from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOr
 from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
 from .message_reference import MessageReference
-from .messages import Message, MessageInput
+from .messages import MessageInput
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
 from .typed_table import (
@@ -281,9 +280,9 @@ class InputDispositions(DurableStore):
         they are. Derived on every read and never stored by reading."""
         owners = {entry.thread.incarnation.require_recorded().lookup: entry for entry in entries}
         outcomes = Outcome.members_with(UnconfirmedOutcome)
-        with Coordination(str(CoordinationStore.path_in(self.root))) as store, store.session.read():
+        with CoordinationStore.opened_reader(CoordinationStore.path_in(self.root)) as db:
             attempts = HarnessDelivery.select(
-                store.session._connection,
+                db,
                 where=(f'"recipient_lookup" IN ({", ".join("?" for _ in owners)}) '
                        f'AND "outcome" IN ({", ".join("?" for _ in outcomes)})'),
                 parameters=(*owners, *(outcome.declared_name for outcome in outcomes)),
