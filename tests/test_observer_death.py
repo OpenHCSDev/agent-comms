@@ -4,6 +4,7 @@
 from agent_comms.repo import Checkout
 import asyncio
 import os
+from functools import partial
 import signal
 
 import pytest
@@ -15,10 +16,18 @@ from agent_comms.field_codec import MessageId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.message_reference import MessageReference
+from agent_comms.bus_read import BusRead, OwnerLiveRead
 from agent_comms.ui_model.observation import (
-    ObservationProcess, ObserverDied, OwnerRead, ReadNotifications, StopSidebar,
+    ObservationProcess, ObserverDied, ReadNotifications, ReadOwnerGoal, ReadOwnerOperation, StopSidebar,
 )
 from agent_comms.threads import Thread
+
+
+def owner_reads():
+    """Every owner read the UI can send: the goal read, and each owner-live operation in its envelope."""
+    yield pytest.param(ReadOwnerGoal, id="goal")
+    for operation in BusRead.members_with(OwnerLiveRead):
+        yield pytest.param(partial(ReadOwnerOperation, operation=operation()), id=operation.declared_name)
 
 
 async def readable(process: ObservationProcess) -> None:
@@ -70,7 +79,7 @@ async def test_an_invalid_notification_reference_does_not_kill_the_observer(comm
         assert await process.read(ReadNotifications(str(comms.root), ())) == {}
 
 
-@pytest.mark.parametrize("read_type", OwnerRead.__subclasses__())
+@pytest.mark.parametrize("read_type", owner_reads())
 @pytest.mark.parametrize("declared, refusal", [
     (True, RelationViolationError), (False, UnregisteredThreadError),
 ])
@@ -88,7 +97,7 @@ async def test_unavailable_owner_reads_preserve_the_observer(
         process.status.raise_if_failed()
 
 
-@pytest.mark.parametrize("read_type", OwnerRead.__subclasses__())
+@pytest.mark.parametrize("read_type", owner_reads())
 @pytest.mark.parametrize("other_root", [False, True])
 async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read_type, other_root):
     owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent))

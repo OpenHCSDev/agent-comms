@@ -1,23 +1,31 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
 from agent_comms.repo import Checkout
-import io
-import json
-from contextlib import redirect_stdout
+import asyncio
 from dataclasses import replace
 
-from agent_comms.cli import main
+import pytest
+from acp.schema import TextContentBlock
+
+from agent_comms.acp_extension import QueuePromptRequest, encode_request
+from agent_comms.child_process import NoProcess
+from agent_comms.errors import RelationViolationError
 from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.comms import wire
-from agent_comms.field_codec import GoalId, InputId, TurnId
+from agent_comms.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope,
     UnobservedInputDeliveryScope,
     UnresolvedInput,
 )
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.order_tools import InputDeliveryRead
 from agent_comms.reported_turn import ReportedTurn
+from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ToolCaller
+from agent_comms.ui_model.observation import ReadOwnerOperation
+from delivery_owner_fixture import canonical_delivery_owner
 from stored_inputs import stored_inputs
 
 
@@ -103,18 +111,46 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     assert stored_inputs(ledger.root).rows[BusInputKey(7)].native_id == "b" * 32
 
 
-def test_commander_reads_a_units_failed_inputs_through_the_tool(tmp_path):
-    """2026-10-24: the commander hand-wrote SQL against the bus to list pi-mi's lost inputs."""
-    comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
-    seed(comms, 'owner')
-    output = io.StringIO()
-    with redirect_stdout(output):
-        code = main(['--root', str(comms.root), 'tool', '--tool', 'comms_input_delivery',
-                     '--arguments', json.dumps({'thread': 'owner'})])
-    assert code == 0, output.getvalue()
-    overview = json.loads(output.getvalue())
-    assert {row['sequence'] for row in overview['inputs']} >= {2, 8}
+async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_path):
+    """2026-10-24: the commander hand-wrote SQL to list pi-mi's lost inputs; the tool then
+    answered from the connector's own process, where no owner queue exists. Both boundaries
+    now carry one InputDeliveryRead to the owner and receive the owner's own answer."""
+    async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
+        comms.registry.register(comms.registry.require("alpha"), RunningThreadStatus())
+        comms.agents.begin_turn("alpha", TurnId.mint(), "Held native fixture")
+        agent.inputs.state("alpha").open_inbox()
+        await agent.prompt("alpha", [TextContentBlock(type="text", text="queued")],
+                           field_meta=encode_request(QueuePromptRequest("queued")))
+        InputDispositions(comms.root).record(
+            BusInputKey(91), seq=91, owner="alpha", claim_scope=1, target="alpha", text="Off queue")
+        owner = comms.registry.require("alpha")
+        scope = await agent.inputs.delivery_scope("alpha")
+        assert type(scope) is OwnerQueueInputDeliveryScope
+        unobserved = comms.goals.input_delivery("alpha")
+        assert BusInputKey(91) in [row.input_id for row in unobserved.inputs]
+        answers = {}
+        for include_history in (False, True):
+            owned = comms.goals.input_delivery("alpha", include_history=include_history, scope=scope)
+            async with asyncio.timeout(30):
+                mcp = await asyncio.to_thread(
+                    InputDeliveryRead.invoke, comms,
+                    {"thread": "alpha", "include_history": include_history},
+                    caller=ToolCaller.from_actor("sender"))
+                ui = await ReadOwnerOperation(
+                    str(comms.root), owner.incarnation, InputDeliveryRead(include_history=include_history),
+                ).answer(comms)
+            assert mcp == FieldCodec.encode(owned)
+            assert ui.value == owned
+            answers[include_history] = owned
+        assert BusInputKey(91) not in [row.input_id for row in answers[False].inputs]
+        assert answers[False].historical_inputs == ()
+        assert BusInputKey(91) in [row.input_id for row in answers[True].historical_inputs]
+        assert replace(answers[True], historical_inputs=()) == answers[False]
+        comms.registry.register(replace(owner, process_identity=NoProcess()), StoppedThreadStatus())
+        with pytest.raises(RelationViolationError):
+            async with asyncio.timeout(30):
+                await asyncio.to_thread(InputDeliveryRead.invoke, comms, {"thread": "alpha"},
+                                        caller=ToolCaller.from_actor("sender"))
 
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
