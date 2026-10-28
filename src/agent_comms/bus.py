@@ -573,13 +573,42 @@ class Bus(FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, B
             return committed
 
     def _insert(self, db: sqlite3.Connection, build: RecordBuilder) -> int:
+        seq, record = self._built(db, build)
+        return record.append_to(db, seq)
+
+    @staticmethod
+    def _built(db: sqlite3.Connection, build: RecordBuilder) -> tuple[int, BusRecord]:
         seq = BusRow.next_seq(db)
         record = build(seq, db)
         FieldCodec.require_fields(record)
-        return record.append_to(db, seq)
+        return seq, record
 
     def append(self, build: RecordBuilder) -> BusRecord:
         return self._publish(lambda db: self._insert(db, build))
+
+    def append_original(self, build: RecordBuilder) -> BusRecord:
+        """Publish a sender's original message once, decided inside the same write.
+
+        The proposed record is built once with its final identity. A committed record with
+        that sender and message identity and the same publication content is the answer,
+        with its original sequence and frozen audience; different content, or an identity
+        naming more than one record, is refused. Otherwise the proposal is appended."""
+        def insert(db: sqlite3.Connection) -> int:
+            seq, record = self._built(db, build)
+            match MessageIdentitySource.select(
+                    db, sender=record.sender, message_id=record.message_id, limit=2):
+                case []:
+                    return record.append_to(db, seq)
+                case [identity]:
+                    original = BusRow.require(db, seq=identity.seq).kind.read_from(db, identity.seq)
+                    if original.publication_snapshot != record.publication_snapshot:
+                        raise RelationViolationError(
+                            "A resend under this message identity has different content.")
+                    return identity.seq
+                case _:
+                    raise RelationViolationError(
+                        "This message identity names more than one recorded message.")
+        return self._publish(insert)
 
     def resource_claim(self, db: sqlite3.Connection, resource: str) -> ResourceClaim:
         return HeldResources.owner_for(db, resource)

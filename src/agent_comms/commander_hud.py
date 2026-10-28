@@ -319,10 +319,11 @@ class CommanderHud(ToolResult):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
-        packet = CommanderUpdate.latest(comms, owner)
+        board = tuple(entry for packet in CommanderUpdate.latest(comms, owner)
+                      for entry in packet.board(comms, commander))
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, CodexUsage.read(), packet.board(comms, commander) if packet else ())
+                   forks, CodexUsage.read(), board)
 
     def rows(self) -> tuple[HudRow, ...]:
         """Committed board order, actionable cards, live phases, then folded quiet units."""

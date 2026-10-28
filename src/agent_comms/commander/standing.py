@@ -401,9 +401,16 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule, HeadReviewR
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        return tuple(cls(claim.original(source), owner.name, todo.id, claim.request())
+        """The retained claim owns the report and the head owed a verdict, published or not:
+        a claim whose answer never reached the bus is still owed its judgement."""
+        return tuple(cls(claim.message, owner.name, todo.id, claim.request())
                      for owner, todos in held.items() for todo in todos
                      for claim in todo.order.owed_claims())
+
+    @property
+    def cited(self) -> str:
+        """The claim by its problem and head; its message may have no bus sequence yet."""
+        return f"{self.problem} claim of {self.request.head[:9]}"
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         """A verdict on the delivered head acts on the delivery; a chat reply does not."""

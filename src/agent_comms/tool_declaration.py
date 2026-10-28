@@ -140,6 +140,11 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         """What the call names after its label: nothing unless the tool says."""
         return ""
 
+    def context_read_paths(self) -> tuple[str, ...]:
+        """Files whose visible text the call puts in the model's context: none unless the tool
+        reads one."""
+        return ()
+
     def digest(self) -> str:
         """What the call does in one line, enough to judge it."""
         return f"{self.declared_name} {one_line(self.reads(), 260)}"

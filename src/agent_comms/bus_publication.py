@@ -170,10 +170,11 @@ class AgentOrigin(InitialOrigin):
         )
 
     def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
-        """An agent's resend is idempotent, so the source holds no precondition."""
+        """An agent's resend is decided by the bus's own write, not by a read before it."""
 
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
-        return bus.append(build)
+        """A resend of the same message returns its committed original, never a copy."""
+        return bus.append_original(build)
 
 
 @dataclass(frozen=True, slots=True)

@@ -69,12 +69,10 @@ class ProofBuildCheckout:
 
 @pytest.fixture
 def proof_build_checkouts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, durable_home: Path
 ) -> tuple[ProofBuildCheckout, ...]:
     """Own each package's distinct commit graph and the installed manifest."""
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    home = durable_home
     checkouts = []
     packages = {}
     for package in RuntimePackage.members_with(RuntimePackage):

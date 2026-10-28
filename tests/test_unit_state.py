@@ -15,10 +15,13 @@ from agent_comms.commander_hud import CommanderFrame
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import ToolCallId
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
+from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
@@ -27,6 +30,7 @@ from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import (
+    AwaitingApplicationRun,
     AwaitingCommander,
     Blocked,
     DeliveredUnclosed,
@@ -41,10 +45,12 @@ from agent_comms.ui_model.unit_state import (
 )
 from test_holder_standing_rules import blocked_holder, publish, state_cards
 
-pytest_plugins = ("test_holder_standing_rules",)
+pytest_plugins = ("test_holder_standing_rules", "test_proof_build")
 
 
-def recorded_turn(comms, calls):
+def recorded_turn(comms, errors: tuple[bool | None, ...], paths: tuple[str, ...] = ()):
+    """One recorded turn calling ``read`` once per entry: its result's ``isError``, or None for a
+    call still running, which has no result row yet."""
     stamp = datetime.fromtimestamp(time.time(), UTC).isoformat()
     rows = [
         dict(type="session", id="state-source", version=3, timestamp=stamp, cwd=str(comms.root)),
@@ -55,7 +61,7 @@ def recorded_turn(comms, calls):
             message=dict(role="user", content="Repair the existing owner"),
         ),
     ]
-    for index in range(calls):
+    for index, error in enumerate(errors):
         rows.append(
             dict(
                 type="message",
@@ -68,13 +74,15 @@ def recorded_turn(comms, calls):
                             type="toolCall",
                             id=f"read-{index}",
                             name="read",
-                            arguments=dict(path="owner.py"),
+                            arguments=dict(path=paths[index] if paths else "owner.py"),
                         )
                     ],
                     stopReason="toolUse",
                 ),
             )
         )
+        if error is None:
+            continue
         rows.append(
             dict(
                 type="message",
@@ -84,7 +92,7 @@ def recorded_turn(comms, calls):
                     role="toolResult",
                     toolCallId=f"read-{index}",
                     toolName="read",
-                    isError=False,
+                    isError=error,
                     content=[dict(type="text", text="contents")],
                 ),
             )
@@ -112,11 +120,11 @@ def unread_checkout(comms, tmp_path):
     checkout = tmp_path / "unread-worker"
     checkout.mkdir()
     (checkout / ".git").write_text("gitdir: ./removed-git-directory\n")
-    comms.registry.register(replace(comms.registry.require("worker"), worktree=str(checkout)))
+    comms.registry.register(replace(comms.registry.require("worker"), worktree=Checkout(checkout)))
 
 
 @pytest.mark.parametrize("member", UnitState.worst_first(), ids=lambda member: member.__name__)
-def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
+def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member):
     comms = held_bus
     unit = "worker"
     with LaunchRoot.from_path(comms.root).selected():
@@ -143,9 +151,9 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
                         ),
                     ).upsert(db)
         elif member is Spinning:
-            recorded_turn(comms, 2)
+            recorded_turn(comms, (True, True))
         elif member is StalledOnNothing:
-            recorded_turn(comms, 1)
+            recorded_turn(comms, (False,))
         elif member is DeliveredUnclosed:
             for todo in comms.goals.todos.held_for_commander(
                 comms.registry.require("lead").incarnation
@@ -159,6 +167,24 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
                         todo.order.id,
                     ),
                 )
+        elif member is AwaitingApplicationRun:
+            graph = next(graph for graph in request.getfixturevalue("proof_build_checkouts")
+                         if graph.repository.github == CorePackage.repository)
+            with comms.goals.todos.writing() as db:
+                for todo in comms.goals.todos.held_for_commander(
+                    comms.registry.require("lead").incarnation
+                ):
+                    checked = todo.order.checked()
+                    replace(
+                        todo,
+                        order=replace(
+                            checked,
+                            run=ApplicationOrderRun(
+                                "The real application shows the merged fix after a restart."),
+                            check=replace(checked.check, directory=graph.repository.checkout),
+                        ).merged(graph.installed),
+                        revision=todo.revision + 1,
+                    ).upsert(db)
         elif member is Moving:
             pass  # Assigned work, before its first-call deadline.
         else:
@@ -242,8 +268,25 @@ def test_commander_fork_gets_no_unit_card(held_bus):
     assert fork.incarnation not in {state.unit for state in states}
 
 
+@pytest.mark.parametrize("errors,paths,spinning", (
+    pytest.param((True, True), (), True, id="same-call-failed-twice"),
+    pytest.param((False, False), (), False, id="same-call-succeeded-twice"),
+    pytest.param((None, None), (), False, id="same-call-still-running"),
+    pytest.param((False, True), (), False, id="mixed-outcomes"),
+    pytest.param((True, True), ("owner.py", "other.py"), False, id="different-failed-inputs"),
+))
+def test_only_the_same_call_failing_twice_is_spinning(held_bus, errors, paths, spinning):
+    """Repeating a call that worked, such as re-arming a watch, is not a failed approach."""
+    with LaunchRoot.from_path(held_bus.root).selected():
+        recorded_turn(held_bus, errors, paths)
+        states = UnitState.current(
+            held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead()))
+        (state,) = (state for state in states if state.unit.name == "worker")
+        assert isinstance(state, Spinning) is spinning
+
+
 def test_malformed_native_source_is_unreadable_not_idle(held_bus):
-    recorded_turn(held_bus, 1)
+    recorded_turn(held_bus, (False,))
     path = held_bus.root / "state-source.jsonl"
     rows = path.read_text().splitlines()
     header = json.loads(rows[0])
