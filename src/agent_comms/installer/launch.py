@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -57,11 +58,19 @@ from agent_comms.installer.upgrade import (
     upgrade,
 )
 from agent_comms.repo import Repo
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage_rules import StorageRule
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
+
+
+def stopped(signum: int, frame: object) -> None:
+    """A stop runs the install's abort once; another signal cannot cut it short."""
+    for each in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(each, signal.SIG_IGN)
+    raise SystemExit(f"install: stopped by {signal.Signals(signum).name}")
 
 
 @dataclass
@@ -111,6 +120,7 @@ class InstallReport(MroDispatch):
     def running(self, tree: TargetTree, clock: InstallClock) -> Iterator[None]:
         """Every writer runs installed artifacts from outside ``tree``, so the report follows
         the tree's cleanup and a cleanup failure is the install's failure."""
+        clock.phases[:0] = self.inherited_phases
         self.source = Repo(checkout=tree.path, github=CorePackage.repository)
         try:
             tree.__enter__()
@@ -119,7 +129,7 @@ class InstallReport(MroDispatch):
             finally:
                 with TreeClosePhase().running(clock):
                     tree.__exit__(*sys.exc_info())
-            lines = self.outcome.lines(tuple(self.inherited_phases))
+            lines = self.outcome.lines()
         except BaseException as error:
             self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
@@ -190,11 +200,11 @@ class InstallRun:
         output.write(self.unit.result.read_text())
         return 0
 
-    def run(self) -> Upgrade:
+    def run(self, runtime: LaunchRuntime) -> Upgrade:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.mode, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses, InstallReport(
+                       runtime, self.harnesses, InstallReport(
                            inherited_phases=[launched.timing() for launched in self.phases]))
 
     def harnesses(self, stack: Stack) -> InstallResult:
