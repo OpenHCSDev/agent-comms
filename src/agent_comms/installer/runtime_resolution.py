@@ -41,8 +41,8 @@ class StackSources:
                 return
         raise ValueError(f"{checkout} does not declare stack package {name}")
 
-    @staticmethod
-    def require_compatible(baseline: str, candidate: str) -> None:
+    @classmethod
+    def require_compatible(cls, baseline: str, candidate: str) -> None:
         """Local-source membership may change; external runtime requirements must agree.
 
         This supported path compares the same external contract, not arbitrary requirement
@@ -57,21 +57,28 @@ class StackSources:
                         match source:
                             case {"git": str(), "branch": str()} | {"path": str()}:
                                 local_names.add(canonicalize_name(FieldCodec.decode(str, name)))
-        contracts = []
-        for document in documents:
-            match document:
-                case {"project": {"dependencies": list() as dependencies, **project}}:
-                    requirements = tuple(Requirement(text) for text in FieldCodec.decode(tuple[str, ...], dependencies))
-                    contracts.append(frozenset(str(requirement) for requirement in requirements
-                                              if canonicalize_name(requirement.name) not in local_names))
-                    version = ".".join(map(str, sys.version_info[:3]))
-                    python = FieldCodec.decode(str, project.get("requires-python", ""))
-                    if not SpecifierSet(python).contains(version, prereleases=True):
-                        raise ValueError(f"The common interpreter {version} does not satisfy {python}")
-                case _:
-                    raise ValueError("A compared source requires explicit project runtime dependencies")
+        contracts = tuple(frozenset(map(str, cls.runtime_requirements(document, frozenset(local_names))))
+                          for document in documents)
         if contracts[0] != contracts[1]:
             raise ValueError("External runtime dependency migration is unsupported by this common environment")
+
+    @staticmethod
+    def runtime_requirements(document: dict[str, object], local_names: frozenset[str]) -> tuple[Requirement, ...]:
+        """Decode the supported external project contract once, for every package consumer."""
+        match document:
+            case {"project": {"dependencies": list() as dependencies, **project}}:
+                version = ".".join(map(str, sys.version_info[:3]))
+                python = FieldCodec.decode(str, project.get("requires-python", ""))
+                if not SpecifierSet(python).contains(version, prereleases=True):
+                    raise ValueError(f"The common interpreter {version} does not satisfy {python}")
+                requirements = []
+                for text in FieldCodec.decode(tuple[str, ...], dependencies):
+                    requirement = Requirement(text)
+                    requirement.name = canonicalize_name(requirement.name)
+                    if requirement.name not in local_names:
+                        requirements.append(requirement)
+                return tuple(requirements)
+        raise ValueError("A compared source requires explicit project runtime dependencies")
 
     @staticmethod
     def declared_sources(document: str) -> dict[str, tuple[str, str]]:

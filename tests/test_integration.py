@@ -1,12 +1,15 @@
 """Integration policy at real TOML/Git/gh boundaries; no patched Core methods."""
 
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tomllib
 
 import pytest
+import tomli_w
 
 from agent_comms import integration
 from agent_comms.errors import ToolRefusedError
@@ -14,16 +17,19 @@ from agent_comms.head_review import BaseSide, HeadReview, HeadSide, IntegrationI
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.todos import (
-    DraftListedPullRequest, QualifiedHeadVerdict, ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
+    DraftListedPullRequest, MergedListedPullRequest, PullRequestCommit, QualifiedHeadVerdict,
+    ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.installer.runtime_resolution import StackSources
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
 from fixture_git import ENVIRONMENT, SETTINGS
 from debt_ratchet import ClientTypeErrors, compare
-from module_layers import MaterializedClients
+from module_layers import MaterializedClients, Package
 
 pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_source_fixture")
 
@@ -81,11 +87,116 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     assert not any(call[:2] == ("pr", "merge") or "state=success" in call for call in github_cli.calls())
 
 
-def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
-    mutual_sources: MutualSources,
+def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_overlay(
+    mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
 ) -> None:
     pair = mutual_sources
-    inputs = integration.IntegrationRun(pair.checkout, pair.output, "real client checker tuple").qualify(pair.context, ("P2", "P3"))
+    head = pair.core.branch_commit
+    baseline = pair.core.main_commit
+    tree = pair.core.git(pair.core.checkout, "rev-parse", f"{head}^{{tree}}").strip()
+    tested = pair.core.git(pair.core.checkout, "commit-tree", tree, "-p", baseline,
+                           "-p", head, "-m", "Actual ordinary synthetic merge").strip()
+    checkout = integration.IntegrationCheckout.create(pair.core, tmp_path / "ordinary-ci", tested)
+    document = tmp_path / "ordinary-event.json"
+    document.write_text(json.dumps({"number": pair.core.number, "pull_request": {"head": {"sha": head}}}))
+    output = tmp_path / "ordinary-inputs"
+    environment = {**os.environ, **ENVIRONMENT, "GITHUB_EVENT_NAME": "pull_request",
+                   "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
+                   "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
+                   "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    result = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--resolve-ci-inputs", str(output)),
+                            cwd=checkout.path, env=environment, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    inputs = IntegrationInput.at(output)
+    core = inputs.source(pair.core.github)
+    client = inputs.source(pair.client.github)
+    assert core.baseline.commit == baseline
+    assert core.heads == (PullRequestHead(pair.core.github, pair.core.number, head),)
+    assert client.heads == () and client.baseline.commit == pair.client.main_commit
+    resource = MaterializedClients(output, inputs)
+    base = BaseSide.require_materialized(output, core)
+    candidate = HeadSide.require_materialized(output, core)
+    assert Package(base, resource.at(checkout.path, baseline, tested, BaseSide)).missing_names == ()
+    assert {name for _, name in Package(candidate, resource.at(checkout.path, baseline, tested, HeadSide)).missing_names} == {"old_api"}
+    assert not any("state=success" in call or call[:2] == ("pr", "merge") for call in github_cli.calls())
+
+
+def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head_changes(
+    mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
+) -> None:
+    pair = mutual_sources
+    peer = SourceRepository(checkout=pair.core.checkout, github=pair.core.github, number=8)
+    peer.git(peer.checkout, "switch", "-c", "second-local-source", "main")
+    peer_head = peer.publish_change("Independent local source", *peer.write_files({
+        Path("src/agent_comms/extra.py"): "extra = 1\n"}))
+    peer.git(peer.checkout, "switch", "feature")
+    stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(peer.github, DraftListedPullRequest(
+        peer.number, "second-local-source", peer_head, stamp, "main", reviewable_times=(stamp,)))
+    primary = pair.context.comms.goals.todos.get("P2")
+    pair.context.comms.goals.update_goal("worker", CreateProblemGoalAction(
+        problem="P4", commander="lead", request=primary.request,
+        assigner=pair.context.comms.registry.require("lead").incarnation,
+        repo=peer.github, text="Include the existing local source",
+        order=replace(primary.order.checked(), pull_requests=(peer.link,)),
+        review_at=RecordedEventTime(9999999999.0)))
+    inputs = integration.IntegrationRun(pair.checkout, pair.output, "actual main tuple").qualify(
+        pair.context, ("P2", "P3", "P4"))
+    carrier = pair.publish_carrier(github_cli)
+    pair.core.git(pair.core.checkout, "switch", "main")
+    pair.core.git(pair.core.checkout, "merge", "--no-ff", "--no-edit", carrier.head)
+    tested = pair.core.git(pair.core.checkout, "rev-parse", "HEAD").strip()
+    pair.core.git(pair.core.checkout, "push", "origin", "main")
+    for number, head in ((carrier.pr, carrier.head), (peer.number, peer_head)):
+        github_cli.put(pair.core.github, MergedListedPullRequest(
+            number, "feature", head, stamp, "main", reviewable_times=(stamp,),
+            merge=PullRequestCommit(tested), merged=stamp))
+    document = tmp_path / "main-event.json"
+    document.write_text(json.dumps({"ref": "refs/heads/main", "after": tested}))
+    output = tmp_path / "main-inputs"
+    environment = {**os.environ, **ENVIRONMENT, "GITHUB_EVENT_NAME": "push",
+                   "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
+                   "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
+                   "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    command = (sys.executable, "-m", "agent_comms.integration")
+    result = subprocess.run((*command, "--resolve-ci-inputs", str(output)), cwd=pair.core.checkout,
+                            env=environment, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert IntegrationInput.at(output) == inputs
+    result = subprocess.run((*command, "--revalidate-ci-inputs", str(output)), cwd=pair.core.checkout,
+                            env=environment, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    github_cli.put(peer.github, MergedListedPullRequest(
+        peer.number, "second-local-source", "f" * 40, stamp, "main", reviewable_times=(stamp,),
+        merge=PullRequestCommit(tested), merged=stamp))
+    stale = subprocess.run((*command, "--revalidate-ci-inputs", str(output)), cwd=pair.core.checkout,
+                           env=environment, capture_output=True, text=True, timeout=120)
+    assert stale.returncode != 0 and "exact captured source" in stale.stderr
+    assert not any("state=success" in call or call[:2] == ("pr", "merge") for call in github_cli.calls())
+
+
+def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+) -> None:
+    pair = mutual_sources
+    plugin = ('from mypy.plugin import Plugin\nfrom agent_comms.api import old_api\n'
+              'def plugin(version: str) -> type[Plugin]:\n'
+              '    assert old_api() == "baseline"\n    return Plugin\n')
+    # The native config and its plugin are real baseline source, then migrated on feature.
+    pair.client.git(pair.client.checkout, "switch", "main")
+    project = tomllib.loads((pair.client.checkout / "pyproject.toml").read_text())
+    project["tool"] = {"mypy": {"plugins": ["mypy_source_plugin.py"]}}
+    pair.client.publish_change("Declare the baseline native mypy plugin", *pair.client.write_files({
+        Path("pyproject.toml"): tomli_w.dumps(project), Path("mypy_source_plugin.py"): plugin}))
+    pair.client.git(pair.client.checkout, "push", "origin", "main")
+    pair.client.git(pair.client.checkout, "switch", "feature")
+    pair.client.git(pair.client.checkout, "rebase", "main")
+    head = pair.client.publish_change("Migrate the real plugin alongside the client", *pair.client.write_files({
+        Path("mypy_source_plugin.py"): plugin.replace("old_api", "new_api").replace("baseline", "candidate")}))
+    stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(pair.client.github, DraftListedPullRequest(
+        pair.client.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
+    inputs = integration.IntegrationRun(pair.checkout, pair.output, "real client checker tuple and native plugins").qualify(pair.context, ("P2", "P3"))
     source = inputs.source(pair.core.github)
     head = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     clients = MaterializedClients(pair.output, inputs)

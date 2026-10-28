@@ -182,11 +182,14 @@ class IntegrationSource:
             raise ToolRefusedError(f"{self.repository.to_wire()} main moved; recapture inputs")
         self.require_candidate(repository, carrier)
 
-    def require_candidate(self, repository: Repo, carrier: PullRequestHead) -> None:
-        """The event/review owner verifies the current carrier; all other heads stay exact."""
+    def require_tree(self, repository: Repo) -> None:
         self.require_origin(repository)
         if self.expected_tree(repository) != self.candidate_tree:
             raise ToolRefusedError(f"{self.repository.to_wire()} candidate tree is not its captured combination")
+
+    def require_candidate(self, repository: Repo, carrier: PullRequestHead) -> None:
+        """The event/review owner verifies the current carrier; all other heads stay exact."""
+        self.require_tree(repository)
         for head in self.heads:
             if not head.same_pull_request(carrier):
                 current = head.current()

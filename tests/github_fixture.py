@@ -36,6 +36,12 @@ class GitHubFixture:
         data[repository.to_wire()]["requests"][str(row.number)] = {"body": body, "listed": FieldCodec.encode(row)}
         self.path.write_text(json.dumps(data))
 
+    def refuse_read(self, repository: RepositoryName, number: int, refusal: str) -> None:
+        """An existing remote PR is inaccessible at GitHub's actual process boundary."""
+        data = json.loads(self.path.read_text())
+        data[repository.to_wire()]["requests"][str(number)]["read_refusal"] = refusal
+        self.path.write_text(json.dumps(data))
+
     def refuse_arm(self, repository: RepositoryName, number: int, refusal: str) -> None:
         """GitHub's answer when enabling auto-merge on this pull request fails."""
         data = json.loads(self.path.read_text())

@@ -25,6 +25,9 @@ def main():
     if arguments[:2] == ["pr", "view"]:
         data = repositories[arguments[arguments.index("-R") + 1]]
         request = data["requests"][arguments[2]]
+        if refusal := request.get("read_refusal"):
+            print(refusal, file=sys.stderr)
+            raise SystemExit(1)
         field = arguments[arguments.index("--json") + 1]
         assert arguments[arguments.index("--jq") + 1] == "." + field
         print({"number": request["listed"]["number"], "body": request["body"]}[field])

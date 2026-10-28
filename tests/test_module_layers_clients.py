@@ -5,9 +5,14 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
+import pytest
+import tomli_w
+
 from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
+from debt_ratchet import ClientTypeErrors
 from agent_comms.head_review import BaseSide, HeadSide, Side
 from agent_comms.integration import IntegrationRun
 from agent_comms.todos import DraftListedPullRequest
@@ -41,6 +46,41 @@ def test_materialized_clients_check_matched_sources_and_both_mixed_sources_fail(
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 
+@pytest.mark.parametrize("baseline_has_client,candidate_has_client", ((False, True), (True, False)))
+def test_actual_client_membership_stays_absent_on_its_own_cut(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+    baseline_has_client: bool, candidate_has_client: bool,
+) -> None:
+    pair = mutual_sources
+    full = (pair.core.checkout / "stack/pyproject.toml").read_text()
+    absent = tomllib.loads(full)
+    absent["project"]["dependencies"].remove("source-client")
+    del absent["tool"]["uv"]["sources"]["source-client"]
+    absent_text = tomli_w.dumps(absent)
+    if not baseline_has_client:
+        pair.core.git(pair.core.checkout, "switch", "main")
+        pair.core.publish_change("Baseline has no client declaration", *pair.core.write_files({
+            Path("stack/pyproject.toml"): absent_text}))
+        pair.core.git(pair.core.checkout, "push", "origin", "main")
+        pair.core.git(pair.core.checkout, "switch", "feature")
+        pair.core.git(pair.core.checkout, "rebase", "main")
+    head = pair.core.publish_change("Declare only the candidate's actual client membership", *pair.core.write_files({
+        Path("stack/pyproject.toml"): full if candidate_has_client else absent_text}))
+    stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(pair.core.github, DraftListedPullRequest(
+        pair.core.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
+    inputs = IntegrationRun(pair.checkout, pair.output, "actual added and removed client").qualify(pair.context, ("P2", "P3"))
+    resource = MaterializedClients(pair.output, inputs)
+    core = inputs.source(pair.core.github)
+    tested = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    for side, present in ((BaseSide, baseline_has_client), (HeadSide, candidate_has_client)):
+        clients = resource.at(pair.core.checkout, core.baseline.commit, tested, side)
+        assert len(clients) == int(present)
+        assert all(client.checkout == side.checkout(pair.output, pair.client.github) for client in clients)
+    assert len(ClientTypeErrors.parts(pair.core.checkout, core.baseline.commit, tested,
+                                     {"src/agent_comms/api.py"}, "src/", resource)) == 1
+
+
 def test_materialized_client_files_come_from_each_actual_cut(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
 ) -> None:
@@ -60,13 +100,26 @@ def test_materialized_client_files_come_from_each_actual_cut(
     assert cuts[HeadSide] == {"src/replacement.py"}
 
 
+@pytest.mark.parametrize("name", ("source-client", "source-renamed"))
 def test_materialized_selection_includes_peer_imports_but_not_absent_paths(
-    mutual_sources: MutualSources, github_cli: GitHubFixture,
+    mutual_sources: MutualSources, github_cli: GitHubFixture, name: str,
 ) -> None:
     pair = mutual_sources
-    files = pair.client.write_files({Path("src/workflow.py"): 'def run() -> str:\n    return "local"\n'})
+    client_project = tomllib.loads((pair.client.checkout / "pyproject.toml").read_text())
+    client_project["project"]["name"] = name
+    files = pair.client.write_files({
+        Path("src/workflow.py"): 'def run() -> str:\n    return "local"\n',
+        Path("pyproject.toml"): tomli_w.dumps(client_project)})
     commit = pair.client.publish_change("Keep the file while removing its candidate Core import", *files)
+    stack = tomllib.loads((pair.core.checkout / "stack/pyproject.toml").read_text())
+    stack["project"]["dependencies"] = [name if item == "source-client" else item
+                                         for item in stack["project"]["dependencies"]]
+    stack["tool"]["uv"]["sources"][name] = stack["tool"]["uv"]["sources"].pop("source-client")
+    core_head = pair.core.publish_change("Declare the actual candidate client name", *pair.core.write_files({
+        Path("stack/pyproject.toml"): tomli_w.dumps(stack)}))
     stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(pair.core.github, DraftListedPullRequest(
+        pair.core.number, "feature", core_head, stamp, "main", reviewable_times=(stamp,)))
     github_cli.put(pair.client.github, DraftListedPullRequest(
         pair.client.number, "feature", commit, stamp, "main", reviewable_times=(stamp,)))
     inputs = IntegrationRun(pair.checkout, pair.output, "selected file union").qualify(pair.context, ("P2", "P3"))

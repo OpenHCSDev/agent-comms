@@ -40,7 +40,7 @@ from agent_comms.todos import (
     CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, OrderClaim, ProgressRead, PullRequestLink, PullRequests, RecordPullRequest, RejectedHeadVerdict,
     HeadVerdict, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
-    StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
+    StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason, WithdrawTodo,
 )
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
@@ -177,6 +177,7 @@ def test_native_companion_link_preserves_claim_review_goal_and_is_idempotent(
     before = comms.goals.todos.get("P2")
     goal = comms.registry.require(before.held().owner).goal
     reviews = StoredHeadReview.head_reviews(comms.goals.todos, primary)
+    history = tuple(comms.registry.goal_history(before.held().owner))
     link = PullRequestLink(SourceRepository.of(companion_checkout).github, primary.pr)
     context = order.Commander.read_root(comms.root)
     with chdir(companion_checkout):
@@ -192,13 +193,46 @@ def test_native_companion_link_preserves_claim_review_goal_and_is_idempotent(
     assert OrderHeadReview.holding((after,), companion) == (after,)
     # Qualification reads these exact stored links, not a caller-provided pair roster.
     assert {item.repo for item in after.order.checked().pull_requests} == {primary.repo, link.repo}
+    story = after.story()
     with chdir(companion_checkout):
         order.main(["pr", before.id, "--existing", str(primary.pr)], context)
     assert comms.goals.todos.get(before.id) == after
+    assert comms.goals.todos.get(before.id).story() == story
     assert comms.registry.require(after.held().owner).goal == goal
     assert StoredHeadReview.head_reviews(comms.goals.todos, primary) == reviews
+    assert tuple(comms.registry.goal_history(after.held().owner)) == history
     assert not any(call[:2] in (("pr", "create"), ("pr", "merge")) for call in github.calls())
     assert any(link.repo.to_wire() in argument for call in github.calls() for argument in call)
+
+
+def test_native_companion_adoption_is_the_same_reviewed_orders_actual_qualification_source(
+    source_pair: MutualSources, claim_order: Callable[..., OrderClaim],
+    github_cli: GitHubFixture,
+) -> None:
+    pair = source_pair
+    comms = pair.context.comms
+    primary = PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit)
+    claim_order("P2", pull_request=primary.pr, head=primary.head)
+    todo = comms.goals.todos.get("P2")
+    invoke(comms, primary, UnderReviewHeadVerdict(), OrderHeadReview.for_request(
+        (todo,), primary, UnquotedHeadReview.of))
+    before = comms.goals.todos.get("P2")
+    owner = comms.registry.require(before.held().owner)
+    rule = comms.registry.storage_rule
+    checkout = rule.repository_checkout(rule.roots_of(owner), before.id, pair.client.github)
+    checkout.parent.mkdir(parents=True, exist_ok=True)
+    pair.client.git(pair.client.checkout, "worktree", "add", "--detach", str(checkout), pair.client.branch_commit)
+    with chdir(checkout):
+        order.main(["pr", before.id, "--existing", str(pair.client.number)], order.Commander.read_root(comms.root))
+    linked = comms.goals.todos.get(before.id)
+    assert linked == replace(before, revision=before.revision + 1,
+                             order=before.order.checked().linked_to(pair.client.link))
+    inputs = IntegrationRun(pair.checkout, pair.output, "native qualified companion discovery").qualify(pair.context, ("P2",))
+    assert inputs.source(pair.client.github).heads == (
+        PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit),)
+    assert comms.goals.todos.get(before.id) == linked
+    assert not HeadReview.accepted(primary.repo, primary.head)
+    assert not any(call[:2] in (("pr", "create"), ("pr", "merge")) for call in github_cli.calls())
 
 
 def test_companion_metadata_cannot_create_edit_or_adopt_missing_pr(
@@ -217,6 +251,19 @@ def test_companion_metadata_cannot_create_edit_or_adopt_missing_pr(
                 order.main(["pr", before.id, *arguments], context)
             assert comms.goals.todos.get(before.id) == before
     assert not any(call[:2] in (("pr", "create"), ("pr", "edit"), ("pr", "merge")) for call in github.calls())
+
+
+def test_companion_metadata_refuses_an_existing_but_inaccessible_remote_pr(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
+) -> None:
+    comms, github, primary = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    companion = SourceRepository.of(companion_checkout)
+    github.refuse_read(companion.github, primary.pr, "GraphQL: Resource not accessible by integration")
+    with chdir(companion_checkout), pytest.raises(subprocess.CalledProcessError):
+        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Commander.read_root(comms.root))
+    assert comms.goals.todos.get(before.id) == before
+    assert not any(call[:2] in (("pr", "create"), ("pr", "edit")) for call in github.calls())
 
 
 def test_companion_metadata_refuses_another_owners_checkout(
@@ -249,6 +296,22 @@ def test_companion_metadata_refuses_an_unregistered_origin_before_forge_read(
     with chdir(companion_checkout), pytest.raises(ValueError, match="Unknown repository"):
         order.main(["pr", before.id, "--existing", str(primary.pr)], context)
     assert comms.goals.todos.get(before.id) == before
+    assert github.calls() == calls
+
+
+def test_companion_metadata_refuses_a_closed_order_without_forge_or_link_changes(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
+) -> None:
+    comms, github, primary = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    comms.goals.todos.apply(before.id, WithdrawTodo(
+        before.revision, comms.registry.require("lead").incarnation,
+        before.held(), "Close this fixture order before attempting metadata"))
+    closed = comms.goals.todos.get(before.id)
+    calls = github.calls()
+    with chdir(companion_checkout), pytest.raises((ValueError, TodoError)):
+        order.main(["pr", before.id, "--existing", str(primary.pr)], order.Commander.read_root(comms.root))
+    assert comms.goals.todos.get(before.id) == closed
     assert github.calls() == calls
 
 

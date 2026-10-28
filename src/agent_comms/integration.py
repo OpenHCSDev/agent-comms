@@ -276,7 +276,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
 
     @property
     def parents(self) -> tuple[str, ...]:
-        return tuple(Repo.git(self.repository.checkout, "rev-list", "--parents", "-n", "1", self.tested).split()[1:])
+        return WorkBranches(self.repository.checkout).commit_parents(self.tested)
 
     @property
     def baseline(self) -> str:
@@ -310,8 +310,11 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         if current.base != "main":
             raise IntegrationFailed("The tested carrier no longer targets main")
 
-    def main_commit(self, source: IntegrationSource) -> str:
-        return source.baseline.commit
+    def main_commits(self, inputs: IntegrationInput) -> dict[RepositoryName, str]:
+        return {source.repository: source.baseline.commit for source in inputs.sources}
+
+    def require_local_candidate(self, source: IntegrationSource) -> None:
+        source.require_candidate(self.repository, self.carrier)
 
     def materialize(self, directory: Path) -> IntegrationInput:
         """Capture once from Git/forge, then use these same exact checkouts for every consumer."""
@@ -394,11 +397,14 @@ class TestedSources(DeclaredFamily, affix="Sources"):
             if local.heads != (self.carrier,) or any(source.heads for source in inputs.sources
                                                     if source.repository != self.repository.github):
                 raise IntegrationFailed("An ordinary comparison cannot supply companion overlays")
+        mains = self.main_commits(inputs)
         for source in inputs.sources:
             repository = Repo.selected(repositories, source.repository.to_wire())
-            if IntegrationSource.main_head(repository) != self.main_commit(source):
+            if IntegrationSource.main_head(repository) != mains[source.repository]:
                 raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
-            source.require_candidate(repository, self.carrier)
+        self.require_local_candidate(local)
+        for source in (source for source in inputs.sources if source.repository != self.repository.github):
+            source.require_candidate(Repo.selected(repositories, source.repository.to_wire()), self.carrier)
 
 
 class PullRequestSources(TestedSources, declared_name="pull_request"):
@@ -442,8 +448,12 @@ class MainSources(TestedSources, declared_name="push"):
         if response.returncode:
             raise IntegrationFailed(response.stderr.strip() or "Cannot read main's merged PR provenance")
         numbers = FieldCodec.decode(tuple[int, ...], FieldCodec.parse(response.stdout))
+        parents = WorkBranches(repository.checkout).commit_parents(tested)
+        if len(parents) != 2:
+            raise IntegrationFailed("Main cache requires the actual two-parent merged PR")
         rows = tuple(row for row in PullRequests().rows(repository.github, numbers)
-                     if row.base == "main" and any(merged.merge.oid == tested for merged in row.as_merged()))
+                     if row.base == "main" and row.head == parents[1]
+                     and any(merged.merge.oid == tested for merged in row.as_merged()))
         if len(rows) != 1:
             raise IntegrationFailed("Main cache requires one actual merged PR; direct/ambiguous commits refuse")
         row, = rows
@@ -464,10 +474,19 @@ class MainSources(TestedSources, declared_name="push"):
         if self.merged_carrier(self.repository, self.tested) != self.carrier:
             raise IntegrationFailed("Main's uniquely identified merged carrier changed")
 
-    def main_commit(self, source: IntegrationSource) -> str:
-        if source.repository == self.repository.github:
-            return self.tested
-        return super().main_commit(source)
+    def main_commits(self, inputs: IntegrationInput) -> dict[RepositoryName, str]:
+        return {**super().main_commits(inputs), self.repository.github: self.tested}
+
+    def require_local_candidate(self, source: IntegrationSource) -> None:
+        """Main owns the transition from exact open sources to exact merged ancestry."""
+        source.require_tree(self.repository)
+        for head in (head for head in source.heads if not head.same_pull_request(self.carrier)):
+            rows = tuple(row for row in PullRequests().rows(head.repo, (head.pr,))
+                         if row.head == head.head and row.base == "main")
+            # Inclusion belongs to Git. An open/closed badge cannot undo a commit that
+            # the actual merged carrier contains, nor can it substitute for that proof.
+            if len(rows) != 1 or not Repo.descends(self.repository.checkout, head.head, self.tested):
+                raise IntegrationFailed(f"#{head.pr} is not the exact captured source merged into this main")
 
 
 @dataclass(frozen=True)

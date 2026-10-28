@@ -919,13 +919,15 @@ class ClientTypeErrors(SideCounts):
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-client-") as scratch:
             subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref, "src"),
                            check=True, timeout=60)
-            # The client checks under its own configuration, from its checkout.
+            # Native config plugins import Python too: both readers need the same cut,
+            # not a baseline static path alongside candidate runtime imports.
+            imports = (str(Path(scratch, "src")), *client.import_paths)
             result = SpawnedProcess.run(
                 (sys.executable, "-m", *TypeErrors.mypy(
                     cache, "--follow-imports=silent", "--ignore-missing-imports", *selected)),
                 cwd=client.checkout, timeout=600,
-                env={**os.environ, "MYPYPATH": os.pathsep.join(
-                    (str(Path(scratch, "src")), *client.import_paths))},
+                env={**os.environ, "MYPYPATH": os.pathsep.join(imports),
+                     "PYTHONPATH": os.pathsep.join((*imports, os.environ.get("PYTHONPATH", "")))},
             )
         output = cls.checker_output(result, f"{client.name} at {ref}")
         return Counter(f"{client.name}/{match[1]}" for match in cls.finding.finditer(output)

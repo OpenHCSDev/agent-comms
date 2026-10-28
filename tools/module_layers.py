@@ -409,9 +409,12 @@ class MaterializedClients(ClientSources):
                     cut.require_materialized(self.directory, source) / "stack",
                     self.directory, cut, self.inputs) for cut in Side.sides()}
         clients = tuple(client for found in cuts.values() for client in found)
+        origins = {member.checkout(self.directory, source.repository): source.repository
+                   for member in Side.sides() for source in self.inputs.sources}
         return tuple(replace(client,
                      compared=tuple(peer.checkout for peer in clients
-                                    if peer.name == client.name and peer.checkout != client.checkout),
+                                    if origins[peer.checkout] == origins[client.checkout]
+                                    and peer.checkout != client.checkout),
                      dependencies=tuple(peer.checkout for peer in cuts[side] if peer.checkout != client.checkout))
                      for client in cuts[side])
 

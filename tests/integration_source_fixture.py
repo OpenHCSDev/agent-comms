@@ -41,7 +41,7 @@ class MutualSources:
 
 
 @pytest.fixture
-def mutual_sources(
+def source_pair(
     held_bus: Comms,
     configured_repository: Callable[[Comms, *tuple[Repo, ...]], Commander],
     github_cli: GitHubFixture,
@@ -56,9 +56,14 @@ def mutual_sources(
         Path("pyproject.toml"): '[project]\nname = "agent-comms"\nversion = "0.0.1"\ndependencies = []\n',
         Path("stack/pyproject.toml"): (
             '[project]\nname = "fixture-stack"\nversion = "0.0.1"\ndependencies = ["agent-comms", "source-client"]\n'
+            '[tool.uv]\noverride-dependencies = ["packaging==26.0"]\n'
+            'constraint-dependencies = ["typing-extensions>=4.15"]\n'
+            '[tool.uv.pip]\nstrict = true\n'
             '[tool.uv.sources]\nagent-comms = {path = "..", editable = true}\n'
             f'source-client = {{git = "{client.remote}", branch = "main"}}\n'
         ),
+        Path("stack/uv.lock"): 'version = 1\nrevision = 3\nrequires-python = ">=3.14"\npackage = []\n',
+        Path("uv.lock"): 'version = 1\nrevision = 3\nrequires-python = ">=3.14"\npackage = []\n',
         Path("src/agent_comms/__init__.py"): "",
         Path("src/agent_comms/api.py"): 'def old_api() -> str:\n    return "baseline"\n',
     })
@@ -83,14 +88,6 @@ def mutual_sources(
     held = primary.held()
     RecordPullRequest(primary.revision, held.owner_identity, core.link, held.generation).record(
         held_bus.goals, primary.id)
-    held_bus.goals.update_goal("worker", CreateProblemGoalAction(
-        problem="P3", commander="lead", request=primary.request,
-        assigner=held_bus.registry.require("lead").incarnation,
-        repo=client.github, text="Migrate the paired source client",
-        order=replace(primary.order.checked(), pull_requests=(client.link,),
-                      check=replace(primary.order.check, directory=client.checkout)),
-        review_at=RecordedEventTime(time.time() + 3600),
-    ))
     stamp = "2026-10-24T00:00:00Z"
     for source in (core, client):
         github_cli.put(source.github, DraftListedPullRequest(
@@ -98,3 +95,19 @@ def mutual_sources(
         ))
     checkout = IntegrationCheckout.create(core, tmp_path / "qualification", core.main_commit)
     return MutualSources(context, core, client, checkout, tmp_path / "qualified-inputs")
+
+
+@pytest.fixture
+def mutual_sources(source_pair: MutualSources) -> MutualSources:
+    """The same source owner, with its companion linked by a separate real checked order."""
+    comms = source_pair.context.comms
+    primary = comms.goals.todos.get("P2")
+    comms.goals.update_goal("worker", CreateProblemGoalAction(
+        problem="P3", commander="lead", request=primary.request,
+        assigner=comms.registry.require("lead").incarnation,
+        repo=source_pair.client.github, text="Migrate the paired source client",
+        order=replace(primary.order.checked(), pull_requests=(source_pair.client.link,),
+                      check=replace(primary.order.check, directory=source_pair.client.checkout)),
+        review_at=RecordedEventTime(time.time() + 3600),
+    ))
+    return source_pair
