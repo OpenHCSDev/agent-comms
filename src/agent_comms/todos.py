@@ -2466,7 +2466,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise TodoError("Only a pending order can be claimed by its holder.")
 
     def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return (ReviewedHeadVerdict, RejectedHeadVerdict)
+        return (ReviewedHeadVerdict, QualifiedHeadVerdict, RejectedHeadVerdict)
 
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
@@ -4107,6 +4107,14 @@ class DecidedHeadVerdict(HeadVerdict, declared_name=None):
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"{self.verb} by {reviewer} on {subject}: {self.reason.text}"
+
+
+@dataclass(frozen=True)
+class QualifiedHeadVerdict(DecidedHeadVerdict):
+    """A reviewed source stage, without permission to promote the whole change."""
+
+    state = "pending"
+    verb = "Qualified"
 
 
 @dataclass(frozen=True)

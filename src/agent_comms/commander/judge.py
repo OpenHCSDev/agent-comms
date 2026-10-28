@@ -57,6 +57,7 @@ from agent_comms.todos import (
     GrownHeadVerdict,
     GrowthReason,
     ReviewedHeadVerdict,
+    QualifiedHeadVerdict,
     RejectedHeadVerdict,
     HeadVerdict,
     OrderHeadReview,
@@ -554,7 +555,7 @@ class ReviewingVerb(HeadVerdictVerb):
 
     def edit_problems(self) -> dict[str, str]:
         return super().edit_problems() | MalformedRecord(
-            'judge reviewing takes --pr and --head, never edit ids.').located(
+            f'judge {self.declared_name} takes --pr and --head, never edit ids.').located(
                 'ids', 'supply --pr and --head instead of edit IDs')
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict:
@@ -563,6 +564,17 @@ class ReviewingVerb(HeadVerdictVerb):
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class QualifyVerb(ReasonedVerb, QuotingVerb, ReviewingVerb):
+    """Record a reasoned source decision using the existing head-only review boundary."""
+
+    help = "the exact PR head's source stage is qualified, without permission to merge"
+    verdict = QualifiedHeadVerdict
+
+    def head_operation(self) -> HeadVerdict:
+        return self.verdict(VerdictReason(self.why))
 
 
 @dataclass(frozen=True, kw_only=True)
