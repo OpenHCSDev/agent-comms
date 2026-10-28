@@ -35,7 +35,10 @@ from .field_codec import (
     FieldCodec,
     JsonShapeFamily,
     JsonShapeMember,
+    NullMember,
     PresenceExclude,
+    RecordMember,
+    SubclassUnion,
     ThreadLookup,
     WatchPaths,
     WatchViews,
@@ -128,7 +131,12 @@ class OutcomeViewer(ABC):
     def sees_direct_read(self, source: Delivered) -> bool:
         pass
 
+    @abstractmethod
+    def sees(self, source: Delivered) -> bool:
+        """Whether this reader may read the message at all."""
 
+
+@dataclass(frozen=True, slots=True)
 class AllOutcomes(OutcomeViewer):
     """An unscoped reader sees every recipient's outcome and every human read."""
 
@@ -136,6 +144,9 @@ class AllOutcomes(OutcomeViewer):
         return True
 
     def sees_direct_read(self, source: Delivered) -> bool:
+        return True
+
+    def sees(self, source: Delivered) -> bool:
         return True
 
 
@@ -154,6 +165,11 @@ class OwnerOutcomes(OutcomeViewer):
 
     def sees_direct_read(self, source: Delivered) -> bool:
         return source.sender_lookup == self.lookup
+
+    def sees(self, source: Delivered) -> bool:
+        """The message's sender and its original recipients may read it."""
+        return self.lookup == source.sender_lookup or any(
+            self.lookup == recipient.recipient_lookup for recipient in source.recipients)
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,12 +234,13 @@ class MessageNotification:
     @classmethod
     def references(
         cls, root: Path, registry: Registration, log: Bus,
-        references: Sequence[MessageReference],
+        references: Sequence[MessageReference], *, viewer: OutcomeViewer,
     ) -> NotificationWindow:
-        """Borrow mounted references in the original bounded delivery windows."""
+        """Borrow mounted references in the original bounded delivery windows, as this
+        viewer may see them."""
         def project(sources: Sequence[Delivered]) -> NotificationWindow:
             read = NotificationAssignment.read(root, sources)
-            return cls.delivery_window(root, registry, sources, read, viewer=AllOutcomes())
+            return cls.delivery_window(root, registry, sources, read, viewer=viewer)
 
         return cls.read_references(log, references, project)
 
@@ -265,7 +282,8 @@ class MessageNotification:
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
-                                 sources: Sequence[Delivered]) -> NotificationWindow:
+                                 sources: Sequence[Delivered], *,
+                                 viewer: OutcomeViewer) -> NotificationWindow:
         observations = {
             recipient.recipient_lookup: RecordedRecipientActivity()
             for source in sources for recipient in source.recipients
@@ -273,7 +291,7 @@ class MessageNotification:
         read = NotificationAssignment.read(root, sources)
         return cls.project_delivery_window(
             root, namespace, sources, observations,
-            assignment_read=read, viewer=AllOutcomes(),
+            assignment_read=read, viewer=viewer,
         )
 
     @classmethod
@@ -377,6 +395,64 @@ class MessageNotification:
 class SentMessageOutcome(MessageNotification):
     """The same typed outcome, with its original message required for context."""
     message: Message = field(kw_only=True)
+
+
+class RecipientCursor(SubclassUnion, affix=""):
+    """Where a page of one message's recipient outcomes starts; recipients are ordered by
+    their stable lookup, never by a display name."""
+
+    @abstractmethod
+    def following(
+        self, outcomes: Iterable[MessageNotification],
+    ) -> tuple[MessageNotification, ...]:
+        """The outcomes after this cursor, in recipient order."""
+
+    @staticmethod
+    def ordered(outcomes: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
+        return tuple(sorted(outcomes, key=lambda outcome: outcome.recipient_identity.recipient_lookup))
+
+
+@dataclass(frozen=True)
+class FirstRecipient(NullMember, RecipientCursor):
+    """No cursor given: start at the first recipient."""
+
+    def following(
+        self, outcomes: Iterable[MessageNotification],
+    ) -> tuple[MessageNotification, ...]:
+        return self.ordered(outcomes)
+
+
+@dataclass(frozen=True)
+class AfterRecipient(RecordMember, RecipientCursor):
+    """Start after this recipient, the last row of the previous page."""
+
+    recipient: FrozenRecipient
+
+    def following(
+        self, outcomes: Iterable[MessageNotification],
+    ) -> tuple[MessageNotification, ...]:
+        return tuple(outcome for outcome in self.ordered(outcomes)
+                     if outcome.recipient_identity.recipient_lookup > self.recipient.recipient_lookup)
+
+
+@dataclass(frozen=True, slots=True)
+class SentMessageSummary:
+    """One sent message's recipient handling: its original reference and the totals
+    MessageNotification.summary reports. comms_message_outcomes reads each recipient's
+    own outcome for that reference, so the message is never repeated per recipient."""
+
+    reference: MessageReference
+    summary: str
+
+    @classmethod
+    def recent(cls, presentation: ThreadPresentation) -> tuple[SentMessageSummary, ...]:
+        """One summary per recent sent source, from the presentation's captured window."""
+        window = presentation.notification_window
+        return tuple(
+            cls(reference, MessageNotification.summary(
+                window.outcomes.get((reference.seq, reference.message_id), ())))
+            for reference in presentation.sent_references
+        )
 
 
 class ChannelReadMark(ABC):

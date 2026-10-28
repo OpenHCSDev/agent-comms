@@ -19,7 +19,7 @@ from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefuse
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
 from agent_comms.heartbeat_subjects import UnitSubject
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.commander.rule_file import RuleFile
+from agent_comms.commander.rule_file import CommanderAudience, RuleFile
 from agent_comms.commander.standing import PlanIdle
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -44,7 +44,8 @@ from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
-from agent_comms_hooks.skill import CommanderStart
+from agent_comms_hooks.read_gate import GatedCall
+from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
@@ -108,10 +109,10 @@ def test_no_deck_no_slices_outside_a_commander_session(tmp_path):
 def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path, commanding_session):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    start = CommanderStart.decode(hook_record(transcript, "SessionStart"))
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     assert start.take()
     hook = SliceReminder.decode(hook_record(transcript))
-    slices = CommanderStart.slices()
+    slices = CommanderReader.slices()
     taken = [hook.take() for _ in range(SliceReminder.every * 3)]
     assert taken[SliceReminder.every - 1::SliceReminder.every] == [(text,) for text in slices[:3]]
     assert sum(map(len, taken)) == 3
@@ -134,7 +135,8 @@ def test_an_unbound_session_is_never_told_to_rearm_a_commander_watch(tmp_path, m
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))
     assert [hook.take() for _ in range(SliceReminder.every * 2)] == [()] * SliceReminder.every * 2
-    assert not hook.deck.exists()
+    assert not hook.deck(CommanderReader()).exists()
+    assert not hook.deck(FleetReader()).exists()
 
 
 def tool_call(hook, server, comms, db, now):
@@ -177,7 +179,7 @@ def test_a_recorded_verdict_drops_its_board_line_on_the_next_tool_call(
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert CommanderStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take()
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take()
         board = tool_call(hook, server, comms, db, time.time())
         assert len(board) == len(rules)
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
@@ -218,7 +220,7 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert CommanderStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take()
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take()
         before = tool_call(hook, server, comms, db, time.time())
         assert sum(phase_name in line for line in before) == 1
         # The worker holds P1 and P2 already; the idle outsider takes the phase order.
@@ -257,7 +259,7 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
         server.bind(str(claim.socket_path))
         server.listen()
         server.settimeout(5)
-        assert CommanderStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take()
+        assert DeckStart.decode(hook_record(tmp_path / "session.jsonl", "SessionStart")).take()
         assert tool_call(hook, server, comms, db, began + 90) == (
             "BOARD: Read worker P1 (seen for 1 min)",
             "BOARD: Review worker P2 (seen for 1 min)",
@@ -288,15 +290,15 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
 
 
 def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():
-    slices = CommanderStart.slices()
-    voice = CommanderStart.paragraphs(CommanderPackage.voice().read_text())
-    indictment = CommanderStart.paragraphs(CommanderPackage.indictment().read_text())
+    slices = CommanderReader.slices()
+    voice = DeckReader.paragraphs(CommanderPackage.voice().read_text())
+    indictment = DeckReader.paragraphs(CommanderPackage.indictment().read_text())
     assert set(slices[0::4]) == set(voice)
     assert set(slices[1::4]) == set(indictment)
     assert set(slices[2::4]) == set(RuleFile.drift_tells())
     assert set(slices[3::4]) == {
         f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines()}
-    assert all(len(text) <= CommanderStart.slice_chars for text in slices)
+    assert all(len(text) <= DeckReader.slice_chars for text in slices)
 
 
 def run_installed(monkeypatch, capsys, transcript):
@@ -320,7 +322,7 @@ def test_the_installed_commands_order_the_reads_once_then_put_slices_inline(
     assert outputs[:-1] == [""] * (SliceReminder.every - 1)
     (document,) = outputs[-1].splitlines()
     context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
-    assert context == CommanderStart.slices()[0]
+    assert context == CommanderReader.slices()[0]
     assert "Read each of these" not in context
 
 
@@ -337,14 +339,24 @@ def test_a_session_that_becomes_commander_is_dealt_its_sources_on_its_next_tool_
     assert transcript.with_suffix(".deck.json").exists()
 
 
-def test_a_unit_session_gets_no_commander_reminders(tmp_path, monkeypatch, capsys, commander_bus):
+def test_a_unit_session_gets_the_fleet_deck_and_no_commander_reminders(
+        tmp_path, monkeypatch, capsys, commander_bus):
+    """A bound session that is not commander follows the fleet rules: it is ordered to read
+    them, its summary is called a paraphrase, and its slices come from the fleet deck."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), (), tmp_path / "state"))
     run = run_installed(monkeypatch, capsys, transcript)
-    assert not run(None, "SessionStart")
-    assert [run(None, "PostToolUse") for _ in range(SliceReminder.every * 2)] == [""] * SliceReminder.every * 2
+    order, header = (json.loads(line)["hookSpecificOutput"]["additionalContext"]
+                     for line in run(None, "SessionStart").splitlines())
+    assert "Read each of these" in order and "Your summary is a paraphrase" in header
+    assert "What your units actually hold" not in header
+    outputs = [run(None, "PostToolUse") for _ in range(SliceReminder.every)]
+    assert outputs[:-1] == [""] * (SliceReminder.every - 1)
+    context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
+    assert context == FleetReader.slices()[0]
+    assert transcript.with_suffix(".fleet-deck.json").exists()
     assert not transcript.with_suffix(".deck.json").exists()
 
 
@@ -367,15 +379,24 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
 
 
 
-def test_a_session_bound_to_another_bus_thread_gets_no_commander_sources(
+def test_a_session_bound_to_another_bus_thread_reads_the_fleet_rules_and_not_the_commanders(
         tmp_path, monkeypatch, commander_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     record = {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}
     WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), (), tmp_path))
-    assert CommanderStart.decode(record).take() == ()
-    assert not CommanderStart.decode(record).parts.exists()
+    start = DeckStart.decode(record)
+    assert start.take()
+    text = "".join(part.read_text() for part in sorted(start.parts.iterdir()))
+    assert all(rule.render() in text for rule in FleetReader.rules())
+    commander_only = [rule for rule in RuleFile.packaged() if rule.audience is CommanderAudience]
+    assert commander_only and not any(rule.render() in text for rule in commander_only)
+    assert CommanderPackage.indictment().read_text() not in text
+
+
+def test_the_commander_reads_every_packaged_rule():
+    assert CommanderReader.rules() == RuleFile.packaged()
 
 
 def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander_bus):
@@ -383,7 +404,7 @@ def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     WatchClaim("s").enrol(WatchRecord("claude-code", str(commander_bus.root), (), tmp_path))
-    assert CommanderStart.decode(
+    assert DeckStart.decode(
         {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take()
 
 
@@ -393,12 +414,15 @@ def test_a_demoted_commander_keeps_its_deck_files_but_they_get_no_vote(
     on disk, and no hook treats it as command: no reminder, stop guard or fork."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    assert CommanderStart.decode(hook_record(transcript, "SessionStart")).take()
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()
     assert transcript.with_suffix(".deck.json").exists()
     commanding_session.registry.set_commander_project(RegisteredCommanderProject(
         commanding_session.registry.require("unit-x").incarnation, ()))
     reminder = BoardReminder.decode(hook_record(transcript))
-    assert [reminder.take() for _ in range(SliceReminder.every * 2)] == [()] * SliceReminder.every * 2
+    (order, header) = reminder.take()  # now a fleet session: dealt the fleet deck, once
+    assert "Read each of these" in order and "What your units actually hold" not in header
+    assert [reminder.take() for _ in range(SliceReminder.every - 1)] == [()] * (SliceReminder.every - 1)
+    assert transcript.with_suffix(".fleet-deck.json").exists()
     StopHook.decode({"hook_event_name": "Stop", "session_id": "s",
                      "transcript_path": str(transcript), "stop_hook_active": False}).guard()
     SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": "s",
@@ -406,3 +430,47 @@ def test_a_demoted_commander_keeps_its_deck_files_but_they_get_no_vote(
     assert capsys.readouterr().out == ""
     assert "claude-a9" not in commanding_session.registry
     assert transcript.with_suffix(".deck.json").exists()
+
+
+def gated(transcript, tool, tool_input, **extra):
+    return GatedCall.of({"hook_event_name": "PreToolUse", "session_id": "s",
+                         "transcript_path": str(transcript), "tool_name": tool,
+                         "tool_input": tool_input, **extra})
+
+
+def refused(capsys, call):
+    call.judge()
+    out = capsys.readouterr().out
+    return out and json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_every_tool_but_read_waits_for_each_dealt_part_to_be_read_in_full(
+        tmp_path, capsys, commanding_session):
+    """PreToolUse only judges; a part counts as read only when a Read covering all of it
+    completes, which Claude Code reports as PostToolUse."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()
+    parts = sorted(transcript.with_suffix(".reread").iterdir())
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+    whole = {"file_path": str(parts[0])}
+    assert not refused(capsys, gated(transcript, "Read", whole))
+    assert refused(capsys, gated(transcript, "Edit", {}))  # a Read that never completed
+    gated(transcript, "Read", {**whole, "limit": 5}).completed()
+    assert refused(capsys, gated(transcript, "Edit", {}))  # a partial read is not a reading
+    for part in parts:
+        gated(transcript, "Read", {"file_path": str(part)}).completed()
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()  # compaction
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+
+
+def test_a_subagent_and_an_unbound_session_are_never_gated(
+        tmp_path, monkeypatch, capsys, commanding_session):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="a9"))
+    elsewhere = tmp_path / "other.jsonl"
+    elsewhere.write_text("")
+    assert not refused(capsys, gated(elsewhere, "Bash", {"command": "ls"}))

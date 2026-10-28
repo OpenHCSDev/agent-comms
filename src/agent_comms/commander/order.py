@@ -74,7 +74,7 @@ from agent_comms.order_tools import (
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
-from agent_comms.presentation import MessageNotification
+from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
@@ -430,7 +430,8 @@ class CommanderContext(BaseModel):
 
         A publish alone is only queued."""
         outcomes = MessageNotification.references(
-            self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,))
+            self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,),
+            viewer=AllOutcomes())
         return MessageNotification.summary(outcomes.outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):

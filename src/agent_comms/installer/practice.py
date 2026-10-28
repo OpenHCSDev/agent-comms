@@ -12,7 +12,9 @@ from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import DeclaredFile, LiveFilesRequest, RegistryFile, RootFile, UndeclaredFile
+from agent_comms.locked_store import (
+    DeclaredFile, LiveFilesRequest, RegistryFile, RetainedCopyRequest, RootFile, UndeclaredFile,
+)
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage_rules import StorageRule
 from agent_comms.private_path import PrivateDirectoryRole
@@ -100,6 +102,11 @@ class PracticeCopy:
     root: Path
     path: Path
     copied: dict[Path, DeclaredFile | UndeclaredFile] = field(default_factory=dict)
+
+    @property
+    def request(self) -> RetainedCopyRequest:
+        """The copy's files, still naming the live root their recorded paths refer to."""
+        return RetainedCopyRequest(self.path, self.root)
 
     @property
     def copied_names(self) -> tuple[Path, ...]:

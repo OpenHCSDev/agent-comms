@@ -13,7 +13,7 @@ from .field_codec import FieldCodec, MalformedRecord
 from .head_review import HeadReviewOrder, PullRequestHead
 from .thread_identity import ThreadIncarnation
 from .todos import DirectiveText
-from .tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
+from .tool_caller import CommanderForkCaller, NoThreadCaller, OperatorOutcomes, ThreadCaller, ToolCaller
 from .tool_request import ToolArgumentsRefusedError, ToolRequest
 
 
@@ -56,7 +56,7 @@ class ForkingCaller(ConnectorCaller):
 
 
 @dataclass(frozen=True)
-class DirectorCaller(ConnectorCaller):
+class DirectorCaller(OperatorOutcomes, ConnectorCaller):
     """claude-ai speaks for the owner, so its sends carry the director origin, which records each
     message to a thread as a directive like the owner's own."""
 

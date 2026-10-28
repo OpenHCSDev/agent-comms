@@ -33,7 +33,7 @@ from .message_page import (
 )
 from .messages import CarriesEnvelope, Message
 from .page_traversal import HistoryCursor, OlderTraversal
-from .presentation import MessageNotification
+from .presentation import MessageNotification, OutcomeViewer
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (
     AnonymousViewer,
@@ -352,15 +352,18 @@ class HistorySource:
         source.validate()
         return source
 
-    def notification_references(self, sources: tuple[HistorySource, ...], references):
-        """Read this namespace within its archive's current catalogue read."""
+    def notification_references(self, sources: tuple[HistorySource, ...], references,
+                                viewer: OutcomeViewer):
+        """Read this namespace within its archive's current catalogue read, as this viewer
+        may see it."""
 
         if self.require(sources, self.key) != self:
             raise HistoricalSourceChanged("Historical source changed; refresh history")
         root = Path(self.root)
         result = MessageNotification.read_references(
             Bus(Bus.path_in(root)), references,
-            partial(MessageNotification.recorded_delivery_window, root, self.provenance),
+            partial(MessageNotification.recorded_delivery_window, root, self.provenance,
+                    viewer=viewer),
         )
         self.validate()
         return result

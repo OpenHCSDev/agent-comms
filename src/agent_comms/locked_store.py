@@ -539,18 +539,31 @@ class FilesRequest(DeclaredFamily, affix="Request"):
     @abstractmethod
     def retained_name(self, owner: type[RootFile], path: Path) -> Path: ...
 
+    @abstractmethod
+    def source_root(self) -> Path:
+        """The live bus root these files are, or were copied from: what recorded paths name."""
+
 
 class LiveFilesRequest(FilesRequest):
     def location(self, resource: FileResource) -> Path:
         return resource.live(self.root)
 
+    def source_root(self) -> Path:
+        return self.root
+
     def retained_name(self, owner: type[RootFile], path: Path) -> Path:
         return owner.retained_name(self.root, path)
 
 
+@dataclass(frozen=True)
 class RetainedCopyRequest(FilesRequest):
+    source: Annotated[Path, PathText]
+
     def location(self, resource: FileResource) -> Path:
         return resource.retained(self.root)
+
+    def source_root(self) -> Path:
+        return self.source
 
     def retained_name(self, owner: type[RootFile], path: Path) -> Path:
         return path.relative_to(self.root)
