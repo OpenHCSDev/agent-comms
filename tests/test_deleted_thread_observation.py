@@ -11,6 +11,7 @@ from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.thread_presentation import NoThreadPresentation, ThreadRetired
+from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserveThreads, ObserveViews, ReadNotifications,
     ThreadPresented, ThreadsObserved, ViewsRetired,
@@ -107,7 +108,7 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
         assert isinstance(updated.activity['surviving'], ObservedActivity)
         assert process.process.is_alive()
         async with asyncio.timeout(30):
-            assert (await process.read(ReadNotifications(str(comms.root), ()))).outcomes == {}
+            assert (await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(())))).outcomes == {}
 
 
 def test_one_revision_captures_each_thread_activity_once(comms):

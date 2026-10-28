@@ -87,8 +87,8 @@ from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
-from .ui_model.observation import ReadNotifications
 from .tool_result import ToolResult
+from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
@@ -703,7 +703,7 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
         source, = comms.bus.bus.deliveries_for_references((self.reference,))
         if not caller.outcome_viewer(comms).sees(source):
             raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")
-        window = ReadNotifications(str(comms.root), (self.reference,)).read_as(comms, caller)
+        window = LiveNotificationRead((self.reference,)).read_as(comms, caller)
         following = self.after.following(
             window.outcomes.get((source.message.seq, source.message.message_id), ()))
         page = following[:self.limit]

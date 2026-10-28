@@ -77,7 +77,8 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     from agent_comms.coordinator import Coordination
     from agent_comms.presentation import MessageNotification
     from agent_comms.threads import Thread
-    from agent_comms.ui_model.observation import NotificationsRead, ReadNotifications
+    from agent_comms.notification_read import NotificationsRead
+    from agent_comms.notification_reads import LiveNotificationRead
 
     root, root_id, comms, initial, _people = _root(private_directory, direct=True)
     for name in ('gamma', 'outside'):
@@ -100,7 +101,7 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     revision = comms.views.revision()
     activity = comms.views.observed_activity(revision, names)
     previous = ThreadsObserved(revision, results, names, activity)
-    notification_window = ReadNotifications(root_id, (notification_source.reference,)).read(comms)
+    notification_window = LiveNotificationRead((notification_source.reference,)).read(comms)
     notification_read = NotificationsRead.of(revision, comms, activity, notification_window)
     if changed_name in ('read', 'unrelated_read'):
         ledger = comms.bus.reads

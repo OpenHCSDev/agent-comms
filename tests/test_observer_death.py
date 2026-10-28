@@ -17,6 +17,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.bus_read import BusRead, OwnerLiveRead
+from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserverDied, ReadNotifications, ReadOwnerGoal, ReadOwnerOperation, StopSidebar,
 )
@@ -33,7 +34,7 @@ def owner_reads():
 
 
 def empty_window(root) -> ReadNotifications:
-    return ReadNotifications(str(root), ())
+    return ReadNotifications(str(root), LiveNotificationRead(()))
 
 
 async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awaited_reads(comms, durable_home):
@@ -71,9 +72,9 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
 async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms, durable_home):
     async with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
-            await process.read(ReadNotifications(
-                str(comms.root), (MessageReference(1, MessageId.mint("not-the-original")),)
-            ))
+            await process.read(ReadNotifications(str(comms.root), LiveNotificationRead(
+                (MessageReference(1, MessageId.mint("not-the-original")),)
+            )))
         assert (await process.read(empty_window(comms.root))).outcomes == {}
 
 

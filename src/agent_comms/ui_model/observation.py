@@ -41,7 +41,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import BusReader, OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
+from agent_comms.bus_read import OwnerLiveRead, OwnerReadRuntimeRequest
 from agent_comms.child_process import join_retirement
 from agent_comms.commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
 from agent_comms.comms import Comms
@@ -57,10 +57,10 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec, OrderId
-from agent_comms.historical_views import HistorySource
 from agent_comms.history_views import RetiredViews
-from agent_comms.message_reference import MessageReference
-from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow
+from agent_comms.notification_evidence import NotificationWindow
+from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
+from agent_comms.notification_reads import NotificationRead
 from agent_comms.presentation import (
     CoordinationSnapshot, MessageNotification, NoRevision, ReadState,
     WireRevision,
@@ -68,7 +68,6 @@ from agent_comms.presentation import (
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
-    ActivityView,
     CommanderFramesView,
     NotificationsView,
     RegistrationsView,
@@ -599,71 +598,13 @@ class RefreshTranscript(ReadRequest):
 
 
 @dataclass(frozen=True)
-class ReadNotifications(UiRead[NotificationWindow], ReadRequest):
-    """Recipient handling of the referenced original messages, as its reader may see them.
-    The UI reads as the operator; an MCP caller reads under its own viewer."""
+class ReadNotifications(ReadRequest):
+    """The UI's root and request witness around one root-free notification operation."""
 
-    references: tuple[MessageReference, ...]
+    operation: NotificationRead
 
-    def read_as(self, comms: Comms, reader: BusReader) -> NotificationWindow:
-        return comms.views.message_notifications_for_references(
-            reader.outcome_viewer(comms), self.references)
-
-    def changed_since(self, comms: Comms, revision: WireRevision,
-                      previous: NotificationsRead) -> bool:
-        return previous.live_changed(comms, revision)
-
-
-@dataclass(frozen=True)
-class ReadRecordedNotifications(ReadNotifications):
-    """The selected archive's recorded handling, independent of today's recipients."""
-
-    source: str
-
-    def read_as(self, comms: Comms, reader: BusReader) -> NotificationWindow:
-        with comms.bus.history.read_sources() as sources:
-            source = HistorySource.require(sources, self.source)
-            return source.notification_references(
-                sources, self.references, reader.outcome_viewer(comms))
-
-    def changed_since(self, comms: Comms, revision: WireRevision,
-                      previous: NotificationsRead) -> bool:
-        return revision.history != previous.revision.history
-
-
-@dataclass(frozen=True)
-class NotificationsRead:
-    """Where one notification read settled: its revision and the activity of every participant
-    its notifications name, captured before the read for participants already known and right
-    after it for new ones."""
-
-    revision: WireRevision
-    activity: Mapping[str, ObservedActivity | DeletedThread | None] = field(default_factory=dict)
-    notification_window: NotificationWindow = field(default_factory=NoNotificationWindow)
-
-    @classmethod
-    def of(cls, revision: WireRevision, comms: Comms,
-           known: Mapping[str, ObservedActivity | DeletedThread],
-           window: NotificationWindow,
-           ) -> NotificationsRead:
-        names = window.activity_names()
-        known = {**comms.views.observed_activity(revision, names - known.keys()), **known}
-        return cls(revision, {name: known.get(name) for name in names}, window)
-
-    def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
-        """Read marks, participant activity or retained assignment evidence changed."""
-        current = (comms.views.observed_activity(revision, self.activity)
-                   if revision.changed_since(ActivityView(), self.revision)
-                   else self.activity)
-        return (any(current.get(name) != seen for name, seen in self.activity.items())
-                or self.notification_window.changed(comms, revision, self.revision))
-
-
-class UnreadableNotificationsRead(NotificationsRead):
-    """An unreadable read names no participants, so any later revision reads again."""
-
-    def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
-        return revision != self.revision
+    def read(self, comms: Comms) -> NotificationWindow:
+        return self.operation.read(comms)
 
 
 @dataclass(frozen=True)
@@ -844,7 +785,7 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         for request in self.request.reads:
             previous = self.read_states.get(request)
-            if previous is not None and not request.changed_since(comms, revision, previous):
+            if previous is not None and not request.operation.changed_since(comms, revision, previous):
                 continue
             yield self.notifications(request, comms, revision, previous)
 
