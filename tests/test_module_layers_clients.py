@@ -63,11 +63,11 @@ def test_actual_client_membership_stays_absent_on_its_own_cut(
     absent_text = tomli_w.dumps(absent)
     if not baseline_has_client:
         pair.core.git(pair.core.checkout, "switch", "main")
-        pair.core.publish_change("Baseline has no client declaration", *pair.core.write_files({
+        pair.core.commit_change("Baseline has no client declaration", *pair.core.write_files({
             Path("stack/pyproject.toml"): absent_text}))
         pair.core.git(pair.core.checkout, "push", "origin", "main")
         pair.core.git(pair.core.checkout, "switch", "feature")
-        pair.core.git(pair.core.checkout, "rebase", "main")
+        pair.core.git(pair.core.checkout, "merge", "--no-edit", "main")
     head = pair.core.publish_change("Declare only the candidate's actual client membership", *pair.core.write_files({
         Path("stack/pyproject.toml"): full if candidate_has_client else absent_text}))
     stamp = "2026-10-24T00:00:00Z"

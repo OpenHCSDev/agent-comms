@@ -53,10 +53,13 @@ def source_pair(
 ) -> MutualSources:
     for name, value in ENVIRONMENT.items():
         monkeypatch.setenv(name, value)
-    core = SourceRepository.create(tmp_path / "matched-core", held_bus.goals.todos.get("P2").repo)
-    client = SourceRepository.create(tmp_path / "matched-client", RepositoryName.from_wire("example/client"))
-    core_files = core.write_files({
-        Path("pyproject.toml"): core.package_project("agent-comms"),
+    client = SourceRepository.create(
+        tmp_path / "matched-client", RepositoryName.from_wire("example/client"), baseline_files={
+            Path("pyproject.toml"): SourceRepository.package_project("source-client"),
+            Path("src/workflow.py"): 'from agent_comms.api import old_api\n\ndef run() -> str:\n    return old_api()\n',
+        })
+    core = SourceRepository.create(tmp_path / "matched-core", held_bus.goals.todos.get("P2").repo, baseline_files={
+        Path("pyproject.toml"): SourceRepository.package_project("agent-comms"),
         Path("stack/pyproject.toml"): (
             '[project]\nname = "fixture-stack"\nversion = "0.0.1"\ndependencies = ["agent-comms", "source-client"]\n'
             '[tool.uv]\npackage = false\noverride-dependencies = ["packaging==26.0"]\n'
@@ -70,16 +73,8 @@ def source_pair(
         Path("src/agent_comms/__init__.py"): "",
         Path("src/agent_comms/api.py"): 'def old_api() -> str:\n    return "baseline"\n',
     })
-    core.publish_change("Declare the baseline Core API and actual stack source", *core_files)
-    core.git(core.checkout, "push", "origin", "main")
-    client_files = client.write_files({
-        Path("pyproject.toml"): client.package_project("source-client"),
-        Path("src/workflow.py"): 'from agent_comms.api import old_api\n\ndef run() -> str:\n    return old_api()\n',
-    })
-    client.publish_change("Declare the baseline client import", *client_files)
-    client.git(client.checkout, "push", "origin", "main")
     for source in (core, client):
-        source.git(source.checkout, "checkout", "-B", "feature", "main")
+        source.git(source.checkout, "switch", "feature")
     core.publish_change("Replace the Core export without an alias", *core.write_files({
         Path("src/agent_comms/api.py"): 'def new_api() -> str:\n    return "candidate"\n',
     }))

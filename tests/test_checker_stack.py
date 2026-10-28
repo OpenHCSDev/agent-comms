@@ -82,12 +82,12 @@ def test_bootstrap_extra_is_runtime_only_when_the_virtual_root_requests_it(
     stack = tomllib.loads((pair.core.checkout / "stack/pyproject.toml").read_text())
     if requested:
         stack["project"]["dependencies"] = ["agent-comms[checking]", "source-client"]
-    pair.core.publish_change("Declare actual baseline root and optional dependency", *pair.core.write_files({
+    pair.core.commit_change("Declare actual baseline root and optional dependency", *pair.core.write_files({
         Path("pyproject.toml"): tomli_w.dumps(project),
         Path("stack/pyproject.toml"): tomli_w.dumps(stack)}))
     pair.core.git(pair.core.checkout, "push", "origin", "main")
     pair.core.git(pair.core.checkout, "switch", "feature")
-    pair.core.git(pair.core.checkout, "rebase", "main")
+    pair.core.git(pair.core.checkout, "merge", "--no-edit", "main")
     project["project"]["optional-dependencies"] = {"checking": ["idna>=3.10"]}
     head = pair.core.publish_change("Change only the optional checker dependency", *pair.core.write_files({
         Path("pyproject.toml"): tomli_w.dumps(project)}))
@@ -115,20 +115,19 @@ def common_checker(
 ) -> Iterator[CheckerStack]:
     """Two genuine independently locked graphs, not hand-built lock/installed claims."""
     pair = mutual_sources
-    plugin = SourceRepository.create(tmp_path / "plugin", RepositoryName.from_wire("example/checker-plugin"))
-    plugin.publish_change("Declare checker-only Git package", *plugin.write_files({
-        Path("python package/pyproject.toml"): plugin.package_project("checker-plugin"),
-        Path("python package/src/checker_plugin.py"): "value = 1\n",
-        Path("other package/pyproject.toml"): plugin.package_project("checker-plugin"),
-        Path("other package/src/checker_plugin.py"): "value = 2\n"}))
-    plugin.git(plugin.checkout, "push", "origin", "main")
+    plugin = SourceRepository.create(
+        tmp_path / "plugin", RepositoryName.from_wire("example/checker-plugin"), baseline_files={
+            Path("python package/pyproject.toml"): SourceRepository.package_project("checker-plugin"),
+            Path("python package/src/checker_plugin.py"): "value = 1\n",
+            Path("other package/pyproject.toml"): SourceRepository.package_project("checker-plugin"),
+            Path("other package/src/checker_plugin.py"): "value = 2\n"})
     pair.client.git(pair.client.checkout, "switch", "main")
-    pair.client.publish_change("Declare runtime-only dependency", *pair.client.write_files({
+    pair.client.commit_change("Declare runtime-only dependency", *pair.client.write_files({
         Path("pyproject.toml"): pair.client.package_project("source-client", dependencies=(
             "charset-normalizer==3.4.0",))}))
     pair.client.git(pair.client.checkout, "push", "origin", "main")
     pair.client.git(pair.client.checkout, "switch", "feature")
-    pair.client.git(pair.client.checkout, "rebase", "main")
+    pair.client.git(pair.client.checkout, "merge", "--no-edit", "main")
     pair.core.git(pair.core.checkout, "switch", "main")
     pair.core.write_files({Path("pyproject.toml"): pair.core.package_project("agent-comms",
         dependencies=("idna>=3.10,<4; python_version >= '3.10'",), extras={
@@ -142,11 +141,11 @@ def common_checker(
     with InstallCommands() as commands:
         for project in (pair.core.checkout, pair.core.checkout / "stack"):
             commands.run(test_uv, "lock", "--project", project, "--python", Path(sys.executable))
-        pair.core.publish_change("Retain actual independent bootstrap and runtime locks", "pyproject.toml",
+        pair.core.commit_change("Retain actual independent bootstrap and runtime locks", "pyproject.toml",
                                  "stack/pyproject.toml", "uv.lock", "stack/uv.lock")
         pair.core.git(pair.core.checkout, "push", "origin", "main")
         pair.core.git(pair.core.checkout, "switch", "feature")
-        pair.core.git(pair.core.checkout, "rebase", "main")
+        pair.core.git(pair.core.checkout, "merge", "--no-edit", "main")
         stamp = "2026-10-24T00:00:00Z"
         for source in (pair.core, pair.client):
             source.git(source.checkout, "push", "origin", f"HEAD:refs/pull/{source.number}/head")
@@ -244,7 +243,7 @@ def test_retained_runtime_checker_version_and_git_identity_refuse_actual_solve_d
         remote = Path(source["git"].removeprefix("file://"))
         repository = SourceRepository.of(remote.parents[1] / "repository")
         if change == "revision":
-            commit = repository.publish_change("Same version, different checker implementation", *repository.write_files({
+            commit = repository.commit_change("Same version, different checker implementation", *repository.write_files({
                 Path("python package/src/checker_plugin.py"): "value = 3\n"}))
             repository.git(repository.checkout, "push", "origin", "main")
             source["rev"] = commit

@@ -26,11 +26,12 @@ pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_s
 
 def package(root: Path, name: str, *, dependencies: tuple[str, ...] = (),
             extras: dict[str, list[str]] | None = None, python: str = ">=3.10") -> SourceRepository:
-    source = SourceRepository.create(root, RepositoryName.from_wire(f"example/{name}"))
-    source.publish_change("Declare a real installable source", *source.write_files({
-        Path("pyproject.toml"): source.package_project(name, dependencies=dependencies, extras=extras, python=python),
+    source = SourceRepository.create(root, RepositoryName.from_wire(f"example/{name}"), baseline_files={
+        Path("pyproject.toml"): SourceRepository.package_project(
+            name, dependencies=dependencies, extras=extras, python=python),
         Path("src/module.py"): "value = 1\n",
-    }))
+    })
+    source.git(source.checkout, "switch", "feature")
     return source
 
 

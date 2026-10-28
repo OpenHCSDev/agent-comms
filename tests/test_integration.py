@@ -189,11 +189,11 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
     pair.client.git(pair.client.checkout, "switch", "main")
     project = tomllib.loads((pair.client.checkout / "pyproject.toml").read_text())
     project["tool"] = {"mypy": {"plugins": ["mypy_source_plugin.py"]}}
-    pair.client.publish_change("Declare the baseline native mypy plugin", *pair.client.write_files({
+    pair.client.commit_change("Declare the baseline native mypy plugin", *pair.client.write_files({
         Path("pyproject.toml"): tomli_w.dumps(project), Path("mypy_source_plugin.py"): plugin}))
     pair.client.git(pair.client.checkout, "push", "origin", "main")
     pair.client.git(pair.client.checkout, "switch", "feature")
-    pair.client.git(pair.client.checkout, "rebase", "main")
+    pair.client.git(pair.client.checkout, "merge", "--no-edit", "main")
     head = pair.client.publish_change("Migrate the real plugin alongside the client", *pair.client.write_files({
         Path("mypy_source_plugin.py"): plugin.replace("old_api", "new_api").replace("baseline", "candidate")}))
     stamp = "2026-10-24T00:00:00Z"
@@ -335,7 +335,7 @@ def test_changed_main_during_source_review_refuses_the_frozen_input(
     inputs = run.qualify(pair.context, ("P2", "P3"))
     carrier = pair.publish_carrier(github_cli)
     pair.client.git(pair.client.checkout, "checkout", "main")
-    pair.client.publish_change("Advance client main", *pair.client.write_files({Path("main-only.py"): "advanced = True\n"}))
+    pair.client.commit_change("Advance client main", *pair.client.write_files({Path("main-only.py"): "advanced = True\n"}))
     pair.client.git(pair.client.checkout, "push", "origin", "main")
     with pytest.raises(ToolRefusedError, match="main moved"):
         inputs.validate(pair.context.repos, carrier)
