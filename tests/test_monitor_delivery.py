@@ -530,15 +530,26 @@ async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, sepa
         await observe(bridge, notification(line).updates(ClaudeSession()))
     inline, = await bridge.attempts(short.message_id)
     assert inline.outcome is DeliveredOutcome
-    message, export = await exported(bridge, body_of(23)[:-40] + separator * 20)
-    lines = export.read_text().split('\n')[:-1]
-    await observe(bridge, read_records(export, shown(lines), 'separator-read'))
+    body = body_of(23)[:-80] + (separator + '\n\r"\\😀') * 10
+    message, export = await exported(bridge, body)
+    lines = export.read_text(newline='').split('\n')[:-1]
+    assert ''.join(ClaudeMonitorFrame.decode_line(line).body for line in lines) == body
+    # Two visible pages of the actual numbered Read output, the later page first.
+    session = ClaudeSession()
+    for start, stop in ((10, len(lines)), (0, 10)):
+        await observe(bridge, (*read_started(session, export, f'page-{start}'),
+                               *read_returned(session, shown(lines[start:stop], start + 1),
+                                              f'page-{start}')))
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
+    observed = await bridge.coordinator_read(lambda db: HarnessObservedPart.of(db, confirmed))
+    assert ''.join(part.body for part in sorted(observed, key=lambda part: part.number)) == body
+    assert not export.exists()
 
 
 @pytest.mark.asyncio
-async def test_a_consumed_export_stays_until_no_other_read_of_it_is_open(bridge):
+@pytest.mark.parametrize('ending', ('succeeded', 'failed'))
+async def test_a_consumed_export_stays_until_no_other_read_of_it_is_open(bridge, ending):
     message, export = await exported(bridge, body_of(23))
     text = shown(export.read_text().splitlines())
     session = ClaudeSession()
@@ -547,7 +558,7 @@ async def test_a_consumed_export_stays_until_no_other_read_of_it_is_open(bridge)
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
     assert export.exists()
-    await observe(bridge, read_returned(session, text, 'second'))
+    await observe(bridge, read_returned(session, text, 'second', error=ending == 'failed'))
     assert await bridge.attempts(message.message_id) == (confirmed,)
     assert not export.exists()
 
@@ -569,6 +580,19 @@ async def test_an_export_directory_that_is_not_private_refuses(bridge, tmp_path,
     with pytest.raises(refusal):
         notice.export(('"part"',))
     assert list(elsewhere.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_an_export_leaf_symlink_refuses(bridge, tmp_path):
+    message = bridge.comms.messaging.send('peer', 'viewer', body_of(23)).message
+    notice = MonitorReadFile.naming(bridge.exports, message.reference)
+    bridge.exports.mkdir(mode=0o700)
+    target = tmp_path / 'target.jsonl'
+    target.write_text('"part"\n')
+    Path(notice.path).symlink_to(target)
+    with pytest.raises(OSError):
+        notice.export(('"part"',))
+    assert target.read_text() == '"part"\n'
 
 
 @pytest.mark.asyncio

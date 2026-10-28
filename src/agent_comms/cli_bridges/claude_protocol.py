@@ -245,11 +245,11 @@ class ClaudeToolDraft(ToolDraft):
 
     def read_results(self, record: TimedRecord, text: str, ok: bool,
                      reading: frozenset[str]) -> tuple[RuntimeUpdate, ...]:
-        """What a successful Read showed the model, timed by its own result record, beside the
-        paths other Reads in this session still have open."""
-        return tuple(ReadResultObserved(path, text, ObservedMonitor(record.uuid, record.timestamp),
-                                        reading)
-                     for path in self.call.context_read_paths() if ok)
+        """What a Read showed the model, timed by its own result record, beside the paths other
+        Reads in this session still have open. A failed Read showed no file but ends its call."""
+        observed = ReadResultObserved if ok else FailedReadObserved
+        return tuple(observed(path, text, ObservedMonitor(record.uuid, record.timestamp), reading)
+                     for path in self.call.context_read_paths())
 
 
 class ClaudeTurn(ABC):
@@ -696,6 +696,15 @@ class ReadResultObserved(ConfirmedDelivery):
 
     async def observed(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
         return replace(self, targets=await bridge.read_export(self))
+
+
+@dataclass(frozen=True)
+class FailedReadObserved(ReadResultObserved):
+    """A failed Read's text is its error, never file lines: it confirms no part, and only
+    releases the export once no other Read of it is open."""
+
+    def frames(self) -> tuple[MonitorFrame, ...]:
+        return ()
 
 
 class MonitorTaskNotification(TaskEnvelope):
