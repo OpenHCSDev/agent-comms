@@ -31,6 +31,7 @@ from .turn_item import NativeTurnId
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .registry_document import RegistrySnapshot
     from .todos import OrderProgress
     from .transcript_sources import TranscriptSource
 
@@ -230,11 +231,11 @@ class OrderEditRead[Result](OrderRead[Result]):
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
-        held = HeldOrders.read(comms, commander)
-        history = comms.goals.todos.history_for_commander(
-            comms.registry.require(commander).incarnation)
+        snapshot = comms.registry.snapshot()
+        held = HeldOrders.of(comms.goals.todos, snapshot, commander)
+        history = comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation)
         pulls = ProgressRead(history)
-        workplaces = EditWorkplaces.capture(comms, held.live, history, pulls)
+        workplaces = EditWorkplaces.capture(comms, snapshot, held.live, history, pulls)
         yield from cls.judgeable(
             comms.root, held.live, pulls.progress(held.todos, comms.registry), workplaces)
 
@@ -274,34 +275,23 @@ class OrderEditRead[Result](OrderRead[Result]):
 
 
 @dataclass(frozen=True)
-class EditWorkplace(Checkout):
-    """A qualified source boundary, or a reserved allocation with no qualified problem."""
-
-    problems: frozenset[str]
-
-    def contains(self, path: Path) -> bool:
-        # Lexical membership rejects aliases into a checkout; resolution rejects escapes
-        # through symlinks inside it. Missing edited files retain their known parent root.
-        return (path.is_absolute() and path.is_relative_to(self.path)
-                and path.resolve().is_relative_to(self.path))
-
-
-@dataclass(frozen=True)
 class EditWorkplaces:
     """One read's derived boundaries. Allocations take precedence over generic source roots;
     zero or multiple candidates never select a held order. Original edit records stay put."""
 
-    allocated: tuple[EditWorkplace, ...]
-    sources: tuple[EditWorkplace, ...]
+    rule: StorageRule
+    owners: Mapping[Path, Thread]
+    allocated: Mapping[Path, frozenset[str]]
+    sources: Mapping[Path, frozenset[str]]
 
     @classmethod
-    def capture(cls, comms: Comms, holds: Iterable[LiveHold], history: tuple[Todo, ...],
-                pulls: ProgressRead) -> dict[ThreadIncarnation, EditWorkplaces]:
+    def capture(cls, comms: Comms, snapshot: RegistrySnapshot, holds: Iterable[LiveHold],
+                history: tuple[Todo, ...], pulls: ProgressRead
+                ) -> dict[ThreadIncarnation, EditWorkplaces]:
         """Acquire source/forge facts once, then match edits without Git or network calls."""
         holds = tuple(holds)
         if not holds:
             return {}
-        snapshot = comms.registry.snapshot()
         repositories = snapshot.commander_project.require().repos
         rule = StorageRule.load(comms.root)
         todos = {todo.id: todo for todo in history}
@@ -332,11 +322,14 @@ class EditWorkplaces:
                     for repo in repositories
                     for row in pulls.rows(repo.github, tuple(
                         link.number for link in links if link.repo == repo.github))}
-        allocated: list[EditWorkplace] = []
+        allocated: dict[Path, frozenset[str]] = {}
         registered = frozenset(repo.github for repo in repositories)
+        owners = {rule.order_checkout(rule.roots_of(thread), ''): thread
+                  for thread in snapshot.threads.values()}
         for path in present:
             allocations = tuple((thread, allocation)
-                                for thread in snapshot.threads.values()
+                                for prefix, thread in owners.items()
+                                if path.parent == prefix.parent and path.name.startswith(prefix.name)
                                 for allocation in CheckoutAllocation.for_path(rule, thread, path)
                                 if allocation.problems())
             if allocations:
@@ -348,10 +341,10 @@ class EditWorkplaces:
                     and actual[path].github in allocation.source_repositories(
                         todos[problem].repo, declared[problem])
                     and allocation.owns_declared(rule, thread, path, actual[path].github))
-                allocated.append(EditWorkplace(path, proved))
+                allocated[path] = proved
         workplaces: dict[ThreadIncarnation, EditWorkplaces] = {}
         for holder in dict.fromkeys(hold.holder.incarnation for hold in holds):
-            sources: list[EditWorkplace] = []
+            sources: dict[Path, set[str]] = {}
             for hold in holds:
                 if hold.holder.incarnation != holder:
                     continue
@@ -365,24 +358,39 @@ class EditWorkplaces:
                     if (todo.repo in registered and path in actual
                             and actual[path].github == todo.repo
                             and not any(link.repo == todo.repo for link in linked)):
-                        sources.append(EditWorkplace(path, frozenset((todo.id,))))
+                        sources.setdefault(path, set()).add(todo.id)
                 for link in linked:
                     if link not in requests:
                         continue  # Unregistered repositories cannot qualify a source boundary.
                     for path in trees[link.repo].get(requests[link].branch, ()):
                         root = Path(path)
                         if root in actual and actual[root].github == link.repo:
-                            sources.append(EditWorkplace(root, frozenset((todo.id,))))
-            workplaces[holder] = cls(tuple(allocated), tuple(sources))
+                            sources.setdefault(root, set()).add(todo.id)
+            workplaces[holder] = cls(rule, owners, allocated, {
+                path: frozenset(problems) for path, problems in sources.items()})
         return workplaces
 
     def problems_for(self, path: str) -> frozenset[str]:
         original = Path(path)
-        allocated = tuple(root for root in self.allocated
-                          if original.is_absolute() and original.is_relative_to(root.path))
-        candidates = allocated if allocated else self.sources
-        return frozenset(problem for root in candidates if root.contains(original)
-                         for problem in root.problems)
+        if not original.is_absolute():
+            return frozenset()
+        # Resolve the edited path once, not its missing leaf with Git. Lexical membership
+        # rejects aliases into a checkout; resolved membership rejects symlink escapes.
+        resolved = original.resolve()
+        parts = (original.relative_to(self.rule.checkout_base).parts
+                 if original.is_relative_to(self.rule.checkout_base) else ())
+        boundary = self.rule.checkout_base.joinpath(*parts[:1])
+        reserved = any(allocation.problems()
+                       for prefix, thread in self.owners.items()
+                       if boundary.parent == prefix.parent and boundary.name.startswith(prefix.name)
+                       for allocation in CheckoutAllocation.for_path(self.rule, thread, boundary))
+        # Even a missing/released/unknown allocation reserves its lexical boundary. Only
+        # captured actual Git identity may supply an owner; absence never enables spill.
+        candidates = ({boundary: self.allocated.get(boundary, frozenset())}
+                      if reserved else self.sources)
+        return frozenset(problem for root, problems in candidates.items()
+                         if original.is_relative_to(root) and resolved.is_relative_to(root)
+                         for problem in problems)
 
 
 class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):

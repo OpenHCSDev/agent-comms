@@ -1,9 +1,11 @@
 """An edit the unit discarded is settled as dropped from git, through the real judge command."""
 import json
 import time
+from dataclasses import replace
 
 import pytest
 
+from agent_comms.change_report import FileLine, NamedRepository
 from agent_comms.commander.judge import Edit, main
 from agent_comms.errors import TodoError
 from agent_comms.external_transcript import ExternalTranscript
@@ -12,7 +14,7 @@ from agent_comms.field_codec import (
     ToolCallId,
 )
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.todos import DroppedVerdict, RewrittenVerdict
+from agent_comms.todos import DroppedVerdict, FixScope, FixShape, RewrittenVerdict
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -56,11 +58,13 @@ def judge_dropped(ctx, edit: Edit, line: str) -> None:
 
 
 @pytest.fixture
-def discarded_and_kept(held_commander):
+def discarded_and_kept(held_commander, cited_source):
     ctx = held_commander
     repo = ctx.repos[0]
     rule = ctx.comms.registry.storage_rule
     gone = rule.order_checkout(rule.roots_of(ctx.comms.registry.require("worker")), "P1")
+    gone.parent.mkdir(parents=True, exist_ok=True)
+    cited_source.git(repo.checkout, "worktree", "add", "-q", "-b", "held-P1", str(gone))
     base = repo.git(repo.checkout, "rev-parse", "--abbrev-ref", "HEAD").strip()
     repo.git(repo.checkout, "checkout", "-q", "-b", "formatter")
     committed(repo, "dropped_module.py", DROPPED)
@@ -160,7 +164,14 @@ def test_rewritten_reads_the_repository_the_edit_was_made_in(discarded_and_kept,
     rule = ctx.comms.registry.storage_rule
     allocated = rule.repository_checkout(rule.roots_of(ctx.comms.registry.require("worker")),
                                          "P1", other.github)
+    other.git(other.checkout, "worktree", "add", "-q", "-b", "companion-P1", str(allocated))
+    todo = ctx.comms.goals.todos.get("P1")
+    scope = FixScope(FixShape(todo.order.scope.shape.parents, (
+        *todo.order.scope.shape.members, FileLine("other_module.py", 1, NamedRepository(other.github)))))
+    with ctx.comms.goals.todos.writing() as db:
+        replace(todo, order=replace(todo.order, scope=scope)).upsert(db)
     recorded_edit(ctx, ToolCallId("other-call"), str(allocated / "other_module.py"), FOREIGN)
+    assert "other-call" in unjudged(ctx)
     committed(other, "other_module.py", "REPLACED_MARKER_LINE = 'what the later commit wrote'")
     other.git(other.checkout, "push", "-q", "origin", "HEAD:refs/heads/unit-rewrite")
     head = other.git(other.checkout, "rev-parse", "HEAD").strip()

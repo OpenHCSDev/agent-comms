@@ -60,5 +60,5 @@ class HeartbeatFrame(HeldOrders):
             OwedAnswer.read_scan(comms, commander, scan),
             closed,
             reviews,
-            EditWorkplaces.capture(comms, scan.live, plan.todos, pulls),
+            EditWorkplaces.capture(comms, snapshot, scan.live, plan.todos, pulls),
         )
