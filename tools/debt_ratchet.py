@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import builtins
+import copy
 import atexit
 import dataclasses
 import enum
@@ -1091,6 +1093,32 @@ class ScopeNames(ast.NodeVisitor):
 type SitePlace = tuple[str, int, int, int, int]
 
 
+class NominalProof:
+    """What an expression's resolved owners prove it is; only two proved identities with
+    the same owners and structure are the same."""
+
+    def same(self, other: NominalProof) -> bool:
+        return False
+
+    def matches(self, key: str) -> bool:
+        return False
+
+
+class UnprovedIdentity(NominalProof):
+    """A reference the binding facts could not resolve: equal to nothing, itself included."""
+
+
+@dataclass(frozen=True)
+class ProvedIdentity(NominalProof):
+    key: str
+
+    def same(self, other: NominalProof) -> bool:
+        return other.matches(self.key)
+
+    def matches(self, key: str) -> bool:
+        return key == self.key
+
+
 @dataclass(frozen=True)
 class DeclaredClass:
     """One top-level class of one changed module at one revision, read for its fields."""
@@ -1125,23 +1153,21 @@ class DeclaredClass:
     def annotated(self) -> DecoratorBinding:
         return DecoratorBinding.named("typing", "Annotated", self.tree, self.path)
 
-    def proved(self, field: str) -> bool:
-        """Whether the field's annotation reads as written: one spelled Annotated that does
-        not bind typing.Annotated at module level could mean anything."""
-        match self.fields[field].annotation:
-            case ast.Subscript(value=ast.Name(id="Annotated") | ast.Attribute(attr="Annotated") as value):
-                return self.annotated.marks(value)
-        return True
-
-    def declared(self, field: str) -> tuple[str, str]:
-        """The field's type without typing.Annotated metadata, and its default, structurally."""
+    def compared(self, field: str) -> list[ast.expr]:
+        """The field's name, its type without typing.Annotated metadata, and its default."""
         statement = self.fields[field]
         match statement.annotation:
             case ast.Subscript(value=value, slice=ast.Tuple(elts=[declared, *_])) if self.annotated.marks(value):
                 annotation: ast.expr = declared
             case annotation:
                 pass
-        return ast.dump(annotation), ast.dump(statement.value) if statement.value else ""
+        return [statement.target, annotation, *([statement.value] if statement.value else [])]
+
+    def declared(self, field: str) -> NominalProof:
+        """The field's type and default, each reference resolved to its owner in this class's
+        scope; the name is the field's own and needs no owner."""
+        _, *written = self.compared(field)
+        return DecoratorBinding.identity(self.tree, self.path, self.scope, ast.Tuple(elts=written))
 
     def holding(self, held: DeclaredClass, base: DeclaredClass) -> tuple[str, ...]:
         """The fields this class newly declares whose type is the module-level binding of
@@ -1192,34 +1218,31 @@ class FieldExtraction:
             if owners[base.path, base.node.name] == holders[held.path, held.node.name] == 1:
                 for field in sorted(base.fields):
                     if (not owner.binds(field) and field in held.fields
-                            and base.proved(field) and held.proved(field)
-                            and base.declared(field) == held.declared(field)):
+                            and base.declared(field).same(held.declared(field))):
                         cls.transfer(measure, base, held, field, departed, credited)
         return credited
 
     @staticmethod
     def transfer(measure: type[CleanChangedLines], base: DeclaredClass, held: DeclaredClass,
                  field: str, departed: Counter[tuple[str, str]], credited: Counter[SitePlace]) -> None:
-        """One field's occurrences, paid one for one by those that left the old declaration."""
-        def occurrences(declared: DeclaredClass) -> Iterator[tuple[ast.AST, str, int]]:
-            inside = {id(node) for node in ast.walk(declared.fields[field])}
-            scopes = measure.scopes(declared.tree)
-            for node in measure.sites(declared.tree, declared.path):
-                if id(node) in inside and (count := measure.occurrences(node)):
-                    yield node, scopes[node], count
-
+        """One field's occurrences, paid one for one by those that left the old declaration.
+        The declarations are proved the same, so their parts pair node for node in walk order;
+        parts whose raw shapes differ pair nothing."""
         scope = f".{base.node.name}"
-        gave: Counter[str] = Counter()
-        for node, within, count in occurrences(base):
-            if within == scope:
-                gave[ast.unparse(node)] += count
-        for text in gave:
-            gave[text] = min(gave[text], departed[scope, text])
-        for node, _, count in occurrences(held):
-            paid = min(count, gave[ast.unparse(node)])
-            gave[ast.unparse(node)] -= paid
-            departed[scope, ast.unparse(node)] -= paid
-            credited[FieldExtraction.place(held.path, node)] += paid
+        counted = {declared: ({id(node) for node in measure.sites(declared.tree, declared.path)},
+                              measure.scopes(declared.tree)) for declared in (base, held)}
+        for gave, took in zip(base.compared(field), held.compared(field), strict=True):
+            left, arrived = list(ast.walk(gave)), list(ast.walk(took))
+            if [type(node) for node in left] != [type(node) for node in arrived]:
+                continue
+            for old, new in zip(left, arrived, strict=True):
+                if ((carried := min(measure.occurrences(old), measure.occurrences(new)))
+                        and id(old) in counted[base][0] and id(new) in counted[held][0]):
+                    identity = counted[base][1][old], ast.unparse(old)
+                    if identity[0] == scope:
+                        paid = min(carried, departed[identity])
+                        departed[identity] -= paid
+                        credited[FieldExtraction.place(held.path, new)] += paid
 
 
 class CleanChangedLines(OccurrenceMeasure):
@@ -1510,6 +1533,47 @@ class DecoratorBinding:
                     direct[id(target)] = statement
         return {name: (node, direct[id(node)]) for name, (node, *others) in bindings.items()
                 if not others and id(node) in direct}
+
+    @classmethod
+    def identity(cls, tree: ast.Module, filename: str, scope: str, expression: ast.expr) -> NominalProof:
+        """The expression with every name and attribute reference replaced by the module and
+        name that own it, as evaluated in ``scope``: an imported name is its source module's
+        export, a declared class its own module's, a builtin one the module never binds. A name
+        the scope itself binds, or any reference these declarations cannot resolve, proves
+        nothing."""
+        module = cls.module_of(filename)
+        package = module[:-1]
+        declared = cls.declarations(tree, "", tree.body)
+        bound = cls.bindings(tree, "")
+        enclosing = cls.bindings(tree, scope)
+        unresolved: list[str] = []
+
+        def owner(name: str) -> str:
+            match declared.get(name) if name not in enclosing else ():
+                case ast.alias(name=imported, asname=alias), ast.Import():
+                    return imported if alias else imported.split(".")[0]
+                case ast.alias(name=imported), ast.ImportFrom(module=source, level=level):
+                    base = package[:len(package) - level + 1] if level else ()
+                    return ".".join((*base, *(source.split(".") if source else ()), imported))
+                case _, ast.ClassDef():
+                    return ".".join((*module, name))
+            if name not in bound and name not in enclosing and name in vars(builtins):
+                return f"builtins.{name}"
+            unresolved.append(name)
+            return name
+
+        class Owned(ast.NodeTransformer):
+            def visit_Name(self, node: ast.Name) -> ast.Name:
+                return ast.Name(id=owner(node.id))
+
+            def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+                match ast.unparse(node).split("."):
+                    case [root, *attributes] if root.isidentifier() and all(map(str.isidentifier, attributes)):
+                        return ast.Name(id=".".join((owner(root), *attributes)))
+                return self.generic_visit(node)
+
+        owned = Owned().visit(copy.deepcopy(expression))
+        return UnprovedIdentity() if unresolved else ProvedIdentity(ast.dump(owned))
 
     def marks(self, decorator: ast.expr) -> bool:
         return ast.unparse(decorator) in self.names

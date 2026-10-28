@@ -1250,6 +1250,43 @@ def test_fields_extracted_into_the_one_new_held_class_are_moved_not_written(repo
     assert report["delta"][destination] == report["head"][destination]
 
 
+TYPED_FROM = (
+    "from .alpha import Cursor\n\n\nclass Request:\n    thread: str\n"
+    "    before: Cursor | None = None\n    archive: str | None = None\n"
+)
+TYPED_PAGE = (
+    "from .alpha import Cursor\n\n\nclass Page:\n"
+    "    before: Cursor | None = None\n    archive: str | None = None\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("source", "pages", "written"),
+    [
+        (TYPED_FROM, TYPED_PAGE, 0),
+        (TYPED_FROM, TYPED_PAGE.replace("import Cursor", "import Cursor as Mark").replace(
+            "before: Cursor", "before: Mark"), 0),
+        (TYPED_FROM, TYPED_PAGE.replace(".alpha", ".beta"), 1),
+        (TYPED_FROM, TYPED_PAGE + "\n\nstr = bytes\n", 1),
+        (TYPED_FROM, TYPED_PAGE.replace("    archive", "    str = bytes\n    archive"), 1),
+        (TYPED_FROM.replace("from .alpha import Cursor", "from typing import TypeVar\n\nCursor = TypeVar('Cursor')"),
+         TYPED_PAGE.replace("from .alpha import Cursor", "from typing import TypeVar\n\nCursor = TypeVar('Cursor')"), 1),
+    ],
+    ids=["same_owner", "same_owner_aliased", "changed_owner", "builtin_shadowed",
+         "builtin_shadowed_in_class", "type_variable"],
+)
+def test_extracted_field_types_are_compared_by_the_owner_they_import(repo, source, pages, written):
+    """A field type is the module and name its spelling is bound to, not the spelling: the same
+    Cursor imported from another module is another type, and an alias of the same is not."""
+    base = repo.commit({"holder.py": source + OTHER, "pages.py": "VALUE = 1\n"})
+    head = repo.commit({"holder.py": HOLDER + OTHER, "pages.py": pages})
+    status, report = repo.compare(base, head, NoneAbsence)
+    source_count, destination = (NoneAbsence.at(f"{repo.root}/{name}").text for name in ("holder.py", "pages.py"))
+    assert status == int(written > 0)
+    assert len(report["introduced"][destination]) == written
+    assert report["introduced"][source_count] == []
+
+
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
     repo.git("config", "diff.interHunkContext", "3")
     base = repo.commit({"names.py": "first = 1\nold_receipt = 1\nlast = 1\n"})
