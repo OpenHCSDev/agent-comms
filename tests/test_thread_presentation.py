@@ -44,7 +44,7 @@ def test_missing_presentation_owns_source_absence_and_retired_status(comms):
     absent = presentations.read("missing")
     assert absent == presentations.view("missing") == NoThreadPresentation()
     assert absent.published() is absent
-    assert absent.sent_summaries() == ()
+    assert absent.sent_notifications() == ()
     assert absent.label == ""
     painted = ThreadStatusModel.known("missing", absent)
     retired = ThreadStatusModel.retired("missing")

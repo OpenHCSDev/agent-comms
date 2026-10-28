@@ -237,7 +237,7 @@ class NotificationAssignment(NotificationSource):
         by_viewer: dict[OutcomeViewer, list[NotificationAssignmentRead]] = {}
         for read in reads:
             by_viewer.setdefault(read.viewer, []).append(read)
-        changed = []
+        changed: list[NotificationAssignmentRead] = []
         for viewer, viewed in by_viewer.items():
             sources = tuple({source.message.reference: source
                              for read in viewed for source in read.sources}.values())

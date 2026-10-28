@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
@@ -457,6 +457,15 @@ class SentMessageSummary:
 
     reference: MessageReference
     summary: str
+
+    @classmethod
+    def for_sources(
+        cls,
+        sources: Iterable[tuple[MessageReference, Iterable[MessageNotification]]],
+    ) -> tuple[Self, ...]:
+        """One summary per sent source, aggregated by MessageNotification.summary."""
+        return tuple(cls(reference, MessageNotification.summary(outcomes))
+                     for reference, outcomes in sources)
 
 
 class ChannelReadMark(ABC):

@@ -16,7 +16,7 @@ from .notification_evidence import NotificationWindow
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
-    from .presentation import MessageNotification, SentMessageSummary
+    from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.transcripts import Transcripts
@@ -218,8 +218,10 @@ class ThreadPresentation(ThreadStatusDisplay):
         """The value a viewer may receive: this presentation itself."""
         return self
 
-    def sent_summaries(self) -> tuple[SentMessageSummary, ...]:
-        """A presentation without acquired sources summarises no sent message."""
+    def sent_notifications(
+        self,
+    ) -> tuple[tuple[MessageReference, tuple[MessageNotification, ...]], ...]:
+        """A presentation without acquired sources holds no sent message."""
         return ()
 
     def require(self, name: str) -> ThreadPresentation:
@@ -308,13 +310,13 @@ class AcquiredThreadPresentation(ThreadPresentation):
         return ThreadPresentation(**{declared.name: getattr(self, declared.name)
                                      for declared in fields(ThreadPresentation)})
 
-    def sent_summaries(self) -> tuple[SentMessageSummary, ...]:
-        """One summary per recent sent source, from this presentation's captured window."""
-        from .presentation import MessageNotification, SentMessageSummary
-
+    def sent_notifications(
+        self,
+    ) -> tuple[tuple[MessageReference, tuple[MessageNotification, ...]], ...]:
+        """Each recent sent source with its outcomes from this presentation's captured window."""
         return tuple(
-            SentMessageSummary(reference, MessageNotification.summary(
-                self.notification_window.outcomes.get((reference.seq, reference.message_id), ())))
+            (reference,
+             self.notification_window.outcomes.get((reference.seq, reference.message_id), ()))
             for reference in self.sent_references
         )
 
