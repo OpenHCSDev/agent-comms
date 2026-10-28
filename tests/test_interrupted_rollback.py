@@ -18,6 +18,7 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import upgrade
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import LiveFilesRequest, RegistryFile
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.registry_store import RegistryStore
@@ -87,7 +88,8 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_ru
     with pytest.raises(UpgradeRefused, match="missing-checkout"):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
-            False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
+            False, spill, tmp_path / "install-scratch", LaunchRuntime.running(),
+            lambda: None, InstallReport(),
         )
     assert {path: RegistryStore.digest(path) for path in registry.written} == expected
     assert comms.registry.require("worker").title != GivenThreadText("Carried title")
@@ -110,7 +112,8 @@ def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, install
     with pytest.raises(UpgradeRefused, match="missing-checkout"):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
-            False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
+            False, spill, tmp_path / "install-scratch", LaunchRuntime.running(),
+            lambda: None, InstallReport(),
         )
     assert {path: RegistryStore.digest(path) for path in registry.written} == carried
     assert comms.registry.require("worker").title == GivenThreadText("Carried title")

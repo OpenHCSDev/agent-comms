@@ -230,3 +230,12 @@ class OpenCodeHarness(InstalledHarness, declared_name="opencode"):
 
         merge_json(tui, add_plugin)
         return (tui,)
+
+
+class HarnessSession(DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
+    """A harness session's declared readers and bridges, selected by their capabilities.
+
+    The root sits beside its harnesses, below the coordinator tables, so a coordinator row
+    can name the bridge that made a delivery attempt by this declaration."""
+
+    harness: ClassVar[type[Harness]]

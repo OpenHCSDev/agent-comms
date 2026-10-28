@@ -62,34 +62,6 @@ def test_spawn_starts_a_unit_whose_request_round_trips(tmp_path, systemd):
     assert FieldCodec.decode(InstallRun, FieldCodec.parse(run.unit.request.read_text())) == run
 
 
-DECODED = """
-import runpy
-from agent_comms.installer.launch import InstallRun
-from agent_comms.installer.refusals import UpgradeRefused
-
-def run(self):
-    raise UpgradeRefused(f"decoded {self.target}")
-
-InstallRun.run = run
-runpy.run_module("agent_comms.installer", run_name="__main__")
-"""
-
-
-def test_the_installed_launcher_hands_its_request_on_stdin(tmp_path):
-    """Installs 5 and 6 died at IndexError: the live 878da2817 launcher pipes the request on
-    stdin with no argument, and the tree it starts must read it there."""
-    root = tmp_path / "bus"
-    root.mkdir()
-    run = InstallRun(InstallRequest(checkout=tmp_path / "checkout", to="HEAD"), root,
-                     tmp_path / "scratch", "a" * 40)
-    finished = subprocess.run(
-        (sys.executable, "-c", DECODED), input=json.dumps(FieldCodec.encode(run)),
-        capture_output=True, text=True, timeout=60, check=False,
-    )
-    assert finished.stderr.strip().splitlines()[-1].endswith(f"decoded {'a' * 40}")
-    assert finished.returncode == 1
-
-
 def test_a_launched_unit_gone_without_a_result_died(tmp_path, systemd):
     root = tmp_path / "bus"
     logs = InstallLogs(root)

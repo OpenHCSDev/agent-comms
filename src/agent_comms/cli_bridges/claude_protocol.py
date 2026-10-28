@@ -29,6 +29,7 @@ from agent_comms.field_codec import (
     MalformedRecord,
     MessageId,
     ToolCallId,
+    TranscriptRecordId,
 )
 from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
@@ -316,7 +317,7 @@ class ClaudeSession:
 
 class TimedRecord(TimestampedWire):
     position: int = Field(exclude=True)
-    uuid: str
+    uuid: TranscriptRecordId
 
 
 class ClaudeUserHeader(WireHeader):

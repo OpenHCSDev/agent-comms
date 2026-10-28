@@ -161,3 +161,49 @@ def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path
     assert page.earlier == EarlierPage('')  # An opaque empty cursor is still a string.
 
 
+
+
+async def test_draining_server_gets_the_same_turn_after_reconnecting(tmp_path):
+    """Codex refuses a turn while draining and asks for it again; the input is delivered, not lost."""
+    from agent_comms.cli_protocol import DeliveredOutcome
+    from agent_comms.messages import InfoKind, Message
+
+    turns = []
+
+    async def serve(request):
+        socket = web.WebSocketResponse()
+        await socket.prepare(request)
+        async for message in socket:
+            frame = json.loads(message.data)
+            if frame['method'] == 'initialized':
+                continue
+            if frame['method'] == 'initialize':
+                await socket.send_json({'id': frame['id'], 'result': {'userAgent': 'codex/0.0.0'}})
+                continue
+            assert frame['method'] == 'turn/start'
+            turns.append(frame['params'])
+            reply = ({'error': {'code': -32000, 'message': 'Server is draining; retry after reconnecting'}}
+                     if len(turns) == 1 else {'result': {}})
+            await socket.send_json({'id': frame['id'], **reply})
+        return socket
+
+    app = web.Application()
+    app.router.add_get('/', serve)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    socket_path = tmp_path.parent / 'draining-codex.sock'
+    await web.UnixSite(runner, str(socket_path)).start()
+    comms = installed_comms(tmp_path / 'root')
+    comms.registry.declare(Thread('cli', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
+    try:
+        binding = Binding(root=str(comms.root), owner=comms.registry.require('cli').incarnation,
+                          thread='thread', start=Binding.bus_head(str(comms.root)))
+        with Binding.open(tmp_path / 'bridge') as db:
+            options = CodexOptions(Watch(), StoredBinding(), tmp_path / 'bridge', tmp_path, str(socket_path))
+            bridge = CodexBridge(options, binding.address(), db)
+            message = Message(sender='sender', target='cli', body='keep going', type=InfoKind)
+            assert await bridge.deliver(message) is DeliveredOutcome
+        assert len(turns) == 2 and turns[0] == turns[1]
+        assert turns[0]['clientUserMessageId'] == f'comms:{message.message_id}'
+    finally:
+        await runner.cleanup()

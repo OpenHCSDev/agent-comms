@@ -166,6 +166,50 @@ def test_a_private_home_does_not_discover_or_reload_the_real_user_service(
     assert not UNIT.running()
 
 
+@pytest.mark.parametrize("enabled,foreign,started", (
+    pytest.param((SystemdConnectorService.unit,), (), (SystemdConnectorService.unit,), id="ordinary"),
+    pytest.param(
+        ("codex-comms-inbox@a.service", "codex-comms-inbox@b.service", "codex-comms-inbox@.service",
+         "codex-comms-inbox@foreign.service"),
+        ("codex-comms-inbox@foreign.service",),
+        ("codex-comms-inbox@a.service", "codex-comms-inbox@b.service"),
+        id="template-instances"),
+    pytest.param((), (), (), id="nothing-enabled"),
+))
+def test_start_enabled_starts_each_enabled_stopped_instance_its_home_defines(
+        tmp_path, monkeypatch, user_manager, enabled, foreign, started):
+    """Systemd enables a template's instances, never the template: an install starts every
+    enabled instance this home defines. A disabled sibling (no link), the bare template
+    link and a unit loaded from another home's definition stay stopped."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for service in (CodexInboxService, SystemdConnectorService):
+        service.unit_file(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+        service.unit_file(tmp_path).write_text("[Unit]\n")
+    wants = tmp_path / ".config/systemd/user/default.target.wants"
+    wants.mkdir()
+    for name in enabled:
+        (wants / name).touch()
+    elsewhere = tmp_path / "other-home" / CodexInboxService.unit
+    starts: list[str] = []
+
+    def control(command: tuple[str, ...], *, check: bool) -> subprocess.CompletedProcess[bytes]:
+        assert check and command[:3] == ("systemctl", "--user", "start")
+        starts.extend(command[3:])
+        return subprocess.CompletedProcess(command, 0)
+
+    def output(command: tuple[str, ...], *, text: bool) -> str:
+        assert text and command[:-1] == ("systemctl", "--user", "show", "-p", "FragmentPath", "--value")
+        name = command[-1]
+        definition = (elsewhere if name in foreign else CodexInboxService.unit_file(tmp_path)
+                      if "@" in name else SystemdConnectorService.unit_file(tmp_path))
+        return f"{definition}\n"
+
+    monkeypatch.setattr(subprocess, "run", control)
+    monkeypatch.setattr(subprocess, "check_output", output)
+    HostService.start_enabled()
+    assert sorted(starts) == sorted(started)
+
+
 def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeypatch, user_manager):
     monkeypatch.setenv("HOME", str(tmp_path / "ambient-home"))
     home = tmp_path / "harness-home"

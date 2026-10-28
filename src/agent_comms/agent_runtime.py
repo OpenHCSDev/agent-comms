@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .cli_protocol import Outcome
+    from .harness_delivery_states import Outcome
     from .messages import Message
     from .runtime_updates import RuntimeUpdate
 

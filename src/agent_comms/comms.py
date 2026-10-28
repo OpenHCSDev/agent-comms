@@ -21,7 +21,8 @@ from .launch_runtime import LaunchRuntime
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .message_reference import FirstUnreadStart, InboxStart
+from .message_reference import InboxStart
+from .agent_inbox import TakenInputStart
 from .messages import Message
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
@@ -29,7 +30,6 @@ from .phase_evidence import PlanReadings
 from .publisher import OwnerPublisher
 from .registration import Registration
 from .relationships import ThreadRelationships
-from .read_basis import WatchAcknowledgment
 from .root_runtime import RootRuntime
 from .thread_configuration import ThreadConfiguration
 from .thread_management import ThreadManagement
@@ -89,10 +89,9 @@ class Comms:
         yield cls(route, plans=plans)
 
     async def watch(
-        self, name: str, *, acknowledgment: type[WatchAcknowledgment],
-        after: InboxStart = FirstUnreadStart(),
+        self, name: str, *, after: InboxStart = TakenInputStart(),
     ) -> AsyncIterator[Message]:
-        """Wait unlocked; each inbox read and acknowledgment owns one client call."""
+        """Wait unlocked; each inbox read owns one client call, and streaming records nothing."""
         with Comms.client(self.route) as comms:
             reader = comms.registry.require(name).incarnation
         maintenance = MaintenanceBarrier(self.registry.store.path)
@@ -108,8 +107,6 @@ class Comms:
                             raise UnregisteredThreadError("Watched thread was removed or replaced")
                     for message in batch.page.messages:
                         yield message
-                        with Comms.client(self.route) as comms:
-                            acknowledgment.taken(comms.bus.reads, batch.displayed.through(message.seq))
                         after = after.advanced(message.reference)
                     if not batch.remaining:
                         break

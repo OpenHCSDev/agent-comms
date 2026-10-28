@@ -72,7 +72,6 @@ from .watched import ChangeSignal, FileLifetimeSource, FileSource
 if TYPE_CHECKING:
     from agent_comms.following_inputs import OwnerFollowingInputs
 
-    from .turn_phase import TurnPhase
 
 AGENT_PREFIX = "!agent "
 
@@ -374,8 +373,8 @@ class DrainTurn(ABC):
     def keys(self) -> tuple[str, ...]:
         return ()
 
-    def for_phase(self, phase: TurnPhase) -> DrainTurn:
-        return self if phase.accepts_followup else NoDrainTurn()
+    def for_owner(self, owner: Thread) -> DrainTurn:
+        return self if owner.accepts_following_input else NoDrainTurn()
 
     @abstractmethod
     def opened(self) -> DrainTurn: ...

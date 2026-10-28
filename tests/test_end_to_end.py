@@ -107,8 +107,8 @@ class TestEndToEndLifecycle:
             assert snapshot['inbox'][0]['type'] == 'handoff'
             await cli(source_programs, root, 'send', '--from', 'kid', '--to', 'PR111',
                       '--body', 'review complete, one nit', '--type', 'ack')
-            assert await cli(source_programs, root, 'ack', '--thread', 'PR111') == {'acknowledged': 1}
-            assert (await cli(source_programs, root, 'inbox', '--thread', 'PR111'))['messages'] == []
+            assert [message['text'] for message in (await cli(
+                source_programs, root, 'inbox', '--thread', 'PR111'))['messages']] == ['review complete, one nit']
         finally:
             for thread in comms.registry.snapshot().threads.values():
                 if thread.process_alive:

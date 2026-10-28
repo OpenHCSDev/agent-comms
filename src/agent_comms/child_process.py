@@ -164,7 +164,7 @@ class ProcessState(SubclassUnion, affix=""):
     ) -> ThreadPresentation: ...
 
     @abstractmethod
-    def attachment_process(self, previous: ProcessState) -> ProcessState: ...
+    def applied(self, previous: ProcessState) -> ProcessState: ...
 
     @abstractmethod
     def offline(self) -> bool: ...
@@ -219,7 +219,7 @@ class NoProcess(NullMember, ProcessState):
     ) -> ThreadPresentation:
         return ordinary
 
-    def attachment_process(self, previous: ProcessState) -> ProcessState:
+    def applied(self, previous: ProcessState) -> ProcessState:
         return previous
 
     def offline(self) -> bool:
@@ -294,7 +294,7 @@ class ProcessIdentity(RecordMember, ProcessState):
     ) -> ThreadPresentation:
         return binding.native_presentation(ordinary)
 
-    def attachment_process(self, previous: ProcessState) -> ProcessState:
+    def applied(self, previous: ProcessState) -> ProcessState:
         return self
 
     def require(self, message: str = "No worker process has started") -> ProcessIdentity:

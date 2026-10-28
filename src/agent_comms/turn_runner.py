@@ -347,8 +347,9 @@ class TurnRunner:
         await consumer.dispatch(update)
 
     async def active_backend_turn(self, session_id: str) -> DrainTurn:
-        state = await Coordination.run_worker(partial(self.turn_state, session_id))
-        return self.inputs.state(session_id).turn.for_phase(state.active.phase)
+        name = self.sessions.require(session_id)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        return self.inputs.state(session_id).turn.for_owner(thread)
 
     async def close_idle_backend(self, session_id: str, thread: Thread) -> None:
         async with self.idle_backend(session_id, thread) as persistent:

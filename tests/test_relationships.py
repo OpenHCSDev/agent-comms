@@ -88,7 +88,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms.messaging.send("peer", "#team", "Channel input").message.message_id
     comms.messaging.send("owner", "peer", "Output").message.message_id
     messages = comms.bus.inbox("owner").page.messages
-    comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
+    comms.bus.mark_read_through("owner", messages[-1].seq)
     pending = comms.bus.pending_count("owner")
     snapshot = comms.relationships.snapshot("owner")
     groups = snapshot.groups_by_type

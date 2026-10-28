@@ -21,6 +21,41 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.threads import Thread
 
 
+def test_cli_worktree_edit_preserves_live_external_owner(tmp_path):
+    import subprocess
+    import sys
+
+    from agent_comms.bus import Bus
+
+    comms = wire(tmp_path / 'wire')
+    Bus.install(Bus.path_in(comms.root))
+    identity = ProcessIdentity.capture(os.getpid())
+    original = comms.registry.declare(Thread(
+        'bridge', frozenset(), Checkout(tmp_path / 'old'),
+        process_identity=identity, execution=ExternalThreadExecution,
+    ))
+    before = comms.registry.snapshot()
+    result = subprocess.run(
+        (sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root),
+         'register', '--name', original.name, '--worktree', str(tmp_path / 'new')),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    after = comms.registry.snapshot()
+    current = after.require(original.name)
+    assert current.worktree == Checkout(tmp_path / 'new')
+    assert current.process_identity == identity and identity.alive()
+    assert current.incarnation == original.incarnation
+    # The project edit still fences work issued for the old project, despite
+    # retaining the same live bridge process and thread incarnation.
+    assert after.owner_generations[original.name] > before.owner_generations[original.name]
+    assert after.claim_generation(original.name) > before.claim_generation(original.name)
+    # Exact lifecycle replacement still releases a process; omission on a public
+    # metadata edit is the operation that preserves it.
+    comms.registry.register(replace(current, process_identity=NoProcess()))
+    assert comms.registry.require(current.name).process_identity == NoProcess()
+
+
 @pytest.mark.parametrize('phases', [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
 def test_bridge_cannot_write_the_registry_during_maintenance(tmp_path, phases):
     comms = wire(tmp_path)

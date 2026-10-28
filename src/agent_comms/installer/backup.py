@@ -41,7 +41,7 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOpera
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile, DirectoryAtomicFile
-from agent_comms.typed_table import WriterOwnedStore
+from agent_comms.typed_table import ExternalStore
 
 
 @dataclass(frozen=True)
@@ -110,8 +110,8 @@ class PresentSavedRoute(SavedRoute):
         DirectoryAtomicFile(path, mode=stat.S_IMODE(self.mode), directory=directory).write_bytes(self.content)
 
 
-def bus_paths(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...]) -> tuple[Path, ...]:
-    """One inventory of bus content and the selected writer-owned stores."""
+def bus_paths(files: FilesRequest, external: tuple[type[ExternalStore], ...]) -> tuple[Path, ...]:
+    """One inventory of bus content and the selected external stores."""
     root = files.root
     excluded = RuntimeFile.paths_in(root)
     observed: list[Path] = []
@@ -125,14 +125,14 @@ def bus_paths(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...])
                          for resource in store.resources(files)))
 
 
-def settle_bus_files(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...] = ()) -> None:
+def settle_bus_files(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()) -> None:
     """Each selected declaration owns whether settling is valid for its file."""
     paths = bus_paths(files, external)
     for resource in RootFile.owned_files(files, paths):
         resource.owner.settle(files.location(resource))
 
 
-def bus_files(files: FilesRequest, external: tuple[type[WriterOwnedStore], ...] = ()
+def bus_files(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()
               ) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
     """One declaration-derived inventory for bus and writer-owned resources."""
     paths = bus_paths(files, external)

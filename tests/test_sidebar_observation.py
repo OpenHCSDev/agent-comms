@@ -118,7 +118,7 @@ def test_recreated_thread_reference_resolves_new_birth_not_same_name(comms, decl
 
 def test_current_reference_membership_and_lookup_share_the_retained_registry(comms, declare_reference):
     original = declare_reference()
-    references = CurrentDisplayReferences(str(comms.root), registry=comms.registry.snapshot())
+    references = CurrentDisplayReferences.from_registry(str(comms.root), comms.registry.snapshot())
     for restored in (references, pickle.loads(pickle.dumps(references, protocol=5))):
         reference = restored.thread(original.incarnation)
         assert reference.current_in(restored)

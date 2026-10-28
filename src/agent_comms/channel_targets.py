@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
     from .history_views import HistoryViews
-    from .messages import Message
+    from .messages import Message, MessageInput
     from .read_basis import (
         ChannelConversation,
         Conversation,
@@ -331,7 +331,7 @@ class NamedTarget(CommandTarget):
     def response_recipients(self, recipients: tuple[FrozenRecipient, ...]) -> tuple[FrozenRecipient, ...]:
         return tuple(member for member in recipients if not self.direct_names or member.canonical_thread in self.direct_names)
 
-    def response_policy(self, message: Message) -> ResponsePolicy:
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
         return DirectPolicy.instance()
 
     def conversation(self, sender: str, viewer: str, canonical: Callable[[str], str]) -> str:
@@ -564,7 +564,7 @@ class ChannelTarget(NamedTarget):
         if self.name not in BuiltinChannelView.addresses():
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
 
-    def response_policy(self, message: Message) -> ResponsePolicy:
+    def response_policy(self, message: MessageInput) -> ResponsePolicy:
         if message.mentions:
             return MentionedPolicy.instance()
         return message.sender_role.channel_policy()

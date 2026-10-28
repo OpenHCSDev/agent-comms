@@ -2109,6 +2109,16 @@ class Id128Text(NominalSpelling[Id128], HexDigits):
     digits = 32
 
 
+class TranscriptRecordId(NominalText):
+    """One record of a harness's own transcript, as the harness writes it."""
+
+
+class TranscriptRecordIdText(NominalSpelling[TranscriptRecordId]):
+    """Claude Code spells every transcript record with a UUID."""
+
+    spelling = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
 class MessageId(NominalText):
     @classmethod
     def mint(cls, text: str) -> Self:
@@ -2671,7 +2681,8 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
     __slots__ = ()
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
-        choices = ", ".join(quote(value) for _, value in self.editor_choices())
+        # SQL IN is an unordered set: stored schema text must not depend on import order.
+        choices = ", ".join(sorted(quote(value) for _, value in self.editor_choices()))
         return (f"{column} IN ({choices})",)
 
     def argument_options(self, argument: Argument) -> dict[str, object]:

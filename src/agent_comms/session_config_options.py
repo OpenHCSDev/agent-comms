@@ -216,6 +216,7 @@ class SessionConfigOptions:
         async with aclosing(Bus.watch_sources(FileSource(self.comms.registry.store.path))) as observations:
             async for _ in observations:
                 for session_id in tuple(self._publication_sessions):
+                    await self.sessions.sync_identity(session_id)
                     await self.publish_configuration(session_id)
 
     async def close(self) -> None:

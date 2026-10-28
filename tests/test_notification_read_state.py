@@ -104,7 +104,7 @@ def test_first_revision_requires_reads_even_for_unchanged_empty_stores():
 
 def test_notification_rank_overrides_follow_the_mro_without_changing_parent_ranks():
     from agent_comms.notification_progress import (
-        ActiveDelivery, DeliveryRank, SelectedReadProgress, SendingProgress,
+        ActiveDelivery, DeliveryRank, SelectedConsumedProgress, SendingProgress,
         SentProgress, SettledDelivery, ShownToModelProgress, WaitingDelivery,
     )
 
@@ -112,4 +112,4 @@ def test_notification_rank_overrides_follow_the_mro_without_changing_parent_rank
     assert SentProgress(100).rank() == DeliveryRank.position_of(WaitingDelivery)
     assert ShownToModelProgress(100).rank() == DeliveryRank.position_of(SettledDelivery)
     assert SendingProgress(100).rank() == DeliveryRank.position_of(ActiveDelivery)
-    assert SelectedReadProgress(100).rank() == DeliveryRank.position_of(ActiveDelivery)
+    assert SelectedConsumedProgress(100).rank() == DeliveryRank.position_of(ActiveDelivery)

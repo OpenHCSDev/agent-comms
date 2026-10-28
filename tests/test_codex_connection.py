@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import (
-    Capabilities, ClientInfo, Initialize, MessageInput, TextInput,
+    Capabilities, ClientInfo, CodexDraining, CodexRefused, Initialize, MessageInput, TextInput,
 )
 
 
@@ -27,7 +27,9 @@ class Socket:
 
 @pytest.mark.parametrize(('frames', 'outcome'), [
     ([{'method': 'notice', 'params': {}}, {'id': 1, 'result': {'ok': True}}], nullcontext({'ok': True})),
-    ([{'id': 1, 'error': {'code': -1, 'message': 'bad'}}], pytest.raises(RuntimeError)),
+    ([{'id': 1, 'error': {'code': -1, 'message': 'bad'}}], pytest.raises(CodexRefused)),
+    ([{'id': 1, 'error': {'code': -1, 'message': 'Server is draining; retry after reconnecting'}}],
+     pytest.raises(CodexDraining)),
     ([{'id': None, 'error': {'code': -1, 'message': 'bad'}}], pytest.raises(ConnectionError)),
     ([{'id': 7, 'result': {}}], pytest.raises(ValueError)),
 ])

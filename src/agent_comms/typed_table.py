@@ -18,6 +18,7 @@ import sqlite3
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
+from itertools import batched
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, is_dataclass
 from enum import Enum, IntEnum, IntFlag
@@ -83,6 +84,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
+    BorrowedStoreLock,
     ExclusiveAtomicFile,
     StoreLockFile,
 )
@@ -2272,16 +2274,49 @@ class TypedTable(
                    f"{_identifier(stored)} TO {_identifier(declared.wire_name)}")
 
     @classmethod
+    def _bound(cls, inputs: Mapping[str, object]) -> tuple[tuple[_Field, ...], tuple[object, ...]]:
+        """Named query inputs resolved to their declared columns, in the declaration's own
+        field order whatever order the caller named them, with each value encoded."""
+        cls._fields_named(tuple(inputs))
+        selected = tuple(item for item in cls._columns if item.name in inputs)
+        return selected, tuple(item.encode(inputs[item.name]) for item in selected)
+
+    @classmethod
     def _condition(
         cls, where: str, parameters: tuple, key: dict[str, object]
     ) -> tuple[str, tuple]:
         """Compile predicate field names and declared key values once."""
-        selected = cls._fields_named(tuple(key))
+        selected, values = cls._bound(key)
         if selected:
             where = "(" + where + ") AND " + " AND ".join(
                 f"{_identifier(item.wire_name)} IS ?" for item in selected)
-            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
+            parameters = (*parameters, *values)
         return cls._sql(where), parameters
+
+    @classmethod
+    def select_keys(cls, db: sqlite3.Connection,
+                    keys: Sequence[Mapping[str, object]]) -> list[Self]:
+        """Rows equal to any of these named keys under the same null-safe IS equality select()
+        uses: the requested keys drive an indexed join, one batch per the connection's own
+        variable limit, each distinct key probed once."""
+        bound = tuple(dict.fromkeys(cls._bound(key) for key in keys))
+        if not bound:
+            return []
+        field_sets = {tuple(item.name for item in selected) for selected, _ in bound}
+        if len(field_sets) != 1:
+            raise ValueError(f"{cls.__name__} keys name different fields: {sorted(field_sets)}")
+        selected = bound[0][0]
+        table = _identifier(cls.declared_name)
+        aliases = tuple(f"k{index}" for index in range(len(selected)))
+        joined = " AND ".join(f"{table}.{_identifier(item.wire_name)} IS requested.{alias}"
+                              for item, alias in zip(selected, aliases, strict=True))
+        probe = "(" + ",".join("?" for _ in selected) + ")"
+        batch = db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // len(selected)
+        return [row for chunk in batched(bound, batch) for row in cls.iterate(db.execute(
+            f"WITH requested({','.join(aliases)}) AS (VALUES {','.join(probe for _ in chunk)}) "
+            f"SELECT {cls.qualified(*cls.column_projection())} FROM requested "
+            f"JOIN {table} ON {joined}",
+            tuple(value for _, values in chunk for value in values)))]
 
     @classmethod
     def _query(
@@ -2529,7 +2564,7 @@ class TypedTable(
 class WriterOwnedResource(DeclaredFile):
     """An external writer's declared live path, retaining the shared copy behavior."""
 
-    owner: type[WriterOwnedStore]
+    owner: type[ExternalStore]
 
     def live(self, root: Path) -> Path:
         return self.owner.live(root) / self.path.relative_to(self.owner.retained_filename())
@@ -2741,13 +2776,10 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
             return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
 
 
-class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"):
-    """A durable file outside the bus that its own writer reconciles when it opens it
-    (``WriterOwnedFile``). An installed package declares each one through the
-    ``agent_comms.writer_owned_stores`` entry point. Before cutover the installer opens a
-    copy of each with the target's declaration, so a stored schema the declaration cannot
-    carry refuses the install and names the file, instead of failing the writer's next
-    launch."""
+class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
+    """Durable files outside the bus that their own writer owns. An installed package declares
+    each one through the ``agent_comms.writer_owned_stores`` entry point; the installer
+    inventories, backs up, retains and restores the selected ones through these resources."""
 
     entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
     retained_directory: ClassVar[Path] = Path("writer-owned")
@@ -2755,12 +2787,6 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
     @classmethod
     def retained_filename(cls) -> Path:
         return cls.retained_directory / cls.declared_name
-
-    @classmethod
-    def content_members(cls, path: Path) -> frozenset[Path]:
-        """Retain the original primary and committed WAL bytes without checkpointing."""
-        observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
-        return cls.snapshot_members(path, observed)
 
     @classmethod
     def retained_name(cls, root: Path, path: Path) -> Path:
@@ -2781,16 +2807,68 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     @classmethod
     def external_members(cls, files: FilesRequest) -> Mapping[Path, type[RootFile]]:
-        cls.load_declarations()
         return {files.location(resource): store for store in cls.members_with(cls)
                 for resource in store.resources(files)}
 
     @classmethod
     def require_retained_name(cls, name: Path) -> None:
-        names = {store.retained_filename() for store in WriterOwnedStore.members_with(WriterOwnedStore)}
+        names = {store.retained_filename() for store in ExternalStore.members_with(ExternalStore)}
         if name.is_relative_to(cls.retained_directory) and not any(
                 name.is_relative_to(directory) for directory in names):
             raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
+
+    @classmethod
+    def borrowed_locks(cls, lifetime: ExitStack, files: FilesRequest) -> tuple[BorrowedStoreLock, ...]:
+        """A file no store lock guards lends the target's worker nothing."""
+        return ()
+
+    @classmethod
+    def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
+        """A file with no stored schema has no opening to practise."""
+
+    @staticmethod
+    def practice_openings(root: Path, excluding: tuple[type[ExternalStore], ...] = ()) -> None:
+        stores = set(ExternalStore.members_with(ExternalStore)) - set(excluding)
+        with TemporaryDirectory() as directory:
+            for store in stores:
+                store.practice_opening(LiveFilesRequest(root), Path(directory))
+
+    @classmethod
+    @abstractmethod
+    def path(cls) -> Path:
+        """The live file or common root used by this owner's resource declarations."""
+
+    @staticmethod
+    @cache
+    def load_declarations() -> None:
+        """Import each module the installed distributions declare, once per process."""
+        for entry in entry_points(group=ExternalStore.entry_point_group):
+            entry.load()
+
+    @classmethod
+    def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
+        """Every family query (names, CLI choices, decoding, lookup) sees the installed members."""
+        cls.load_declarations()
+        return super()._member_declarations()
+
+
+class WriterOwnedStore(SQLiteStorage, ExternalStore, declared_name=None):
+    """An external SQLite file its own writer reconciles when it opens it
+    (``WriterOwnedFile``). Before cutover the installer opens a copy of each with the
+    target's declaration, so a stored schema the declaration cannot carry refuses the install
+    and names the file, instead of failing the writer's next launch."""
+
+    @classmethod
+    def content_members(cls, path: Path) -> frozenset[Path]:
+        """Retain the original primary and committed WAL bytes without checkpointing."""
+        observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
+        return cls.snapshot_members(path, observed)
+
+    @classmethod
+    def borrowed_locks(cls, lifetime: ExitStack, files: FilesRequest) -> tuple[BorrowedStoreLock, ...]:
+        """The installer retains each file lock through rollback; the worker only borrows it."""
+        return tuple(lifetime.enter_context(cls.retaining(files.location(resource)))
+                     for resource in cls.resources(files))
 
     @classmethod
     def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
@@ -2809,34 +2887,9 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
                 raise RelationViolationError(
                     f"{path} cannot open on this runtime: {error}") from error
 
-    @staticmethod
-    def practice_openings(root: Path, excluding: tuple[type[WriterOwnedStore], ...] = ()) -> None:
-        WriterOwnedStore.load_declarations()
-        stores = set(WriterOwnedStore.members_with(WriterOwnedStore)) - set(excluding)
-        with TemporaryDirectory() as directory:
-            for store in stores:
-                store.practice_opening(LiveFilesRequest(root), Path(directory))
-
-    @classmethod
-    @abstractmethod
-    def path(cls) -> Path:
-        """The live file or common root used by this owner's resource declarations."""
-
     @classmethod
     @abstractmethod
     def table_schema(cls) -> type[TableSchema]: ...
-
-    @staticmethod
-    @cache
-    def load_declarations() -> None:
-        """Import each module the installed distributions declare, once per process."""
-        for entry in entry_points(group=WriterOwnedStore.entry_point_group):
-            entry.load()
-
-    @classmethod
-    def member_named(cls, name: object) -> type[Self]:
-        cls.load_declarations()
-        return super().member_named(name)
 
 
 class CarriedWriter(HolderWrittenFile, StoreWriter):

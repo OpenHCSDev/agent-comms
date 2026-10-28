@@ -43,6 +43,16 @@ class OrdinaryOwnerCheck(RuleCheck):
     claim_generation: int
     turn: TurnId
 
+    def worktree_matches(self) -> bool:
+        return self.current.worktree == self.expected.worktree
+
+
+class RunningOrdinaryOwnerCheck(OrdinaryOwnerCheck):
+    """The running turn retains its project; a selection is for the next turn."""
+
+    def worktree_matches(self) -> bool:
+        return self.current.continues_running_project(self.expected)
+
 
 class OrdinaryIncarnationRule(ReservationRule):
     check_type = OrdinaryOwnerCheck
@@ -81,7 +91,7 @@ class OrdinaryWorktreeRule(ReservationRule):
     explanation = "The ordinary owner's worktree changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
-        return check.current.worktree != check.expected.worktree
+        return not check.worktree_matches()
 
 
 class OrdinaryTurnRule(ReservationRule):
