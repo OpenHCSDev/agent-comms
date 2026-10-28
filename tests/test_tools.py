@@ -6,6 +6,9 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
+from agent_comms.connector_caller import DirectorCaller
+from agent_comms.errors import ToolRefusedError
+from agent_comms.presentation import MessageNotification, SentMessageSummary
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
@@ -121,11 +124,11 @@ class TestToolCatalog:
         comms.registry.declare(Thread(name='listed', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         result = invoke_tool(comms, "comms_threads", {"active_only": True}, caller=NoThreadCaller())
         assert [thread["name"] for thread in result["threads"]] == ["listed"]
-        assert result["sent_notifications"] == []
+        assert result["sent_messages"] == []
         with pytest.raises(CallingThreadUnavailable):
             invoke_tool(comms, "comms_set_goal", {"text": "not authorized"}, caller=NoThreadCaller())
 
-    def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
+    def test_threads_tool_summarizes_each_recent_sent_message_once(self, comms, monkeypatch):
         # A tool consumes its bound caller, never a subsequently changed environment.
         monkeypatch.setenv("AGENT_COMMS_THREAD", "not-the-invoker")
         comms.registry.declare(Thread(name='sender', tags=frozenset(), worktree=Checkout(Path('/wt'))))
@@ -136,24 +139,70 @@ class TestToolCatalog:
 
         presentation = comms.views.thread_presentations(("sender",)).require("sender")
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
-        assert [row.message.reference for row in presentation.sent_notifications] == [sent.reference]
+        outcomes = presentation.notification_window.outcomes[sent.seq, sent.message_id]
+        assert [summary.reference for summary in SentMessageSummary.recent(presentation)] == [sent.reference]
 
         result = invoke_tool(comms, "comms_threads", {}, caller=ThreadCaller("sender"))
-        assert [
-            (
-                row["message"]["seq"],
-                row["message"]["text"],
-                row["recipient_identity"]["canonical_thread"],
-                row["state"],
-            )
-            for row in result["sent_notifications"]
-        ] == [(
-            sent.seq, "track me", "recipient", {
-                "kind": "contextual_progress",
-                "details": [],
-                "proof": {"kind": "unrecorded_progress", "details": []},
-            },
-        )]
+        # One row per sent message, never one per recipient, and never the message body.
+        assert result["sent_messages"] == [{
+            "reference": {"seq": sent.seq, "message_id": str(sent.message_id)},
+            "summary": MessageNotification.summary(outcomes),
+        }]
+        assert "track me" not in json.dumps(result["sent_messages"])
+
+    def test_message_outcomes_reads_one_message_once_and_pages_its_recipients(self, comms):
+        # The sender is a member of the channel; the frozen audience never lists its sender.
+        comms.channels.create_tag("team")
+        for name in ("sender", "alice", "bob", "carol"):
+            comms.registry.declare(Thread(
+                name=name, tags=frozenset({"team"}), worktree=Checkout(Path('/wt'))))
+        sent = comms.messaging.send("sender", "#team", "count me once").message
+        reference = {"seq": sent.seq, "message_id": str(sent.message_id)}
+
+        first = invoke_tool(comms, "comms_message_outcomes", {"reference": reference, "limit": 2},
+                            caller=ThreadCaller("sender"))
+        assert first["message"]["seq"] == sent.seq
+        assert json.dumps(first).count("count me once") == 1
+        assert len(first["outcomes"]) == 2 and first["remaining"] == 1
+        assert first["next"] == {"recipient": first["outcomes"][-1]["recipient_identity"]}
+        rest = invoke_tool(comms, "comms_message_outcomes",
+                           {"reference": reference, "limit": 2, "after": first["next"]},
+                           caller=ThreadCaller("sender"))
+        assert len(rest["outcomes"]) == 1 and rest["remaining"] == 0
+        paged = [row["recipient_identity"]["canonical_thread"]
+                 for row in (*first["outcomes"], *rest["outcomes"])]
+        assert sorted(paged) == ["alice", "bob", "carol"]
+
+    def test_message_outcomes_gives_a_sender_its_message_with_no_recipients(self, comms):
+        comms.channels.create_tag("solo")
+        comms.registry.declare(Thread(name='sender', tags=frozenset({"solo"}), worktree=Checkout(Path('/wt'))))
+        sent = comms.messaging.send("sender", "#solo", "nobody else here").message
+        read = invoke_tool(comms, "comms_message_outcomes",
+                           {"reference": {"seq": sent.seq, "message_id": str(sent.message_id)}},
+                           caller=ThreadCaller("sender"))
+        assert read["message"]["seq"] == sent.seq
+        assert read["outcomes"] == [] and read["remaining"] == 0
+
+    def test_message_outcomes_shows_a_recipient_only_its_own_row_and_refuses_outsiders(self, comms):
+        comms.channels.create_tag("team")
+        for name in ("sender", "alice", "bob"):
+            comms.registry.declare(Thread(
+                name=name, tags=frozenset({"team"}), worktree=Checkout(Path('/wt'))))
+        comms.registry.declare(Thread(name='outsider', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        sent = comms.messaging.send("sender", "#team", "who sees what").message
+        reference = {"seq": sent.seq, "message_id": str(sent.message_id)}
+
+        own = invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
+                          caller=ThreadCaller("alice"))
+        assert [row["recipient_identity"]["canonical_thread"] for row in own["outcomes"]] == ["alice"]
+        with pytest.raises(ToolRefusedError, match="is not readable by this caller"):
+            invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
+                        caller=ThreadCaller("outsider"))
+        # The director speaks for the owner, so it reads another sender's message whole.
+        director = invoke_tool(comms, "comms_message_outcomes", {"reference": reference},
+                               caller=DirectorCaller("outsider"))
+        assert sorted(row["recipient_identity"]["canonical_thread"]
+                      for row in director["outcomes"]) == ["alice", "bob"]
 
     def test_inbox_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
