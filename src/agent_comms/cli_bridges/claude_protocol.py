@@ -172,7 +172,8 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
-        return tuple(cls.decode_line(line) for line in event.splitlines())
+        """Monitor joins event lines with LF only; an encoded part may hold U+2028 or U+0085."""
+        return tuple(cls.decode_line(line) for line in event.split('\n'))
 
 
 class ClaudeReaderPhase(ReadingPhase):
@@ -242,9 +243,12 @@ class ClaudeToolDraft(ToolDraft):
     ) -> tuple[TranscriptEvent, ...]:
         return (*self.events, self.call.ended(text, ok, record.position, record.timestamp))
 
-    def read_results(self, record: TimedRecord, text: str, ok: bool) -> tuple[RuntimeUpdate, ...]:
-        """What a successful Read showed the model, timed by its own result record."""
-        return tuple(ReadResultObserved(path, text, ObservedMonitor(record.uuid, record.timestamp))
+    def read_results(self, record: TimedRecord, text: str, ok: bool,
+                     reading: frozenset[str]) -> tuple[RuntimeUpdate, ...]:
+        """What a successful Read showed the model, timed by its own result record, beside the
+        paths other Reads in this session still have open."""
+        return tuple(ReadResultObserved(path, text, ObservedMonitor(record.uuid, record.timestamp),
+                                        reading)
                      for path in self.call.context_read_paths() if ok)
 
 
@@ -344,7 +348,9 @@ class ClaudeSession:
             return self.phase.missing_tool(tool_id)
         return (*self.finished(tool_id, tool.completed(record, text, ok)),
                 *self.turn.active(tool_id, self.phase, ModelWaitPhase()),
-                *tool.read_results(record, text, ok))
+                *tool.read_results(record, text, ok, frozenset(
+                    path for other in self.tools.values()
+                    for path in other.call.context_read_paths())))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
@@ -663,13 +669,21 @@ class ReadResultObserved(ConfirmedDelivery):
     path: str
     text: str
     record: ObservedMonitor
+    reading: frozenset[str]
+    """Paths other Reads in this session had open when this one returned."""
+
+    def closing(self, export: MonitorReadFile) -> tuple[MonitorReadFile, ...]:
+        """The export this Read may retire: none while another Read of it is still open."""
+        return () if export.path in self.reading else (export,)
 
     def frames(self) -> tuple[MonitorFrame, ...]:
         """Claude shows each file line as its number, a tab, then the line. The leading
-        numbered block is the file; numbers that do not run consecutively make no line count."""
+        numbered block is the file; numbers that do not run consecutively make no line count.
+        Records end only at a physical LF: a JSON line may hold U+2028, U+0085 or other
+        characters str.splitlines would split on."""
         numbers: list[int] = []
         lines: list[str] = []
-        for row in self.text.splitlines():
+        for row in self.text.split('\n'):
             number, tab, line = row.partition('\t')
             if not (tab and number.isdecimal()):
                 break

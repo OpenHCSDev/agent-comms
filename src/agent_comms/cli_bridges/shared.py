@@ -55,8 +55,8 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.private_path import PrivateDirectoryRole, PrivateFileRole
-from agent_comms.store_files import ExclusiveAtomicFile
+from agent_comms.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
+from agent_comms.store_files import ExclusiveDirectoryAtomicFile
 from agent_comms.message_reference import (
     BridgeBeginning,
     BridgePosition,
@@ -1351,23 +1351,39 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         notice = cls.naming(directory, MessageReference(int(seq), identity))
         return (notice,) if notice.path == path else ()
 
+    @contextmanager
+    def directory(self) -> Iterator[int]:
+        """The export directory, checked private and pinned by descriptor, under trusted
+        ancestors: a swapped or foreign parent refuses instead of receiving the message."""
+        parent = Path(self.path).parent
+        refusal = RelationViolationError(f'Message export directory {parent} is not private')
+        PrivateDirectoryRole.make_parents(parent)
+        TrustedAncestorRole.require_path(parent.parent, refusal)
+        directory = PrivateDirectoryRole.read(parent, refusal)
+        try:
+            yield directory
+        finally:
+            os.close(directory)
+
     def export(self, lines: tuple[str, ...]) -> None:
         """Publish every encoded part, one per line, once. A file already at this path must
         hold exactly these bytes: the bus message stays the source, never the file."""
         data = ''.join(line + '\n' for line in lines).encode()
         path = Path(self.path)
-        PrivateDirectoryRole.make_parents(path.parent)
-        try:
-            ExclusiveAtomicFile(path).write_bytes(data)
-        except FileExistsError:
-            refusal = RelationViolationError(f'Message export {path} is not this message')
-            with os.fdopen(PrivateFileRole.read(path, refusal), 'rb') as existing:
-                if existing.read() != data:
-                    raise refusal from None
+        refusal = RelationViolationError(f'Message export {path} is not this message')
+        with self.directory() as directory:
+            try:
+                ExclusiveDirectoryAtomicFile(path, directory=directory).write_bytes(data)
+            except FileExistsError:
+                with os.fdopen(PrivateFileRole.read(path.name, refusal, dir_fd=directory),
+                               'rb') as existing:
+                    if existing.read() != data:
+                        raise refusal from None
 
     def retire(self) -> None:
-        """A confirmed body's export is evidence nobody reads again."""
-        Path(self.path).unlink(missing_ok=True)
+        """A consumed body's export is evidence nobody reads again."""
+        with self.directory() as directory, suppress(FileNotFoundError):
+            os.unlink(Path(self.path).name, dir_fd=directory)
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         """The notice frees only its own reservation; it confirms no body."""
@@ -1573,18 +1589,21 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         """A visible Read of this session's own export confirms the parts it shows, through the
         same all-parts gate a Monitor event uses, which also owns whether this session attempted
         the message. Any other file, or a read whose every line is not a part of the exported
-        message, confirms nothing."""
+        message, confirms nothing. The export goes once its body is consumed and no other Read
+        of it is still running."""
         targets: list[str] = []
         for notice in MonitorReadFile.exported_at(self.exports, read.path):
+            identity = notice.reference.message_id
             frames = read.frames()
-            parts = tuple(part for frame in frames
-                          for part in frame.exported_part(notice.reference.message_id))
+            parts = tuple(part for frame in frames for part in frame.exported_part(identity))
             if len(parts) != len(frames):
                 continue
             for part in parts:
                 targets.extend(await part.confirm(self, read.record))
-            if targets:
-                notice.retire()
+            with self.uncertain_on_contention(identity):
+                for unread in read.closing(notice):
+                    for attempt in await self.attempts(identity):
+                        attempt.outcome.finished_with(unread)
         return tuple(targets)
 
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:

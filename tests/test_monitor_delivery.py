@@ -371,19 +371,28 @@ def body_of(parts):
     raise AssertionError(parts)
 
 
-def read_records(path, text, label, error=False):
-    """Claude's real Read call and its visible result, decoded through one session."""
-    session = ClaudeSession()
-    started = decoded_record(dict(
+def read_started(session, path, label):
+    """Claude's real Read call, still open in this session."""
+    return decoded_record(dict(
         type='assistant', uuid=transcript_record(f'{label}-start'),
         timestamp='2026-10-16T16:40:04.000Z', sessionId='session',
         message=dict(content=[dict(type='tool_use', id=f'read-{label}', name='Read',
-                                   input=dict(file_path=str(path)))])))
-    result = decoded_record(dict(
+                                   input=dict(file_path=str(path)))]))).updates(session)
+
+
+def read_returned(session, text, label, error=False):
+    """The visible result of that Read call."""
+    return decoded_record(dict(
         type='user', uuid=transcript_record(label), timestamp='2026-10-16T16:40:05.123Z',
         sessionId='session', promptId='prompt', message=dict(content=[dict(
-            type='tool_result', tool_use_id=f'read-{label}', content=text, is_error=error)])))
-    return (*started.updates(session), *result.updates(session))
+            type='tool_result', tool_use_id=f'read-{label}', content=text,
+            is_error=error)]))).updates(session)
+
+
+def read_records(path, text, label, error=False):
+    """One Read call and its visible result, decoded through one session."""
+    session = ClaudeSession()
+    return (*read_started(session, path, label), *read_returned(session, text, label, error))
 
 
 def shown(lines, start=1):
@@ -506,6 +515,60 @@ async def test_a_wrong_body_in_the_export_never_confirms(bridge, capsys):
     assert isinstance(stored.monitor, MismatchedMonitor)
     assert 'message remains pending' in capsys.readouterr().err
     assert export.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('separator', ('\u2028', '\x85', '\u2029\x1c'))
+async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, separator):
+    """Encoded parts keep U+2028, U+0085 and friends raw; only a physical LF ends a record,
+    inline in an event and in a Read result alike."""
+    short = bridge.comms.messaging.send('peer', 'viewer', f'a{separator}b').message
+    async with attached_monitor(bridge) as reader:
+        await bridge.accept(short)
+        line = await only_event(reader)
+        assert separator[0] in line
+        await observe(bridge, notification(line).updates(ClaudeSession()))
+    inline, = await bridge.attempts(short.message_id)
+    assert inline.outcome is DeliveredOutcome
+    message, export = await exported(bridge, body_of(23)[:-40] + separator * 20)
+    lines = export.read_text().split('\n')[:-1]
+    await observe(bridge, read_records(export, shown(lines), 'separator-read'))
+    confirmed, = await bridge.attempts(message.message_id)
+    assert confirmed.outcome is DeliveredOutcome
+
+
+@pytest.mark.asyncio
+async def test_a_consumed_export_stays_until_no_other_read_of_it_is_open(bridge):
+    message, export = await exported(bridge, body_of(23))
+    text = shown(export.read_text().splitlines())
+    session = ClaudeSession()
+    starts = (*read_started(session, export, 'first'), *read_started(session, export, 'second'))
+    await observe(bridge, (*starts, *read_returned(session, text, 'first')))
+    confirmed, = await bridge.attempts(message.message_id)
+    assert confirmed.outcome is DeliveredOutcome
+    assert export.exists()
+    await observe(bridge, read_returned(session, text, 'second'))
+    assert await bridge.attempts(message.message_id) == (confirmed,)
+    assert not export.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('swap', 'refusal'), (
+    ('symlink', NotADirectoryError), ('shared', RelationViolationError)))
+async def test_an_export_directory_that_is_not_private_refuses(bridge, tmp_path, swap, refusal):
+    """make_parents leaves an existing directory unchecked; the export pins and checks it."""
+    elsewhere = tmp_path / 'elsewhere'
+    elsewhere.mkdir(mode=0o700)
+    if swap == 'symlink':
+        bridge.exports.symlink_to(elsewhere)
+    else:
+        bridge.exports.mkdir(mode=0o755)
+        bridge.exports.chmod(0o755)
+    message = bridge.comms.messaging.send('peer', 'viewer', body_of(23)).message
+    notice = MonitorReadFile.naming(bridge.exports, message.reference)
+    with pytest.raises(refusal):
+        notice.export(('"part"',))
+    assert list(elsewhere.iterdir()) == []
 
 
 @pytest.mark.asyncio
