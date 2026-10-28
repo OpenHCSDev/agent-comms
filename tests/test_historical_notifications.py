@@ -18,6 +18,7 @@ from agent_comms.assignment_states import (
     CompletedAssignment,
     DeliveredAssignment,
     EngagedAssignment,
+    IgnoredAssignment,
 )
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli_bridges.claude import ClaudeBridge
@@ -229,8 +230,11 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
         AssignmentActivity,
         UnansweredResponse,
     )
+    from agent_comms.activity import ActivityState, ObservedActivity, ReadyDrainReadiness
+    from agent_comms.agent_activity import LiveRecipientActivity
     from agent_comms.notification_progress import (
         IgnoredProgress, QueuedProgress, SelectedConsumedProgress, SentProgress, ShownToModelProgress,
+        TakenProgress, WorkingTakenProgress,
     )
 
     sent_activity = AssignmentActivity(
@@ -300,8 +304,38 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     assert consumed.label.startswith("Consumed ") and consumed.state == SelectedConsumedProgress(2_000)
     assert answered.label.startswith("Answered ") and answered.answered_at_ms == 3_000
     # A delivered claim carries no consumed time of its own: without native or harness proof
-    # its message is not consumed, whatever the claim's update time says.
-    assert delivered.state == IgnoredProgress(SentProgress(1_000)) and not delivered.state.consumed
+    # its message is not consumed, whatever the claim's update time says. A running turn took
+    # it; that is not a decision to ignore it.
+    assert delivered.state == TakenProgress(SentProgress(1_000)) and not delivered.state.consumed
+    assert delivered.label.startswith("Sent ")
+
+    # Only the captured live activity says whether the recipient is working now.
+    thread = old.registry.snapshot().threads[recipient.canonical_thread]
+    def observed(state):
+        return LiveRecipientActivity(thread, ObservedActivity(thread.name, state, readiness=ReadyDrainReadiness()))
+    def delivered_to(observation, activity):
+        return DeliveredAssignment.build(FullWake(), None, None).notification(
+            recipient, SENDER, observation=observation, activity=activity, updated_at_ms=2_000)
+    working = delivered_to(observed(ActivityState.WORKING), consumed_activity)
+    assert working.state == WorkingTakenProgress(ShownToModelProgress(2_000))
+    assert working.label.startswith("Seen, working ") and working.state.seen_working
+    idle = delivered_to(observed(ActivityState.IDLE), consumed_activity)
+    assert idle.label.startswith("Consumed ") and not idle.state.seen_working
+    unconsumed = delivered_to(observed(ActivityState.WORKING), sent_activity)
+    assert unconsumed.label.startswith("Sent ") and not unconsumed.state.seen_working
+    confirmed = replace(unconsumed, state=unconsumed.state.harness_consumed())
+    assert confirmed.label == "Seen, working" and confirmed.state.seen_working
+    # An explicit ignore decision is the only Seen, not answering.
+    ignored = IgnoredAssignment.build(FullWake(), None, None)
+    declined = ignored.notification(recipient, SENDER, observation=RecordedRecipientActivity(),
+                                    activity=consumed_activity, updated_at_ms=2_000)
+    assert declined.label.startswith("Seen, not answering ") and declined.state.seen_not_answering
+    unconfirmed = ignored.notification(recipient, SENDER, observation=RecordedRecipientActivity(),
+                                       activity=sent_activity, updated_at_ms=2_000)
+    assert unconfirmed.label == "Not answering" and not unconfirmed.state.seen_not_answering
+    assert unconfirmed.state == IgnoredProgress(SentProgress(1_000))
+    assert MessageNotification.summary((working, declined, unconfirmed, idle)).endswith(
+        "Consumed 3/4 · Read 0/4 · Seen, working 1 · Seen, not answering 1")
     assert delivered_answer.label.startswith("Answered ")
     assert delivered_answer.answer == MessageReference(99, reply_id)
     assert sent.recipient_identity == consumed.recipient_identity == answered.recipient_identity

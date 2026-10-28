@@ -11,12 +11,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
+from .notification_progress import TakenProgress, WorkingTakenProgress
 
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
     from .bus_publication import Delivered
-    from .notification_progress import AssignmentProgress
+    from .notification_progress import AssignmentProgress, DeliveryProgress
     from .presentation import MessageNotification
     from .registration import Registration
     from .registry_document import RegistrySnapshot
@@ -67,6 +68,12 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
             notification, busy=self.turn_started_by(updated_at_ms)
         )
 
+    def taken_response(
+        self, notification: MessageNotification, progress: DeliveryProgress,
+    ) -> MessageNotification:
+        """A message a running turn took, shown without a claim about current work."""
+        return replace(notification, state=TakenProgress(progress))
+
 
 @dataclass(frozen=True)
 class RecordedRecipientActivity(RecipientActivity):
@@ -90,6 +97,10 @@ class LiveRecipientActivity(RecipientActivity):
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
+
+    def taken_response(self, notification, progress):
+        state = (WorkingTakenProgress if self.activity.state.busy else TakenProgress)(progress)
+        return replace(notification, state=state)
 
 class AgentActivity:
     def __init__(self, root: Path, registry: Registration):

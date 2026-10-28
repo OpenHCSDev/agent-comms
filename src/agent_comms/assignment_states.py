@@ -14,7 +14,6 @@ from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, T
 from .notification_progress import (
     CompletedProgress,
     ContextualProgress,
-    EngagedProgress,
     FailedProgress,
     IgnoredProgress,
     InterruptedProgress,
@@ -429,7 +428,6 @@ class BoundAssignment(ChangedNotification, AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
-    notification_state = EngagedProgress
     def wake_frame(self, source: Delivered, obligation: ResponseObligation | None) -> tuple[str, str]:
         if obligation is None:
             raise IdentityConflict("full wake frame requires the current response obligation")
@@ -554,9 +552,7 @@ class DeliveredAssignment(
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
-        return activity.answered(notification)
-
-    notification_state = IgnoredProgress
+        return activity.answered(observation.taken_response(notification, activity.progress))
 
     @classmethod
     def binding_expression(cls) -> str:

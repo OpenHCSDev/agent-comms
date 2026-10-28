@@ -35,6 +35,7 @@ class DeliveryProgress(ThreadPresentationStatus):
 
     label: ClassVar[str] = "Sent"
     detail: ClassVar[str] = ""
+    ignored_label: ClassVar[str] = "Not answering"
     consumed: ClassVar[bool] = False
 
     def rank(self) -> int:
@@ -42,6 +43,26 @@ class DeliveryProgress(ThreadPresentationStatus):
 
     def notification_label(self, notification: MessageNotification) -> str:
         return self.label
+
+    @property
+    def answering(self) -> bool:
+        return False
+
+    @property
+    def seen_not_answering(self) -> bool:
+        return False
+
+    @property
+    def seen_working(self) -> bool:
+        return False
+
+    def ignored_notification_label(self, notification: MessageNotification) -> str:
+        """How a recipient that chose not to answer reads, given this proof."""
+        return self.ignored_label
+
+    def working_notification_label(self, notification: MessageNotification) -> str:
+        """How a busy recipient that took this message reads; without context proof, unchanged."""
+        return self.notification_label(notification)
 
     def harness_consumed(self) -> DeliveryProgress:
         """This progress once a harness confirmed the message entered its session."""
@@ -52,11 +73,15 @@ class ConsumedDelivery(SettledDelivery):
     """The harness or native runtime proved the message entered the model's context."""
 
     label: ClassVar[str] = "Consumed"
+    ignored_label: ClassVar[str] = "Seen, not answering"
     consumed: ClassVar[bool] = True
 
     def harness_consumed(self) -> Self:
         """An earlier proof already timed the entry; a harness confirmation adds nothing."""
         return self
+
+    def working_notification_label(self, notification):
+        return WorkingTakenProgress.label
 
 
 @dataclass(frozen=True)
@@ -103,10 +128,34 @@ class PassiveProgress(ContextualProgress):
 
 
 class IgnoredProgress(SettledDelivery, ContextualProgress):
-    label = ConsumedDelivery.label
+    label = DeliveryProgress.ignored_label
+
+    @property
+    def seen_not_answering(self):
+        return self.proof.consumed
+
+    def notification_label(self, notification):
+        return self.proof.ignored_notification_label(notification)
+
+
+class TakenProgress(ContextualProgress):
+    """A running turn took this message as one of its inputs; its proof says how far."""
 
     def notification_label(self, notification):
         return self.proof.notification_label(notification)
+
+
+class WorkingTakenProgress(ActiveDelivery, TakenProgress, WorkingThreadPresentationStatus):
+    """The same taken message while its recipient is busy. Working does not promise a reply."""
+
+    label = "Seen, working"
+
+    @property
+    def seen_working(self):
+        return self.proof.consumed
+
+    def notification_label(self, notification):
+        return self.proof.working_notification_label(notification)
 
 
 class InterruptedProgress(ContextualProgress):
@@ -115,10 +164,6 @@ class InterruptedProgress(ContextualProgress):
 
 class FailedProgress(ContextualProgress):
     label = "Failed"
-
-
-class EngagedProgress(ActiveDelivery, ContextualProgress, WorkingThreadPresentationStatus):
-    pass
 
 
 class AnsweredProgress(SettledDelivery, ContextualProgress):
@@ -186,6 +231,12 @@ class ShownToModelProgress(ConsumedDelivery, AssignmentProgress):
     def at_ms(self):
         return self.consumed_at_ms
 
+    def ignored_notification_label(self, notification):
+        return notification.timed_state(self.ignored_label, self.at_ms)
+
+    def working_notification_label(self, notification):
+        return notification.timed_state(WorkingTakenProgress.label, self.at_ms)
+
     def selected_notification(self, notification, *, busy):
         state = (ConsumingProgress(self.consumed_at_ms) if busy
                  else SelectedConsumedProgress(self.consumed_at_ms))
@@ -200,4 +251,10 @@ class SelectedConsumedProgress(ActiveDelivery, ShownToModelProgress):
 
 
 class ConsumingProgress(SelectedConsumedProgress, WorkingThreadPresentationStatus):
-    pass
+    """The message is in the recipient's context and its turn is running."""
+
+    label = "Answering"
+
+    @property
+    def answering(self):
+        return True

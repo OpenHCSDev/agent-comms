@@ -58,7 +58,9 @@ from .message_page import (
 )
 from .message_reference import MessageReference
 from .messages import Message
-from .notification_progress import ConsumedDelivery, DeliveryProgress, HumanReadProgress
+from .notification_progress import (
+    ConsumedDelivery, ConsumingProgress, DeliveryProgress, HumanReadProgress, WorkingTakenProgress,
+)
 from .private_path import FileRevision
 from .read_basis import (
     AnonymousViewer,
@@ -217,9 +219,15 @@ class MessageNotification:
         total = len(ordered)
         consumed = sum(notification.state.consumed for notification in ordered)
         read = sum(bool(notification.displayed_to) for notification in ordered)
+        answering = sum(notification.state.answering for notification in ordered)
+        working = sum(notification.state.seen_working for notification in ordered)
+        declined = sum(notification.state.seen_not_answering for notification in ordered)
         return (f"{ordered[0].label} · Delivered {total}/{total}"
                 f" · {ConsumedDelivery.label} {consumed}/{total}"
-                f" · {HumanReadProgress.label} {read}/{total}")
+                f" · {HumanReadProgress.label} {read}/{total}"
+                + (f" · {ConsumingProgress.label} {answering}" if answering else "")
+                + (f" · {WorkingTakenProgress.label} {working}" if working else "")
+                + (f" · {ConsumedDelivery.ignored_label} {declined}" if declined else ""))
 
     @staticmethod
     def timed_state(label: str, timestamp_ms: int | None) -> str:
