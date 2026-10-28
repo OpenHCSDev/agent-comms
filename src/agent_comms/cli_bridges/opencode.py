@@ -19,7 +19,7 @@ from agent_comms.comms import wire
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_arguments import CliArguments
-from agent_comms.cli_protocol import DeliveredOutcome, Outcome
+from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 
 from .history import HarnessAddress, OnlineHistory, OpenCodeHistory
 from .shared import (

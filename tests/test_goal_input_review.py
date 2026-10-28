@@ -74,9 +74,10 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         report.invoke(comms, args, caller=ThreadCaller("worker"))
     before = ledger.path.read_bytes()
     messages = comms.bus.inbox("worker").page.messages
-    comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
+    comms.bus.mark_read_through("worker", messages[-1].seq)
     result = inbox.invoke(comms, {"thread": "worker", "standby": {"goal_id": goal.id, "wait_for": ["parent"]}}, caller=ThreadCaller("worker"))
-    assert result["messages"] == []  # Display ACK is not handling evidence.
+    # A human read hides nothing from the agent: only what its runtime took leaves its inbox.
+    assert result["messages"] == [message.to_wire() for message in messages]
     review = result["standby_review"]
     assert [row["sequence"] for row in review["messages"]] == [m.seq for m in messages]
     assert review["excluded_inputs"][0]["reason"] == "owner_input_without_bus_sequence"
@@ -189,7 +190,7 @@ def test_standby_accepts_inbox_keys_delivered_since_the_inbox_cut(tmp_path, monk
     ledger.record(BusInputKey(late.seq), seq=late.seq, owner="worker", claim_scope=claim_scope,
                   target="worker", text=late.body)
     review = CommsInboxTool.invoke(
-        comms, {"thread": "worker", "ack": False,
+        comms, {"thread": "worker",
                 "standby": {"goal_id": goal.id, "wait_for": ["parent"]}},
         caller=ThreadCaller("worker"))["standby_review"]
     keys = review["reviewed_inputs"]

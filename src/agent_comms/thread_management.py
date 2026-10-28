@@ -268,7 +268,6 @@ class ThreadManagement:
                 publish()
                 try:
                     self.registry._declare_in(edit, thread, StoppedThreadStatus())
-                    self.bus.mark_delivered_through(name, self.bus.bus.revision())
                 except (OSError, ValueError, CoordinationError):
                     if name in self.registry:
                         edit.document.remove(name)

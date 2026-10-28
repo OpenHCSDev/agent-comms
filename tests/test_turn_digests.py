@@ -10,6 +10,7 @@ import json
 import os
 
 import pytest
+from transcript_record_fixture import transcript_record
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import main
@@ -191,13 +192,13 @@ def recorded_claude_transcript(tmp_path):
         times = [(start + timedelta(seconds=index * 4 + phase)).isoformat() for phase in range(4)]
         prompt_id, call_id = f'prompt-{index}', f'read-{index}'
         rows.extend((
-            dict(type='user', uuid=f'prompt-record-{index}', promptId=prompt_id, timestamp=times[0],
+            dict(type='user', uuid=transcript_record(f'prompt-record-{index}'), promptId=prompt_id, timestamp=times[0],
                  origin=dict(kind='human'), message=dict(content='read file')),
-            dict(type='assistant', uuid=f'call-record-{index}', timestamp=times[1],
+            dict(type='assistant', uuid=transcript_record(f'call-record-{index}'), timestamp=times[1],
                  message=dict(content=[dict(type='tool_use', id=call_id, name='read', input=dict(path='x.py'))])),
-            dict(type='user', uuid=f'result-record-{index}', promptId=prompt_id, timestamp=times[2],
+            dict(type='user', uuid=transcript_record(f'result-record-{index}'), promptId=prompt_id, timestamp=times[2],
                  message=dict(content=[dict(type='tool_result', tool_use_id=call_id, content='contents')])),
-            dict(type='assistant', uuid=f'final-record-{index}', timestamp=times[3],
+            dict(type='assistant', uuid=transcript_record(f'final-record-{index}'), timestamp=times[3],
                  message=dict(content=[dict(type='text', text='done')])),
         ))
     path.write_text(''.join(json.dumps(row) + '\n' for row in rows))

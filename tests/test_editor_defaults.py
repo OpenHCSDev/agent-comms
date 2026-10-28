@@ -7,13 +7,11 @@ from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, ThinkingLevelField
 from agent_comms.repo import LaunchCheckout
-from agent_comms.read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from agent_comms.thread_execution import ExternalThreadExecution, ThreadExecution
 from agent_comms.thread_model import UndeclaredModel
 
 
 @pytest.mark.parametrize('annotation,value,encoded', (
-    (type[WatchAcknowledgment], OnReadWatchAcknowledgment, OnReadWatchAcknowledgment.declared_name),
     (type[ThreadExecution], ExternalThreadExecution, ExternalThreadExecution.declared_name),
     (ThinkingLevelField, NoThinkingOverride, None),
     (ThinkingLevelField, HighThinkingLevel, 'high'),

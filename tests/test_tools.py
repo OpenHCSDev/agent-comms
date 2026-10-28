@@ -96,7 +96,7 @@ class TestToolCatalog:
         } <= set(names)
         assert all(tool["parameters"]["additionalProperties"] is False for tool in catalog)
 
-    def test_inbox_ack_behavior_is_owned_by_declared_tool(self, comms):
+    def test_inbox_read_records_nothing(self, comms):
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         comms.messaging.send("a", "b", "hello").message.message_id
@@ -104,8 +104,7 @@ class TestToolCatalog:
         result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
 
         assert result["messages"][0]["text"] == "hello"
-        assert result["acknowledged"] == 1
-        assert comms.bus.pending_count("b") == 0
+        assert comms.bus.pending_count("b") == 1
 
     def test_arguments_are_validated_before_dispatch(self, comms):
         with pytest.raises(
@@ -216,8 +215,7 @@ class TestToolCatalog:
         )
 
         assert [message["text"] for message in result["messages"]] == ["from a"]
-        assert result["acknowledged"] == 1
-        assert comms.bus.pending_count("b", CommandTarget.named("a")) == 0
+        assert comms.bus.pending_count("b", CommandTarget.named("a")) == 1
         assert comms.bus.pending_count("b", CommandTarget.named("c")) == 1
 
 

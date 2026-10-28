@@ -144,6 +144,20 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
         ))
 
     @classmethod
+    def require_references(cls, db: sqlite3.Connection,
+                           references: tuple[MessageReference, ...]) -> None:
+        """Every supplied full reference is a recorded identity; neither seq nor id alone."""
+        matches = ReferenceMatch.read(db.execute(
+            "SELECT identity.seq IS NOT NULL AS matched FROM json_each(?) AS supplied "
+            f'LEFT JOIN "{cls.declared_name}" AS identity '
+            "ON identity.seq=json_extract(supplied.value,'$[0]') "
+            "AND identity.message_id=json_extract(supplied.value,'$[1]')",
+            (json.dumps(tuple((reference.seq, reference.message_id) for reference in references)),),
+        ))
+        cls.require_matched(matches, RelationViolationError(
+            "Message reference does not match a recorded message identity"))
+
+    @classmethod
     def answering(
         cls, db: sqlite3.Connection, references: tuple[MessageReference, ...],
         route: NamedTarget, snapshot: RegistryProvenance,
@@ -221,15 +235,15 @@ class AnsweredSource(messages.BusProjectionTables):
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         kind_filter = (
-            "AND " + messages.Message.table._sql("message.{type}")
+            "AND " + messages.MessageInput.table._sql("message.{type}")
             + " IN (" + ",".join("?" for _ in kinds) + ") "
             if kinds else ""
         )
         query = (
             f'SELECT asked.seq FROM "{MessageIdentitySource.declared_name}" AS asked '
-            f'JOIN "{messages.Message.table.declared_name}" AS message USING(seq) '
+            f'JOIN "{messages.MessageInput.table.declared_name}" AS message USING(seq) '
             f'WHERE asked.sender IN ({asking}) AND '
-            + messages.Message.table._sql('message.{timestamp} BETWEEN ? AND ? ')
+            + messages.MessageInput.table._sql('message.{timestamp} BETWEEN ? AND ? ')
             + f'AND asked.seq < ? {kind_filter}AND ({eligible}) AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
             f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
@@ -255,10 +269,10 @@ class AnsweredSource(messages.BusProjectionTables):
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         identity = MessageIdentitySource.declared_name
-        content = messages.Message.table
+        content = messages.MessageInput.table
         query = (
             'WITH matches AS (SELECT reply.seq, '
-            + content._sql('reply_message.{timestamp} AS timestamp ')
+            + content._sql('reply_message.{timestamp} AS {timestamp} ')
             + f'FROM "{identity}" AS reply '
             f'JOIN "{content.declared_name}" AS reply_message USING(seq) '
             f'WHERE reply.sender IN ({replying}) AND '
@@ -293,6 +307,6 @@ class AnsweredSource(messages.BusProjectionTables):
     ) -> float:
         row = cls._answer_rows(
             db, scope, since,
-            'SELECT COALESCE(MAX(timestamp),0.0) FROM matches',
+            messages.MessageInput.render('SELECT COALESCE(MAX({timestamp}),0.0) FROM matches'),
         ).fetchone()
         return FieldCodec.decode(float, row[0])

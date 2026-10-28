@@ -2109,6 +2109,16 @@ class Id128Text(NominalSpelling[Id128], HexDigits):
     digits = 32
 
 
+class TranscriptRecordId(NominalText):
+    """One record of a harness's own transcript, as the harness writes it."""
+
+
+class TranscriptRecordIdText(NominalSpelling[TranscriptRecordId]):
+    """Claude Code spells every transcript record with a UUID."""
+
+    spelling = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
 class MessageId(NominalText):
     @classmethod
     def mint(cls, text: str) -> Self:

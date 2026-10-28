@@ -28,6 +28,7 @@ from agent_comms.bus_tables import (
 )
 from agent_comms.messages import (
     Addressed,
+    MessageInput,
     BusRow,
     ClaimOperations,
     HeldResources,
@@ -267,10 +268,10 @@ class BusReader(RouteCounts, ABC):
             order = "DESC" if descending else "ASC"
             members = ""
             if kinds:
-                members = ' AND type IN (' + ','.join('?' for _ in kinds) + ')'
+                members = MessageInput.render(' AND {type} IN (') + ','.join('?' for _ in kinds) + ')'
             rows = db.execute(
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
-                f'JOIN "{Message.table.declared_name}" USING(seq) '
+                f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                 f'WHERE ({predicate}) AND seq > ? AND seq < ?{members} '
                 f'ORDER BY seq {order} LIMIT ?',
                 (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
@@ -286,7 +287,7 @@ class BusReader(RouteCounts, ABC):
             return AddressedRow.matching(
                 db, (f'{{seq}} IN (SELECT MAX(seq) FROM '
                      f'"{Addressed.table.declared_name}" '
-                     f'JOIN "{Message.table.declared_name}" USING(seq) '
+                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                      f'WHERE ({predicate}) AND seq <= ? GROUP BY sender, target)'),
                 (*parameters, through),
             )
@@ -307,6 +308,16 @@ class BusReader(RouteCounts, ABC):
         if tuple(message.reference for message in messages) != references:
             raise RelationViolationError("Message reference does not match its bus record")
         return messages
+
+    def input_messages_for_references(
+        self, references: Iterable[MessageReference],
+    ) -> tuple[MessageInput, ...]:
+        """The input facts of exactly these recorded messages, in order, duplicates kept,
+        from one read cut; their attachments, reports and answers are never decoded."""
+        references = tuple(references)
+        with self.observing() as db:
+            MessageIdentitySource.require_references(db, references)
+            return tuple(MessageInput.read_from(db, reference.seq) for reference in references)
 
     def deliveries_for_references(
         self, references: Iterable[MessageReference],
@@ -439,7 +450,7 @@ class BusReader(RouteCounts, ABC):
                 counts[scope.channel] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
+                    f'JOIN "{MessageInput.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
                     f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
                     (*bindings.values(), max(after, selection.seen.lower_bound(scope, selection.registry)),
@@ -459,7 +470,7 @@ class BusReader(RouteCounts, ABC):
             rows = db.execute(
                 f'WITH {ReadCursor.sql("?")}, requests AS ('
                 f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                f'JOIN "{Message.table.declared_name}" USING(seq) '
+                f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                 f'WHERE seq > 0 AND ({predicate}) AND seq IN ({received})), '
                 f'{ReadCursor.joined_sql} '
                 f'SELECT DISTINCT seq FROM cursors WHERE {ReadCursor.read_sql}',
@@ -475,7 +486,7 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return AddressedRow.matching(
                 db, (f'{{seq}} IN (SELECT seq FROM "{Addressed.table.declared_name}" '
-                     f'JOIN "{Message.table.declared_name}" USING(seq) '
+                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                      f'WHERE ({predicate}) AND seq <= ?)'),
                 (*parameters, through),
             )

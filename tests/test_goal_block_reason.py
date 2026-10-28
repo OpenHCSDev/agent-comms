@@ -18,7 +18,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_scope import OneGoal
-from agent_comms.goal_presentation import PausedExecution, UnrecordedBlockExecution
+from agent_comms.goal_presentation import PausedExecution, RetryableBlockExecution
 from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
@@ -79,7 +79,7 @@ def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_
     )
     comms.registry.register(replace(thread, goal=recorded), comms.registry.status("worker"))
     observed = wire(tmp_path).goals.goal_execution("worker")
-    assert isinstance(observed, UnrecordedBlockExecution)
+    assert type(observed) is RetryableBlockExecution
     assert observed.presentation("worker").summary == "Blocked · reason unavailable"
     assert "Unrelated old progress" not in observed.presentation("worker").summary
 

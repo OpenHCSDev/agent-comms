@@ -266,7 +266,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_constraint": {"to": "worker", "text": "Preserve the original saved file."},
         "comms_subtask": {"to": "worker", "text": "Read the saved file.", "completed": False},
         "comms_history": {"peer": "worker"},
-        "comms_inbox": {"thread": "claude-ai", "ack": False},
+        "comms_inbox": {"thread": "claude-ai"},
         "comms_fork": {"name": "never-launched", "parent": "absent-owner"},
         "comms_stop": {"name": "absent-owner"},
         "comms_start": {"name": "absent-owner"},

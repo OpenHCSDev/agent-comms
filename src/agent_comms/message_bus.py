@@ -23,7 +23,6 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.context_segments.awareness import AwarenessSegment
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.historical_views import HistoryArchive
@@ -33,14 +32,12 @@ from agent_comms.message_reference import (
     FirstUnreadStart,
     NewestUnreadStart,
     InboxStart,
-    MessageReference,
 )
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import (
     AnonymousViewer,
     CapturedSelection,
-    DisplayBasis,
     DisplayViewer,
     ListedDeliveries,
     NamedViewer,
@@ -52,7 +49,6 @@ from .watched import FileSource
 
 
 if TYPE_CHECKING:
-    from agent_comms.assignment_states import AssignmentState
     from agent_comms.comms import Comms
     from agent_comms.registration import Registration
     from agent_comms.registry_document import RegistrySnapshot
@@ -145,6 +141,8 @@ class MessageBus[Writes: Publisher]:
         cursor = after.cursor()
         traversal = after.traversal()
         with self.bus.reading() as source:
+            with source.observing() as db:
+                seen = seen.attached(db, self.bus.path.parent, self._registry.store.privacy())
             unread = source.unseen_deliveries(
                 snapshot, delivery, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
                 traversal=traversal,
@@ -208,37 +206,7 @@ class MessageBus[Writes: Publisher]:
         )[actor])
         return counts
 
-    def delivered(self, name: str, references: Sequence[MessageReference]) -> DisplayBasis:
-        snapshot = self._registry.snapshot()
-        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        document = self.reads.read()
-        seen = self.reads.cursor(delivery.actor, snapshot, document=document)
-        messages = self.bus.messages_for_references(references)
-        return self.reads.capture(
-            name, tuple(message for message in messages if delivery.includes(message)
-                        and not delivery.has_read(seen, message, snapshot)),
-            snapshot, self.bus, document=document,
-        )
-
-    def hand_to_harness(self, name: str, references: Sequence[MessageReference]) -> None:
-        """A harness outside Core takes these messages before it says whether they started."""
-        self._settle_claims(name, references, lambda state: state.harness_handoff())
-
-    def mark_delivered(self, name: str, references: Sequence[MessageReference]) -> int:
-        self._settle_claims(name, references, lambda state: state.harness_delivery())
-        basis = self.delivered(name, references)
-        self.reads.mark_displayed(basis.viewer, basis)
-        return basis.message_count
-
-    def _settle_claims(
-        self, name: str, references: Sequence[MessageReference],
-        steps: Callable[[AssignmentState], tuple[type[AssignmentState], ...]],
-    ) -> None:
-        lookup = self._registry.require(name).incarnation.require_recorded().lookup
-        with Coordination(str(CoordinationStore.path_in(self.bus.path.parent))) as store:
-            store.assignments.settle_harness_inputs(lookup, references, steps)
-
-    def mark_delivered_through(
+    def mark_read_through(
         self, name: str, sequence: int, *, target: NamedTarget = AnyChannel.target(),
     ) -> None:
         if sequence < 0:

@@ -33,6 +33,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 
@@ -101,6 +102,12 @@ class AcceptedCohort:
                 claim_id=selected.get(recipient.recipient_lookup, NoDeliveryClaim()),
             ).insert(db)
         _record_optional_owner_generations(db, expected, privacy.namespace, initial.message.seq)
+        # A bridge may have attempted this original before acceptance created its claims; each
+        # stored attempt owes its claim the same steps it took on a claim that already existed.
+        # Acceptance reads the attempts and never writes one.
+        for attempt in HarnessDelivery.for_recipients(db, tuple(
+                (claim.recipient_lookup, initial.message.reference) for claim in expected)):
+            attempt.settle_claims(store.assignments, db)
         ClaimBatchAcknowledgements.update(
             db,
             where="wire_root_id=? AND wire_seq=?",

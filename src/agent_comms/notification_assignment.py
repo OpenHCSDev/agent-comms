@@ -14,6 +14,7 @@ from .bus import Bus
 from .coordination_database import CoordinationStore
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import CurrentExecutions
+from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
@@ -25,7 +26,7 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .notification_evidence import NotificationAssignmentRead, NotificationWindow
+from .notification_evidence import NotificationAssignmentRead, NotificationWindow, SourceEvidence
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow
@@ -96,9 +97,8 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
     ) -> MessageNotification: ...
 
     @abstractmethod
-    def delivered_notification(
-        self, notification: MessageNotification, delivered_at_ms: int
-    ) -> MessageNotification: ...
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        """The notification with this recorded reply attached; consumption stays its proof's."""
 
 
 class UnansweredResponse(AssignmentResponse):
@@ -108,14 +108,10 @@ class UnansweredResponse(AssignmentResponse):
         )
 
     def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
-        return progress.read_notification(notification)
+        return progress.consumed_notification(notification)
 
-    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
-        return replace(
-            notification,
-            state=ShownToModelProgress(delivered_at_ms),
-
-        )
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        return notification
 
 
 @dataclass(frozen=True)
@@ -128,11 +124,10 @@ class AnsweredResponse(AssignmentResponse):
             notification, self.reference, self.received_at_ms
         )
 
-    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
+    def answered(self, notification: MessageNotification) -> MessageNotification:
         return replace(
             notification,
-            state=AnsweredProgress(ShownToModelProgress(delivered_at_ms)),
-
+            state=AnsweredProgress(notification.state),
             answer=self.reference,
             answered_at_ms=self.received_at_ms,
         )
@@ -150,8 +145,8 @@ class AssignmentActivity:
     def completed_notification(self, notification: MessageNotification) -> MessageNotification:
         return self.response.completed_notification(self.progress, notification)
 
-    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
-        return self.response.delivered_notification(notification, delivered_at_ms)
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        return self.response.answered(notification)
 
     def recorded_response(self, message: Delivered) -> Self:
         return replace(self, response=self.response.recorded(message))
@@ -210,17 +205,24 @@ class NotificationSource(DeclaredFamily, affix="NotificationSource"):
     def project(self, observation: RecipientActivity,
                 sender_lookup: ThreadLookup) -> MessageNotification: ...
 
+    @abstractmethod
+    def recipient(self) -> FrozenRecipient:
+        """The frozen publication recipient this source answers for."""
+
 
 @dataclass(frozen=True)
 class UnrecordedNotificationSource(NotificationSource):
-    recipient: FrozenRecipient
+    published: FrozenRecipient
     decision: RecipientDecision
+
+    def recipient(self) -> FrozenRecipient:
+        return self.published
 
     def project(
         self, observation: RecipientActivity, sender_lookup: ThreadLookup
     ) -> MessageNotification:
         return self.decision.initial_notification(
-            self.recipient, sender_lookup, observation=observation)
+            self.published, sender_lookup, observation=observation)
 
 
 @dataclass(frozen=True)
@@ -234,9 +236,9 @@ class NotificationAssignment(NotificationSource):
         reads = tuple(reads)
         sources = tuple({source.message.reference: source
                          for read in reads for source in read.sources}.values())
-        fresh = {}
+        fresh: dict[MessageReference, SourceEvidence] = {}
         for sources_chunk in NotificationWindow.chunks(sources):
-            fresh.update(cls.read(root, sources_chunk).rows_by_source())
+            fresh.update(cls.read(root, sources_chunk).evidence)
         return tuple(read for read in reads if read.differs_from(fresh))
 
     @classmethod
@@ -333,7 +335,10 @@ class NotificationAssignment(NotificationSource):
             ),
             AssignmentActivityEvidence,
         )
-        return NotificationAssignmentRead(sources, tuple(rows))
+        attempts = HarnessDelivery.for_recipients(connection, tuple(
+            (recipient.recipient_lookup, source.message.reference)
+            for source in sources for recipient in source.recipients))
+        return NotificationAssignmentRead(sources, tuple(rows), attempts)
 
     @classmethod
     def read(
@@ -358,7 +363,6 @@ class NotificationAssignment(NotificationSource):
     ) -> NoReturn:
         raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
-    @property
     def recipient(self) -> FrozenRecipient:
         return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
 
@@ -366,7 +370,7 @@ class NotificationAssignment(NotificationSource):
         self, observation: RecipientActivity, sender_lookup: ThreadLookup
     ) -> MessageNotification:
         return self.assignment.lifecycle.notification(
-            self.recipient,
+            self.recipient(),
             sender_lookup,
             observation=observation,
             activity=self.activity,

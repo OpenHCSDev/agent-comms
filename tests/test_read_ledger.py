@@ -54,11 +54,11 @@ def test_delivery_watermark_keeps_other_peer_and_newer_messages_unread(tmp_path)
     first = comms.messaging.send('alice', viewer, 'first').message
     later = comms.messaging.send('alice', viewer, 'later').message
     other = comms.messaging.send('bob', viewer, 'other peer').message
-    comms.bus.mark_delivered_through(viewer, first.seq, target=CommandTarget.named('alice'))
+    comms.bus.mark_read_through(viewer, first.seq, target=CommandTarget.named('alice'))
     assert read_message(comms, viewer, first)
     assert not read_message(comms, viewer, later)
     assert not read_message(comms, viewer, other)
-    comms.bus.mark_delivered_through(viewer, later.seq, target=CommandTarget.named('alice'))
+    comms.bus.mark_read_through(viewer, later.seq, target=CommandTarget.named('alice'))
     assert read_message(comms, viewer, later)
     assert not read_message(comms, viewer, other)
 

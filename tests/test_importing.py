@@ -20,6 +20,7 @@ from agent_comms.transcript_events import ImportedMessage
 from pathlib import Path
 
 import pytest
+from transcript_record_fixture import transcript_record
 
 from agent_comms.session_file import RegistrySessionLocation
 
@@ -104,7 +105,7 @@ def test_every_harness_has_one_offline_family_and_one_online_reader() -> None:
 
 
 def claude(kind: str, uuid: str, **fields: JsonValue) -> dict[str, JsonValue]:
-    record = {"type": kind, "uuid": uuid, "timestamp": "2026-10-18T00:00:00Z", "cwd": "/work/project",
+    record = {"type": kind, "uuid": transcript_record(uuid), "timestamp": "2026-10-18T00:00:00Z", "cwd": "/work/project",
               "sessionId": "session"}
     return record | fields
 
