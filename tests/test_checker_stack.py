@@ -13,7 +13,7 @@ import tomli_w
 from agent_comms.head_review import BaseSide, HeadSide
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.runtime_resolution import CorePackage, ResolvedLock
+from agent_comms.installer.runtime_resolution import CorePackage, GitSource, ResolvedLock
 from agent_comms.integration import IntegrationRun
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
@@ -117,8 +117,10 @@ def common_checker(
     pair = mutual_sources
     plugin = SourceRepository.create(tmp_path / "plugin", RepositoryName.from_wire("example/checker-plugin"))
     plugin.publish_change("Declare checker-only Git package", *plugin.write_files({
-        Path("pyproject.toml"): plugin.package_project("checker-plugin"),
-        Path("src/checker_plugin.py"): "value = 1\n"}))
+        Path("python package/pyproject.toml"): plugin.package_project("checker-plugin"),
+        Path("python package/src/checker_plugin.py"): "value = 1\n",
+        Path("other package/pyproject.toml"): plugin.package_project("checker-plugin"),
+        Path("other package/src/checker_plugin.py"): "value = 2\n"}))
     plugin.git(plugin.checkout, "push", "origin", "main")
     pair.client.git(pair.client.checkout, "switch", "main")
     pair.client.publish_change("Declare runtime-only dependency", *pair.client.write_files({
@@ -131,7 +133,7 @@ def common_checker(
     pair.core.write_files({Path("pyproject.toml"): pair.core.package_project("agent-comms",
         dependencies=("idna>=3.10,<4; python_version >= '3.10'",), extras={
             "checking": ["idna<3.11", "six==1.16.0",
-                         f"checker-plugin @ git+{plugin.remote.as_uri()}@main"]})})
+                         f"checker-plugin @ git+{plugin.remote.as_uri()}@main#subdirectory=python%20package"]})})
     stack = tomllib.loads((pair.core.checkout / "stack/pyproject.toml").read_text())
     stack["tool"]["uv"]["sources"]["source-client"]["git"] = pair.client.remote.as_uri()
     stack["project"]["dependencies"] = ["agent-comms>=0.0.1; python_version >= '3.10'", "source-client"]
@@ -177,6 +179,15 @@ def test_complete_project_reconciles_shared_preferences_and_keeps_both_cuts_on_o
     assert not any(edge.name == "six" for edge in checker.requirements(HeadSide))
     assert any(edge.name == "six" for edge in checker.private_requirements())
     assert any(edge.marker is not None for edge in checker.private_requirements())
+    source = private["tool"]["uv"]["sources"]["checker-plugin"]
+    assert source["subdirectory"] == "python package"
+    override, = (Requirement(text) for text in private["tool"]["uv"]["override-dependencies"]
+                 if Requirement(text).name == "checker-plugin")
+    assert override.url == f"git+{source['git']}@{source['rev']}#subdirectory=python%20package"
+    for query in ("unknown=python", "subdirectory=python&subdirectory=other", "subdirectory=",
+                  "branch=main&tag=release", "subdirectory=%00"):
+        with pytest.raises(ValueError, match="Git"):
+            GitSource(git=f"{source['git']}?{query}#{source['rev']}").project_source()
     checker.resolve()
     locked = ResolvedLock.read(checker.lock).external(checker.local_names)
     assert locked["idna"].version == bootstrap["idna"].version
@@ -213,7 +224,8 @@ def test_incompatible_full_root_graph_refuses_during_solve(common_checker: Check
 
 
 @pytest.mark.parametrize("package,change", (
-    ("charset-normalizer", "3.4.1"), ("six", "1.17.0"), ("checker-plugin", "revision"),
+    ("charset-normalizer", "3.4.1"), ("six", "1.17.0"),
+    ("checker-plugin", "revision"), ("checker-plugin", "location"),
 ))
 def test_retained_runtime_checker_version_and_git_identity_refuse_actual_solve_drift(
     common_checker: CheckerStack, package: str, change: str,
@@ -225,17 +237,21 @@ def test_retained_runtime_checker_version_and_git_identity_refuse_actual_solve_d
     uv = document["tool"]["uv"]
     uv["constraint-dependencies"] = [text for text in uv["constraint-dependencies"]
                                      if Requirement(text).name != package]
-    if change == "revision":
+    if change in ("revision", "location"):
         # Move only the genuine external repository and solve its new exact source. The
         # retained canonical lock must reject a same-version, different-commit package.
         source = uv["sources"][package]
         remote = Path(source["git"].removeprefix("file://"))
         repository = SourceRepository.of(remote.parents[1] / "repository")
-        commit = repository.publish_change("Same version, different checker implementation", *repository.write_files({
-            Path("src/checker_plugin.py"): "value = 2\n"}))
-        repository.git(repository.checkout, "push", "origin", "main")
-        source["rev"] = commit
-        uv["override-dependencies"] = [f"{package} @ git+{source['git']}@{commit}"
+        if change == "revision":
+            commit = repository.publish_change("Same version, different checker implementation", *repository.write_files({
+                Path("python package/src/checker_plugin.py"): "value = 3\n"}))
+            repository.git(repository.checkout, "push", "origin", "main")
+            source["rev"] = commit
+        else:
+            source["subdirectory"] = "other package"  # Same repo/SHA/version, another actual project.
+        location = source["subdirectory"].replace(" ", "%20")
+        uv["override-dependencies"] = [f"{package} @ git+{source['git']}@{source['rev']}#subdirectory={location}"
             if Requirement(text).name == package else text for text in uv["override-dependencies"]]
     else:
         # Changing the explicit private override is not an accepted waiver: the retained

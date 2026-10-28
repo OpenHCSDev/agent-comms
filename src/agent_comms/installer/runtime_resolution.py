@@ -14,7 +14,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 from typing import TYPE_CHECKING, ClassVar
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 from packaging.markers import Marker, default_environment
 from packaging.requirements import Requirement
@@ -288,17 +288,19 @@ class LockSource(BaseModel):
     def retained_options(self, options: dict[str, object]) -> dict[str, object]:
         return options
 
-    def retain(self, name: str, marker: str, uv: dict[str, object]) -> None:
+    def retain(self, name: str, marker: str, uv: dict[str, object]) -> dict[str, str]:
+        source = self.project_source()
         match uv:
             case {"sources": dict() as sources}:
                 match sources.get(name, {}):
                     case dict() as options:
-                        sources[name] = {**self.retained_options(options), **self.project_source(),
+                        sources[name] = {**self.retained_options(options), **source,
                                          **({"marker": marker} if marker else {})}
                     case _:
                         raise ValueError(f"Ambiguous private source declarations for {name}")
             case _:
                 raise ValueError("Private retention requires the existing UV sources table")
+        return source
 
 
 class RegistrySource(LockSource):
@@ -310,7 +312,7 @@ class RegistrySource(LockSource):
     def project_source(self) -> dict[str, str]:
         return {"index": "locked-" + hashlib.sha256(self.registry.encode()).hexdigest()}
 
-    def retain(self, name: str, marker: str, uv: dict[str, object]) -> None:
+    def retain(self, name: str, marker: str, uv: dict[str, object]) -> dict[str, str]:
         index = {"name": self.project_source()["index"], "url": self.registry, "explicit": True}
         match uv.get("index", []):
             case list() as indexes:
@@ -319,7 +321,7 @@ class RegistrySource(LockSource):
                 uv["index"] = indexes
             case _:
                 raise ValueError("Private UV indexes must retain their declared table array")
-        super().retain(name, marker, uv)
+        return super().retain(name, marker, uv)
 
 
 class GitSource(LockSource):
@@ -331,7 +333,8 @@ class GitSource(LockSource):
     git: str
 
     def tracked(self, name: str) -> tuple[str, ...]:
-        branches = tuple(parse_qs(urlsplit(self.git).query).get("branch", []))
+        source = self.decoded_source()
+        branches = (source["branch"],) if "branch" in source else ()
         self.require_branches(name, branches)
         return (name,) if branches else ()
 
@@ -343,22 +346,36 @@ class GitSource(LockSource):
     def pin(self, version: str, core: str) -> PackagePin:
         return GitPin(version, self.project_source()["rev"])
 
-    def project_source(self) -> dict[str, str]:
+    def decoded_source(self) -> dict[str, str]:
+        """Decode UV's locked URL once here, including the package's repository location."""
         source = urlsplit(self.git)
         if not source.fragment:
             raise ValueError("A resolved Git lock entry must name its commit")
-        return {"git": source._replace(query="", fragment="").geturl(), "rev": source.fragment}
+        parameters: dict[str, str] = {}
+        for key, value in parse_qsl(source.query, keep_blank_values=True, strict_parsing=True, errors="strict"):
+            if (key not in ("branch", "tag", "rev", "subdirectory") or key in parameters
+                    or not value or "\u0000" in value):
+                raise ValueError(f"Unsupported or duplicate locked Git query parameter: {key}")
+            parameters[key] = value
+        if len(parameters.keys() & {"branch", "tag", "rev"}) > 1:
+            raise ValueError("A locked Git source must have one unambiguous ref selector")
+        # The fragment owns the actual commit; a query rev is only the old requested ref.
+        return {"git": source._replace(query="", fragment="").geturl(), **parameters, "rev": source.fragment}
+
+    def project_source(self) -> dict[str, str]:
+        return {key: value for key, value in self.decoded_source().items() if key not in ("branch", "tag")}
 
     def retained_options(self, options: dict[str, object]) -> dict[str, object]:
         # The locked revision replaces ONLY the old ref selector, never extra/index settings.
         return {key: value for key, value in options.items() if key not in ("branch", "tag", "rev")}
 
-    def retain(self, name: str, marker: str, uv: dict[str, object]) -> None:
-        super().retain(name, marker, uv)
-        source = self.project_source()
+    def retain(self, name: str, marker: str, uv: dict[str, object]) -> dict[str, str]:
+        source = super().retain(name, marker, uv)
         # A transitive direct URL must also stop naming its old moving branch. The
         # override fixes SOURCE only; VersionedPackage's constraint retains its version.
-        locked = Requirement(f"{name} @ git+{source['git']}@{source['rev']}")
+        fragment = urlencode({"subdirectory": source["subdirectory"]}, quote_via=quote) if "subdirectory" in source else ""
+        url = f"git+{source['git']}@{source['rev']}" + (f"#{fragment}" if fragment else "")
+        locked = Requirement(f"{name} @ {url}")
         if marker:
             locked.marker = Marker(marker)
         overrides = FieldCodec.decode(list[str], uv.get("override-dependencies", []))
@@ -380,6 +397,7 @@ class GitSource(LockSource):
         if not any(canonicalize_name(Requirement(text).name) == name for text in overrides):
             result.append(str(locked))
         uv["override-dependencies"] = result
+        return source
 
 
 class EditableSource(LockSource):
