@@ -164,21 +164,6 @@ class GoalUpdated(OwnGoalPublication):
 
 
 @dataclass(frozen=True)
-class GoalHistory(ToolResult, RecordedGoalHistory):
-    pass
-
-
-
-
-
-
-
-
-
-
-
-
-@dataclass(frozen=True)
 class WorkBranchList(ToolResult):
     branches: tuple[WorkBranch, ...]
 
@@ -622,8 +607,8 @@ class CommsGoalHistoryTool(ThreadReadTool):
         OneGoal | AllGoals, *tool_field("Optional goal ID; omit for this thread's full history")
     ] = AllGoals()
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
-        return comms.goals.recorded_history(GoalHistory, caller.subject(self.thread), self.goal_id)
+    def apply(self, comms: Comms, caller: ToolCaller) -> RecordedGoalHistory:
+        return comms.goals.recorded_history(caller.subject(self.thread), self.goal_id)
 
 
 

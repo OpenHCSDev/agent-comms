@@ -83,11 +83,6 @@ class GoalReply(DeclaredReply):
 
 
 @dataclass(frozen=True)
-class GoalHistoryReply(RecordedGoalHistory):
-    pass
-
-
-@dataclass(frozen=True)
 class AcpResponseReply(DeclaredReply, WireValue):
     """An ACP schema response, sent exactly as the schema writes it."""
 
@@ -298,10 +293,9 @@ class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
 class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
     goal_id: OneGoal | AllGoals = AllGoals()
 
-    async def result(self, ctx: RuntimeRequestContext) -> GoalHistoryReply:
+    async def result(self, ctx: RuntimeRequestContext) -> RecordedGoalHistory:
         return await Coordination.run_worker(partial(
-            ctx.server.agent._comms.goals.recorded_history,
-            GoalHistoryReply, ctx.name, self.goal_id,
+            ctx.server.agent._comms.goals.recorded_history, ctx.name, self.goal_id,
         ))
 
 
