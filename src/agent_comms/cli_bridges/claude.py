@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, ClassVar
 
 from agent_comms.bus import Bus
-from agent_comms.harness_delivery_states import Outcome
+from agent_comms.harness_delivery_states import Outcome, WakeOnlyMonitor
 from agent_comms.messages import Message
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
@@ -58,7 +58,9 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
         return await update.wake(self, message)
 
     async def wake(self, message: Message) -> type[Outcome]:
-        return await self.deliver(replace(message, body=self.board_wake))
+        return await self.deliver(
+            replace(message, body=self.board_wake), reception=WakeOnlyMonitor,
+        )
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         """On restart only the last 4 MiB is published again; Core's finish is idempotent, so

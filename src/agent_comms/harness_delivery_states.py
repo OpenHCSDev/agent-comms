@@ -7,6 +7,7 @@ attempts can declare these families without importing the bridge transport.
 from __future__ import annotations
 
 import sqlite3
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
@@ -139,9 +140,36 @@ class UnrecordedMonitor(MonitorEvidence):
     pass
 
 
+class PendingMonitor(MonitorEvidence, declared_name=None):
+    """The emission owns whether its later observation can prove the original body."""
+
+    @classmethod
+    @abstractmethod
+    def for_parts(cls, total: int) -> PendingMonitor: ...
+
+
 @dataclass(frozen=True)
-class ReceivingMonitor(MonitorEvidence):
+class WakeOnlyMonitor(PendingMonitor):
+    """A board wake is not the original packet, even if its bytes happen to match."""
+
+    @classmethod
+    def for_parts(cls, total: int) -> WakeOnlyMonitor:
+        return cls()
+
+    async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+        # Retire only the wake's transport reservation, never original-body proof.
+        await bridge.part_observed(delivery.message_id, notification.number)
+        return ()
+
+
+@dataclass(frozen=True)
+class ReceivingMonitor(PendingMonitor):
     total: int
+
+    @classmethod
+    def for_parts(cls, total: int) -> ReceivingMonitor:
+        return cls(total)
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:

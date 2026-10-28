@@ -43,7 +43,7 @@ from agent_comms.cli_arguments import CliArguments
 from agent_comms.cli_protocol import TaggedWire, WatchLine, raise_child_exit
 from agent_comms.harness_delivery_states import (
     EmittedOutcome, FilteredOutcome, MismatchedMonitor, ObservedMonitor,
-    Outcome, ReceivingMonitor, UnconfirmedOutcome,
+    Outcome, PendingMonitor, ReceivingMonitor, UnconfirmedOutcome,
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
@@ -1651,12 +1651,17 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
         return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
 
-    async def deliver(self, message: messages.Message) -> type[Outcome]:
-        return await self.reader.deliver(self, message)
+    async def deliver(
+        self, message: messages.Message, *, reception: type[PendingMonitor] = ReceivingMonitor,
+    ) -> type[Outcome]:
+        return await self.reader.deliver(self, message, reception)
 
-    async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
+    async def deliver_to(
+        self, attachment: MonitorAttachment, message: messages.Message,
+        reception: type[PendingMonitor],
+    ) -> type[Outcome]:
         frame = self.incoming_frame(message)
-        receiving = partial(replace, monitor=ReceivingMonitor(len(frame.parts)))
+        receiving = partial(replace, monitor=reception.for_parts(len(frame.parts)))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))
         await frame.emit_to(attachment, self.window_bytes, self.exports)
