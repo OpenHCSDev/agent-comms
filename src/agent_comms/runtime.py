@@ -25,7 +25,7 @@ from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
 
@@ -62,9 +62,6 @@ from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .acp import CommsAgent
-    from .bus_read import OwnerReading
-    from .comms import Comms
-    from .thread_identity import ThreadIncarnation
     from .selected_write_authority import AcpSelectedWriteAuthority
     from .turn_runner import TurnRunner
 
@@ -424,36 +421,6 @@ class RuntimeConnection(OwnerConnection):
         return RuntimeRequest.member_named(action).proxy_payload(
             self.session_id, self.controller_token, parameters,
         )
-
-
-class OwnerReplyConnection(RuntimeConnection):
-    """Bound only the live owner's response after a request has been dispatched."""
-
-    REPLY_TIMEOUT: ClassVar[float] = 3
-
-    @classmethod
-    def held(cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading) -> Self:
-        """A connection to exactly this registered owner incarnation, which the reading admits."""
-        thread = comms.registry.require(owner.name)
-        connection = cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
-        connection.require_identity(owner)
-        reading.admit(thread)
-        return connection
-
-    @classmethod
-    async def answer[Result](
-        cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading[Result],
-    ) -> Result:
-        """One reading from the held owner; the connection closes whatever the outcome."""
-        connection = await asyncio.to_thread(cls.held, comms, owner, reading)
-        try:
-            return await reading.read(connection)
-        finally:
-            await connection.close()
-
-    async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
-        async with asyncio.timeout(self.REPLY_TIMEOUT):
-            return await super()._read_response(reader)
 
 
 @dataclass(frozen=True)

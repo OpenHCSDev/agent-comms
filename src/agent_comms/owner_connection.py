@@ -8,8 +8,8 @@ import os
 import socket
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, cast
-from abc import abstractmethod
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable
 from dataclasses import dataclass, replace
 from .command import Command
@@ -256,3 +256,44 @@ class OwnerConnection:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
+
+class OwnerReading[Result](ABC):
+    """One exchange with exactly one live native owner incarnation over its socket."""
+
+    def require_native_owner(self, owner: Thread) -> None:
+        """Only a native owner serves a runtime socket; an external bridge with a live PID
+        has none, so it is refused here instead of waited on before dispatch."""
+        owner.execution.require_native()
+
+    @abstractmethod
+    async def read(self, owner: OwnerConnection) -> Result: ...
+
+
+class OwnerReplyConnection(OwnerConnection):
+    """Bound only the live owner's response after a request has been dispatched."""
+
+    REPLY_TIMEOUT: ClassVar[float] = 3
+
+    @classmethod
+    def held(cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading) -> Self:
+        """A connection to exactly this registered native owner incarnation."""
+        thread = comms.registry.require(owner.name)
+        connection = cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
+        connection.require_identity(owner)
+        reading.require_native_owner(thread)
+        return connection
+
+    @classmethod
+    async def answer[Result](
+        cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading[Result],
+    ) -> Result:
+        """One reading from the held owner; the connection closes whatever the outcome."""
+        connection = await asyncio.to_thread(cls.held, comms, owner, reading)
+        try:
+            return await reading.read(connection)
+        finally:
+            await connection.close()
+
+    async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
+        async with asyncio.timeout(self.REPLY_TIMEOUT):
+            return await super()._read_response(reader)

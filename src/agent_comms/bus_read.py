@@ -10,20 +10,20 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn
 
 from .launch_runtime import CallingThreadUnavailable
+from .owner_connection import (
+    OwnerConnection, OwnerReading, OwnerReplyConnection, ResultRuntimeRequest, RuntimeRequestContext,
+)
 from .presentation import AllOutcomes
 from .tool_declaration import ToolDeclaration
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .owner_connection import RuntimeRequestContext
     from .presentation import OutcomeViewer
-    from .runtime import RuntimeConnection
-    from .thread_identity import ThreadIncarnation
-    from .threads import Thread
 
 
 class BusReader(ABC):
@@ -75,24 +75,13 @@ class UiRead[Result](BusRead[Result], ABC):
         return self.read_as(comms, OperatorReader())
 
 
-class OwnerReading[Result](ABC):
-    """One exchange with exactly one live owner incarnation over its socket."""
-
-    def admit(self, owner: Thread) -> None:
-        """Only a native owner serves a runtime socket; an external bridge with a live PID
-        has none, so it is refused here instead of waited on before dispatch."""
-        owner.execution.require_native()
-
-    @abstractmethod
-    async def read(self, owner: RuntimeConnection) -> Result: ...
-
-
-class OwnerLiveRead[Result: ToolResult](OwnerReading[Result], BusRead[Result], ABC):
+class OwnerLiveRead[Result: ToolResult = ToolResult](BusRead[Result], ABC):
     """A read only the selected thread's live native owner can answer, from its own queue.
 
-    MCP and the UI both reach the owner; neither answers from its own process, and owner
-    loss reaches the caller as the original refusal. The owner runs ``owned`` against its
-    own registration and session, never against the public thread selector.
+    MCP and the UI both reach the owner through ``OwnerReadRuntimeRequest``; neither answers
+    from its own process, and owner loss reaches the caller as the original refusal. The
+    owner runs ``owned`` against its own registration and session, never against the public
+    thread selector.
     """
 
     if TYPE_CHECKING:
@@ -103,16 +92,9 @@ class OwnerLiveRead[Result: ToolResult](OwnerReading[Result], BusRead[Result], A
         return self.read_as(comms, caller)
 
     def read_as(self, comms: Comms, reader: BusReader) -> Result:
-        from .runtime import OwnerReplyConnection
-
         owner = comms.registry.require(reader.subject(self.thread)).incarnation
-        return asyncio.run(OwnerReplyConnection.answer(comms, owner, self))
-
-    async def read(self, owner: RuntimeConnection) -> Result:
-        from .runtime_requests import OwnerReadRuntimeRequest
-
-        return self.decode_reply(
-            await owner.request(OwnerReadRuntimeRequest.declared_name, operation=self))
+        request = OwnerReadRuntimeRequest(thread=owner.name, operation=self)
+        return self.decode_reply(asyncio.run(OwnerReplyConnection.answer(comms, owner, request)))
 
     @abstractmethod
     async def owned(self, ctx: RuntimeRequestContext) -> Result:
@@ -120,3 +102,17 @@ class OwnerLiveRead[Result: ToolResult](OwnerReading[Result], BusRead[Result], A
 
     @abstractmethod
     def decode_reply(self, raw: object) -> Result: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class OwnerReadRuntimeRequest(OwnerReading[object], ResultRuntimeRequest):
+    """The one runtime envelope for every owner-live read: sent once to the held owner, and
+    answered there by the operation under the owner's context."""
+
+    operation: OwnerLiveRead
+
+    async def read(self, owner: OwnerConnection) -> object:
+        return await owner.request(self.declared_name, operation=self.operation)
+
+    async def result(self, ctx: RuntimeRequestContext) -> ToolResult:
+        return await self.operation.owned(ctx)

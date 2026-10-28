@@ -25,16 +25,16 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey
+from agent_comms.bus_read import OwnerReadRuntimeRequest
 from agent_comms.order_tools import InputDeliveryRead
-from agent_comms.owner_connection import OwnerIdentityChangedError, RuntimeRequest
-from agent_comms.runtime_requests import OwnerReadRuntimeRequest
+from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyConnection, RuntimeRequest
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
 from agent_comms.field_codec import RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import (
-    OwnerReplyConnection, RuntimeConnection, RuntimeProxy, present_session, socket_path,
+    RuntimeConnection, RuntimeProxy, present_session, socket_path,
 )
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -97,16 +97,16 @@ async def test_an_input_delivery_read_without_a_reply_is_lost_after_one_dispatch
 async def test_a_held_owner_read_refuses_a_replaced_root_before_dispatch(comms):
     process = ProcessIdentity.capture(os.getpid())
     owner = declare_owner(comms, "held", process)
-    operation = InputDeliveryRead(thread="held")
+    reading = OwnerReadRuntimeRequest(thread="held", operation=InputDeliveryRead(thread="held"))
     async with silent_socket(comms, process) as received:
-        connection = OwnerReplyConnection.held(comms, owner.incarnation, operation)
+        connection = OwnerReplyConnection.held(comms, owner.incarnation, reading)
         moved = comms.root.with_name(comms.root.name + "-replaced")
         comms.root.rename(moved)
         comms.root.mkdir()
         try:
             with pytest.raises(OwnerIdentityChangedError):
                 async with asyncio.timeout(30):
-                    await operation.read(connection)
+                    await reading.read(connection)
         finally:
             comms.root.rmdir()
             moved.rename(comms.root)
@@ -117,9 +117,9 @@ async def test_a_held_owner_read_refuses_a_replaced_root_before_dispatch(comms):
 async def test_a_same_name_recreation_refuses_the_held_read_and_the_old_witness(comms):
     process = ProcessIdentity.capture(os.getpid())
     old = declare_owner(comms, "held", process)
-    operation = InputDeliveryRead(thread="held")
+    reading = OwnerReadRuntimeRequest(thread="held", operation=InputDeliveryRead(thread="held"))
     async with silent_socket(comms, process) as received:
-        connection = OwnerReplyConnection.held(comms, old.incarnation, operation)
+        connection = OwnerReplyConnection.held(comms, old.incarnation, reading)
         try:
             comms.registry.unregister("held")
             comms.registry.begin_delete("held")
@@ -129,9 +129,9 @@ async def test_a_same_name_recreation_refuses_the_held_read_and_the_old_witness(
             assert comms.registry.require("held").incarnation == new.incarnation
             with pytest.raises(OwnerIdentityChangedError):
                 async with asyncio.timeout(30):
-                    await operation.read(connection)
+                    await reading.read(connection)
             with pytest.raises(OwnerIdentityChangedError):
-                OwnerReplyConnection.held(comms, old.incarnation, operation)
+                OwnerReplyConnection.held(comms, old.incarnation, reading)
         finally:
             await connection.close()
     assert received == []
@@ -140,16 +140,16 @@ async def test_a_same_name_recreation_refuses_the_held_read_and_the_old_witness(
 async def test_a_held_owner_read_refuses_after_its_process_dies(comms, runtime_processes):
     child = runtime_processes[0]
     owner = declare_owner(comms, "held", child.identity)
-    operation = InputDeliveryRead(thread="held")
+    reading = OwnerReadRuntimeRequest(thread="held", operation=InputDeliveryRead(thread="held"))
     before = recorded_input(comms)
     async with silent_socket(comms, child.identity) as received:
-        connection = OwnerReplyConnection.held(comms, owner.incarnation, operation)
+        connection = OwnerReplyConnection.held(comms, owner.incarnation, reading)
         try:
             child.stop_sync()
             assert not child.identity.alive()
             with pytest.raises(ConnectionError):
                 async with asyncio.timeout(30):
-                    await operation.read(connection)
+                    await reading.read(connection)
         finally:
             await connection.close()
     assert received == []

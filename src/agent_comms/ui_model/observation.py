@@ -41,11 +41,12 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import BusReader, OwnerLiveRead, OwnerReading, UiRead
+from agent_comms.bus_read import BusReader, OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
 from agent_comms.child_process import join_retirement
 from agent_comms.commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
+from agent_comms.owner_connection import OwnerConnection, OwnerReading, OwnerReplyConnection
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -94,7 +95,6 @@ if TYPE_CHECKING:
     from concurrent.futures import Future
     from multiprocessing.connection import Connection
 
-    from agent_comms.runtime import RuntimeConnection
     from agent_comms.tool_result import ToolResult
     from agent_comms.transcripts import TranscriptRead
 
@@ -488,8 +488,6 @@ class OwnerRead(OwnerReading[object], AwaitedRead):
             return self.refused(error)
 
     async def ask(self, comms: Comms) -> object:
-        from agent_comms.runtime import OwnerReplyConnection
-
         return await OwnerReplyConnection.answer(comms, self.owner, self)
 
 
@@ -672,7 +670,7 @@ class UnreadableNotificationsRead(NotificationsRead):
 class ReadOwnerGoal(OwnerRead):
     """The owner's goal snapshot and the turn it read with it."""
 
-    async def read(self, owner: RuntimeConnection) -> GoalSnapshotReply:
+    async def read(self, owner: OwnerConnection) -> GoalSnapshotReply:
         return FieldCodec.decode(GoalSnapshotReply, await owner.request("goal_snapshot"))
 
 
@@ -682,8 +680,9 @@ class ReadOwnerOperation(OwnerRead):
 
     operation: OwnerLiveRead
 
-    async def read(self, owner: RuntimeConnection) -> ToolResult:
-        return await self.operation.read(owner)
+    async def read(self, owner: OwnerConnection) -> ToolResult:
+        request = OwnerReadRuntimeRequest(thread=owner.session_id, operation=self.operation)
+        return self.operation.decode_reply(await request.read(owner))
 
 
 @dataclass(frozen=True)
