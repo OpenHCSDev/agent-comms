@@ -313,8 +313,14 @@ class InputDispositions(DurableStore):
     def unresolved(self, entries: tuple[RegistryEntry, ...]) -> InputDocument:
         """Stored unresolved inputs plus uncertain harness attempts with no stored row.
         A stored row wins in every state, so a completed input is never resurrected."""
-        owners = _names(entries)
-        attempted = self.harness_attempts(entries)
+        return self._unknown(_names(entries), self.harness_attempts(entries))
+
+    def stored_unresolved(self, entries: tuple[RegistryEntry, ...]) -> InputDocument:
+        """Stored unresolved inputs only. Native recovery asks this: a harness attempt supplies
+        no native-recoverable reference, so recovery never reads the coordinator for one."""
+        return self._unknown(_names(entries), ())
+
+    def _unknown(self, owners: frozenset[str], attempted: tuple[ReservedInput, ...]) -> InputDocument:
         document = self._select(*self._owned_or_attempted(owners, attempted)).record(*attempted)
         return InputDocument({row.key: row for row in document.unknown(owners)})
 
