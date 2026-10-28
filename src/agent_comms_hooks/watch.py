@@ -129,10 +129,20 @@ class WatchClaim:
         key = hashlib.sha256(self.thread.encode()).hexdigest()
         return self.directory(self.home) / f"{key}.lock"
 
+    @staticmethod
+    def claims_in(directory: Path) -> tuple[Path, ...]:
+        """Every session's claim lock in ``directory``; reader and launch claims carry a
+        second suffix (``reader_claim``, ``launch_claim``)."""
+        return tuple(sorted(path for path in directory.glob("*.lock") if len(path.suffixes) == 1))
+
+    @staticmethod
+    def record_beside(claim: Path) -> Path:
+        """The saved re-arm record, published whole; the lock file only holds the flock."""
+        return claim.with_suffix(".record")
+
     @property
     def record_path(self) -> Path:
-        """The saved re-arm record, published whole; the lock file only holds the flock."""
-        return self.path.with_suffix(".record")
+        return self.record_beside(self.path)
 
     @property
     def socket_path(self) -> Path:

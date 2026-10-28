@@ -168,14 +168,14 @@ def test_writer_owned_carry_copies_migrates_and_restores_original_bytes(
 
     copy = PracticeCopy(root, tmp_path / "practice")
     copy.include(step.input_files())
-    copied_step = replace(step, files=RetainedCopyRequest(copy.path))
+    copied_step = replace(step, files=copy.request)
     copied_paths = tuple(copied_step.files.location(resource)
                          for resource in store.resources(copied_step.files))
     assert Carried(1, rewritten=copied_paths).for_step(copied_step).rewritten == (name,)
     with pytest.raises(RelationViolationError):
         copied_step.require_confined(store.path())
     assert copied_step.carry(apply=True).rewritten == (name,)
-    assert WriterOwnedOpeningProbe(RetainedCopyRequest(copy.path), (store,)).run() == copied_paths
+    assert WriterOwnedOpeningProbe(copy.request, (store,)).run() == copied_paths
     for copied_path in copied_paths:
         with closing(store.read_snapshot(copied_path)) as db:
             assert row.select(db)[0].target == ChannelTarget("#comms")
@@ -224,10 +224,11 @@ def test_writer_owned_carry_preserves_its_declaration_across_cli_and_worker_boun
     assert decoded == probe
     assert decoded.run() == (store.path(),)
     copied_root = tmp_path / "copied"
-    copied_probe = WriterOwnedOpeningProbe(RetainedCopyRequest(copied_root), (store,))
+    copied_probe = WriterOwnedOpeningProbe(RetainedCopyRequest(copied_root, tmp_path), (store,))
     copied_decoded = FieldCodec.decode(WriterOwnedOpeningProbe, FieldCodec.encode(copied_probe))
     assert copied_decoded.stores == (store,)
     assert copied_decoded.files.root == copied_root
+    assert copied_decoded.files.source_root() == tmp_path
     assert copied_decoded == copied_probe
 
 

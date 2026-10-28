@@ -83,6 +83,7 @@ from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, Maintena
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
 from .store_files import (
+    BorrowedStoreLock,
     ExclusiveAtomicFile,
     StoreLockFile,
 )
@@ -2529,7 +2530,7 @@ class TypedTable(
 class WriterOwnedResource(DeclaredFile):
     """An external writer's declared live path, retaining the shared copy behavior."""
 
-    owner: type[WriterOwnedStore]
+    owner: type[ExternalStore]
 
     def live(self, root: Path) -> Path:
         return self.owner.live(root) / self.path.relative_to(self.owner.retained_filename())
@@ -2741,13 +2742,10 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
             return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
 
 
-class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"):
-    """A durable file outside the bus that its own writer reconciles when it opens it
-    (``WriterOwnedFile``). An installed package declares each one through the
-    ``agent_comms.writer_owned_stores`` entry point. Before cutover the installer opens a
-    copy of each with the target's declaration, so a stored schema the declaration cannot
-    carry refuses the install and names the file, instead of failing the writer's next
-    launch."""
+class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
+    """Durable files outside the bus that their own writer owns. An installed package declares
+    each one through the ``agent_comms.writer_owned_stores`` entry point; the installer
+    inventories, backs up, retains and restores the selected ones through these resources."""
 
     entry_point_group: ClassVar[str] = "agent_comms.writer_owned_stores"
     retained_directory: ClassVar[Path] = Path("writer-owned")
@@ -2755,12 +2753,6 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
     @classmethod
     def retained_filename(cls) -> Path:
         return cls.retained_directory / cls.declared_name
-
-    @classmethod
-    def content_members(cls, path: Path) -> frozenset[Path]:
-        """Retain the original primary and committed WAL bytes without checkpointing."""
-        observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
-        return cls.snapshot_members(path, observed)
 
     @classmethod
     def retained_name(cls, root: Path, path: Path) -> Path:
@@ -2787,10 +2779,63 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
 
     @classmethod
     def require_retained_name(cls, name: Path) -> None:
-        names = {store.retained_filename() for store in WriterOwnedStore.members_with(WriterOwnedStore)}
+        names = {store.retained_filename() for store in ExternalStore.members_with(ExternalStore)}
         if name.is_relative_to(cls.retained_directory) and not any(
                 name.is_relative_to(directory) for directory in names):
             raise RelationViolationError(f"Unknown writer-owned installation file: {name}")
+
+    @classmethod
+    def borrowed_locks(cls, lifetime: ExitStack, files: FilesRequest) -> tuple[BorrowedStoreLock, ...]:
+        """A file no store lock guards lends the target's worker nothing."""
+        return ()
+
+    @classmethod
+    def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
+        """A file with no stored schema has no opening to practise."""
+
+    @staticmethod
+    def practice_openings(root: Path, excluding: tuple[type[ExternalStore], ...] = ()) -> None:
+        ExternalStore.load_declarations()
+        stores = set(ExternalStore.members_with(ExternalStore)) - set(excluding)
+        with TemporaryDirectory() as directory:
+            for store in stores:
+                store.practice_opening(LiveFilesRequest(root), Path(directory))
+
+    @classmethod
+    @abstractmethod
+    def path(cls) -> Path:
+        """The live file or common root used by this owner's resource declarations."""
+
+    @staticmethod
+    @cache
+    def load_declarations() -> None:
+        """Import each module the installed distributions declare, once per process."""
+        for entry in entry_points(group=ExternalStore.entry_point_group):
+            entry.load()
+
+    @classmethod
+    def member_named(cls, name: object) -> type[Self]:
+        cls.load_declarations()
+        return super().member_named(name)
+
+
+class WriterOwnedStore(SQLiteStorage, ExternalStore, declared_name=None):
+    """An external SQLite file its own writer reconciles when it opens it
+    (``WriterOwnedFile``). Before cutover the installer opens a copy of each with the
+    target's declaration, so a stored schema the declaration cannot carry refuses the install
+    and names the file, instead of failing the writer's next launch."""
+
+    @classmethod
+    def content_members(cls, path: Path) -> frozenset[Path]:
+        """Retain the original primary and committed WAL bytes without checkpointing."""
+        observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
+        return cls.snapshot_members(path, observed)
+
+    @classmethod
+    def borrowed_locks(cls, lifetime: ExitStack, files: FilesRequest) -> tuple[BorrowedStoreLock, ...]:
+        """The installer retains each file lock through rollback; the worker only borrows it."""
+        return tuple(lifetime.enter_context(cls.retaining(files.location(resource)))
+                     for resource in cls.resources(files))
 
     @classmethod
     def practice_opening(cls, files: FilesRequest, directory: Path) -> None:
@@ -2809,34 +2854,9 @@ class WriterOwnedStore(SQLiteStorage, DurableFile, DeclaredFamily, affix="Store"
                 raise RelationViolationError(
                     f"{path} cannot open on this runtime: {error}") from error
 
-    @staticmethod
-    def practice_openings(root: Path, excluding: tuple[type[WriterOwnedStore], ...] = ()) -> None:
-        WriterOwnedStore.load_declarations()
-        stores = set(WriterOwnedStore.members_with(WriterOwnedStore)) - set(excluding)
-        with TemporaryDirectory() as directory:
-            for store in stores:
-                store.practice_opening(LiveFilesRequest(root), Path(directory))
-
-    @classmethod
-    @abstractmethod
-    def path(cls) -> Path:
-        """The live file or common root used by this owner's resource declarations."""
-
     @classmethod
     @abstractmethod
     def table_schema(cls) -> type[TableSchema]: ...
-
-    @staticmethod
-    @cache
-    def load_declarations() -> None:
-        """Import each module the installed distributions declare, once per process."""
-        for entry in entry_points(group=WriterOwnedStore.entry_point_group):
-            entry.load()
-
-    @classmethod
-    def member_named(cls, name: object) -> type[Self]:
-        cls.load_declarations()
-        return super().member_named(name)
 
 
 class CarriedWriter(HolderWrittenFile, StoreWriter):
