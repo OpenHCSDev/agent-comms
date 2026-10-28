@@ -7,16 +7,21 @@ import subprocess
 import pytest
 
 from agent_comms import integration
-from agent_comms.head_review import PullRequestHead
+from agent_comms.errors import ToolRefusedError
+from agent_comms.head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, PullRequestHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.todos import (
     DraftListedPullRequest, QualifiedHeadVerdict, ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
+from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.runtime_resolution import StackSources
+from github_fixture import GitHubFixture
+from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
 from fixture_git import ENVIRONMENT, SETTINGS
 
-pytest_plugins = ("github_fixture",)
+pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_source_fixture")
 
 
 @pytest.fixture
@@ -71,6 +76,84 @@ def test_only_accepted_ready_members_are_selected(github_cli, tmp_path: Path):
         source.github, source.branch_commit, "lead", "integration",
     )
     assert run.accepted_heads() == (PullRequestHead(source.github, 7, source.branch_commit),)
+
+
+def test_qualification_captures_actual_orders_without_reviewing_or_arming_sources(
+        mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
+    pair = mutual_sources
+    run = integration.IntegrationRun(pair.checkout, pair.output, "mutually migrated API/import source")
+    inputs = run.qualify(pair.context, ("P2", "P3"))
+    assert FieldCodec.decode(IntegrationInput, FieldCodec.parse((pair.output / "input.json").read_bytes())) == inputs
+    carrier = Repo.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    assert IntegrationInput.from_message(Repo.git(pair.checkout.path, "show", "--format=%B", "--no-patch", carrier)) == (inputs,)
+    for source in inputs.sources:
+        assert len(source.heads) == 1
+        assert Repo.descends(HeadSide.checkout(pair.output, source.repository), source.heads[0].head, "HEAD")
+        assert Repo.git(BaseSide.checkout(pair.output, source.repository), "rev-parse", "HEAD").strip() == source.baseline.commit
+        assert Repo.git(HeadSide.checkout(pair.output, source.repository), "rev-parse", "HEAD^{tree}").strip() == source.candidate_tree
+        assert not HeadReview.accepted(source.repository, source.heads[0].head)
+    assert run.accepted_heads() == ()
+    assert not any(call[:2] == ("pr", "merge") or "POST" in call for call in github_cli.calls())
+
+
+def test_real_mutual_imports_work_for_both_matched_cuts_and_fail_for_both_mixed_cuts(
+        mutual_sources: MutualSources) -> None:
+    import sys
+
+    pair = mutual_sources
+    integration.IntegrationRun(pair.checkout, pair.output, "both mixed imports must fail").qualify(
+        pair.context, ("P2", "P3"))
+    results = {}
+    for core_side in (BaseSide, HeadSide):
+        for client_side in (BaseSide, HeadSide):
+            environment = {**os.environ, "PYTHONPATH": os.pathsep.join((
+                str(core_side.checkout(pair.output, pair.core.github) / "src"),
+                str(client_side.checkout(pair.output, pair.client.github) / "src"),
+            ))}
+            result = subprocess.run(
+                (sys.executable, "-c", "from workflow import run; print(run())"),
+                cwd=pair.output, env=environment, text=True, capture_output=True, timeout=30,
+            )
+            results[core_side, client_side] = result
+    assert results[BaseSide, BaseSide].returncode == 0
+    assert results[BaseSide, BaseSide].stdout.strip() == "baseline"
+    assert results[HeadSide, HeadSide].returncode == 0
+    assert results[HeadSide, HeadSide].stdout.strip() == "candidate"
+    assert results[BaseSide, HeadSide].returncode != 0
+    assert results[HeadSide, BaseSide].returncode != 0
+
+
+def test_changed_main_during_source_review_refuses_the_frozen_input(
+        mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
+    pair = mutual_sources
+    run = integration.IntegrationRun(pair.checkout, pair.output, "stale baseline must refuse")
+    inputs = run.qualify(pair.context, ("P2", "P3"))
+    carrier = pair.publish_carrier(github_cli)
+    pair.client.git(pair.client.checkout, "checkout", "main")
+    pair.client.publish_change("Advance client main", *pair.client.write_files({Path("main-only.py"): "advanced = True\n"}))
+    pair.client.git(pair.client.checkout, "push", "origin", "main")
+    with pytest.raises(ToolRefusedError, match="main moved"):
+        inputs.validate(pair.context.repos, carrier)
+
+
+def test_common_runtime_contract_allows_local_source_and_metadata_changes() -> None:
+    baseline = ('[project]\nname="old-label"\nversion="1"\n'
+                'dependencies=["agent-comms", "old-client", "packaging>=25"]\n'
+                '[tool.uv.sources]\nagent-comms={path="..",editable=true}\n'
+                'old-client={git="https://github.com/example/old.git",branch="main"}\n')
+    candidate = ('[project]\nname="new-label"\nversion="2"\n'
+                 'dependencies=["agent-comms", "new-client", "packaging>=25"]\n'
+                 '[tool.uv.sources]\nagent-comms={path="..",editable=true}\n'
+                 'new-client={git="https://github.com/example/new.git",branch="main"}\n')
+    StackSources.require_compatible(baseline, candidate)
+    StackSources.require_compatible(candidate, baseline)
+
+
+def test_common_runtime_contract_refuses_unsupported_external_dependency_migration() -> None:
+    baseline = '[project]\ndependencies=["packaging>=25"]\n'
+    candidate = '[project]\ndependencies=["packaging>=26"]\n'
+    with pytest.raises(ValueError):
+        StackSources.require_compatible(baseline, candidate)
 
 
 def test_main_checkout_is_refused_without_changes(tmp_path: Path):

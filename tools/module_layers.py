@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
+from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
 from typing_names import TypingImports, TypingReference
@@ -298,24 +299,11 @@ class TopLevelNames(ast.NodeVisitor):
 
 
 @dataclass(frozen=True)
-class StackClient:
+class StackClient(StackSources):
     """A package the stack installs from a git source, read from a checkout of it."""
 
     name: str
     checkout: Path
-
-    @staticmethod
-    def sources(stack: Path) -> dict[str, tuple[str, str]]:
-        """Each git source stack/pyproject.toml declares: name to (url, branch)."""
-        match tomllib.loads((stack / "pyproject.toml").read_text()):
-            case {"tool": {"uv": {"sources": dict() as sources}}}:
-                found = {}
-                for name, source in sources.items():
-                    match source:
-                        case {"git": str(url), "branch": str(branch)}:
-                            found[name] = (url, branch)
-                return found
-        raise ValueError(f"{stack / 'pyproject.toml'} declares no [tool.uv.sources] table")
 
     @classmethod
     def fetched(cls, stack: Path, into: Path) -> tuple[StackClient, ...]:

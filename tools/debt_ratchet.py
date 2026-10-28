@@ -60,6 +60,7 @@ from module_layers import PACKAGE, StackClient
 from stored_formats import StoredForm
 from typing_names import TypingImports, TypingReference
 from agent_comms.field_codec import FieldCodec, ViewExclusion, boundary_decoder, projected
+from agent_comms.head_review import BaseSide, HeadSide, Side
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
@@ -140,31 +141,6 @@ class ContentCache:
             return typing.cast(Value, value)
         return cls.store(compute(), *parts)
 
-
-
-class Side(DeclaredFamily, affix="Side"):
-    """One of the two revisions a comparison measures; its declared name names a checker's cache."""
-
-    @staticmethod
-    @abstractmethod
-    def ref(base: str, head: str) -> str:
-        """This side's revision of the compared pair."""
-
-    @classmethod
-    def sides(cls) -> tuple[type[Side], ...]:
-        return cls.members_with(cls)
-
-
-class BaseSide(Side):
-    @staticmethod
-    def ref(base: str, head: str) -> str:
-        return base
-
-
-class HeadSide(Side):
-    @staticmethod
-    def ref(base: str, head: str) -> str:
-        return head
 
 
 class Measure(DeclaredFamily, affix="Measure"):

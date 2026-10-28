@@ -12,17 +12,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from .active_route import resolve_comms_route
+from .build_identity import RepositoryCommit
+from .commander.order import CommanderContext
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
+from .errors import ToolRefusedError
 from .field_codec import FieldCodec, WireName
-from .head_review import HeadReview, PullRequestHead
+from .head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, IntegrationSource, PullRequestHead
+from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, GitCommandError, Repo
 from .systemd_unit import AgentsSlice
+from .repository_name import RepositoryName
 from .test_lease import LeaseStart, TestLease
 from .todos import PullRequests
+from .work_branches import WorkBranches
 
-
-class IntegrationFailed(RuntimeError):
+class IntegrationFailed(ToolRefusedError):
     pass
 
 
@@ -62,6 +68,9 @@ class TestSelection:
 
 
 class FailureAction(ABC):
+    def require_qualification(self) -> None:
+        """Checking source capture does not run or retry a test selection."""
+
     def require_heads(self, heads: tuple[PullRequestHead, ...]) -> None:
         pass
 
@@ -93,6 +102,9 @@ class ExcludeAfterFailure(FailureAction):
         if pr <= 0:
             raise argparse.ArgumentTypeError("A positive pull request number is required")
         return cls(pr)
+
+    def require_qualification(self) -> None:
+        raise IntegrationFailed("Qualification cannot exclude a captured source after failure")
 
     def require_heads(self, heads: tuple[PullRequestHead, ...]) -> None:
         if not any(head.pr == self.pr for head in heads):
@@ -128,6 +140,38 @@ class IntegrationCheckout(Checkout):
         Repo.git(self.path, "fetch", "origin", timeout=300)
         return Repo.git(self.path, "rev-parse", "origin/main").strip()
 
+    @classmethod
+    def create(cls, repository: Repo, path: Path, commit: str) -> IntegrationCheckout:
+        if path.exists():
+            raise IntegrationFailed(f"Preserve existing qualification checkout: {path}")
+        WorkBranches(repository.checkout).require_commits("origin", commit)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Repo.git(repository.checkout, "worktree", "add", "--detach", str(path), commit, timeout=300)
+        created = cls(path)
+        created.require_editable()
+        return created
+
+    def include(self, head: PullRequestHead) -> None:
+        """Fetch exactly the captured member; Git, not a patch heuristic, combines it."""
+        Repo.git(self.path, "fetch", "origin", f"refs/pull/{head.pr}/head", timeout=300)
+        fetched = Repo.git(self.path, "rev-parse", "FETCH_HEAD").strip()
+        if fetched != head.head:
+            raise IntegrationFailed(f"#{head.pr} moved while fetching; capture its new head")
+        try:
+            Repo.git(self.path, "merge", "--no-ff", "--no-edit", head.head, timeout=300)
+        except GitCommandError:
+            if Repo.answers(self.path, "rev-parse", "-q", "--verify", "MERGE_HEAD"):
+                Repo.git(self.path, "merge", "--abort")
+            raise
+
+    def combine_sources(self, base: str, heads: tuple[PullRequestHead, ...]) -> str:
+        """Checking admits incomplete sources, but never drops a conflicting member."""
+        self.require_editable()
+        Repo.git(self.path, "switch", "--detach", base)
+        for head in heads:
+            self.include(head)
+        return Repo.git(self.path, "rev-parse", "HEAD^{tree}").strip()
+
     def combine(self, base: str, heads: tuple[PullRequestHead, ...]) -> tuple[PullRequestHead, ...]:
         self.require_editable()
         Repo.git(self.path, "switch", "--detach", base)
@@ -136,15 +180,9 @@ class IntegrationCheckout(Checkout):
             current = head.current()
             if not HeadReview.accepted(current.repo, current.head):
                 raise IntegrationFailed(f"#{head.pr} no longer has an accepted head review")
-            Repo.git(self.path, "fetch", "origin", f"refs/pull/{head.pr}/head", timeout=300)
-            fetched = Repo.git(self.path, "rev-parse", "FETCH_HEAD").strip()
-            if fetched != current.head:
-                raise IntegrationFailed(f"#{head.pr} moved while fetching; review its new head")
             try:
-                Repo.git(self.path, "merge", "--no-ff", "--no-edit", current.head, timeout=300)
+                self.include(current)
             except GitCommandError as error:
-                if Repo.answers(self.path, "rev-parse", "-q", "--verify", "MERGE_HEAD"):
-                    Repo.git(self.path, "merge", "--abort")
                 print(f"MERGE REFUSED #{head.pr} {current.head}: {error}", flush=True)
             else:
                 combined.append(current)
@@ -240,6 +278,101 @@ class IntegrationRun:
             for request in row.parsed((), ()).as_ready()
             if HeadReview.accepted(repo.github, request.head)
         )
+
+    def qualify(self, context: CommanderContext, problems: tuple[str, ...]) -> IntegrationInput:
+        """Prepare one checking carrier from stored orders; never test, post, ready or arm it."""
+        self.checkout.require_editable()
+        self.failure.require_qualification()
+        if not problems or len(set(problems)) != len(problems):
+            raise IntegrationFailed("Qualification requires unique actual problem selectors")
+        if context.actor_identity.commanding_identity != context.incarnation:
+            raise IntegrationFailed("Qualification requires this root's existing commander authority")
+        todos = tuple(context.comms.goals.todos.get(problem) for problem in problems)
+        for todo in todos:
+            todo.require_commander(context.incarnation)
+        core = Repo.of(self.checkout.path)
+        registered_core = Repo.selected(context.repos, core.github.to_wire())
+        base = IntegrationSource.main_head(registered_core)
+        WorkBranches(registered_core.checkout).require_commits("origin", base)
+        linked_repositories = {link.repo for todo in todos for order in todo.order.declarations
+                               for link in order.pull_requests}
+        initial = {*IntegrationInput.declared_repositories(registered_core, base, base), *linked_repositories}
+        repositories = {name: Repo.selected(context.repos, name.to_wire()) for name in initial}
+        mains = {core.github: base, **{name: IntegrationSource.main_head(repo)
+                                     for name, repo in repositories.items() if name != core.github}}
+        pulls = PullRequests(todos)
+        heads: dict[RepositoryName, tuple[PullRequestHead, ...]] = {}
+        for repo in repositories.values():
+            WorkBranches(repo.checkout).require_commits("origin", mains[repo.github])
+            linked = PullRequests.linked_among(todos, repo.github)
+            selected = []
+            for row in pulls.rows(repo.github, tuple(sorted(linked))):
+                if row.as_merged():
+                    merged, = row.as_merged()
+                    if not repo.contains(merged.merge.oid, mains[repo.github]):
+                        raise IntegrationFailed("A merged source is absent from captured main")
+                    continue
+                if not row.as_unmerged() or len(linked[row.number]) != 1 or row.base != "main":
+                    raise IntegrationFailed("A linked source is closed, ambiguous or targets another base")
+                selected.append(PullRequestHead(repo.github, row.number, row.head))
+            heads[repo.github] = tuple(selected)
+        primary = PullRequests.linked_among((todos[0],), core.github)
+        carriers = tuple(head for head in heads[core.github] if head.pr in primary)
+        if len(carriers) != 1:
+            raise IntegrationFailed("The primary problem has no unique existing local carrier")
+        self.output.mkdir(parents=True, exist_ok=False)
+        IntegrationCheckout.create(registered_core, BaseSide.checkout(self.output, core.github), base)
+        tree = self.checkout.combine_sources(base, heads[core.github])
+        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        required = IntegrationInput.declared_repositories(registered_core, base, candidate_commit)
+        if linked_repositories - set(required):
+            raise IntegrationFailed("A selected order links an unknown stack repository")
+        sources = [IntegrationSource(RepositoryCommit(core.github, base), heads[core.github], tree)]
+        for name in required:
+            if name == core.github:
+                continue
+            if name not in repositories:
+                repositories[name] = Repo.selected(context.repos, name.to_wire())
+                mains[name] = IntegrationSource.main_head(repositories[name])
+                heads[name] = ()
+            repo = repositories[name]
+            if len(heads[name]) > 1:
+                raise IntegrationFailed("A companion repository has no unique existing linked carrier")
+            baseline = mains[name]
+            IntegrationCheckout.create(repo, BaseSide.checkout(self.output, name), baseline)
+            candidate = IntegrationCheckout.create(repo, HeadSide.checkout(self.output, name), baseline)
+            tree = candidate.combine_sources(baseline, heads[name])
+            sources.append(IntegrationSource(RepositoryCommit(name, baseline), heads[name], tree))
+        # Revalidate original sources before freezing the shared value or attaching its payload.
+        for source in sources:
+            repo = repositories[source.repository]
+            if IntegrationSource.main_head(repo) != source.baseline.commit:
+                raise IntegrationFailed("A captured main moved; preserve this failed attempt and recapture")
+            for head in source.heads:
+                head.current()
+            if source.expected_tree(repo) != source.candidate_tree:
+                raise IntegrationFailed("Actual and reproduced candidate trees differ")
+        current_todos = tuple(context.comms.goals.todos.get(todo.id) for todo in todos)
+        for todo in current_todos:
+            todo.require_commander(context.incarnation)
+        for source in sources:
+            linked = PullRequests.linked_among(current_todos, source.repository)
+            if any(head.pr not in linked for head in source.heads):
+                raise IntegrationFailed("A selected problem no longer links its captured source")
+        inputs = IntegrationInput(tuple(sorted(sources, key=lambda source: source.repository.key)))
+        context.comms.goals.todos.require_input_links(inputs)
+        if Repo.git(self.checkout.path, "rev-parse", f"{base}^{{tree}}").strip() == inputs.source(core.github).candidate_tree:
+            raise IntegrationFailed("The Core carrier has no substantive source change")
+        original_message = WorkBranches(self.checkout.path).commit_message(candidate_commit)
+        if IntegrationInput.from_message(original_message):
+            raise IntegrationFailed("Capture requires a fresh substantive integration commit, not nested metadata")
+        Repo.git(self.checkout.path, "commit", "--amend", "-m",
+                 f"{original_message.rstrip()}\n\n{inputs.trailer}")
+        commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        IntegrationCheckout.create(registered_core, HeadSide.checkout(self.output, core.github), commit)
+        (self.output / "input.json").write_text(inputs.canonical + "\n")
+        print(f"QUALIFICATION ONLY {commit}; inputs {inputs.digest}; {self.output}; no review or merge permission", flush=True)
+        return inputs
 
     def test(
         self, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart, attempt: int
@@ -346,6 +479,11 @@ def run() -> int:
         help="new persistent directory for this run's two bounded logs",
     )
     parser.add_argument("--risk", required=True)
+    parser.add_argument("--qualify", default="", metavar="PROBLEM",
+                        help="prepare sources from this actual primary order, without running tests")
+    parser.add_argument("--with-problem", action="append", default=[], metavar="PROBLEM")
+    parser.add_argument("--comms-root", type=Path,
+                        help="the existing authorized root for stored-problem qualification")
     parser.add_argument(
         ExcludeAfterFailure.option, type=ExcludeAfterFailure.argument, default=StopAfterFailure()
     )
@@ -358,13 +496,23 @@ def run() -> int:
     pytest_arguments = arguments.pytest_arguments
     if pytest_arguments[:1] == ["--"]:
         pytest_arguments = pytest_arguments[1:]
-    return IntegrationRun(
+    run = IntegrationRun(
         IntegrationCheckout(arguments.checkout.resolve()),
         arguments.output.resolve(),
         arguments.risk,
         arguments.drop_on_failure,
         tuple(pytest_arguments),
-    ).execute()
+    )
+    # Decode the foreign CLI operation once; qualification never enters execute/test/lease.
+    if arguments.qualify:
+        if pytest_arguments:
+            parser.error("Qualification cannot run tests")
+        context = CommanderContext.read_root(resolve_comms_route(arguments.comms_root).root)
+        run.qualify(context, (arguments.qualify, *arguments.with_problem))
+        return 0
+    if arguments.with_problem:
+        parser.error("--with-problem requires --qualify")
+    return run.execute()
 
 
 if __name__ == "__main__":

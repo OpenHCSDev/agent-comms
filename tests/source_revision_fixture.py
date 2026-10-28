@@ -1,5 +1,6 @@
 """One real Git source/remote owner for citation tests; no source checkout is required."""
 import ast
+from collections.abc import Mapping
 from pathlib import Path
 import subprocess
 from typing import ClassVar, Self
@@ -59,6 +60,14 @@ class SourceRepository(Repo):
             ('git', *IDENTITY, '-C', str(repository), *arguments), input=text, text=True,
             capture_output=True, check=True, timeout=30,
         ).stdout.strip()
+
+    def write_files(self, files: Mapping[Path, str]) -> tuple[str, ...]:
+        """Real source fixtures share file preparation, not a second source-selection mechanism."""
+        for relative, text in files.items():
+            destination = self.checkout / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(text)
+        return tuple(str(path) for path in files)
 
     def publish_change(self, message: str, *files: str) -> str:
         """Commit fixture files and publish this PR's new head through real Git."""

@@ -37,9 +37,10 @@ def main():
                     print(entry["listed"]["number"])
         elif parts[:1] == ["pulls"] and len(parts) == 2:
             assert arguments[arguments.index("--jq") + 1] == (
-                '.head.sha + " " + .base.ref + " " + (.draft | tostring)')
+                '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
             listed = data["requests"][parts[1]]["listed"]
-            print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower())
+            state = "open" if listed["kind"] in data["open_kinds"] else "closed"
+            print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower(), state)
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
             print("{}")

@@ -10,10 +10,13 @@ from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import parse_qs, urlsplit
 
 from packaging.markers import Marker
+from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.launch_runtime import LaunchRuntime
@@ -21,6 +24,59 @@ from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from agent_comms.installer.upgrade import Stack
+
+
+class StackSources:
+    """Branch-tracking source declarations shared by installation and source checking."""
+
+    @classmethod
+    def sources(cls, stack: Path) -> dict[str, tuple[str, str]]:
+        return cls.declared_sources((stack / "pyproject.toml").read_text())
+
+    @staticmethod
+    def require_compatible(baseline: str, candidate: str) -> None:
+        """Local-source membership may change; external runtime requirements must agree.
+
+        This supported path compares the same external contract, not arbitrary requirement
+        migrations. Candidate metadata/settings are copied intact by the private project writer.
+        """
+        documents = tuple(tomllib.loads(text) for text in (baseline, candidate))
+        local_names: set[str] = set()
+        for document in documents:
+            match document:
+                case {"tool": {"uv": {"sources": dict() as sources}}}:
+                    for name, source in sources.items():
+                        match source:
+                            case {"git": str(), "branch": str()} | {"path": str()}:
+                                local_names.add(canonicalize_name(FieldCodec.decode(str, name)))
+        contracts = []
+        for document in documents:
+            match document:
+                case {"project": {"dependencies": list() as dependencies, **project}}:
+                    requirements = tuple(Requirement(text) for text in FieldCodec.decode(tuple[str, ...], dependencies))
+                    contracts.append(frozenset(str(requirement) for requirement in requirements
+                                              if canonicalize_name(requirement.name) not in local_names))
+                    version = ".".join(map(str, sys.version_info[:3]))
+                    python = FieldCodec.decode(str, project.get("requires-python", ""))
+                    if not SpecifierSet(python).contains(version, prereleases=True):
+                        raise ValueError(f"The common interpreter {version} does not satisfy {python}")
+                case _:
+                    raise ValueError("A compared source requires explicit project runtime dependencies")
+        if contracts[0] != contracts[1]:
+            raise ValueError("External runtime dependency migration is unsupported by this common environment")
+
+    @staticmethod
+    def declared_sources(document: str) -> dict[str, tuple[str, str]]:
+        match tomllib.loads(document):
+            case {"tool": {"uv": {"sources": dict() as sources}}}:
+                found: dict[str, tuple[str, str]] = {}
+                for name, source in sources.items():
+                    match source:
+                        case {"git": str(url), "branch": str(branch)}:
+                            GitSource.require_branches(name, (branch,))
+                            found[FieldCodec.decode(str, name)] = (url, branch)
+                return found
+        raise ValueError("The stack declares no [tool.uv.sources] table")
 
 
 class RuntimePackage(DeclaredFamily, affix="Package"):
@@ -78,10 +134,14 @@ class GitSource(LockSource):
     git: str
 
     def tracked(self, name: str) -> tuple[str, ...]:
-        branches = parse_qs(urlsplit(self.git).query).get("branch", [])
-        if branches not in ([], ["main"]):
-            raise ValueError(f"{name} tracks {branches}, not main: {self.git}")
+        branches = tuple(parse_qs(urlsplit(self.git).query).get("branch", []))
+        self.require_branches(name, branches)
         return (name,) if branches else ()
+
+    @staticmethod
+    def require_branches(name: str, branches: tuple[str, ...]) -> None:
+        if branches not in ((), ("main",)):
+            raise ValueError(f"{name} tracks {branches}, not main")
 
     def pin(self, version: str, core: str) -> PackagePin:
         commit = urlsplit(self.git).fragment

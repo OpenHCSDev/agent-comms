@@ -16,8 +16,9 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.head_review import (
-    HeadReview, IntegrationInput, IntegrationSource, PullRequestHead, ReadPullRequestHead,
+    DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, PullRequestHead, ReadPullRequestHead,
 )
+from agent_comms.integration import IntegrationRun
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -39,9 +40,10 @@ from agent_comms.todos import (
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from github_fixture import GitHubFixture
+from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
 
-pytest_plugins = ("test_holder_standing_rules", "github_fixture")
+pytest_plugins = ("test_holder_standing_rules", "github_fixture", "integration_source_fixture")
 
 REASON = StrikeReason("This head repeats the same decision in two unrelated places instead of using the existing class.")
 ACCEPTED = VerdictReason("The existing class owns this behavior without another copy")
@@ -313,6 +315,52 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
     # An author's canonical self-hash is source identity, never an accepted review.
     github_cli.configure(source.github)
     assert not any(HeadReview.accepted(head.repo, head.head) for head in heads)
+
+
+def test_pending_sources_can_compute_but_only_reviewed_other_heads_allow_carrier_promotion(
+        mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
+    pair = mutual_sources
+    comms = pair.context.comms
+    client = PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit)
+    invoke(comms, client, UnderReviewHeadVerdict())
+    run = IntegrationRun(pair.checkout, pair.output, "pending inputs compute without promotion")
+    inputs = run.qualify(pair.context, ("P2", "P3"))
+    carrier = pair.publish_carrier(github_cli)
+    invoke(comms, carrier, UnderReviewHeadVerdict())
+    for verdict in (UnderReviewHeadVerdict(), QualifiedHeadVerdict(QUALIFIED)):
+        invoke(comms, client, verdict)
+        with pytest.raises(TodoError, match="no accepted exact-head source review"):
+            invoke(comms, carrier, ReviewedHeadVerdict(ACCEPTED))
+        assert not HeadReview.accepted(carrier.repo, carrier.head)
+    invoke(comms, client, ReviewedHeadVerdict(ACCEPTED))
+    assert HeadReview.accepted(client.repo, client.head)
+    original, = inputs.source(pair.core.github).heads
+    assert not HeadReview.accepted(original.repo, original.head)
+    invoke(comms, carrier, ReviewedHeadVerdict(ACCEPTED))
+    assert HeadReview.accepted(carrier.repo, carrier.head)
+    assert StoredHeadReview.current_verdict(comms.goals.todos, carrier) is ReviewedHeadVerdict
+    assert carrier.current().arm() == DraftMergeArm()
+    assert run.accepted_heads() == ()
+    assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
+
+
+def test_a_moved_companion_refuses_final_review_without_writing_acceptance(
+        mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
+    pair = mutual_sources
+    run = IntegrationRun(pair.checkout, pair.output, "a changed actual source invalidates the input")
+    run.qualify(pair.context, ("P2", "P3"))
+    carrier = pair.publish_carrier(github_cli)
+    pair.client.publish_change("Move the companion", *pair.client.write_files({
+        Path("src/new_file.py"): "changed = True\n",
+    }))
+    stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(pair.client.github, DraftListedPullRequest(
+        pair.client.number, "feature", pair.client.branch_commit, stamp, "main", reviewable_times=(stamp,),
+    ))
+    with pytest.raises(TodoError, match="moved"):
+        invoke(pair.context.comms, carrier, ReviewedHeadVerdict(ACCEPTED))
+    assert not HeadReview.accepted(carrier.repo, carrier.head)
+    assert not StoredHeadReview.head_reviews(pair.context.comms.goals.todos, carrier)
 
 
 def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp_path):

@@ -1,0 +1,100 @@
+"""One real Git/forge/Todo setup for matched source capture and promotion controls."""
+
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from pathlib import Path
+import time
+
+import pytest
+
+from agent_comms.commander.order import Commander, CommanderContext
+from agent_comms.comms import Comms
+from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.head_review import PullRequestHead
+from agent_comms.integration import IntegrationCheckout
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
+from agent_comms.todos import DraftListedPullRequest, RecordPullRequest
+from fixture_git import ENVIRONMENT
+from github_fixture import GitHubFixture
+from source_revision_fixture import SourceRepository
+
+
+@dataclass(frozen=True)
+class MutualSources:
+    context: CommanderContext
+    core: SourceRepository
+    client: SourceRepository
+    checkout: IntegrationCheckout
+    output: Path
+
+    def publish_carrier(self, github: GitHubFixture) -> PullRequestHead:
+        """Only tests emulate the root's explicit publication to the existing primary PR."""
+        commit = self.core.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        self.core.git(self.checkout.path, "push", "origin", f"{commit}:refs/pull/{self.core.number}/head")
+        stamp = "2026-10-24T00:00:00Z"
+        github.put(self.core.github, DraftListedPullRequest(
+            self.core.number, "feature", commit, stamp, "main", reviewable_times=(stamp,),
+        ))
+        return PullRequestHead(self.core.github, self.core.number, commit)
+
+
+@pytest.fixture
+def mutual_sources(
+    held_bus: Comms,
+    configured_repository: Callable[[Comms, *tuple[Repo, ...]], Commander],
+    github_cli: GitHubFixture,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> MutualSources:
+    for name, value in ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+    core = SourceRepository.create(tmp_path / "matched-core", held_bus.goals.todos.get("P2").repo)
+    client = SourceRepository.create(tmp_path / "matched-client", RepositoryName.from_wire("example/client"))
+    core_files = core.write_files({
+        Path("pyproject.toml"): '[project]\nname = "agent-comms"\nversion = "0.0.1"\ndependencies = []\n',
+        Path("stack/pyproject.toml"): (
+            '[project]\nname = "fixture-stack"\nversion = "0.0.1"\ndependencies = ["agent-comms", "source-client"]\n'
+            '[tool.uv.sources]\nagent-comms = {path = "..", editable = true}\n'
+            f'source-client = {{git = "{client.remote}", branch = "main"}}\n'
+        ),
+        Path("src/agent_comms/__init__.py"): "",
+        Path("src/agent_comms/api.py"): 'def old_api() -> str:\n    return "baseline"\n',
+    })
+    core.publish_change("Declare the baseline Core API and actual stack source", *core_files)
+    core.git(core.checkout, "push", "origin", "main")
+    client_files = client.write_files({
+        Path("pyproject.toml"): '[project]\nname = "source-client"\nversion = "0.0.1"\ndependencies = []\n',
+        Path("src/workflow.py"): 'from agent_comms.api import old_api\n\ndef run() -> str:\n    return old_api()\n',
+    })
+    client.publish_change("Declare the baseline client import", *client_files)
+    client.git(client.checkout, "push", "origin", "main")
+    for source in (core, client):
+        source.git(source.checkout, "checkout", "-B", "feature", "main")
+    core.publish_change("Replace the Core export without an alias", *core.write_files({
+        Path("src/agent_comms/api.py"): 'def new_api() -> str:\n    return "candidate"\n',
+    }))
+    client.publish_change("Migrate the client to the new Core export", *client.write_files({
+        Path("src/workflow.py"): 'from agent_comms.api import new_api\n\ndef run() -> str:\n    return new_api()\n',
+    }))
+    context = configured_repository(held_bus, core, client)
+    primary = held_bus.goals.todos.get("P2")
+    held = primary.held()
+    RecordPullRequest(primary.revision, held.owner_identity, core.link, held.generation).record(
+        held_bus.goals, primary.id)
+    held_bus.goals.update_goal("worker", CreateProblemGoalAction(
+        problem="P3", commander="lead", request=primary.request,
+        assigner=held_bus.registry.require("lead").incarnation,
+        repo=client.github, text="Migrate the paired source client",
+        order=replace(primary.order.checked(), pull_requests=(client.link,),
+                      check=replace(primary.order.check, directory=client.checkout)),
+        review_at=RecordedEventTime(time.time() + 3600),
+    ))
+    stamp = "2026-10-24T00:00:00Z"
+    for source in (core, client):
+        github_cli.put(source.github, DraftListedPullRequest(
+            source.number, "feature", source.branch_commit, stamp, "main", reviewable_times=(stamp,),
+        ))
+    checkout = IntegrationCheckout.create(core, tmp_path / "qualification", core.main_commit)
+    return MutualSources(context, core, client, checkout, tmp_path / "qualified-inputs")

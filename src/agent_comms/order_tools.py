@@ -204,6 +204,9 @@ class HeadVerdictTool:
             heads.append(self.request.current())
         preparations = []
         for current in heads:
+            with RecordProblems.collecting(problems, '--head',
+                                          'recapture integration inputs from their actual linked sources'):
+                self.operation.prepare_sources(comms.goals, current)
             with RecordProblems.collecting(problems, self.operation.preparation_field,
                                           self.operation.preparation_fix):
                 preparations.append(PreparedHeadReview(current, self.operation.subject(comms.goals, current)))
