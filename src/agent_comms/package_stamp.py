@@ -15,4 +15,4 @@ class CheckoutStamp(CoreStamp):
         return Repo.git(self.value, "rev-parse", "HEAD").strip()
 
 
-STAMP = CheckoutStamp(str(Path(__file__).resolve().parents[2]))
+STAMP: CoreStamp = CheckoutStamp(str(Path(__file__).resolve().parents[2]))

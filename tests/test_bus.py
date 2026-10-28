@@ -24,15 +24,14 @@ from agent_comms.activity_clocks import ChannelActivity
 from agent_comms.bus_activity_index import ActivityMaximum
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
-from agent_comms.bus_tables import (
-    AnsweredSource, BusSchema, CommanderUpdatePosition, MessageIdentitySource,
-)
+from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
 from agent_comms.task_attachments.commander_pings import CommanderNotice, CommanderUpdate
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
+    CommanderUpdatePosition,
     Claimed,
     ClaimHolders,
     ClaimHistoryKind,
@@ -144,7 +143,7 @@ import importlib, inspect, json, sys
 startup = sys.argv[1]
 if startup != "table-first":
     importlib.import_module(startup)
-from agent_comms.bus_tables import CommanderUpdatePosition
+from agent_comms.messages import CommanderUpdatePosition
 if startup == "agent_comms.cli_verbs.reconcile_stores":
     from agent_comms.producer_stamp import stamped_digests
     first = stamped_digests()[CommanderUpdatePosition.declared_name]
