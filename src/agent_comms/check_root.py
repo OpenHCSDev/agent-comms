@@ -15,6 +15,9 @@ from .attempt_recovery import RecoveryMonitorCapability
 from .bus import Bus
 from .cli_result import CliResult
 from .comms import Comms, wire
+from .cohort_schema import AcceptanceFrontier
+from .coordinator import Coordination
+from .coordination_database import CoordinationStore
 from .fresh_private_session import create_fresh_private_session
 from .goals import NoGoal
 from .launch_root import LaunchRoot
@@ -128,6 +131,18 @@ class CheckRoot:
                     edit.document.advance_claim(name)
                     edit.document.owners.advance(name)
             edit.commit()
+        if messages:
+            # Imported history is displayable, not fresh input for this root.
+            # Position acceptance itself; human read markers own a different fact.
+            privacy = copied.registry.store.privacy()
+            with Coordination(str(CoordinationStore.path_in(copied.root))) as store:
+                with store.session.writing() as db:
+                    for thread in declarations.values():
+                        AcceptanceFrontier(
+                            wire_root_id=privacy.namespace,
+                            recipient_lookup=thread.incarnation.require_recorded().lookup,
+                            through_seq=messages[-1].seq,
+                        ).advance(db)
 
     def _session(self, original: Thread, root: Path, slot: str, project: Path) -> str:
         session = create_fresh_private_session(root, worktree=project, location=CheckSession, slot=slot)
