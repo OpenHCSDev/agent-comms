@@ -11,7 +11,7 @@ import pytest
 from bus_record_fixture import OWNER_LOOKUP, RECIPIENT_LOOKUP, SENDER_LOOKUP
 
 from agent_comms.cohort_schema import CohortDeliveries, CohortTable
-from agent_comms.field_codec import AssignmentId, FieldCodec, ThreadLookup
+from agent_comms.field_codec import AssignmentId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
@@ -20,6 +20,7 @@ A, B, C = SENDER_LOOKUP, RECIPIENT_LOOKUP, OWNER_LOOKUP
 ROOT = "a" * 32
 CLAIM_A = AssignmentId("c" * 32)
 CLAIM_B = AssignmentId("d" * 32)
+MESSAGE_ID = MessageId.mint("cohort-schema-original")
 SEQ = 7
 
 
@@ -32,7 +33,7 @@ def _tables(store: Coordination) -> set[str]:
 
 def _receipt(
     db: sqlite3.Connection, *, n: int, k: int, root: str = ROOT,
-    message_id: str = "msg", policy_version: str = "p1", accepted_at_ms: int = 100,
+    message_id: str = MESSAGE_ID, policy_version: str = "p1", accepted_at_ms: int = 100,
 ) -> None:
     db.execute(
         "INSERT INTO claim_batch_receipts (wire_root_id,wire_seq,message_id,exact_target,"
@@ -50,9 +51,9 @@ def _assignment(db: sqlite3.Connection) -> None:
     db.execute(
         "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,"
         "message_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
-        "updated_at_ms,revision) VALUES (?,?,?,7,'msg',json_object('kind','triage_pending'),"
+        "updated_at_ms,revision) VALUES (?,?,?,7,?,json_object('kind','triage_pending'),"
         "'collective','r1','p1',100,100,1)",
-        (CLAIM_A, "Alice", A),
+        (CLAIM_A, "Alice", A, MESSAGE_ID),
     )
 
 
@@ -222,7 +223,7 @@ def test_foreign_claim_lookup_and_delivery_identity_fail_before_seal(private_com
         with store.session.writing() as db:
             _assignment(db)
             _receipt(db, n=2, k=1)
-            for assignment_id, lookup in (("missing", A), (CLAIM_A, B)):
+            for assignment_id, lookup in ((AssignmentId("e" * 32), A), (CLAIM_A, B)):
                 with pytest.raises(sqlite3.IntegrityError):
                     _member(db, assignment_id=assignment_id, lookup=lookup)
             _member(db)
@@ -241,7 +242,8 @@ def test_foreign_claim_lookup_and_delivery_identity_fail_before_seal(private_com
 
 @pytest.mark.parametrize(
     "field,override",
-    [("message_id", "wrong"), ("policy_version", "WRONG"), ("accepted_at_ms", 999)],
+    [("message_id", MessageId.mint("cohort-schema-different")), ("policy_version", "WRONG"),
+     ("accepted_at_ms", 999)],
 )
 def test_seal_cannot_adopt_claim_with_conflicting_immutable_acceptance(
     private_comms, field: str, override: str | int,

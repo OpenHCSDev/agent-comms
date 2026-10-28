@@ -2681,7 +2681,8 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
     __slots__ = ()
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
-        choices = ", ".join(quote(value) for _, value in self.editor_choices())
+        # SQL IN is an unordered set: stored schema text must not depend on import order.
+        choices = ", ".join(sorted(quote(value) for _, value in self.editor_choices()))
         return (f"{column} IN ({choices})",)
 
     def argument_options(self, argument: Argument) -> dict[str, object]:
