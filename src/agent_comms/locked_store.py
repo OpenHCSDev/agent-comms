@@ -318,15 +318,21 @@ class RootFile:
                 for path, owner in family.external_members(files).items()}
 
     @classmethod
-    def referenced_files(cls, files: FilesRequest, path: Path
+    def referenced_files(cls, files: FilesRequest, paths: Collection[Path]
                          ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
-        if path.is_absolute():
-            return cls.owned_files(files, (path,))
-        return cls.named_files(files, (path,))
+        """Absolute paths and retained names together, resolved in one inventory pass:
+        each pass scans the whole root, so resolving per path scales with the bus."""
+        names = tuple(path for path in paths if not path.is_absolute())
+        return cls.owned_files(files, (
+            *(path for path in paths if path.is_absolute()), *cls.named_paths(files, names)))
 
     @classmethod
     def named_files(cls, files: FilesRequest, names: Collection[Path]
                     ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
+        return cls.owned_files(files, cls.named_paths(files, names))
+
+    @classmethod
+    def named_paths(cls, files: FilesRequest, names: Collection[Path]) -> tuple[Path, ...]:
         root = files.root
         declarations = cls.installation_declarations(files)
         known = {files.retained_name(owner, path): path for path, owner in declarations.items()}
@@ -335,7 +341,7 @@ class RootFile:
                 raise RelationViolationError(f"Installation refuses a retained name: {name}")
             for family in cls.families():
                 family.require_retained_name(name)
-        return cls.owned_files(files, tuple(known.get(name, root / name) for name in names))
+        return tuple(known.get(name, root / name) for name in names)
 
     @classmethod
     def owned_files(
