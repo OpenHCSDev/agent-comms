@@ -20,7 +20,9 @@ from agent_comms.bus_read import BusRead, OwnerLiveRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserverDied, ReadNotifications, ReadOwnerGoal, ReadOwnerOperation, StopSidebar,
 )
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
+from owner_socket_fixture import declare_owner
 
 
 def owner_reads():
@@ -107,6 +109,22 @@ async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read
     with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(StaleRevision if other_root else OwnerIdentityChangedError):
             await process.read(read_type(root, identity))
+        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+        assert process.process.is_alive()
+        process.status.raise_if_failed()
+
+
+@pytest.mark.parametrize("read_type", owner_reads())
+async def test_external_owner_reads_refuse_before_waiting_for_a_socket(
+    comms, durable_home, runtime_processes, read_type,
+):
+    """An external bridge has a live process and no runtime socket: the read refuses with the
+    original error instead of waiting for a socket that will never be served."""
+    owner = declare_owner(comms, "external-owner", runtime_processes[0].identity, ExternalThreadExecution)
+    with ObservationProcess.awaited(comms.route) as process:
+        with pytest.raises(RelationViolationError):
+            async with asyncio.timeout(30):
+                await process.read(read_type(str(comms.root), owner.incarnation))
         assert await process.read(ReadNotifications(str(comms.root), ())) == {}
         assert process.process.is_alive()
         process.status.raise_if_failed()
