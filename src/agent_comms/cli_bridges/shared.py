@@ -1587,10 +1587,11 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
 
     async def read_export(self, read: ReadResultObserved) -> tuple[str, ...]:
         """A visible Read of this session's own export confirms the parts it shows, through the
-        same all-parts gate a Monitor event uses, which also owns whether this session attempted
-        the message. Any other file, or a read whose every line is not a part of the exported
-        message, confirms nothing. The export goes once its body is consumed and no other Read
-        of it is still running."""
+        same all-parts gate a Monitor event uses. The export names an exact reference: only the
+        attempt at that reference takes its parts, so a file at another sequence with the same
+        message id confirms nothing. Any other file, or a read whose every line is not a part of
+        the exported message, confirms nothing either. The export goes once that attempt, reread,
+        is consumed and no other Read of it is still running."""
         targets: list[str] = []
         for notice in MonitorReadFile.exported_at(self.exports, read.path):
             identity = notice.reference.message_id
@@ -1598,12 +1599,15 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
             parts = tuple(part for frame in frames for part in frame.exported_part(identity))
             if len(parts) != len(frames):
                 continue
-            for part in parts:
-                targets.extend(await part.confirm(self, read.record))
             with self.uncertain_on_contention(identity):
-                for unread in read.closing(notice):
-                    for attempt in await self.attempts(identity):
-                        attempt.outcome.finished_with(unread)
+                attempted = await self.attempts(identity)
+                for exact in (attempt for attempt in attempted
+                              if attempt.reference == notice.reference):
+                    for part in parts:
+                        targets.extend(await part.confirm(self, read.record))
+                    for unread in read.closing(notice):
+                        for stored in await self.coordinator_read(exact.stored):
+                            stored.outcome.finished_with(unread)
         return tuple(targets)
 
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:

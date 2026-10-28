@@ -48,7 +48,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
-from agent_comms.message_reference import BridgeStart
+from agent_comms.message_reference import BridgeStart, MessageReference
 from agent_comms.runtime_updates import HiddenItem
 from agent_comms.turn_item import NativeTurnId
 from agent_comms.messages import InfoKind, Message
@@ -501,6 +501,28 @@ async def test_only_visible_pages_of_the_exact_export_confirm(bridge):
     assert confirmed.monitor == ObservedMonitor(transcript_record('first-page'), 1792168805.123)
     assert not export.exists()
     assert other_export.exists() and copied.exists()
+
+
+@pytest.mark.asyncio
+async def test_an_export_copy_at_another_sequence_confirms_nothing(bridge):
+    """The same message id at another sequence is not the attempted reference, even when every
+    byte and part matches: the export names its exact reference."""
+    message, export = await exported(bridge, body_of(23))
+    lines = export.read_text().splitlines()
+    copy = Path(MonitorReadFile.naming(bridge.exports, MessageReference(
+        message.seq + 1000, message.message_id)).path)
+    shutil.copyfile(export, copy)
+    await observe(bridge, read_records(copy, shown(lines), 'wrong-sequence'))
+    pending, = await bridge.attempts(message.message_id)
+    assert pending.outcome is EmittedOutcome
+    assert pending.monitor == ReceivingMonitor(23)
+    assert await bridge.coordinator_read(lambda db: HarnessObservedPart.of(db, pending)) == ()
+    assert export.exists() and copy.exists()
+    await observe(bridge, read_records(export, shown(lines), 'exact-sequence'))
+    confirmed, = await bridge.attempts(message.message_id)
+    assert confirmed.outcome is DeliveredOutcome
+    assert confirmed.monitor == ObservedMonitor(transcript_record('exact-sequence'), 1792168805.123)
+    assert not export.exists() and copy.exists()
 
 
 @pytest.mark.asyncio
