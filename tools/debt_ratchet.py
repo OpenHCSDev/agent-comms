@@ -1151,7 +1151,7 @@ class DeclaredClass:
 
     @cached_property
     def annotated(self) -> DecoratorBinding:
-        return DecoratorBinding.named("typing", "Annotated", self.tree, self.path)
+        return DecoratorBinding.named("typing", "Annotated", self.tree, self.path, self.scope)
 
     def compared(self, field: str) -> list[ast.expr]:
         """The field's name, its type without typing.Annotated metadata, and its default."""
@@ -1173,7 +1173,8 @@ class DeclaredClass:
         """The fields this class newly declares whose type is the module-level binding of
         ``held``."""
         binding = DecoratorBinding.named(
-            ".".join(DecoratorBinding.module_of(held.path)), held.node.name, self.tree, self.path)
+            ".".join(DecoratorBinding.module_of(held.path)), held.node.name, self.tree, self.path,
+            self.scope)
         return tuple(name for name, statement in self.fields.items()
                      if name not in base.fields and binding.marks(statement.annotation))
 
@@ -1459,8 +1460,10 @@ class DecoratorBinding:
         return parts[1:] if parts[:1] == ("src",) else parts
 
     @classmethod
-    def named(cls, owner: str, name: str, tree: ast.AST, filename: str) -> DecoratorBinding:
-        """The spellings binding ``owner.name`` in the module at ``filename``."""
+    def named(cls, owner: str, name: str, tree: ast.AST, filename: str,
+              scope: str = "") -> DecoratorBinding:
+        """The spellings binding ``owner.name`` in the module at ``filename``, as read from
+        ``scope``: a spelling whose root that scope rebinds names something else there."""
         module = cls.module_of(filename)
         package = module[:-1]
         names: set[str] = set()
@@ -1479,7 +1482,8 @@ class DecoratorBinding:
                         names.add(f"{bound}.{name}")
                     if resolved == owner and imported == name:
                         names.add(bound)
-        return cls(frozenset(names))
+        hidden = cls.bindings(tree, scope).keys() if scope else frozenset()
+        return cls(frozenset(spelling for spelling in names if spelling.split(".")[0] not in hidden))
 
     @staticmethod
     def bound(node: ast.AST) -> tuple[str, ...]:

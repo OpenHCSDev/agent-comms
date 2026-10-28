@@ -1230,11 +1230,14 @@ PAGE = (
         (HOLDER + OTHER, PAGE + "\n\nPage = dict\n", 2),
         (HOLDER + OTHER, PAGE + "    archive = ''\n", 1),
         (HOLDER.replace("    operation: Page", "    operation: Page\n    before, extra = 1, 2") + OTHER, PAGE, 1),
+        (HOLDER + OTHER, PAGE.replace("class Page:\n", "class Page:\n    Annotated = dict\n"), 1),
+        (HOLDER.replace("    operation: Page", "    Page = dict\n    operation: Page") + OTHER, PAGE, 2),
     ],
     ids=["extracted", "retained", "unheld", "second_owner", "shadowed", "unresolved", "renamed",
          "retyped", "redefaulted", "extra_field", "method", "copied_twice", "aliased_imports",
          "nested_only_import", "unrelated_local_name", "annotated_rebound", "annotated_local_only",
-         "export_rebound", "field_rebound", "source_rebound_by_unpacking"],
+         "export_rebound", "field_rebound", "source_rebound_by_unpacking",
+         "annotated_shadowed_in_class", "held_class_shadowed_in_owner"],
 )
 def test_fields_extracted_into_the_one_new_held_class_are_moved_not_written(repo, holder, pages, written):
     """An old class that now holds one new class in a typed field carries each field it lost
