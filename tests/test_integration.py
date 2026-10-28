@@ -11,7 +11,7 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.todos import (
-    DraftListedPullRequest, ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
+    DraftListedPullRequest, QualifiedHeadVerdict, ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
 from fixture_git import ENVIRONMENT, SETTINGS
@@ -50,6 +50,20 @@ def test_only_accepted_ready_members_are_selected(github_cli, tmp_path: Path):
     github_cli.put(source.github, DraftListedPullRequest(
         8, "draft", source.branch_commit, stamp, "main", reviewable_times=(stamp,),
     ))
+    (source.checkout / "stage.py").write_text("source_stage = True\n")
+    source.git(source.checkout, "add", "stage.py")
+    source.git(source.checkout, "commit", "-m", "Prepare an incomplete source stage")
+    qualified = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/9/head")
+    github_cli.put(source.github, UnmergedListedPullRequest(
+        9, "qualified", qualified, stamp, "main", reviewable_times=(stamp,),
+    ))
+    github_cli.put(source.github, UnmergedListedPullRequest(
+        10, "unaccepted", source.main_commit, stamp, "main", reviewable_times=(stamp,),
+    ))
+    QualifiedHeadVerdict(VerdictReason("The source stage is reviewed while paired implementation remains incomplete")).post(
+        source.github, qualified, "lead", "source stage",
+    )
     run = integration.IntegrationRun(integration.IntegrationCheckout(source.checkout),
                                      tmp_path / "output", "ready-head selection")
     assert run.accepted_heads() == ()

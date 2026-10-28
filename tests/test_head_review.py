@@ -22,15 +22,15 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
-from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import RecordProblems
+from agent_comms.errors import TodoError, ToolRefusedError
+from agent_comms.field_codec import FieldCodec, MalformedRecord, RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth, WorkBranches
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
     CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
-    ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
+    HeadVerdict, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
@@ -39,6 +39,7 @@ pytest_plugins = ("test_holder_standing_rules", "github_fixture")
 
 REASON = StrikeReason("This head repeats the same decision in two unrelated places instead of using the existing class.")
 ACCEPTED = VerdictReason("The existing class owns this behavior without another copy")
+QUALIFIED = VerdictReason("The source stage is reviewed while paired implementation remains incomplete")
 
 
 @pytest.mark.parametrize('roast,fields', (
@@ -78,9 +79,138 @@ def head_bus(held_bus, github_cli, reviewed_source):
     return held_bus, github_cli, opened(github_cli, source, 7, source.branch_commit)
 
 
+@pytest.fixture
+def linked_head_bus(head_bus):
+    comms, _, request = head_bus
+    todo = comms.goals.todos.get("P2")
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity,
+                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
+    return head_bus
+
+
 def invoke(comms, request, verdict, order=NoHeadOrder()):
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=order)
     return tool.invoke(comms, tool.arguments, caller=ThreadCaller("lead"))
+
+
+def test_qualification_records_each_open_order_cut_without_promoting_or_finishing_work(
+        linked_head_bus, claim_order):
+    """A ready companion's source stage is a decision, not permission to ship its incomplete pair."""
+    comms, github, request = linked_head_bus
+    context = order.Commander.read_root(comms.root)
+
+    def qualify_unchanged():
+        before = comms.goals.todos.get("P2")
+        goal = comms.registry.require("worker").goal.require()
+        quote = before.order.checked().edits[0]
+        judge.main(["qualify", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
+                    "--head", request.head, "--why", QUALIFIED.text, "--serves", quote], context)
+        assert comms.goals.todos.get("P2") == replace(before, revision=before.revision + 1)
+        assert comms.registry.require("worker").goal.require() == replace(goal, revision=goal.revision + 1)
+        record = StoredHeadReview.head_reviews(comms.goals.todos, request)[0]
+        assert record.verdict == QualifiedHeadVerdict(QUALIFIED)
+        assert record.order == LinkedHeadReview.of(before, quote)
+        assert record.verdict.decides()
+        assert record.verdict.settles_edits(record, 0) == record.at.recorded_at("qualified source cut")
+        assert not record.verdict.allows_integration()
+        assert not HeadReview.accepted(request.repo, request.head)
+        with pytest.raises(TodoError, match="no recorded ok verdict"):
+            record.verdict.require_merge(request)
+
+    qualify_unchanged()  # Pending: the order still requires every unfinished clause.
+    claim_order("P2", pull_request=request.pr, head=request.head)
+    qualify_unchanged()  # Claimed: the delivery is neither accepted nor completed.
+    todo = comms.goals.todos.get("P2")
+    invoke(comms, request, UnderReviewHeadVerdict(), OrderHeadReview.for_request(
+        (todo,), request, UnquotedHeadReview.of))
+    qualify_unchanged()  # Reviewing: the recorded source cut changes no held work.
+    posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
+    assert len(posts) == 4
+    assert all("state=pending" in call for call in posts)
+    assert not any(call[:2] == ("pr", "merge") for call in github.calls())
+
+
+def test_qualification_withdraws_acceptance_without_claiming_to_disarm_the_request(head_bus):
+    comms, github, request = head_bus
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    arms = tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))
+    assert len(arms) == 1 and HeadReview.accepted(request.repo, request.head)
+    invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
+    assert StoredHeadReview.current_verdict(comms.goals.todos, request) is QualifiedHeadVerdict
+    assert not HeadReview.accepted(request.repo, request.head)
+    assert tuple(call for call in github.calls() if call[:2] == ("pr", "merge")) == arms
+    posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
+    assert "state=pending" in posts[-1]
+    # Only a later full acceptance can permit promotion and request an arm again.
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    assert HeadReview.accepted(request.repo, request.head)
+    assert len(tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))) == 2
+
+
+def test_qualification_codec_and_head_only_cli_require_a_reason():
+    verdict = QualifiedHeadVerdict(QUALIFIED)
+    assert FieldCodec.decode(HeadVerdict, FieldCodec.encode(verdict, HeadVerdict)) == verdict
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(HeadVerdict, {"kind": FieldCodec.encode(QualifiedHeadVerdict)})
+    common = ["qualify", "--pr", "7", "--head", "a" * 40]
+    assert judge.JudgeVerb.parse([*common, "--why", QUALIFIED.text]).head_operation() == verdict
+    with pytest.raises(RecordProblems) as refused:
+        judge.JudgeVerb.parse(common)
+    assert "why" in refused.value.problems
+    with pytest.raises(RecordProblems) as refused:
+        judge.JudgeVerb.parse(["qualify", "E1:abcd", "--why", QUALIFIED.text,
+                              "--serves", "Repair the existing owner"])
+    assert "ids" in refused.value.problems
+
+
+@pytest.mark.parametrize("quote", ("", "These words never occur in the held order"))
+def test_linked_qualification_requires_the_original_order_quote(linked_head_bus, quote):
+    comms, github, request = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    with pytest.raises(ToolRefusedError):
+        judge.main(["qualify", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
+                    "--head", request.head, "--why", QUALIFIED.text, "--serves", quote],
+                   order.Commander.read_root(comms.root))
+    assert comms.goals.todos.get(before.id) == before
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
+    assert not any("statuses/" in call[1] for call in github.calls())
+
+
+def test_qualification_refuses_a_noncommander_before_any_record_or_public_status(linked_head_bus):
+    comms, github, request = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    tool = CommsHeadVerdictTool(
+        request=request, operation=QualifiedHeadVerdict(QUALIFIED),
+        order=OrderHeadReview.for_request((before,), request,
+                                        lambda linked: LinkedHeadReview.of(linked, linked.order.edits[0])))
+    with pytest.raises(ToolRefusedError):
+        tool.invoke(comms, tool.arguments, caller=ThreadCaller("worker"))
+    assert comms.goals.todos.get(before.id) == before
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
+    assert not any("statuses/" in call[1] for call in github.calls())
+
+
+def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head_bus, reviewed_source):
+    comms, github, request = head_bus
+    source = reviewed_source
+    invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
+    (source.checkout / "base_only.py").write_text("advanced = True\n")
+    source.git(source.checkout, "add", "base_only.py")
+    source.git(source.checkout, "commit", "-m", "Advance the base independently")
+    source.git(source.checkout, "push", "origin", "main")
+    source.git(source.checkout, "checkout", "feature")
+    source.git(source.checkout, "merge", "--no-edit", "main")
+    head = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
+    moved = opened(github, source, request.pr, head)
+    assert request.change_identity(WorkBranches(source.checkout), "main") == moved.change_identity(
+        WorkBranches(source.checkout), "main")
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, moved)
+    assert not pulls.open(request.repo)[0].has_head_review
+    assert not any(f"statuses/{head}" in call[1] for call in github.calls())
 
 
 def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp_path):
@@ -209,11 +339,12 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
         "state=success", "state=pending"]
 
 
-def test_moved_head_posts_and_records_nothing(head_bus):
+@pytest.mark.parametrize("verdict", (ReviewedHeadVerdict(ACCEPTED), QualifiedHeadVerdict(QUALIFIED)))
+def test_moved_head_posts_and_records_nothing(head_bus, verdict):
     comms, github, request = head_bus
     moved = replace(request, head="a" * 40)
     with pytest.raises(ToolRefusedError):
-        invoke(comms, moved, ReviewedHeadVerdict(ACCEPTED))
+        invoke(comms, moved, verdict)
     assert not StoredHeadReview.head_reviews(comms.goals.todos, moved)
     assert not any("statuses/" in call[1] for call in github.calls())
 
