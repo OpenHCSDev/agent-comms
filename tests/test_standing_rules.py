@@ -68,8 +68,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     old = RulePing(RequestStalled, TextDigest.of("old housekeeping"),
                    text="IDLE housekeeping", since=RecordedEventTime(now - 600))
     previous = CommanderDecisions(thread.incarnation, (old,), (old,), ())
-    update = CommanderUpdate.derive(thread.incarnation, (), (rule,), previous, now=now)
-    assert update is not None
+    update, = CommanderUpdate.derive(thread.incarnation, (), (rule,), (previous,), now=now)
     assert update.handled[0].urgent
     current = comms.registry.require("paper")
     comms.registry.register(
@@ -77,8 +76,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
         comms.registry.status("paper"),
     )
     assert GoalBlocked.violations(comms, "paper") == ()
-    cleared = CommanderUpdate.derive(thread.incarnation, (), (), update, now=now + 60)
-    assert cleared is not None
+    cleared, = CommanderUpdate.derive(thread.incarnation, (), (), (update,), now=now + 60)
     assert cleared.handled == ()
 
 

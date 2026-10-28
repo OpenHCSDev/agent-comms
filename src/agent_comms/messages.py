@@ -47,6 +47,7 @@ from .field_codec import (
     MessageId,
     NullMember,
     PublicationExclude,
+    ThreadLookup,
     WireName,
     WireOmitDefault,
     WireOrder,
@@ -116,6 +117,27 @@ class BusRow(BusTables):
             "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name=?), 0) + 1",
             (cls.declared_name,),
         ).fetchone()[0])
+
+
+@dataclass(frozen=True)
+class CommanderUpdatePosition(BusProjectionTables):
+    """Where each typed commander packet sits, by the commander birth it addresses. A rebuildable
+    search projection: the packet's content stays on its original message's task."""
+
+    seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
+    commander_lookup: ThreadLookup
+    indexes = (Index(("commander_lookup", "seq")),)
+
+    @classmethod
+    def latest(cls, db: sqlite3.Connection, commander: ThreadLookup) -> tuple[BusRecord, ...]:
+        """The newest packet for that commander through the covering index, decoded from its one
+        original record; a commander with no packet has none."""
+        positions = db.execute(
+            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
+                     'ORDER BY {seq} DESC LIMIT 1'),
+            (FieldCodec.encode(commander),))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
 
 @dataclass(frozen=True)
@@ -1050,10 +1072,14 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         from .bus_display_index import BusDisplayIndex
         from .bus_route_counts import BusRouteCounts
         from .bus_tables import MessageIdentitySource, AnsweredSource
-        return (
+        # Task rows are written by the record that carries the task, so the record kinds own
+        # them too: that is what lets a carry replay old records into a new task row.
+        return tuple(dict.fromkeys((
             BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts,
             MessageIdentitySource, AnsweredSource,
-        )
+            *(row for task in TaskAttachment.members_with(TaskAttachment)
+              for owner in task.writer_declarations() for row in owner.writes),
+        )))
 
     def projections(self):
         from .bus_activity_index import BusActivityIndex
@@ -1071,6 +1097,7 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         yield MessageIdentitySource(self.seq, self.message_id, self.sender)
         for original in self.answers:
             yield AnsweredSource(original.seq, self.seq)
+        yield from self.task.projections(self)
 
 
     @property

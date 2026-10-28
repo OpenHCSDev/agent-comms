@@ -1,7 +1,9 @@
 """A holder claims through the real tool boundary on a copied bus."""
 import json
 import shlex
+import sqlite3
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import chdir
 from dataclasses import replace
 
@@ -10,7 +12,7 @@ import pytest
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.commander.standing import Scrutinize
+from agent_comms.commander.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.standing_rules import OwedAnswer
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
 from agent_comms.field_codec import (
@@ -29,6 +31,7 @@ from agent_comms.order_tools import (
     CommsVerdictTool,
     TodoChanged,
 )
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.slop import (
     DeclarationDerivation,
@@ -53,6 +56,8 @@ from agent_comms.todos import (
     StrikeReason,
     StrikeTodo,
     Todo,
+    ClaimPublicationUnavailable,
+    ResumeClaimOrder,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool
@@ -104,8 +109,16 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
                 if message.message_id == claimed.order.claim.message.message_id)
     assert sent.sender == "worker" and sent.target == ctx.commander
     assert sent.answers and sent.answers == claimed.order.claim.message.answers
+    # The identical call resumes the retained claim's publication: the same Todo, one original.
+    ThreadCaller("worker").invoke(request, comms)
+    assert comms.goals.todos.get("P1") == claimed
+    history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
+    assert [message.message_id for message in history.messages].count(
+        claimed.order.claim.message.message_id) == 1
+    other = replace(request, report=DeliveryReport(
+        report.read_text() + " The tests it changed need reading too."))
     with pytest.raises(TodoError, match="Only a pending order"):
-        ThreadCaller("worker").invoke(request, comms)
+        ThreadCaller("worker").invoke(other, comms)
     assert comms.goals.todos.get("P1") == claimed
 
     why = StrikeReason(
@@ -131,6 +144,136 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     assert isinstance(delivered.order, DeliveredProblemOrder)
     assert delivered.order.delivery.delivered == delivered.order.delivery.commit
     assert not delivered.pending
+
+
+def unsent_claim(ctx):
+    """A real claim whose Todo commits while another writer holds the bus."""
+    comms = ctx.comms
+    original = comms.goals.todos.get("P1")
+    comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        goal_id=original.held().generation,
+    ))
+    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
+    request = CommsOrderDeliverTool(
+        problem="P1", pull_request=1, head=sha, report=DeliveryReport(
+            "Killed the stupid duplicated count decision; read its actual diff before accepting it."),
+    )
+    before = comms.bus.bus.revision()
+    # The bus writer's own busy wait expires; nothing in the publisher or claim is patched.
+    with SQLiteFile.writers_drained(comms.bus.bus.path):
+        with pytest.raises(ClaimPublicationUnavailable) as unsent:
+            ThreadCaller("worker").invoke(request, comms)
+    claimed = comms.goals.todos.get("P1")
+    assert isinstance(claimed.order, ClaimedProblemOrder)
+    assert unsent.value.claim == claimed.order.claim
+    assert comms.bus.bus.revision() == before
+    return request, claimed, before
+
+
+def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_commander):
+    ctx = held_commander
+    comms = ctx.comms
+    request, claimed, before = unsent_claim(ctx)
+    claim = claimed.order.claim
+    # Every owed-answer gate reads the retained claim; no bus record is required.
+    opened = OwedAnswer.opened(comms, ctx.commander)
+    owed, = (rule for rule in opened if isinstance(rule, DeliveryAwaitingJudgement))
+    assert (owed.problem, owed.request, owed.message) == ("P1", claim.request(), claim.message)
+    assert owed.cited == f"P1 claim of {claim.head[:9]}"
+    assert not owed.answered_by((claim.message,))
+    # Two identical resumptions at once publish one original with its retained content.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        for resumed in [pool.submit(ThreadCaller("worker").invoke, request, comms)
+                        for _ in range(2)]:
+            resumed.result(timeout=60)
+    assert comms.bus.bus.revision() == before + 1
+    published = comms.bus.bus.lookup_message(claim.message.message_id).message
+    assert published.publication_snapshot == claim.message.publication_snapshot
+    assert published.timestamp == claim.message.timestamp
+    assert comms.goals.todos.get("P1") == claimed
+    # A repeat after success is the same original, never a second attention delivery.
+    ThreadCaller("worker").invoke(request, comms)
+    assert comms.bus.bus.revision() == before + 1
+    assert comms.goals.todos.get("P1") == claimed
+    owed, = (rule for rule in OwedAnswer.opened(comms, ctx.commander)
+             if isinstance(rule, DeliveryAwaitingJudgement))
+    assert owed.request == claim.request()
+
+
+def test_a_resume_publishes_only_the_order_s_current_claim(held_commander):
+    """A claim the order never held, or a resume prepared before a real send-back replaced the
+    claim, refuses in the Todo transaction: no bus original and no Todo change."""
+    ctx = held_commander
+    comms = ctx.comms
+    _request, claimed, before = unsent_claim(ctx)
+    worker = comms.registry.require("worker").incarnation
+    generation = claimed.held().generation
+    claim = claimed.order.claim
+    never_retained = replace(claim, head="b" * 40)
+    with pytest.raises(TodoError, match="does not hold the claim"):
+        ResumeClaimOrder(claimed.revision, worker, generation, never_retained).record(
+            comms.goals, "P1")
+    assert comms.bus.bus.revision() == before
+    assert comms.goals.todos.get("P1") == claimed
+    prepared = ResumeClaimOrder(claimed.revision, worker, generation, claim)
+    why = StrikeReason(
+        "This is stupid because the claimed change leaves the original duplicated decision in place."
+    )
+    ThreadCaller(ctx.commander).invoke(CommsVerdictTool(
+        problem="P1", operation=SendBackVerdict(
+            claimed.revision, ctx.incarnation, claimed.held(), ToolCallId("fixture-call"), why,
+            evidence=(claimed.order.owner,),
+        ),
+    ), comms)
+    replaced = comms.goals.todos.get("P1")
+    assert claim not in replaced.order.commander_claims()
+    sent = comms.bus.bus.revision()
+    with pytest.raises(TodoError):
+        prepared.record(comms.goals, "P1")
+    assert comms.bus.bus.revision() == sent
+    assert comms.goals.todos.get("P1") == replaced
+
+
+def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(held_commander):
+    """A retry that cannot take the bus writer cannot see the original it already published:
+    it reports the publication unavailable, and after release returns that original."""
+    ctx = held_commander
+    comms = ctx.comms
+    original = comms.goals.todos.get("P1")
+    comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        goal_id=original.held().generation,
+    ))
+    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
+    request = CommsOrderDeliverTool(
+        problem="P1", pull_request=1, head=sha, report=DeliveryReport(
+            "Killed the stupid duplicated count decision; read its actual diff before accepting it."),
+    )
+    ThreadCaller("worker").invoke(request, comms)
+    claimed = comms.goals.todos.get("P1")
+    published = comms.bus.bus.revision()
+    with SQLiteFile.writers_drained(comms.bus.bus.path):
+        with pytest.raises(ClaimPublicationUnavailable) as unavailable:
+            ThreadCaller("worker").invoke(request, comms)
+    assert isinstance(unavailable.value.__cause__, sqlite3.Error)
+    assert "could not be completed" in str(unavailable.value)
+    assert comms.bus.bus.revision() == published
+    ThreadCaller("worker").invoke(request, comms)
+    assert comms.bus.bus.revision() == published
+    assert comms.bus.bus.lookup_message(claimed.order.claim.message.message_id).seq == published
+    assert comms.goals.todos.get("P1") == claimed
+
+
+def test_an_unsent_claim_is_never_resent_under_a_renamed_commander(held_commander):
+    ctx = held_commander
+    comms = ctx.comms
+    request, claimed, before = unsent_claim(ctx)
+    comms.registry.rename(ctx.commander, "renamed-lead")
+    with pytest.raises(TodoError, match="retained claim was addressed"):
+        ThreadCaller("worker").invoke(request, comms)
+    assert comms.bus.bus.revision() == before
+    assert comms.goals.todos.get("P1") == claimed
 
 
 def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(

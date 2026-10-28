@@ -61,6 +61,10 @@ class ToolCall:
     def recorded(self, tool: ToolDeclaration) -> DecodedToolCall:
         return DecodedToolCall(self.id, self.name, self.arguments, tool)
 
+    def context_read_paths(self) -> tuple[str, ...]:
+        """A call Core did not decode reads nothing it can name."""
+        return ()
+
 
 @dataclass(frozen=True)
 class DecodedToolCall(ToolCall):
@@ -74,6 +78,9 @@ class DecodedToolCall(ToolCall):
 
     def started(self, position: int | NativeItemId, timestamp: float) -> ToolStartTranscript:
         return replace(super().started(position, timestamp), tool=self.tool)
+
+    def context_read_paths(self) -> tuple[str, ...]:
+        return self.tool.context_read_paths()
 
     def patched(self, diff: ToolDiff) -> PatchedToolCall:
         return PatchedToolCall(self.id, self.name, self.arguments, self.tool, diff)

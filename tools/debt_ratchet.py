@@ -2638,9 +2638,11 @@ class UncarriedRecordFormat(ChangeMeasure):
             source = git(repo, "archive", ref, "--", str(package))
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
             tree = Path(scratch)
+            sources = cls.source_paths(root, tree)
             for stamp in tree.rglob("package_stamp.py"):
-                WheelStamp.of_source(tree / package, revision(repo, ref)).write(stamp)
-            paths = dict.fromkeys((str(tree / package), *cls.source_paths(root, tree)))
+                WheelStamp.of_source(tree / package, revision(repo, ref),
+                                     source_paths=sources).write(stamp)
+            paths = dict.fromkeys((str(tree / package), *sources))
             result = SpawnedProcess.run(
                 (sys.executable, "-c", cls.probe,
                  str(Path(__file__).resolve().with_name("stored_formats.py")),

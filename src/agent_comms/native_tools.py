@@ -157,6 +157,9 @@ class ReadTool(ReadAction, PathTool, CodingTool):
     def _parse_resource(self) -> None:
         return None
 
+    def context_read_paths(self) -> tuple[str, ...]:
+        return (self.path,)
+
 
 @dataclass(frozen=True, kw_only=True)
 class BashTool(ExecuteAction, CodingTool):

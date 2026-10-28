@@ -46,7 +46,9 @@ from agent_comms.harness_delivery_states import (
     Outcome, ReceivingMonitor, UnconfirmedOutcome,
 )
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_errors import CoordinationError, DeferredRead
+from agent_comms.coordination_errors import (
+    CoordinationBeginUnavailable, CoordinationError, CoordinationReadUnavailable, DeferredRead,
+)
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.coordination_database import CoordinationStore
@@ -55,6 +57,8 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
+from agent_comms.store_files import ExclusiveDirectoryAtomicFile
 from agent_comms.message_reference import (
     BridgeBeginning,
     BridgePosition,
@@ -110,6 +114,7 @@ from .monitor import (
 
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
+    from .claude_protocol import ReadResultObserved
 
 
 class BridgeStateTable(DurableTables):
@@ -1066,10 +1071,22 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
     async def coordinator_write[Result](
         self, operation: Callable[[AssignmentStore, sqlite3.Connection], Result],
     ) -> Result:
-        """Attempts and their claim steps share the coordinator's one write, under the bus hold."""
+        """Attempts and their claim steps share the coordinator's one write, under the bus hold.
+
+        A busy store while the coordinator and its transaction are still being acquired is
+        CoordinationBeginUnavailable: the operation and its commit never ran. Once acquired,
+        the operation, its commit and close keep their own errors; none is relabelled."""
         def write() -> Result:
-            with Coordination(str(CoordinationStore.path_in(Path(self.binding.root)))) as store, \
-                    store.session.writing() as db:
+            with ExitStack() as held:
+                try:
+                    store = held.enter_context(
+                        Coordination(str(CoordinationStore.path_in(Path(self.binding.root)))))
+                    db = held.enter_context(store.session.writing())
+                except CoordinationBeginUnavailable:
+                    raise
+                except CoordinationReadUnavailable as error:
+                    raise CoordinationBeginUnavailable(
+                        CoordinationBeginUnavailable.busy_message) from error
                 return operation(store.assignments, db)
         return await self.comms.bus.when_open(write)
 
@@ -1118,12 +1135,25 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         return await self.deliver(message)
 
     async def accept(self, message: messages.Message) -> None:
+        """Before its durable begin the message is held, never skipped: a store busy while the
+        begin is still being acquired waits and reacquires for the same message. After the
+        begin, the attempt is exactly as stored; contention leaves it uncertain, never re-sent."""
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        if not await self.coordinator_write(self.attempt(message, outcome).begin):
+        while True:
+            # A detached reader creates no attempt for a message it has not reached.
+            await self.prepare_delivery()
+            try:
+                begun = await self.coordinator_write(self.attempt(message, outcome).begin)
+                break
+            except CoordinationBeginUnavailable as error:
+                self.log(f'Message {message.message_id} waits for the coordinator: {error}')
+                await asyncio.sleep(Platform.current().store_lock_interval)
+        if not begun:
             return
-        result = await message.task.delivered_by(self, message) if conversation else outcome
-        await self.finish(self.attempt(message, result), partial(replace, outcome=result))
+        with self.uncertain_on_contention(message.message_id):
+            result = await message.task.delivered_by(self, message) if conversation else outcome
+            await self.finish(self.attempt(message, result), partial(replace, outcome=result))
 
     async def watch(self) -> None:
         await self.prepare_delivery()
@@ -1248,6 +1278,10 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
 
     output_type: ClassVar[type[ThreadOutput]] = ThreadOutput
 
+    async def confirm_delivery(self, update: ConfirmedDelivery) -> RuntimeUpdate:
+        """A transcript this bridge did not deliver into confirms nothing."""
+        return update
+
     async def publish_transcript(self) -> None:
         comms = self.comms
         output = self.output_type.for_comms(
@@ -1285,6 +1319,10 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
         self, bridge: LineMonitorBridge, record: ObservedMonitor,
     ) -> tuple[str, ...]: ...
 
+    def exported_part(self, message_id: MessageId) -> tuple[MonitorPart, ...]:
+        """Only a body part of that message counts when read back from its export."""
+        return ()
+
 
 class MonitorProtocolFrame(MonitorFrame, declared_name=None):
     """A line the monitor writes itself; the transcript scan knows it by its protocol prefix."""
@@ -1302,6 +1340,85 @@ class MonitorProbe(MonitorProtocolFrame, declared_name='probe'):
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         await bridge.confirm_probe(self)
+        return ()
+
+
+class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
+    """The one bounded event for a message no single Monitor event holds.
+
+    Claude cuts each event line at 500 UTF-16 units and flushes a joined batch after 200 ms,
+    so a message spread over several lines can reach the model in pieces, one turn apart.
+    The message is instead the private file this notice names, read whole. Seeing the notice
+    proves only that the notice arrived; a visible Read of the file confirms the body."""
+
+    reference: InstanceOf[
+        Annotated[
+            MessageReference,
+            PlainValidator(partial(FieldCodec.decode, MessageReference)),
+            PlainSerializer(FieldCodec.encode),
+        ]
+    ]
+    path: str
+    instruction: Literal['This is one message. Read this complete file before acting on it.'] = (
+        'This is one message. Read this complete file before acting on it.')
+    reservation: ClassVar[int] = 0
+    """The notice's own window reservation; body parts number from one."""
+
+    @classmethod
+    def naming(cls, directory: Path, reference: MessageReference) -> Self:
+        return cls.model_validate(dict(
+            reference=reference, path=str(directory / f'{reference.seq}-{reference.message_id}.jsonl')))
+
+    @classmethod
+    def exported_at(cls, directory: Path, path: str) -> tuple[Self, ...]:
+        """The notice whose export is exactly this path; any other path names none."""
+        seq, _, name = Path(path).name.partition('-')
+        if not seq.isdecimal():
+            return ()
+        try:
+            identity = FieldCodec.decode(MessageId, name.removesuffix('.jsonl'))
+        except field_codec.MalformedRecord:
+            return ()
+        notice = cls.naming(directory, MessageReference(int(seq), identity))
+        return (notice,) if notice.path == path else ()
+
+    @contextmanager
+    def directory(self) -> Iterator[int]:
+        """The export directory, checked private and pinned by descriptor, under trusted
+        ancestors: a swapped or foreign parent refuses instead of receiving the message."""
+        parent = Path(self.path).parent
+        refusal = RelationViolationError(f'Message export directory {parent} is not private')
+        PrivateDirectoryRole.make_parents(parent)
+        TrustedAncestorRole.require_path(parent.parent, refusal)
+        directory = PrivateDirectoryRole.read(parent, refusal)
+        try:
+            yield directory
+        finally:
+            os.close(directory)
+
+    def export(self, lines: tuple[str, ...]) -> None:
+        """Publish every encoded part, one per line, once. A file already at this path must
+        hold exactly these bytes: the bus message stays the source, never the file."""
+        data = ''.join(line + '\n' for line in lines).encode()
+        path = Path(self.path)
+        refusal = RelationViolationError(f'Message export {path} is not this message')
+        with self.directory() as directory:
+            try:
+                ExclusiveDirectoryAtomicFile(path, directory=directory).write_bytes(data)
+            except FileExistsError:
+                with os.fdopen(PrivateFileRole.read(path.name, refusal, dir_fd=directory),
+                               'rb') as existing:
+                    if existing.read() != data:
+                        raise refusal from None
+
+    def retire(self) -> None:
+        """A consumed body's export is evidence nobody reads again."""
+        with self.directory() as directory, suppress(FileNotFoundError):
+            os.unlink(Path(self.path).name, dir_fd=directory)
+
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
+        """The notice frees only its own reservation; it confirms no body."""
+        await bridge.part_observed(self.reference.message_id, self.reservation)
         return ()
 
 
@@ -1357,6 +1474,9 @@ class MonitorPart(MonitorFrame, declared_name='part'):
             raise ValueError('Monitor part number exceeds total')
         return self
 
+    def exported_part(self, message_id: MessageId) -> tuple[MonitorPart, ...]:
+        return (self,) if self.id == message_id else ()
+
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[str, ...]:
         """The whole confirmation (attempt read, observed parts, mismatch, final outcome) is one
         contention boundary: a busy coordinator cannot tear down the monitor mid-confirmation."""
@@ -1379,17 +1499,30 @@ MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())
 
 
 @dataclass(frozen=True)
-class MonitorObservation(RuntimeUpdate):
-    frame: MonitorFrame
-    record: ObservedMonitor
-    targets: tuple[str, ...] = ()
+class ConfirmedDelivery(RuntimeUpdate):
+    """A transcript observation that may confirm deliveries."""
 
-    async def observed(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
-        return replace(self, targets=await self.frame.confirm(bridge, self.record))
+    targets: tuple[str, ...] = field(default=(), kw_only=True)
 
     def publish(self, output: ThreadOutput) -> None:
         """Keep confirmed reply routes in transcript order, without a second input row."""
         output.delivered_targets(self.targets)
+
+    async def observed(self, bridge: TranscriptBridge) -> RuntimeUpdate:
+        return await bridge.confirm_delivery(self)
+
+    @abstractmethod
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
+        """This observation with the reply targets its delivery confirms through that bridge."""
+
+
+@dataclass(frozen=True)
+class MonitorObservation(ConfirmedDelivery):
+    frame: MonitorFrame
+    record: ObservedMonitor
+
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
+        return replace(self, targets=await self.frame.confirm(bridge, self.record))
 
 
 class TranscriptConfirmsDelivery:
@@ -1400,6 +1533,10 @@ class MonitorIncomingFrame(IncomingFrame):
     @property
     @abstractmethod
     def parts(self) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
+        """Put the whole message on the reader as one event."""
 
 
 class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
@@ -1437,9 +1574,6 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         )
 
     async def accept(self, message: messages.Message) -> None:
-        # Wait before recording an attempt. Detachment never creates
-        # an attempt for a message that has not reached an attached reader.
-        await self.prepare_delivery()
         try:
             await super().accept(message)
         except (BrokenPipeError, ConnectionResetError) as error:
@@ -1481,6 +1615,39 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         # One reversible JSON string per line; no truncation or lost line breaks.
         return json.dumps(text, ensure_ascii=False)
 
+    @property
+    def exports(self) -> Path:
+        """Where this session's messages too large for one event are read whole."""
+        return self.options.state.absolute() / 'messages'
+
+    async def confirm_delivery(self, update: ConfirmedDelivery) -> RuntimeUpdate:
+        return await update.confirmed_by(self)
+
+    async def read_export(self, read: ReadResultObserved) -> tuple[str, ...]:
+        """A visible Read of this session's own export confirms the parts it shows, through the
+        same all-parts gate a Monitor event uses. The export names an exact reference: only the
+        attempt at that reference takes its parts, so a file at another sequence with the same
+        message id confirms nothing. Any other file, or a read whose every line is not a part of
+        the exported message, confirms nothing either. The export goes once that attempt, reread,
+        is consumed and no other Read of it is still running."""
+        targets: list[str] = []
+        for notice in MonitorReadFile.exported_at(self.exports, read.path):
+            identity = notice.reference.message_id
+            frames = read.frames()
+            parts = tuple(part for frame in frames for part in frame.exported_part(identity))
+            if len(parts) != len(frames):
+                continue
+            with self.uncertain_on_contention(identity):
+                attempted = await self.attempts(identity)
+                for exact in (attempt for attempt in attempted
+                              if attempt.reference == notice.reference):
+                    for part in parts:
+                        targets.extend(await part.confirm(self, read.record))
+                    for unread in read.closing(notice):
+                        for stored in await self.coordinator_read(exact.stored):
+                            stored.outcome.finished_with(unread)
+        return tuple(targets)
+
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
         return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
 
@@ -1488,12 +1655,11 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return await self.reader.deliver(self, message)
 
     async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
-        parts = self.incoming_frame(message).parts
-        receiving = partial(replace, monitor=ReceivingMonitor(len(parts)))
+        frame = self.incoming_frame(message)
+        receiving = partial(replace, monitor=ReceivingMonitor(len(frame.parts)))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))
-        for number, part in enumerate(parts, 1):
-            await attachment.emit(message.message_id, number, self.encode(part), self.window_bytes)
+        await frame.emit_to(attachment, self.window_bytes, self.exports)
         return EmittedOutcome
 
     async def show_sent(self, result: SendResult) -> None:

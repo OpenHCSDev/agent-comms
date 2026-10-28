@@ -20,6 +20,7 @@ from process_tree_fixture import TREE, identities, ready
 
 from debt_ratchet import (
     AUDIT_SCRIPTS,
+    REPOSITORY,
     BannedVocabulary,
     BroadExceptDefault,
     BroadSwallow,
@@ -306,6 +307,9 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
         ["git", "archive", "HEAD", "--", "src/agent_comms"], timeout=20
     )
     subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=source, check=True, timeout=60)
+    # A Git archive carries no submodule: the complete producer stamp's child reaches the
+    # pinned audit only through the measurement's own source paths.
+    assert not (tmp_path / AUDIT_SCRIPTS.resolve().relative_to(REPOSITORY) / "audit").exists()
     dependency = tmp_path / "dependencies"
     dependency.mkdir()
     (dependency / "parent_only_dependency.py").write_text("VERSION = 7\n")
@@ -314,10 +318,12 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
     revision = repo.commit(
         {
             "probe_record.py": (
-                "from dataclasses import dataclass\nfrom typing import ClassVar\n"
+                "from dataclasses import dataclass\nfrom typing import ClassVar, Literal\n"
                 "from parent_only_dependency import VERSION\n"
+                "from agent_comms.owner_protocol import CORE_COMMIT\n"
                 "@dataclass(frozen=True)\nclass Record:\n"
                 "    version: ClassVar[int] = VERSION\n    value: str\n"
+                "    commit: Literal[CORE_COMMIT]\n"
             )
         }
     )
@@ -328,6 +334,9 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
         tmp_path, revision, repo.root, {"src/agent_comms/probe_record.py"}
     )
     assert forms["agent_comms.probe_record.Record"].version == 7
+    # The archive holds no Git checkout: the protocol's commit is the revision the stamp
+    # factory was given, reached through the complete writer family without asking Git.
+    assert forms["agent_comms.probe_record.Record"].fields["commit"]["enum"] == [revision]
     assert os.environ["PYTHONPATH"] == inherited
 
 
