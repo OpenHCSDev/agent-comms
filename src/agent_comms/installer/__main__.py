@@ -7,6 +7,7 @@ import sys
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.launch import InstallRun, stopped
+from agent_comms.installer.prepared import PreparedInstall
 from agent_comms.launch_root import LaunchRoot
 
 
@@ -16,7 +17,7 @@ def main() -> None:
     request = FieldCodec.decode(InstallRun, FieldCodec.parse(sys.stdin.read()))
     try:
         with LaunchRoot.from_path(request.root).selected():
-            request.bootstrap()
+            PreparedInstall.bootstrap(request)
     except UpgradeRefused as error:
         raise SystemExit(str(error))
 

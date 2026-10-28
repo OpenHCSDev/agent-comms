@@ -45,7 +45,7 @@ RESTARTED = RestartedService("Connector on port 1 for /bus", Path("/runtime/bin/
 ))
 def test_install_mode_decodes_the_launchers_single_boolean_wire_form(flags, mode, serialized):
     arguments = build_parser().parse_args(("install", *flags))
-    command = CliCommand.member_named(arguments.command).from_arguments(arguments)
+    command = arguments.command_declaration.from_arguments(arguments)
     assert type(command.mode) is mode
     encoded = FieldCodec.encode(command)
     assert encoded["rehearse"] is serialized and "mode" not in encoded

@@ -18,12 +18,11 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 from traceback import extract_tb
-from typing import Annotated, Never, TextIO
+from typing import Annotated, TextIO
 
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.installer.request import InstallRequest
-from agent_comms.installer.backup import StoreBackup
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.logs import InstallLogs, InstallUnit
 from agent_comms.installer.commands import InstallCommands
@@ -58,7 +57,7 @@ from agent_comms.installer.upgrade import (
     Upgrade,
     upgrade,
 )
-from agent_comms.repo import Repo, ScratchCheckout
+from agent_comms.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.storage_rules import StorageRule
 from metaclass_registry.mro_dispatch import (
@@ -200,33 +199,6 @@ class InstallRun:
         output.write(self.unit.result.read_text())
         return 0
 
-    def bootstrap(self) -> Never:
-        """Build with the outgoing dependencies, then run with the target dependencies.
-
-        Carry discovery imports client declarations, so it belongs after this handoff.
-        The request travels on the same stdin contract, including the build's timings;
-        no process environment flag decides whether the handoff has happened.
-        """
-        tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        try:
-            with InstallCommands() as commands:
-                StoreBackup.complete_interrupted(
-                    self.root, self.command.spill_dir,
-                    Stack(self.command.checkout, commands).restore_stores)
-                staged = Stack.build(ScratchCheckout(tree.path), commands)
-            prepared = PreparedInstall(self, staged.runtime)
-            self.phases.extend(timing.launched() for timing in commands.clock.phases)
-            with tempfile.TemporaryFile(mode="w+") as request:
-                request.write(FieldCodec.compact(FieldCodec.encode(prepared)))
-                request.flush()
-                request.seek(0)
-                os.dup2(request.fileno(), sys.stdin.fileno())
-            os.execve(staged.python, (str(staged.python), "-m", "agent_comms.installer.prepared"),
-                      staged.environment(tree.steps_package))
-        except BaseException:
-            tree.__exit__(*sys.exc_info())
-            raise
-
     def run(self, runtime: LaunchRuntime) -> Upgrade:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
@@ -238,11 +210,3 @@ class InstallRun:
         # The target runtime is published by now, and only its installed package
         # declares harness registration beside the operation family (``TargetProgram``).
         return stack.probe(HarnessesProbe(self.root, self.command.declared_part()))
-
-
-@dataclass(frozen=True)
-class PreparedInstall:
-    """The bootstrap's exact built runtime, consumed only by the target interpreter."""
-
-    request: InstallRun
-    runtime: LaunchRuntime
