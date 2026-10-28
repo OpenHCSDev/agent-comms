@@ -287,7 +287,8 @@ class Initialized(WireModel):
 
 
 class CodexRefused(RuntimeError):
-    """The server answered a request with an error, so it did not perform it."""
+    """The server answered a request with a JSON-RPC error. That alone does not prove the request
+    had no effect; only a specific refusal (``CodexDraining``) says so."""
 
 
 class CodexDraining(CodexRefused):

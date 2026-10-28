@@ -117,16 +117,22 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
 
     async def deliver(self, message: Message) -> type[Outcome]:
         request = BusInput.for_message(self.thread, message.message_id, IncomingFrame(message).text)
+        retries = 0
         while True:
             try:
                 async with CodexConnection.open(self.socket) as codex:
                     await codex.call(request)
-                return DeliveredOutcome
             except (CodexDraining, aiohttp.ClientConnectorError) as absent:
-                # Refused before any turn started, or no server to connect to: nothing was sent,
-                # and a draining server asks for this turn again after reconnecting.
-                self.log(f'Codex unavailable ({absent}); sending {message.message_id} once it is back')
+                # Only these two prove no turn started: the connection never opened, or the server
+                # refused while draining and asks for the same turn after reconnecting.
+                if not retries:
+                    self.log(f'Codex unavailable ({absent}); sending {message.message_id} once it is back')
+                retries += 1
                 await asyncio.sleep(self.reconnect_seconds)
+                continue
+            if retries:
+                self.log(f'Codex is back; sent {message.message_id} after {retries} refused attempts')
+            return DeliveredOutcome
 
     async def show_sent(self, result: SendResult) -> None:
         async with CodexConnection.open(self.socket) as codex:
