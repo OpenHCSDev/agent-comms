@@ -79,7 +79,9 @@ class OwnerReading[Result](ABC):
     """One exchange with exactly one live owner incarnation over its socket."""
 
     def admit(self, owner: Thread) -> None:
-        """An ordinary owner reading accepts any registered owner of the held incarnation."""
+        """Only a native owner serves a runtime socket; an external bridge with a live PID
+        has none, so it is refused here instead of waited on before dispatch."""
+        owner.execution.require_native()
 
     @abstractmethod
     async def read(self, owner: RuntimeConnection) -> Result: ...
@@ -105,9 +107,6 @@ class OwnerLiveRead[Result: ToolResult](OwnerReading[Result], BusRead[Result], A
 
         owner = comms.registry.require(reader.subject(self.thread)).incarnation
         return asyncio.run(OwnerReplyConnection.answer(comms, owner, self))
-
-    def admit(self, owner: Thread) -> None:
-        owner.execution.require_native()
 
     async def read(self, owner: RuntimeConnection) -> Result:
         from .runtime_requests import OwnerReadRuntimeRequest

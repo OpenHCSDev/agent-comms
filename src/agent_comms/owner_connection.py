@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .child_process import ProcessIdentity
     from .registry_document import RegistryEntry
-    from .thread_identity import OwnerIdentity
+    from .thread_identity import OwnerIdentity, ThreadIncarnation
     from .runtime import RuntimeServer, SocketClient
     from .threads import Thread
 
@@ -149,6 +149,11 @@ class OwnerConnection:
         self._requests: set[asyncio.Task] = set()
         self._identity = comms.registry.entry(session_id).entry.thread.incarnation
         self._root_identity = comms.root.stat()
+
+    def require_identity(self, owner: ThreadIncarnation) -> None:
+        """The incarnation this connection captured is the one the caller holds."""
+        if self._identity != owner:
+            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
 
     def _owner_entry(self) -> RegistryEntry:
         if self._closed:

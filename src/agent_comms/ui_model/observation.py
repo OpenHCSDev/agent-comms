@@ -95,7 +95,6 @@ if TYPE_CHECKING:
     from multiprocessing.connection import Connection
 
     from agent_comms.runtime import RuntimeConnection
-    from agent_comms.threads import Thread
     from agent_comms.tool_result import ToolResult
     from agent_comms.transcripts import TranscriptRead
 
@@ -682,9 +681,6 @@ class ReadOwnerOperation(OwnerRead):
     """The UI's envelope for an owner-live read: the operation's own reply, from the held owner."""
 
     operation: OwnerLiveRead
-
-    def admit(self, owner: Thread) -> None:
-        self.operation.admit(owner)
 
     async def read(self, owner: RuntimeConnection) -> ToolResult:
         return await self.operation.read(owner)

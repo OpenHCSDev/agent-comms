@@ -435,10 +435,10 @@ class OwnerReplyConnection(RuntimeConnection):
     def held(cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading) -> Self:
         """A connection to exactly this registered owner incarnation, which the reading admits."""
         thread = comms.registry.require(owner.name)
-        if thread.incarnation != owner:
-            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
+        connection = cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
+        connection.require_identity(owner)
         reading.admit(thread)
-        return cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
+        return connection
 
     @classmethod
     async def answer[Result](
