@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.native_runtime_input import NativeRuntimeTable
-from .field_codec import InputId
+from .field_codec import AcpSessionId, InputId
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import (
@@ -24,6 +24,7 @@ from .diagnostics import (
     record_request_progress,
 )
 from .following_inputs import FollowingInputs
+from .goal_turn_permit import NoLaunchPermit
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import SelectedModel
@@ -35,6 +36,7 @@ from .native_prompt_send import PromptBoundary
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
+from .owned_send import OwnedSend
 from .text_digest import TextDigest
 from .tracked_turn import (
     NO_FOLLOWING_INPUTS,
@@ -46,6 +48,7 @@ from .turn_context import RenderedInput
 from agent_comms.turn_input_source import SelectedOriginalInput
 
 if TYPE_CHECKING:
+    from .input_drain import InputDrain
     from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
     from .selected_session import SelectedSession
@@ -62,8 +65,19 @@ class PrivateSendClaim(PromptBoundary):
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
-    def following_original(self, prompt: str):
-        return SelectedOriginalInput.answering(prompt, self.selected.goal_permission)
+    def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:
+        """The committed prompt supplies following authority, never a later selection."""
+        return OwnedSend(
+            comms=inputs.comms,
+            inputs=inputs,
+            goal_store=inputs.comms.goals.open_goal_store(),
+            session_id=session_id,
+            thread=self.owner.thread,
+            turn=self.owner.turn_lease.turn_id,
+            claim_generation=self.owner.claimed_generation,
+            original_source=SelectedOriginalInput.answering(prompt, self.selected.goal_permission),
+            goal_permit=NoLaunchPermit(),
+        )
 
     @property
     def bus(self) -> MessageBus:

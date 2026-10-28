@@ -48,14 +48,19 @@ if TYPE_CHECKING:
     from .backend import TurnSession
     from .coordination_tables.assignments import WakeAssignment
     from .pi_payloads import PiToolResult
+    from .threads import Thread
 
 
 @dataclass(frozen=True, kw_only=True)
 class CodingToolOwner(ABC):
     comms: Comms
-    owner_name: str
+    thread: Thread
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
+
+    @property
+    def owner_name(self) -> str:
+        return self.thread.name
 
     @property
     @abstractmethod
@@ -63,7 +68,7 @@ class CodingToolOwner(ABC):
 
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
-        thread = registry.require(self.owner_name)
+        thread = self.thread
         projection = StorageProjection(registry.storage_rule, thread)
         effects = await asyncio.to_thread(projection.check_call, call)
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
@@ -79,12 +84,12 @@ class CodingToolOwner(ABC):
             self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(store, slot, call.call_id)
-            owner = self.comms.registry.require(self.owner_name)
             resource = call.allowed_claim()
             if resource is not None:
-                canonical = resource.normalized(owner.worktree.path)
+                canonical = resource.normalized(self.thread.worktree.path)
                 self.claims[canonical] = self.claim_resource(
-                    store, turn, resource, FieldCodec.decode(ClaimId, slot))
+                    store, turn, replace(resource, resource=Path(canonical)),
+                    FieldCodec.decode(ClaimId, slot))
 
         reservation = await self.reserve_room(call)
         async with reservation.checking(), self.check_lock:
@@ -152,8 +157,7 @@ class CodingToolMode(NativeToolMode):
         declarations = NativeToolDeclaration.members_with(NativeToolDeclaration)
         arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
                      *NativeToolDeclaration.extension_arguments(package))
-        thread = self.owner.comms.registry.require(self.owner.owner_name)
-        return thread.native_launch_arguments(
+        return self.owner.thread.native_launch_arguments(
             NativeArguments.parse(arguments), package, self.owner.comms.root,
         )
 
