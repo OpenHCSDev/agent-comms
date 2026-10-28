@@ -5,7 +5,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from typing import Annotated, Literal
+from functools import partial
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import JsonValue
 
@@ -31,9 +32,11 @@ from agent_comms.todos import (
     JudgedCall,
     ToolCallVerdict,
 )
+from .bus_read import OwnerLiveRead
 from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderHud
 from .comms import Comms
+from .coordinator import Coordination
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
@@ -68,6 +71,9 @@ from .turn_digests import (
     TurnsSince,
     UnjudgedEdits,
 )
+
+if TYPE_CHECKING:
+    from .owner_connection import RuntimeRequestContext
 
 
 @dataclass(frozen=True)
@@ -499,13 +505,27 @@ class CommsTurnsTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsInputDeliveryTool(ThreadReadTool):
+class InputDeliveryRead(
+    OwnerLiveRead[DeliveryOverview], ThreadReadTool, declared_name="comms_input_delivery",
+):
+    """The one declaration of a unit's input delivery, answered by its live native owner."""
+
     label = "Input delivery"
     description = ("Read a unit's inputs that failed or are UNKNOWN, and its earlier delivery "
                    "notices, each with its bus sequence and input id; none is ever replayed.")
+    include_history: Annotated[
+        bool, *tool_field("Include earlier delivery notices; current inputs are always read")
+    ] = True
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> DeliveryOverview:
-        return comms.goals.input_delivery(caller.subject(self.thread), include_history=True)
+    async def owned(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
+        scope = await ctx.server.agent.inputs.delivery_scope(ctx.session_id)
+        return await Coordination.run_worker(partial(
+            ctx.server.agent._comms.goals.input_delivery,
+            ctx.name, include_history=self.include_history, scope=scope,
+        ))
+
+    def decode_reply(self, raw: object) -> DeliveryOverview:
+        return FieldCodec.decode(DeliveryOverview, raw)
 
 
 @dataclass(frozen=True, kw_only=True)

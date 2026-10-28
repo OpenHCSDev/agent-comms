@@ -38,6 +38,7 @@ from .errors import RelationViolationError
 from .field_codec import AcpSessionId, FieldCodec, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalHistory
+from .bus_read import OwnerLiveRead
 from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
@@ -45,7 +46,7 @@ from .owner_connection import NoControllerToken, OwnerConnection, ResultRuntimeR
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import LiveThreadOwnerBinding
-from .tool_result import DeclaredReply
+from .tool_result import DeclaredReply, ToolResult
 from .turn_context import (
     ContextManifest,
     ContextSourceText,
@@ -267,16 +268,13 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
-    include_history: bool = False
+class OwnerReadRuntimeRequest(ResultRuntimeRequest):
+    """One envelope for every owner-live read; the operation answers under this owner's context."""
 
-    async def result(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
-        return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
-            ctx.name,
-            include_history=self.include_history,
-            scope=await ctx.server.agent.inputs.delivery_scope(ctx.session_id),
+    operation: OwnerLiveRead
 
-        ))
+    async def result(self, ctx: RuntimeRequestContext) -> ToolResult:
+        return await self.operation.owned(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

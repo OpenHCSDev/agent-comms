@@ -41,7 +41,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import BusReader, UiRead
+from agent_comms.bus_read import BusReader, OwnerLiveRead, OwnerReading, UiRead
 from agent_comms.child_process import join_retirement
 from agent_comms.commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
 from agent_comms.comms import Comms
@@ -79,7 +79,6 @@ from agent_comms.revision_views import (
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import ThreadPresentation
 from agent_comms.transcripts import TranscriptCursor, TranscriptReadIdentity
-from agent_comms.ui_model.delivery import ReadDeliveryView
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
     SidebarModel,
@@ -96,6 +95,8 @@ if TYPE_CHECKING:
     from multiprocessing.connection import Connection
 
     from agent_comms.runtime import RuntimeConnection
+    from agent_comms.threads import Thread
+    from agent_comms.tool_result import ToolResult
     from agent_comms.transcripts import TranscriptRead
 
 
@@ -453,7 +454,7 @@ class ReadCommanderUnit(ReadRequest):
 
 
 @dataclass(frozen=True)
-class OwnerRead(AwaitedRead):
+class OwnerRead(OwnerReading[object], AwaitedRead):
     """A read the live owner of thread incarnation ``owner`` answers over its socket.
 
     Served as it arrives, beside store reads; the owner's reply is decoded
@@ -487,25 +488,10 @@ class OwnerRead(AwaitedRead):
         except self.refusal_errors as error:
             return self.refused(error)
 
-    def connect(self, comms: Comms) -> RuntimeConnection:
-        from agent_comms.runtime import OwnerIdentityChangedError, OwnerReplyConnection, socket_path
-
-        owner = comms.registry.require(self.owner.name)
-        if owner.incarnation != self.owner:
-            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
-        return OwnerReplyConnection(
-            comms, owner.name, socket_path(comms.root, owner.require_process().pid),
-        )
-
     async def ask(self, comms: Comms) -> object:
-        connection = await asyncio.to_thread(self.connect, comms)
-        try:
-            return await self.read(connection)
-        finally:
-            await connection.close()
+        from agent_comms.runtime import OwnerReplyConnection
 
-    @abstractmethod
-    async def read(self, owner: RuntimeConnection) -> object: ...
+        return await OwnerReplyConnection.answer(comms, self.owner, self)
 
 
 @dataclass(frozen=True)
@@ -692,15 +678,16 @@ class ReadOwnerGoal(OwnerRead):
 
 
 @dataclass(frozen=True)
-class ReadDeliveryOverview(OwnerRead):
-    """The owner's delivery notices, checked against its live queue."""
+class ReadOwnerOperation(OwnerRead):
+    """The UI's envelope for an owner-live read: the operation's own reply, from the held owner."""
 
-    include_history: bool = False
+    operation: OwnerLiveRead
 
-    async def read(self, owner: RuntimeConnection) -> ReadDeliveryView:
-        return ReadDeliveryView.from_wire(
-            await owner.request("input_dispositions", include_history=self.include_history)
-        )
+    def admit(self, owner: Thread) -> None:
+        self.operation.admit(owner)
+
+    async def read(self, owner: RuntimeConnection) -> ToolResult:
+        return await self.operation.read(owner)
 
 
 @dataclass(frozen=True)

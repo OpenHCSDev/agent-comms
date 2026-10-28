@@ -62,6 +62,9 @@ from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .acp import CommsAgent
+    from .bus_read import OwnerReading
+    from .comms import Comms
+    from .thread_identity import ThreadIncarnation
     from .selected_write_authority import AcpSelectedWriteAuthority
     from .turn_runner import TurnRunner
 
@@ -427,6 +430,26 @@ class OwnerReplyConnection(RuntimeConnection):
     """Bound only the live owner's response after a request has been dispatched."""
 
     REPLY_TIMEOUT: ClassVar[float] = 3
+
+    @classmethod
+    def held(cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading) -> Self:
+        """A connection to exactly this registered owner incarnation, which the reading admits."""
+        thread = comms.registry.require(owner.name)
+        if thread.incarnation != owner:
+            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
+        reading.admit(thread)
+        return cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
+
+    @classmethod
+    async def answer[Result](
+        cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading[Result],
+    ) -> Result:
+        """One reading from the held owner; the connection closes whatever the outcome."""
+        connection = await asyncio.to_thread(cls.held, comms, owner, reading)
+        try:
+            return await reading.read(connection)
+        finally:
+            await connection.close()
 
     async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
         async with asyncio.timeout(self.REPLY_TIMEOUT):

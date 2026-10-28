@@ -458,7 +458,10 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments, caller)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
-        except (ToolRefusedError, RelationViolationError, CoordinationError) as error:
+        except (
+            ToolRefusedError, RelationViolationError, CoordinationError,
+            Refused, ConnectionError, TimeoutError,
+        ) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)
 

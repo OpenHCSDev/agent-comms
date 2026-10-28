@@ -86,7 +86,10 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
         {"action": "cancel"},
         {"action": "set_config_option", "config_id": "model", "value": "test/model"},
         {"action": "compact", "instructions": "focus"},
-        {"action": "input_dispositions", "include_history": True},
+        {"action": "owner_read", "operation": {
+            "tool": "comms_input_delivery", "thread": "", "include_history": True}},
+        {"action": "owner_read", "operation": {
+            "tool": "comms_input_delivery", "thread": "", "include_history": False}},
         {"action": "dismiss_historical_inputs"},
         {"action": "goal_history", "goal_id": None},
         {"action": "goal_snapshot"},
@@ -117,7 +120,9 @@ def test_runtime_wire_format_round_trip(parameters):
 @pytest.mark.parametrize(
     "parameters",
     [
-        {"action": "input_dispositions", "include_history": "yes"},
+        {"action": "owner_read", "operation": {
+            "tool": "comms_input_delivery", "include_history": "yes"}},
+        {"action": "owner_read", "operation": {"tool": "comms_goal_history"}},
         {"action": "goal_history", "goal_id": 2},
         {"action": "edit_goal", "goal_id": None, "expected_revision": True, "text": "x"},
         {"action": "retry_goal"},

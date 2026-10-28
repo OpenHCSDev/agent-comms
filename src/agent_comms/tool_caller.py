@@ -3,14 +3,13 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated
 
 from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
-from .launch_runtime import CallingThreadUnavailable
 from .bus_read import BusReader, OperatorOutcomes
 from .presentation import OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
 from .thread_identity import ThreadIncarnation
@@ -55,13 +54,6 @@ class ToolCaller(BusReader):
     def from_flag(self) -> tuple[str, ...]:
         """The command line's --from argument naming this caller, if it names a thread."""
 
-    @abstractmethod
-    def own_thread(self) -> str:
-        """The thread a tool acts on when its call names none."""
-
-    def subject(self, named: str) -> str:
-        return named or self.own_thread()
-
     def commanding(self, comms: Comms, commander: str) -> None:
         """An ordinary caller needs no commander-child registration."""
         return None
@@ -104,17 +96,11 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ToolCatalogResult(tools)
 
-    def refuse_thread(self) -> NoReturn:
-        raise CallingThreadUnavailable("This tool requires a thread caller.")
-
     def acting_name(self, default: str) -> str:
         return default
 
     def from_flag(self) -> tuple[str, ...]:
         return ()
-
-    def own_thread(self) -> NoReturn:
-        return self.refuse_thread()
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller with no thread gives no directive."""
