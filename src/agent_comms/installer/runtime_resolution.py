@@ -244,7 +244,7 @@ class UvSourceOptions(UvRecord):
         return self.model_dump(mode="python", by_alias=True, exclude_unset=True)
 
     def with_options(self, options: dict[str, object], marker: str) -> Self:
-        selected = type(self)(**{**options, **self.document()})
+        selected = type(self).model_validate({**options, **self.document()})
         if marker:
             selected.marker = marker
         return selected
