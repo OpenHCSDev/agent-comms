@@ -2079,6 +2079,9 @@ class FamilyDeletion(OrderDeletion):
 
 @dataclass(frozen=True)
 class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
+    def source_locations(self) -> tuple[FileLine, ...]:
+        return ()
+
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         """An unlocated finding has no source reference to validate."""
 
@@ -2100,6 +2103,9 @@ class UnlocatedProblemFinding(ProblemFinding):
 @dataclass(frozen=True)
 class LocatedProblemFinding(ProblemFinding):
     where: FileLine
+
+    def source_locations(self) -> tuple[FileLine, ...]:
+        return (self.where,)
 
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         self.where.require_exists(roots, revision)
@@ -2505,7 +2511,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def source_repositories(self) -> tuple[RepositoryName, ...]:
         """Companions are declared by qualified locations or explicit PR links."""
-        locations = (self.owner, *self.finding.located(), *self.scope.source_locations())
+        locations = (self.owner, *self.finding.source_locations(), *self.scope.source_locations())
         return tuple(dict.fromkeys((
             *(link.repo for link in self.pull_requests),
             *(repository for location in locations

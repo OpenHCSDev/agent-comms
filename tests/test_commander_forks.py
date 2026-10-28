@@ -62,6 +62,7 @@ from agent_comms.todos import (
     FixScope,
     FixShape,
     IncomingWork,
+    LocatedProblemFinding,
     PendingProblemOrder,
     ProblemAllocation,
     ProgressRead,
@@ -71,6 +72,7 @@ from agent_comms.todos import (
     StrikeReason,
     SupersededVerdict,
     Todo,
+    UnlocatedProblemFinding,
 )
 from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.tool_declaration import ToolDeclaration
@@ -442,7 +444,14 @@ def test_edit_membership_preserves_native_and_external_foreign_records(edit_sour
     assert native_ids == external_ids == {identity for identity, _ in calls}
 
 
-def test_canonical_primary_companion_and_released_roots_take_precedence(edit_sources):
+@pytest.mark.parametrize("declare_companion", (
+    pytest.param(lambda order, location: replace(
+        order, scope=FixScope(FixShape(order.scope.shape.parents, (location,))),
+        finding=UnlocatedProblemFinding()), id="scope-unlocated-finding"),
+    pytest.param(lambda order, location: replace(
+        order, finding=LocatedProblemFinding(location)), id="located-finding"),
+))
+def test_canonical_primary_companion_and_released_roots_take_precedence(edit_sources, declare_companion):
     comms, source, foreign, primary = edit_sources
     store = comms.goals.todos
     todo = store.get("P40")
@@ -452,9 +461,8 @@ def test_canonical_primary_companion_and_released_roots_take_precedence(edit_sou
     companion = rule.repository_checkout(roots, todo.id, foreign.github)
     foreign.git(foreign.checkout, "worktree", "add", "-q", "-b", "companion-P40", str(companion))
     # A qualified source declaration, not origin equality alone, authorizes the companion.
-    scope = FixScope(FixShape(todo.order.scope.shape.parents,
-                              (FileLine("owner.py", 2, NamedRepository(foreign.github)),)))
-    save_edit_order(comms, replace(todo, order=replace(todo.order, scope=scope)))
+    location = FileLine("owner.py", 2, NamedRepository(foreign.github))
+    save_edit_order(comms, replace(todo, order=declare_companion(todo.order, location)))
     released = another_edit_order(comms)
     save_edit_order(comms, released)
     released_path = rule.order_checkout(roots, released.id)
@@ -472,7 +480,8 @@ def test_canonical_primary_companion_and_released_roots_take_precedence(edit_sou
     assert selected.problems_for(str(released_path / "new.py")) == frozenset(("P41",))
     # A registered foreign repository in an undeclared companion allocation stays unowned.
     current = store.get("P40")
-    save_edit_order(comms, replace(current, order=replace(current.order, scope=source.scope())))
+    save_edit_order(comms, replace(current, order=replace(
+        current.order, scope=source.scope(), finding=UnlocatedProblemFinding())))
     _, workplaces = edit_workplaces(comms)
     assert workplaces[owner.incarnation].problems_for(str(companion / "new.py")) == frozenset()
 
