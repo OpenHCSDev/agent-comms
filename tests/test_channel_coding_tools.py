@@ -28,7 +28,7 @@ from agent_comms.field_codec import ClaimId, InputId, TurnId
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
-from agent_comms.pi_payloads import MissingToolResult, ReportedFlag, ReportedText, ToolCallContent
+from agent_comms.pi_payloads import ReportedFlag, ReportedText, ToolCallContent
 from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.threads import Thread
 
@@ -217,6 +217,9 @@ class TransportOwner:
     def tool_completed(self, call, result, child):
         pass
 
+    def tool_failed(self, call, child):
+        pass
+
 
 def _request(socket, id, name, args):
     return (
@@ -237,8 +240,8 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
             await release.wait()
             return NoRoomNeeded()
 
-        def tool_completed(self, call, result, child):
-            finished.append((call.call_id, result))
+        def tool_failed(self, call, child):
+            finished.append(call.call_id)
 
     owner = Owner()
     socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
@@ -252,7 +255,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
     socket.tool_finished(ToolExecutionEnd(
         tool_call_id=ReportedText("late"), tool_name=ReportedText("read"), is_error=ReportedFlag(True)
     ), owner.input_id)
-    assert finished == [("late", MissingToolResult())]
+    assert finished == ["late"]
     release.set()
     with pytest.raises(ValueError):
         await pending

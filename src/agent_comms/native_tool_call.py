@@ -280,6 +280,9 @@ class CodingCall(NativeToolCall):
     def completed_instruction_read(self, child: PiSessionChild, result: PiToolResult) -> None:
         pass
 
+    def failed_instruction_read(self, child: PiSessionChild) -> None:
+        pass
+
     def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
         """Coding output is not a goal publication, even if its text resembles one."""
 

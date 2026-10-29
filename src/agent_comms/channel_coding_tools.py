@@ -29,7 +29,7 @@ from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
-from .pi_payloads import MissingToolResult, StorageDenialToolDetails
+from .pi_payloads import StorageDenialToolDetails
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from .coordination_tables.assignments import WakeAssignment
     from .native_child import PiSessionChild
     from .pi_payloads import PiToolResult
+    from .pi_events import ToolExecutionEnd, ToolExecutionStart
     from .threads import Thread
 
 
@@ -108,6 +109,9 @@ class CodingToolOwner(ABC):
         """Only an actually completed full read opens this child's rule gate."""
         call.completed_instruction_read(child, result)
         call.published_goal(result, self.goal_permission)
+
+    def tool_failed(self, call: CodingCall, child: PiSessionChild) -> None:
+        call.failed_instruction_read(child)
 
     @abstractmethod
     def verify(self, store, turn, snapshot): ...
@@ -216,19 +220,21 @@ class CodingToolSocket(ToolTransport[CodingCall]):
             call.progress.observation.require(Executing, ToolNotExecuting())
             call.progress.room = reservation
 
-    def tool_started(self, event) -> None:
+    def tool_started(self, event: ToolExecutionStart) -> None:
         super().tool_started(event)
         _, call = self.calls.require_current(
             FieldCodec.encode(event.tool_call_id), 'Missing started tool')
         self.owner.tool_started(call, self.turn.native)
 
-    def tool_finished(self, event, input_id):
+    def tool_finished(self, event: ToolExecutionEnd, input_id: InputId) -> None:
         super().tool_finished(event, input_id)
         _, call = self.calls.require_current(
             FieldCodec.encode(event.tool_call_id), 'Missing completed tool'
         )
-        result = MissingToolResult() if event.is_error.value_or(False) else event.result
-        self.owner.tool_completed(call, result, self.turn.native)
+        if event.is_error.value_or(False):
+            self.owner.tool_failed(call, self.turn.native)
+        else:
+            self.owner.tool_completed(call, event.result, self.turn.native)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 
