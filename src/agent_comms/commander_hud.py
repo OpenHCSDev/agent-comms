@@ -396,10 +396,11 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     def current(cls, comms: Comms, commander: str) -> CommanderHud:
         """Read the heartbeat's publication, never repeat its forge and history work."""
         owner = comms.registry.require(commander).incarnation.require_recorded()
-        completed = ServicePassStore.at(comms.root).read().heartbeat_completed_at(owner)
+        passes = ServicePassStore.at(comms.root).read()
+        completed = passes.heartbeat_completed_at(owner)
         if not completed.since(time.time() - 3 * Coordination.watch_period):
             raise ToolRefusedError(
-                f"Tristan stale for {owner.name} since {completed.clock()}: he has gone silent"
+                f"Tristan stale for {owner.name} since {completed.clock()}: {passes.stall()}"
             )
         hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup))).read()
         if hud.commander != owner:

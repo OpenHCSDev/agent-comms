@@ -852,18 +852,12 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(ctx.commander).require_commander()
         self.actor.commanding(ctx.comms, ctx.commander)
         ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
     def act(self, ctx: Commander) -> None:
-        """Gate, then run."""
-        self.gate(ctx)
         self.run(ctx)
-
-    def gate(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(self.who(ctx)).require_commander()
 
 
 

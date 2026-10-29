@@ -296,6 +296,18 @@ class Repo(GitLaunch, BaseModel, WireValue):
         return tuple(run.stdout.decode().splitlines())
 
     @classmethod
+    def merge_conflicts(cls, checkout: Path | str, left: str, right: str) -> tuple[str, ...]:
+        """The paths ``git merge-tree`` cannot merge between two commits: exit 0 merges
+        cleanly, exit 1 lists the conflicting paths after the written tree."""
+        run = cls._run(checkout, "merge-tree", "--write-tree", "--name-only", "--no-messages",
+                       left, right)
+        if run.returncode == 1:
+            return tuple(run.stdout.decode().splitlines()[1:])
+        if run.returncode:
+            raise FailedGitCommand(str(checkout), run)
+        return ()
+
+    @classmethod
     def of(cls, checkout: Path) -> Repo:
         """Its GitHub name comes from the checkout's own origin remote."""
         url = cls.git(checkout, "remote", "get-url", cls.remote).strip()
