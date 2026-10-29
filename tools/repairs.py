@@ -25,8 +25,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms_project import AgentCommsProject
 from agent_comms.pinned_audit import audit
+from agent_comms_project import AgentCommsProject
 from module_layers import Package, TopLevelNames
 from nominal_refactor_advisor.codemod import (
     CodemodPlanSequence,

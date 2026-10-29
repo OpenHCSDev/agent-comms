@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import atexit
+import dataclasses
 import inspect
 import json
 import os
@@ -16,7 +17,7 @@ import shutil
 import sys
 import tempfile
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from concurrent.futures import Executor
 from dataclasses import dataclass
 from functools import cache, partial
@@ -25,7 +26,14 @@ from subprocess import CompletedProcess
 
 import agent_comms
 import stored_formats
-from agent_comms import coordination_schema, field_codec, locked_store, process_claim, store_files, typed_table
+from agent_comms import (
+    coordination_schema,
+    field_codec,
+    locked_store,
+    process_claim,
+    store_files,
+    typed_table,
+)
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
@@ -65,7 +73,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
     def pool(self, workers: int) -> Executor:
         return ForkedProcessPool(workers)
 
-    def run(self, command: tuple[str, ...], *, cwd: Path, env: Mapping[str, str],
+    def run(self, command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
             timeout: float) -> CompletedProcess[bytes]:
         return SpawnedProcess.run(command, cwd=cwd, env=env, timeout=timeout)
 
@@ -81,7 +89,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         return (boundary_decoder,)
 
     def mechanism_modules(self) -> frozenset[Path]:
-        # Our own modules are named by their files; Toad's live in another repository, named by path.
+        # Our own modules are named by their files; Toad's live in another repository, by path.
         return frozenset((
             *(Path(inspect.getfile(module)).relative_to(REPOSITORY)
               for module in (field_codec, typed_table, coordination_schema)),
@@ -91,7 +99,9 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
     def selecting_calls(self) -> frozenset[str]:
         return frozenset({DeclaredFamily.member_named.__name__})
 
-    def stored_formats(self, ref: str, root: str, changed: set[str]) -> dict[str, audit.project.StoredFormat]:
+    def stored_formats(
+        self, ref: str, root: str, changed: set[str]
+    ) -> dict[str, audit.project.StoredFormat]:
         package = Path(root)
         while self.tracks(ref, str(package / "__init__.py")):
             package = package.parent
@@ -115,7 +125,10 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
             )
         if result.returncode:
             raise ValueError(f"stored formats could not be read at {ref}: {result.stderr.decode()}")
-        return {name: audit.project.StoredFormat(**form) for name, form in json.loads(result.stdout).items()}
+        return {
+            name: audit.project.StoredFormat(**form)
+            for name, form in json.loads(result.stdout).items()
+        }
 
     def carried(self, base: str, head: str) -> bool:
         """A carry step is a module under STEPS declaring a member of the Carry family: one of
@@ -125,7 +138,9 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         families = self.carry_family()
         for path, source in self.sources(head, set(added)):
             tree = ast.parse(source, path)
-            bindings = [audit.source_measures.DecoratorBinding.of(family, tree, path) for family in families]
+            bindings = [
+                audit.source_measures.DecoratorBinding.of(family, tree, path) for family in families
+            ]
             if any(binding.marks(base) for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
                    for base in node.bases for binding in bindings):
                 return True
@@ -133,11 +148,11 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
 
     @staticmethod
     @cache
-    def carry_family() -> tuple[type[Carry], ...]:
+    def carry_family() -> tuple[type, ...]:
         """Carry and every class derived from it, its steps' shared bases among them; reading
         the members imports every step module, where those bases are declared."""
         Carry.members_with(Carry)
-        found: list[type[Carry]] = [Carry]
+        found: list[type] = [Carry]
         for family in found:
             found.extend(derived for derived in family.__subclasses__() if derived not in found)
         return tuple(found)
@@ -182,7 +197,7 @@ class ClientTypeErrors(audit.checkers.SideCounts):
 
     @staticmethod
     @cache
-    def clients(repo: AgentCommsProject, head: str) -> tuple[StackClient, ...]:
+    def clients(repo: audit.project.Project, head: str) -> tuple[StackClient, ...]:
         """The head's stack clients, cloned once per run and read by both sides; a revision
         declaring no stack has none."""
         stack = "stack/pyproject.toml"
@@ -200,15 +215,17 @@ class ClientTypeErrors(audit.checkers.SideCounts):
                        if entry.module.partition(".")[0] == PACKAGE})
 
     @classmethod
-    def findings(cls, repo: AgentCommsProject, ref: str, client: StackClient,
-                 side: type[audit.ratchet.Side]) -> tuple[type[audit.ratchet.Side], tuple[audit.checkers.CheckerSite, ...]]:
+    def findings(
+        cls, repo: audit.project.Project, ref: str, client: StackClient,
+        side: type[audit.ratchet.Side],
+    ) -> tuple[type[audit.ratchet.Side], tuple[audit.checkers.CheckerSite, ...]]:
         # The pinned audit's git boundary, which pinned_audit puts on the path.
         commit = audit.repository.Repository(client.checkout).revision("HEAD")
         return side, repo.memo(partial(cls.checked, repo, ref, client, side),
                                cls.__name__, client.name, commit, repo.identity(ref, "src"))
 
     @classmethod
-    def checked(cls, repo: AgentCommsProject, ref: str, client: StackClient,
+    def checked(cls, repo: audit.project.Project, ref: str, client: StackClient,
                 side: type[audit.ratchet.Side]) -> tuple[audit.checkers.CheckerSite, ...]:
         selected = cls.selected(client)
         cache = repo.beside("mypy-clients") / client.name / side.family_name
@@ -223,12 +240,12 @@ class ClientTypeErrors(audit.checkers.SideCounts):
                     (str(Path(scratch, "src")), str(client.checkout / "src")))},
             )
         output = cls.checker_output(result, f"{client.name} at {ref}")
-        return tuple(audit.checkers.CheckerSite(f"{client.name}/{match['path']}", int(match["line"]),
-                                 match["message"])
-                     for match in cls.finding.finditer(output) if match["path"] in selected)
+        return tuple(dataclasses.replace(site, path=f"{client.name}/{site.path}")
+                     for site in audit.checkers.TypeErrors.reported(output)
+                     if site.path in selected)
 
     @classmethod
-    def parts(cls, repo: AgentCommsProject, base: str, head: str, changed: set[str],
+    def parts(cls, repo: audit.project.Project, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
         # Only a change to the package the clients import can change what they see.
         if not any(path.startswith(f"src/{PACKAGE}/") for path in changed):
@@ -239,7 +256,9 @@ class ClientTypeErrors(audit.checkers.SideCounts):
                      for side in audit.ratchet.Side.sides())
 
     @classmethod
-    def measured(cls, found: dict[type[audit.ratchet.Side], Counter[str]], changed: set[str]) -> list[str]:
+    def measured(
+        cls, found: dict[type[audit.ratchet.Side], Counter[str]], changed: set[str]
+    ) -> list[str]:
         """The client files with an error on either side; changed paths are the package's."""
         return sorted(found[audit.ratchet.BaseSide].keys() | found[audit.ratchet.HeadSide].keys())
 
