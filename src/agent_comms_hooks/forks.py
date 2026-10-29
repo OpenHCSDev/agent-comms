@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from agent_comms.cli_commands import RegisteredResult, ThreadArchivedResult
+from agent_comms.cli_result import CliResult
+from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import AtomicFile
 from agent_comms_hooks import ClaudeHookProgram, SubagentId
 from agent_comms_hooks.watch import CommanderSession, WatchClaim, WatchRecord
@@ -43,13 +46,13 @@ class SubagentHook(CommanderSession):
     def commanding(self, verb: str) -> subprocess.CompletedProcess[str]:
         return self.run(*self.command, verb, "--fork", self.agent_id.fork)
 
-    def core(self, record: WatchRecord, *argv: str) -> dict[str, str]:
-        """Core's answer on this session's bus; Core writes a refusal as its JSON `error`."""
+    def core[Result: CliResult](
+            self, record: WatchRecord, result: type[Result], *argv: str) -> Result:
+        """Core's declared answer on this session's bus; a refusal is Core's own error line."""
         run = self.run(sys.executable, "-m", "agent_comms.cli", "--root", record.root, *argv)
-        answer = json.loads(run.stdout)
         if run.returncode:
-            raise SystemExit(answer["error"])
-        return answer
+            raise SystemExit(run.stdout.strip())
+        return FieldCodec.decode(result, json.loads(run.stdout))
 
     def register(self) -> None:
         state = WatchClaim(self.session_id).state()
@@ -75,7 +78,8 @@ class SubagentHook(CommanderSession):
                               "reason": run.stderr.strip() or f"exit status {run.returncode}"}))
 
     def claim(self, record: WatchRecord) -> None:
-        slot = self.core(record, "claim-slot", "--parent", record.bus, "--role", self.agent_type)["registered"]
+        slot = self.core(record, RegisteredResult, "claim-slot", "--parent", record.bus,
+                         "--role", self.agent_type).registered
         self.seat.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         AtomicFile(self.seat).write_text(slot)
         self.warn(f"Core seated you in slot {slot}, a child of {record.bus}: messages to {slot}"
@@ -86,7 +90,7 @@ class SubagentHook(CommanderSession):
         if not self.seat.exists():
             raise SystemExit(f"Subagent {self.agent_id} stopped without a seat: SubagentStart"
                              " never ran for it under this session's bus binding.")
-        self.core(record, "retire-slot", "--name", self.seat.read_text())
+        self.core(record, ThreadArchivedResult, "retire-slot", "--name", self.seat.read_text())
         self.seat.unlink()
 
 

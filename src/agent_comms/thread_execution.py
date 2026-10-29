@@ -15,8 +15,8 @@ from .thread_presentation import UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
-    from .goals import GoalDeclaration
     from .goal_management import Goals
+    from .goals import GoalDeclaration
     from .registry_document import RegistrySnapshot
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .threads import Thread

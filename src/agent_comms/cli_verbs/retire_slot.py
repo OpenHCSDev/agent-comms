@@ -9,7 +9,8 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetireSlotCliCommand(NameArgument, CliCommand[ThreadArchivedResult], declared_name="retire-slot"):
+class RetireSlotCliCommand(NameArgument, CliCommand[ThreadArchivedResult],
+                           declared_name="retire-slot"):
     help = "Archive a subagent's slot when its occupant stops; the next occupant redeclares onto it"
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:

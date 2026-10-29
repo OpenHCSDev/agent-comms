@@ -143,7 +143,8 @@ class SubagentRole(SingleFieldValue):
 
     def __post_init__(self) -> None:
         if not self.slug:
-            raise ValueError(f"Subagent role {self.text!r} has no letters or digits to name a slot.")
+            raise ValueError(
+                f"Subagent role {self.text!r} has no letters or digits to name a slot.")
 
     @property
     def slug(self) -> str:
