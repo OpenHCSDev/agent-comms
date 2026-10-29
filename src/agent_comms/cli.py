@@ -28,8 +28,8 @@ def _fail(error: BaseException, output: TextIO) -> int:
     return 1
 
 
-def build_parser(arguments: Sequence[str] = (), *, output: TextIO) -> argparse.ArgumentParser:
-    parser = CliArgumentParser(prog="agent-comms", description=__doc__, output=output)
+def build_parser(arguments: Sequence[str] = ()) -> argparse.ArgumentParser:
+    parser = CliArgumentParser(prog="agent-comms", description=__doc__)
     parser.add_root_options()
     selection = parser.command_parsing(arguments)
     subparsers = parser.add_subparsers(required=True)
@@ -44,7 +44,7 @@ class CliInvocation:
     def execute(self, arguments: Sequence[str], output: TextIO) -> int:
         """Own parsing, root selection and dispatch for every registered command."""
         arguments = list(arguments)
-        args, unknown = build_parser(arguments, output=output).parse_known_args(
+        args, unknown = build_parser(arguments).parse_known_args(
             arguments, namespace=CliArguments())
         if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
             raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
@@ -66,6 +66,8 @@ class CliInvocation:
             except CLI_FAILURES as exc:
                 return _fail(exc, output)
             except CliParserExit as exited:
+                for text in exited.text.texts():
+                    output.write(text)
                 return exited.code
 
 

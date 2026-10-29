@@ -1,6 +1,5 @@
 """Cursor owners preserve source identity and the existing CLI JSON forms."""
 import json
-from io import StringIO
 
 import pytest
 
@@ -27,7 +26,7 @@ def test_cursor_owns_traversal_and_cli_json(cursor, wire, source):
     assert cursor.newer().source == source
     assert FieldCodec.encode(cursor) == wire
     assert FieldCodec.decode(PageCursor, wire) == cursor
-    args = build_parser(output=StringIO()).parse_args(['history', '--before', json.dumps(wire)])
+    args = build_parser().parse_args(['history', '--before', json.dumps(wire)])
     command = CliCommand.member_named(args.command).from_arguments(args)
     assert command.before == cursor
 

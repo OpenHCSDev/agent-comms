@@ -5,12 +5,11 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import partial
-from typing import TYPE_CHECKING, Never, Self, TextIO
+from typing import TYPE_CHECKING, Never, Self
 
 from agent_comms.cli_command import CliCommand
 from agent_comms.launch_root import DefaultLaunch, LaunchRequest, LaunchRoot
-from agent_comms.field_codec import FieldCodec, SubclassUnion
+from agent_comms.field_codec import SubclassUnion
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
@@ -51,10 +50,15 @@ class CliParserExit(SystemExit):
     """A parser exit carries its declared integer status, not arbitrary process state."""
 
     code: int
+    text: CliParserText
+
+    def __init__(self, status: int, text: CliParserText) -> None:
+        super().__init__(status)
+        self.text = text
 
 
 class CliParserText(SubclassUnion, TextChoice, affix="CliParserText"):
-    """Argparse's printed text, decoded once at the parser boundary."""
+    """The parser's text carried to the invocation that owns its output."""
 
 
 @dataclass(frozen=True)
@@ -70,17 +74,11 @@ class NoCliParserText(AbsentText, CliParserText):
 class CliArgumentParser(argparse.ArgumentParser):
     """Argument errors use Core's JSON failure boundary, including subcommands."""
 
-    def __init__(self, *args: object, output: TextIO, **kwargs: object) -> None:
-        self.output = output
-        super().__init__(*args, **kwargs)
+    def print_help(self, file: object = None) -> Never:
+        raise CliParserExit(0, GivenCliParserText(self.format_help()))
 
-    def add_subparsers(self, **kwargs: object) -> argparse._SubParsersAction[argparse.ArgumentParser]:
-        return super().add_subparsers(
-            parser_class=partial(type(self), output=self.output), **kwargs)
-
-    def _print_message(self, message: object, file: object = None) -> None:
-        for text in FieldCodec.decode(CliParserText, message).texts():
-            self.output.write(text)
+    def print_usage(self, file: object = None) -> Never:
+        raise CliParserExit(0, GivenCliParserText(self.format_usage()))
 
     def add_root_options(self) -> None:
         self.add_argument(
@@ -90,7 +88,7 @@ class CliArgumentParser(argparse.ArgumentParser):
         self.add_argument(LaunchRoot.argument, help=argparse.SUPPRESS)
 
     def command_parsing(self, arguments: Sequence[str]) -> CommandParsing:
-        selection = type(self)(output=self.output, add_help=False)
+        selection = type(self)(add_help=False)
         selection.add_root_options()
         selection.add_argument(
             "command", nargs="?", type=SelectedCommand.from_name, default=CommandParsing(),
@@ -98,9 +96,8 @@ class CliArgumentParser(argparse.ArgumentParser):
         args, _ = selection.parse_known_args(arguments, namespace=_CommandParsingArguments())
         return args.command
 
-    def exit(self, status: int = 0, message: object = None) -> Never:
-        self._print_message(message)
-        raise CliParserExit(status)
+    def exit(self, status: int = 0, message: str | None = None) -> Never:
+        raise CliParserExit(status, NoCliParserText())
 
     def error(self, message: str) -> Never:
         raise ValueError(message)

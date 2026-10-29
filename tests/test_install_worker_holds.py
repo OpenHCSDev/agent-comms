@@ -10,7 +10,7 @@ from typing import TextIO
 import pytest
 
 from agent_comms.cli import CliInvocation
-from agent_comms.cli_arguments import CliArgumentParser, CliParserExit
+from agent_comms.cli_arguments import CliArgumentParser
 from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
@@ -93,14 +93,17 @@ def test_parser_help_uses_only_the_invocations_output(
     assert capsys.readouterr() == ("", "")
 
 
-@pytest.mark.parametrize("message,expected", [(None, ""), ("", ""), ("parser text\n", "parser text\n")])
-def test_parser_exit_text_is_decoded_at_its_boundary(message: object, expected: str) -> None:
+def test_cli_invocation_preserves_parser_exit_status_without_console_output(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class ExitingInvocation(CliInvocation):
+        def execute(self, arguments: Sequence[str], output: TextIO) -> int:
+            CliArgumentParser().exit(2)
+
     output = StringIO()
-    parser = CliArgumentParser(output=output)
-    with pytest.raises(CliParserExit) as exited:
-        parser.exit(2, message)
-    assert exited.value.code == 2
-    assert output.getvalue() == expected
+    assert ExitingInvocation().invoke((), output) == 2
+    assert output.getvalue() == ""
+    assert capsys.readouterr() == ("", "")
 
 
 def test_cli_invocation_does_not_turn_interrupt_into_an_answer() -> None:

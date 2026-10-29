@@ -45,7 +45,7 @@ RESTARTED = RestartedService("Connector on port 1 for /bus", Path("/runtime/bin/
     ((), LiveMode, False), (("--rehearse",), RehearsalMode, True),
 ))
 def test_install_mode_decodes_the_launchers_single_boolean_wire_form(flags, mode, serialized):
-    arguments = build_parser(output=StringIO()).parse_args(("install", *flags))
+    arguments = build_parser().parse_args(("install", *flags))
     command = arguments.command_declaration.from_arguments(arguments)
     assert type(command.mode) is mode
     encoded = FieldCodec.encode(command)

@@ -3,7 +3,6 @@
 from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
-from io import StringIO
 from typing import Annotated, ClassVar
 
 import pytest
@@ -212,7 +211,7 @@ def test_writer_owned_carry_preserves_its_declaration_across_cli_and_worker_boun
     writer_owned_store, tmp_path,
 ):
     store, row = writer_owned_store
-    parser = build_parser(output=StringIO())
+    parser = build_parser()
     command = PlannedReconcileCliCommand.from_arguments(parser.parse_args([
         "planned-reconcile", "--carrying", store.declared_name,
     ]))

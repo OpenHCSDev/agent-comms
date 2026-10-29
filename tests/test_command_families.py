@@ -4,7 +4,6 @@ from agent_comms.field_codec import FieldCodec, GoalId
 """External contracts and adding commands without editing any consumer catalog."""
 
 import json
-from io import StringIO
 
 import pytest
 from acp.schema import PromptRequest, TextContentBlock
@@ -35,7 +34,7 @@ from agent_comms.threads import Thread
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/a pi")
     monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", '--label "two words"')
-    parser = build_parser(output=StringIO())
+    parser = build_parser()
 
     def parse(args):
         options = parser.parse_args(args)
@@ -69,7 +68,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     assert explicit.agent_bin == GivenBinary("/a pi")
     assert explicit.agent_args == GivenArguments(("--label", "two words"))
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/next pi")
-    fresh = build_parser(output=StringIO()).parse_args(["restart", "--all"])
+    fresh = build_parser().parse_args(["restart", "--all"])
     assert fresh.command_declaration.from_arguments(fresh).agent_bin == ConfiguredBinary()
 
 
