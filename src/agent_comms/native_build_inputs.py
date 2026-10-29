@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import getopt
 import hashlib
 import json
@@ -10,13 +11,15 @@ import platform
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from tempfile import TemporaryFile
 from time import monotonic
-from typing import BinaryIO, ClassVar, cast
+from typing import BinaryIO, ClassVar, TextIO, cast
 
 INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
 PREPARATION_SCHEME = "sealed-native-store-v1"
@@ -51,6 +54,48 @@ class Executable(NamedProgram):
     def __init_subclass__(cls, *, names: frozenset[str] = frozenset()) -> None:
         cls.names = cls.names | frozenset((cls.program,))
         super().__init_subclass__(names=names)
+
+
+class GitAcquisitionCancelled(asyncio.CancelledError):
+    """Shutdown interrupted an explicitly cancellable Git acquisition, not a Git failure."""
+
+
+class GitOpening:
+    """Stdlib bootstrap constructor; Core binds identity ownership in its work context."""
+
+    @contextmanager
+    def opening(
+        self, command: tuple[str, ...], *, env: Mapping[str, str],
+        stdin: int | BinaryIO | TextIO | None,
+        stdout: int | BinaryIO | TextIO | None,
+        stderr: int | BinaryIO | TextIO | None,
+    ) -> Iterator[subprocess.Popen[bytes]]:
+        with subprocess.Popen(command, env=env, stdin=stdin, stdout=stdout, stderr=stderr) as process:
+            try:
+                yield process
+            except BaseException:
+                process.kill()
+                process.wait()
+                raise
+
+    @contextmanager
+    def bound(self) -> Iterator[None]:
+        token = _git_opening.set(self)
+        try:
+            yield
+        finally:
+            _git_opening.reset(token)
+
+    @contextmanager
+    def acquiring(self) -> Iterator[None]:
+        """Standalone construction has no connector shutdown to borrow."""
+        yield
+
+    def enter_phase(self) -> None:
+        """A standalone operation has no connector phase admission."""
+
+
+_git_opening: ContextVar[GitOpening] = ContextVar("git_opening", default=GitOpening())
 
 
 class GitLaunch(Executable):
@@ -112,16 +157,16 @@ class GitLaunch(Executable):
     @cache
     def _local_environment(program: Path, modified_ns: int) -> frozenset[str]:
         """Git declares local selectors; the binary's stamp keys this immutable answer."""
-        probe = subprocess.run(
-            (program, "rev-parse", "--local-env-vars"),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
+        command = (str(program), "rev-parse", "--local-env-vars")
+        with GitLaunch.opening(
+            command, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env={name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
             | {"LC_ALL": "C"},
-        )
-        return frozenset(probe.stdout.splitlines())
+        ) as process:
+            stdout, stderr = process.communicate(timeout=10)
+            probe = subprocess.CompletedProcess(command, process.wait(), stdout, stderr)
+        probe.check_returncode()
+        return frozenset(probe.stdout.decode().splitlines())
 
     @classmethod
     def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
@@ -140,51 +185,60 @@ class GitLaunch(Executable):
             if name not in local or name.startswith("GIT_CONFIG_")
         } | {"LC_ALL": "C"}
 
+    @staticmethod
+    def opening(
+        command: tuple[str, ...], *, env: Mapping[str, str],
+        stdin: int | BinaryIO | TextIO | None,
+        stdout: int | BinaryIO | TextIO | None,
+        stderr: int | BinaryIO | TextIO | None,
+    ) -> AbstractContextManager[subprocess.Popen[bytes]]:
+        return _git_opening.get().opening(
+            command, env=env, stdin=stdin, stdout=stdout, stderr=stderr)
+
+    @staticmethod
+    def acquiring() -> AbstractContextManager[None]:
+        return _git_opening.get().acquiring()
+
+    @staticmethod
+    def enter_phase() -> None:
+        _git_opening.get().enter_phase()
+
     @classmethod
     def _run(
         cls, checkout: Path | str, *args: str, timeout: float = 60, input: bytes = b""
     ) -> subprocess.CompletedProcess[bytes]:
-        return subprocess.run(
-            cls.command(checkout, *args),
-            capture_output=True,
-            input=input,
-            timeout=timeout,
-            env=cls.environment(os.environ),
-        )
+        command = cls.command(checkout, *args)
+        with cls.opening(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, env=cls.environment(os.environ)) as process:
+            stdout, stderr = process.communicate(input=input, timeout=timeout)
+            return subprocess.CompletedProcess(command, process.wait(), stdout, stderr)
 
     @classmethod
     def _pipe(cls, checkout: Path | str, producer: tuple[str, ...], consumer: tuple[str, ...],
               *, timeout: float = 60, input: bytes = b'') -> subprocess.CompletedProcess[bytes]:
         """Stream Git output between children; capture only the final, bounded answer."""
         environment = cls.environment(os.environ)
+        producer_command = cls.command(checkout, *producer)
+        consumer_command = cls.command(checkout, *consumer)
         started = monotonic()
         # Only revision names and diagnostics are spooled. The potentially enormous patch
         # stream stays in the kernel pipe, and every child is retired on success or failure.
         with TemporaryFile() as source, TemporaryFile() as errors:
             source.write(input)
             source.seek(0)
-            with subprocess.Popen(cls.command(checkout, *producer), stdin=source,
-                                  stdout=subprocess.PIPE, stderr=errors, env=environment) as first:
-                try:
-                    with subprocess.Popen(cls.command(checkout, *consumer), stdin=first.stdout,
-                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                          env=environment) as last:
-                        cast(BinaryIO, first.stdout).close()
-                        try:
-                            output, error = last.communicate(timeout=timeout)
-                        except BaseException:
-                            last.kill()
-                            last.communicate()
-                            raise
-                    result = first.wait(timeout=max(0, timeout - (monotonic() - started)))
-                except BaseException:
-                    first.kill()
-                    first.wait()
-                    raise
+            with cls.opening(producer_command, stdin=source,
+                             stdout=subprocess.PIPE, stderr=errors, env=environment) as first:
+                with cls.opening(consumer_command, stdin=first.stdout,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 env=environment) as last:
+                    cast(BinaryIO, first.stdout).close()
+                    output, error = last.communicate(
+                        timeout=max(0, timeout - (monotonic() - started)))
+                result = first.wait(timeout=max(0, timeout - (monotonic() - started)))
                 if result:
                     errors.seek(0)
-                    return subprocess.CompletedProcess(first.args, result, b'', errors.read())
-                return subprocess.CompletedProcess(last.args, last.wait(), output, error)
+                    return subprocess.CompletedProcess(producer_command, result, b'', errors.read())
+                return subprocess.CompletedProcess(consumer_command, last.wait(), output, error)
 
 
 def built_tree_pin(manifest: Path) -> str:

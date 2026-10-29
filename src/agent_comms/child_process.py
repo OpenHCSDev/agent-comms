@@ -25,7 +25,7 @@ import termios
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import (
     AbstractContextManager,
@@ -46,6 +46,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
+from .native_build_inputs import GitAcquisitionCancelled, GitLaunch, GitOpening
 from .sealed import Sealed
 from .systemd_unit import AgentsSlice, SystemdUnit
 
@@ -1694,7 +1695,12 @@ class ReadWork(AsyncWork):
     @classmethod
     async def run_async[Result](cls, operation: Callable[[], Result]) -> Result:
         context = copy_context()
-        return await DroppableRead(lambda: context.run(operation)).answer()
+
+        def observe() -> Result:
+            with GitLaunch.acquiring():
+                return operation()
+
+        return await DroppableRead(lambda: context.run(observe)).answer()
 
     @classmethod
     def cancel_on_shutdown[Result](cls, pending: asyncio.Future[Result]) -> None:
@@ -1713,6 +1719,8 @@ async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:
             except asyncio.CancelledError as error:
                 interrupted = error
         result = task.result()
+    except ChildRetirementError:
+        raise  # Cancellation cannot turn an unattested physical stop into success.
     except BaseException as error:
         # A failed joined operation has still finished. Its error must
         # not consume the caller's cancellation and restart an observer loop.
@@ -2104,6 +2112,12 @@ class BoundedRun:
 class SynchronousProcess(ChildProcess):
     """Identity-checked process control; each subclass supplies synchronous reaping."""
 
+    def __init__(self, identity: ProcessIdentity,
+                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
+        super().__init__(identity, registration)
+        self._retirement_lock = threading.Lock()
+        self._retirement: Future[ChildOutcome] | None = None
+
     def require_stop_authority(self) -> None:
         """A retained parent handle already establishes stop/reap authority."""
 
@@ -2116,6 +2130,9 @@ class SynchronousProcess(ChildProcess):
             self.require_stop_authority()
         return await super().stop()
 
+    async def _stop(self) -> ChildOutcome:
+        return await join_retirement(asyncio.create_task(asyncio.to_thread(self.stop_sync)))
+
     @abstractmethod
     def reap(self) -> ChildOutcome: ...
 
@@ -2123,7 +2140,35 @@ class SynchronousProcess(ChildProcess):
         return SynchronousProcess.stop_together(((self, guard),), deadline=deadline)[0]
 
     @staticmethod
-    def stop_together(stops, *, deadline=math.inf) -> tuple[ChildOutcome, ...]:
+    def stop_together(
+        stops: Iterable[tuple[SynchronousProcess, Callable[[], AbstractContextManager[None]]]],
+        *, deadline: float = math.inf,
+    ) -> tuple[ChildOutcome, ...]:
+        """Concurrent cleanup callers share each actual process's one retirement."""
+        owned = []
+        pending: list[Future[ChildOutcome]] = []
+        for process, guard in stops:
+            with process._retirement_lock:
+                retirement = process._retirement
+                if retirement is None:
+                    retirement = process._retirement = Future()
+                    owned.append((process, guard, retirement))
+                pending.append(retirement)
+        if owned:
+            try:
+                outcomes = SynchronousProcess._stop_together(
+                    tuple((process, guard) for process, guard, _future in owned), deadline=deadline)
+            except BaseException as error:
+                for _process, _guard, future in owned:
+                    future.set_exception(error)
+                raise
+            else:
+                for (_process, _guard, future), outcome in zip(owned, outcomes, strict=True):
+                    future.set_result(outcome)
+        return tuple(result.result() for result in pending)
+
+    @staticmethod
+    def _stop_together(stops, *, deadline=math.inf) -> tuple[ChildOutcome, ...]:
         """Step every member's stop plan together: one signal pass, one shared grace, one force pass.
 
         Each member still runs the sole stop plan under its own guard. Expected
@@ -2282,6 +2327,125 @@ class SpawnedProcess(SynchronousProcess):
 
     def __exit__(self, *_):
         self.close()
+
+
+class GitChildPermission:
+    """An entered business operation retains its child launches through shutdown."""
+
+    def require_admission(self, closing: threading.Event) -> None:
+        pass
+
+    def stopping(self, child: SpawnedProcess) -> tuple[SpawnedProcess, ...]:
+        return ()
+
+    def completed(self) -> None:
+        pass
+
+
+class CancellableGitChild(GitChildPermission):
+    """This exchange belongs to a declared observation or publication acquisition."""
+
+    def __init__(self) -> None:
+        self.cancelled = threading.Event()
+
+    def require_admission(self, closing: threading.Event) -> None:
+        if closing.is_set():
+            raise GitAcquisitionCancelled("Connector closed acquisition admission")
+
+    def stopping(self, child: SpawnedProcess) -> tuple[SpawnedProcess, ...]:
+        self.cancelled.set()
+        return (child,)
+
+    def completed(self) -> None:
+        if self.cancelled.is_set():
+            raise GitAcquisitionCancelled("Connector stopped this acquisition")
+
+
+class GitChildren:
+    """One connector's actual gated children, admitted with their operation's permission."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.closing = threading.Event()
+        self.active: dict[SpawnedProcess, GitChildPermission] = {}
+        self._stop_task: asyncio.Task[tuple[ChildOutcome, ...]] | None = None
+
+    def enter_phase(self) -> None:
+        with self.lock:
+            if self.closing.is_set():
+                raise GitAcquisitionCancelled("Connector closed phase admission")
+
+    def admit(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
+        with self.lock:
+            permission.require_admission(self.closing)
+            self.active[child] = permission
+
+    def retire(self, child: SpawnedProcess) -> None:
+        # Never hold admission while signalling, waiting, draining or closing streams.
+        child.stop_sync(deadline=time.monotonic() + 2 * STOP_GRACE_SECONDS)
+        child.close_streams()
+        with self.lock:
+            del self.active[child]
+
+    def start_shutdown(self) -> asyncio.Task[tuple[ChildOutcome, ...]]:
+        if self._stop_task is None:
+            with self.lock:
+                self.closing.set()
+                stops = tuple((permitted, nullcontext)
+                              for child, permission in self.active.items()
+                              for permitted in permission.stopping(child))
+            self._stop_task = asyncio.create_task(asyncio.to_thread(
+                SynchronousProcess.stop_together, stops,
+                deadline=time.monotonic() + 2 * STOP_GRACE_SECONDS))
+        return self._stop_task
+
+
+class OwnedGitOpening(GitOpening):
+    """Core's constructor capability; permission stays with the entered operation."""
+
+    permission: type[GitChildPermission] = GitChildPermission
+
+    def __init__(self, children: GitChildren) -> None:
+        self.children = children
+
+    def enter_phase(self) -> None:
+        self.children.enter_phase()
+
+    @contextmanager
+    def acquiring(self) -> Iterator[None]:
+        self.children.enter_phase()
+        with AcquisitionGitOpening(self.children).bound():
+            yield
+            self.children.enter_phase()
+
+    @contextmanager
+    def opening(
+        self, command: tuple[str, ...], *, env: Mapping[str, str],
+        stdin: int | BinaryIO | TextIO | None,
+        stdout: int | BinaryIO | TextIO | None,
+        stderr: int | BinaryIO | TextIO | None,
+    ) -> Iterator[subprocess.Popen[bytes]]:
+        permission = self.permission()
+        try:
+            with self.children.lock:
+                permission.require_admission(self.children.closing)
+            with ExitStack() as cleanup:
+                with SpawnedProcess.launching(
+                    command, env=env, stdin=stdin, output=stdout, stderr=stderr,
+                ) as child:
+                    self.children.admit(child, permission)
+                    cleanup.callback(self.children.retire, child)
+                yield child.process
+        except ChildRetirementError:
+            raise  # Failed physical retirement must never be relabelled cancellation.
+        except BaseException:
+            permission.completed()
+            raise
+        permission.completed()
+
+
+class AcquisitionGitOpening(OwnedGitOpening):
+    permission = CancellableGitChild
 
 
 class HandedOffProcess(ObservedProcess, SpawnedProcess):

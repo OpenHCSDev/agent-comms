@@ -143,6 +143,8 @@ class Coordination(ExecutionStore, AttemptStore):
             (outcome,) = await asyncio.gather(
                 watch.run(opened_wire), return_exceptions=True,
             )
+            if isinstance(outcome, asyncio.CancelledError):
+                raise outcome
             if isinstance(outcome, Exception):
                 logging.error("Service worker pass failed: %s", name, exc_info=outcome)
                 await cls.run_worker(partial(passes.failed, name, outcome))
