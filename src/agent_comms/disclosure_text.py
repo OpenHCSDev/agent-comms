@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, is_dataclass
-from functools import singledispatchmethod
+from functools import cached_property, singledispatchmethod
+from itertools import zip_longest
+from textwrap import wrap
 from typing import ClassVar, Hashable
 
 from agent_comms.declared_family import FamilyMeta
-from agent_comms.field_codec import DisclosureIdentity, FieldCodec, FieldPlan
+from agent_comms.field_codec import DisclosureIdentity, FieldCodec, FieldPlan, ViewColumn
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,51 @@ class DisclosureText:
         """Read the original values, not their flattened JSON representations."""
         return tuple(cls.of(column.current(value)).summary()
                      for column in FieldCodec.view_columns(type(value), view))
+
+
+@dataclass(frozen=True)
+class ViewTable[R]:
+    """One declared column set owns cells, content demand and optional reader-side fitting."""
+
+    record: type[R]
+    view: str
+    records: tuple[R, ...]
+
+    @cached_property
+    def columns(self) -> tuple[ViewColumn, ...]:
+        return FieldCodec.view_columns(self.record, self.view)
+
+    @cached_property
+    def cells(self) -> tuple[tuple[DisclosureText, ...], ...]:
+        return tuple(tuple(DisclosureText.of(column.current(record)) for column in self.columns)
+                     for record in self.records)
+
+    @cached_property
+    def texts(self) -> tuple[tuple[str, ...], ...]:
+        return tuple(tuple(cell.summary() for cell in row) for row in self.cells)
+
+    def widths(self, available: int | None = None) -> tuple[int, ...]:
+        weights = tuple(max(len(column.label), max(
+            (len(line) for row in self.texts for line in row[index].splitlines()), default=0,
+        )) for index, column in enumerate(self.columns))
+        if available is None:
+            return weights
+        minimums = tuple(column.minimum_width(row[index] for row in self.texts)
+                         for index, column in enumerate(self.columns))
+        return ViewColumn.fit_widths(weights, available, minimums)
+
+    def lines(self, width: int | None = None) -> tuple[str, ...]:
+        """A producer supplies no width. Only a reader may ask this view to fit its viewport."""
+        available = None if width is None else width - len("  ") * (len(self.columns) - 1)
+        widths = self.widths(available)
+        lines = []
+        for row in (tuple(column.label for column in self.columns), *self.texts):
+            wrapped = tuple(tuple(part for line in text.splitlines() or ("",)
+                                  for part in wrap(line, cell_width, replace_whitespace=False) or ("",))
+                            for text, cell_width in zip(row, widths))
+            lines.extend("  ".join(value.ljust(cell_width) for value, cell_width in zip(parts, widths)).rstrip()
+                         for parts in zip_longest(*wrapped, fillvalue=""))
+        return tuple(lines)
 
 
 class RecordText(DisclosureText):

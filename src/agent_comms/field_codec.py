@@ -528,7 +528,7 @@ class Argument(FieldDirective):
         owner.add_argument(*flags, **options)
 
 
-class ViewColumn:
+class ViewColumn(ABC):
     """Stored and computed fields expose one read-only presentation contract."""
 
     name: str
@@ -538,8 +538,8 @@ class ViewColumn:
     def label(self) -> str:
         return declared_field_label(self.annotation) or self.name.replace("_", " ").title()
 
-    def current(self, record: object) -> object:
-        raise NotImplementedError
+    @abstractmethod
+    def current(self, record: object) -> object: ...
 
     def minimum_width(self, values: Iterable[str]) -> int:
         """Keep headers and individual words intact while the viewport can afford them."""

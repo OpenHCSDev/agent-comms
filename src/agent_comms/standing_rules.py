@@ -760,9 +760,7 @@ class ReviewTimerUp(HeldOrderDue, FamilyScan):
 
     @classmethod
     def conditions(cls, comms: Comms, frame: HeartbeatFrame) -> Iterable[tuple[Todo, EventTime]]:
-        return comms.goals.todos.timers_up_in(
-            frame.todos, time.time(), frame.pulls.progress(frame.todos, comms.registry),
-        )
+        return frame.review_timers
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,

@@ -8,10 +8,11 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
+from agent_comms.commander_hud import CommanderFrame, CommanderHud, HudUnavailableGroup
+from agent_comms.task_attachments.commander_pings import AlarmGroup, CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.message_bus import WatchPass
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import ServicePassStore
@@ -76,9 +77,11 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                     thread.incarnation, failure,
                     CommanderUpdate.latest(comms, thread.incarnation), now=now,
                 ):
+                    actions = CommanderHistory.read(comms, self.actors(comms.registry.snapshot(), thread.name))
+                    sections = AlarmGroup.sections((update,), update.open_pings(actions))
                     update.send(comms, now, (
-                        "HUD unavailable: heartbeat failed",
-                        *CommanderHud.alarm_text((update,), now),
+                        HudUnavailableGroup.heading(), failure.line(),
+                        *CommanderHud.alarm_text(sections, now),
                     ))
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
@@ -104,11 +107,12 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                      *(state for state in item.states
                        if state.attention() and UnitPing.capture(state) not in known)),
                 )
-                for update in CommanderUpdate.derive(
+                actions = CommanderHistory.read(comms, self.actors(comms.registry.snapshot(), item.thread.name))
+                for delivery in CommanderUpdate.derive(
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
                     tuple(rule for rule in item.rules if rule not in rejected), previous,
-                    now=now,
+                    now=now, history=actions,
                     undisposed=tuple(
                         ping for packet in previous
                         for ping in packet.undisposed(comms, item.thread.name,
@@ -116,9 +120,11 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 ):
-                    hud = replace(item.hud, packets=(update,))
+                    hud = replace(item.hud, packets=(delivery.packet,), open_pings=delivery.open_pings)
                     published[item.thread.incarnation] = hud
-                    update.send(comms, now, hud.hud_text(now))
+                    changed = CommanderFrame.at(comms.root, hud.commander).changed(hud)
+                    if delivery.packet.should_publish(changed):
+                        delivery.packet.send(comms, now, hud.hud_text(now))
                 completed.append(item.thread.incarnation)
         finally:
             CommanderFrame.replace_all(comms.root, tuple(published.values()))

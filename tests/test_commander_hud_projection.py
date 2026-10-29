@@ -65,7 +65,7 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
     assert tuple(section.group for section in groups) == (
         UrgentGroup, InProgressGroup, ReadyToTestGroup, IdleGroup,
     )
-    assert tuple(unit.unit.name for section in groups for unit in section.units) == (
+    assert tuple(unit.unit.name for section in groups for unit in section.records) == (
         "blocked", "screen", "run-next", "idle",
     )
     plain = hud.hud_text(1000, width=120)
@@ -73,13 +73,15 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
     assert "LOAD 7 · REVIEW UP 1 · UNJUDGED 2 · FORKS 0" in plain[0]
     assert plain[0].endswith("heartbeat 10 s ago")
     assert "\x1b" not in "\n".join(plain)
-    headings = [section.group.heading() for section in groups]
+    headings = [section.heading() for section in groups]
     assert [plain.index(heading) for heading in headings] == sorted(plain.index(heading) for heading in headings)
     assert "CommanderUnit" not in "\n".join(plain)
     assert "\x1b[" in "\n".join(hud.hud_text(1000, width=120, colour=True))
-    alarms = hud.alarm_text(hud.packets, 1000)
-    assert alarms == (
-        "NEW", f"  {hud.packets[0].new_pings()[0].render(1000)}", "STILL OPEN",
-        f"  {hud.packets[0].handled[0].render(1000)}",
+    section, = hud.alarms
+    summary, = section.summaries(1000)
+    assert summary.kind is ServicePassFailing and summary.count == 1
+    assert hud.board == ()
+    assert hud.alarm_detail(hud.alarms, 1000) == (
+        section.heading(), hud.packets[0].new_pings()[0].render(1000),
     )
-    assert tuple(unit.unit for unit in groups[0].units) == (hud.units[1].unit,)
+    assert tuple(unit.unit for unit in groups[0].records) == (hud.units[1].unit,)

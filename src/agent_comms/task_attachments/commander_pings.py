@@ -1,9 +1,9 @@
 """Committed commander notifications own the heartbeat's retained observations.
 
-A packet carries only lines that need the commander. New lines wake it; unchanged lines stay
-visible in passive heartbeat notices; lines still undisposed past the answer window refuse
-the commander's writing verbs until a recorded action on their subject disposes of them. No
-process-local cache owns any of it.
+New observations and every still-undisposed request wake on each beat. A changed quiet frame
+publishes once without waking; an unchanged quiet frame adds nothing to bus history. The
+original subject actions dispose of requests, and the answer window only gates overdue
+writing verbs. No process-local cache owns any of it.
 """
 from __future__ import annotations
 
@@ -30,14 +30,13 @@ from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
+from agent_comms.ui_model.unit_state import AwaitingCommander, HudGroup, UnitState
 from agent_comms_hooks.board import BoardEntry
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from agent_comms.bus import BusReader
-    from agent_comms.cli_bridges.claude import ClaudeBridge
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
     from agent_comms.registry_document import RegistrySnapshot
@@ -70,6 +69,10 @@ class Ping(DeclaredFamily, affix="Ping"):
     @property
     @abstractmethod
     def key(self) -> object: ...
+
+    @property
+    @abstractmethod
+    def alarm_kind(self) -> type[DeclaredFamily]: ...
 
     def acted(self, history: CommanderHistory) -> bool:
         """Whether a subject has a recorded action since this line began."""
@@ -118,6 +121,10 @@ class RulePing(Ping):
         return self.rule.urgent
 
     @property
+    def alarm_kind(self) -> type[StandingRule]:
+        return self.rule
+
+    @property
     def key(self) -> TextDigest:
         return self.observation
 
@@ -140,6 +147,14 @@ class UnitPing(Ping):
     observation: TextDigest
 
     @property
+    def urgent(self) -> bool:
+        return self.state.hud_group.needs_hand()
+
+    @property
+    def alarm_kind(self) -> type[UnitState]:
+        return self.state
+
+    @property
     def key(self) -> ThreadIncarnation:
         return self.unit
 
@@ -159,6 +174,14 @@ class UnitPing(Ping):
 
 
 @dataclass(frozen=True)
+class CommanderDelivery:
+    """A derived packet and the one open set shared by publication and its disposable HUD."""
+
+    packet: CommanderUpdate
+    open_pings: tuple[Ping, ...]
+
+
+@dataclass(frozen=True)
 class CommanderUpdate(TaskAttachment, declared_name=None):
     commander: ThreadIncarnation
     handled: tuple[Ping, ...]
@@ -173,6 +196,9 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         return (self,) if self.commander == commander else ()
+
+    def should_publish(self, frame_changed: bool) -> bool:
+        return True
 
     def new_pings(self) -> tuple[Ping, ...]:
         return ()
@@ -189,15 +215,17 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         gate reads: a verdict drops its line on the next read, not the next packet."""
         actors = CommanderService.actors(comms.registry.snapshot(), commander)
         history = CommanderHistory.read(comms, actors)
-        return tuple(ping.board_entry() for ping in self.handled
-                     if ping.on_board(history))
+        return tuple(ping.board_entry() for ping in self.open_pings(history))
+
+    def open_pings(self, history: CommanderHistory) -> tuple[Ping, ...]:
+        return tuple(ping for ping in self.handled if ping.on_board(history))
 
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         return await bridge.deliver_board(self, message)
 
     @abstractmethod
-    async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
-        """What reaches the session itself once its bridge has put this packet on its board."""
+    async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
+        """The packet's wake decision is the same on every harness."""
 
     def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
         """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
@@ -239,10 +267,10 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
                previous: tuple[CommanderUpdate, ...], *, now: float,
-               undisposed: tuple[Ping, ...] = (),
-               not_applied: tuple[str, ...] = ()) -> tuple[CommanderUpdate, ...]:
-        """New observations wake the commander. Every beat also publishes unchanged alarms
-        through a passive notice; publication never counts as disposing of an alarm."""
+               history: CommanderHistory, undisposed: tuple[Ping, ...] = (),
+               not_applied: tuple[str, ...] = ()) -> tuple[CommanderDelivery, ...]:
+        """New observations or any open request wake on every beat. Publication never disposes
+        of a ping; only a beat without unresolved work may be passive."""
         known = {ping.key: ping for packet in previous for ping in packet.handled}
         # Equality ignores the start, so an unchanged observation keeps the start it had.
         began = {ping: ping.since for ping in known.values()}
@@ -254,12 +282,13 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
              )), key=lambda ping: not ping.urgent,
         ))
         new = tuple(ping for ping in handled if known.get(ping.key) != ping)
-        if new:
-            return (CommanderDecisions(
-                commander, handled, new,
-                tuple(ping for ping in undisposed if ping in handled), not_applied=not_applied,
-            ),)
-        return (CommanderNotice(commander, handled, not_applied=not_applied),)
+        notice = CommanderNotice(commander, handled, not_applied=not_applied)
+        opened = notice.open_pings(history)
+        packet = CommanderDecisions(
+            commander, handled, new,
+            tuple(ping for ping in undisposed if ping in handled), not_applied=not_applied,
+        ) if new or opened or not_applied else notice
+        return (CommanderDelivery(packet, opened),)
 
     @classmethod
     def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
@@ -293,12 +322,15 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
 @dataclass(frozen=True)
 class CommanderNotice(CommanderUpdate):
-    """The current HUD without new requests: publish it, never wake for it."""
+    """Publish a changed quiet frame once, without waking for an identical copy."""
 
     role = NoticeRole()
 
-    async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
-        """Unchanged alarms remain visible; nothing new needs the session."""
+    def should_publish(self, frame_changed: bool) -> bool:
+        return frame_changed
+
+    async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
+        """The current display has no unresolved request that needs model input."""
         return DeliveredOutcome
 
 
@@ -310,8 +342,68 @@ class CommanderDecisions(CommanderUpdate):
     waiting: tuple[Ping, ...]
     role = ConversationRole()
 
-    async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
+    async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         return await bridge.wake(message)
 
     def new_pings(self) -> tuple[Ping, ...]:
         return self.decisions
+
+
+class AlarmGroup(HudGroup, affix="Alarms"):
+    """Alarm section membership and headings share the HUD family's declaration behavior."""
+
+    @classmethod
+    @abstractmethod
+    def members(cls, packets: tuple[CommanderUpdate, ...],
+                opened: tuple[Ping, ...]) -> tuple[Ping, ...]: ...
+
+    @classmethod
+    def sections(cls, packets: tuple[CommanderUpdate, ...],
+                 opened: tuple[Ping, ...]) -> tuple[AlarmSection, ...]:
+        return tuple(AlarmSection(group, members)
+                     for group in cls.members_with(cls)
+                     for members in (group.members(packets, opened),)
+                     if members or group.show_empty)
+
+
+class NewAlarms(AlarmGroup):
+    terminal_colour = 36
+
+    @classmethod
+    def members(cls, packets: tuple[CommanderUpdate, ...],
+                opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        return tuple(ping for packet in packets for ping in packet.new_pings())
+
+
+class StillOpenAlarms(AlarmGroup):
+    terminal_colour = 33
+
+    @classmethod
+    def members(cls, packets: tuple[CommanderUpdate, ...],
+                opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        new = frozenset(NewAlarms.members(packets, opened))
+        return tuple(ping for ping in opened if ping not in new)
+
+
+@dataclass(frozen=True)
+class AlarmSummary:
+    kind: type[DeclaredFamily]
+    count: int
+    oldest_age: str
+
+
+@dataclass(frozen=True)
+class AlarmSection:
+    group: type[AlarmGroup]
+    pings: tuple[Ping, ...]
+
+    def heading(self) -> str:
+        return self.group.count_heading(len(self.pings))
+
+    def summaries(self, now: float) -> tuple[AlarmSummary, ...]:
+        grouped: dict[type[DeclaredFamily], list[Ping]] = {}
+        for ping in self.pings:
+            grouped.setdefault(ping.alarm_kind, []).append(ping)
+        return tuple(AlarmSummary(kind, len(pings),
+                                  min(pings, key=lambda ping: ping.since.chronology()).since.age(now))
+                     for kind, pings in grouped.items())

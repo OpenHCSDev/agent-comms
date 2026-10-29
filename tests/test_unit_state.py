@@ -21,6 +21,7 @@ from agent_comms.message_page import MessagePageRequest
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.repo import Checkout
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -37,6 +38,7 @@ from agent_comms.ui_model.unit_state import (
     Detached,
     Idle,
     Moving,
+    ReviewDue,
     Spinning,
     StalledOnNothing,
     Stuck,
@@ -151,6 +153,11 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
                             first_call_deadline=RecordedEventTime(time.time() - 1),
                         ),
                     ).upsert(db)
+        elif member is ReviewDue:
+            todo = comms.goals.todos.get("P1")
+            with comms.goals.todos.writing() as db:
+                replace(todo, review_at=RecordedEventTime(time.time() - 1),
+                        revision=todo.revision + 1).upsert(db)
         elif member is Spinning:
             recorded_turn(comms, (True, True))
         elif member is StalledOnNothing:
@@ -190,8 +197,9 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
             pass  # Assigned work, before its first-call deadline.
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
-        states = UnitState.current(
-            comms, "lead", HeartbeatFrame.capture(comms, "lead", ProgressRead()))
+        frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+        assert tuple(ReviewTimerUp.conditions(comms, frame)) == frame.review_timers
+        states = UnitState.current(comms, "lead", frame)
         (state,) = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation

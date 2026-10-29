@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
@@ -11,11 +12,13 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import OwedAnswer
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.turn_digests import EditWorkplaces
 from agent_comms.todos import (
     ClosedHeadReading, HeadReviewRecord, ProgressRead, StoredClosedHead, StoredHeadReview,
+    Todo, TodoStore,
 )
 
 if TYPE_CHECKING:
@@ -33,6 +36,7 @@ class HeartbeatFrame(HeldOrders):
     closed: ClosedHeadReading
     head_reviews: Mapping[PullRequestHead, tuple[HeadReviewRecord, ...]]
     workplaces: Mapping[ThreadIncarnation, EditWorkplaces]
+    review_timers: tuple[tuple[Todo, RecordedEventTime], ...]
 
     @classmethod
     def capture(cls, comms: Comms, commander: str, pulls: ProgressRead,
@@ -61,4 +65,5 @@ class HeartbeatFrame(HeldOrders):
             closed,
             reviews,
             EditWorkplaces.capture(comms, snapshot, scan.live, plan.todos, pulls),
+            TodoStore.timers_up_in(scan.todos, time.time(), pulls.progress(scan.todos, comms.registry)),
         )
