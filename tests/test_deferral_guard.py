@@ -13,7 +13,7 @@ from pydantic import JsonValue
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.hook_deferral import FutureOrder, Later, NextTick
+from agent_comms.cli_bridges.hook_deferral import FutureOrder, Later, NextTick, TranscriptRecord
 from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
 from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
@@ -80,6 +80,29 @@ def test_narration_before_a_tool_call_is_not_the_final_reply(stop_binding, tmp_p
                assistant(text("Ordered P362 to pi-story-tool."))]
     result = stop(stop_binding, tmp_path, records, idle=("pi-story-tool",))
     assert (result.status, result.stdout) == (0, "")
+
+
+def test_a_missing_bound_transcript_is_not_a_normal_hook_reply(
+        stop_binding: ClaudeBridge, tmp_path: Path):
+    with pytest.raises(FileNotFoundError):
+        resident_hook(stop_binding, StopRequest, tmp_path / "missing.jsonl", stop_hook_active=False)
+
+
+@pytest.mark.parametrize(("record", "said", "ends_reply"), [
+    (assistant(text("Final reply")), "Final reply", False),
+    (assistant(text("Narration"), TOOL), "Narration", True),
+    (RESULT, "", True),
+    ({"type": "unknown"}, "", False),
+    ({"type": ["unknown"]}, "", False),
+    (assistant({"type": "unknown"}), "", False),
+    (assistant({"type": "user"}), "", False),
+    ({"type": "text", "text": "A block is not a transcript record"}, "", False),
+])
+def test_transcript_members_and_unknowns_keep_their_reply_behavior(
+        record: dict[str, JsonValue], said: str, ends_reply: bool):
+    answer = TranscriptRecord.of(record)
+    assert answer.said() == said
+    assert answer.ends_reply is ends_reply
 
 
 def test_a_stop_already_sent_back_passes(stop_binding, tmp_path):

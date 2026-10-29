@@ -37,7 +37,7 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms_hooks.session import started
+from agent_comms.cli_bridges import hook_session
 from source_programs import SourcePrograms
 from agent_comms.threads import Thread
 
@@ -257,7 +257,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 assert not claim.socket_path.exists()
                 assert isinstance(claim.state(), LiveWatch)
                 hook = subprocess.run(
-                    (str(old.script(started)),), input=packet, text=True, capture_output=True,
+                    (str(old.script(hook_session.main)),), input=packet, text=True, capture_output=True,
                     timeout=40, env={**env, 'CLAUDE_CODE_SESSION_ID': claim.thread,
                                      'CLAUDE_PID': str(os.getpid())})
                 assert hook.returncode != 0

@@ -92,10 +92,10 @@ class SubagentStopHook(SubagentHook):
 
     def leave(self, comms: Comms) -> None:
         if not self.seat.exists():
-            raise SystemExit(f"Subagent {self.agent_id} stopped without a seat: SubagentStart"
-                             " never ran for it under this session's bus binding.")
+            raise ToolRefusedError(f"Subagent {self.agent_id} stopped without a seat: SubagentStart"
+                                   " never ran for it under this session's bus binding.")
         for refusal in self.vacate(comms, self.seat):
-            raise SystemExit(refusal)
+            raise ToolRefusedError(refusal)
 
     def retire_fork(self, comms: Comms) -> None:
         actor = CommanderForkCaller(self.agent_id.fork)

@@ -87,7 +87,7 @@ from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.typed_table import HeldBusFile
 from agent_comms_hooks import forks
-from hook_session_fixture import resident_session, resident_stdout
+from hook_session_fixture import resident_hook, resident_session, resident_stdout
 from cli_command import commander
 from source_revision_fixture import SourceRepository
 from agent_comms.thread_execution import CommanderForkExecution
@@ -1084,6 +1084,19 @@ def test_a_unit_sessions_subagents_take_role_slots(
         assert isinstance(comms.registry.status("worker-explore-2"), ArchivedThreadStatus)
         assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
         assert not any(session.seats.iterdir())
+
+
+def test_a_bound_subagent_stop_without_a_start_is_an_intentional_failure(
+        durable_home: Path, fork_bus: tuple[Comms, SourceRepository, PendingProblemOrder], tmp_path: Path):
+    comms = fork_bus[0]
+    with resident_session(comms, tmp_path / "state", "worker", "unit") as bridge:
+        result = resident_hook(
+            bridge, SubagentStopRequest, tmp_path / "unit.jsonl",
+            agent_id="never-started", agent_type="Explore", stop_hook_active=False)
+        assert result.status == 1
+        assert result.stdout == ""
+        assert "stopped without a seat" in result.stderr
+        assert not comms.registry.snapshot().children("worker")
 
 
 def test_a_subagent_role_names_its_slots_in_thread_name_characters():

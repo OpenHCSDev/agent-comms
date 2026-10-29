@@ -42,5 +42,10 @@ class SessionHook(DeckStart):
         self.warn(*self.take())
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """The SessionStart console entrypoint runs its existing lifecycle owner directly."""
     SessionHook.read().start()
+
+
+if __name__ == "__main__":
+    main()
