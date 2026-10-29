@@ -267,6 +267,10 @@ class AttemptFailedExecution(BlockedExecution, RetryableExecution):
 
 class GoalPublicationSnapshot(ABC):
     @abstractmethod
+    def goal_changed(self, goal: GoalDeclaration) -> bool:
+        """Whether an owner declaration requests a fresh projection, not its complete inputs."""
+
+    @abstractmethod
     def changed_by(self, current: GoalSnapshot) -> bool: ...
 
     @abstractmethod
@@ -274,6 +278,9 @@ class GoalPublicationSnapshot(ABC):
 
 
 class UnpublishedGoalSnapshot(NullMember, GoalPublicationSnapshot):
+    def goal_changed(self, goal: GoalDeclaration) -> bool:
+        return True
+
     def changed_by(self, current: GoalSnapshot) -> bool:
         return True
 
@@ -285,6 +292,9 @@ class UnpublishedGoalSnapshot(NullMember, GoalPublicationSnapshot):
 class GoalSnapshot(GoalPublicationSnapshot):
     goal: GoalDeclaration
     execution: GoalExecution
+
+    def goal_changed(self, goal: GoalDeclaration) -> bool:
+        return self.goal != goal
 
     def changed_by(self, current: GoalSnapshot) -> bool:
         return self != current

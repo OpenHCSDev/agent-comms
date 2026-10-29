@@ -9,9 +9,10 @@ from __future__ import annotations
 from .errors import GoalAttemptError
 import asyncio
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import partial
-from threading import Thread as ReaderThread
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.field_codec import GoalId
@@ -29,8 +30,7 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
-from .goal_management import Goals, GoalSourceRevision
-from .agent_events import GoalChange, GoalUnchanged
+from .locked_store import GoalWakeFile
 from .goal_scope import OneGoal
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
@@ -38,7 +38,7 @@ from .routing import ScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
+    from .registry_document import RegistryDocument, RegistrySnapshot
     from .threads import Thread
     from .comms import Comms
     from .input_drain import InputDrain
@@ -48,24 +48,30 @@ if TYPE_CHECKING:
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 
 
+class GoalRefresh:
+    """An explicit refresh projects the live owners before comparing publication."""
+
+    def needed(self, snapshot: GoalPublicationSnapshot) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class DeclaredGoalRefresh(GoalRefresh):
+    goal: GoalDeclaration
+
+    def needed(self, snapshot: GoalPublicationSnapshot) -> bool:
+        return snapshot.goal_changed(self.goal)
+
+
 @dataclass(eq=False, slots=True)
 class GoalSessionPublication:
     """One session's last published goal and its publication lifetime."""
 
     snapshot: GoalPublicationSnapshot = field(default_factory=UnpublishedGoalSnapshot)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    revisions: dict[ReaderThread, GoalSourceRevision] = field(default_factory=dict)
 
     def in_standby(self) -> bool:
         return self.snapshot.standby()
-
-    def observe(self, goals: Goals, thread_name: str) -> tuple[GoalSourceRevision, GoalChange]:
-        """Do not rebuild an unchanged projection. Versions from different
-        pool-thread connections are never compared as one counter domain."""
-        revision = goals.source_revision()
-        if self.revisions.get(revision.reader_thread) == revision:
-            return revision, GoalUnchanged()
-        return revision, goals.goal_changed(thread_name, self.snapshot)
 
 
 class GoalScheduler:
@@ -241,13 +247,43 @@ class GoalScheduler:
         return self.publication(session_id).in_standby()
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        # A publication advances this session's snapshot only after delivery.
+        await self._sync_requested_goal(session_id, thread_name, GoalRefresh())
+
+    async def _sync_requested_goal(
+        self, session_id: str, thread_name: str, request: GoalRefresh,
+    ) -> None:
         record = self.publication(session_id)
         async with record.lock:
-            revision, event = await Coordination.run_worker(partial(
-                record.observe, self.comms.goals, thread_name,
+            if not request.needed(record.snapshot):
+                return
+            event = await Coordination.run_worker(partial(
+                self.comms.goals.goal_changed, thread_name, record.snapshot,
             ))
+            # Failed delivery leaves the published snapshot unchanged.
             record.snapshot = await event.publish(
                 AcpEventConsumer(self.effects, session_id, self.effects._runtime), record.snapshot
             )
-            record.revisions[revision.reader_thread] = revision
+
+    async def observe_root(
+        self, document: RegistryDocument, session_ids: Iterable[str], paths: frozenset[Path],
+    ) -> None:
+        # RuntimeServer reports this task's original failure. Joining it keeps
+        # its lifetime with the watcher without inventing a failed input drain.
+        publication = self.effects._runtime.background(
+            self._publish_root_goals(document, tuple(session_ids), paths))
+        await asyncio.gather(publication, return_exceptions=True)
+
+    async def _publish_root_goals(
+        self, document: RegistryDocument, session_ids: tuple[str, ...], paths: frozenset[Path],
+    ) -> None:
+        execution_changed = not paths.isdisjoint(GoalWakeFile.execution_paths_in(self.comms.root))
+        publications: list[asyncio.Task[None]] = []
+        for session_id in session_ids:
+            thread_name = self.sessions.require(session_id)
+            request = (GoalRefresh() if execution_changed else
+                       DeclaredGoalRefresh(document.entry(thread_name).thread.goal))
+            if request.needed(self.publication(session_id).snapshot):
+                publications.append(self.effects._runtime.background(
+                    self._sync_requested_goal(session_id, thread_name, request)))
+        # An independent session's failed projection must not cancel its peers.
+        await asyncio.gather(*publications, return_exceptions=True)

@@ -167,11 +167,11 @@ class Generation(GoalLedgerTable, TypedTable):
             raise StorageUncertainError("Invalid persisted goal generation.") from error
 
     @classmethod
-    def require(cls, db: sqlite3.Connection, **key: object) -> Self:
+    def require_in(cls, db: sqlite3.Connection, goal_id: GoalId) -> Self:
         try:
-            return super().require(db, **key)
+            return cls.require(db, goal_id=goal_id)
         except RowNotFoundError as error:
-            raise MissingGoalGenerationError(str(error)) from error
+            raise MissingGoalGenerationError(goal_id) from error
 
     def advance(
         self, conn: sqlite3.Connection, successor: Generation, *, digest: str = ""
@@ -695,7 +695,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
 
     def __init__(self, path: Path) -> None:
         super().__init__(path)
-        self._require_root()
+        self.require_path()
         if not self.path.is_file():
             raise StorageUncertainError("Goal attempt store is not initialized.")
         self._owned: set[AttemptId] = set()
@@ -752,7 +752,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
     def open(self) -> GoalAttemptStore:
         return self
 
-    def _require_root(self) -> None:
+    def require_path(self) -> None:
         if not self.root.is_dir() or not Platform.current().is_private(self.root.stat(), 0o700):
             raise StorageUncertainError("Goal attempt root must remain owner-0700.")
         if (
@@ -762,7 +762,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
             raise StorageUncertainError("Goal attempt database must remain owner-0600.")
 
     def _connect(self) -> sqlite3.Connection:
-        self._require_root()
+        self.require_path()
         return self.database(self.path)
 
     @classmethod
@@ -772,13 +772,24 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
             conn = cls.writer(path, isolation_level=None)
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA synchronous=EXTRA")
-            modes = SQLiteJournalMode.read(conn.execute("PRAGMA journal_mode"))
-            if modes != [SQLiteJournalMode("delete")]:
+            try:
+                cls.require_database_mode(conn)
+            except BaseException:
                 conn.close()
-                raise StorageUncertainError("Unexpected SQLite journal mode.")
+                raise
             return conn
         except sqlite3.Error as error:
             raise StorageUncertainError("Goal attempt database unavailable.") from error
+
+    @staticmethod
+    def require_database_mode(conn: sqlite3.Connection) -> None:
+        if SQLiteJournalMode.read(conn.execute("PRAGMA journal_mode")) != [SQLiteJournalMode("delete")]:
+            raise StorageUncertainError("Unexpected SQLite journal mode.")
+
+    @classmethod
+    def begin_snapshot(cls, conn: sqlite3.Connection) -> None:
+        super().begin_snapshot(conn)
+        cls.require_database_mode(conn)
 
     def _sync(self) -> None:
         AtomicFile(self.path).sync()
@@ -818,7 +829,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
 
     def require_generation(self, goal_id: GoalId) -> Generation:
         with closing(self._connect()) as conn:
-            return Generation.require(conn, goal_id=goal_id)
+            return Generation.require_in(conn, goal_id)
 
     def read_attempt(self, attempt_id: AttemptId) -> LedgerAttempt:
         with closing(self._connect()) as conn:

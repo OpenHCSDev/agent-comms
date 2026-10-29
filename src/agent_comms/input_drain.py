@@ -207,13 +207,16 @@ class InputObservation(ABC):
     async def observe_root(self) -> None:
         """One kernel registration and captured registry read feed the root's drains."""
         bus = self.comms.bus.bus
-        sources = (
+        inbox_sources = (
             *(FileSource(path) for path in (
                 *bus.source_paths(self.comms.root), *CoordinationStore.source_paths(self.comms.root),
-                *GoalWakeFile.watched_paths_in(self.comms.root),
             )),
             FileLifetimeSource(bus.path),
             FileLifetimeSource(CoordinationStore.path_in(self.comms.root)),
+        )
+        sources = (
+            *inbox_sources,
+            *(FileSource(path) for path in GoalWakeFile.watched_paths_in(self.comms.root)),
         )
         try:
             async with aclosing(bus.watch_sources(*sources)) as observations:
@@ -228,15 +231,23 @@ class InputObservation(ABC):
                         self._read_observed_registry, names,
                     )))
                     try:
-                        await read
+                        document = await read
                     except UNAVAILABLE_DRAIN_ERRORS:
                         # Each consumer records failure against its own original owner.
-                        pass
+                        for state in targets.values():
+                            state.observation_ready.set()
+                    else:
+                        await self.effects.turns.goals.observe_root(document, targets, watcher.observed_paths)
                     self.observed_registry = read
+                    inbox_changed = any(source.path in watcher.observed_paths for source in inbox_sources)
                     for state in targets.values():
                         if state.observing():
+                            # Pending producers have their own completion wake;
+                            # only an explicit local request owes another tick.
+                            if (state.observation_watcher is None or inbox_changed
+                                    or state.repeat_observation):
+                                state.observation_ready.set()
                             state.observation_watcher = watcher
-                            state.observation_ready.set()
         finally:
             self.root_observer = BackgroundTask()
             # A failed native registration cannot leave consumers waiting forever.
@@ -255,16 +266,12 @@ class InputObservation(ABC):
             await state.observation_ready.wait()
             state.observation_ready.clear()
             read = self.observed_registry
+            if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
+                changed = await Coordination.run_worker(partial(
+                    state.idle_revision.has_unobserved_inputs, bus, lookup))
+                if not changed:
+                    continue
             try:
-                if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
-                    changed = await Coordination.run_worker(partial(
-                        state.idle_revision.has_unobserved_inputs, bus, lookup))
-                    if not changed:
-                        # A goal-store commit is not an inbox item. Publish its
-                        # changed projection without draining or launching input.
-                        await self.effects.turns.goals.sync_goal_execution(
-                            session_id, self.sessions.require(session_id))
-                        continue
                 document = await asyncio.shield(read)
                 entry = document.entry(self.sessions.require(session_id))
             except UNAVAILABLE_DRAIN_ERRORS as error:

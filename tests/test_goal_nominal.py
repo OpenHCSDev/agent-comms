@@ -99,42 +99,26 @@ def test_goal_changed_compares_goal_snapshots(owner):
     assert isinstance(comms.goals.goal_changed("worker", event.snapshot), GoalUnchanged)
 
 
-def test_publication_probes_original_revisions_before_rebuilding(owner):
-    from agent_comms.goal_scheduler import GoalSessionPublication
+def test_owner_declaration_routes_without_claiming_complete_projection_equality(owner):
+    from agent_comms.goal_presentation import UnpublishedGoalSnapshot
 
-    comms, _ = owner
-    record = GoalSessionPublication(snapshot=comms.goals.goal_snapshot("worker"))
-    revision, event = record.observe(comms.goals, "worker")
-    assert isinstance(event, GoalUnchanged)
-    record.revisions[revision.reader_thread] = revision
-    before = comms.registry.store.cache.read_counts()
-    repeated, event = record.observe(comms.goals, "worker")
-    assert repeated == revision
-    assert isinstance(event, GoalUnchanged)
-    assert comms.registry.store.cache.read_counts().requests == before.requests
-
-    # A separate client changes the original store, not the publication record.
+    comms, goal = owner
+    assert UnpublishedGoalSnapshot().goal_changed(goal)
+    published = comms.goals.goal_snapshot("worker")
+    assert not published.goal_changed(goal)
     changed = wire(comms.root).goals.update_goal("worker", ActiveGoalAction(progress="external"))
-    revised, event = record.observe(comms.goals, "worker")
-    assert revised != revision
-    assert event == GoalChanged(comms.goals.goal_snapshot("worker"))
-    assert comms.registry.require("worker").goal == changed
+    assert published.goal_changed(changed)
+    assert comms.goals.goal_changed("worker", published) == GoalChanged(
+        comms.goals.goal_snapshot("worker"))
 
 
-def test_publication_observes_attempt_commit_without_registry_change(owner):
-    from agent_comms.goal_scheduler import GoalSessionPublication
-
+def test_unrelated_attempt_commit_requests_a_real_comparison_not_a_second_revision(owner):
     comms, _ = owner
-    record = GoalSessionPublication(snapshot=comms.goals.goal_snapshot("worker"))
-    revision, _ = record.observe(comms.goals, "worker")
-    record.revisions[revision.reader_thread] = revision
-    before = comms.registry.store.cache.read_counts()
+    published = comms.goals.goal_snapshot("worker")
+    before = comms.registry.store.path.read_bytes()
     comms.goals.open_goal_store().create_goal(GoalId.mint())
-    changed, event = record.observe(comms.goals, "worker")
-    assert changed.registry == revision.registry
-    assert changed.attempts != revision.attempts
-    assert isinstance(event, GoalUnchanged)
-    assert comms.registry.store.cache.read_counts().requests > before.requests
+    assert comms.registry.store.path.read_bytes() == before
+    assert isinstance(comms.goals.goal_changed("worker", published), GoalUnchanged)
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():

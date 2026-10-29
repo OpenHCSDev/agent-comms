@@ -8,13 +8,10 @@ from .agent_events import (
 )
 
 from .errors import StaleAttemptError
-from .locked_store import SQLiteRevision
-from .private_path import FileObservation
 import logging
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
-from threading import Thread as ReaderThread, current_thread
+from dataclasses import replace
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
@@ -76,16 +73,6 @@ from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, T
 
 _LOG = logging.getLogger(__name__)
 HistoryReply = TypeVar("HistoryReply", bound=RecordedGoalHistory)
-
-
-@dataclass(frozen=True)
-class GoalSourceRevision:
-    """Original store revisions, including each connection's data_version domain."""
-
-    registry: tuple[FileObservation, FileObservation]
-    waits: SQLiteRevision
-    attempts: SQLiteRevision
-    reader_thread: ReaderThread
 
 
 class Goals(GoalWaitRecovery):
@@ -319,17 +306,6 @@ class Goals(GoalWaitRecovery):
     def goal_execution(self, name: str) -> GoalExecution:
         return self._goal_snapshot(name).execution
 
-    def source_revision(self) -> GoalSourceRevision:
-        """Original counters only; no registry decode or scheduling projection.
-
-        An unopened ledger observes existing data_version or established file
-        absence. Only the active goal path opens its launch-capable store.
-        """
-        return GoalSourceRevision(
-            self.registry.store.revision_unlocked(), self.waits.data_revision(),
-            self.goal_store.data_revision(), current_thread(),
-        )
-
     def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
         """Compare a rebuilt view after its publication owner observed a source change."""
         current = self.goal_snapshot(name)
@@ -352,7 +328,7 @@ class Goals(GoalWaitRecovery):
             # Generation and its failure evidence come from one cut. Permit
             # attestation keeps GoalAttemptStore's independent fresh readback.
             with store.reader_snapshot() as connection:
-                generation = Generation.require(connection, goal_id=goal.id)
+                generation = Generation.require_in(connection, goal.id)
                 source = GoalExecutionSource(
                     goal, GoalWaits.for_goal(goal, waits), generation,
                     generation.lifecycle.evidence(connection, generation),
