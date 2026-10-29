@@ -1,5 +1,6 @@
 """A line still being appended is not history yet, so a newer read never stalls on it."""
 
+from agent_comms.transcripts import LaterThan, Through
 from agent_comms.repo import Checkout
 import json
 
@@ -30,12 +31,12 @@ def test_newer_read_moves_past_a_line_still_being_appended(tmp_path, private_com
     newest = comms.transcripts.capture_page_read("saved").read()
     assert newest.after.offset == complete
     through = newest.after
-    stalled = comms.transcripts.capture_page_read("saved", after=through, through=through).read()
+    stalled = comms.transcripts.capture_page_read("saved", position=LaterThan(through), limit=Through(through)).read()
     assert (stalled.after, stalled.has_newer) == (through, False)
 
     with session.open("a") as stream:
         stream.write(pending[len(pending) // 2:])
     grown = comms.transcripts.capture_page_read("saved").read().after
-    newer = comms.transcripts.capture_page_read("saved", after=through, through=grown).read()
+    newer = comms.transcripts.capture_page_read("saved", position=LaterThan(through), limit=Through(grown)).read()
     assert newer.after == grown
     assert [event.text.startswith("Second answer") for event in newer.events] == [True]

@@ -567,15 +567,14 @@ class RefreshTranscript(ReadRequest):
         read = comms.transcripts.bind_page_read(
             identity.requested_name,
             identity,
-            before=identity.before,
-            after=identity.after,
-            through=identity.through,
+            position=identity.position,
+            limit=identity.limit,
         )
         if read.content_current():
             return None
         operation = TranscriptPageRead(
-            thread=identity.requested_name, before=identity.before, after=identity.after,
-            through=identity.through, historical_source=identity.historical_source,
+            thread=identity.requested_name, position=identity.position, limit=identity.limit,
+            historical_source=identity.historical_source,
         )
         return UnreadableHistory.outcome(lambda: operation.read(comms)).raised()
 

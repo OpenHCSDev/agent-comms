@@ -109,7 +109,7 @@ class TextNoticeUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class TranscriptChangedUpdate(AgentCommsUpdate):
-    cursor: TranscriptCursor | None
+    cursor: TranscriptCursor
 
 
 class ClaimBlockedFailure(BackendDeliveryFailure):

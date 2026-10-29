@@ -36,7 +36,7 @@ from agent_comms.bus_read import OwnerLiveRead
 from agent_comms.commander_hud import CommanderUnitDetail
 from agent_comms.field_codec import OrderId
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.transcripts import NativeTranscriptCursor
+from agent_comms.transcripts import EarlierThan, NativeTranscriptCursor
 from agent_comms.ui_model.observation import (
     ObserveNotifications, ReadNotifications, ReadOperation, ReadOwnerOperation,
     ReadTranscript, ReadTranscriptUpdate, RefreshTranscript, SubscribeTranscript,
@@ -279,7 +279,7 @@ ORDERS = (OrderId.mint(),)
 UI_ONLY_FIELDS = {"root", "request_id", "previous", "owner", "identity"}
 SHARED_UI_READS = [
     CommanderUnitRead(commander=LEAD, unit=WORKER, orders=ORDERS),
-    TranscriptPageRead(thread="worker", before=NativeTranscriptCursor("session.jsonl", 7),
+    TranscriptPageRead(thread="worker", position=EarlierThan(NativeTranscriptCursor("session.jsonl", 7)),
                        historical_source="archive"),
 ]
 
@@ -315,7 +315,7 @@ def test_witnesses_cursors_and_archive_each_distinguish_a_shared_read_request():
         replace(commander, operation=replace(SHARED_UI_READS[0], unit=RecordedThreadIncarnation("worker", 3.0))),
         replace(commander, operation=replace(SHARED_UI_READS[0], orders=(OrderId.mint(),))),
         page,
-        replace(page, operation=replace(SHARED_UI_READS[1], before=NativeTranscriptCursor("session.jsonl", 8))),
+        replace(page, operation=replace(SHARED_UI_READS[1], position=EarlierThan(NativeTranscriptCursor("session.jsonl", 8)))),
         replace(page, operation=replace(SHARED_UI_READS[1], historical_source="other-archive")),
     )
     assert len({commander, *distinct}) == 1 + len(distinct)

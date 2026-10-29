@@ -1,4 +1,5 @@
 """Real Unix WebSocket replies, watch frames and Core pager; no replaced transports."""
+from agent_comms.transcripts import EarlierThan, Through
 from agent_comms.repo import Checkout
 import asyncio
 import json
@@ -80,7 +81,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             assert [event.text for event in newest.events] == ['recent1', 'recent2']
             assert newest.has_older
             with pytest.raises(CoordinationReadUnavailable):
-                comms.transcripts.capture_page_read('cli', before=newest.before).read()
+                comms.transcripts.capture_page_read('cli', position=EarlierThan(newest.before)).read()
             request = await asyncio.wait_for(frames.get(), 3)
             # The exact JSON line parser used by the running bridge owns decoding.
             request = WATCH_LINE.validate_json(request.model_dump_json())
@@ -90,20 +91,20 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             await request.handle(bridge, None)
             assert seen == [None, 'p1']
             # Zero is a real external item coordinate, including a pinned read.
-            older = comms.transcripts.capture_page_read('cli', before=newest.before,
-                                                        through=newest.before).read()
+            older = comms.transcripts.capture_page_read('cli', position=EarlierThan(newest.before),
+                                                        limit=Through(newest.before)).read()
             assert [event.text for event in older.events] == ['older1', 'older2']
             with pytest.raises(CoordinationReadUnavailable):
-                comms.transcripts.capture_page_read('cli', before=older.before).read()
+                comms.transcripts.capture_page_read('cli', position=EarlierThan(older.before)).read()
             request = await asyncio.wait_for(frames.get(), 3)
             await WATCH_LINE.validate_json(request.model_dump_json()).handle(bridge, None)
-            oldest = comms.transcripts.capture_page_read('cli', before=older.before).read()
+            oldest = comms.transcripts.capture_page_read('cli', position=EarlierThan(older.before)).read()
             assert [event.text for event in oldest.events] == ['oldest']
             assert not oldest.has_older
             assert seen == [None, 'p1', 'p2']
             # Existing source coordinates survived both prepends.
             assert [event.text for event in comms.transcripts.capture_page_read(
-                'cli', before=newest.before).read().events] == ['oldest', 'older1', 'older2']
+                'cli', position=EarlierThan(newest.before)).read().events] == ['oldest', 'older1', 'older2']
             assert [event.text for event in comms.transcripts.capture_page_read('cli').read().events] == [
                 'oldest', 'older1', 'older2', 'recent1', 'recent2']
             with transcript.snapshot() as connection:

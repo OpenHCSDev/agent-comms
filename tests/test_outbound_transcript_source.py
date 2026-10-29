@@ -24,7 +24,7 @@ from agent_comms.notification_progress import (
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
-from agent_comms.transcripts import TranscriptRead
+from agent_comms.transcripts import EarlierThan, TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from agent_comms.threads import Thread
 
@@ -322,7 +322,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     with pytest.raises(StaleRevision):
         comms.transcripts.bind_page_read(
             "beta", identity,
-            before=identity.page_bound.at_offset(0),
+            position=EarlierThan(identity.page_bound.at_offset(0)),
         )
     comms.registry.rename("beta", "renamed")
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity

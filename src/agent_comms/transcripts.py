@@ -47,6 +47,7 @@ from .transcript_sources import (
     NoWireFrontier,
     TranscriptDraft,
     TranscriptSource,
+    TranscriptTraversal,
     WireFrontier,
 )
 from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
@@ -72,8 +73,6 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     session_file: ClassVar[str | None] = None
     offset: ClassVar[int] = 0
     wire: ClassVar[WireFrontier] = NoWireFrontier()
-    # A read position bounds a page; nothing read is no position.
-    bounds_page: ClassVar[bool] = True
 
     def at_offset(self, offset: int) -> TranscriptCursor:
         return replace(self, offset=offset)
@@ -100,13 +99,25 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
         return (self.accepts_source(other) and self.offset <= other.offset
                 and self.wire.within(other.wire))
 
-    async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
-                        **bounds: TranscriptCursor) -> TranscriptPage:
-        return await loader(**self.page_bounds(bounds), through=self)
+    def earlier_page(self) -> PagePosition:
+        """The page that ends where this read position starts."""
+        return EarlierThan(self)
 
-    @staticmethod
-    def page_bounds(bounds: dict[str, TranscriptCursor]) -> dict[str, TranscriptCursor]:
-        return {name: cursor for name, cursor in bounds.items() if cursor.bounds_page}
+    def later_page(self) -> PagePosition:
+        """The page that starts where this read position ends."""
+        return LaterThan(self)
+
+    def page_limit(self) -> PageLimit:
+        """A painted read position pins the page to the source it was read from."""
+        return Through(self)
+
+    def requires_commit(self) -> bool:
+        """A changed transcript at a read position needs no commit before it is read again."""
+        return False
+
+    async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
+                        position: PagePosition) -> TranscriptPage:
+        return await loader(position=position, limit=self.page_limit())
 
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
@@ -143,12 +154,20 @@ class UnreadTranscriptCursor(TranscriptCursor):
     def accepts_source(self, other: TranscriptCursor) -> bool:
         return True
 
-    bounds_page: ClassVar[bool] = False
+    def earlier_page(self) -> PagePosition:
+        """Nothing read bounds no page: the latest one."""
+        return LatestPage()
 
-    async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
-                        **bounds: TranscriptCursor) -> TranscriptPage:
-        # Nothing read pins no source window; the page's own bounds still apply.
-        return await loader(**self.page_bounds(bounds))
+    def later_page(self) -> PagePosition:
+        return LatestPage()
+
+    def page_limit(self) -> PageLimit:
+        """Nothing read pins no source window; the page's own frontier applies."""
+        return AtFrontier()
+
+    def requires_commit(self) -> bool:
+        """A replaced source with nothing read must be committed before it is read again."""
+        return True
 
     def at_offset(self, offset: int) -> TranscriptCursor:
         return self
@@ -226,6 +245,113 @@ class WireTranscriptCursor(NativeTranscriptCursor):
     wire: AssignedSourceCursor = field()
 
 
+@dataclass(frozen=True)
+class PagePosition(DeclaredFamily, affix=""):
+    """Where a bounded transcript page starts: the latest page, or one side of a read cursor."""
+
+    def require_source(self, runtime: RuntimeLocation) -> None:
+        """The latest page has no cursor that could belong to another source."""
+
+    def require_offset(self, reader: TranscriptSource, size: int) -> None:
+        """The latest page has no cursor offset to validate."""
+
+    def within(self, frontier: TranscriptCursor) -> bool:
+        return True
+
+    def initial(self, frontier: TranscriptCursor) -> TranscriptCursor:
+        return frontier
+
+    def traversal(self) -> TranscriptTraversal:
+        return EarlierTranscript()
+
+    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
+        """An inherited thread's fork origin closes its oldest page; the latest page reaches it."""
+        return True
+
+    def later_only(self) -> PagePosition:
+        """A re-read under a new limit keeps only a later-than cursor; any other page starts latest."""
+        return LatestPage()
+
+
+@dataclass(frozen=True, slots=True)
+class LatestPage(PagePosition):
+    """The newest page up to the frontier."""
+
+
+@dataclass(frozen=True, slots=True)
+class CursorPage(PagePosition, declared_name=None):
+    """A page beside a read cursor, which must belong to the page's source and fit its cut."""
+
+    cursor: TranscriptCursor
+
+    def require_source(self, runtime: RuntimeLocation) -> None:
+        if self.cursor.session_file != runtime.read_key:
+            raise TranscriptChanged()
+
+    def require_offset(self, reader: TranscriptSource, size: int) -> None:
+        if not reader.valid_offset(self.cursor.offset, size):
+            raise TranscriptChanged()
+
+    def within(self, frontier: TranscriptCursor) -> bool:
+        return frontier.contains(self.cursor)
+
+    def initial(self, frontier: TranscriptCursor) -> TranscriptCursor:
+        return self.cursor
+
+
+@dataclass(frozen=True, slots=True)
+class EarlierThan(CursorPage):
+    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
+        return self.cursor == frontier
+
+
+@dataclass(frozen=True, slots=True)
+class LaterThan(CursorPage):
+    def traversal(self) -> TranscriptTraversal:
+        return LaterTranscript()
+
+    def shows_fork_start(self, frontier: TranscriptCursor) -> bool:
+        return False
+
+    def later_only(self) -> PagePosition:
+        return self
+
+
+@dataclass(frozen=True)
+class PageLimit(DeclaredFamily, affix=""):
+    """How far a page's source reaches: its live frontier, or a cursor already painted."""
+
+    def bound(self, frontier: TranscriptCursor) -> TranscriptCursor:
+        return frontier
+
+    def resolve_source(
+        self, member: type[TranscriptReadIdentity], owner: Transcripts, name: str,
+        historical_source: str | None,
+    ) -> PageSource:
+        return member.resolve_source(owner, name, None, historical_source)
+
+
+@dataclass(frozen=True, slots=True)
+class AtFrontier(PageLimit):
+    """The page reaches the source's current frontier."""
+
+
+@dataclass(frozen=True, slots=True)
+class Through(PageLimit):
+    """The page reaches no further than a cursor already painted, in that cursor's source."""
+
+    cursor: TranscriptCursor
+
+    def bound(self, frontier: TranscriptCursor) -> TranscriptCursor:
+        return self.cursor
+
+    def resolve_source(
+        self, member: type[TranscriptReadIdentity], owner: Transcripts, name: str,
+        historical_source: str | None,
+    ) -> PageSource:
+        return member.resolve_source(owner, name, self.cursor.session_file, historical_source)
+
+
 @dataclass(frozen=True, slots=True)
 class TranscriptPage:
     events: tuple[TranscriptEvent, ...]
@@ -275,9 +401,8 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     reply_revision: PublishedReplyRevision
     read_revision: Annotated[FileObservation, ContentExclude()]
     wire_frontier: WireFrontier
-    before: TranscriptCursor | None
-    after: TranscriptCursor | None
-    through: TranscriptCursor | None
+    position: PagePosition
+    limit: PageLimit
 
     def __post_init__(self) -> None:
         # A decoded witness reads its transcript under the root that published its thread.
@@ -329,7 +454,8 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     @property
     def page_bound(self) -> TranscriptCursor:
         """The last native byte and assigned message included in this page."""
-        return self.through or self.thread.runtime.transcript_cursor(self.wire_frontier, self.records_cut.offset, source=self.runtime)
+        return self.limit.bound(self.thread.runtime.transcript_cursor(
+            self.wire_frontier, self.records_cut.offset, source=self.runtime))
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
@@ -470,8 +596,7 @@ class TranscriptRead:
         return self.owner._thread_transcript_page(
             self.source,
             identity=identity,
-            before=identity.before,
-            after=identity.after,
+            position=identity.position,
             max_messages=20,
             max_bytes=64 * 1024,
             through=identity.page_bound,
@@ -520,23 +645,22 @@ class Transcripts:
         name: str,
         identity: TranscriptReadIdentity,
         *,
-        before: TranscriptCursor | None = None,
-        after: TranscriptCursor | None = None,
-        through: TranscriptCursor | None = None,
+        position: PagePosition = LatestPage(),
+        limit: PageLimit = AtFrontier(),
     ) -> TranscriptRead:
         """Bind the original published witness to this actual source request."""
         if identity.root != str(self.root):
             raise StaleRevision("Transcript witness belongs to another root")
-        if (identity.before, identity.after, identity.through) != (before, after, through):
+        if (identity.position, identity.limit) != (position, limit):
             raise StaleRevision("Transcript witness belongs to another page window")
         identity.require_binding(self, name)
-        source = self._page_source(name, identity.page_bound, identity.historical_source)
+        source = self._page_source(name, Through(identity.page_bound), identity.historical_source)
         return TranscriptRead(self, identity, source)
 
     def capture_native_output(
         self, name: str, location: NativeRecordLocation,
     ) -> NativeCommittedPrefix:
-        page = self._page_source(name, None, None)
+        page = self._page_source(name, AtFrontier(), None)
         cut = page.records.committed_output_cut(location)
         original = NativeRecordLocation(**{
             item.name: getattr(location, item.name)
@@ -550,15 +674,14 @@ class Transcripts:
         self,
         name: str,
         *,
-        before: TranscriptCursor | None = None,
-        after: TranscriptCursor | None = None,
-        through: TranscriptCursor | None = None,
+        position: PagePosition = LatestPage(),
+        limit: PageLimit = AtFrontier(),
         historical_source: str | None = None,
     ) -> TranscriptRead:
-        page = self._page_source(name, through, historical_source)
+        page = self._page_source(name, limit, historical_source)
         frontier = page.projection.frontier
         identity = self._capture_page_identity(
-            page, name, frontier, before=before, after=after, through=through,
+            page, name, frontier, position=position, limit=limit,
         )
         return TranscriptRead(self, identity, page)
 
@@ -568,9 +691,8 @@ class Transcripts:
         *,
         source_limit: int = 1,
         sent_source_limit: int = 0,
-        before: TranscriptCursor | None = None,
-        after: TranscriptCursor | None = None,
-        through: TranscriptCursor | None = None,
+        position: PagePosition = LatestPage(),
+        limit: PageLimit = AtFrontier(),
         historical_source: str | None = None,
     ) -> TranscriptSourceWindow:
         """Expose the source owner's complete identity without parsing its page.
@@ -583,10 +705,10 @@ class Transcripts:
             raise ValueError("Transcript source capture requires a bounded window")
         if not 0 <= sent_source_limit <= NotificationWindow.window_limit:
             raise ValueError("Sent source capture requires a bounded window")
-        page = self._page_source(name, through, historical_source)
+        page = self._page_source(name, limit, historical_source)
         captured = page.projection.window(limit=source_limit, sent_limit=sent_source_limit)
         identity = self._capture_page_identity(
-            page, name, captured.cursor, before=before, after=after, through=through,
+            page, name, captured.cursor, position=position, limit=limit,
         )
         return TranscriptSourceWindow(
             TranscriptRead(self, identity, page), captured.sources, captured.sent_sources
@@ -597,16 +719,15 @@ class Transcripts:
     ) -> TranscriptReadIdentity:
         """Recapture identity facts without reconstructing presentation source windows."""
         page = self._page_source(
-            identity.requested_name, identity.through, identity.historical_source
+            identity.requested_name, identity.limit, identity.historical_source
         )
         frontier = page.projection.frontier
         return self._capture_page_identity(
             page,
             identity.requested_name,
             frontier,
-            before=identity.before,
-            after=identity.after,
-            through=identity.through,
+            position=identity.position,
+            limit=identity.limit,
         )
 
     def _capture_page_identity(
@@ -615,9 +736,8 @@ class Transcripts:
         name: str,
         wire_frontier: WireFrontier,
         *,
-        before: TranscriptCursor | None,
-        after: TranscriptCursor | None,
-        through: TranscriptCursor | None,
+        position: PagePosition,
+        limit: PageLimit,
     ) -> TranscriptReadIdentity:
         root, thread, records = page.root, page.thread, page.records
         with records.reading() as captured_records:
@@ -635,9 +755,8 @@ class Transcripts:
             page.projection.reply_revision(records),
             FileRevision.capture(root / self.bus.reads.path.name),
             wire_frontier,
-            before,
-            after,
-            through,
+            position,
+            limit,
         )
 
     def turns(self, name: str, bound: TurnBound) -> ThreadTurns:
@@ -645,15 +764,13 @@ class Transcripts:
 
     def external(self, name: str) -> ExternalTranscript:
         """Where a CLI bridge publishes the items of its sessionless bus thread."""
-        page = self._page_source(name, None, None)
+        page = self._page_source(name, AtFrontier(), None)
         return page.runtime.external_records(page.root, page.thread.incarnation)
 
-    def _page_source(self, name: str, through: TranscriptCursor | None, historical_source: str | None) -> PageSource:
+    def _page_source(self, name: str, limit: PageLimit, historical_source: str | None) -> PageSource:
         member = (LiveTranscriptReadIdentity if historical_source is None
                   else RecordedTranscriptReadIdentity)
-        return member.resolve_source(
-            self, name, through.session_file if through is not None else None, historical_source,
-        )
+        return limit.resolve_source(member, self, name, historical_source)
 
     def _thread_transcript_source(
         self, name: str, source_runtime: str | None = None, *, registry: RegistrySnapshot
@@ -681,35 +798,30 @@ class Transcripts:
         page: PageSource,
         *,
         identity: TranscriptReadIdentity,
-        before: TranscriptCursor | None,
-        after: TranscriptCursor | None,
+        position: PagePosition,
         max_messages: int,
         max_bytes: int,
-        through: TranscriptCursor | None,
+        through: TranscriptCursor,
     ) -> tuple[TranscriptPage, TranscriptDraft]:
-        """Read page and draft while their record owner retains one source lifecycle."""
+        """Read page and draft while their record owner retains one source lifecycle; the
+        page reaches through its witness's painted bound."""
         self.page_reads += 1
         thread, runtime = page.thread, page.runtime
-        cursor = before or after
-        if cursor and cursor.session_file != runtime.read_key:
-            raise TranscriptChanged()
+        position.require_source(runtime)
         source = page.projection
         with page.records.reading() as reader:
             size = reader.cut().offset
-            if cursor and not reader.valid_offset(cursor.offset, size):
+            position.require_offset(reader, size)
+            if through.session_file != runtime.read_key or not reader.valid_offset(through.offset, size):
                 raise TranscriptChanged()
-            if through is not None:
-                if through.session_file != runtime.read_key or not reader.valid_offset(through.offset, size):
-                    raise TranscriptChanged()
-                size = through.offset
-                if cursor and not reader.valid_offset(cursor.offset, size):
-                    raise TranscriptChanged()
-            frontier = through or thread.runtime.transcript_cursor(source.frontier, size, source=runtime)
+            size = through.offset
+            position.require_offset(reader, size)
+            frontier = through
             source.require_cursor(frontier)
-            if frontier.wire.sequence < 0 or (cursor is not None and not frontier.contains(cursor)):
+            if frontier.wire.sequence < 0 or not position.within(frontier):
                 raise TranscriptChanged()
-            traversal = LaterTranscript() if after is not None else EarlierTranscript()
-            initial = cursor or frontier
+            traversal = position.traversal()
+            initial = position.initial(frontier)
             with reader.projection(source, page.routes) as project:
                 consumed, records = traversal.read_records(
                     reader, project, source, initial, frontier,
@@ -722,7 +834,7 @@ class Transcripts:
         events = traversal.finish(records)
         if requested_earlier and not events:
             raise CoordinationReadUnavailable("Waiting for the bridge's earlier transcript page")
-        if page.inherited and not after and (cursor is None or cursor == frontier):
+        if page.inherited and position.shows_fork_start(frontier):
             events = (*events, *self._fork_start_events(thread))
         return (
             TranscriptPage(
