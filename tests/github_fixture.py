@@ -48,9 +48,11 @@ class GitHubFixture:
         data[repository.to_wire()]["next_creation"] = FieldCodec.encode(row)
         self.path.write_text(json.dumps(data))
 
-    def refuse_status(self, repository: RepositoryName, head: str, context: str, refusal: str) -> None:
+    def refuse_status(self, repository: RepositoryName, head: str, context: str,
+                      refusal: str, *, state: str = "") -> None:
         data = json.loads(self.path.read_text())
-        data[repository.to_wire()].setdefault("status_refusals", {}).setdefault(head, {})[context] = refusal
+        data[repository.to_wire()].setdefault("status_refusals", {}).setdefault(head, {})[context] = {
+            "state": state, "message": refusal}
         self.path.write_text(json.dumps(data))
 
     def refuse_arm(self, repository: RepositoryName, number: int, refusal: str) -> None:

@@ -148,7 +148,7 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
         (todo,), request, UnquotedHeadReview.of))
     qualify_unchanged()  # Reviewing: the recorded source cut changes no held work.
     posts = review_posts(github, request.head)
-    assert len(posts) == 4
+    assert len(posts) == 8
     assert all("state=pending" in call for call in posts)
     assert not any(call[:2] == ("pr", "merge") for call in github.calls())
 
@@ -675,8 +675,8 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
     assert StoredHeadReview.head_reviews(comms.goals.todos, current) == StoredHeadReview.head_reviews(comms.goals.todos, request)
     assert tuple(todo.strike_count for todo in comms.goals.todos.list(request.repo)) == before
     posts = review_posts(github, request.head)
-    assert len(posts) == 2
-    assert "state=success" in posts[0] and "state=failure" in posts[1]
+    assert [next(part for part in post if part.startswith("state=")) for post in posts] == [
+        "state=pending", "state=success", "state=pending", "state=failure"]
 
 
 def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(head_bus):
@@ -695,7 +695,7 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
                 "--slop", "IMPL-5", "--fact", "the same decision is written twice",
                 "--at", location, "--derive", "base-method", "--by", location], context)
     assert isinstance(StoredHeadReview.head_reviews(comms.goals.todos, request)[0].verdict, RejectedHeadVerdict)
-    assert len(review_posts(github, request.head)) == 2
+    assert len(review_posts(github, request.head)) == 4
 
 
 @pytest.mark.parametrize("ready,refused", ((False, False), (True, False), (True, True)))
@@ -764,6 +764,81 @@ def test_failed_permission_withdrawal_preserves_the_preceding_source_record(
     assert MergeHeadReview.accepted(request.repo, request.head)
 
 
+@pytest.mark.parametrize("state", ("accepted", "unreviewed", "rejected", "stale", "uncontained", "status-only"))
+def test_capture_derives_only_exact_saved_root_orderless_sources_in_the_actual_carrier(
+    mutual_sources: MutualSources, github_cli: GitHubFixture, state: str,
+) -> None:
+    pair = mutual_sources
+    comms = pair.context.comms
+    peer = SourceRepository(checkout=pair.core.checkout, github=pair.core.github, number=9)
+    peer.git(peer.checkout, "switch", "-c", "orderless-source", "main")
+    commit = peer.publish_change("Actual orderless source", *peer.write_files({
+        Path("src/agent_comms/orderless.py"): "orderless = 1\n"}))
+    request = opened(github_cli, peer, peer.number, commit)
+    if state not in ("unreviewed", "status-only"):
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    if state == "rejected":
+        invoke(comms, request, RejectedHeadVerdict(REASON))
+    if state == "status-only":
+        ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, "lead", "not a saved decision")
+    if state == "stale":
+        commit = peer.publish_change("A later unreviewed head", *peer.write_files({
+            Path("src/agent_comms/orderless.py"): "orderless = 2\n"}))
+        request = opened(github_cli, peer, peer.number, commit)
+    primary = PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit)
+    invoke(comms, primary, ReviewedHeadVerdict(ACCEPTED))
+    pair.prepare_carrier(("P2", "P3"))
+    if state != "uncontained":
+        pair.checkout.include(request)
+    carrier = pair.publish_carrier(github_cli)
+    inputs = IntegrationRun(pair.checkout, pair.output, "retain actual orderless source authority").qualify(
+        pair.context, ("P2", "P3"), carrier=carrier)
+    local = inputs.source(pair.core.github)
+    expected = (primary, request) if state == "accepted" else (primary,)
+    assert local.heads == expected  # The linked primary also has a NoHeadOrder review: no duplicate.
+    comms.goals.todos.require_input_sources(inputs)
+    assert all(link.number != request.pr for todo in comms.goals.todos.open_orders()
+               for link in todo.order.checked().pull_requests)
+    if state == "accepted":
+        record, = StoredHeadReview.head_reviews(comms.goals.todos, request)
+        assert record.order == NoHeadOrder() and record.actor == pair.context.incarnation
+    else:
+        altered = replace(local, heads=(primary, request))
+        forged = replace(inputs, sources=tuple(altered if source.repository == pair.core.github else source
+                                               for source in inputs.sources))
+        if state == "uncontained":
+            comms.goals.todos.require_input_sources(forged)
+            with pytest.raises(ToolRefusedError, match="dropped a captured source parent"):
+                altered.require_ancestry(pair.core, inputs.carrier.head)
+        else:
+            with pytest.raises(TodoError, match="saved root source authority"):
+                comms.goals.todos.require_input_sources(forged)
+    assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
+
+
+def test_failed_final_rejection_status_leaves_the_member_pending_not_old_green(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+) -> None:
+    pair = mutual_sources
+    comms = pair.context.comms
+    inputs = pair.capture(("P2", "P3"), "a failed source publication must stay closed")
+    request = pair.publish_carrier(github_cli)
+    for source in inputs.sources:
+        for head in source.heads:
+            invoke(comms, head, ReviewedHeadVerdict(ACCEPTED))
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    PromotedHeadReview().post(request.repo, request.head, "lead", "explicit carrier promotion")
+    MergeHeadReview.require_merge(request, pair.context.repos)
+    member = inputs.source(pair.client.github).heads[0]
+    github_cli.refuse_status(member.repo, member.head, HeadReview.context, "final source status refused", state="failure")
+    with pytest.raises(ToolRefusedError, match="final source status refused"):
+        invoke(comms, member, RejectedHeadVerdict(REASON))
+    assert isinstance(StoredHeadReview.head_reviews(comms.goals.todos, member)[0].verdict, RejectedHeadVerdict)
+    assert not HeadReview.accepted(member.repo, member.head)
+    with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
+        MergeHeadReview.require_merge(request, pair.context.repos)
+
+
 def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_member(head_bus) -> None:
     comms, github, request = head_bus
     context = order.Commander.read_root(comms.root)
@@ -810,7 +885,7 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
     judge.main(["reviewing", *common], context)
     posts = review_posts(github, request.head)
     assert [next(part for part in post if part.startswith("state=")) for post in posts] == [
-        "state=success", "state=pending"]
+        "state=pending", "state=success", "state=pending", "state=pending"]
 
 
 @pytest.mark.parametrize("verdict", (ReviewedHeadVerdict(ACCEPTED), QualifiedHeadVerdict(QUALIFIED)))
@@ -844,8 +919,8 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     assert StoredHeadReview.head_reviews(comms.goals.todos, moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
     assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls)
     carried_posts = review_posts(github, merged)
-    assert len(carried_posts) == 1
-    assert f"description=carried from {request.head[:9]}: same change" in carried_posts[0]
+    assert len(carried_posts) == 2 and "state=pending" in carried_posts[0]
+    assert f"description=carried from {request.head[:9]}: same change" in carried_posts[1]
 
     owner = source.checkout / "owner.py"
     owner.write_text(owner.read_text() + 'spacing = "a b"\n')
@@ -997,7 +1072,8 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     invoke(comms, request, GrownHeadVerdict(ACCEPTED, GrowthReason(
         "grown.py declares forty one values that the reviewed request needs as separate names")))
     posts = review_posts(github, head)
-    assert len(posts) == 1 and any(f"(src +{grown})" in part for part in posts[0])
+    assert len(posts) == 2 and "state=pending" in posts[0]
+    assert any(f"(src +{grown})" in part for part in posts[1])
 
     # The actual CLI must report both independent failures, then infer the unique
     # order when corrected. Native orderless acceptance above remains legal.
@@ -1059,7 +1135,8 @@ def test_a_stacked_head_is_charged_only_its_own_growth_over_its_base_branch(
         9, "fix/child", head, stamp, "fix/parent", reviewable_times=(stamp,)))
     invoke(comms, PullRequestHead(source.github, 9, head), ReviewedHeadVerdict(ACCEPTED))
     posts = review_posts(github, head)
-    assert len(posts) == 1 and any("(src +1)" in part for part in posts[0])
+    assert len(posts) == 2 and "state=pending" in posts[0]
+    assert any("(src +1)" in part for part in posts[1])
 
 
 def test_judge_ok_keeps_every_repeated_growth_reason():

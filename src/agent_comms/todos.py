@@ -4096,11 +4096,16 @@ class HeadVerdict(HeadReview, declared_name=None):
         UnpromotedHeadReview().post(repo, head, reviewer, subject)
         super().post(repo, head, reviewer, subject)
 
+    def begin_review(self, repo: RepositoryName, head: str, reviewer: str, subject: str) -> None:
+        UnpromotedHeadReview().post(repo, head, reviewer, subject)
+        # A failed final status write must not leave a newly rejected member source green.
+        HeadReview.post(UnderReviewHeadVerdict(), repo, head, reviewer, subject)
+
     def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
                  reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
         request = replace(request, head=prepared.current.head)
         # Do not store a rejection/reviewing row while its old merge permission remains live.
-        UnpromotedHeadReview().post(request.repo, request.head, reviewer.name, prepared.subject)
+        self.begin_review(request.repo, request.head, reviewer.name, prepared.subject)
         recorded = order.record_review(goals, request, self, reviewer)
         self.after_record(goals, recorded)
         super().post(request.repo, request.head, reviewer.name, prepared.subject)
@@ -4191,7 +4196,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
-        UnpromotedHeadReview().post(current.repo, current.head, record.actor.name, f"#{current.pr}")
+        verdict.begin_review(current.repo, current.head, record.actor.name, f"#{current.pr}")
         goals.todos.record_head(carried)
         HeadReview.post(verdict, current.repo, current.head, record.actor.name, f"#{current.pr}")
         return True
@@ -4307,6 +4312,11 @@ class HeadOrderLink(HeadReviewRelation, declared_name=None):
 
 @dataclass(frozen=True)
 class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
+    def root_sources(self, record: HeadReviewRecord,
+                     commander: ThreadIncarnation) -> tuple[PullRequestHead, ...]:
+        return ((record.request,) if record.actor.commanding_identity == commander
+                and record.verdict.allows_integration() else ())
+
     def rejected(self, goals: Goals, record: HeadReviewRecord) -> None:
         """There is no holder to strike or wake."""
 
@@ -4589,6 +4599,15 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
         """An indexed exact-head lookup, newest committed verdict first."""
         with store.snapshot() as db:
             return cls.head_reviews_among(db, (request,))[request]
+
+    @classmethod
+    def root_sources(cls, store: TodoStore, requests: Iterable[PullRequestHead],
+                     commander: ThreadIncarnation) -> tuple[PullRequestHead, ...]:
+        """One exact-head snapshot; the saved relationship owns orderless source authority."""
+        with store.snapshot() as db:
+            reviewed = cls.head_reviews_among(db, requests)
+            return tuple(source for records in reviewed.values() for record in records
+                         for source in record.order.root_sources(record, commander))
 
     @classmethod
     def current_verdict(cls, store: TodoStore, request: PullRequestHead) -> type[HeadVerdict]:
@@ -6081,15 +6100,19 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
                             reader=partial(self.held_in, unit=owner))
 
-    def require_input_links(self, inputs: IntegrationInput) -> None:
-        """Only current stored orders, never metadata supplied by an author, link these sources."""
+    def require_input_sources(self, inputs: IntegrationInput) -> None:
+        """Current Todo links or an exact saved root orderless decision own each source."""
         todos = self.open_orders()
+        commander = RegistryStore.at(self.root).snapshot().commander_project.require().commander
+        approved = set(StoredHeadReview.root_sources(
+            self, (head for source in inputs.sources for head in source.heads), commander))
         for source in inputs.sources:
             linked = PullRequests.linked_among(todos, source.repository)
             for head in source.heads:
-                if len(linked.get(head.pr, ())) != 1:
+                owners = linked.get(head.pr, ())
+                if len(owners) > 1 or not (owners or head in approved):
                     raise TodoError(
-                        f"{head.repo.to_wire()}#{head.pr} has no unique actual Todo source authority")
+                        f"{head.repo.to_wire()}#{head.pr} has neither unique Todo nor saved root source authority")
 
     def open_orders(self) -> tuple[Todo, ...]:
         """Every open order, whichever commander created it: their links say which requests

@@ -27,7 +27,7 @@ from .repo import Checkout, DetachedStart, GitCommandError, Repo
 from .systemd_unit import AgentsSlice
 from .repository_name import RepositoryName
 from .test_lease import LeaseStart, TestLease
-from .todos import PullRequests
+from .todos import PullRequests, StoredHeadReview
 from .work_branches import WorkBranches
 
 class IntegrationFailed(ToolRefusedError):
@@ -609,11 +609,18 @@ class IntegrationRun:
         core = Repo.of(self.checkout.path)
         registered_core = Repo.selected(context.repos, core.github.to_wire())
         base = IntegrationSource.main_head(registered_core)
-        WorkBranches(registered_core.checkout).require_commits("origin", base)
+        current = carrier.current()
+        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        if current.repo != core.github or current.base != WorkBranches.main or current.head != candidate_commit:
+            raise IntegrationFailed("Capture requires the actual published combined carrier at this checkout's HEAD")
+        WorkBranches(registered_core.checkout).require_commits("origin", base, candidate_commit)
+        required = IntegrationInput.declared_repositories(registered_core, base, candidate_commit)
         linked_repositories = {link.repo for todo in todos for order in todo.order.declarations
                                for link in order.pull_requests}
-        initial = {*IntegrationInput.declared_repositories(registered_core, base, base), *linked_repositories}
-        repositories = {name: Repo.selected(context.repos, name.to_wire()) for name in initial}
+        if linked_repositories - set(required):
+            raise IntegrationFailed("A selected order links an unknown stack repository")
+        repositories = {name: Repo.selected(context.repos, name.to_wire()) for name in required}
+        carriers = (carrier, *companions)
         mains = {core.github: base, **{name: IntegrationSource.main_head(repo)
                                      for name, repo in repositories.items() if name != core.github}}
         pulls = PullRequests(todos)
@@ -631,17 +638,20 @@ class IntegrationRun:
                 if not row.as_unmerged() or len(linked[row.number]) != 1 or row.base != WorkBranches.main:
                     raise IntegrationFailed("A linked source is closed, ambiguous or targets another base")
                 selected.append(PullRequestHead(repo.github, row.number, row.head))
-            heads[repo.github] = tuple(selected)
-        current = carrier.current()
-        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
-        if current.repo != core.github or current.base != WorkBranches.main or current.head != candidate_commit:
-            raise IntegrationFailed("Capture requires the actual published combined carrier at this checkout's HEAD")
+            candidates = tuple(PullRequestHead(repo.github, row.number, row.head)
+                               for row in pulls.open(repo.github) if row.base == WorkBranches.main)
+            approved = StoredHeadReview.root_sources(context.comms.goals.todos, candidates, context.incarnation)
+            for head in approved:
+                for container in carriers:
+                    if (container.repo == repo.github
+                            and not head.same_pull_request(container)):
+                        WorkBranches(repo.checkout).require_commits("origin", head.head, container.head)
+                        if Repo.descends(repo.checkout, head.head, container.head):
+                            selected.append(head)
+            heads[repo.github] = tuple(sorted({head.pr: head for head in selected}.values(), key=lambda head: head.pr))
         self.output.mkdir(parents=True, exist_ok=False)
         IntegrationCheckout.create(registered_core, BaseSide.checkout(self.output, core.github), base)
         tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
-        required = IntegrationInput.declared_repositories(registered_core, base, candidate_commit)
-        if linked_repositories - set(required):
-            raise IntegrationFailed("A selected order links an unknown stack repository")
         resolved = {companion.repo: companion for companion in companions}
         if len(resolved) != len(companions) or set(resolved) - (set(required) - {core.github}):
             raise IntegrationFailed("Select at most one actual carrier per declared companion repository")
@@ -649,10 +659,6 @@ class IntegrationRun:
         for name in required:
             if name == core.github:
                 continue
-            if name not in repositories:
-                repositories[name] = Repo.selected(context.repos, name.to_wire())
-                mains[name] = IntegrationSource.main_head(repositories[name])
-                heads[name] = ()
             repo = repositories[name]
             baseline = mains[name]
             IntegrationCheckout.create(repo, BaseSide.checkout(self.output, name), baseline)
@@ -686,12 +692,8 @@ class IntegrationRun:
         current_todos = tuple(context.comms.goals.todos.get(todo.id) for todo in todos)
         for todo in current_todos:
             todo.require_commander(context.incarnation)
-        for source in sources:
-            linked = PullRequests.linked_among(current_todos, source.repository)
-            if any(head.pr not in linked for head in source.heads):
-                raise IntegrationFailed("A selected problem no longer links its captured source")
         inputs = CombinedInput(tuple(sorted(sources, key=lambda source: source.repository.key)), carrier)
-        context.comms.goals.todos.require_input_links(inputs)
+        context.comms.goals.todos.require_input_sources(inputs)
         if Repo.git(self.checkout.path, "rev-parse", f"{base}^{{tree}}").strip() == inputs.source(core.github).candidate_tree:
             raise IntegrationFailed("The Core carrier has no substantive source change")
         original_message = WorkBranches(self.checkout.path).commit_message(candidate_commit)
