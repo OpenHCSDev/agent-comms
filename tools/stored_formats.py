@@ -36,14 +36,15 @@ class StoredForm:
         declared = vars(record).get("version")
         match FieldCodec.record_schema(record):
             case {"properties": {"version": {"enum": [stamped]}, **stored}, "required": required}:
-                return cls(stamped, stored, [key for key in required if key in stored])
+                return cls(stamped, stored, frozenset(key for key in required if key in stored))
             case {"properties": properties, "required": required} if isinstance(declared, int):
-                return cls(declared, properties, required)
+                return cls(declared, properties, frozenset(required))
         return None
 
-    def __post_init__(self) -> None:
-        """Each revision's probe prints the keys as a JSON list; their order means nothing."""
-        object.__setattr__(self, "required", frozenset(self.required))
+    def wire(self) -> dict[str, object]:
+        """The JSON the ratchet decodes. JSON has no set, so the required keys travel as a
+        sorted list and the decoder makes them a set again."""
+        return {"version": self.version, "fields": self.fields, "required": sorted(self.required)}
 
 
 def stored_formats(module_name: str) -> dict[str, StoredForm]:
@@ -65,10 +66,9 @@ def main(modules: list[str]) -> None:
     print(
         json.dumps(
             {
-                name: dataclasses.asdict(form)
+                name: form.wire()
                 for module in modules
                 for name, form in stored_formats(module).items()
-            },
-            default=sorted,
+            }
         )
     )

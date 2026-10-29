@@ -155,7 +155,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         if result.returncode:
             raise ValueError(f"stored formats could not be read at {ref}: {result.stderr.decode()}")
         return {
-            name: audit.project.StoredFormat(**form)
+            name: audit.project.StoredFormat(form["version"], form["fields"], frozenset(form["required"]))
             for name, form in json.loads(result.stdout).items()
         }
 
