@@ -244,7 +244,7 @@ class FreshMainCheck:
     """Undelivered work is checked against fetched main, independent of the local branch."""
 
     def check_base(self, repo: Path) -> str:
-        return f"origin/{WorkBranches.main}"
+        return f"{Repo.remote}/{WorkBranches.main}"
 
 
 class BranchPointCheck:
@@ -256,7 +256,7 @@ class BranchPointCheck:
     def work_commit(self) -> str: ...
 
     def check_base(self, repo: Path) -> str:
-        main = f"origin/{WorkBranches.main}"
+        main = f"{Repo.remote}/{WorkBranches.main}"
         line = set(Repo.git(repo, "rev-list", "--first-parent", main).split())
         for commit in Repo.git(repo, "rev-list", "--first-parent", f"{self.work_commit}^1").split():
             if commit in line:
@@ -459,7 +459,10 @@ class CommitSourceDelivery(BranchPointCheck, CheckedDelivery, declared_name=None
         return (self.commit,)
 
     def merged_commits(self, repo: Repo) -> tuple[str, ...]:
-        return (self.commit,) if repo.contains(self.commit, f"origin/{WorkBranches.main}") else ()
+        # Called by the joined merge closure, never by the observation frame.
+        Repo.require_commits(repo.checkout, repo.remote, self.commit,
+                             f"{repo.remote}/{WorkBranches.main}")
+        return (self.commit,) if repo.contains(self.commit, f"{repo.remote}/{WorkBranches.main}") else ()
 
     def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
         if self.commit != self.delivered:
@@ -679,6 +682,12 @@ class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
     def head_review_due(self, now: float, due_at: float) -> tuple[float, ...]:
         return () if self.has_head_review or now < due_at else (due_at,)
 
+    def prepare_comparison(self, reader: WorkBranches) -> None:
+        reader.prepare_pull_request(self.base, self.head)
+
+    def require_comparison(self, reader: WorkBranches) -> None:
+        reader.pull_request_base(self.base, self.head)
+
     def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
         compared = reader.pull_request_diff(self.base, self.head)
         return () if compared.paths else (compared,)
@@ -719,6 +728,12 @@ class DraftPullRequest(UnmergedPullRequest):
     def head_review_due(self, now: float, due_at: float) -> tuple[float, ...]:
         return ()
 
+    def prepare_comparison(self, reader: WorkBranches) -> None:
+        """Drafts promise no comparison, matching their empty_changes policy."""
+
+    def require_comparison(self, reader: WorkBranches) -> None:
+        """There is no required comparison object for a draft."""
+
     def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
         return ()
 
@@ -734,7 +749,7 @@ class MergedPullRequest(PullRequest):
 
     def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
         """GitHub owns which pushed head produced the checked merge, for every merge style."""
-        Repo.git(repo, "fetch", "-q", "origin", self.base, f"refs/pull/{self.number}/head")
+        Repo.git(repo, "fetch", "-q", Repo.remote, self.base, f"refs/pull/{self.number}/head")
         return CommitDelivery(commit=self.merge, delivered_commit=self.head, evidence=evidence)
 
     def delivery_merges(self, delivery: CommitDelivery) -> tuple[DeliveryMerge, ...]:
@@ -1369,7 +1384,7 @@ class UnreadCheckout(ProgressCheckout):
 
 
 class PresentCheckout(ProgressCheckout):
-    default_reference: ClassVar[str] = "refs/remotes/origin/HEAD"
+    default_reference: ClassVar[str] = f"refs/remotes/{Repo.remote}/HEAD"
 
     @property
     def default_refs(self) -> tuple[str, ...]:
@@ -1388,7 +1403,7 @@ class PresentCheckout(ProgressCheckout):
     @cached_property
     def origin_refs(self) -> tuple[str, ...]:
         return tuple(self.git("for-each-ref", "--format=%(refname)",
-                              "refs/remotes/origin/").splitlines())
+                              f"refs/remotes/{Repo.remote}/").splitlines())
 
     @cached_property
     def origin_pushes(self) -> tuple[tuple[str, float], ...]:
@@ -1513,6 +1528,18 @@ class CheckoutReads:
             self._branch_facts[path] = reader.difference(self._branch_mains[repository])
         return self._branch_facts[path]
 
+    @property
+    def captured_branch_paths(self) -> frozenset[Path]:
+        """Captured branch membership, including worktrees retired since this cut."""
+        return frozenset(self._branch_facts)
+
+    def require_branch_difference(self, path: Path) -> BranchDifference:
+        """Consume this cut's required branch input without opening another Git read."""
+        path = path.resolve()
+        if path not in self._branch_facts:
+            raise WorkBranchError(f"Unprepared branch difference in {path}")
+        return self._branch_facts[path]
+
 
 class ProgressRead(PullRequests, CheckoutReads):
     """One read of order progress: its GitHub facts and its checkouts' Git facts."""
@@ -1521,6 +1548,10 @@ class ProgressRead(PullRequests, CheckoutReads):
         CheckoutReads.__init__(self)
         PullRequests.__init__(self, todos)
         self._progress: dict[str, OrderProgress] = {}
+
+    def unread(self, todo: Todo, error: Exception) -> None:
+        directory = todo.order.checked().check.directory
+        self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
 
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
         """Each held order's progress, read once per frame however many readers ask."""
@@ -1646,8 +1677,16 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
             source.checkout.require_read()
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
-        except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as unread:
+        except (OSError, GitCommandError,
+                WorkBranchError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
+
+    def require_read(self) -> None:
+        """A normal progress answer has no acquisition failure."""
+
+    def readable_paths(self, paths: tuple[Path, ...]) -> tuple[Path, ...]:
+        """These source roots may still qualify edit ownership in this progress cut."""
+        return paths
 
     @property
     @abstractmethod
@@ -1712,6 +1751,12 @@ class NoCommitProgress(OrderProgress):
 @dataclass(frozen=True)
 class UnreadProgress(OrderProgress):
     reason: str
+
+    def require_read(self) -> None:
+        raise WorkBranchError(self.reason)
+
+    def readable_paths(self, paths: tuple[Path, ...]) -> tuple[Path, ...]:
+        return ()
 
     @property
     def state(self) -> str:
@@ -2410,7 +2455,7 @@ class TriageScope(OrderScope[ReportDelivery]):
     ) -> dict[ProgressClaim, tuple[str, ...]]:
         if claims:
             raise TodoError(
-                "scope triage returns a report, not merged, installed or working claims")
+                "scope triage returns its report directly, not progress claims")
         return {}
 
     def completed(self, todo: Todo, delivery: ReportDelivery) -> Todo:
@@ -2538,7 +2583,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def require_check_acceptance(self, check: OrderCheck, worktrees: Path) -> None:
         repo = check.directory
-        Repo.git(repo, 'fetch', '-q', 'origin', 'main')
+        Repo.git(repo, 'fetch', '-q', Repo.remote, 'main')
         check.require_acceptance(self.check_base(repo), worktrees)
 
     def source_refusals(self, context: CommanderContext, document: OrderFile,
@@ -2673,8 +2718,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def observed_merges(
         self, repo: Repo, source: PullRequestSource
     ) -> tuple[MergedProblemOrder, ...]:
-        return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
-                     if repo.contains(merged.sha))
+        candidates = tuple(MergedProgress.found(source))
+        Repo.require_commits(repo.checkout, repo.remote, *(merged.sha for merged in candidates))
+        return tuple(self.merged(merged.sha) for merged in candidates if repo.contains(merged.sha))
 
     def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str,
                           store: TodoStore, actor: ThreadIncarnation) -> str:
@@ -3046,7 +3092,7 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
         return self.claim.head
 
     def check_base(self, repo: Path) -> str:
-        Repo.git(repo, "fetch", "-q", "origin", f"refs/pull/{self.claim.pull_request.number}/head")
+        Repo.git(repo, "fetch", "-q", Repo.remote, f"refs/pull/{self.claim.pull_request.number}/head")
         return super().check_base(repo)
 
     def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
@@ -4161,6 +4207,8 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
               reader: WorkBranches) -> bool:
         try:
+            reader.prepare_pull_request(current.base, record.request.head)
+            reader.prepare_pull_request(current.base, current.head)
             reviewed_change = record.request.change_identity(reader, current.base)
             current_change = current.change_identity(reader, current.base)
         except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired):

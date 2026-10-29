@@ -72,7 +72,7 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
@@ -118,7 +118,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, CommanderPeerCaller, NoThreadCaller
 from agent_comms.typed_table import RowNotFoundError
 
 
@@ -341,7 +341,7 @@ class CommanderContext(BaseModel):
     root: Path
 
     actor: Annotated[
-        InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
+        InstanceOf[CommanderForkCaller] | InstanceOf[CommanderPeerCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
     ] = NoThreadCaller()
     _comms: Comms = PrivateAttr()
 
@@ -385,7 +385,8 @@ class CommanderContext(BaseModel):
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return PlanReading(todos, MainTree.of(repository))
+        return PlanReadings().prepare_reading(repository, todos, tuple(
+            phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
@@ -825,7 +826,18 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
+    acting_as: Annotated[
+        CommanderPeerCaller | NoThreadCaller,
+        Normalize(FieldCodec.encode),
+        Argument(flags=("--as",), options={
+            "type": CommanderPeerCaller,
+            "help": "another commander in #commanders acting under its own name"}),
+    ] = NoThreadCaller()
 
+    @property
+    def actor(self) -> CommanderForkCaller | CommanderPeerCaller | NoThreadCaller:
+        """A fork acts for the commander; a peer commander acts as itself."""
+        return self.fork.acting_caller(self.acting_as)
 
     def __post_init__(self) -> None:
         if problems := self.argument_problems():
@@ -840,8 +852,8 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
 
     def apply(self, ctx: Commander) -> None:
         ctx.comms.registry.require(ctx.commander).require_commander()
-        self.fork.commanding(ctx.comms, ctx.commander)
-        ctx = ctx.model_copy(update={'actor': self.fork})
+        self.actor.commanding(ctx.comms, ctx.commander)
+        ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
     def act(self, ctx: Commander) -> None:

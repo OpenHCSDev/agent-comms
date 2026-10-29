@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .head_review import PullRequestHead
-from .message_bus import Watch
+from .message_bus import JoinedWatch
 from .repo import Repo
 from .todos import (
     PullRequests, StoredClosedHead, StoredClosedRepository, StoredCommitPatch,
@@ -82,7 +82,7 @@ class ClosedHeadScan:
                              db, self.repo, commit.patches - self.new_patches))
 
 
-class ClosedPullRequestWatch(Watch):
+class ClosedPullRequestWatch(JoinedWatch):
     """Each completed repository publishes before the next external observation starts."""
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
@@ -100,11 +100,12 @@ class ClosedPullRequestWatch(Watch):
         changes = PullRequests().updated_since(repo.github, floor)
         updated = max((floor, *(row.updated_at for row in changes)))
         reader = WorkBranches(repo.checkout)
-        (published,) = reader.remote_heads('origin', f'refs/heads/{reader.main}')
+        (published,) = reader.remote_heads(repo.remote, f'refs/heads/{reader.main}')
         old_tips = tuple(row.main for row in previous)
         closed = tuple(pull for change in changes for pull in change.as_closed())
-        reader.require_commits('origin', published, *old_tips, *(pull.head for pull in closed),
-                               *(row.request.head for row in recorded))
+        Repo.require_commits(reader.checkout, repo.remote, published, *old_tips,
+                             *(pull.head for pull in closed),
+                             *(row.request.head for row in recorded))
         for old in old_tips:
             if not Repo.descends(reader.checkout, old, published):
                 raise WorkBranchError(f'{repo.github.to_wire()} main rewrote its indexed history')

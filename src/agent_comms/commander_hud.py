@@ -370,7 +370,7 @@ class CommanderHud(ToolResult):
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
         """The load line, then one line per row in the order rows() declares."""
-        return (str(self.load), *self.heartbeat.aged_line("heartbeat", time.time()),
+        return (str(self.load), *self.heartbeat.aged_line("Tristan", time.time()),
                 *(row.line() for row in self.rows()))
 
 
@@ -390,7 +390,7 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     record_type = CommanderHud
 
     def empty(self) -> CommanderHud:
-        raise ToolRefusedError(f"heartbeat frame missing: {self.path}")
+        raise ToolRefusedError(f"Tristan frame missing: {self.path}")
 
     @classmethod
     def current(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -399,11 +399,11 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
         completed = ServicePassStore.at(comms.root).read().heartbeat_completed_at(owner)
         if not completed.since(time.time() - 3 * Coordination.watch_period):
             raise ToolRefusedError(
-                f"heartbeat frame stale for {owner.name} since {completed.clock()}"
+                f"Tristan stale for {owner.name} since {completed.clock()}: he has gone silent"
             )
         hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup))).read()
         if hud.commander != owner:
-            raise ToolRefusedError(f"heartbeat frame belongs to another incarnation of {owner.name}")
+            raise ToolRefusedError(f"Tristan frame belongs to another incarnation of {owner.name}")
         return replace(hud, heartbeat=completed)
 
     @classmethod

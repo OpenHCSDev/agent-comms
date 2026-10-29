@@ -35,7 +35,7 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
     Monitor only gets a wake line, since an idle session runs no tool calls."""
 
     board_wake: ClassVar[str] = (
-        "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
+        "Tristan: your board changed. New and changed lines print once as BOARD: on your next "
         "tool call; later calls print one unchanged count."
     )
 
