@@ -396,9 +396,12 @@ async def test_notice_question_is_confirmed_without_opening_a_reply(bridge: Clau
 
 
 @pytest.mark.asyncio
-async def test_mixed_info_and_question_answer_only_the_asked_sender(bridge: ClaudeBridge) -> None:
+@pytest.mark.parametrize('information_sender', ('peer', 'claude-code'), ids=('different-sender', 'same-sender'))
+async def test_mixed_info_and_question_answer_only_the_asked_sender(
+    bridge: ClaudeBridge, information_sender: str,
+) -> None:
     comms = bridge.comms
-    information = comms.messaging.send('peer', 'viewer', 'An informational opening').message
+    information = comms.messaging.send(information_sender, 'viewer', 'An informational opening').message
     question = comms.messaging.send('claude-code', 'viewer', 'An asked opening', QuestionKind).message
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
@@ -412,6 +415,26 @@ async def test_mixed_info_and_question_answer_only_the_asked_sender(bridge: Clau
               if message.sender == 'viewer' and message.seq > question.seq)
     assert final.answers == (question.reference,)
     assert_retained_final(output, 'mixed-turn', 'One asked answer')
+
+
+@pytest.mark.asyncio
+async def test_explicit_answers_and_named_source_sends_can_still_answer_info(bridge: ClaudeBridge) -> None:
+    comms = bridge.comms
+    information = comms.messaging.send('claude-code', 'viewer', 'An informational opening').message
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
+    session = ClaudeSession()
+    await confirm_messages(bridge, output, session, (information,), prompt_id='explicit-turn')
+    explicit = comms.messaging.send('viewer', 'claude-code', 'Explicit acknowledgement',
+                                    answers=(information.reference,)).message
+    assert explicit.answers == (information.reference,)
+    inferred = comms.messaging.send('viewer', 'claude-code', 'Explicit source acknowledgement',
+                                    source_turn=NamedSourceTurn(NativeTurnId('explicit-turn'))).message
+    assert inferred.answers == (information.reference,)
+    assert output.transcript.opening_for(NativeTurnId('explicit-turn')) == (information.reference,)
+    output.publish_batch(list(assistant_record('explicit-final', 'Holding').updates(session)))
+    finish_reply(output, session)
+    assert replies_after(bridge, inferred.seq) == ()
+    assert_retained_final(output, 'explicit-turn', 'Holding')
 
 
 @pytest.mark.asyncio

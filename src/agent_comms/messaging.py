@@ -123,7 +123,7 @@ class Messaging:
             for turn_id in source_turn.ids():
                 opening = transcript.opening_for(turn_id)
                 references.extend(source.answering(opening, route, boundary.registry))
-        return tuple(dict.fromkeys(references))
+        return source_turn.answering_references(tuple(dict.fromkeys(references)))
 
     def user_identity(self, worktree: Checkout) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""

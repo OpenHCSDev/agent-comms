@@ -91,7 +91,7 @@ class ReplyWindow(DeclaredFamily, affix="Replies"):
 
 
 class ActiveReplies(ReplyWindow, declared_name=None):
-    """Only active windows admit context or transition on turn retirement."""
+    """Only active windows receive context or transition on turn retirement."""
 
     def delivered(self, connection: Connection, turn: ExternalTurn,
                   references: tuple[MessageReference, ...]) -> None:

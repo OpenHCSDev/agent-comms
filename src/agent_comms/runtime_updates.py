@@ -26,7 +26,7 @@ from .transcript_events import (
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, TurnItem
+from .turn_item import AutomaticReplyTurn, NativeItemId, NativeTurnId, TurnItem
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
@@ -283,7 +283,10 @@ class ReplyingThreadOutput(ThreadOutput):
 
     def end_turn(self, turn_id: NativeTurnId) -> None:
         opening = self.messaging.bus.bus.messages_for_references(self.transcript.opening_for(turn_id))
-        targets = {target for message in opening for target in message.automatic_reply_targets()}
+        replies: dict[str, list[MessageReference]] = {}
+        for message in opening:
+            for target in message.automatic_reply_targets():
+                replies.setdefault(target, []).append(message.reference)
         for key in tuple(self.pending):
             if key.turn_id != turn_id:
                 continue
@@ -291,9 +294,9 @@ class ReplyingThreadOutput(ThreadOutput):
             publications = tuple(
                 self.messaging.send(
                     sender=self.activity_thread, target=target, body=item.assistant_text,
-                    source_turn=NamedSourceTurn(turn_id),
+                    source_turn=AutomaticReplyTurn(turn_id, tuple(references)),
                 ).message.reference
-                for target in sorted(targets)
+                for target, references in sorted(replies.items())
             )
             super().publish_item(replace(item, events=tuple(
                 event.with_publications(publications) for event in item.events
