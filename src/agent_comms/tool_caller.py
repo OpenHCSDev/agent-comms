@@ -184,6 +184,18 @@ class SubagentCaller(ThreadCaller):
         """What a child reports as it ends; a role slot's history is already on its thread."""
 
 
+class ActsForCommander(ThreadCaller):
+    """Recorded under its own incarnation, holding its commander's authority: the commander
+    verbs accept its orders and verdicts as the commander's, and the record names who acted."""
+
+    @abstractmethod
+    def commander(self, comms: Comms) -> Thread: ...
+
+    def identity(self, comms: Comms) -> ThreadIncarnation:
+        own = comms.registry.require(self.name).incarnation
+        return own.require_recorded().acting_for(self.commander(comms).incarnation)
+
+
 @dataclass(frozen=True)
 class CommanderPeerCaller(ThreadCaller):
     """Another commander acting under its own name: membership in the commanders channel is
@@ -197,9 +209,25 @@ class CommanderPeerCaller(ThreadCaller):
             raise ToolRefusedError(
                 f"{self.name} is not in #{self.channel}; join it to act as a commander.")
 
+    def as_thread(self, commander: str) -> ThreadCaller:
+        return CommanderPeerAuthority(self.name, commander)
+
 
 @dataclass(frozen=True)
-class CommanderForkCaller(SubagentCaller):
+class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
+    """A peer bound to the registered commander whose orders it judges and directs."""
+
+    authority: str
+
+    def as_thread(self, commander: str) -> ThreadCaller:
+        return self
+
+    def commander(self, comms: Comms) -> Thread:
+        return comms.registry.require(self.authority)
+
+
+@dataclass(frozen=True)
+class CommanderForkCaller(ActsForCommander, SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
     def commanding(self, comms: Comms, commander: str) -> None:
@@ -209,10 +237,6 @@ class CommanderForkCaller(SubagentCaller):
         fork = comms.registry.require(self.name)
         parent, = fork.parent.names()
         return comms.registry.require(parent)
-
-    def identity(self, comms: Comms) -> ThreadIncarnation:
-        fork = comms.registry.require(self.name)
-        return fork.incarnation.require_recorded().acting_for(self.commander(comms).incarnation)
 
     def recorded(self, comms: Comms) -> bool:
         """Every commander verb that records announces it on the bus, so a fork that sent
