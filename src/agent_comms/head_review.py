@@ -191,8 +191,9 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
     def require_ancestry(self, repository: Repo, candidate: str) -> None:
         """A resolved Git combination retains every actual source, not a guessed patch."""
         self.require_origin(repository)
-        WorkBranches(repository.checkout).require_commits(
-            "origin", self.baseline.commit, candidate, *(head.head for head in self.heads))
+        Repo.require_commits(
+            repository.checkout, repository.remote,
+            self.baseline.commit, candidate, *(head.head for head in self.heads))
         if not Repo.descends(repository.checkout, self.baseline.commit, candidate) or any(
                 not Repo.descends(repository.checkout, head.head, candidate) for head in self.heads):
             raise ToolRefusedError("The resolved candidate dropped a captured source parent")
@@ -217,8 +218,8 @@ class MergedIntegrationSource(IntegrationSource):
     """Ordered source heads whose reproducible Git merge owns the candidate tree."""
 
     def expected_tree(self, repository: Repo) -> str:
-        reader = WorkBranches(repository.checkout)
-        reader.require_commits("origin", self.baseline.commit, *(head.head for head in self.heads))
+        Repo.require_commits(repository.checkout, repository.remote,
+                             self.baseline.commit, *(head.head for head in self.heads))
         commit = self.baseline.commit
         for head in self.heads:
             tree = Repo.git(repository.checkout, "merge-tree", "--write-tree", commit, head.head).strip()
@@ -428,7 +429,7 @@ class CombinedInput(IntegrationInput):
         if not self.carrier.same_pull_request(carrier) or core.github != self.carrier.repo:
             raise ToolRefusedError("This is not the captured combined carrier pull request")
         reader = WorkBranches(core.checkout)
-        reader.require_commits("origin", self.carrier.head, carrier.head)
+        Repo.require_commits(core.checkout, core.remote, self.carrier.head, carrier.head)
         source = self.source(core.github)
         self.require_repositories(self.declared_repositories(core, source.baseline.commit, carrier.head))
         source.require_ancestry(core, self.carrier.head)

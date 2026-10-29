@@ -146,7 +146,7 @@ class IntegrationCheckout(SourceCheckout):
     def create(cls, repository: Repo, path: Path, commit: str) -> IntegrationCheckout:
         if path.exists():
             raise IntegrationFailed(f"Preserve existing qualification checkout: {path}")
-        WorkBranches(repository.checkout).require_commits("origin", commit)
+        Repo.require_commits(repository.checkout, repository.remote, commit)
         path.parent.mkdir(parents=True, exist_ok=True)
         created = cls.add(repository.checkout, path, DetachedStart(commit))
         created.require_editable()
@@ -398,7 +398,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
                                          (self.carrier,), self.tree)]
             for repository in repositories[1:]:
                 commit = IntegrationSource.main_head(repository)
-                WorkBranches(repository.checkout).require_commits("origin", commit)
+                Repo.require_commits(repository.checkout, repository.remote, commit)
                 tree = Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
                 sources.append(MergedIntegrationSource(RepositoryCommit(repository.github, commit), (), tree))
             inputs = OrdinaryInput(tuple(sorted(sources, key=lambda source: source.repository.key)))
@@ -618,7 +618,7 @@ class IntegrationRun:
         candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
         if current.repo != core.github or current.base != WorkBranches.main or current.head != candidate_commit:
             raise IntegrationFailed("Capture requires the actual published combined carrier at this checkout's HEAD")
-        WorkBranches(registered_core.checkout).require_commits("origin", base, candidate_commit)
+        Repo.require_commits(registered_core.checkout, registered_core.remote, base, candidate_commit)
         required = IntegrationInput.declared_repositories(registered_core, base, candidate_commit)
         linked_repositories = {link.repo for todo in todos for order in todo.order.declarations
                                for link in order.pull_requests}
@@ -631,7 +631,7 @@ class IntegrationRun:
         pulls = PullRequests(todos)
         heads: dict[RepositoryName, tuple[PullRequestHead, ...]] = {}
         for repo in repositories.values():
-            WorkBranches(repo.checkout).require_commits("origin", mains[repo.github])
+            Repo.require_commits(repo.checkout, repo.remote, mains[repo.github])
             linked = PullRequests.linked_among(todos, repo.github)
             selected = []
             for row in pulls.rows(repo.github, tuple(sorted(linked))):
@@ -650,7 +650,7 @@ class IntegrationRun:
                 for container in carriers:
                     if (container.repo == repo.github
                             and not head.same_pull_request(container)):
-                        WorkBranches(repo.checkout).require_commits("origin", head.head, container.head)
+                        Repo.require_commits(repo.checkout, repo.remote, head.head, container.head)
                         if Repo.descends(repo.checkout, head.head, container.head):
                             selected.append(head)
             heads[repo.github] = tuple(sorted({head.pr: head for head in selected}.values(), key=lambda head: head.pr))
@@ -673,7 +673,7 @@ class IntegrationRun:
             if name in resolved:
                 companion = resolved[name]
                 companion.current()
-                WorkBranches(repo.checkout).require_commits("origin", companion.head)
+                Repo.require_commits(repo.checkout, repo.remote, companion.head)
                 tree = Repo.git(repo.checkout, "rev-parse", f"{companion.head}^{{tree}}").strip()
                 source = ResolvedIntegrationSource(
                     RepositoryCommit(name, baseline), heads[name], tree, companion)

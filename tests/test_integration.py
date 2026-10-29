@@ -16,7 +16,7 @@ from agent_comms import integration
 from agent_comms.errors import ToolRefusedError
 from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import Repo
+from agent_comms.repo import Repo, UnavailableCommitError
 from agent_comms.todos import (
     DraftListedPullRequest, MergedListedPullRequest, PullRequestCommit, QualifiedHeadVerdict,
     ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
@@ -51,10 +51,14 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     carrier = pair.publish_carrier(github_cli)
     local = inputs.source(pair.core.github)
     # Actual synthetic merge: its own message deliberately has no source metadata.
-    tested = pair.core.git(pair.core.checkout, "commit-tree", local.candidate_tree,
+    tested = pair.core.git(pair.core.remote_path, "commit-tree", local.candidate_tree,
                            "-p", local.baseline.commit, "-p", carrier.head,
                            "-m", "Synthetic PR/queue merge; no input metadata").strip()
+    pair.core.git(pair.core.remote_path, "update-ref", f"refs/pull/{carrier.pr}/merge", tested)
+    assert not pair.core.has_commit(tested)
     checkout = integration.IntegrationCheckout.create(pair.core, tmp_path / "ci-checkout", tested)
+    assert pair.core.git(checkout.path, "rev-parse", "HEAD^{tree}").strip() == local.candidate_tree
+    assert pair.core.git(checkout.path, "show", "-s", "--format=%P", "HEAD").split() == [local.baseline.commit, carrier.head]
     assert IntegrationInput.from_message(Repo.git(checkout.path, "show", "--no-patch", "--format=%B", "HEAD")) == ()
     documents = {
         "pull_request": {"number": carrier.pr, "pull_request": {"head": {"sha": carrier.head}}},
@@ -102,9 +106,13 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     head = pair.core.branch_commit
     baseline = pair.core.main_commit
     tree = pair.core.git(pair.core.checkout, "rev-parse", f"{head}^{{tree}}").strip()
-    tested = pair.core.git(pair.core.checkout, "commit-tree", tree, "-p", baseline,
+    tested = pair.core.git(pair.core.remote_path, "commit-tree", tree, "-p", baseline,
                            "-p", head, "-m", "Actual ordinary synthetic merge").strip()
+    pair.core.git(pair.core.remote_path, "update-ref", f"refs/pull/{pair.core.number}/merge", tested)
+    assert not pair.core.has_commit(tested)
     checkout = integration.IntegrationCheckout.create(pair.core, tmp_path / "ordinary-ci", tested)
+    assert pair.core.git(checkout.path, "rev-parse", "HEAD^{tree}").strip() == tree
+    assert pair.core.git(checkout.path, "show", "-s", "--format=%P", "HEAD").split() == [baseline, head]
     document = tmp_path / "ordinary-event.json"
     document.write_text(json.dumps({"number": pair.core.number, "pull_request": {"head": {"sha": head}}}))
     output = tmp_path / "ordinary-inputs"
@@ -144,6 +152,26 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     assert queued.returncode != 0 and "individual source" in queued.stderr
     assert not HeadReview.accepted(pair.core.github, tested)
     assert not MergeHeadReview.accepted(pair.core.github, tested)
+
+
+def test_integration_checkout_refuses_commits_absent_from_its_own_origin(
+    source_repository: SourceRepository, tmp_path: Path,
+) -> None:
+    source = source_repository
+    foreign = SourceRepository.create(tmp_path / "foreign-origin")
+    foreign_head = foreign.publish_change("Foreign-only source", *foreign.write_files({
+        Path("foreign.py"): "foreign = True\n",
+    }))
+    before = source.git(source.checkout, "rev-parse", "HEAD", "HEAD^{tree}")
+    published = source.git(source.remote_path, "show-ref")
+    for index, commit in enumerate((foreign_head, "f" * 40)):
+        destination = tmp_path / f"unavailable-{index}"
+        assert not source.has_commit(commit)
+        with pytest.raises(UnavailableCommitError):
+            integration.IntegrationCheckout.create(source, destination, commit)
+        assert not destination.exists()
+        assert source.git(source.checkout, "rev-parse", "HEAD", "HEAD^{tree}") == before
+        assert source.git(source.remote_path, "show-ref") == published
 
 
 @pytest.mark.parametrize("event", ("pull_request", "merge_group"))
