@@ -35,6 +35,7 @@ from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, ClassVar, Literal, Self, cast
@@ -79,7 +80,7 @@ from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
 from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
-from .tool_request import ReadTool, ToolCall, ToolRequest, tool_field
+from .tool_request import ToolCall, ToolRequest, tool_field
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
@@ -346,7 +347,7 @@ class ToolDescription:
     ) -> ToolDescription:
         """The name is the key tools/call dispatches on, so listing and calling share it."""
         return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",
-                   caller.input_schema(tool), ToolAnnotations(issubclass(tool, ReadTool)))
+                   caller.input_schema(tool), ToolAnnotations(tool.read_only_hint))
 
 
 @dataclass(frozen=True)
@@ -456,7 +457,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
                 ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
-            reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments, caller)
+            reply = await connector.call(tool, self.params.arguments, caller)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
         except (ToolRefusedError, RelationViolationError, CoordinationError) as error:
             logging.exception("Connector tool %s failed", self.params.name)
@@ -503,6 +504,33 @@ class Connector:
         init=False, repr=False, compare=False,
     )
 
+    calls: dict[
+        asyncio.Task[dict[str, JsonValue]], type[ToolRequest] | type[ConnectorTool],
+    ] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
+    closing: asyncio.Event = field(default_factory=asyncio.Event, init=False, repr=False, compare=False)
+
+    async def call(
+        self, tool: type[ToolRequest] | type[ConnectorTool],
+        arguments: Mapping[str, object], caller: ConnectorCaller,
+    ) -> dict[str, JsonValue]:
+        """Start once; a disconnected HTTP client cannot abandon its write."""
+        if self.closing.is_set():
+            raise web.HTTPServiceUnavailable(text="Connector is stopping")
+        pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller)))
+        self.calls[pending] = tool
+        pending.add_done_callback(self.calls.pop)
+        return await asyncio.shield(pending)
+
+    async def stop_calls(self, app: web.Application) -> None:
+        """The runner has stopped accepting: drop readers and join declared mutations."""
+        self.closing.set()
+        pending = tuple(self.calls.items())
+        for call, tool in pending:
+            tool.cancel_on_shutdown(call)
+        await asyncio.gather(*(call for call, tool in pending), return_exceptions=True)
+
     @property
     def heartbeat(self) -> CommanderHeartbeat:
         return cast(CommanderHeartbeat, self.watches[CommanderHeartbeat])
@@ -542,6 +570,7 @@ class Connector:
             CommanderHeartbeat.register(comms.registry)
         app = web.Application(middlewares=[self.log_route])
         app.cleanup_ctx.append(self.watch_orders)
+        app.on_shutdown.append(self.stop_calls)
         app.add_routes(
             [
                 web.get("/.well-known/oauth-protected-resource", self.resource_metadata),
