@@ -62,17 +62,19 @@ class ServiceReading(ToolResult):
         return replace(self, services=passes, heartbeat=passes.heartbeat_completed_at(owner))
 
     def retained_status(self) -> str:
-        if self.heartbeat.since(time.time() - 3 * Coordination.watch_period):
+        if not self.services.failing and self.heartbeat.since(time.time() - 3 * Coordination.watch_period):
             return 'Retained board rows and load:'
-        return 'STALE retained board rows and load; no recent completed pass:'
+        return 'STALE retained board rows and load:'
+
+    def failure_lines(self) -> tuple[str, ...]:
+        # Standing-rule rendering remains the determining owner of failure text.
+        from .standing_rules import ServicePassFailing
+        return tuple(failure.line() for failure in ServicePassFailing.from_passes(self.services))
 
     @projected(view='wire')
     def service_status(self) -> tuple[str, ...]:
-        # Standing-rule rendering remains the determining owner of failure text.
-        from .standing_rules import ServicePassFailing
         clock = self.heartbeat.aged_line('Tristan last completed', time.time())
-        return (*(failure.line() for failure in ServicePassFailing.from_passes(self.services)),
-                *(clock or ('Tristan last completed: unrecorded',)))
+        return (*self.failure_lines(), *(clock or ('Tristan last completed: unrecorded',)))
 
 
 @dataclass(frozen=True, slots=True)

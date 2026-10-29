@@ -362,15 +362,16 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     comms = notification_bus
     lead = comms.registry.require("lead").incarnation
     worker = comms.registry.require("worker").incarnation
-    hud = CommanderHud(lead, (), (
+    hud = CommanderHud(commander=lead, units=(), phases=(
         CommanderPhase(RetainedStorePhase, True, False, ()),
         CommanderPhase(OneOrderOwnerPhase, True, False, ()),
         CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
         CommanderPhase(RecordPlanePhase, False, True, ()),
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
-    ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage(reason='not requested')))
+    ), load=OverloadDegradation.from_orders((), 0, 0), forks=(worker,),
+        usage=CodexUsage(UnreadableUsage(reason='not requested')))
     assert hud.frame == (
-        str(hud.load),
+        *hud.header(),
         "commander_native/record_plane done=False ready=True holders=",
         "commander_native/review_queue done=True ready=False holders=worker",
         "commander_native/design_reconciled done=False ready=False holders=worker",
@@ -395,9 +396,9 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_p
         BoardEntry("judge", "JUDGE #1", now - 240, now + 3600),
     )
     hud = CommanderHud(
-        RecordedThreadIncarnation("lead", 3.0), (awaiting, stuck), (),
-        OverloadDegradation.from_orders((), 0, 0), (),
-        CodexUsage(UnreadableUsage(reason="not requested")), board,
+        commander=RecordedThreadIncarnation("lead", 3.0), units=(awaiting, stuck), phases=(),
+        load=OverloadDegradation.from_orders((), 0, 0), forks=(),
+        usage=CodexUsage(UnreadableUsage(reason="not requested")), board=board,
     )
 
     CommanderFrame.replace_all(tmp_path, (hud,))

@@ -19,7 +19,7 @@ from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import DisclosureIdentity, OrderId, projected
+from agent_comms.field_codec import DisclosureIdentity, MalformedRecord, OrderId, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
@@ -262,11 +262,14 @@ class CommanderLoad(ServiceReading):
 
     @projected(view='wire')
     def frame(self) -> tuple[str, ...]:
-        return (*self.service_status(), self.retained_status(), str(self.load))
+        return self.header()
+
+    def header(self) -> tuple[str, ...]:
+        return (*self.service_status, self.retained_status(), str(self.load))
 
 
 @dataclass(frozen=True)
-class CommanderHud(ServiceReading):
+class CommanderHud(CommanderLoad):
     """One disposable view of native records, shared by comms_hud and the commander board.
 
     TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
@@ -278,7 +281,6 @@ class CommanderHud(ServiceReading):
     commander: ThreadIncarnation
     units: tuple[CommanderUnit, ...]
     phases: tuple[CommanderPhase, ...]
-    load: OverloadDegradation
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
     board: tuple[BoardEntry, ...] = ()
@@ -333,9 +335,9 @@ class CommanderHud(ServiceReading):
                       if snapshot.status(fork.name).receiving)
         board = tuple(entry for packet in CommanderUpdate.latest(comms, owner)
                       for entry in packet.board(comms, commander))
-        return cls(owner, tuple(units), phases,
-                   OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, CodexUsage.read(), board)
+        return cls(commander=owner, units=tuple(units), phases=phases,
+                   load=OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
+                   forks=forks, usage=CodexUsage.read(), board=board)
 
     def rows(self) -> tuple[HudRow, ...]:
         """Committed board order, actionable cards, live phases, then folded quiet units."""
@@ -376,8 +378,7 @@ class CommanderHud(ServiceReading):
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
         """The load line, then one line per row in the order rows() declares."""
-        return (*self.service_status(), self.retained_status(), str(self.load),
-                *(row.line() for row in self.rows()))
+        return (*self.header(), *(row.line() for row in self.rows()))
 
     def load_reading(self) -> CommanderLoad:
         return CommanderLoad(self.load, services=self.services, heartbeat=self.heartbeat)
@@ -402,18 +403,25 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
         raise ToolRefusedError(f"Tristan frame missing: {self.path}")
 
     @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        """Every persisted input hydrated by this reader must wake its open view."""
+        return (*sorted(cls.matching_in(root)), ServicePassStore.path_in(root))
+
+    @classmethod
     def current(cls, comms: Comms, commander: str) -> CommanderHud:
         """Read the heartbeat's publication, never repeat its forge and history work."""
         owner = comms.registry.require(commander).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
         try:
             hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup))).read()
-        except ToolRefusedError as error:
+        except (ToolRefusedError, MalformedRecord, OSError) as error:
             health = ServiceReading().with_services(passes, owner)
-            raise ToolRefusedError('\n'.join((*health.service_status(),
+            raise ToolRefusedError('\n'.join((*health.service_status,
                                              f'Board unavailable: {error}'))) from error
         if hud.commander != owner:
-            raise ToolRefusedError(f"Tristan frame belongs to another incarnation of {owner.name}")
+            health = ServiceReading().with_services(passes, owner)
+            raise ToolRefusedError('\n'.join((*health.service_status,
+                f'Board unavailable: Tristan frame belongs to another incarnation of {owner.name}')))
         return hud.with_services(passes, owner)
 
     @classmethod
@@ -431,6 +439,15 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     @classmethod
     def read_all(cls, root: Path) -> tuple[CommanderHud, ...]:
         passes = ServicePassStore.at(root).read()
-        return tuple(sorted((hud.with_services(passes, hud.commander.require_recorded())
-            for path in cls.matching_in(root) for hud in (cls(path).read(),)),
-            key=lambda hud: hud.commander.name))
+        health = ServiceReading(services=passes)
+        try:
+            huds = tuple(sorted((hud.with_services(passes, hud.commander.require_recorded())
+                for path in cls.matching_in(root) for hud in (cls(path).read(),)),
+                key=lambda hud: hud.commander.name))
+        except (ToolRefusedError, MalformedRecord, OSError) as error:
+            raise ToolRefusedError('\n'.join((*health.failure_lines(),
+                                             f'Board unavailable: {error}'))) from error
+        if not huds and passes.failing:
+            raise ToolRefusedError('\n'.join((*health.failure_lines(),
+                                             'Board unavailable: no published commander frame.')))
+        return huds

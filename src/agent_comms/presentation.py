@@ -23,7 +23,6 @@ from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
-from .commander_frame_file import CommanderFrameFile
 from .coordination_database import CoordinationStore
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .declared_family import DeclaredFamily
@@ -895,7 +894,8 @@ def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
 
 
 def commander_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return tuple(sorted(CommanderFrameFile.matching_in(views.root)))
+    from .commander_hud import CommanderFrame
+    return CommanderFrame.source_paths(views.root)
 
 
 def expiry_period_changed(before: int, now: int) -> bool:
@@ -990,7 +990,7 @@ class WireRevision(ReadState):
     # Activity-derived views change once per expiry period, not per tick.
     expiry_tick: Annotated[
         int,
-        WatchViews((ActivityView,)),
+        WatchViews((ActivityView, CommanderFramesView)),
         Differs(expiry_period_changed),
     ]
 

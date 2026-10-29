@@ -20,6 +20,7 @@ from agent_comms.field_codec import (
     MalformedRecord,
 )
 from agent_comms.locked_store import DurableFile
+from agent_comms.errors import TodoError
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
@@ -36,6 +37,8 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from agent_comms.registration import Registration
+    from agent_comms.comms import Comms
+    from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.todos import Todo, TodoStore
 
     from .native_tool_call import CodingCall
@@ -96,6 +99,18 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
                       repository: RepositoryName) -> bool:
         return self.owns_present(rule, owner, path)
 
+    @classmethod
+    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                 generation: GoalId) -> tuple[Path, ...]:
+        """Read/launch allocations reserve no editable work; declared members supply it."""
+        return ()
+
+    @classmethod
+    def for_goal(cls, rule: StorageRule, owner: Thread, generation: GoalId,
+                 repository: RepositoryName) -> tuple[Path, ...]:
+        return ()
+
     def problems(self) -> tuple[str, ...]:
         """Only a problem allocation reserves an edit boundary for a problem."""
         return ()
@@ -103,6 +118,17 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
     def source_repositories(self, primary: RepositoryName,
                             companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
         return ()
+
+    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
+                       repository: RepositoryName) -> frozenset[Path]:
+        return frozenset()
+
+    def reserves_boundary(self) -> bool:
+        return False
+
+    def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
+                      store: TodoStore) -> frozenset[Path]:
+        return frozenset()
 
 
 @dataclass(frozen=True)
@@ -117,7 +143,25 @@ class HomeCheckoutAllocation(CheckoutAllocation):
         return path in owner.home_checkouts
 
 
-class ProblemCheckoutAllocation(CheckoutAllocation):
+class EditableCheckoutAllocation(CheckoutAllocation):
+    """Declared editable members acquire Git identity once at the source-write boundary."""
+
+    def reserves_boundary(self) -> bool:
+        return True
+
+    def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
+                      store: TodoStore) -> frozenset[Path]:
+        try:
+            repository = Repo.of(path).github
+            if not self.owns_declared(rule, owner, path, repository):
+                return frozenset()
+            return frozenset(root for root in self.editable_roots(rule, owner, store, repository)
+                             if root == path)
+        except (GitCommandError, TodoError) as error:
+            raise StorageDenied(f'Cannot admit source write in {path}: {error}') from error
+
+
+class ProblemCheckoutAllocation(EditableCheckoutAllocation):
     """A checkout allocated to one problem; ``verb`` is the command that creates it."""
 
     verb: ClassVar[str]
@@ -125,6 +169,17 @@ class ProblemCheckoutAllocation(CheckoutAllocation):
 
     def problems(self) -> tuple[str, ...]:
         return (self.problem,)
+
+    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
+                       repository: RepositoryName) -> frozenset[Path]:
+        current = store.get(self.problem)
+        current.state.require_open(current)
+        assignment = current.held()
+        current.require_assignee(owner.incarnation, assignment.generation)
+        companions = current.order.source_repositories()
+        if repository not in self.source_repositories(current.repo, companions):
+            return frozenset()
+        return rule.edit_boundaries(owner, current.id, current.repo, companions, assignment.generation)
 
     def source_repositories(self, primary: RepositoryName,
                             companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
@@ -150,6 +205,12 @@ class OrderCheckoutAllocation(ProblemCheckoutAllocation):
     def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
         if not suffix:
             yield cls(problem)
+
+    @classmethod
+    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                 generation: GoalId) -> tuple[Path, ...]:
+        return (rule.order_checkout(rule.roots_of(owner), problem),)
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
         return path == rule.order_checkout(rule.roots_of(owner), self.problem)
@@ -179,6 +240,13 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
     problem: str
     suffix: str
 
+    @classmethod
+    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                 generation: GoalId) -> tuple[Path, ...]:
+        return tuple(rule.repository_checkout(rule.roots_of(owner), problem, repository)
+                     for repository in companions)
+
     def source_repositories(self, primary: RepositoryName,
                             companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
         return companions
@@ -194,14 +262,36 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
 
 
 @dataclass(frozen=True)
-class GoalCheckoutAllocation(RepositoryAllocation):
+class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
     goal: GoalId
     suffix: str
+
+    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
+                       repository: RepositoryName) -> frozenset[Path]:
+        roots = frozenset(path.resolve() for goal in owner.goal.matching(self.goal)
+                          for path in self.for_goal(rule, owner, goal.id, repository))
+        for current in store.for_goal(owner.incarnation, self.goal):
+            companions = current.order.source_repositories()
+            if repository in (current.repo, *companions):
+                roots |= rule.edit_boundaries(owner, current.id, current.repo, companions, self.goal)
+        return roots
+
+    @classmethod
+    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                 generation: GoalId) -> tuple[Path, ...]:
+        return tuple(path for repository in dict.fromkeys((primary, *companions))
+                     for path in cls.for_goal(rule, owner, generation, repository))
+
+    @classmethod
+    def for_goal(cls, rule: StorageRule, owner: Thread, generation: GoalId,
+                 repository: RepositoryName) -> tuple[Path, ...]:
+        return (rule.repository_checkout(rule.roots_of(owner), generation, repository),)
 
     @classmethod
     def read(cls, owner: Thread, path: Path, problem: str,
              suffix: str) -> Iterator[CheckoutAllocation]:
-        if path == owner.project_path or not suffix:
+        if not suffix:
             return
         try:
             goal = FieldCodec.decode(GoalId, problem)
@@ -264,6 +354,13 @@ class StorageRule(RoomAllocation, DurableFile):
         """The same problem's checkout of another repository, changed in lockstep with it."""
         checkout = self.order_checkout(roots, problem)
         return checkout.with_name(f'{checkout.name}--{repository.name}')
+
+    def edit_boundaries(self, owner: Thread, problem: str, primary: RepositoryName,
+                        companions: tuple[RepositoryName, ...], generation: GoalId) -> frozenset[Path]:
+        """Physical editable roots follow declared allocations, even before materialization."""
+        return frozenset(path.resolve()
+                         for member in CheckoutAllocation.members_with(CheckoutAllocation)
+                         for path in member.for_work(self, owner, problem, primary, companions, generation))
 
     def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""
@@ -495,6 +592,9 @@ class StorageProjection:
     def storage(self) -> UnitStorage:
         return UnitStorage.read(self.rule, self.thread)
 
+    def require_write(self, path: Path) -> None:
+        self.rule.require_path(self.thread, path)
+
     def check_call(self, call: CodingCall) -> tuple[StorageEffect, ...]:
         """Check the call's declared effects against this same lazy owner snapshot."""
         effects = call.storage_effects(self.thread.worktree.path)
@@ -505,3 +605,32 @@ class StorageProjection:
         """Preflight every effect of one call against this one snapshot."""
         for effect in effects:
             effect.check(self)
+
+
+@dataclass
+class RegisteredStorageProjection(StorageProjection):
+    """Native source writes consume the same captured allocation boundaries as admission."""
+
+    comms: Comms
+
+    @cached_property
+    def snapshot(self) -> RegistrySnapshot:
+        return self.comms.registry.snapshot()
+
+    def require_write(self, path: Path) -> None:
+        from .todos import TodoStore
+        self.rule.require_destination(self.thread, path)
+        owners = self.snapshot.threads_for(self.thread.incarnation.require_recorded())
+        if not owners:
+            self.rule.deny('The source writer incarnation is no longer registered.')
+        owner, = owners
+        resolved = path.resolve()
+        sources = Checkout.git_roots(resolved, *resolved.parents)
+        store = TodoStore(self.comms.root)
+        allowed = frozenset(boundary for root in sources
+                            for allocation in CheckoutAllocation.for_path(self.rule, owner, root)
+                            for boundary in allocation.edit_boundary(self.rule, owner, root, store))
+        if (sources or path.is_relative_to(self.rule.checkout_base)
+                or resolved.is_relative_to(owner.project_path.resolve())) and not any(
+                resolved.is_relative_to(root) for root in allowed):
+            self.rule.deny(f'{path} is source/read custody, not allocated editable work of {owner.name}.')

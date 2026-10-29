@@ -73,7 +73,7 @@ class WriteStorageEffect(StorageEffect):
     path: Path
 
     def check(self, projection: StorageProjection) -> None:
-        projection.rule.require_path(projection.thread, self.path)
+        projection.require_write(self.path)
 
 
 @dataclass(frozen=True)
