@@ -6,6 +6,72 @@ audience: fleet
 type: hard-rule
 ---
 
+> need to store an execution id
+> could make a type
+> that feels like overengineering
+> `str` it is. simple. flexible.
+> nice
+> sometimes there's no execution
+> could make a type for that
+> overengineering again
+> `None` it is
+> nice
+> `current_execution_id: str | None`
+> very clean. very pythonic.
+> nice
+> now it has to come back out of SQLite
+> SQLite hands over a str or a None
+> but the column says `str | None`
+> so FieldCodec tries each candidate
+> "are you a str?"
+> "yes"
+> "are you perhaps a None?"
+> "I just said I'm a str"
+> nice
+> once per row
+> every recipient of every message on screen
+> 200,000 rows
+> "are you a str?" × 200,000
+> wait
+> Toad hiccups
+> wait
+> profile it
+> 9.15 seconds in decode_candidates
+> the single biggest cost in the entire worker
+> spent asking strings whether they are strings
+> wait
+> someone else needs the execution id
+> it's a str, so they compare it to another str
+> that one is a thread name
+> also a str
+> they compare equal. somebody named a thread after an execution.
+> nothing crashes
+> wrong thread gets the reply
+> wait
+> someone writes `if current_execution_id is not None:` in a different file
+> and `if current_execution_id:` in a third
+> the empty string "" walks in
+> it is not None
+> it is falsy
+> two files now disagree on whether something is running
+> wait
+> bug report: "messages route to the wrong thread sometimes"
+> add a prefix: "exec-"
+> now it's a string with a brand painted on it
+> some writers forget the prefix
+> add a check: `if id.startswith("exec-")`
+> the check is a third type system
+> made of string methods
+> nice
+> the class `ExecutionId` was in the codebase the entire time
+> it knew it was an execution id
+> it couldn't be confused with a thread name, because it's not the same type
+> it couldn't be empty, because the constructor says so
+> "no execution" would have been `NoCurrentExecution`, a thing you can call methods on
+> decoded once per column instead of interrogated per row
+> mfw I avoided one class to stay simple and built a type checker out of `startswith`
+> mfw `str` is not a type, it's a lack of one with a length method
+
 **Why:** a decision that a new case must edit outside its declaration restates that declaration; inheritance derives it once, so factoring by inheritance is how slop is driven to zero.
 
 - **Inheritance as much as we can.** Tristan, 2026-10-20: "inheritance = factoring and factoring = slop genocide. MI = compositional factoring. you should remember MI applies waaaaaaaaaaay more than your default thinks". Default verdict on any helper object, forwarder, delegate attribute, `*Service` or manager: a missing parent class. Capabilities are mixins composed by the MRO; overlapping capabilities are multiple parents. "Prefer composition" and "inherits two classes" are dogma, never a defect.

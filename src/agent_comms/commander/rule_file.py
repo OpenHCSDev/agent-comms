@@ -63,11 +63,14 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     description: str
     drift: str
     audience: type[RuleAudience]
+    wakeup: str
     why: str
     body: str
-    reason_line: ClassVar[re.Pattern[str]] = re.compile(
-        r"^(?:\*\*Why:\*\*|Why:)[ \t]*(\S[^\n]*)$", re.M
+    opening: ClassVar[re.Pattern[str]] = re.compile(
+        r"\A(?P<wakeup>(?:>[^\n]*\n)+)\n\*\*Why:\*\*[ \t]*(?P<why>\S[^\n]*)$", re.M
     )
+    """A rule opens with its wake-up, the greentext read before anything else, then its one
+    Why line; the bullets follow."""
 
     @staticmethod
     @boundary_decoder
@@ -96,12 +99,11 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     @boundary_decoder
     def read(cls, path: Path) -> Self:
         metadata, body = cls.document(path)
-        reason = cls.reason_line.search(body)
-        if reason is None:
-            raise ValueError(f"{path.name}: missing Why")
-        return FieldCodec.decode(
-            cls, {**metadata, "why": reason.group(1), "body": cls.reason_line.sub("", body).strip()}
-        )
+        opening = cls.opening.match(body)
+        if opening is None:
+            raise ValueError(f"{path.name}: does not open with its wake-up greentext, then **Why:**")
+        return FieldCodec.decode(cls, {**metadata, "wakeup": opening["wakeup"].rstrip(),
+                                       "why": opening["why"], "body": body[opening.end():].strip()})
 
     @classmethod
     def packaged(cls) -> tuple[Self, ...]:
@@ -123,12 +125,12 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         return f"{self.name}: {self.description}\nWhy: {self.why}"
 
     def render(self) -> str:
-        return f"{self.summary}\n\n{self.body}".rstrip()
+        return f"{self.wakeup}\n\n{self.summary}\n\n{self.body}".rstrip()
 
-    @classmethod
-    def drift_tells(cls) -> tuple[str, ...]:
-        """The reminder hook's one-line tells, one declared by each packaged rule."""
-        return tuple(rule.drift for rule in cls.packaged())
+    @property
+    def reminder(self) -> str:
+        """The inline slice that keeps this rule awake between reads: its wake-up, then its tell."""
+        return f"{self.wakeup}\n\n{self.drift}"
 
 
 class FeedbackRuleFile(RuleFile):

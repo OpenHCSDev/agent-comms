@@ -33,12 +33,12 @@ from native_unread_fixture import completed_counts, completed_snapshot
 from agent_comms.threads import Thread
 
 
-def append(path, role='assistant', content='Reply'):
+def append(path, role='assistant', content='Reply', **fields):
     if role == 'assistant' and isinstance(content, str):
         content = [{'type': 'text', 'text': content}]
     with path.open('a') as stream:
         stream.write(json.dumps({'type': 'message', 'timestamp': '2026-10-19T05:00:00.000Z',
-            'message': {'role': role, 'content': content}}) + '\n')
+            'message': {'role': role, 'content': content, **fields}}) + '\n')
 
 
 def session(path, identity='session-test'):
@@ -80,7 +80,7 @@ def test_prepare_caps_records_not_replies_and_detects_replacement(tmp_path):
     session(source)
     append(source)
     for _ in range(ReplyIndex.limit):
-        append(source, 'toolResult', 'not an assistant reply')
+        append(source, 'toolResult', 'not an assistant reply', toolCallId='tool')
     revision = FileRevision.capture(source)
     index = ReplyIndex(source=str(source))
     update = index.prepare(revision, 0, get_context('spawn').Event())
@@ -103,18 +103,18 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     append(source, 'user', 'My own prompt')
     append(source, content=[{'type': 'thinking', 'thinking': 'private'}])
     append(source, content=[{'type': 'toolCall', 'id': 'tool', 'name': 'read', 'arguments': {}}])
-    append(source, 'toolResult', 'tool output')
+    append(source, 'toolResult', 'tool output', toolCallId='tool')
     append(source, content=[{'type': 'text', 'text': 'one'}, {'type': 'text', 'text': 'two'}])
-    assert completed_snapshot(comms, str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
+    assert completed_snapshot(comms, Checkout(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
     shown = comms.transcripts.transcript_checkpoint('worker')
     append(source, content='Arrived after the displayed cut')
     comms.views.mark_thread_view_read('worker', worktree=Checkout(tmp_path), through=shown)
-    assert completed_snapshot(wire(comms.root), str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
-    assert completed_snapshot(comms, str(tmp_path / 'other-project')).thread_unread['worker'] == ReplyUnread(1)
-    comms.messaging.send('worker', '#ci', 'Channel reply')
+    assert completed_snapshot(wire(comms.root), Checkout(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
+    assert completed_snapshot(comms, Checkout(tmp_path / 'other-project')).thread_unread['worker'] == ReplyUnread(1)
+    reply = comms.messaging.send('worker', '#ci', 'Channel reply').message
     comms.views.mark_user_view_read('#ci', worktree=Checkout(tmp_path))
-    comms.bus.mark_read_through('worker', comms.bus.inbox('worker').page.messages[-1].seq)
-    assert completed_snapshot(comms, str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
+    comms.bus.mark_read_through('worker', reply.seq)
+    assert completed_snapshot(comms, Checkout(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
 
 
 def test_read_uses_the_captured_registry_after_a_thread_is_archived(tmp_path):

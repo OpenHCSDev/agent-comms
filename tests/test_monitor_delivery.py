@@ -1092,7 +1092,7 @@ async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_send
 @pytest.mark.parametrize(('target', 'body', 'expected'), (
     ('viewer', 'ordinary direct request', ('claude-code',)),
     ('#monitor', 'channel information', ()),
-    ('#monitor', '@viewer please answer this channel request', ('#monitor',)),
+    ('#monitor', '@viewer please answer this channel request', ()),
 ))
 async def test_confirmed_reply_routes_follow_direct_and_channel_policy(
     bridge, reply_end, target, body, expected,

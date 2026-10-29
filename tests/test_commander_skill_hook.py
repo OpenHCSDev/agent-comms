@@ -289,13 +289,13 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
         assert DeliveredBoardContent.count(db) == 0
 
 
-def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():
+def test_the_deck_carries_the_voice_every_fourth_slice_every_rule_reminder_and_every_failure():
     slices = CommanderReader.slices()
     voice = DeckReader.paragraphs(CommanderPackage.voice().read_text())
     indictment = DeckReader.paragraphs(CommanderPackage.indictment().read_text())
     assert set(slices[0::4]) == set(voice)
     assert set(slices[1::4]) == set(indictment)
-    assert set(slices[2::4]) == set(RuleFile.drift_tells())
+    assert set(slices[2::4]) == {rule.reminder for rule in RuleFile.packaged()}
     assert set(slices[3::4]) == {
         f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines()}
     assert all(len(text) <= DeckReader.slice_chars for text in slices)
@@ -361,8 +361,20 @@ def test_a_unit_session_gets_the_fleet_deck_and_no_commander_reminders(
 
 
 @pytest.mark.parametrize("path", CommanderPackage.rules_files(), ids=lambda path: path.name)
-def test_package_rule_has_a_reason(path):
-    assert RuleFile.read(path).why
+def test_package_rule_opens_with_its_wakeup_then_its_reason(path):
+    rule = RuleFile.read(path)
+    assert rule.why and rule.wakeup.startswith(">")
+    assert rule.render().startswith(rule.wakeup + "\n\n" + rule.summary)
+    assert rule.reminder.startswith(rule.wakeup) and rule.reminder.endswith(rule.drift)
+
+
+def test_rule_file_without_a_wakeup_is_refused(tmp_path):
+    source = CommanderPackage.rules_files()[0].read_text(encoding="utf-8")
+    path = tmp_path / "asleep.md"
+    path.write_text("".join(line for line in source.splitlines(keepends=True)
+                            if not line.startswith(">")), encoding="utf-8")
+    with pytest.raises(ValueError, match="wake-up"):
+        RuleFile.read(path)
 
 
 def test_package_descriptions_do_not_repeat_rule_kind():
@@ -473,6 +485,11 @@ def test_a_subagent_and_an_unbound_session_are_never_gated(
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()
+    # Claude's SubagentStart registers the child before PreToolUse reports its activity.
+    from agent_comms.thread_execution import CommanderForkExecution
+
+    commanding_session.registry.register_child(
+        "claude-a9", "claude-code", CommanderForkExecution, commanding_session.goals)
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="a9"))
     elsewhere = tmp_path / "other.jsonl"
     elsewhere.write_text("")

@@ -134,6 +134,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return UnavailableRecipientActivity()
 
     @classmethod
+    def holds_activity(cls, thread: Thread, status: ThreadStatus) -> bool:
+        """An executing native turn keeps its last activity current."""
+        return thread.executing
+
+    @classmethod
     def project_activity(cls, thread: Thread, activity):
         """External participants report their own activity events."""
         return activity
@@ -196,6 +201,11 @@ class ExternalThreadExecution(ThreadExecution):
 class SubagentExecution(ExternalThreadExecution):
     """A child working inside its parent session's turn: it reads its CLI inbox, holds no
     order and has no unit card of its own, and starts with its parent's audience."""
+
+    @classmethod
+    def holds_activity(cls, thread: Thread, status: ThreadStatus) -> bool:
+        """The occupied registration lasts until SubagentStop or SessionEnd retires it."""
+        return status.receiving
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
