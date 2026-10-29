@@ -423,6 +423,11 @@ class ChildNative(NativeChildState):
     async def closed(self) -> None:
         await self.child.shutdown()
 
+    async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
+        """Every live child's context starts with its rule-reading segment, a freshly spawned
+        one's first input included."""
+        return context.prepend(self.child.rule_reading)
+
 
 @dataclass
 class SuccessorNative(ChildNative):
@@ -520,7 +525,7 @@ class RetainedNative(ChildNative):
     async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
         if thread.project_resume_due or self.child.key[0].cwd != thread.worktree.path:
             await self.child.forget_context()
-        context = context.prepend(self.child.rule_reading)
+        context = await super().context_for_input(thread, context)
         if not self.current or self.identity.session_file != thread.runtime.read_key:
             return context
         return context.after_received(self.child.received_context)
