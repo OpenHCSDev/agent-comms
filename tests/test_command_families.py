@@ -1,4 +1,4 @@
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, Repo
 from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.field_codec import FieldCodec, GoalId, MalformedRecord
 
@@ -10,7 +10,6 @@ import pytest
 from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.cli import build_parser, main
-from agent_comms.cli_command import CliCommand
 from agent_comms.comms import wire
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
@@ -47,7 +46,8 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     send_arguments = ["user-send", "--to", "a", "--body", "hello"]
     with pytest.raises(ValueError):
         parse(send_arguments)
-    assert parse([*send_arguments, "--worktree", str(tmp_path)]).worktree == str(tmp_path)
+    Repo.git(tmp_path, "init", "--quiet")
+    assert parse([*send_arguments, "--worktree", str(tmp_path)]).worktree == Checkout.checked(tmp_path)
     invoke = parse(["tool", "--tool", "comms_threads"])
     assert invoke.arguments == {}
     send = parse(["send", "--from", "a", "--to", "b", "--body", "hello"])

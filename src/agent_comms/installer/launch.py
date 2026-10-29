@@ -54,7 +54,6 @@ from agent_comms.installer.upgrade import (
     RehearsedUpgrade,
     Stack,
     TargetTree,
-    Upgrade,
     upgrade,
 )
 from agent_comms.repo import Repo
@@ -200,7 +199,7 @@ class InstallRun:
         output.write(self.unit.result.read_text())
         return 0
 
-    def run(self, runtime: LaunchRuntime) -> Upgrade:
+    def run(self, runtime: LaunchRuntime) -> RehearsedUpgrade:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.mode, command.retire, command.spill_dir, self.scratch,

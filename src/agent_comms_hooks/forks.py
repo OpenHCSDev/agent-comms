@@ -24,8 +24,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.cli_commands import RegisteredResult
+from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import AtomicFile
+from agent_comms.turn_phase import ModelWaitPhase, TurnPhase
 from agent_comms_hooks import ClaudeHookProgram, SubagentId
 from agent_comms_hooks.watch import CommanderSession, WatchClaim, WatchRecord
 
@@ -59,24 +61,44 @@ class SubagentSeats(CommanderSession):
 
 
 @dataclass(frozen=True)
-class SubagentHook(SubagentSeats):
-    """What Claude Code adds for a subagent event; `transcript_path` stays the parent's."""
+class SeatedSubagent(SubagentSeats):
+    """The existing seat or commander-fork name identifies whose activity a hook reports."""
 
     agent_id: SubagentId
-    agent_type: str
 
     @property
     def seat(self) -> Path:
         return self.seats / self.agent_id
+
+    def enter(self, phase: TurnPhase) -> None:
+        state = WatchClaim(self.session_id).state()
+        state.by_role(
+            lambda: None,
+            lambda record: self.record_phase(record, self.seat.read_text(), phase),
+            lambda record: self.record_phase(record, self.agent_id.fork, phase),
+        )
+
+    @staticmethod
+    def record_phase(record: WatchRecord, name: str, phase: TurnPhase) -> None:
+        with client_wire(Path(record.root)) as comms:
+            comms.agents.enter_phase(name, phase)
+
+
+@dataclass(frozen=True)
+class SubagentHook(SeatedSubagent):
+    """What Claude Code adds for a subagent event; `transcript_path` stays the parent's."""
+
+    agent_type: str
 
     def commanding(self, verb: str) -> subprocess.CompletedProcess[str]:
         return self.run(*self.command, verb, "--fork", self.agent_id.fork)
 
     def register(self) -> None:
         state = WatchClaim(self.session_id).state()
-        state.by_role(lambda: None, lambda: self.claim(*state.bindings()), self.join)
+        state.by_role(lambda: None, self.claim, self.join)
+        self.enter(ModelWaitPhase())
 
-    def join(self) -> None:
+    def join(self, record: WatchRecord) -> None:
         run = self.commanding("join")
         if run.returncode:
             raise SystemExit(run.stderr.strip() or f"exit status {run.returncode}")
@@ -105,7 +127,7 @@ class SubagentStopHook(SubagentHook):
 
     def retire(self) -> None:
         state = WatchClaim(self.session_id).state()
-        state.by_role(lambda: None, lambda: self.leave(*state.bindings()), self.retire_fork)
+        state.by_role(lambda: None, self.leave, self.retire_fork)
 
     def leave(self, record: WatchRecord) -> None:
         if not self.seat.exists():
@@ -114,7 +136,7 @@ class SubagentStopHook(SubagentHook):
         for refusal in self.vacate(record, self.seat):
             raise SystemExit(refusal)
 
-    def retire_fork(self) -> None:
+    def retire_fork(self, record: WatchRecord) -> None:
         if self.stop_hook_active:
             self.end()
             return
@@ -142,15 +164,14 @@ class SessionSubagents(SubagentSeats):
     def end_subagents(self) -> tuple[str, ...]:
         """Core's refusals to end this session's children, or none."""
         state = WatchClaim(self.session_id).state()
-        return state.by_role(lambda: (), lambda: self.vacate_seats(*state.bindings()),
-                             self.end_forks)
+        return state.by_role(lambda: (), self.vacate_seats, self.end_forks)
 
     def vacate_seats(self, record: WatchRecord) -> tuple[str, ...]:
         """Every slot an occupant still holds: one with no stop left it seated."""
         seats = sorted(self.seats.glob("*")) if self.seats.is_dir() else []
         return tuple(refusal for seat in seats for refusal in self.vacate(record, seat))
 
-    def end_forks(self) -> tuple[str, ...]:
+    def end_forks(self, record: WatchRecord) -> tuple[str, ...]:
         """Core's one run for this session's forks, or none for a session with none."""
         subagents = self.subagents()
         if not subagents:
