@@ -198,12 +198,6 @@ RTS, derived from behaviour:
 - **Calibration:** share of recent predictions that came true.
 - **Context:** tokens used against the 300k compaction point.
 
-The existing `capacity.py` gate (fork when overloaded) reads these instead of
-a raw unit count. When look debt or judge debt passes its limit, the tool
-does not ask the commander how it feels; it forks a slice for the oldest debt
-and refuses new orders until the debt is back under the limit. No form to fill,
-one number to read, and the response is automatic.
-
 **Self-report alongside, calibrated like predictions.** Tristan's correction
 (2026-10-18): the commander did recognise its own skimming when asked, so the
 self-report carries signal even if nobody's introspection is reliable. Each
