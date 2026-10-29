@@ -273,7 +273,7 @@ class SubagentCall(GatedCall, SeatedSubagent):
     """A subagent bypasses its parent's read gate but reports its own tool activity."""
 
     def judge(self, comms: Comms, binding: Binding) -> None:
-        self.enter(ToolRunningPhase(self.tool_name))
+        self.enter(comms, binding, ToolRunningPhase(self.tool_name))
 
     def completed(self, comms: Comms, binding: Binding) -> int:
         """A subagent's event never increments its parent's deal record."""

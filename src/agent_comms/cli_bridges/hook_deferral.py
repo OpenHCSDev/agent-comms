@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from abc import (
     ABC,
     abstractmethod,
@@ -12,16 +11,18 @@ from collections.abc import (
     Iterator,
     Mapping,
 )
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import (
     ClassVar,
     Self,
 )
 
-from agent_comms_hooks import HookRecord
+from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
 
-from .session_watch import CommanderSession
+from .shared import Binding
+from ..comms import Comms
+from ..commander.standing import UnownedWheelSpin
 
 
 class Tagged(HookRecord):
@@ -164,23 +165,18 @@ class Waiting(Deferral):
 
 
 class IdleRead(ABC):
-    """Core's answer to which units hold no order, read through its own command."""
-
-    command: ClassVar[tuple[str, ...]] = ("agent-comms-commander", "order", "idle")
-    timeout: ClassVar[float] = 30
+    """Core's idle answer or an explicit failed read, on the admitted resident context."""
 
     @abstractmethod
     def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]: ...
 
     @staticmethod
-    def read() -> IdleRead:
-        """Core's exit status is its answer; a command that cannot start or never answers
-        is a broken install, and the hook fails with it instead of guessing."""
-        run = subprocess.run(IdleRead.command, capture_output=True, text=True,
-                             timeout=IdleRead.timeout)
-        if run.returncode:
-            return FailedIdleRead(run.stderr.strip()[-300:] or f"exit status {run.returncode}")
-        return ReadIdle(tuple(run.stdout.split()))
+    def read(comms: Comms, binding: Binding) -> IdleRead:
+        try:
+            return ReadIdle(tuple(unit.name for unit in UnownedWheelSpin.read_idle(comms, binding.owner)))
+        except Exception as failed:
+            # A failed read is an explicit blocking result, never an empty/successful answer.
+            return FailedIdleRead(str(failed))
 
 
 @dataclass(frozen=True)
@@ -199,7 +195,7 @@ class FailedIdleRead(IdleRead):
 
     def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]:
         yield (f"You deferred {quoted(deferred)} and Core's idle read failed ({self.error}):"
-               f" run `{' '.join(self.command)}` and order every idle unit now.")
+               " repair the Core idle read and order every idle unit now.")
 
 
 def quoted(phrases: tuple[str, ...]) -> str:
@@ -207,12 +203,14 @@ def quoted(phrases: tuple[str, ...]) -> str:
 
 
 @dataclass(frozen=True)
-class StopHook(CommanderSession):
+class StopHook(ClaudeTranscriptHook):
     stop_hook_active: bool
+    comms: Comms = field(kw_only=True, compare=False, repr=False)
+    binding: Binding = field(kw_only=True, compare=False, repr=False)
 
     @cached_property
     def idle(self) -> IdleRead:
-        return IdleRead.read()
+        return IdleRead.read(self.comms, self.binding)
 
     def reply(self) -> str:
         """The text of the reply that ends the turn: what the model said after its last act."""
@@ -226,8 +224,13 @@ class StopHook(CommanderSession):
 
     def guard(self) -> None:
         """A stop this hook already sent back is let through, so it never loops."""
-        if self.stop_hook_active or not self.commands:
+        if self.stop_hook_active:
             return
+        selected = self.comms.registry.snapshot().commander_project.session_output(
+            self.binding.owner, commander=self.judge_reply, commanded=lambda: None)
+        selected()
+
+    def judge_reply(self) -> None:
         reply = self.reply()
         reasons = tuple(
             reason

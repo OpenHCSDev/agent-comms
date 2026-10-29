@@ -226,6 +226,14 @@ class CommanderForkCaller(SubagentCaller):
         fork = comms.registry.require(self.name)
         return fork.incarnation.require_recorded().acting_for(self.commander(comms).incarnation)
 
+    @staticmethod
+    def end_session(comms: Comms, callers: tuple[CommanderForkCaller, ...]) -> tuple[CommanderForkCaller, ...]:
+        """Only children that joined this bus can be ended; every entry uses the same owner."""
+        registered = tuple(caller for caller in callers if caller.name in comms.registry)
+        for caller in registered:
+            caller.end(comms)
+        return registered
+
     def recorded(self, comms: Comms) -> bool:
         """Every commander verb that records announces it on the bus, so a fork that sent
         nothing recorded nothing."""

@@ -338,7 +338,7 @@ class NativeChildState(ABC):
         with startup.measurements.operation("native_spawn"):
             child = await PiSessionChild.start(key, launch.session.attestation(), prepare_rules)
         persistent.child_state = BorrowedNative(child, persistent.child_state)
-        watchdog.spawned(False)
+        watchdog.spawned()
         return child
 
     async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
@@ -472,7 +472,7 @@ class RetainedNative(ChildNative):
         self.child.prepare_rules = prepare_rules
         watchdog.launching(asyncio.get_running_loop().time, key[0].session.path)
         persistent.child_state = BorrowedNative(self.child, EmptyNative())
-        watchdog.spawned(True)
+        watchdog.reused()
         return self.child
 
     def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:

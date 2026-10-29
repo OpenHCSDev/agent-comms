@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import inspect
 import os
 from abc import ABC, abstractmethod
@@ -21,6 +20,7 @@ from .commander.rule_file import CommanderAudience, FleetAudience, RuleAudience,
 from .field_codec import ToolCallId, boundary_decoder
 from .pattern_sources import PostmortemFailure
 from .slop import Slop
+from .store_files import StoreGuard
 from .tool_denial import SelectedToolDenied
 
 
@@ -298,7 +298,7 @@ class RecordedGateCall:
         return self.notices.first_read() if first else ()
 
 
-class DealtCalls(ClaudeTranscriptHook):
+class DealtCalls(ClaudeTranscriptHook, StoreGuard):
     """One byte per completed/refused call, retaining the existing .calls representation.
 
     The leading byte also records that a refusal occurred. Its remaining bytes are
@@ -323,8 +323,8 @@ class DealtCalls(ClaudeTranscriptHook):
         their ordinals. Keep this session's lock through publication so the read notice
         cannot overtake the refusal it answers. Ordinary tool completions only append.
         """
-        fd = os.open(self.calls, os.O_CREAT | os.O_RDWR, 0o600)
-        with os.fdopen(fd, "r+b", buffering=0) as record:
-            fcntl.flock(record, fcntl.LOCK_EX)
-            notices = GateNotices.from_marker(record.read(1))
-            yield RecordedGateCall(notices, self.count_call(), record)
+        with self.write_guard(self.calls):
+            fd = os.open(self.calls, os.O_CREAT | os.O_RDWR, 0o600)
+            with os.fdopen(fd, "r+b", buffering=0) as record:
+                notices = GateNotices.from_marker(record.read(1))
+                yield RecordedGateCall(notices, self.count_call(), record)
