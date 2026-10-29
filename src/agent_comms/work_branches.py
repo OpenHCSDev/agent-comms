@@ -455,11 +455,11 @@ query($owner: String!, $name: String!, $after: String) {
 
     def prepare_upstreams(self) -> None:
         """Acquire all declared publications in one remote cut and one object batch per remote."""
-        references: dict[str, set[str]] = {}
-        for upstream in self.upstreams.values():
-            for remote, reference in upstream.publication_inputs():
-                references.setdefault(remote, set()).add(reference)
         with Repo.acquiring():
+            references: dict[str, set[str]] = {}
+            for upstream in self.upstreams.values():
+                for remote, reference in upstream.publication_inputs():
+                    references.setdefault(remote, set()).add(reference)
             for remote, refs in references.items():
                 Repo.enter_phase()
                 heads = tuple(dict.fromkeys(

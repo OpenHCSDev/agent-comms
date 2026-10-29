@@ -13,7 +13,7 @@ import subprocess
 import sys
 from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
-from contextvars import ContextVar
+from contextvars import Context, ContextVar
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -164,9 +164,10 @@ class GitLaunch(Executable):
             | {"LC_ALL": "C"},
         ) as process:
             stdout, stderr = process.communicate(timeout=10)
-            probe = subprocess.CompletedProcess(command, process.wait(), stdout, stderr)
+            probe = subprocess.CompletedProcess(
+                command, process.wait(), stdout.decode(), stderr.decode())
         probe.check_returncode()
-        return frozenset(probe.stdout.decode().splitlines())
+        return frozenset(probe.stdout.splitlines())
 
     @classmethod
     def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
@@ -202,6 +203,12 @@ class GitLaunch(Executable):
     @staticmethod
     def enter_phase() -> None:
         _git_opening.get().enter_phase()
+
+    @staticmethod
+    def in_context(context: Context) -> Context:
+        """Carry this constructor capability through an explicitly isolated worker context."""
+        context.run(_git_opening.set, _git_opening.get())
+        return context
 
     @classmethod
     def _run(

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
 from .child_process import AsyncWork, join_retirement
+from .native_build_inputs import GitLaunch
 from .coordination_session import (
     CoordinationSession,
     NativeCoordinationSession,
@@ -116,7 +117,7 @@ class Coordination(ExecutionStore, AttemptStore):
 
     @staticmethod
     def worker_context() -> Context:
-        return MaintenanceHolder.in_context(StoreLock.worker_context())
+        return GitLaunch.in_context(MaintenanceHolder.in_context(StoreLock.worker_context()))
 
     @staticmethod
     async def run_worker(operation: Callable[[], Result]) -> Result:
