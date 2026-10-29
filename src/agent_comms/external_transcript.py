@@ -286,7 +286,7 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
 
     @classmethod
     @contextmanager
-    def publication(cls, root: Path, input_id: InputId):
+    def publication(cls, root: Path, input_id: InputId) -> Iterator[DraftPublication]:
         from .transcripts import TranscriptRead
         with TranscriptRead.publication_source(root) as connection:
             original = NativeRuntimeInput.one(connection, input_id=input_id) if connection is not None else None

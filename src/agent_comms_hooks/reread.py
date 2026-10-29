@@ -35,9 +35,7 @@ class SliceReminder(DeckStart):
         deck = self.deck(reader)
         if not deck.exists():
             return self.dealt(reader)  # the session was bound, or changed role, after it started
-        with self.calls.open("ab") as calls:
-            calls.write(b".")
-            count = calls.tell()
+        count = self.count_call()
         if count % self.every:
             return ()
         slices = json.loads(deck.read_text(encoding="utf-8"))
@@ -79,7 +77,7 @@ def main() -> None:
     GatedCall.of(record).completed()
     hook = BoardReminder.decode(record)
     if texts := hook.take():
-        hook.warn("\n\n".join(texts))
+        hook.warn(*texts)
 
 
 if __name__ == "__main__":

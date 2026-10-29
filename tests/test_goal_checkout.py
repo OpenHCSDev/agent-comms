@@ -23,7 +23,7 @@ def test_goal_checkout_uses_origin_default_and_retires(
     )
     repository.git(repository.checkout, "branch", "-m", "main", "master")
     repository.git(repository.checkout, "push", "origin", "master")
-    repository.git(repository.remote, "symbolic-ref", "HEAD", "refs/heads/master")
+    repository.git(repository.remote_path, "symbolic-ref", "HEAD", "refs/heads/master")
     repository.git(repository.checkout, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
     rule = StorageRule(checkout_base=tmp_path / "checkouts",
                        scratch_base=tmp_path / "scratch", floor_gib=0)

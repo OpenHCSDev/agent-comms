@@ -12,7 +12,7 @@ import pytest
 
 from agent_comms.commander import judge, order
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
 from agent_comms.recorded_time import RecordedEventTime
@@ -262,6 +262,8 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     four = opened(github, source, request.pr,
                   source.publish_change("Move the return outside the branch", "owner.py"))
     reader = WorkBranches(source.checkout)
+    reader.prepare_pull_request("main", eight.head)
+    reader.prepare_pull_request("main", four.head)
     assert eight.change_identity(reader, "main") != four.change_identity(reader, "main")
     pulls = ProgressRead()
     pulls.carry_reviews(comms.goals, request.repo)
@@ -312,7 +314,7 @@ def test_review_timer_up_with_open_head_builds(held_bus, github_cli, reviewed_so
         RecordPullRequest(todo.revision, held.owner_identity,
                           PullRequestLink(request.repo, request.pr), held.generation).record(
                               comms.goals, todo.id)
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead(()))
+    frame = capture_frame(comms, "lead", ProgressRead(()))
     assert HeadReviewTimerUp.scan_owner() is ReviewTimerUp
     found, = ReviewTimerUp.broken(comms, "lead", observed=(), frame=frame)
     assert found.problem == "P3"

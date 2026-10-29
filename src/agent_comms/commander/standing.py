@@ -58,6 +58,7 @@ from agent_comms.todos import (
     Assignment,
     OwnerRequest,
     PullRequests,
+    ProgressRead,
     UnmergedListedPullRequest,
     RestoreHolderTodo,
     Todo,
@@ -126,21 +127,30 @@ class InstallDue(UndatedStandingRule, FamilyScan):
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
         return cls.due(comms, frame.pulls)
 
+    @staticmethod
+    def repositories(comms: Comms, installed: RecordedBuildIdentity) -> tuple[Repo, ...]:
+        return tuple(repo for repo in comms.registry.snapshot().commander_project.require().repos
+                     if any(repo.github == record.repository for record in installed.commits))
+
+    @classmethod
+    def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
+                pulls: ProgressRead) -> None:
+        """Fetching changes Git state, so the heartbeat joins it before observation."""
+        for repo in cls.repositories(comms, RecordedBuildIdentity.installed()):
+            repo.git(repo.checkout, "fetch", "-q", repo.remote, "main")
+
     @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
         DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
-        runtime_repos = tuple(repo for repo in repos
-                              if any(repo.github == record.repository for record in installed.commits))
+        runtime_repos = cls.repositories(comms, installed)
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
-        for repo in runtime_repos:
-            repo.git(repo.checkout, "fetch", "-q", "origin", "main")
         core = {repo.github: repo for repo in repos}[CorePackage.repository]
-        target = core.git(core.checkout, "rev-parse", "origin/main").strip()
+        target = core.git(core.checkout, "rev-parse", f"{core.remote}/main").strip()
         for repo in runtime_repos:
-            main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
+            main = repo.git(repo.checkout, "rev-parse", f"{repo.remote}/main").strip()
             recorded = installed.for_repository(repo)
             # Main is in the build exactly when git logs no first-parent commit past it.
             merges = UninstalledMerge.read(repo, recorded.commit, main)
@@ -616,9 +626,9 @@ class UnownedObservation:
 
 
 class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
-    """Observe released work and its checkouts before entering the bus to assign it."""
+    """Keep dispatch preparation joined; only individually audited readers can be dropped."""
 
-    def observe(self, comms: Comms) -> tuple[UnownedObservation, ...]:
+    def observe(self, comms: Comms, prepared: None) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()
         observed: list[UnownedObservation] = []
         pulls = PullRequests(available)
