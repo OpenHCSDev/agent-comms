@@ -92,13 +92,18 @@ class CommanderUnit(HudRow):
             f"draft={','.join(str(pr.number) for pr in self.draft_prs)}"
         )
 
+    def brief_parts(self) -> tuple[str, ...]:
+        """The scan line's coherent pieces: the unit, each held order, its pull requests, its next
+        action. A narrow view breaks the line between pieces, never inside one."""
+        orders = tuple(
+            f"{order.problem} {order.state} · {order.progress.line}" for order in self.orders
+        ) or ("no held orders",)
+        pulls = ", ".join(f"#{pr.number}@{pr.head[:9]}" for pr in (*self.ready_prs, *self.draft_prs))
+        return (self.unit.name, *orders, pulls or "no PR", f"→ {self.state.action}")
+
     def brief(self) -> str:
         """A dense scan line; expansion reads the original order and activity owners."""
-        orders = "; ".join(
-            f"{order.problem} {order.state} · {order.progress.line}" for order in self.orders
-        ) or "no held orders"
-        pulls = ", ".join(f"#{pr.number}@{pr.head[:9]}" for pr in (*self.ready_prs, *self.draft_prs))
-        return f"{self.unit.name} | {orders} | {pulls or 'no PR'} | → {self.state.action}"
+        return " | ".join(self.brief_parts())
 
     def needs_hand(self) -> bool:
         """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
