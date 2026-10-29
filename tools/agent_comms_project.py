@@ -16,6 +16,7 @@ import os
 import shutil
 import sys
 import tempfile
+from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import Executor
@@ -48,11 +49,41 @@ from module_layers import PACKAGE, StackClient
 
 SOURCES = Path(inspect.getfile(agent_comms)).parents[1]
 REPOSITORY = SOURCES.parent
+READER = Path(inspect.getfile(stored_formats)).relative_to(REPOSITORY)
+
+
+class StoredFormatReader(ABC):
+    """Where the reader that declares a revision's stored formats comes from. The measured
+    project declares it once; nothing probes a revision for one."""
+
+    @abstractmethod
+    def place(self, project: AgentCommsProject, ref: str, tree: Path) -> None:
+        """Write the reader to its path under the extracted revision."""
+
+
+class RevisionReader(StoredFormatReader):
+    """agent-comms measuring itself: each revision runs its own reader, because a head's
+    reader may import modules only that head declares (#3576 moved field_codec under
+    nominal). A revision without one fails loud."""
+
+    def place(self, project: AgentCommsProject, ref: str, tree: Path) -> None:
+        project.extract(ref, tree, str(READER))
+
+
+class CheckoutReader(StoredFormatReader):
+    """A client repository such as Toad ships no reader; the ratchet checkout's own reads its
+    modules, importing agent_comms from that checkout."""
+
+    def place(self, project: AgentCommsProject, ref: str, tree: Path) -> None:
+        (tree / READER).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(REPOSITORY / READER, tree / READER)
 
 
 @dataclass(frozen=True)
 class AgentCommsProject(audit.project.Project[PlanPhase]):
     """agent-comms' own facts, read from the modules that declare them."""
+
+    reader: StoredFormatReader = RevisionReader()
 
     probe = (
         "import importlib.util, os, sys; sys.path[:0] = sys.argv[2].split(os.pathsep); "
@@ -107,22 +138,17 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
             package = package.parent
         modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
                    for path in sorted(changed)]
-        reader = Path(inspect.getfile(stored_formats)).relative_to(REPOSITORY)
-        if not self.tracks(ref, str(reader)):
-            # A revision older than its reader (164c80ca9) declares no stored format.
-            return {}
         with tempfile.TemporaryDirectory(prefix="ratchet-formats-") as scratch:
-            # Each side runs its own revision's probe script: the head's may import modules
-            # that only the head's package declares (#3576 moved field_codec under nominal).
             tree = Path(scratch)
-            self.extract(ref, tree, str(package), str(reader))
+            self.extract(ref, tree, str(package))
+            self.reader.place(self, ref, tree)
             sources = audit.ratchet.Compared.source_paths(root, tree)
             for stamp in tree.rglob("package_stamp.py"):
                 WheelStamp.of_source(tree / package, self.revision(ref),
                                      source_paths=sources).write(stamp)
             paths = dict.fromkeys((str(tree / package), *sources))
             result = SpawnedProcess.run(
-                (sys.executable, "-c", self.probe, str(tree / reader),
+                (sys.executable, "-c", self.probe, str(tree / READER),
                  os.pathsep.join(paths), *modules), cwd=scratch,
                 env=audit.ratchet.Compared.environment(root, tree), timeout=300,
             )
