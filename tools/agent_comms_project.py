@@ -126,7 +126,7 @@ class AgentCommsProject(Project[PlanPhase]):
         its classes derives from Carry or one of Carry's own subclasses, as that module binds it."""
         added = [path for change in self.changes(base, head, str(STEPS)) for path in change.added()
                  if self.python(path)]
-        families = (Carry, *Carry.__subclasses__())
+        families = self.carry_family()
         for path, source in self.sources(head, set(added)):
             tree = ast.parse(source, path)
             bindings = [DecoratorBinding.of(family, tree, path) for family in families]
@@ -134,6 +134,17 @@ class AgentCommsProject(Project[PlanPhase]):
                    for base in node.bases for binding in bindings):
                 return True
         return False
+
+    @staticmethod
+    @cache
+    def carry_family() -> tuple[type[Carry], ...]:
+        """Carry and every class derived from it, its steps' shared bases among them; reading
+        the members imports every step module, where those bases are declared."""
+        Carry.members_with(Carry)
+        found: list[type[Carry]] = [Carry]
+        for family in found:
+            found.extend(derived for derived in family.__subclasses__() if derived not in found)
+        return tuple(found)
 
     def guard_roots(self) -> frozenset[str]:
         declared = Path(inspect.getfile(PlanPhase)).resolve()

@@ -336,6 +336,6 @@ def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
     through its own imports. Its source is still one of the ratchet's measuring code, so a
     change to it is a different cache key."""
     indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
-    assert indirect in PROJECT.sources()
-    assert (AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in PROJECT.sources()
+    assert indirect in PROJECT.measuring_sources()
+    assert (AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in PROJECT.measuring_sources()
     assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")
