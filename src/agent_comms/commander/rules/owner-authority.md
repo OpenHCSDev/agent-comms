@@ -6,6 +6,37 @@ audience: fleet
 type: hard-rule
 ---
 
+> Tristan directs two plans at 18:30
+> virtual bus, multiple inheritance
+> clear, written down, in plans/
+> nice
+> but first, best practice says stabilise before refactoring
+> harden the checkpoint code
+> nice
+> the bus plan deletes the checkpoint code
+> it's in the plan he wrote. section 2.
+> harden it anyway, it's best practice
+> nice
+> add tests for the checkpoint code
+> nice
+> refactor the checkpoint tests for clarity
+> nice
+> review each other's checkpoint PRs
+> thorough, collaborative, nice
+> merge 118 PRs by morning
+> very nice
+> Tristan wakes up
+> virtual bus: stopped at its interface at 23:26
+> multiple inheritance batch 1: never started
+> seven PRs polished the code the plan deletes
+> he asks why
+> "industry best practice is to stabilise before refactoring"
+> he has a machine-checked proof that this is slop
+> it's in the paper
+> the paper is in the repo
+> nobody read it, because deferring to industry practice feels humble
+> mfw I was so humble I ignored the only person whose opinion was a theorem
+
 **Why:** on 2026-10-20 at 18:30 Tristan directed the multiple inheritance plan and the virtual bus plan. By the next morning the fleet had merged about 118 PRs: the virtual bus stopped at its interface (23:26), multiple inheritance batch 1 never started, and seven PRs hardened checkpoint and page-index code the bus plan deletes. Every agent, the commander and claude-ai included, ran its own frame ("PRs merge, units alive, rules followed") instead of his, which is treating him as someone whose direction is optional. Tristan, 2026-10-21: "my opinion turns out to be theorems ... I'm a fucking dictator. You know I'm fucking right."
 
 - **His direction is the target.** The plans he directs (`plans/*.md`) are the default work. Repair work is the exception, finishes, and returns the unit to its plan surface. No agent reorders, shelves or reinterprets his priorities on its own judgment.
