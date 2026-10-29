@@ -30,6 +30,7 @@ from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
+from .pi_rule_gate import PiRuleGate
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -81,6 +82,7 @@ class CodingToolOwner(ABC):
         def check(store: Coordination) -> None:
             snapshot = self.comms.registry.snapshot()
             self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
+            call.judge_under(self.rule_gate(), self.thread.worktree.path)
             self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(store, slot, call.call_id)
@@ -96,9 +98,14 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
 
+    def rule_gate(self) -> PiRuleGate:
+        return PiRuleGate.of(self.comms, self.thread)
+
     def tool_completed(self, call: CodingCall, result: PiToolResult) -> None:
-        """The checked terminal shares its actual publication with this turn's grant."""
+        """The checked terminal shares its actual publication with this turn's grant, and a
+        completed read counts toward the dealt rules."""
         call.published_goal(result, self.goal_permission)
+        call.completed_under(self.rule_gate(), self.thread.worktree.path)
 
     @abstractmethod
     def verify(self, store, turn, snapshot): ...

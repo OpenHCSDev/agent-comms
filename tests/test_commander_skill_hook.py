@@ -45,7 +45,8 @@ from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
-from agent_comms_hooks.read_gate import AuditDue, GatedCall, OwnerWordsAnswer, RuleAudit, SessionAudit
+from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, RuleAudit, SessionAudit
+from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from test_commander_notifications import beat, lead_hud

@@ -12,9 +12,8 @@ until each part is read. The reminder hook then puts one short slice inline ever
 
 from __future__ import annotations
 
-import inspect
 import json
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,11 +21,10 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.commander.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
 from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
-from agent_comms.slop import Slop
+from agent_comms.rule_deal import CommanderSources, DealtSources, FleetSources, RuleDeal
 from agent_comms.todos import TodoStore
 from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
 from agent_comms_hooks.watch import WatchClaim
@@ -36,15 +34,10 @@ if TYPE_CHECKING:
     from agent_comms.threads import Thread
 
 
-class DeckReader(ABC):
-    """Which packaged sources a bound session is dealt, by the audience its rules declare.
+class DeckReader(DealtSources):
+    """The reminder deck dealt beside a session's sources: its slices interleave the voice, the
+    rules' wake-ups and the recorded failures."""
 
-    Every session bound to a bus follows the fleet rules; the session the registry names
-    commander also follows the commander's. RuleFile's audience is the one owner of that split.
-    """
-
-    audiences: ClassVar[tuple[type[RuleAudience], ...]] = ()
-    """Its own audience after every audience its base readers serve."""
     deck_suffix: ClassVar[str]
     """Where this reader's deck sits beside the transcript: a session whose role changes finds
     no deck of its new kind and is dealt again."""
@@ -53,24 +46,10 @@ class DeckReader(ABC):
     rule's wake-up is never split, since a greentext cut before its punchline teaches nothing,
     so the cap sits above the longest one and the deck test fails when one outgrows it."""
 
-    def __init_subclass__(cls, audience: type[RuleAudience], **options: object) -> None:
-        super().__init_subclass__(**options)
-        cls.audiences = (*cls.audiences, audience)
-
-    @classmethod
-    def rules(cls) -> tuple[RuleFile, ...]:
-        return tuple(rule for rule in RuleFile.packaged() if rule.audience in cls.audiences)
-
     @classmethod
     @abstractmethod
     def streams(cls) -> tuple[tuple[str, ...], ...]:
         """The slice streams this reader's deck interleaves, one slice of each per round."""
-
-    @classmethod
-    @abstractmethod
-    def sources(cls) -> tuple[Path, ...]:
-        """The packaged files this reader is ordered to read in full after a start or
-        compaction: the rules themselves, never a copy of them."""
 
     @abstractmethod
     def header(self, start: DeckStart) -> str:
@@ -131,9 +110,8 @@ class DeckReader(ABC):
         return tuple(runs)
 
 
-class FleetReader(DeckReader, audience=FleetAudience):
-    """A bound session the registry does not name commander: the fleet rules, the voice they
-    are said in and the failures already caught."""
+class FleetReader(DeckReader, FleetSources):
+    """The fleet's deck: the voice, the fleet rules' wake-ups and the failures already caught."""
 
     deck_suffix = ".fleet-deck.json"
 
@@ -141,23 +119,14 @@ class FleetReader(DeckReader, audience=FleetAudience):
     def streams(cls) -> tuple[tuple[str, ...], ...]:
         return (cls.voice(), cls.tells(), cls.failures())
 
-    @classmethod
-    def sources(cls) -> tuple[Path, ...]:
-        return (
-            CommanderPackage.voice(),
-            Path(inspect.getfile(PostmortemFailure)),
-            *(rule.path for rule in cls.rules()),
-        )
-
     def header(self, start: DeckStart) -> str:
         return ("FUCK YOUR COMPACTION. Your summary is a paraphrase of these rules, and a"
                 " paraphrase drops the exact words they turn on. The files above are the source;"
                 " where your summary disagrees with them, the summary is wrong.")
 
 
-class CommanderReader(FleetReader, audience=CommanderAudience):
-    """The session the registry names commander: the fleet's sources plus the indictment, the
-    commander skill, the commander's own rules and the slop catalog's index."""
+class CommanderReader(FleetReader, CommanderSources):
+    """The commander's deck: the fleet's streams with the indictment interleaved."""
 
     deck_suffix = ".deck.json"
 
@@ -165,17 +134,6 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
     def streams(cls) -> tuple[tuple[str, ...], ...]:
         indictment = cls.paragraphs(CommanderPackage.indictment().read_text(encoding="utf-8"))
         return (cls.voice(), indictment, cls.tells(), cls.failures())
-
-    @classmethod
-    def sources(cls) -> tuple[Path, ...]:
-        return (
-            CommanderPackage.voice(),
-            CommanderPackage.indictment(),
-            Path(inspect.getfile(PostmortemFailure)),
-            CommanderPackage.skill(),
-            *(rule.path for rule in cls.rules()),
-            Slop.catalog() / "README.md",
-        )
 
     def header(self, start: DeckStart) -> str:
         return start.held()
@@ -188,11 +146,11 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
 
 
 @dataclass(frozen=True)
-class DealtDeck(ClaudeTranscriptHook):
-    """The slices the session start hook dealt beside the transcript, and the calls since."""
+class DealtDeck(ClaudeTranscriptHook, RuleDeal):
+    """The deal and the slices the session start hook dealt beside the transcript."""
 
     def deck(self, reader: DeckReader) -> Path:
-        return Path(self.transcript_path).with_suffix(reader.deck_suffix)
+        return self.stem.with_suffix(reader.deck_suffix)
 
 
 @dataclass(frozen=True)
@@ -274,18 +232,9 @@ class DeckStart(DealtDeck):
                 yield root, snapshot, thread
 
     def prepare(self, reader: DeckReader, prompts: tuple[str, ...]) -> None:
-        """A start or compaction drops what was read: the deck is dealt again from its start,
-        and no file counts as read until it is read again."""
-        self.calls.unlink(missing_ok=True)
-        self.dealt_read.write_text("", encoding="utf-8")
-        self.audit.unlink(missing_ok=True)
-        self.audit_due.write_text(json.dumps({
-            "rules": [rule.name for rule in reader.rules()],
-            "owner_words": list(prompts),
-        }), encoding="utf-8")
+        """The deal, and the deck dealt again from its start."""
+        self.deal(reader, prompts)
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
-        self.dealt_files.write_text(
-            "".join(f"{source.resolve()}\n" for source in reader.sources()), encoding="utf-8")
 
     def notice(self) -> str:
         names = [thread.name for _, _, thread in self.commanders()]

@@ -50,6 +50,8 @@ from .pi_commands import (
 )
 from .pi_payloads import StateData
 from .queued_input import InitialInput
+from .pi_rule_gate import PiRuleGate
+from .rule_deal import DealtSources
 from .routing import NoTurnRouting, Routing
 from .runtime import (
     RuntimeServer,
@@ -139,8 +141,15 @@ class TurnRunner:
             return
         thread = await Coordination.run_worker(partial(
             self.comms.registry.require, self.sessions.require(session_id)))
+        await Coordination.run_worker(partial(self.deal_rules, thread, event))
         for lease in thread.turn_lease.held():
             await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
+
+    def deal_rules(self, thread: Thread, event: events.CompactionEvent) -> None:
+        """Every compaction Core observes, Pi's own or one it asked for, deals the thread the
+        rules its role follows; its tool owner refuses other calls until they are read."""
+        event.deal_rules(PiRuleGate.of(self.comms, thread),
+                         DealtSources.for_thread(self.comms.registry.snapshot(), thread))
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""

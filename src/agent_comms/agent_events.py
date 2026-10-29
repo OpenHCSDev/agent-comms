@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .native_turn_context import NativeContextManifestData
     from .pi_commands import PiCommand
+    from .rule_deal import DealtSources, RuleDeal
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
     from .transcript_events import SentTranscript
@@ -255,6 +256,9 @@ class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
     def summary(self) -> str | None:
         return None
 
+    def deal_rules(self, gate: RuleDeal, dealt: DealtSources) -> None:
+        """Only a finished compaction drops the rules from context."""
+
     @property
     def will_retry(self) -> bool:
         return False
@@ -278,6 +282,11 @@ class CompactionEnd(CompactionEvent):
     @property
     def phase(self) -> str:
         return "abort" if self.aborted else "end"
+
+    def deal_rules(self, gate: RuleDeal, dealt: DealtSources) -> None:
+        """The summary that replaced the context is a paraphrase of the rules: deal them again."""
+        if not self.aborted:
+            gate.deal(dealt, ())
 
 
 @dataclass(frozen=True)

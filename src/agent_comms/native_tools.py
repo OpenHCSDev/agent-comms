@@ -18,6 +18,7 @@ from .field_codec import (
 )
 from .native_tool_call import CodingCall
 from .recorded_time import EventTime
+from .rule_deal import ReadSpan
 from .shell_effects import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import (
     EditAction,
@@ -34,6 +35,7 @@ from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .pi_payloads import PiToolResult
+    from .rule_deal import RuleDeal, ToolGate
     from .turn_goal_permission import TurnGoalPermission
 
 
@@ -153,9 +155,25 @@ class ReadTool(ReadAction, PathTool, CodingTool):
     label = "Read"
     offset: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
     limit: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
+    max_lines: ClassVar[int] = 2_000
+    max_bytes: ClassVar[int] = 50 * 1024
+    """Pi's read truncates at DEFAULT_MAX_LINES and DEFAULT_MAX_BYTES (dist/core/tools/truncate.js),
+    the byte cap applying after a supplied limit too."""
 
     def _parse_resource(self) -> None:
         return None
+
+    def span(self) -> ReadSpan:
+        """An argument the model left out is absent from the wire, and Pi applies its default."""
+        supplied = self.arguments
+        return ReadSpan(int(supplied.get("offset", 1)),
+                        int(supplied.get("limit", self.max_lines)), self.max_bytes)
+
+    def judge_under(self, gate: ToolGate, cwd: Path) -> None:
+        """Reading is the way through the gate."""
+
+    def completed_under(self, gate: RuleDeal, cwd: Path) -> None:
+        gate.record_read(physical_path(self.path, cwd), self.span())
 
     def context_read_paths(self) -> tuple[str, ...]:
         return (self.path,)
@@ -225,6 +243,9 @@ class WriteTool(MutatingPathTool, CodingTool):
 
     def replacements(self) -> tuple[ReplacementEdit, ...]:
         return (ReplacementEdit(old_text='', new_text=self.content),)
+
+    def judge_under(self, gate: ToolGate, cwd: Path) -> None:
+        gate.judge_write(self.declared_name, physical_path(self.path, cwd))
 
     claim_type = WritableFileClaim
 
