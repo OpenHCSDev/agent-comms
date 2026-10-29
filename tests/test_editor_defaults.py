@@ -4,7 +4,9 @@ import json
 import pytest
 
 from agent_comms.cli_verbs.fork import ForkCliCommand
-from agent_comms.field_codec import FieldCodec, MalformedRecord, compile_decoder
+from dataclasses import dataclass
+
+from agent_comms.field_codec import FieldCodec, MalformedRecord, UnchosenMember, compile_decoder
 from agent_comms.target_fields import TargetField
 from agent_comms.thread_management import ChangedTags, GivenTags, InheritedTags, TagChoice
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, ThinkingLevelField
@@ -88,9 +90,26 @@ def test_native_union_default_does_not_leak_into_public_json_schema() -> None:
     value = ChangedTags(frozenset({'auth'}), frozenset())
     parameter = TargetField.of(plan, value)
     assert parameter.editor_initial is value
-    assert parameter.editor_selection(value) is ChangedTags
+    assert parameter.editor_selection(value).declaration is ChangedTags
     assert isinstance(parameter.editor_default, str)
     json.dumps(parameter.json_schema())
+
+
+def test_unchosen_selection_is_not_a_supplied_null_member() -> None:
+    @dataclass(frozen=True)
+    class RequiredUnion:
+        value: int | float | None
+
+    plan, = FieldCodec.argument_fields(RequiredUnion)
+    omitted = TargetField.omitted(plan)
+    unchosen = omitted.editor_selection(omitted.editor_initial)
+    assert isinstance(unchosen, UnchosenMember)
+    assert unchosen.declaration is UnchosenMember
+    assert unchosen.label == 'Choose a member…'
+    assert unchosen.declaration in tuple(member.declaration for member in omitted.editor_selections)
+    assert omitted.editor_selection(3).declaration is int
+    supplied_null = TargetField.of(plan, None).editor_selection(None)
+    assert supplied_null.declaration is type(None)
 
 
 def test_record_member_inputs_remain_required_without_invented_values() -> None:

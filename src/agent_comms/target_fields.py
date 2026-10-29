@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from functools import singledispatchmethod
 
 from pydantic import JsonValue
 
@@ -57,8 +58,12 @@ class TargetField(ABC):
     def editor_members(self) -> tuple[field_codec.EditorMember, ...]:
         return self.plan.value.editor_wire.editor_members
 
-    def editor_selection(self, value: object) -> object:
-        return self.plan.value.editor_wire.selected_editor_member(value).declaration
+    @property
+    def editor_selections(self) -> tuple[field_codec.MemberSelection, ...]:
+        return self.editor_members
+
+    def editor_selection(self, value: object) -> field_codec.MemberSelection:
+        return self.plan.value.editor_wire.selected_editor_member(value)
 
     @property
     @abstractmethod
@@ -135,9 +140,19 @@ class UnsuppliedTargetField(TargetField):
     def default_schema(self) -> dict[str, JsonValue]:
         return {}
 
+    @property
+    def editor_selections(self) -> tuple[field_codec.MemberSelection, ...]:
+        return (field_codec.UnchosenMember(), *super().editor_selections)
+
+    @singledispatchmethod
     @boundary_decoder
-    def editor_selection(self, value: object) -> object:
-        return None if value is None else super().editor_selection(value)
+    def editor_selection(self, value: object) -> field_codec.MemberSelection:
+        return super().editor_selection(value)
+
+    @editor_selection.register
+    @boundary_decoder
+    def _unchosen_selection(self, value: None) -> field_codec.MemberSelection:
+        return field_codec.UnchosenMember()
 
     @boundary_decoder
     def argument(self, value: object) -> Mapping[str, object]:
