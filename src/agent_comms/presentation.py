@@ -163,6 +163,11 @@ class OutcomeViewer(ABC):
                 source, range(max(eligible.start, following.start), min(eligible.stop, following.stop)), limit))
         return NotificationSelection(self, tuple(pages))
 
+    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
+                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
+        """Unscoped/operator and agent readers retain every human paint receipt."""
+        return displayed_to
+
     @abstractmethod
     def sees_direct_read(self, source: Delivered) -> bool:
         pass
@@ -184,6 +189,23 @@ class AllOutcomes(OutcomeViewer):
 
     def sees(self, source: Delivered) -> bool:
         return True
+
+
+@dataclass(frozen=True, slots=True)
+class DisplayOutcomes(AllOutcomes):
+    """Full operator access, minus only this display's source-matching viewer.
+
+    Incarnation equality owns rename/recreation; the captured bus owns namespace.
+    The live registry cannot establish either fact for an archived display.
+    """
+
+    viewer: ThreadIncarnation
+    bus_identity: RecordedBusIdentity
+
+    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
+                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
+        return tuple(reader for reader in displayed_to
+                     if reader != self.viewer or not self.bus_identity.matches(source))
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,7 +274,9 @@ class MessageNotification:
         """One message's state and totals; clients never classify or count agents."""
         ordered = cls.ordered(notifications)
         if not ordered:
-            return "No recorded notification result"
+            # A matched original is sent even when there is no recipient feedback
+            # (including when its only synthetic row was the viewing human).
+            return DeliveryProgress.label
         # This is a bounded observation, not the complete frozen audience and
         # not a set of runtime acknowledgements. Membership proves neither.
         total = len(ordered)
@@ -382,7 +406,7 @@ class MessageNotification:
                 result[key].append(
                     replace(
                         notification,
-                        displayed_to=displayed_to,
+                        displayed_to=viewer.visible_reads(displayed_to, document.bus_identity),
                         changed=notification.changed or bool(displayed_to),
                     )
                 )
@@ -409,8 +433,9 @@ class MessageNotification:
                 source, recipient, snapshot, document=document
             )
             mark = NotificationReadMark(source, recipient, displayed_to)
+            visible = viewer.visible_reads(displayed_to, document.bus_identity)
             notification = (cls(recipient, source.sender_lookup, HumanReadProgress(),
-                                displayed_to=displayed_to, changed=True),) if displayed_to else ()
+                                displayed_to=visible, changed=True),) if visible else ()
             return CapturedNotificationWindow({(message.seq, message.message_id): notification}, (), (mark,))
         return CapturedNotificationWindow({}, ())
 
