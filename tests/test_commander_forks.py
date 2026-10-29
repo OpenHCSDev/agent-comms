@@ -76,6 +76,8 @@ from agent_comms.todos import (
     UnlocatedProblemFinding,
 )
 from agent_comms.tool_caller import CommanderForkCaller, SubagentCaller
+from agent_comms.activity import ActivityState
+from agent_comms_hooks import read_gate
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -978,10 +980,15 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     assert "--fork claude-a1" in told["additionalContext"]
     fork = comms.registry.require("claude-a1")
     assert fork.parent.named("lead") and comms.registry.status("claude-a1").receiving
+    assert comms.agents.activity.current(fork.name).state is ActivityState.THINKING
+    assert run(read_gate.main, "PreToolUse", tool_name="Bash", tool_input={"command": "pwd"}) == ""
+    activity = comms.agents.activity.current(fork.name)
+    assert (activity.state, activity.detail) == (ActivityState.WORKING, "Bash")
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
     assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
+    assert comms.agents.activity.current(fork.name).state is ActivityState.IDLE
     run(forks.started, "SubagentStart")
     assert comms.registry.require("claude-a1").incarnation == fork.incarnation
     assert comms.registry.status("claude-a1").receiving
@@ -1039,9 +1046,9 @@ def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_
     monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
     transcript = tmp_path / "unit.jsonl"
 
-    def run(program, event, agent_id):
+    def run(program, event, agent_id, **tool):
         record = {"session_id": "unit", "hook_event_name": event, "transcript_path": str(transcript),
-                  "agent_id": agent_id, "agent_type": "Explore", "stop_hook_active": False}
+                  "agent_id": agent_id, "agent_type": "Explore", "stop_hook_active": False, **tool}
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
         program()
         return capsys.readouterr().out
@@ -1055,6 +1062,15 @@ def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_
     slot = comms.registry.require("worker-explore")
     assert slot.parent.named("worker") and comms.registry.status("worker-explore").receiving
     slot.execution.require_subagent()
+    assert comms.agents.activity.current(slot.name).state is ActivityState.THINKING
+    assert run(read_gate.main, "PreToolUse", "a2", tool_name="Read",
+               tool_input={"file_path": str(transcript)}) == ""
+    activity = comms.agents.activity.current(slot.name)
+    assert (activity.state, activity.detail) == (ActivityState.WORKING, "Read")
+    # A long-running tool stays working beyond the activity store's ordinary stale budget.
+    comms.agents.activity.emit(replace(activity, timestamp=1.))
+    snapshot = comms.registry.snapshot()
+    assert comms.agents.activity_of(slot.name, snapshot=snapshot).state is ActivityState.WORKING
     with pytest.raises(RelationViolationError, match="not a declared commander fork"):
         slot.execution.require_commander_fork()
     assert "claude-a2" not in comms.registry
@@ -1063,6 +1079,7 @@ def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_
 
     assert run(forks.stopped, "SubagentStop", "a2") == ""
     assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
+    assert comms.agents.activity.current(slot.name).state is ActivityState.IDLE
     assert comms.registry.status("worker-explore-2").receiving
     run(forks.started, "SubagentStart", "a4")
     assert comms.registry.require("worker-explore").incarnation == slot.incarnation

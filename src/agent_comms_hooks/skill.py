@@ -209,8 +209,8 @@ class DeckStart(DealtDeck):
         """What this hook says: nothing to a session no bus binding names, the fleet's deck to
         a bound session, and the commander's deck to the one the registry names commander now."""
         return WatchClaim(self.session_id).state().by_role(
-            unbound=tuple, fleet=lambda: self.taken(FleetReader()),
-            commander=lambda: self.taken(CommanderReader()))
+            unbound=tuple, fleet=lambda record: self.taken(FleetReader()),
+            commander=lambda record: self.taken(CommanderReader()))
 
     def taken(self, reader: DeckReader) -> tuple[str, ...]:
         """A session start deals the deck."""

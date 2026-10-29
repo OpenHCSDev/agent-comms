@@ -70,11 +70,12 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 
 class ContentCache:
     """Results that are pure functions of content, stored under a digest of that content, of
-    this ratchet's own code and of the checkers it runs. The key is the content, so an entry
-    never goes stale: any change to what produced it is a different key."""
+    this ratchet's own code and of the environment its checkers run in. The key is the content,
+    so an entry never goes stale: any change to what produced it is a different key. Batch 3579
+    went red on 170 Toad errors nobody wrote, because the key held mypy's version but not
+    Textual's commit, and a git dependency moves without changing its version."""
 
     directory: typing.ClassVar[Path] = Path.home() / ".cache/agent-comms/debt-ratchet"
-    checkers: typing.ClassVar[tuple[str, ...]] = ("black", "ruff", "mypy")
     retention_days: typing.ClassVar[int] = 14
 
     @staticmethod
@@ -93,11 +94,15 @@ class ContentCache:
     @staticmethod
     @cache
     def code() -> bytes:
-        """This ratchet's measuring code (see sources), and each checker's version. Computed
-        once, at the first key, after the measures' imports, so the set is the one that ran."""
+        """This ratchet's measuring code (see sources), and every installed distribution: the
+        checkers and everything they read, such as the stack client's Textual. A git install
+        keeps its version across commits, so its recorded origin (direct_url.json) is digested
+        too. Computed once, at the first key, after the measures' imports, so the set is the one
+        that ran."""
         digest = hashlib.sha256(f"{sys.version}\0{__name__}".encode())
-        for name in ContentCache.checkers:
-            digest.update(f"\0{name}={importlib.metadata.version(name)}".encode())
+        for installed in sorted(f"{dist.name}={dist.version}\0{dist.read_text('direct_url.json')}"
+                                for dist in importlib.metadata.distributions()):
+            digest.update(b"\0" + installed.encode())
         for path in ContentCache.sources():
             digest.update(b"\0" + str(path).encode() + b"\0" + path.read_bytes())
         return digest.digest()

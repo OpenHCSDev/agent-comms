@@ -485,6 +485,11 @@ def test_a_subagent_and_an_unbound_session_are_never_gated(
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()
+    # Claude's SubagentStart registers the child before PreToolUse reports its activity.
+    from agent_comms.thread_execution import CommanderForkExecution
+
+    commanding_session.registry.register_child(
+        "claude-a9", "claude-code", CommanderForkExecution, commanding_session.goals)
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="a9"))
     elsewhere = tmp_path / "other.jsonl"
     elsewhere.write_text("")

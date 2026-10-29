@@ -242,8 +242,8 @@ class WatchState(ABC):
         a binding can point at it."""
         return False
 
-    def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[], T],
-                   commander: Callable[[], T]) -> T:
+    def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[WatchRecord], T],
+                   commander: Callable[[WatchRecord], T]) -> T:
         """An unbound session has no role on any bus: a subagent, or a session never enrolled."""
         return unbound()
 
@@ -297,11 +297,10 @@ class RecordedWatch(WatchState):
         return any(thread.incarnation == bound.incarnation
                    for thread in snapshot.commander_project.commanders(snapshot))
 
-    def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[], T],
-                   commander: Callable[[], T]) -> T:
-        """A bound session follows the fleet rules; the one the registry names commander now
-        also follows the commander's."""
-        return commander() if self.commands() else fleet()
+    def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[WatchRecord], T],
+                   commander: Callable[[WatchRecord], T]) -> T:
+        """A bound session supplies its own record to the selected role's operation."""
+        return commander(self.record) if self.commands() else fleet(self.record)
 
     def connect(self, serve: Callable[[], Serve],
                 request: Callable[[Serve], SessionRequest]) -> None:
