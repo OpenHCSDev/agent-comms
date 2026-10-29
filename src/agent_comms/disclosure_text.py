@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, is_dataclass
 from functools import singledispatchmethod
+from typing import ClassVar, Hashable
 
 from agent_comms.declared_family import FamilyMeta
-from agent_comms.field_codec import DisclosureIdentity, FieldCodec
+from agent_comms.field_codec import DisclosureIdentity, FieldCodec, FieldPlan
 
 
 @dataclass(frozen=True)
@@ -16,15 +18,42 @@ class DisclosureText:
     @singledispatchmethod
     @classmethod
     def of(cls, value: object) -> DisclosureText:
-        """Recover foreign record shape once, at this presentation boundary."""
+        """Recover foreign shape once, before heartbeat and UI consumers borrow it."""
         if is_dataclass(value):
+            identity = tuple(
+                plan for plan in FieldCodec.field_plans(type(value))
+                if DisclosureIdentity.read(plan.annotation, False)
+            )
+            if identity:
+                return IdentifiedRecordText(value, identity)
             return RecordText(value)
         return cls(value)
+
+    @of.register(type)
+    @classmethod
+    def _class(cls, value: type) -> DisclosureText:
+        return ClassText(value)
 
     @of.register(FamilyMeta)
     @classmethod
     def _family(cls, value: FamilyMeta) -> DisclosureText:
         return FamilyText(value)
+
+    @of.register(Mapping)
+    @classmethod
+    def _mapping(cls, value: Mapping[Hashable, object]) -> DisclosureText:
+        return MappingText(value)
+
+    @of.register(Sequence)
+    @classmethod
+    def _sequence(cls, value: Sequence[object]) -> DisclosureText:
+        return SequenceText(value)
+
+    @of.register(str)
+    @of.register(bytes)
+    @classmethod
+    def _scalar(cls, value: str | bytes) -> DisclosureText:
+        return cls(value)
 
     def summary(self, width: int | None = None) -> str:
         return str(self.value)[:width].partition("\n")[0]
@@ -42,20 +71,60 @@ class DisclosureText:
 
 
 class RecordText(DisclosureText):
+    def summary_fields(self) -> tuple[FieldPlan, ...]:
+        return tuple(plan for plan in FieldCodec.field_plans(type(self.value)) if plan.records)
+
     def summary(self, width: int | None = None) -> str:
-        plans = tuple(plan for plan in FieldCodec.field_plans(type(self.value)) if plan.records)
-        identity = tuple(plan for plan in plans if DisclosureIdentity.read(plan.annotation, False))
         parts: list[str] = []
-        for plan in identity or plans:
-            parts.append(DisclosureText.of(plan.current(self.value)).summary(width))
-            if width is not None and sum(map(len, parts)) >= width:
+        length = 0
+        for plan in self.summary_fields():
+            part = DisclosureText.of(plan.current(self.value)).summary(width)
+            parts.append(part)
+            length += len(part) + len(" · ")
+            if width is not None and length >= width:
                 break
         return " · ".join(parts)[:width]
 
 
 @dataclass(frozen=True)
-class FamilyText(DisclosureText):
+class IdentifiedRecordText(RecordText):
+    identity: tuple[FieldPlan, ...]
+
+    def summary_fields(self) -> tuple[FieldPlan, ...]:
+        return self.identity
+
+
+@dataclass(frozen=True)
+class ClassText(DisclosureText):
+    value: type
+
+    def summary(self, width: int | None = None) -> str:
+        return self.value.__name__[:width]
+
+
+@dataclass(frozen=True)
+class FamilyText(ClassText):
     value: FamilyMeta
 
     def summary(self, width: int | None = None) -> str:
         return self.value.declared_name[:width]
+
+
+class CollectionText(DisclosureText):
+    value: Collection[object]
+    noun: ClassVar[str] = "item"
+
+    def summary(self, width: int | None = None) -> str:
+        count = len(self.value)
+        return f"{count} {self.noun}{'s' if count != 1 else ''}"[:width]
+
+
+@dataclass(frozen=True)
+class SequenceText(CollectionText):
+    value: Sequence[object]
+
+
+@dataclass(frozen=True)
+class MappingText(CollectionText):
+    value: Mapping[Hashable, object]
+    noun = "field"
