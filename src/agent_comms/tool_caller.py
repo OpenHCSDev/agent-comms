@@ -219,7 +219,10 @@ class CommanderForkCaller(ThreadCaller):
     def end(self, comms: Comms) -> None:
         """A fork that has stopped is archived whatever it recorded, so no ended fork stays
         subscribed; one that recorded nothing tells its commander the work is missing. A
-        resumed fork of the same name redeclares onto the archived thread."""
+        resumed fork of the same name redeclares onto the archived thread, and a fork already
+        archived has already ended."""
+        if comms.registry.status(self.name).archived:
+            return
         if not self.recorded(comms):
             commander = self.commander(comms).name
             comms.messaging.send(self.name, commander, (

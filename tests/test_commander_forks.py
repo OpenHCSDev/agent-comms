@@ -1008,6 +1008,26 @@ def test_a_sent_back_stop_ends_a_fork_that_recorded_nothing_and_reports_it_missi
     assert "stopped without recording what it found" in report.body
 
 
+def test_a_commander_session_end_ends_each_subagent_core_still_has(subagent_hook, tmp_path):
+    """A subagent killed without a SubagentStop ends with its session, once."""
+    comms, run = subagent_hook
+    run(forks.started, "SubagentStart")
+    subagents = tmp_path / "commander" / "subagents"
+    subagents.mkdir(parents=True)
+    for agent in ("a1", "never-joined"):
+        (subagents / f"agent-{agent}.jsonl").write_text("")
+    session = forks.SessionSubagents.decode({
+        "session_id": "commander", "hook_event_name": "SessionEnd",
+        "transcript_path": str(tmp_path / "commander.jsonl")})
+    for _ in range(2):
+        ended, = session.end_subagents()
+        assert ended.returncode == 0, ended.stderr
+        assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
+    assert "claude-never-joined" not in comms.registry
+    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
+    assert "its work is missing" in report.body
+
+
 def test_a_subagent_of_a_session_that_is_not_commander_is_not_its_fork(fork_bus, tmp_path, monkeypatch, capsys):
     """A Claude session bound to a unit, or to nothing, never conscripts its subagents."""
     comms = fork_bus[0]

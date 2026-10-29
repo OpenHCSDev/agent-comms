@@ -9,12 +9,13 @@ from pathlib import Path
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import EndSession
 from agent_comms.cli_bridges.shared import Serve
-from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
+from agent_comms_hooks import ClaudeHookProgram
+from agent_comms_hooks.forks import SessionSubagents
 from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
-class SessionHook(ClaudeTranscriptHook):
+class SessionHook(SessionSubagents):
     @staticmethod
     def environment_session() -> str:
         """Claude exports the identity shared by its hook and bare Monitor command."""
@@ -41,8 +42,13 @@ class SessionHook(ClaudeTranscriptHook):
         Serve.launch(WatchClaim(self.session_id), self.owner, Path(self.transcript_path))
 
     def end(self) -> None:
+        """The subagents end first, while the claim still names this session commander; a
+        refusal still lets the bridge stop, then fails the hook with Core's reason."""
+        refused = tuple(run for run in self.end_subagents() if run.returncode)
         claim = WatchClaim(self.session_id)
         claim.state().end(lambda: EndSession(owner=self.owner()))
+        for run in refused:
+            raise SystemExit(run.stderr.strip() or f"exit status {run.returncode}")
 
 
 class SessionStarted(ClaudeHookProgram):

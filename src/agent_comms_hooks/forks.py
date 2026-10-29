@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram, SubagentId
@@ -66,6 +67,26 @@ class SubagentStopHook(SubagentHook):
         run = self.commanding("end")
         if run.returncode:
             raise SystemExit(run.stderr.strip() or f"exit status {run.returncode}")
+
+
+class SessionSubagents(CommanderSession):
+    """A commander session's subagents end with it. SubagentStop never comes for one killed
+    or cut off by the session's end, so the session ends whatever Core still has registered."""
+
+    def subagents(self) -> tuple[SubagentId, ...]:
+        """Claude Code keeps each subagent's transcript beside the session's own."""
+        directory = Path(self.transcript_path).with_suffix("") / "subagents"
+        return tuple(SubagentId(path.stem.removeprefix("agent-"))
+                     for path in sorted(directory.glob("agent-*.jsonl")))
+
+    def end_subagents(self) -> tuple[subprocess.CompletedProcess[str], ...]:
+        """Core's one run for this session's subagents, or none for a session with none."""
+        subagents = self.subagents() if self.commands else ()
+        if not subagents:
+            return ()
+        return (subprocess.run(
+            (*SubagentHook.command, "session-end", "--forks", *(agent.fork for agent in subagents)),
+            capture_output=True, text=True, timeout=SubagentHook.timeout),)
 
 
 class SubagentStartProgram(ClaudeHookProgram):

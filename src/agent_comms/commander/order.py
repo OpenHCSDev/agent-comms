@@ -1298,6 +1298,22 @@ class EndVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SessionEndVerb(OrderVerb, declared_name="session-end"):
+    help = "end every fork the commander's ended session still has registered"
+    forks: Annotated[
+        tuple[str, ...],
+        Argument(flags=("--forks",), options={"nargs": "*", "help": "the session's subagent forks"}),
+    ] = ()
+
+    def run(self, ctx: Commander) -> None:
+        """A session's subagents end with it, whether or not each one stopped on its own."""
+        registered = tuple(fork for fork in self.forks if fork in ctx.comms.registry)
+        for fork in registered:
+            CommanderForkCaller(fork).end(ctx.comms)
+        print(f'session forks ended: {" ".join(registered)}')
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProblemVerb(RequestedOrderVerb):
     help = "Core records the problem with its order, or nothing"
     order: Annotated[
