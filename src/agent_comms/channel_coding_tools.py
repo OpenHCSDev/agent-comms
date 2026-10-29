@@ -29,7 +29,7 @@ from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
-from .pi_payloads import StorageDenialToolDetails
+from .pi_payloads import MissingToolResult, StorageDenialToolDetails
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -82,6 +82,7 @@ class CodingToolOwner(ABC):
         call.require_instructions(turn.native)
 
         def check(store: Coordination) -> None:
+            call.progress.observation.require(Executing, ToolNotExecuting())
             call.require_instructions(turn.native)
             snapshot = self.comms.registry.snapshot()
             self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
@@ -99,6 +100,9 @@ class CodingToolOwner(ABC):
         async with reservation.checking(), self.check_lock:
             await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
+
+    def tool_started(self, call: CodingCall, child: PiSessionChild) -> None:
+        call.started_instruction_read(child)
 
     def tool_completed(self, call: CodingCall, result: PiToolResult, child: PiSessionChild) -> None:
         """Only an actually completed full read opens this child's rule gate."""
@@ -212,13 +216,19 @@ class CodingToolSocket(ToolTransport[CodingCall]):
             call.progress.observation.require(Executing, ToolNotExecuting())
             call.progress.room = reservation
 
+    def tool_started(self, event) -> None:
+        super().tool_started(event)
+        _, call = self.calls.require_current(
+            FieldCodec.encode(event.tool_call_id), 'Missing started tool')
+        self.owner.tool_started(call, self.turn.native)
+
     def tool_finished(self, event, input_id):
         super().tool_finished(event, input_id)
         _, call = self.calls.require_current(
             FieldCodec.encode(event.tool_call_id), 'Missing completed tool'
         )
-        if not event.is_error.value_or(False):
-            self.owner.tool_completed(call, event.result, self.turn.native)
+        result = MissingToolResult() if event.is_error.value_or(False) else event.result
+        self.owner.tool_completed(call, result, self.turn.native)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 

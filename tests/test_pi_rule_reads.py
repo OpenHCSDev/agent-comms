@@ -49,36 +49,48 @@ async def test_saved_pi_requires_full_reads_and_rearms_on_compaction(tmp_path, n
         async with fixture.open_owner(native_options=()) as (agent, session_id):
             persistent = agent.turns.persistent_backends[session_id]
             child = persistent.child_state.child
-            parts = child.rule_parts
+            parts = child.rule_reading.parts
             marker = fixture.project / "allowed.txt"
             blocked = fixture.project / "blocked.txt"
             fixture.provider.plan = [
                 ("bash", {"command": f"touch {blocked}"}),
                 ("read", {"path": str(parts[0]), "limit": 1}),
+                ("read", {"path": str(fixture.project / '.git/config')}),
                 ("bash", {"command": f"touch {blocked}"}),
                 *(("read", {"path": str(part)}) for part in parts),
                 ("bash", {"command": f"printf read > {marker}"}),
             ]
             async with fixture.original_input(agent, session_id, "Read the rules, then write the marker.") as turn:
-                assert sum(isinstance(segment, RuleReadingSegment) for segment in turn.context.segments) == 1
+                context = await persistent.context_for_input(turn.thread, turn.context)
+                assert sum(isinstance(segment, RuleReadingSegment) for segment in context.segments) == 1
                 await turn.prepare_native()
                 await turn.stream()
             assert not blocked.exists()
             assert marker.read_text() == "read"
             child = persistent.child_state.child
             assert child.parts_read == set(parts)
+            assert not child.pending_part_reads
             assert RuleReadingSegment in child.received_context
             assert CoordinationSegment in child.received_context
             results = [message for request in fixture.provider.requests for message in request["messages"]
                        if message["role"] == "tool"]
-            denied = [message for message in results if message["tool_call_id"] in {"read-proof-1", "read-proof-3"}]
+            denied = [message for message in results if message["tool_call_id"] in {"read-proof-1", "read-proof-2", "read-proof-3", "read-proof-4"}]
             assert denied and all(all(str(part) in message["content"] for part in parts) for message in denied)
 
             # Actual second owner input reuses the child and drops both once-per-context segments.
             before = len(fixture.provider.requests)
             async with fixture.original_input(agent, session_id, "Reply once without repeating the read order.") as turn:
                 context = await persistent.context_for_input(turn.thread, turn.context)
-                assert not any(isinstance(segment, (RuleReadingSegment, CoordinationSegment)) for segment in context.segments)
+                for kind in (RuleReadingSegment, CoordinationSegment):
+                    assert kind not in tuple(type(segment) for segment in context.segments), (
+                        f"Repeated {kind.__name__}\n"
+                        f"old: {child.received_context[kind]!r}\n"
+                        f"new: {next(segment.provenance for segment in context.segments if type(segment) is kind)!r}\n"
+                        f"current: {persistent.child_state.current}; "
+                        f"same session: {turn.thread.runtime.read_key == persistent.child_state.identity.session_file}; "
+                        f"resume: {turn.thread.project_resume_due}; "
+                        f"same cwd: {child.key[0].cwd == turn.thread.worktree.path}"
+                    )
                 await turn.prepare_native()
                 await turn.stream()
             assert len(fixture.provider.requests) == before + 1
@@ -106,14 +118,20 @@ async def test_saved_pi_requires_full_reads_and_rearms_on_compaction(tmp_path, n
             async with fixture.original_input(agent, session_id, "After compaction, read before using bash.") as turn:
                 context = await persistent.context_for_input(turn.thread, turn.context)
                 order = next(segment for segment in context.segments if isinstance(segment, RuleReadingSegment))
-                assert all(str(part) in order.text() for part in child.rule_parts)
+                assert all(str(part) in order.text() for part in child.rule_reading.parts)
                 await turn.prepare_native()
                 await turn.stream()
             assert not blocked.exists()
 
 
-def test_shared_parts_fit_one_full_read():
+def test_shared_parts_fit_one_full_read(tmp_path):
     chunks = tuple(DeckParts.chunks(FleetReader.sources("")))
     assert "".join(chunks) == FleetReader.sources("")
     assert all(len(chunk.encode("utf-8")) <= DeckParts.part_bytes for chunk in chunks)
     assert all(len(chunk.splitlines()) <= DeckParts.part_lines for chunk in chunks)
+    directory = tmp_path / "actual"
+    directory.mkdir()
+    alias = tmp_path / "symlink"
+    alias.symlink_to(directory, target_is_directory=True)
+    parts = DeckParts(alias).prepare(FleetReader())
+    assert parts and all(part.parent == directory and part == part.resolve() for part in parts)

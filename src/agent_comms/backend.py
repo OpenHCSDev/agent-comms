@@ -64,6 +64,8 @@ from .pi_rpc import PiRpcChannel
 from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
 from .registry_store import RegistryStore
+from .held_orders import HeldOrders
+from .todos import TodoStore
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
@@ -419,6 +421,7 @@ class NativeSession(MroDispatch, ABC):
             native = await self.native_session.open(
                 self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,
                 registry=RegistryStore.at(self.launch.root),
+                held_orders=partial(HeldOrders.of, TodoStore(self.launch.root)),
             )
         self.startup.native_process = native.proc.identity
         return native

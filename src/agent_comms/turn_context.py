@@ -8,7 +8,6 @@ import re
 from abc import abstractmethod, ABC
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self, Annotated
@@ -32,7 +31,7 @@ from .field_codec import (
 )
 from .goals import Goal, NoGoal
 from .message_reference import MessageReference
-from .instruction_deck import DeckParts, DeckReader
+from .instruction_deck import DeckParts
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .repo import Checkout
@@ -45,7 +44,6 @@ from .wake_policy import WakePolicy
 if TYPE_CHECKING:
     from .context_store import RecordedContextState
     from .input_attempt import StoredInput
-    from .goal_management import Goals
     from .native_child import PiSessionChild
     from .presentation import ThreadView
     from .relationships import PeerRelation
@@ -1121,13 +1119,9 @@ class RuleReadingSegment(OncePerContextSegment):
     header: str
 
     @classmethod
-    def capture(cls, owner: Thread, goals: Goals) -> RuleReadingSegment:
-        snapshot = goals.registry.snapshot()
-        reader = DeckReader.for_owner(snapshot, owner.incarnation.require_recorded())
-        parts = DeckParts.beside_session(owner.native_session_directory(goals.root)).planned(reader)
-        header = reader.header(partial(goals.recalled_orders, snapshot, owner.name))
+    def for_parts(cls, owner: ThreadIncarnation, parts: tuple[Path, ...], header: str) -> Self:
         revision = hashlib.sha256("\n".join(map(str, parts)).encode()).hexdigest()
-        return super().capture((OwnerProvenance(owner.incarnation, revision),), parts=parts, header=header)
+        return super().capture((OwnerProvenance(owner, revision),), parts=parts, header=header)
 
     def values(self) -> dict[str, object]:
         return {"read_order": DeckParts.order(self.parts), "header": self.header}
@@ -1490,7 +1484,6 @@ class TurnContext(DeclaredReply):
             owner.incarnation,
             turn,
             (
-                RuleReadingSegment.capture(owner, goals),
                 CoordinationSegment.capture(owner, views, relations, goals),
                 UserInputSegment(provenance=source, content=task),
             ),

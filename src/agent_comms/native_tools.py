@@ -161,11 +161,14 @@ class ReadTool(ReadAction, PathTool, CodingTool):
     def context_read_paths(self) -> tuple[str, ...]:
         return (self.path,)
 
-    def require_instructions(self, child: PiSessionChild) -> None:
+    def started_instruction_read(self, child: PiSessionChild) -> None:
         # A slice never counts. Even an unsliced call must return the exact full text.
         child.begin_part_read(
             self.call_id, self.path,
             full_read=self.offset == UnsuppliedArgument() and self.limit == UnsuppliedArgument())
+
+    def require_instructions(self, child: PiSessionChild) -> None:
+        child.require_part_read(self.call_id)
 
     def completed_instruction_read(self, child: PiSessionChild, result: PiToolResult) -> None:
         child.completed_part_read(self.call_id, result)

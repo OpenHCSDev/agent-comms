@@ -59,7 +59,6 @@ from .goal_presentation import (
     IdleGoalExecution,
 )
 from .goals import Goal, GoalDeclaration
-from .held_orders import HeldOrders
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
@@ -84,10 +83,6 @@ class Goals(GoalWaitRecovery):
         self.agents = agents
         self.waits = GoalWaits(root)
         self.goal_store: GoalAttemptStore | None = None
-
-    def recalled_orders(self, snapshot: RegistrySnapshot, commander: str) -> str:
-        """The current held-order instructions, read through this goal owner's store."""
-        return "\n".join(hold.recalled() for hold in HeldOrders.of(self.todos, snapshot, commander).live)
 
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a commander's child goal from its parent's active work."""

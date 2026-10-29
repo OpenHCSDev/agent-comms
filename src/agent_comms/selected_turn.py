@@ -35,7 +35,7 @@ from .selected_triage import SelectedTriageOutcome
 from .wake_candidate_index import WakeCandidateIndex
 from .context_segments.wake import SelectedWakeSegment
 from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
-from .turn_context import RecordedContextTurn, RenderedInput, RuleReadingSegment, TurnContext
+from .turn_context import RecordedContextTurn, RenderedInput, TurnContext
 from .turn_phase import PreparingPhase, PromptAcceptancePhase, PublishingPhase
 
 
@@ -96,7 +96,6 @@ class SelectedPrompt:
         )
         context = self.context(
             (
-                RuleReadingSegment.capture(participant.owner.thread, participant.comms.goals),
                 frame,
                 *awareness,
                 SelectedWorkSegment.capture(participant, action, frame.provenance),

@@ -22,9 +22,7 @@ from typing import ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.read_gate import GatedCall
-from agent_comms.instruction_deck import DeckReader
-from agent_comms_hooks.skill import DeckStart
-from agent_comms_hooks.watch import WatchClaim
+from agent_comms_hooks.skill import DeckStart, HookReader
 
 
 @dataclass(frozen=True)
@@ -33,7 +31,7 @@ class SliceReminder(DeckStart):
 
     every: ClassVar[int] = 5
 
-    def taken(self, reader: DeckReader) -> tuple[str, ...]:
+    def taken(self, reader: HookReader) -> tuple[str, ...]:
         deck = self.deck(reader)
         if not deck.exists():
             return self.dealt(reader)  # the session was bound, or changed role, after it started
@@ -51,11 +49,8 @@ class DeafReminder(SliceReminder):
     """Beside the deck's slice, the RE-ARM line while the commander session's bridge has no
     Monitor reading it. The line rides the next tool call, never the bridge it reports dead."""
 
-    def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        watch = WatchClaim(self.session_id)
-        return super().taken(reader) + watch.state().by_role(
-            unbound=tuple, fleet=tuple,
-            commander=lambda: tuple(deaf.line() for deaf in watch.deaf()))
+    def taken(self, reader: HookReader) -> tuple[str, ...]:
+        return super().taken(reader) + reader.deaf(self.session_id)
 
 
 @dataclass(frozen=True)
@@ -65,10 +60,8 @@ class BoardReminder(DeafReminder):
     The bridge derives current lines from Core and owns their delivery evidence.
     """
 
-    def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        watch = WatchClaim(self.session_id)
-        return super().taken(reader) + watch.state().by_role(
-            unbound=tuple, fleet=tuple, commander=lambda: watch.state().board())
+    def taken(self, reader: HookReader) -> tuple[str, ...]:
+        return super().taken(reader) + reader.board(self.session_id)
 
 
 class ReminderProgram(ClaudeHookProgram):

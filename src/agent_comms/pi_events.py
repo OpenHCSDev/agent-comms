@@ -382,7 +382,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
         for result in completed:
             for event in result.charge():
                 yield event
-            session.native.forget_context()
+            await session.native.forget_context()
             session.watchdog.compacted(session.prompt_state.started)
         session.usage.invalidate()
         yield session.context_info()
