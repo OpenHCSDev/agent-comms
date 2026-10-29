@@ -34,7 +34,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import GitCommandError, Repo
+from agent_comms.repo import GitCommandError
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
@@ -410,8 +410,31 @@ class LostTools(UndatedStandingRule):
                 " who took them, and why? -> restore its required tools")
 
 
+class HolderBranch:
+    """A holder's branch difference; two of them may write the same files in parallel."""
+
+    holder: ThreadIncarnation
+    difference: BranchDifference
+
+    def parallel_to(self, other: HolderBranch) -> bool:
+        """Different holders writing different branches of one repository with shared files."""
+        left, right = self.difference, other.difference
+        return (self.holder != other.holder and left.repository == right.repository
+                and left.branch != right.branch and bool(left.files & right.files))
+
+
 @dataclass(frozen=True)
-class HeldBranch:
+class PreparedBranch(HolderBranch):
+    """One held order's captured branch difference, before the cut, in its repository."""
+
+    holder: ThreadIncarnation
+    todo: Todo
+    difference: BranchDifference
+    repository: Path
+
+
+@dataclass(frozen=True)
+class HeldBranch(HolderBranch):
     """One order still writing source, joined to its own allocated checkout. Only the branch
     difference and publication are captured from that worktree before observation; its unit
     may retire it mid-frame. Later PR comparisons use the order's repository, which outlives
@@ -427,12 +450,6 @@ class HeldBranch:
     @property
     def problem(self) -> str:
         return self.todo.id
-
-    def parallel_to(self, other: HeldBranch) -> bool:
-        """Different holders writing different branches of one repository with shared files."""
-        left, right = self.difference, other.difference
-        return (self.holder != other.holder and left.repository == right.repository
-                and left.branch != right.branch and bool(left.files & right.files))
 
 
 class HolderLine(StandingRule, declared_name=None):
@@ -460,6 +477,7 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
     def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
                 pulls: ProgressRead) -> None:
         storage = comms.registry.storage_rule
+        prepared: list[PreparedBranch] = []
         for held in holds.live:
             todo = held.todo
             directory = todo.order.checked().check.directory
@@ -470,10 +488,18 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
                 path = storage.order_checkout(storage.roots_of(held.holder), todo.id)
                 if path.is_dir():
                     pulls.checkout(path).branches.prepare_upstreams()
-                    pulls.branch_difference(path)
+                    prepared.append(PreparedBranch(held.holder, todo, pulls.branch_difference(path),
+                                                   pulls.checkout(directory).path))
             except (OSError, GitCommandError,
                     WorkBranchError, TimeoutExpired) as error:
                 pulls.unread(todo, error)
+        for member in cls.members_with(cls):
+            member.prepare_captured(tuple(prepared), pulls)
+
+    @classmethod
+    def prepare_captured(cls, prepared: tuple[PreparedBranch, ...], pulls: ProgressRead) -> None:
+        """A member that needs more than each branch's own difference reads it here, before
+        the cut; its scan consumes only what this captured."""
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -577,6 +603,13 @@ class ConflictingBranches(HeldBranchRule):
     paths: tuple[str, ...] = field(compare=False)
 
     @classmethod
+    def prepare_captured(cls, prepared: tuple[PreparedBranch, ...], pulls: ProgressRead) -> None:
+        for first, second in combinations(prepared, 2):
+            if first.parallel_to(second):
+                pulls.branch_conflicts(first.repository, first.difference.head,
+                                       second.difference.head)
+
+    @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         return tuple(
             cls(problem=first.problem, holder=first.holder, branch=first.difference.branch,
@@ -584,8 +617,8 @@ class ConflictingBranches(HeldBranchRule):
                 other_branch=second.difference.branch, repository=first.difference.repository,
                 paths=conflicts)
             for first, second in combinations(branches, 2)
-            if first.parallel_to(second) and (conflicts := Repo.merge_conflicts(
-                first.repository.path, first.difference.head, second.difference.head))
+            if first.parallel_to(second) and (conflicts := first.source.pulls.require_branch_conflicts(
+                first.difference.head, second.difference.head))
         )
 
     def line(self) -> str:

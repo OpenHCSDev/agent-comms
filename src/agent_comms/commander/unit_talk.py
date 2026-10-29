@@ -49,9 +49,9 @@ class UnitTalk:
     def messages(self) -> tuple[Delivered, ...]:
         """Its own publications in the window, newest first, through the bus's sent index."""
         return tuple(
-            message for message in self.source.comms.bus.sent(
+            message for record in self.source.comms.bus.bus.sent(
                 self.unit.require_recorded().lookup, limit=500)
-            if message.timestamp >= self.since
+            for message in record.deliveries() if message.timestamp >= self.since
         )
 
     @cached_property
