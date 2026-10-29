@@ -68,6 +68,8 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     receiving: ClassVar[bool] = False
     # Whether the thread has left every new audience and presence; only an archive has.
     archived: ClassVar[bool] = False
+    # Whether a role slot in this lifecycle may take a new occupant: no one holds it now.
+    vacant: ClassVar[bool] = False
 
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
@@ -286,6 +288,7 @@ class IdleThreadStatus(ActiveThreadPresence):
 
 class StoppedThreadStatus(Visible, ThreadStatus):
     stopped = True
+    vacant = True
 
     def require_stopped(self) -> None:
         pass
@@ -361,6 +364,7 @@ class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
 
 class ArchivedThreadStatus(ThreadStatus):
     archived = True
+    vacant = True
 
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.archived

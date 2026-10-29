@@ -44,6 +44,7 @@ from agent_comms.ui_model.unit_state import (
     Unreadable,
 )
 from test_holder_standing_rules import blocked_holder, publish, state_cards
+from agent_comms.thread_execution import CommanderForkExecution
 
 pytest_plugins = ("test_holder_standing_rules", "test_proof_build")
 
@@ -261,7 +262,7 @@ def test_a_stopped_child_holding_no_order_is_no_unit(held_bus):
 
 
 def test_commander_fork_gets_no_unit_card(held_bus):
-    fork = held_bus.registry.register_commander_child("judge-fork", "lead", held_bus.goals)
+    fork = held_bus.registry.register_child("judge-fork", "lead", CommanderForkExecution, held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
         states = UnitState.current(
             held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead()))

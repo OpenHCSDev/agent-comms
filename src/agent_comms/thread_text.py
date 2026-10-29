@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import itertools
+import re
 from abc import ABC, abstractmethod
-from collections.abc import Collection
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -130,3 +132,29 @@ class NoParent(AbsentText, ThreadParent):
 
     def kept_in(self, names: Collection[str]) -> NoParent:
         return self
+
+
+@dataclass(frozen=True, slots=True)
+class SubagentRole(SingleFieldValue):
+    """A subagent's role as its harness names it (Claude Code's `agent_type`). The role is the
+    durable half of a child's name: each occupant of a role takes the first vacant slot."""
+
+    text: str
+
+    def __post_init__(self) -> None:
+        if not self.slug:
+            raise ValueError(
+                f"Subagent role {self.text!r} has no letters or digits to name a slot.")
+
+    @property
+    def slug(self) -> str:
+        """The role in the characters a thread name allows: `Explore` and `plugin:Code Review`
+        become `explore` and `plugin-code-review`."""
+        return "-".join(re.findall(r"[a-z0-9]+", self.text.lower()))
+
+    def slot_names(self, parent: str) -> Iterator[str]:
+        """`{parent}-{role}`, then `-2`, `-3`, ... for occupants running at once."""
+        base = f"{parent}-{self.slug}"
+        yield base
+        for ordinal in itertools.count(2):
+            yield f"{base}-{ordinal}"

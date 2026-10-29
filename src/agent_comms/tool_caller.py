@@ -12,6 +12,7 @@ from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
 from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
+from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 
@@ -188,11 +189,30 @@ class ThreadCaller(ToolCaller):
 
 
 @dataclass(frozen=True)
-class CommanderForkCaller(ThreadCaller):
+class SubagentCaller(ThreadCaller):
+    """A child working inside its parent session's turn."""
+
+    def end(self, comms: Comms) -> None:
+        """A child that has stopped is archived, so no ended child stays subscribed; the next
+        declaration of the same name redeclares onto it and keeps its history, and a child
+        already archived has already ended."""
+        if comms.registry.status(self.name).archived:
+            return
+        comms.registry.require(self.name).execution.require_subagent()
+        self.leaving(comms)
+        comms.registry.unregister(self.name)
+        comms.threads.archive(self.name)
+
+    def leaving(self, comms: Comms) -> None:
+        """What a child reports as it ends; a role slot's history is already on its thread."""
+
+
+@dataclass(frozen=True)
+class CommanderForkCaller(SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
     def commanding(self, comms: Comms, commander: str) -> None:
-        comms.registry.register_commander_child(self.name, commander, comms.goals)
+        comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
 
     def commander(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)
@@ -216,17 +236,10 @@ class CommanderForkCaller(ThreadCaller):
                 f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
         self.end(comms)
 
-    def end(self, comms: Comms) -> None:
-        """A fork that has stopped is archived whatever it recorded, so no ended fork stays
-        subscribed; one that recorded nothing tells its commander the work is missing. A
-        resumed fork of the same name redeclares onto the archived thread, and a fork already
-        archived has already ended."""
-        if comms.registry.status(self.name).archived:
-            return
+    def leaving(self, comms: Comms) -> None:
+        """A fork that recorded nothing tells its commander the work is missing."""
         if not self.recorded(comms):
             commander = self.commander(comms).name
             comms.messaging.send(self.name, commander, (
                 f"{self.name} stopped without recording what it found: its work is missing."
                 " Read its transcript or give the work to another fork."))
-        comms.registry.unregister(self.name)
-        comms.threads.archive(self.name)
