@@ -1031,14 +1031,16 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
     for speaker, sender in ((lead, unit), (unit, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
-        output.delivered_targets((sender.name,))
+        original = comms.messaging.send(sender.name, speaker.name, "Open this answer").message
         turn = NativeTurnId(f"{speaker.name}-turn")
+        output.delivered(turn, (original.reference,))
         item_id = NativeItemId("a")
         output.publish_item(FinishedItem(turn, item_id, (AssistantTranscript(
             f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
-    assert comms.bus.pending_count("unit") == 0
-    assert comms.bus.pending_count("lead") == 1
+    replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
+                    if message.body in {"lead answers", "unit answers"})
+    assert replies == (("lead", "unit answers"),)
 
 
 @pytest.mark.parametrize(('rows', 'start', 'frames'), (

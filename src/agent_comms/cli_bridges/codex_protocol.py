@@ -62,6 +62,7 @@ from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import DeclaredWireFamily, WireModel
+from .shared import BridgeInputObserved
 
 
 class UserInput(TaggedWire, ABC, affix=""):
@@ -436,9 +437,12 @@ class UserItem(Item):
     def completed(
         self, turn_id: NativeTurnId, events: tuple[TranscriptEvent, ...]
     ) -> RuntimeUpdate:
-        # Bus inputs already appear in Core's inbox; the live view does not echo them as new input.
+        # The client identity and exact echoed text bind this input to its original attempt.
         if BusInput.identifies(self.clientId):
-            return HiddenItem(events)
+            client_id = FieldCodec.decode(str, self.clientId)
+            message_id = FieldCodec.decode(MessageId, client_id.removeprefix(BusInput.client_prefix))
+            return BridgeInputObserved(events, message_id, '\n'.join(
+                part.display for part in self.content)).in_turn(turn_id)
         return super().completed(turn_id, events)
 
 

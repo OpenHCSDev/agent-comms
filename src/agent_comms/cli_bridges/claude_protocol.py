@@ -255,6 +255,9 @@ class ClaudeToolDraft(ToolDraft):
 class ClaudeTurn(ABC):
     """The transcript's identified turn owns item identities."""
 
+    def confirmed(self, updates: tuple[RuntimeUpdate, ...]) -> tuple[RuntimeUpdate, ...]:
+        return updates
+
     @abstractmethod
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]: ...
@@ -285,6 +288,9 @@ class UnknownTurn(ClaudeTurn):
 @dataclass(frozen=True)
 class KnownTurn(ClaudeTurn):
     id: NativeTurnId
+
+    def confirmed(self, updates: tuple[RuntimeUpdate, ...]) -> tuple[RuntimeUpdate, ...]:
+        return tuple(update.in_turn(self.id) for update in updates)
 
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
@@ -348,9 +354,9 @@ class ClaudeSession:
             return self.phase.missing_tool(tool_id)
         return (*self.finished(tool_id, tool.completed(record, text, ok)),
                 *self.turn.active(tool_id, self.phase, ModelWaitPhase()),
-                *tool.read_results(record, text, ok, frozenset(
+                *self.turn.confirmed(tool.read_results(record, text, ok, frozenset(
                     path for other in self.tools.values()
-                    for path in other.call.context_read_paths())))
+                    for path in other.call.context_read_paths()))))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
@@ -710,8 +716,8 @@ class ReadResultObserved(ConfirmedDelivery):
             lines.pop()
         return tuple(ClaudeMonitorFrame.decode_line(line) for line in lines)
 
-    async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
-        return replace(self, targets=await bridge.read_export(self))
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:
+        return replace(self, references=await bridge.read_export(self))
 
 
 @dataclass(frozen=True)
@@ -805,7 +811,7 @@ class TaskUserRecord(ClaudeRecord, TimedRecord, declared_name='task-user'):
     message: TaskMessage
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return self.message.updates(self)
+        return session.turn.confirmed(self.message.updates(self))
 
 
 class SubtypeHeader(WireHeader):

@@ -44,7 +44,7 @@ from .ui_model.message_category import (
 
 if TYPE_CHECKING:
     from .importing import ImportBuffer, ImportLimits
-    from .runtime_updates import OpeningReplies
+    from .external_transcript import ReplyWindow
     from .transcript_sources import TranscriptSource
 
 
@@ -136,7 +136,7 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def assistant_parts(self) -> tuple[str, ...]:
         return ()
 
-    def reply_window(self, window: OpeningReplies) -> OpeningReplies:
+    def reply_window(self, window: ReplyWindow) -> ReplyWindow:
         """Input and system evidence do not start an assistant answer."""
         return window
 
@@ -355,7 +355,7 @@ class UserTranscript(NativeTextTranscript):
 class ModelOutput:
     """Assistant text, thinking and tool output close the window for new automatic reply routes."""
 
-    def reply_window(self, window: OpeningReplies) -> OpeningReplies:
+    def reply_window(self, window: ReplyWindow) -> ReplyWindow:
         return window.answering()
 
 
