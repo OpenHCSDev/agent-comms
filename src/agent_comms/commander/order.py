@@ -829,10 +829,8 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
     peer: Annotated[
         CommanderPeerCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
-        Argument(
-            flags=("--as",), options={"type": CommanderPeerCaller,
-                                      "help": "another commander acting under its own name"}
-        ),
+        Argument(options={"type": CommanderPeerCaller,
+                          "help": "another commander in #commanders acting under its own name"}),
     ] = NoThreadCaller()
 
     @property
