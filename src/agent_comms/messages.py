@@ -1032,6 +1032,11 @@ class Message(MessageInput, TurnOrigin):
         """The exact response destination owned by this opening message."""
         return CommandTarget.named(self.target).reply_target(self.sender)
 
+    def opening_references(self, recipient: str) -> tuple[MessageReference, ...]:
+        """A confirmed delivery can open a reply only for its policy's intended reader."""
+        return ((self.reference,)
+                if self.role.response_policy(self).starts_turn_for(self, recipient) else ())
+
     autonomous: ClassVar[bool] = False
 
     @property

@@ -16,6 +16,8 @@ from . import activity
 from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
+from .channel_targets import CommandTarget
+from .message_reference import MessageReference
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import (
     LiveTextTranscript,
@@ -174,9 +176,9 @@ class ThreadOutput(activity.ThreadOutput):
     def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
         return cls(transcript, comms.agents)
 
-    def delivered_targets(self, targets: tuple[str, ...]) -> None:
-        """Ordinary transcript outputs do not publish session replies."""
-        return None
+    def delivered(self, turn_id: NativeTurnId, references: tuple[MessageReference, ...]) -> None:
+        """Every external turn records the original deliveries that opened it."""
+        self.transcript.delivered(turn_id, references)
 
     def publish_item(self, item: FinishedItem) -> None:
         self.transcript.finish(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
@@ -223,11 +225,13 @@ class ThreadOutput(activity.ThreadOutput):
         return finished
 
     def end_turn(self, turn_id: NativeTurnId) -> None:
+        self.transcript.finish_replies(turn_id)
         for key in tuple(self.drafts):
             if key.turn_id == turn_id:
                 del self.drafts[key]
 
     def end_all_turns(self) -> None:
+        self.transcript.finish_all_replies()
         self.drafts.clear()
 
     @property
@@ -235,41 +239,11 @@ class ThreadOutput(activity.ThreadOutput):
         return self.transcript.incarnation.name
 
 
-@dataclass(frozen=True)
-class OpeningReplies:
-    """Only deliveries observed before assistant output can open this turn's reply routes."""
-
-    targets: frozenset[str] = frozenset()
-
-    def delivered_targets(self, targets: tuple[str, ...]) -> OpeningReplies:
-        return replace(self, targets=self.targets.union(targets))
-
-    def answering(self) -> OpeningReplies:
-        return AnsweringReplies(self.targets)
-
-    def observed(self, events: tuple[TranscriptEvent, ...]) -> OpeningReplies:
-        window = self
-        for event in events:
-            window = event.reply_window(window)
-        return window
-
-
-class AnsweringReplies(OpeningReplies):
-    """Output has started: later context does not become a recipient of this answer."""
-
-    def delivered_targets(self, targets: tuple[str, ...]) -> OpeningReplies:
-        return self
-
-    def answering(self) -> OpeningReplies:
-        return self
-
-
 @dataclass
 class ReplyingThreadOutput(ThreadOutput):
     """The last finished assistant item replies only to deliveries that opened its turn."""
 
     messaging: Messaging = field(kw_only=True)
-    replies: OpeningReplies = field(default_factory=OpeningReplies)
     pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
 
     def staged(self) -> Self:
@@ -277,7 +251,6 @@ class ReplyingThreadOutput(ThreadOutput):
 
     def commit(self, staged: Self) -> None:
         super().commit(staged)
-        self.replies = staged.replies
         self.pending = staged.pending
 
     @classmethod
@@ -288,25 +261,20 @@ class ReplyingThreadOutput(ThreadOutput):
             commanded=cls(transcript, comms.agents, messaging=comms.messaging),
         )
 
-    def delivered_targets(self, targets: tuple[str, ...]) -> None:
-        self.replies = self.replies.delivered_targets(targets)
-
     def flush_before(self, key: TurnItem) -> None:
         for previous in tuple(self.pending):
             if previous != key:
                 super().publish_item(self.pending.pop(previous))
 
     def publish_item(self, item: FinishedItem) -> None:
-        self.replies = self.replies.observed(item.events)
         self.flush_before(item.key)
-        if self.replies.targets and item.assistant_text:
+        if self.transcript.replies_for(item.turn_id).active_references and item.assistant_text:
             self.pending[item.key] = item
             self.transcript.draft(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
         else:
             super().publish_item(item)
 
     def publish_draft(self, item: DraftItem) -> None:
-        self.replies = self.replies.observed(item.events)
         self.flush_before(item.key)
         super().publish_draft(item)
 
@@ -315,23 +283,25 @@ class ReplyingThreadOutput(ThreadOutput):
             if key.turn_id != turn_id:
                 continue
             item = self.pending[key]
+            opening = self.messaging.bus.bus.messages_for_references(
+                self.transcript.replies_for(turn_id).active_references)
+            targets = {target for message in opening
+                       for target in CommandTarget.named(message.target).automatic_reply_targets(message.sender)}
             publications = tuple(
                 self.messaging.send(
                     sender=self.activity_thread, target=target, body=item.assistant_text,
                 ).message.reference
-                for target in sorted(self.replies.targets)
+                for target in sorted(targets)
             )
             super().publish_item(replace(item, events=tuple(
                 event.with_publications(publications) for event in item.events
             )))
             del self.pending[key]
-        self.replies = OpeningReplies()
         super().end_turn(turn_id)
 
     def end_all_turns(self) -> None:
         for turn_id in dict.fromkeys(key.turn_id for key in self.pending):
             self.end_turn(turn_id)
-        self.replies = OpeningReplies()
         super().end_all_turns()
 
 
@@ -370,6 +340,10 @@ class RuntimeUpdate(ABC):
 
     async def observed(self, bridge: TranscriptBridge) -> RuntimeUpdate:
         """Carry source-owned confirmation into the ordered publication stream."""
+        return self
+
+    def in_turn(self, turn_id: NativeTurnId) -> RuntimeUpdate:
+        """Only input observations need their source turn attached."""
         return self
 
     def retain_before(self, later: set[TurnItem]) -> bool:
