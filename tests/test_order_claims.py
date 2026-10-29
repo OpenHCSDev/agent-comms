@@ -23,7 +23,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import capture_frame
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.messages import QuestionKind
 from agent_comms.order_runs import ApplicationOrderRun
@@ -183,7 +183,7 @@ def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_com
     worker = comms.registry.require('worker').incarnation
     assert owed.questions_for(worker) == ()
     assert owed.questions_for(ctx.incarnation) == ()
-    frame = HeartbeatFrame.capture(comms, ctx.commander, ProgressRead())
+    frame = capture_frame(comms, ctx.commander, ProgressRead())
     observation, = (reading for reading in UnitState.observations(comms, ctx.commander, frame)
                     if reading.thread.incarnation == worker)
     assert claim.message not in observation.questions

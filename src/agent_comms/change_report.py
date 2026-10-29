@@ -96,10 +96,6 @@ class SourceRevision(SourceText):
     def resolve(self, repository: Path) -> str:
         """The commit this revision names in ``repository``."""
 
-    @property
-    def local(self) -> SourceRevision:
-        return self
-
     def commit_at(self, repository: Path) -> str:
         if repository not in self._commits:
             self._commits[repository] = self.resolve(repository)
@@ -128,11 +124,6 @@ class SourceRevision(SourceText):
 @dataclass(frozen=True)
 class FetchedRevision(SourceRevision):
     """A revision fetched from origin before it is read."""
-
-    @cached_property
-    def local(self) -> BranchHeadRevision:
-        """Reviewing captured edits may use only an already-present explicit Git ref."""
-        return BranchHeadRevision(self.reference)
 
     @property
     @abstractmethod

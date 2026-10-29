@@ -3853,10 +3853,12 @@ class AssignTodo(TodoOperation):
                        parent=actor.name, parent_created=actor.wire_birth))
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        snapshot = RegistryStore.at(store.root).snapshot()
+        if not self.proposed.holder_in(snapshot):
+            raise TodoConflict(current)
         self.proposed.require_available_in(
             db, current.id, IncomingWork(
-                self.actor, self.group | {current.id}, frozenset({self.order.id})),
-            RegistryStore.at(store.root).snapshot())
+                self.actor, self.group | {current.id}, frozenset({self.order.id})), snapshot)
         OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:

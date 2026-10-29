@@ -201,6 +201,10 @@ class HeadVerdictTool:
         for order in orders:
             with RecordProblems.collecting(problems, '--problem', 'select the current held order'):
                 actors.append(caller.head_review_actor(comms, self.request, order))
+        if not orders or len(actors) != len(orders):
+            # Local argument/relationship problems remain visible, but a caller without
+            # review authority may not trigger source growth or current-forge previews.
+            raise TodoProblems(problems)
         heads = []
         with RecordProblems.collecting(problems, '--head', 'supply the current PR head SHA with --head'):
             heads.append(self.request.current())

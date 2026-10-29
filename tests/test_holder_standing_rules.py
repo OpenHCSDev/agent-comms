@@ -30,7 +30,7 @@ from agent_comms.commander.standing import (
     UnitAskUnanswered,
     ReassignedWheelSpin,
 )
-from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_hud import CommanderFrame
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
@@ -167,25 +167,25 @@ def test_shared_worktree_proposal_is_reported_without_aborting_the_board(held_bu
     question = comms.messaging.send('outsider', 'lead',
         'Which retained source owns this independent question?', type=QuestionKind).message
     ordinary = UnitAskUnanswered(question, 'outsider')
-    rejected = StandingRule.enforce_all(comms, 'lead', (proposal, ordinary))
-    refusal = rejected[proposal]
-    assert isinstance(refusal, SharedWorktreeRefusal)
+    frame = capture_frame(comms, 'lead', ProgressRead())
+    observation = CommanderObservation(comms.registry.require('lead'), frame, (proposal, ordinary), ())
+    CommanderHeartbeat().pass_body(comms, (observation,))
+    packet, = CommanderUpdate.latest(comms, lead)
+    assert len(packet.not_applied) == 1
+    assert released.id in packet.not_applied[0] and retained.id in packet.not_applied[0]
+    assert candidate.name in packet.not_applied[0] and worker.name in packet.not_applied[0]
+    assert question.message_id in packet.body(time.time(), ())
+    assert comms.goals.todos.get(released.id) == released
+    assert comms.goals.todos.get(retained.id) == retained
+    assert comms.registry.require('proposed').goal == goal_before
+    with pytest.raises(SharedWorktreeRefusal) as refused:
+        dispatch.start(comms)
+    refusal = refused.value
     assert (refusal.problem, refusal.holding_problem) == (released.id, retained.id)
     assert refusal.holder == candidate.incarnation
     assert refusal.holding_holder == worker.incarnation
     assert str(refusal.worktree) in refusal.explanation()
-    assert comms.goals.todos.get(released.id) == released
-    assert comms.goals.todos.get(retained.id) == retained
-    assert comms.registry.require('proposed').goal == goal_before
-    lines = tuple(rule.rejected_line(error) for rule, error in rejected.items())
-    packet, = CommanderUpdate.derive(lead, (), (proposal, ordinary), (),
-                                     now=time.time(), not_applied=lines)
-    message = packet.send(comms, time.time(), ())
-    assert message.seq > 0
-    assert packet.not_applied == lines
-    assert question.message_id in packet.body(time.time(), ())
-    with pytest.raises(SharedWorktreeRefusal):
-        dispatch.start(comms)
+    assert str(refusal.worktree) in packet.not_applied[0]
     isolated = comms.registry.require('outsider')
     ReusedWorkDispatch.for_unit(action, isolated).start(comms)
     assigned = comms.goals.todos.get(released.id)
@@ -624,7 +624,7 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     assert question.seq > 0
     assert ask.questions_for(worker) == (question,)
     assert ask.questions_for(outsider) == ()
-    frame = HeartbeatFrame.capture(held_bus, 'lead', ProgressRead())
+    frame = capture_frame(held_bus, 'lead', ProgressRead())
     observation, = (reading for reading in UnitState.observations(held_bus, 'lead', frame)
                     if reading.thread.incarnation == worker)
     assert question in observation.due_questions

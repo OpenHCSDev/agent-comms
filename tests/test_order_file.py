@@ -53,6 +53,36 @@ def test_generic_base_identity_excludes_its_type_arguments():
     assert forwarders_added('+    def answer(self): return self.peer.answer()\n', (unrelated,))
 
 
+def test_retained_generic_decoder_fragments_use_the_actual_after_declarations():
+    from agent_comms.commander.judge import Hunk
+
+    parents = ('class DecoderPlan:\n    editor_annotation: object\n'
+               '    def format_editor(self, wire): pass\n'
+               '    def parse_editor(self, text): pass\n'
+               'class ValueDecoder[T](DecoderPlan):\n    pass\n'
+               'class UnionDecoder[T](ValueDecoder[T]):\n    pass\n')
+    represented = ('class _RepresentedDecoder[T](ValueDecoder[T]):\n'
+                   '    @property\n    def editor_annotation(self) -> object:\n'
+                   '        return self.wire_structure.editor_annotation\n'
+                   '    def format_editor(self, wire: object) -> JsonValue:\n'
+                   '        return self.wire_structure.format_editor(wire)\n'
+                   '    def parse_editor(self, text: object) -> object:\n'
+                   '        return self.wire_structure.parse_editor(text)\n')
+    text_edited = ('@dataclass(frozen=True, slots=True)\n'
+                   'class _TextEditedUnionDecoder[T](UnionDecoder[T]):\n'
+                   '    editor: DecoderPlan\n'
+                   '    def format_editor(self, wire: object) -> JsonValue:\n'
+                   '        return self.editor.format_editor(wire)\n'
+                   '    def parse_editor(self, text: object) -> object:\n'
+                   '        return self.editor.parse_editor(text)\n')
+    # call94d8's final hunk ends at the next class header; it is not a whole module.
+    tail = '@dataclass(frozen=True, slots=True)\nclass _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):\n'
+    after = parents + represented + text_edited + tail + '    pass\n'
+    assert Hunk(tail, text_edited + '\n' + tail).introduced_forwarders((after,)) == []
+    assert not forwarders_added(OverrideNames.introduced(parents, parents + represented),
+                                (parents + represented,))
+
+
 def test_retained_replacement_methods_keep_owner_decorators_and_body_identity():
     # P952 call641730 retained binding_mode while inserting key_mode_label.
     before = ('    @property\n'

@@ -24,12 +24,12 @@ from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import RecordProblems
+from agent_comms.field_codec import GoalId, OrderId, RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth, WorkBranches
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
+    CarriedHeadVerdict, ClaimOrder, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderClaim, OrderMessage, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
@@ -98,6 +98,20 @@ def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp
     RejectedHeadVerdict(REASON).post(request.repo, request.head, 'lead', 'integration')
     assert not HeadReview.accepted(request.repo, request.head)
     assert not HeadReview.accepted(request.repo, 'a' * 40)
+
+
+def test_unauthorized_review_cannot_trigger_forge_or_source_preview(head_bus):
+    comms, github, request = head_bus
+    todo = comms.goals.todos.get('P2')
+    scope = OrderHeadReview(todo.revision, LinkedHeadReview.of(todo, 'short'))
+    before = tuple(github.calls())
+    tool = CommsHeadVerdictTool(request=request, operation=ReviewedHeadVerdict(ACCEPTED), order=scope)
+    with pytest.raises(RecordProblems) as refused:
+        tool.invoke(comms, tool.arguments, caller=ThreadCaller('outsider'))
+    assert {'--serves', '--problem'} <= refused.value.problems.keys()
+    assert tuple(github.calls()) == before
+    assert comms.goals.todos.get(todo.id) == todo
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 
 
 def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(head_bus):
@@ -351,22 +365,34 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
     assert owed() == [request]
 
 
+@pytest.fixture
+def retained_linked_head(head_bus):
+    """Both grouped problems are genuinely claimed before their holder can replace its goal."""
+    comms, _, request = head_bus
+    worker = comms.registry.require('worker').incarnation
+    lead = comms.registry.require('lead').incarnation
+    for problem in ('P1', 'P2'):
+        todo = comms.goals.todos.get(problem)
+        original = comms.messaging.send('lead', 'worker', todo.order.instructions(todo)).message
+        OrderMessage(todo.revision, lead, original.message_id,
+                     at=RecordedEventTime(time.time())).record(comms.goals, todo.id)
+        todo = comms.goals.todos.get(problem)
+        claim = OrderClaim.for_order(todo, worker, request.pr, request.head,
+            'The actual source declaration was repaired; inspect its retained head before acceptance.',
+            original.reference, store=comms.goals.todos)
+        ClaimOrder(todo.revision, worker, todo.held().generation, claim).record(comms.goals, todo.id)
+    todo = comms.goals.todos.get('P2')
+    scope = OrderHeadReview(todo.revision, LinkedHeadReview.of(todo, 'Repair the existing owner'))
+    return comms, request, todo, scope
+
+
 @pytest.mark.parametrize('goal_action', (None,
     SetGoalAction(text='An unrelated current goal whose complete declaration must survive'),
     ClearGoalAction(),
 ))
-def test_retained_linked_review_does_not_depend_on_the_current_goal(head_bus, claim_order, goal_action):
-    comms, _, request = head_bus
-    for problem in ('P1', 'P2'):
-        claim_order(problem)
-    todo = comms.goals.todos.get('P2')
+def test_retained_linked_review_does_not_depend_on_the_current_goal(retained_linked_head, goal_action):
+    comms, request, todo, scope = retained_linked_head
     held = todo.held()
-    RecordPullRequest(todo.revision, held.owner_identity,
-                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
-    todo = comms.goals.todos.get(todo.id)
-    scope = OrderHeadReview.for_request((todo,), request,
-        lambda linked: LinkedHeadReview.of(linked, 'Repair the existing owner'))
-    assert isinstance(scope, OrderHeadReview)
     if goal_action is not None:
         comms.goals.update_goal('worker', goal_action)
     before = comms.registry.require('worker').goal
@@ -383,6 +409,62 @@ def test_retained_linked_review_does_not_depend_on_the_current_goal(head_bus, cl
     else:
         assert after == before
         assert comms.goals.waits.read() == waits
+
+
+def test_reborn_holder_gets_no_goal_side_effect_from_its_predecessors_review(retained_linked_head):
+    comms, request, todo, scope = retained_linked_head
+    worker = comms.registry.require('worker')
+    comms.registry.unregister(worker.name)
+    comms.registry.remove(worker.name)
+    comms.registry.declare(Thread('worker', worker.tags, worker.worktree))
+    reborn = comms.registry.require('worker')
+    assert reborn.incarnation != worker.incarnation
+    comms.goals.update_goal('worker', SetGoalAction(text='The reborn owner has unrelated current work'))
+    before = comms.registry.require('worker').goal
+    waits = comms.goals.waits.read()
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    assert comms.registry.require('worker').goal == before
+    assert comms.goals.waits.read() == waits
+    assert comms.goals.todos.get(todo.id).held() == todo.held()
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.previous == todo.held()
+
+
+@pytest.mark.parametrize('violation', ('order', 'revision', 'assignment', 'head'))
+def test_retained_review_still_refuses_stale_todo_or_head_authority(retained_linked_head, violation):
+    comms, request, todo, scope = retained_linked_head
+    if violation == 'order':
+        scope = replace(scope, link=replace(scope.link, order_id=OrderId.mint()))
+    elif violation == 'revision':
+        scope = replace(scope, expected_revision=todo.revision - 1)
+    elif violation == 'assignment':
+        scope = replace(scope, link=replace(scope.link,
+            previous=replace(scope.link.previous, generation=GoalId.mint())))
+    elif violation == 'head':
+        request = replace(request, head='b' * 40)
+    before = comms.registry.require('worker').goal
+    with pytest.raises(ToolRefusedError):
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    assert comms.goals.todos.get(todo.id) == todo
+    assert comms.registry.require('worker').goal == before
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
+
+
+def test_reassigned_order_cannot_be_reviewed_through_its_old_link(
+        retained_linked_head, reviewed_source):
+    from test_review_assignment_lifecycle import declared_successor, release
+
+    comms, request, old, scope = retained_linked_head
+    ctx = order.Commander.read_root(comms.root)
+    released, _ = release(ctx, old)
+    action = declared_successor(ctx, reviewed_source, released)
+    comms.goals.update_goal('outsider', action)
+    current = comms.goals.todos.get(old.id)
+    goal = comms.registry.require('outsider').goal
+    with pytest.raises(ToolRefusedError):
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    assert comms.goals.todos.get(old.id) == current
+    assert comms.registry.require('outsider').goal == goal
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 
 
 def test_qualified_companion_head_uses_its_declared_repository(

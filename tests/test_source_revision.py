@@ -100,11 +100,17 @@ def test_a_replacement_order_carries_the_problem_pull_requests_once(tmp_path):
 def test_qualified_scope_uses_only_its_repository_carrier_and_keeps_the_cut(tmp_path):
     primary = SourceRepository.create(tmp_path / 'primary', RepositoryName.from_wire('example/core'))
     companion = SourceRepository.create(tmp_path / 'companion', RepositoryName.from_wire('example/toad'))
+    companion.git(companion.checkout, 'checkout', 'feature')
+    companion.git(companion.checkout, 'rm', 'branch.py')
+    (companion.checkout / 'companion_only.py').write_text('marker = 2\nclass CompanionOnly:\n    pass\n')
+    companion.publish_change('Distinct companion carrier source', 'companion_only.py')
+    assert primary.branch_commit != companion.branch_commit
     project = replace(primary.project, repos=(primary, companion))
-    location = FileLine.from_wire('example/toad:branch.py:2')
+    location = FileLine.from_wire('example/toad:companion_only.py:2')
+    primary_location = FileLine.from_wire('example/core:branch.py:2')
     declaration = replace(order(primary), owner=location,
         finding=LocatedProblemFinding(location),
-        scope=FixScope(FixShape(parents=(location,), members=())),
+        scope=FixScope(FixShape(parents=(location, primary_location), members=())),
         pull_requests=(primary.link, companion.link))
     action = OrderGoalAction(problem='P1', order=declaration,
         request=OwnerRequestId(OwnerRequestKey.mint()), review_at=RecordedEventTime(1000),
@@ -112,7 +118,7 @@ def test_qualified_scope_uses_only_its_repository_carrier_and_keeps_the_cut(tmp_
     action.require_sendable(project)
     with pytest.raises(MissingSourceLine):
         replace(action, order=replace(declaration, pull_requests=(primary.link,))).require_sendable(project)
-    for bad in ('example/toad:branch.py:1', 'example/toad:absent.py:2'):
+    for bad in ('example/toad:companion_only.py:1', 'example/toad:absent.py:2'):
         with pytest.raises(MissingSourceLine):
             replace(action, order=replace(declaration,
                 scope=FixScope(FixShape(parents=(FileLine.from_wire(bad),), members=())))).require_sendable(project)
@@ -121,7 +127,13 @@ def test_qualified_scope_uses_only_its_repository_carrier_and_keeps_the_cut(tmp_
     roots = OrderRoots(primary.checkout, project)
     revision = declaration.cited_revision
     location.require_class(roots, revision)
-    companion.git(companion.remote, 'update-ref', 'refs/pull/7/head', companion.main_commit)
+    primary_location.require_class(roots, revision)
+    FileLine('branch.py', 2).require_class(roots, revision)
+    with pytest.raises(MissingSourceLine):
+        FileLine.from_wire('example/toad:branch.py:2').require_class(roots, revision)
+    with pytest.raises(MissingSourceLine):
+        FileLine.from_wire('example/core:companion_only.py:2').require_class(roots, revision)
+    companion.git(companion.remote_path, 'update-ref', 'refs/pull/7/head', companion.main_commit)
     location.require_class(roots, revision)
     FileLine.from_wire('example/toad:owner.py:2').require_class(roots, revision)
     with pytest.raises(MissingSourceLine):

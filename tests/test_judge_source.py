@@ -1,15 +1,16 @@
 """Captured replacement data against real local Git cuts; no live tool call is replayed."""
 from dataclasses import replace
+import json
 import time
 
 import pytest
 
-from agent_comms.change_report import PullRequestHeadRevision
-from agent_comms.commander.judge import Edit, Hunk, JudgeVerb
+from agent_comms.commander.judge import Edit, Hunk, JudgeVerb, main
 from agent_comms.errors import MissingSourceLine, TodoError
 from agent_comms.field_codec import RecordProblems, ToolCallId
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import PullRequestLink, RecordPullRequest
+from agent_comms.todos import AcceptedVerdict
+from test_judge_dropped import recorded_edit
 from source_revision_fixture import SourceRepository
 
 pytest_plugins = ('test_held_problem_orders',)
@@ -47,6 +48,39 @@ def admission(ctx, edit, todo=None):
     verb.check_edits(ctx, [(todo, edit)])
 
 
+def test_native_cli_uses_the_whole_write_cut_and_refuses_a_batch_atomically(held_commander):
+    ctx = held_commander
+    local_cut(ctx, 'target_fields.py', TARGET)
+    repo = ctx.repos[0]
+    storage = ctx.comms.registry.storage_rule
+    allocated = storage.order_checkout(storage.roots_of(ctx.comms.registry.require('worker')), 'P1')
+    allocated.parent.mkdir(parents=True, exist_ok=True)
+    SourceRepository.git(repo.checkout, 'worktree', 'add', '--detach', str(allocated), 'HEAD')
+    (allocated / 'target_fields.py').write_text(TARGET + ADDED)
+    (allocated / 'new_file.py').write_text(TARGET)
+    recorded_edit(ctx, ToolCallId('retained-source-cli'), str(allocated / 'target_fields.py'), TARGET + ADDED)
+    recorded_edit(ctx, ToolCallId('introduced-source-cli'), str(allocated / 'new_file.py'), TARGET)
+    edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander)}
+    positive, negative = edits['retained-source-cli'], edits['introduced-source-cli']
+    before = ctx.comms.goals.todos.get('P1')
+    entries = [{'kind': 'ok', 'ids': [f'{edit.id}:{edit.code()}'],
+                'lines': ['class TargetField(ABC):'], 'serves': before.order.instructions(before),
+                'why': 'The captured source and its actual inherited declarations were read together'}
+               for edit in (positive, negative)]
+    batch = ctx.root / 'source-verdict-batch.json'
+    batch.write_text(json.dumps(entries))
+    with pytest.raises(RecordProblems, match='adds forwarders'):
+        main(['batch', str(batch)], ctx)
+    assert ctx.comms.goals.todos.get('P1') == before
+    assert {positive.id, negative.id} <= {edit.id for edit in Edit.unjudged(ctx.comms, ctx.commander)}
+    main(['ok', f'{positive.id}:{positive.code()}', '--line', 'class TargetField(ABC):',
+          '--serves', before.order.instructions(before), '--why', entries[0]['why']], ctx)
+    changed = ctx.comms.goals.todos.get('P1')
+    assert any(verdict.tool_call_id == positive.id
+               for verdict in changed.history.events(changed.id, AcceptedVerdict))
+    assert {edit.id for edit in Edit.unjudged(ctx.comms, ctx.commander)} >= {negative.id}
+
+
 def test_whole_write_uses_exact_git_baseline_not_mutable_file(held_commander, capsys):
     ctx = held_commander
     commit = local_cut(ctx, 'target_fields.py', TARGET)
@@ -72,13 +106,11 @@ def test_real_new_or_changed_forwarder_is_not_retained(held_commander, name, bef
     assert ctx.comms.goals.todos.get('P1') == original
 
 
-def test_missing_foreign_and_stale_source_evidence_refuse_without_mutation(held_commander):
+def test_missing_or_foreign_whole_file_evidence_refuses_without_mutation(held_commander):
     ctx = held_commander
     local_cut(ctx, 'target_fields.py', TARGET)
     original = ctx.comms.goals.todos.get('P1')
-    edit = captured(ctx, 'target_fields.py', 'not the original captured text', TARGET)
-    with pytest.raises(MissingSourceLine, match='source evidence unavailable'):
-        admission(ctx, edit)
+    edit = captured(ctx, 'target_fields.py', '', TARGET + ADDED)
     with pytest.raises(TodoError, match='no checkout of a registered repository'):
         admission(ctx, replace(edit, path=str(ctx.root / 'foreign.py')))
     repo = ctx.repos[0]
@@ -88,26 +120,16 @@ def test_missing_foreign_and_stale_source_evidence_refuse_without_mutation(held_
     assert ctx.comms.goals.todos.get('P1') == original
 
 
-def test_old_text_can_select_its_qualified_local_carrier_without_fetch(held_commander):
+def test_captured_replacements_do_not_need_main_or_unique_occurrence(held_commander):
     ctx = held_commander
     repo = ctx.repos[0]
     local_cut(ctx, 'target_fields.py', 'class MainOnly:\n    pass\n')
-    before = TARGET
-    (repo.checkout / 'target_fields.py').write_text(before)
-    SourceRepository.git(repo.checkout, 'add', '--', 'target_fields.py')
-    SourceRepository.git(repo.checkout, 'commit', '-m', 'Unmerged carrier declaration')
-    commit = SourceRepository.git(repo.checkout, 'rev-parse', 'HEAD').strip()
-    todo = ctx.comms.goals.todos.get('P1')
-    held = todo.held()
-    link = PullRequestLink(repo.github, 7)
-    RecordPullRequest(todo.revision, held.owner_identity, link, held.generation).record(
-        ctx.comms.goals, todo.id)
-    todo = ctx.comms.goals.todos.get(todo.id)
-    carrier = PullRequestHeadRevision(link)
-    SourceRepository.git(repo.checkout, 'update-ref', carrier.reference, commit)
-    edit = captured(ctx, 'target_fields.py', before, before + ADDED)
+    SourceRepository.git(repo.checkout, 'update-ref', '-d', 'refs/remotes/origin/main')
+    # Neither branch-only source nor repeated captured text requires a main preimage.
+    (repo.checkout / 'target_fields.py').write_text(TARGET + TARGET)
+    edit = captured(ctx, 'target_fields.py', TARGET, TARGET + ADDED)
+    original = ctx.comms.goals.todos.get('P1')
     admission(ctx, edit)
-    # The same ref number in an undeclared repository gives no source authority.
-    without = replace(todo, order=replace(todo.order, pull_requests=()))
-    with pytest.raises(MissingSourceLine, match='source evidence unavailable'):
-        admission(ctx, edit, without)
+    admission(ctx, replace(edit, hunks=(Hunk(TARGET, TARGET + ADDED),
+                                      Hunk(TARGET, TARGET + ADDED + '\nextra = 1\n'))))
+    assert ctx.comms.goals.todos.get('P1') == original
