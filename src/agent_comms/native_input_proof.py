@@ -143,20 +143,9 @@ class NativeContextRecord(NativeInputCommit):
         )
 
 
-class NativeInputProof(DurableFile, ReconciledFile, PatternFile, DurableTables):
-    """A retained proof file whose journal declares membership through inheritance."""
-
-    __slots__ = ()
-    filename = "input-proofs/{lookup}/{name}.sqlite"
-
-    @classmethod
-    def table_schema(cls) -> type[TableSchema]:
-        return cls
-
-
 @dataclass(frozen=True, slots=True)
 class NativeContextJournal(
-    GuardedInserts, ImmutableRows, NativeContextRecord, WithoutRowid, NativeInputProof
+    GuardedInserts, ImmutableRows, NativeContextRecord, WithoutRowid, DurableTables
 ):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
@@ -249,6 +238,17 @@ class NativeContextJournal(
         if self.session_id != header.id or self.session_entry_id != entry.id:
             raise NativePiUnavailable("Native Pi proof journal source lineage differs")
         return self.at(session_file, session_entry_start=session_entry_start)
+
+
+class NativeInputProof(DurableFile, ReconciledFile, PatternFile):
+    """The retained proof file names its journal without joining their two families."""
+
+    __slots__ = ()
+    filename = "input-proofs/{lookup}/{name}.sqlite"
+
+    @classmethod
+    def table_schema(cls) -> type[TableSchema]:
+        return NativeContextJournal
 
 
 @dataclass(frozen=True, slots=True)
