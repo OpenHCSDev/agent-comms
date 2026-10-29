@@ -80,10 +80,12 @@ def test_the_commander_session_start_reads_all_package_files(tmp_path, source, c
     transcript.write_text("")
     result = session_start(transcript, source)
     assert result.returncode == 0, result.stderr
-    context = json.loads(result.stdout.splitlines()[0])["hookSpecificOutput"]["additionalContext"]
-    assert len(context) < 10_000
+    context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
     assert context.startswith("Commander: claude-code.")
-    dealt = tuple(Path(line) for line in context.splitlines()[1:])
+    assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
+    assert "FUCK YOUR COMPACTION" in context
+    dealt = tuple(Path(line) for line in transcript.with_suffix(".dealt").read_text().splitlines())
+    assert all(str(path) in context for path in dealt)
     assert dealt == (
         CommanderPackage.voice(),
         CommanderPackage.indictment(),
@@ -319,8 +321,7 @@ def test_the_installed_commands_order_the_reads_once_then_put_slices_inline(
     assert run(None, "SessionStart")
     outputs = [run(None, "PostToolUse") for _ in range(SliceReminder.every)]
     assert outputs[:-1] == [""] * (SliceReminder.every - 1)
-    (document,) = outputs[-1].splitlines()
-    context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
+    context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
     assert context == CommanderReader.slices()[0]
     assert "Read each of these" not in context
 
@@ -347,11 +348,10 @@ def test_a_unit_session_gets_the_fleet_deck_and_no_commander_reminders(
     transcript.write_text("")
     WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), (), tmp_path / "state"))
     run = run_installed(monkeypatch, capsys, transcript)
-    order, owner_words, header = (json.loads(line)["hookSpecificOutput"]["additionalContext"]
-                                  for line in run(None, "SessionStart").splitlines())
-    assert "Read each of these" in order and "Your summary is a paraphrase" in header
-    assert owner_words.startswith("WHAT TRISTAN ACTUALLY SAID LAST")
-    assert "What your units actually hold" not in header
+    context = json.loads(run(None, "SessionStart"))["hookSpecificOutput"]["additionalContext"]
+    assert "Read each of these" in context and "Your summary is a paraphrase" in context
+    assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
+    assert "What your units actually hold" not in context
     outputs = [run(None, "PostToolUse") for _ in range(SliceReminder.every)]
     assert outputs[:-1] == [""] * (SliceReminder.every - 1)
     context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
