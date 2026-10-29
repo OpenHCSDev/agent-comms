@@ -131,13 +131,15 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
+        runtime_repos = tuple(repo for repo in repos
+                              if any(repo.github == record.repository for record in installed.commits))
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
-        for repo in repos:
+        for repo in runtime_repos:
             repo.git(repo.checkout, "fetch", "-q", "origin", "main")
         core = {repo.github: repo for repo in repos}[CorePackage.repository]
         target = core.git(core.checkout, "rev-parse", "origin/main").strip()
-        for repo in repos:
+        for repo in runtime_repos:
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
             recorded = installed.for_repository(repo)
             # Main is in the build exactly when git logs no first-parent commit past it.

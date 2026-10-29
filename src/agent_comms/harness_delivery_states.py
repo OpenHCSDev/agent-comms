@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
+from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .field_codec import TranscriptRecordId
 
@@ -184,7 +185,9 @@ class ReceivingMonitor(PendingMonitor):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
             return ()
         await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
-        return (message.exact_reply_target,)
+        return (CommandTarget.named(message.target).automatic_reply_targets(message.sender)
+                if message.role.response_policy(message).starts_turn_for(message, bridge.binding.bus)
+                else ())
 
 
 @dataclass(frozen=True)

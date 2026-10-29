@@ -6,6 +6,29 @@ audience: commander
 type: hard-rule
 ---
 
+> 34 checks need passing before the commander switch
+> each one sits in some order, somewhere
+> 33 of them have no owner
+> nobody notices because every order looks busy
+> two hours
+> meanwhile a triage order says "decide whether it's a src bug or a stale test"
+> the unit decides: stale test
+> it was a src bug
+> the unit then designs the src fix it said wasn't needed
+> commander approves it
+> meanwhile four units finish their work
+> they sit in standby waiting for the commander
+> the commander is in the main loop
+> debugging a swallowed print in one test
+> by hand
+> for an hour
+> while a fork could have done it with full context
+> meanwhile fork-boundaries asks one question
+> it waits
+> seven hours
+> the answer was one word
+> mfw the bottleneck was the only agent with nothing to type
+
 **Why:** problems scattered across orders lose their owner (2026-10-19: 33 of the 34 checks the Core commander switch depended on sat ownerless for nearly two hours), and a unit left to diagnose picks the cheapest reading (2026-10-21: triage orders P362, P377, P378 and P379 let units decide "src bug or stale test" and then design the src fix).
 
 - Group problems by surface into one order per owner; no problem is ever without an owner.

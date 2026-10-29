@@ -47,11 +47,12 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class AssignmentContextEvidence(DeclaredFamily, affix="ContextEvidence"):
     @classmethod
+    @boundary_decoder
     def from_columns(cls, committed_at_ms: object) -> AssignmentContextEvidence:
-        committed_at_ms = FieldCodec.decode(int | None, committed_at_ms)
+        """SQL NULL is the one foreign fact tested; a present value decodes as its own type."""
         if committed_at_ms is None:
             return NotShownContextEvidence()
-        return ShownContextEvidence(committed_at_ms)
+        return ShownContextEvidence(FieldCodec.decode(int, committed_at_ms))
 
     @abstractmethod
     def progress(self, *, pending_at_ms: int, queued: bool) -> AssignmentProgress: ...
@@ -83,14 +84,16 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
     def from_columns(
         cls, seq: object, message_id: object, received_at_ms: object
     ) -> AssignmentResponse:
-        seq = FieldCodec.decode(int | None, seq)
-        message_id = FieldCodec.decode(MessageId | None, message_id)
-        received_at_ms = FieldCodec.decode(int | None, received_at_ms)
-        if seq is None and message_id is None and received_at_ms is None:
+        """SQL NULL is the one foreign fact tested; present values decode as their own types."""
+        columns = (seq, message_id, received_at_ms)
+        if all(column is None for column in columns):
             return UnansweredResponse()
-        if seq is None or message_id is None or received_at_ms is None:
+        if any(column is None for column in columns):
             raise MalformedRecord("Published response evidence is incomplete")
-        return AnsweredResponse(MessageReference(seq, message_id), received_at_ms)
+        return AnsweredResponse(
+            MessageReference(FieldCodec.decode(int, seq), FieldCodec.decode(MessageId, message_id)),
+            FieldCodec.decode(int, received_at_ms),
+        )
 
     @abstractmethod
     def completed_notification(
@@ -150,7 +153,8 @@ class AssignmentActivityEvidence(TypedRow):
     """Independent context and response facts decoded once from one SQL row."""
 
     triage_inflight: bool
-    current_execution_id: str | None
+    # Whether the recipient has a current execution: SQL answers it, no id is decoded.
+    queued: bool
     context: AssignmentContextEvidence
     response: AssignmentResponse
 
@@ -158,7 +162,7 @@ class AssignmentActivityEvidence(TypedRow):
     def column_projection(cls) -> dict[str, str]:
         return {
             "triage_inflight": "triage_inflight",
-            "current_execution_id": "current_execution_id",
+            "queued": "queued",
             "context_committed_at_ms": "context_committed_at_ms",
             "response_seq": "response_seq",
             "response_message_id": "response_message_id",
@@ -172,7 +176,7 @@ class AssignmentActivityEvidence(TypedRow):
 
         return cls(
             BooleanStorage.from_sql(column("triage_inflight")),
-            FieldCodec.decode(str | None, column("current_execution_id")),
+            BooleanStorage.from_sql(column("queued")),
             AssignmentContextEvidence.from_columns(column("context_committed_at_ms")),
             AssignmentResponse.from_columns(
                 column("response_seq"),
@@ -186,7 +190,7 @@ class AssignmentActivityEvidence(TypedRow):
             self.triage_inflight,
             self.context.progress(
                 pending_at_ms=pending_at_ms,
-                queued=self.current_execution_id is not None,
+                queued=self.queued,
             ),
             self.response,
         )
@@ -309,7 +313,7 @@ class NotificationAssignment(NotificationSource):
                 "AND original.wire_seq=selected.wire_seq AND original.message_id=selected.message_id), "
                 f"context AS MATERIALIZED ({privacy.notification_context_sql(connection)}) "
                 f"SELECT {columns},context.triage_inflight,"
-                "pointer.execution_id AS current_execution_id,context.context_committed_at_ms,"
+                "pointer.execution_id IS NOT NULL AS queued,context.context_committed_at_ms,"
                 "p.seq AS response_seq, p.message_id AS response_message_id, "
                 "p.received_at_ms AS response_received_at_ms "
                 "FROM w JOIN context ON context.assignment_id=w.assignment_id "

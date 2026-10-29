@@ -6,6 +6,26 @@ audience: fleet
 type: feedback
 ---
 
+> NRA finds 40 restated facts
+> fix one
+> rescan to show progress
+> 41
+> the fix moved the finding instead of deleting it
+> count it as progress anyway, the number changed
+> nice
+> rescan after every edit to keep the dashboard fresh
+> 6 minutes a scan
+> nice
+> eight scans, one codemod
+> nice
+> report: "simulated 12 removals"
+> very nice
+> application: blocked
+> score: zero
+> the batch codemod for all 40 was one command
+> it was in the recipe frontier the whole time
+> mfw the scoreboard updated more often than the source
+
 **Why:** Tristan, 2026-10-26: "write as many codemods as possible ... get as much slop out in one scan before the next. thats the game"; "you can start playing the commander game single player". Repeated scans and busy agents consume time without removing an obligation.
 
 - One retained complete scan is the map. Keep its source revision, coverage, findings and available proof objects. Give an incomplete scan its actual missing coverage; do not turn omitted or unresolved cases into zero debt.
@@ -16,8 +36,3 @@ type: feedback
 - Derive progress from NRA's existing report/application owners and Core's existing orders, verdicts and application evidence. Do not add a second writable score ledger, finding roster, cache or service. If an existing boundary cannot carry the evidence, repair that owner before awarding points.
 - Single-player means one agent performs the serial work and reviews its own concrete diff against the same obligations and counterexamples. It does not waive the evidence gates or manufacture another reviewer. Use existing board records for the work; leave the live commander's identity, other units and original inputs alone.
 - Improve NRA when a real move exposes friction: repair the existing owner, delete the obsolete path, codemod the supported work, replay the original case and its counterexamples, then measure the end-to-end work removed. Keep factual greentexts in the work notes: humor must survive the source and the run.
-
-> simulate two removals
-> batch says application blocked
-> zero points
-> spreadsheet speedrun cancelled

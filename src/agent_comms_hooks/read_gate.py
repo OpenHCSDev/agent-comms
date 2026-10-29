@@ -5,9 +5,9 @@ The deal's order to read the parts is text, and text loses to a compaction summa
 holds its own paraphrase of the rules and treats the order as optional. This gate makes the
 order the only path forward. PreToolUse only judges: it refuses any tool but Read while a part
 is unread. PostToolUse, which Claude Code sends only after a tool completes, records a Read that
-covered a whole dealt part; a failed or partial Read leaves the gate closed. Both read two files
-beside the transcript and nothing else, so no tool call pays a registry or bus read. A subagent
-runs on its parent's transcript and is never gated: the parent reads the parts.
+covered a whole dealt part; a failed or partial Read leaves the gate closed. Parent calls read
+only the dealt-part files. A subagent runs on its parent's transcript and is never gated: the
+parent reads the parts, while the subagent reports tool activity through its existing seat.
 """
 
 from __future__ import annotations
@@ -20,7 +20,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord, SubagentId
+from agent_comms.turn_phase import ToolRunningPhase
+from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
+from agent_comms_hooks.forks import SeatedSubagent
 
 
 @dataclass(frozen=True)
@@ -102,13 +104,11 @@ class OtherCall(GatedCall, DefaultGate):
 
 
 @dataclass(frozen=True)
-class SubagentCall(GatedCall):
-    """A subagent's call: its parent reads the parts, so it is never refused or recorded."""
-
-    agent_id: SubagentId
+class SubagentCall(GatedCall, SeatedSubagent):
+    """A subagent bypasses its parent's read gate but reports its own tool activity."""
 
     def judge(self) -> None:
-        return
+        self.enter(ToolRunningPhase(self.tool_name))
 
 
 class ReadGateProgram(ClaudeHookProgram):
