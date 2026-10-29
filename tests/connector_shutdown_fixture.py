@@ -26,13 +26,16 @@ class ShutdownReply(ToolResult):
 class HeldCall:
     directory: Annotated[Path, PathText]
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
+    def wait(self) -> None:
         (self.directory / "entered").touch()
         deadline = time.monotonic() + 20
         while not (self.directory / "release").exists():
             if time.monotonic() >= deadline:
                 raise TimeoutError("Shutdown proof did not release its held tool")
             time.sleep(.01)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
+        self.wait()
         result = self.completed(comms, caller)
         (self.directory / "finished").touch()
         return result

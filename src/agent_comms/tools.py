@@ -521,7 +521,7 @@ class CommsGoalTool(ThreadToolRequest):
     claims: Annotated[
         tuple[ProgressClaim, ...],
         *tool_field(
-            "Merged, installed or working claims, each with the artifact Core verifies; "
+            "Typed evidence claims, each with the artifact Core verifies; "
             "a completed report needs at least one"
         ),
     ] = ()

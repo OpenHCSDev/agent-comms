@@ -9,7 +9,7 @@ import pytest
 
 import agent_comms
 from agent_comms.coordination_errors import CommandFailure
-from agent_comms.repo import GitCommandError
+from agent_comms.repo import FailedGitCommand
 
 
 def members(family: type) -> set[type]:
@@ -38,6 +38,6 @@ def test_each_member_unpickles_with_its_message_state_and_cause(member) -> None:
 
 def test_a_raised_git_failure_keeps_its_git_message() -> None:
     run = subprocess.CompletedProcess(("git",), 128, b"", b"fatal: bad object\n")
-    copy = pickle.loads(pickle.dumps(GitCommandError("/repo", run)))
+    copy = pickle.loads(pickle.dumps(FailedGitCommand("/repo", run)))
     assert str(copy) == "Git in /repo: fatal: bad object"
     assert (copy.returncode, copy.stderr) == (128, "fatal: bad object\n")

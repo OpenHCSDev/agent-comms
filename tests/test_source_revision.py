@@ -75,7 +75,7 @@ def test_main_revision_refuses_branch_lines_and_ignores_dirty_disk(tmp_path):
         with pytest.raises(MissingSourceLine, match='does not exist'):
             missing.require_exists(source.roots, revision)
     # All citations in one validation share the fetched commit, not a moving ref.
-    source.git(source.remote, 'update-ref', 'refs/heads/main', source.branch_commit)
+    source.git(source.remote_path, 'update-ref', 'refs/heads/main', source.branch_commit)
     with pytest.raises(MissingSourceLine):
         FileLine('owner.py', 4).require_exists(source.roots, revision)
     FileLine('owner.py', 4).require_class(source.roots, MainRevision())

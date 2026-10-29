@@ -35,6 +35,7 @@ from contextlib import (
     nullcontext,
     suppress,
 )
+from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -1673,6 +1674,31 @@ class DroppableRead[Result](Future[Result], threading.Thread):
     async def answer(self) -> Result:
         self.start()
         return await asyncio.wrap_future(self)
+
+
+class AsyncWork:
+    """Accepted work finishes before its caller releases the operation's resources."""
+
+    @classmethod
+    async def run_async[Result](cls, operation: Callable[[], Result]) -> Result:
+        return await join_retirement(asyncio.create_task(asyncio.to_thread(operation)))
+
+    @classmethod
+    def cancel_on_shutdown[Result](cls, pending: asyncio.Future[Result]) -> None:
+        """A mutation must finish, even if its worker has not started yet."""
+
+
+class ReadWork(AsyncWork):
+    """Declared read-only work can leave with its process without joining its thread."""
+
+    @classmethod
+    async def run_async[Result](cls, operation: Callable[[], Result]) -> Result:
+        context = copy_context()
+        return await DroppableRead(lambda: context.run(operation)).answer()
+
+    @classmethod
+    def cancel_on_shutdown[Result](cls, pending: asyncio.Future[Result]) -> None:
+        pending.cancel()
 
 
 async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:

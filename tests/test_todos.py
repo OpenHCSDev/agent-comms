@@ -7,6 +7,7 @@ from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 
 import argparse
+import asyncio
 import json
 import os
 import shlex
@@ -706,7 +707,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             # Run the standalone watcher while the released checkout is still pending.
             for watch in (UnownedOrderWatch(), CommanderHeartbeat()):
                 start = calls.stat().st_size
-                watch.watch_pass(lambda: nullcontext(copied))
+                asyncio.run(watch.run(lambda: nullcontext(copied)))
                 readings = calls.read_text()[start:].splitlines()
                 observed.extend(readings)
             application = copied.goals.todos.get(original.id)
@@ -726,28 +727,26 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
 
 
 def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
-    from agent_comms.commander.standing import ReassignedWheelSpin
+    from agent_comms.commander.standing import ReassignedWheelSpin, UnownedWheelSpin
     from agent_comms.goals import GoalChangedError, NoGoal
 
     with LaunchRoot.from_path(checkout_bus.root).selected():
-        watch = UnownedOrderWatch()
-        observed = watch.observe(checkout_bus)
-        item, = observed
-        assert isinstance(item.rule, ReassignedWheelSpin)
-        selected = item.rule.dispatch.unit
+        rule, = UnownedWheelSpin.violations(checkout_bus, 'lead')
+        assert isinstance(rule, ReassignedWheelSpin)
+        selected = rule.dispatch.unit
         assert selected.goal == NoGoal()
         assert FieldCodec.decode(
-            type(item.rule.dispatch.action), FieldCodec.encode(item.rule.dispatch.action)
-        ) == item.rule.dispatch.action
+            type(rule.dispatch.action), FieldCodec.encode(rule.dispatch.action)
+        ) == rule.dispatch.action
         changed = checkout_bus.goals.update_goal(selected.name, SetGoalAction(
             text="New independent work after the idle observation"))
-        before = checkout_bus.goals.todos.get(item.rule.todo.id)
-        rejected = StandingRule.enforce_all(checkout_bus, item.commander.name, (item.rule,))
+        before = checkout_bus.goals.todos.get(rule.todo.id)
+        rejected = StandingRule.enforce_all(checkout_bus, 'lead', (rule,))
         assert checkout_bus.registry.require(selected.name).goal == changed
         assert checkout_bus.goals.todos.get(before.id) == before
-        assert isinstance(rejected[item.rule], GoalChangedError)
-        assert rejected[item.rule].thread.name == selected.name
-        assert rejected[item.rule].expected == selected.goal.captured
+        assert isinstance(rejected[rule], GoalChangedError)
+        assert rejected[rule].thread.name == selected.name
+        assert rejected[rule].expected == selected.goal.captured
 
 
 @pytest.mark.parametrize("number", (0, -1))

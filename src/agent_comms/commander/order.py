@@ -72,7 +72,7 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.read_basis import AllOutcomes
 from agent_comms.presentation import MessageNotification
@@ -386,7 +386,8 @@ class CommanderContext(BaseModel):
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return PlanReading(todos, MainTree.of(repository))
+        return PlanReadings().prepare_reading(repository, todos, tuple(
+            phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,

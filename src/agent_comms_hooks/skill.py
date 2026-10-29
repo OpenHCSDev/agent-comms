@@ -194,12 +194,6 @@ class DealtDeck(ClaudeTranscriptHook):
     def deck(self, reader: DeckReader) -> Path:
         return Path(self.transcript_path).with_suffix(reader.deck_suffix)
 
-    @property
-    def calls(self) -> Path:
-        """One byte per tool call since the deck was dealt. An append is atomic, so tool
-        calls that run in parallel each count once."""
-        return Path(self.transcript_path).with_suffix(".calls")
-
 
 @dataclass(frozen=True)
 class DeckStart(DealtDeck):
@@ -309,8 +303,7 @@ class SkillText(ClaudeHookProgram):
 
 def main() -> None:
     start = DeckStart.read()
-    for text in start.take():
-        start.warn(text)
+    start.warn(*start.take())
 
 
 if __name__ == "__main__":

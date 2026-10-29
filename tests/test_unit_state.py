@@ -1,7 +1,9 @@
 """Unit cards from real records, with unread failures isolated to their unit."""
 
+import asyncio
 import json
 import os
+from contextlib import nullcontext
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -10,23 +12,24 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.commander_hud import CommanderFrame
+from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, observe_commander
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import ToolCallId
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.field_codec import OrderId, ToolCallId
+from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot
-from agent_comms.message_page import MessagePageRequest
 from agent_comms.order_runs import ApplicationOrderRun
-from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
-from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
+from agent_comms.task_attachments.commander_pings import CommanderUpdate, UnitPing
+from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead, UnreadProgress
+from agent_comms.heartbeat_frame import CommanderInputs
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import (
@@ -43,6 +46,8 @@ from agent_comms.ui_model.unit_state import (
     UnitState,
     Unreadable,
 )
+from agent_comms.work_branches import WorkBranchError
+from source_revision_fixture import SourceRepository
 from test_holder_standing_rules import blocked_holder, publish, state_cards
 from agent_comms.thread_execution import CommanderForkExecution
 
@@ -191,7 +196,7 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
         states = UnitState.current(
-            comms, "lead", HeartbeatFrame.capture(comms, "lead", ProgressRead()))
+            comms, "lead", capture_frame(comms, "lead", ProgressRead()))
         (state,) = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation
@@ -232,7 +237,7 @@ def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
         (state,) = (
             state
             for state in UnitState.current(
-                held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead())
+                held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead())
             )
             if state.unit.name == "worker"
         )
@@ -257,7 +262,7 @@ def test_a_stopped_child_holding_no_order_is_no_unit(held_bus):
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
         states = UnitState.current(
-            held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead()))
+            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
     assert child.incarnation not in {state.unit for state in states}
 
 
@@ -265,7 +270,7 @@ def test_commander_fork_gets_no_unit_card(held_bus):
     fork = held_bus.registry.register_child("judge-fork", "lead", CommanderForkExecution, held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
         states = UnitState.current(
-            held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead()))
+            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
     assert fork.incarnation not in {state.unit for state in states}
 
 
@@ -281,7 +286,7 @@ def test_only_the_same_call_failing_twice_is_spinning(held_bus, errors, paths, s
     with LaunchRoot.from_path(held_bus.root).selected():
         recorded_turn(held_bus, errors, paths)
         states = UnitState.current(
-            held_bus, "lead", HeartbeatFrame.capture(held_bus, "lead", ProgressRead()))
+            held_bus, "lead", capture_frame(held_bus, "lead", ProgressRead()))
         (state,) = (state for state in states if state.unit.name == "worker")
         assert isinstance(state, Spinning) is spinning
 
@@ -299,6 +304,33 @@ def test_malformed_native_source_is_unreadable_not_idle(held_bus):
         assert "timestamp" in state.reason
 
 
+def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_card(
+    held_bus, tmp_path, installed_runtime,
+):
+    todo = held_bus.goals.todos.get("P1")
+    directory = todo.order.checked().check.directory
+    branch = Repo.git(directory, "branch", "--show-current").strip()
+    head = Repo.git(directory, "rev-parse", "HEAD").strip()
+    missing = tmp_path / "unavailable-remote"
+    Repo.git(directory, "remote", "add", "publication", str(missing))
+    Repo.git(directory, "update-ref", "refs/remotes/publication/main", head)
+    Repo.git(directory, "config", f"branch.{branch}.remote", "publication")
+    Repo.git(directory, "config", f"branch.{branch}.merge", "refs/heads/main")
+    plans = CommanderHeartbeat()
+    with LaunchRoot.from_path(held_bus.root).selected():
+        prepared = CommanderInputs.prepare(held_bus, "lead", ProgressRead(), plans)
+        progress = prepared.pulls.progress((todo,), held_bus.registry)[todo.id]
+        assert isinstance(progress, UnreadProgress)
+        assert str(directory) in progress.reason and str(missing) in progress.reason
+        observed = CommanderObservation.read(
+            held_bus, held_bus.registry.require("lead"), prepared, plans=plans)
+    (unread,) = (state for state in observed.states if state.unit.name == todo.held().owner)
+    assert isinstance(unread, Unreadable)
+    assert progress.reason == unread.reason
+    assert unread.readable_units() == ()
+    assert any(state.unit.name == "outsider" for state in observed.states)
+
+
 @pytest.mark.parametrize(
     "primary,broken_metadata",
     ((False, True), (True, True), (False, False)),
@@ -307,32 +339,51 @@ def test_malformed_native_source_is_unreadable_not_idle(held_bus):
 def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
     held_bus, tmp_path, primary, broken_metadata, installed_runtime
 ):
-    if primary:
-        checkout = held_bus.goals.todos.get("P1").order.checked().check.directory
-        (checkout / ".git").rename(checkout / "saved-git")
-        (checkout / ".git").write_text("gitdir: ./removed-git-directory\n")
-    else:
-        unread_checkout(held_bus, tmp_path)
-    if not broken_metadata:
-        (held_bus.registry.require("worker").project_path / ".git").unlink()
-    lead = held_bus.registry.require("lead")
-    held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
-    heartbeat = CommanderHeartbeat()
+    lead = replace(held_bus.registry.require("lead"),
+                   process_identity=ProcessIdentity.capture(os.getpid()))
+    held_bus.registry.register(lead)
+    primary_order = held_bus.goals.todos.get("P1")
+    healthy_source = SourceRepository.create(tmp_path / "healthy-source", primary_order.repo)
+    outsider = replace(held_bus.registry.require("outsider"), worktree=Checkout(healthy_source.checkout))
+    held_bus.registry.register(outsider)
+    checked = primary_order.order.checked()
+    held_bus.goals.update_goal("outsider", CreateProblemGoalAction(
+        problem="P3", commander=lead.name, request=primary_order.request.require(),
+        assigner=lead.incarnation, repo=primary_order.repo, text="Independent healthy work",
+        review_at=RecordedEventTime(time.time() + 3600),
+        order=replace(checked, id=OrderId.mint(),
+                      check=replace(checked.check, directory=outsider.project_path)),
+    ))
     with LaunchRoot.from_path(held_bus.root).selected():
-        observed = heartbeat.observe(held_bus)
-        cards = observed[0].states
-        assert isinstance(cards[0], Unreadable)
+        baseline = observe_commander(held_bus, lead, ProgressRead())
+        healthy, = (card for card in baseline.states if card.unit == outsider.incarnation)
+        if primary:
+            checkout = checked.check.directory
+            (checkout / ".git").rename(checkout / "saved-git")
+            (checkout / ".git").write_text("gitdir: ./removed-git-directory\n")
+        else:
+            unread_checkout(held_bus, tmp_path)
+        if not broken_metadata:
+            (held_bus.registry.require("worker").project_path / ".git").unlink()
+        observed = observe_commander(held_bus, lead, ProgressRead())
+        cards = observed.states
+        worker, = (card for card in cards if card.unit.name == "worker")
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
-        heartbeat.pass_body(held_bus, observed)
-        assert CommanderFrame.read_all(held_bus.root) == (observed[0].hud,)
-        page = MessagePageRequest(
-            DMDisplayScope.capture(
-                heartbeat.sender,
-                "lead",
-                held_bus.registry.snapshot(),
-            )
-        ).read_opened(held_bus.bus.bus)
-        message = next(row for row in page.messages if row.sender == heartbeat.sender)
-        assert all(card.line() in message.body for card in cards)
-        assert message.body.index(cards[0].line()) < message.body.index(cards[-1].line())
-        print(message.body)
+        assert next(card for card in cards if card.unit == outsider.incarnation) == healthy
+        assert healthy.orders == ("P3",)
+        if broken_metadata:
+            assert isinstance(worker, Unreadable)
+            with pytest.raises((GitCommandError, WorkBranchError)) as source_failure:
+                worker.source.require_read()
+            assert worker.reason == str(source_failure.value)
+        else:
+            assert not isinstance(worker, Unreadable)
+        expected = CommanderHud.of(held_bus, lead.name, observed.frame, cards)
+        asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(held_bus)))
+        published, = CommanderFrame.read_all(held_bus.root)
+        assert published == expected
+        assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)
+        packets = CommanderUpdate.latest(held_bus, lead.incarnation)
+        assert tuple(ping for packet in packets for ping in packet.handled
+                     if isinstance(ping, UnitPing)) == tuple(
+            UnitPing.capture(card) for card in cards if card.attention())
