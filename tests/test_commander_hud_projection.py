@@ -23,6 +23,8 @@ def test_commander_hud_projection_has_one_progress_answer() -> None:
     assert unit.work == "P927 pending"
     assert unit.change == progress.line
     assert unit.next == Moving.action
-    assert unit.brief().count("#3572") == 1
+    assert unit.brief() == (
+        "worker | moving | P927 pending | PR #3572 open at 87dabd883 | let it continue"
+    )
     assert tuple(plan.name for plan in FieldCodec.field_plans(type(unit.unit))
                  if DisclosureIdentity.read(plan.annotation, False)) == ("name",)

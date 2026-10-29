@@ -7,7 +7,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated
 
 from aiohttp import ClientError
 from pydantic import JsonValue
@@ -19,9 +19,10 @@ from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
 from agent_comms.coordinator import Coordination
+from agent_comms.disclosure_text import DisclosureText
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
-    DisclosureIdentity, FieldCodec, HudExclude, OrderId, WireTransient, projected,
+    DisclosureIdentity, HudExclude, OrderId, WireTransient, projected,
 )
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
@@ -108,9 +109,7 @@ class CommanderUnit(HudRow):
 
     def brief(self) -> str:
         """The same declared HUD view supplies the heartbeat's text scan line."""
-        return " | ".join(str(value) for value in cast(
-            dict[str, JsonValue], FieldCodec.project(self, "hud"),
-        ).values())
+        return " | ".join(DisclosureText.view(self, "hud"))
 
     def needs_hand(self) -> bool:
         """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
