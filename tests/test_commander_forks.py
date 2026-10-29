@@ -53,7 +53,8 @@ from agent_comms.slop import DeclarationDerivation, ExistingLine, Slop
 from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import ArchivedThreadStatus
+from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.thread_text import ForkedParent, SubagentRole
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
@@ -74,7 +75,7 @@ from agent_comms.todos import (
     Todo,
     UnlocatedProblemFinding,
 )
-from agent_comms.tool_caller import CommanderForkCaller
+from agent_comms.tool_caller import CommanderForkCaller, SubagentCaller
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -82,6 +83,7 @@ from agent_comms.typed_table import HeldBusFile
 from agent_comms_hooks import forks
 from cli_command import commander
 from source_revision_fixture import SourceRepository
+from agent_comms.thread_execution import CommanderForkExecution
 
 
 @pytest.fixture
@@ -926,7 +928,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
         order=replace(order, id=OrderId.mint()),
         request=store.get("P40").request.require(),
     )
-    comms.registry.register_commander_child("fork-one", "lead", comms.goals)
+    comms.registry.register_child("fork-one", "lead", CommanderForkExecution, comms.goals)
     actor = CommanderForkCaller("fork-one").identity(comms)
     current = store.get("P40")
     verdict = SupersededVerdict(
@@ -958,9 +960,10 @@ def subagent_hook(fork_bus, tmp_path, monkeypatch, capsys):
     transcript = tmp_path / "commander.jsonl"
     WatchClaim("commander").enrol(WatchRecord("lead", str(comms.root), (), tmp_path / "state"))
 
-    def run(program, event):
+    def run(program, event, **stop):
         record = {"session_id": "commander", "hook_event_name": event,
-                  "transcript_path": str(transcript), "agent_id": "a1"}
+                  "transcript_path": str(transcript), "agent_id": "a1",
+                  "agent_type": "general-purpose", **stop}
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
         program()
         return capsys.readouterr().out
@@ -978,7 +981,7 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
-    assert run(forks.stopped, "SubagentStop") == ""
+    assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
     run(forks.started, "SubagentStart")
     assert comms.registry.require("claude-a1").incarnation == fork.incarnation
     assert comms.registry.status("claude-a1").receiving
@@ -988,25 +991,107 @@ def test_a_subagent_stop_is_refused_until_its_fork_records_then_archives_it(
         subagent_hook, tmp_path):
     comms, run = subagent_hook
     run(forks.started, "SubagentStart")
-    assert json.loads(run(forks.stopped, "SubagentStop"))["decision"] == "block"
+    assert json.loads(run(forks.stopped, "SubagentStop", stop_hook_active=False))["decision"] == "block"
     assert comms.registry.status("claude-a1").receiving
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
-    assert run(forks.stopped, "SubagentStop") == ""
+    assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
     assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
 
 
-def test_a_subagent_of_a_session_that_is_not_commander_is_not_its_fork(fork_bus, tmp_path, monkeypatch, capsys):
-    """A Claude session bound to a unit, or to nothing, never conscripts its subagents."""
+def test_a_sent_back_stop_ends_a_fork_that_recorded_nothing_and_reports_it_missing(subagent_hook):
+    """Claude Code ends the fork on the stop after a send-back; it must not stay subscribed."""
+    comms, run = subagent_hook
+    run(forks.started, "SubagentStart")
+    assert json.loads(run(forks.stopped, "SubagentStop", stop_hook_active=False))["decision"] == "block"
+    assert run(forks.stopped, "SubagentStop", stop_hook_active=True) == ""
+    assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
+    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
+    assert "stopped without recording what it found" in report.body
+
+
+def test_a_commander_session_end_ends_each_subagent_core_still_has(subagent_hook, tmp_path):
+    """A subagent killed without a SubagentStop ends with its session, once."""
+    comms, run = subagent_hook
+    run(forks.started, "SubagentStart")
+    subagents = tmp_path / "commander" / "subagents"
+    subagents.mkdir(parents=True)
+    for agent in ("a1", "never-joined"):
+        (subagents / f"agent-{agent}.jsonl").write_text("")
+    session = forks.SessionSubagents.decode({
+        "session_id": "commander", "hook_event_name": "SessionEnd",
+        "transcript_path": str(tmp_path / "commander.jsonl")})
+    for _ in range(2):
+        assert session.end_subagents() == ()
+        assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
+    assert "claude-never-joined" not in comms.registry
+    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
+    assert "its work is missing" in report.body
+
+
+def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_none(
+        fork_bus, tmp_path, monkeypatch, capsys):
+    """A subagent of a bound session that is not commander sits in the first vacant slot of
+    its role under that session's thread, never a commander fork; a slot it leaves keeps its
+    thread and history for the next occupant. A session bound to nothing has no bus to join."""
     comms = fork_bus[0]
+    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
     transcript = tmp_path / "unit.jsonl"
-    for bound in ((), (WatchRecord("worker", str(comms.root), (), tmp_path / "state"),)):
-        for record in bound:
-            WatchClaim("unit").enrol(record)
-        event = {"session_id": "unit", "hook_event_name": "SubagentStart",
-                 "transcript_path": str(transcript), "agent_id": "a2"}
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-        forks.started()
-        assert capsys.readouterr().out == ""
-        assert "claude-a2" not in comms.registry
+
+    def run(program, event, agent_id):
+        record = {"session_id": "unit", "hook_event_name": event, "transcript_path": str(transcript),
+                  "agent_id": agent_id, "agent_type": "Explore", "stop_hook_active": False}
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
+        program()
+        return capsys.readouterr().out
+
+    assert run(forks.started, "SubagentStart", "a2") == ""
+    assert not comms.registry.snapshot().children("worker")
+    WatchClaim("unit").enrol(WatchRecord("worker", str(comms.root), (), tmp_path / "state"))
+
+    told = json.loads(run(forks.started, "SubagentStart", "a2"))["hookSpecificOutput"]
+    assert "slot worker-explore" in told["additionalContext"]
+    slot = comms.registry.require("worker-explore")
+    assert slot.parent.named("worker") and comms.registry.status("worker-explore").receiving
+    slot.execution.require_subagent()
+    with pytest.raises(RelationViolationError, match="not a declared commander fork"):
+        slot.execution.require_commander_fork()
+    assert "claude-a2" not in comms.registry
+    run(forks.started, "SubagentStart", "a3")
+    assert comms.registry.require("worker-explore-2").parent.named("worker")
+
+    assert run(forks.stopped, "SubagentStop", "a2") == ""
+    assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
+    assert comms.registry.status("worker-explore-2").receiving
+    run(forks.started, "SubagentStart", "a4")
+    assert comms.registry.require("worker-explore").incarnation == slot.incarnation
+    assert comms.registry.status("worker-explore").receiving
+
+    session = forks.SessionSubagents.decode({
+        "session_id": "unit", "hook_event_name": "SessionEnd", "transcript_path": str(transcript)})
+    assert session.end_subagents() == ()  # a3 never stopped: its session's end vacates it
+    assert isinstance(comms.registry.status("worker-explore-2"), ArchivedThreadStatus)
+    assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
+    assert not any(session.seats.iterdir())
+
+
+def test_a_subagent_role_names_its_slots_in_thread_name_characters():
+    assert SubagentRole("Explore").slug == "explore"
+    assert SubagentRole("plugin:Code Review").slug == "plugin-code-review"
+    names = SubagentRole("Explore").slot_names("worker")
+    assert [next(names) for _ in range(3)] == ["worker-explore", "worker-explore-2", "worker-explore-3"]
+    with pytest.raises(ValueError, match="no letters or digits"):
+        SubagentRole("::")
+
+
+def test_only_a_subagent_slot_is_retired_and_a_stopped_stranger_is_no_slot(fork_bus):
+    """Retiring archives only a declared child; a stopped thread that happens to carry a
+    role slot's name is refused, not adopted."""
+    comms = fork_bus[0]
+    with pytest.raises(RelationViolationError, match="not a declared subagent"):
+        SubagentCaller("worker").retire(comms)
+    comms.registry.declare(Thread("other-explore", frozenset(), Checkout(Path("/tmp")),
+                                  parent=ForkedParent("other")), status=StoppedThreadStatus())
+    with pytest.raises(RelationViolationError, match="not a declared subagent"):
+        comms.registry.claim_slot("other", SubagentRole("Explore"), comms.goals)

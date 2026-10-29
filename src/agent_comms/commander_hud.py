@@ -20,7 +20,7 @@ from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import OrderId, WireTransient, projected
+from agent_comms.field_codec import DisclosureIdentity, OrderId, WireTransient, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 class CommanderOrder:
     """Small order card; identifiers/text come from Todo, review rounds from TodoStore."""
 
-    problem: str
+    problem: Annotated[str, DisclosureIdentity()]
     text: str
     order: OrderId
     state: str
@@ -72,7 +72,7 @@ class CommanderUnit(HudRow):
     view tells moving from circling without deriving either itself.
     """
 
-    unit: ThreadIncarnation
+    unit: Annotated[ThreadIncarnation, DisclosureIdentity()]
     state: type[UnitState]
     clock: UnitClock
     orders: tuple[CommanderOrder, ...]
@@ -92,13 +92,18 @@ class CommanderUnit(HudRow):
             f"draft={','.join(str(pr.number) for pr in self.draft_prs)}"
         )
 
+    def brief_parts(self) -> tuple[str, ...]:
+        """The scan line's coherent pieces: the unit, each held order, its pull requests and
+        next action. The view owns wrapping, including sections wider than its viewport."""
+        orders = tuple(
+            f"{order.problem} {order.state} · {order.progress.line}" for order in self.orders
+        ) or ("no held orders",)
+        pulls = ", ".join(f"#{pr.number}@{pr.head[:9]}" for pr in (*self.ready_prs, *self.draft_prs))
+        return (self.unit.name, *orders, pulls or "no PR", f"→ {self.state.action}")
+
     def brief(self) -> str:
         """A dense scan line; expansion reads the original order and activity owners."""
-        orders = "; ".join(
-            f"{order.problem} {order.state} · {order.progress.line}" for order in self.orders
-        ) or "no held orders"
-        pulls = ", ".join(f"#{pr.number}@{pr.head[:9]}" for pr in (*self.ready_prs, *self.draft_prs))
-        return f"{self.unit.name} | {orders} | {pulls or 'no PR'} | → {self.state.action}"
+        return " | ".join(self.brief_parts())
 
     def needs_hand(self) -> bool:
         """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
@@ -135,7 +140,7 @@ class CommanderUnit(HudRow):
 class CommanderOrderDetail:
     """The selected card beside its original instructions, story and captured Git points."""
 
-    card: CommanderOrder
+    card: Annotated[CommanderOrder, DisclosureIdentity()]
     instructions: tuple[str, ...]
     story: OrderStory
     commits: tuple[ProgressPoint, ...]
@@ -145,7 +150,7 @@ class CommanderOrderDetail:
 class CommanderUnitDetail(ToolResult):
     """A lazy disclosure; activity uses the existing bounded turn wire projection."""
 
-    unit: CommanderUnit
+    unit: Annotated[CommanderUnit, DisclosureIdentity()]
     orders: tuple[CommanderOrderDetail, ...]
     activity: JsonValue
 
@@ -345,13 +350,12 @@ class CommanderHud(ToolResult):
         )
 
     def brief(self) -> tuple[str, ...]:
-        """Heartbeat telemetry from this same frame, with completed plans folded together."""
-        finished = tuple(phase for phase in self.phases if phase.finished)
+        """Routine heartbeat telemetry; the full board retains completed plans."""
         plans = "; ".join(
-            f"{plan.declared_name} {sum(phase.phase.plan is plan for phase in finished)}/"
-            f"{sum(phase.phase.plan is plan for phase in self.phases)}"
+            f"{plan.declared_name} {sum(phase.finished for phase in phases)}/{len(phases)}"
             for plan in Plan.members_with(Plan)
-            if any(phase.phase.plan is plan for phase in self.phases)
+            for phases in (tuple(phase for phase in self.phases if phase.phase.plan is plan),)
+            if any(not phase.finished for phase in phases)
         )
         visible = tuple(unit for unit in self.units if unit.orders or unit.needs_hand())
         quiet = tuple(unit for unit in self.units if unit not in visible)

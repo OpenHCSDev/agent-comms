@@ -48,6 +48,7 @@ from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.threads import Thread
 from test_holder_standing_rules import state_cards
 from test_unit_state import recorded_turn
+from agent_comms.thread_execution import CommanderForkExecution
 
 pytest_plugins = ("test_holder_standing_rules",)
 
@@ -411,7 +412,7 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_p
 
 def test_a_registered_commander_fork_is_on_the_hud(notification_bus):
     comms = notification_bus
-    fork = comms.registry.register_commander_child("judge-fork", "lead", comms.goals)
+    fork = comms.registry.register_child("judge-fork", "lead", CommanderForkExecution, comms.goals)
     assert fork.incarnation in lead_hud(comms).forks
 
 

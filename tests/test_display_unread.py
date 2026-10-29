@@ -67,6 +67,46 @@ def test_unread_advances_over_new_rows_and_recounts_after_a_read_mark(bus):
         assert expanded.counts == {"#team": 253}
 
 
+def test_a_registry_revision_that_changes_no_query_counts_only_appended_rows(bus):
+    """The registry changes on every fleet turn; a count that read none of what changed
+    must not rescan history, and a read mark on one channel recounts only that channel."""
+    Bus.install(bus.path, history=(
+        PublicRecord.from_message(Message("author", "#team", f"backlog {seq}", InfoKind, seq=seq))
+        for seq in range(1, 201)
+    ))
+    scopes = (ChannelDisplayScope("#team", frozenset({"#team"})),
+              ChannelDisplayScope("#other", frozenset({"#other"})))
+    selection = DisplayUnreadSelection(
+        ReadCursor(), scopes, ("viewer",), RegistryProvenance(threads={}, aliases={}))
+    with bus.reading() as source:
+        first = DisplayUnread().advanced(source, selection)
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "#team", "new", InfoKind, seq=seq)))
+    class RevisedRegistry(RegistryProvenance):
+        """Another registry revision that resolves every name the same way."""
+
+    revised = replace(selection, registry=RevisedRegistry(threads={}, aliases={}))
+    assert revised != selection
+    queries = []
+    with bus.reading() as source, source.observing() as db:
+        db.set_trace_callback(queries.append)
+        second = first.advanced(source, revised)
+        assert second.counts == {"#team": 201, "#other": 0}
+        counted = [query for query in queries if query.startswith("WITH read_cursors")]
+        assert len(counted) == 2 and all(f"seq > {first.through}" in query for query in counted)
+    marked = replace(revised, seen=revised.seen.add((
+        DisplayedConversation(ChannelConversation("#team"), (), prefix_through=150),
+    )))
+    queries.clear()
+    with bus.reading() as source, source.observing() as db:
+        db.set_trace_callback(queries.append)
+        third = second.advanced(source, marked)
+        recounted = [query for query in queries if query.startswith("WITH read_cursors")]
+        assert len(recounted) == 1
+        assert third.counts == {"#team": 51, "#other": 0}
+        assert third == source.display_unread(marked, through=source.revision())
+
+
 def test_status_row_equality_ignores_an_older_notification_outside_shown_lines():
     lookup = ThreadLookup.mint()
     older = MessageNotification(
