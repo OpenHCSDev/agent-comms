@@ -63,10 +63,10 @@ class GitCommandError(RuntimeError, CommandFailure):
 
 
 class UnavailableCommitError(RuntimeError, CommandFailure):
-    """Required comparison objects are unavailable, not a negative ancestry answer."""
+    """Required Git objects are unavailable, not a negative ancestry or absent-path answer."""
 
     def __init__(self, checkout: Path | str, objects: tuple[str, ...], detail: str = ""):
-        super().__init__(f"Git in {checkout}: required commit objects unavailable: "
+        super().__init__(f"Git in {checkout}: required Git objects unavailable: "
                          f"{', '.join(objects)}" + (f"; {detail}" if detail else ""))
 
 
@@ -84,6 +84,11 @@ class Repo(GitLaunch, BaseModel, WireValue):
         ]
     ]
     source: str = "src"
+
+    @classmethod
+    def command(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
+        """Only explicit acquisition may contact a promisor remote for missing objects."""
+        return super().command(checkout, "--no-lazy-fetch", *args)
 
     def to_wire(self) -> dict[str, object]:
         return self.model_dump(mode="json")
@@ -186,6 +191,35 @@ class Repo(GitLaunch, BaseModel, WireValue):
 
     def has_commit(self, sha: str) -> bool:
         return self.answers(self.checkout, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}")
+
+    @classmethod
+    def tree_objects(cls, checkout: Path | str, revision: str, paths: tuple[str, ...],
+                     *options: str) -> dict[str, str]:
+        """Decode selected tree entries without requiring their contents to be local."""
+        entries = cls.git(checkout, "ls-tree", "-z", *options, revision, "--", *paths)
+        return {path: metadata.rsplit(" ", 1)[1]
+                for metadata, path in (entry.split("\t", 1)
+                                       for entry in entries.split("\0") if entry)}
+
+    @classmethod
+    def blobs(cls, checkout: Path | str, *objects: str, timeout: float = 60) -> tuple[bytes, ...]:
+        """Decode required contents once; an unavailable blob is never an absent path."""
+        if not objects:
+            return ()
+        batch = cls.git_bytes(checkout, "cat-file", "--batch", "-Z", timeout=timeout,
+                              input="".join(f"{name}\0" for name in objects))
+        contents: list[bytes] = []
+        offset = 0
+        for name in objects:
+            end = batch.index(b"\0", offset)
+            header = batch[offset:end]
+            offset = end + 1
+            if header.endswith(b" missing"):
+                raise UnavailableCommitError(checkout, (name,), "required blob unavailable")
+            size = int(header.rsplit(b" ", 1)[1])
+            contents.append(batch[offset:offset + size])
+            offset += size + 1
+        return tuple(contents)
 
     @classmethod
     def git_bytes(cls, checkout: Path | str, *args: str, timeout: float = 60,

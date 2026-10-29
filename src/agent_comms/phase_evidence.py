@@ -53,13 +53,12 @@ class MainTree:
         return self
 
     def has(self, path: str) -> bool:
-        return not self.missing(f"{self.commit}:{path}\n")[0]
+        return not self.missing((path,))[0]
 
-    def missing(self, requests: str) -> tuple[bool, ...]:
-        """For each ``REV:PATH`` line, whether this repository lacks it; any other failure
-        is a GitCommandError, never an absence."""
-        return tuple(line.endswith(" missing") for line in Repo.git(
-            self.repo.checkout, "cat-file", "--batch-check", input=requests).splitlines())
+    def missing(self, paths: tuple[str, ...]) -> tuple[bool, ...]:
+        """Tree membership does not require a present path's promised contents."""
+        entries = Repo.tree_objects(self.repo.checkout, self.commit, paths)
+        return tuple(path not in entries for path in paths)
 
     def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
         """``git grep -E`` rows of this tree's Python modules, like ``module`` and ``modules``;
@@ -101,13 +100,14 @@ class MainTree:
         )
 
     def module(self, path: str) -> ParsedModule:
-        source = Repo.git(self.repo.checkout, "show", f"{self.commit}:{path}")
+        blob, = Repo.blobs(self.repo.checkout, f"{self.commit}:{path}")
+        source = blob.decode()
         return ParsedModule(path, source, ast.parse(source, filename=path), path)
 
     def present_modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
         """The parsed modules of the ``paths`` main holds. Plans finish by deleting files, so
         a declared path main no longer holds has no module, and nothing it held is left."""
-        missing = self.missing("".join(f"{self.commit}:{path}\n" for path in paths))
+        missing = self.missing(paths)
         for path, absent in zip(paths, missing, strict=True):
             if not absent:
                 yield self.module(path)
@@ -116,21 +116,15 @@ class MainTree:
         """Every Python module under ``paths``. Each path keeps its last parsed blob, so every
         evidence reading one commit parses it once, and the rest are read in one
         ``git cat-file --batch``."""
-        listed = Repo.git(self.repo.checkout, "ls-tree", "-r", self.commit, "--", *paths)
-        blobs = [(entry.split()[2], name) for entry, _, name in
-                 (line.partition("\t") for line in listed.splitlines())
-                 if name.endswith(self.source)]
+        listed = Repo.tree_objects(self.repo.checkout, self.commit, paths, "-r")
+        blobs = [(blob, name) for name, blob in listed.items() if name.endswith(self.source)]
         fresh = [(blob, name) for blob, name in blobs
                  if self.parsed.get(name, ("", None))[0] != blob]
-        batch = Repo.git_bytes(self.repo.checkout, "cat-file", "--batch",
-                               input="".join(f"{blob}\n" for blob, _ in fresh)) if fresh else b""
-        for blob, name in fresh:
-            header, _, batch = batch.partition(b"\n")
-            size = int(header.rsplit(b" ", 1)[1])
-            source = batch[:size].decode()
+        contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
+        for (blob, name), content in zip(fresh, contents, strict=True):
+            source = content.decode()
             self.parsed[name] = blob, ParsedModule(name, source,
                                                    ast.parse(source, filename=name), name)
-            batch = batch[size + 1 :]
         yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
@@ -262,7 +256,7 @@ class PlanReadings:
     def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
         return PlanReading(todos, MainTree.of(repo))
 
-    def prepare(self, repo: Repo, todos: tuple[Todo, ...],
+    def prepare_reading(self, repo: Repo, todos: tuple[Todo, ...],
                 evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
         """Capture the main cut and acquire inputs without evaluating the plan."""
         reading = self.observed(repo, todos)
@@ -270,7 +264,7 @@ class PlanReadings:
             reading.prepare(declared)
         return reading
 
-    def observe(self, reading: PlanReading, evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+    def observe_reading(self, reading: PlanReading, evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
         for declared in evidence:
             declared.recorded(reading)
         self.retain(reading)
@@ -278,7 +272,7 @@ class PlanReadings:
 
     def read(self, repo: Repo, todos: tuple[Todo, ...],
              evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
-        return self.observe(self.prepare(repo, todos, evidence), evidence)
+        return self.observe_reading(self.prepare_reading(repo, todos, evidence), evidence)
 
     def retain(self, reading: PlanReading) -> None:
         """An ordinary command releases its reading when its caller does."""
@@ -335,7 +329,10 @@ class MainEvidence(PhaseEvidence):
     """Read the selected immutable main; PlanReading owns the answer's lifetime."""
 
     def holds(self, reading: PlanReading) -> bool:
-        return self.read(reading.main)
+        try:
+            return self.read(reading.main)
+        except (GitCommandError, UnavailableCommitError) as error:
+            raise UnreadableEvidenceError(str(error)) from error
 
     @abstractmethod
     def read(self, main: MainTree) -> bool: ...

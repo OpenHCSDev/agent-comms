@@ -79,7 +79,7 @@ class Watch(AsyncWork, DeclaredFamily, ABC):
 
 
 class WatchPass[Prepared, Observed](Watch):
-    """One pass joins its effects; only an admitted read capability can drop observation."""
+    """Joined effects finish; a source-proved safe read can drop observation."""
 
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:

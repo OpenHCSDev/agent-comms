@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from agent_comms.phase_evidence import CommitMerged, EvidenceFound, EvidenceUnread, RetainedPlanReadings
-from agent_comms.repo import Repo, UnavailableCommitError
+from agent_comms.native_build_inputs import GitLaunch
+from agent_comms.phase_evidence import (
+    BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent,
+    RetainedPlanReadings,
+)
+from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
@@ -20,10 +25,10 @@ class GitPreparation:
     repository: Repo
 
     @classmethod
-    def create(cls, source: SourceRepository, path: Path) -> GitPreparation:
+    def create(cls, source: SourceRepository, path: Path, *options: str) -> GitPreparation:
         # A transport clone cannot hardlink the remote's unadvertised objects.
         source.git(path.parent, "clone", "--no-local", "--single-branch", "--branch", "main",
-                   str(source.remote), str(path))
+                   *options, source.remote.as_uri(), str(path))
         return cls(source, Repo(checkout=path, github=source.github))
 
     def commit_at_remote(self, parent: str, message: str, reference: str) -> str:
@@ -125,7 +130,7 @@ def test_missing_objects_are_not_negative_ancestry_and_local_siblings_are(git_pr
     assert not repo.contains(remote, local)
     assert not repo.contains(local, remote)
     assert repo.contains(remote[:12], remote)
-    with pytest.raises(UnavailableCommitError, match="required commit objects unavailable"):
+    with pytest.raises(UnavailableCommitError, match="required Git objects unavailable"):
         repo.contains(local, "not-a-revision")
     assert case.snapshot() == prepared
 
@@ -137,23 +142,96 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     evidence = CommitMerged(head)
     plans = RetainedPlanReadings()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(repo.checkout / "absent-remote"))
-    failed = plans.prepare(repo, (), (evidence,))
+    failed = plans.prepare_reading(repo, (), (evidence,))
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert head in failed.describe(evidence) and "origin" in failed.describe(evidence)
-    plans.observe(failed, (evidence,))
+    plans.observe_reading(failed, (evidence,))
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(case.source.remote))
-    recovered = plans.prepare(repo, (), (evidence,))
+    recovered = plans.prepare_reading(repo, (), (evidence,))
     assert recovered.main.commit == failed.main.commit
     assert repo.has_commit(head)
     prepared = case.snapshot()
-    plans.observe(recovered, (evidence,))
+    plans.observe_reading(recovered, (evidence,))
     assert recovered.read(evidence) == EvidenceFound(False)
     assert case.snapshot() == prepared
 
 
 def test_unexpected_plan_object_loss_is_unknown_not_phase_completion(git_preparation):
     repo = git_preparation.repository
-    reading = RetainedPlanReadings().prepare(repo, (), ())
+    reading = RetainedPlanReadings().prepare_reading(repo, (), ())
     missing = CommitMerged("f" * 40)
     assert isinstance(reading.read(missing), EvidenceUnread)
     assert not reading.holds(missing)
+
+
+def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
+    source_repository: SourceRepository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = source_repository
+    directory = source.checkout / "src"
+    directory.mkdir()
+    (directory / "promised.py").write_text("value = 1\n")
+    (directory / "deleted.py").write_text("deleted = 1\n")
+    base = source.publish_change("Before content changes", "src")
+    (directory / "promised.py").write_text("value = 1\nother = 2\n")
+    (directory / "added.py").write_text("added = 1\n")
+    (directory / "deleted.py").unlink()
+    head = source.publish_change("Content changes", "src")
+    source.git(source.checkout, "push", "origin", "HEAD:refs/heads/main")
+    source.git(source.remote, "config", "uploadpack.allowFilter", "true")
+    source.git(source.remote, "config", "uploadpack.allowAnySHA1InWant", "true")
+    case = GitPreparation.create(source, tmp_path / "promisor", "--no-checkout", "--filter=blob:none")
+    repo = case.repository
+    paths = ("src/added.py", "src/deleted.py", "src/promised.py")
+    objects = tuple(dict.fromkeys(
+        blob for commit in (base, head)
+        for blob in Repo.tree_objects(source.checkout, commit, paths).values()
+    ))
+    # The fixture probe forbids demand acquisition explicitly, before any content read.
+    for blob in objects:
+        assert GitLaunch._run(repo.checkout, "--no-lazy-fetch", "cat-file", "-e", blob).returncode != 0
+    common = Path(Repo.git(repo.checkout, "rev-parse", "--path-format=absolute", "--git-common-dir").strip())
+    assert tuple((common / "objects/pack").glob("*.promisor"))
+    assert Repo.git(repo.checkout, "config", "--bool", "remote.origin.promisor").strip() == "true"
+    trace = tmp_path / "observation.trace2.jsonl"
+    monkeypatch.setenv("GIT_TRACE2_EVENT", str(trace))
+    before = case.snapshot()
+    main = MainTree(repo, head)
+    assert main.has("src/promised.py")
+    assert not main.has("src/deleted.py")
+    assert main.missing(paths) == (False, True, False)
+    with pytest.raises(UnavailableCommitError):
+        main.module("src/promised.py")
+    with pytest.raises(UnavailableCommitError):
+        tuple(main.modules(("src",)))
+    reader = WorkBranches(repo.checkout)
+    changed = reader.changed(base, head)
+    assert changed == frozenset(paths)
+    with pytest.raises(UnavailableCommitError):
+        reader.source_growth(base, head, changed)
+    with pytest.raises(GitCommandError):
+        Repo.git_pipeline(repo.checkout, ("cat-file", "blob", objects[0]), ("hash-object", "--stdin"))
+    evidence = BusStorageAbsent()
+    plans = RetainedPlanReadings()
+    failed = plans.prepare_reading(repo, (), (evidence,))
+    plans.observe_reading(failed, (evidence,))
+    assert isinstance(failed.read(evidence), EvidenceUnread)
+    assert "required blob unavailable" in failed.describe(evidence)
+    assert not failed.holds(PathsAbsent(("src/promised.py",)))
+    assert case.snapshot() == before
+    events = tuple(json.loads(line) for line in trace.read_text().splitlines())
+    assert not any(event.get("event") == "child_start" and
+                   any("upload-pack" in argument for argument in event.get("argv", ()))
+                   for event in events)
+    monkeypatch.delenv("GIT_TRACE2_EVENT")
+    # Only this explicit joined acquisition changes Git. The same-main unknown must retry.
+    Repo.git(repo.checkout, "fetch", "--quiet", "--no-tags", "origin", *objects)
+    prepared = case.snapshot()
+    recovered = plans.prepare_reading(repo, (), (evidence,))
+    plans.observe_reading(recovered, (evidence,))
+    assert recovered.main.commit == failed.main.commit == head
+    assert recovered.read(evidence) == EvidenceFound(True)
+    assert dict(reader.source_growth(base, head, changed).files) == {
+        "src/added.py": 1, "src/deleted.py": -1, "src/promised.py": 1,
+    }
+    assert case.snapshot() == prepared

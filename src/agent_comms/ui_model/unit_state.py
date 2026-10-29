@@ -333,8 +333,7 @@ class Unreadable(NeedsCommanderAttention, UnitState):
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        # Validate the checkout reads before a higher-level label can hide a failure.
-        source.require_read()
+        # UnitState.read validates once before selecting any card.
         return iter(())
 
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:

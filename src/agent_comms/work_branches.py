@@ -540,27 +540,21 @@ query($owner: String!, $name: String!, $after: String) {
         Both commits are immutable, so one pair is counted once per process: the
         heartbeat asks again every pass and the answer cannot move until a SHA does.
         """
+        paths = tuple(path for path in sorted(files)
+                      if path.startswith(SourceGrowth.tree) and path.endswith(".py"))
+        if not paths:
+            return SourceGrowth(())
+        # Only a tree-proved added/deleted side contributes zero, never a missing blob.
         sources = tuple(
-            (path, f"{commit}:{path}", weight)
-            for path in sorted(files) if path.startswith(SourceGrowth.tree) and path.endswith(".py")
+            (path, blob, weight)
             for commit, weight in ((base, -1), (head, 1))
+            for path, blob in Repo.tree_objects(self.checkout, commit, paths).items()
         )
-        batch = Repo.git_bytes(
-            self.checkout, "cat-file", "--batch", "-Z", timeout=self.timeout,
-            input="".join(f"{expression}\0" for _path, expression, _weight in sources),
-        )
-        offset = 0
-        growth = dict.fromkeys((path for path, _expression, _weight in sources), 0)
-        for path, _expression, weight in sources:
-            end = batch.index(b"\0", offset)
-            header = batch[offset:end]
-            offset = end + 1
-            if header.endswith(b" missing"):
-                continue  # An added/deleted file contributes zero on its absent side.
-            size = int(header.rsplit(b" ", 1)[1])
-            source = batch[offset:offset + size].decode()
-            offset += size + 1
-            growth[path] += weight * CodeLines.of(source)
+        contents = Repo.blobs(self.checkout, *(blob for _path, blob, _weight in sources),
+                              timeout=self.timeout)
+        growth = dict.fromkeys(paths, 0)
+        for (path, _blob, weight), content in zip(sources, contents, strict=True):
+            growth[path] += weight * CodeLines.of(content.decode())
         return SourceGrowth(tuple(growth.items()))
 
     def reviewed_growth(self, pr: int, head: str, branch: str) -> SourceGrowth:

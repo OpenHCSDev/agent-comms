@@ -40,7 +40,7 @@ class CommanderInputs(HeldOrders):
             pulls.carry_reviews(comms.goals, repo)
         StandingRule.prepare_all(comms, commander, holds, pulls)
         repository = Repo.declaring(project.repos, PlanPhase.__module__)
-        plan = plans.prepare(
+        plan = plans.prepare_reading(
             repository,
             comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
             tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
@@ -67,7 +67,7 @@ class HeartbeatFrame(CommanderInputs):
             closed = StoredClosedHead.current(db, project.repository_names())
             reviews = StoredHeadReview.head_reviews_among(
                 db, (head.request for head in closed.lost))
-        plan = plans.observe(inputs.plan,
+        plan = plans.observe_reading(inputs.plan,
             tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
         pulls = inputs.pulls
         return cls(

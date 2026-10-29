@@ -15,6 +15,7 @@ from agent_comms.registry_document import RegisteredCommanderProject
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.comms import Comms
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.commander_hud import (
     BoardRow, CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, QuietUnits, UnreadableUsage,
@@ -59,6 +60,20 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
     CommanderHeartbeat.register(held_bus.registry)
     with LaunchRoot.from_path(held_bus.root).selected():
         yield held_bus
+
+
+def test_real_heartbeat_dispatches_watch_and_plan_roles_separately(notification_bus: Comms) -> None:
+    heartbeat = CommanderHeartbeat()
+    prepared = heartbeat.prepare(notification_bus)
+    lead = notification_bus.registry.require("lead")
+    inputs = prepared[lead]
+    observed = heartbeat.observe(notification_bus, prepared)
+    item = next(item for item in observed if item.thread == lead)
+    assert item.frame.plan is inputs.plan
+    assert item.frame.pulls is inputs.pulls
+    assert (item.frame.live, item.frame.orphaned) == (inputs.live, inputs.orphaned)
+    assert inputs.plan.reads
+    assert any(plan.main == inputs.plan.main for plan in heartbeat.plans)
 
 
 def notifications(comms):

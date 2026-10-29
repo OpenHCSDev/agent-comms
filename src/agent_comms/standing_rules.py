@@ -463,7 +463,7 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
                     pull.prepare_comparison(reader)
             except (OSError, GitCommandError, UnavailableCommitError,
                     WorkBranchError, TimeoutExpired) as error:
-                pulls.unread(todo, f"Comparison preparation in {directory}: {error}")
+                pulls.unread(todo, error)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
