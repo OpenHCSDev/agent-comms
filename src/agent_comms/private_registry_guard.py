@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, NoReturn
 from .child_process import Platform
 from . import store_files
 from .coordination_database import CoordinationStore
-from .cohort_schema import AcceptanceFrontier
+from .cohort_schema import AcceptanceFrontier, PrivateCoordinatorSchema
 from .coordination_errors import PublicationActivationBlocked
 from .coordination_schema import CoordinatorTable
 from .coordination_tables.participants import Participants
@@ -44,7 +44,7 @@ from .private_nk_entrypoint import (
     SharedRootLaunch,
 )
 from .private_path import PrivateFileRole
-from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
+from .private_runtime_schema import PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
 from .notification_evidence import NotificationAssignmentRead
 

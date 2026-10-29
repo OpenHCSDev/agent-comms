@@ -15,12 +15,14 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+from .coordination_schema import CoordinatorTable
 from .field_codec import AssignmentId, MalformedRecord, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
 from .thread_text import AbsentText, GivenText, TextChoice
 from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,
     ColumnGuard,
+    ComposedSchemas,
     DurableTables,
     ForeignKey,
     FrozenColumn,
@@ -397,6 +399,12 @@ class AwarenessClaimGenerations(
                 target_columns=("wire_root_id", "wire_seq", "claim_id"),
             ),
         )
+
+class PrivateCoordinatorSchema(
+    ComposedSchemas, CoordinatorTable, PrivateCoordinatorTable, AwarenessTable
+):
+    """All coordination-file families share reconciliation, not runtime criticality."""
+
 
 def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
     if not AwarenessTable.stored_schema(db) or AwarenessTable.schema_differs(db):

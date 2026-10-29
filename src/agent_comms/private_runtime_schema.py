@@ -1,4 +1,4 @@
-"""Private coordinator declarations and the mandatory target's derived schema view."""
+"""Mandatory private coordinator declarations and runtime preparation."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from .coordination_errors import SchemaVersionError
 from .coordination_schema import CoordinatorTable
 from .typed_table import (
-    ComposedSchemas,
     DurableTables,
     SharedFileTables,
     SQLiteJournalMode,
@@ -54,7 +53,3 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
             ]:
                 raise SchemaVersionError("private coordinator requires rollback-journal mode")
             AwarenessTable.install_optional(db)
-
-
-class PrivateCoordinatorSchema(ComposedSchemas, CoordinatorTable, PrivateCoordinatorTable):
-    """Mandatory core/private families; optional awareness owns its separate view."""
