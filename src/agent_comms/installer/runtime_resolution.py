@@ -409,20 +409,27 @@ class StackSources:
         migrations. Candidate metadata/settings are copied intact by the private project writer.
         """
         documents = tuple(tomllib.loads(text) for text in (baseline, candidate))
-        local_names: set[str] = set()
-        for document in documents:
-            match document:
-                case {"tool": {"uv": {"sources": dict() as sources}}}:
-                    for name, source in sources.items():
-                        match source:
-                            case {"git": str(), "branch": str()} | {"path": str()}:
-                                local_names.add(canonicalize_name(FieldCodec.decode(str, name)))
+        local_names = cls.local_packages(*documents)
         environment = cls.marker_environment(Path(sys.executable))
         contracts = tuple(frozenset(str(requirement) for requirement in cls.virtual_requirements(document, environment)
                                     if canonicalize_name(requirement.name) not in local_names)
                           for document in documents)
         if contracts[0] != contracts[1]:
             raise ValueError("External runtime dependency migration is unsupported by this common environment")
+
+    @staticmethod
+    @boundary_decoder
+    def local_packages(*documents: dict[str, object]) -> frozenset[str]:
+        """The source declarations own which distribution names are local."""
+        names: set[str] = set()
+        for document in documents:
+            match document:
+                case {"tool": {"uv": {"sources": dict() as sources}}}:
+                    for name, source in sources.items():
+                        match source:
+                            case {"git": str(), "branch": str()} | {"path": str()}:
+                                names.add(canonicalize_name(FieldCodec.decode(str, name)))
+        return frozenset(names)
 
     @classmethod
     def virtual_requirements(cls, document: dict[str, object], environment: dict[str, str]) -> tuple[Requirement, ...]:

@@ -20,7 +20,7 @@ from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
-from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource, Side, SourceCheckout, UnpromotedHeadReview
+from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, LocalIntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource, Side, SourceCheckout, UnpromotedHeadReview
 from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, DetachedStart, GitCommandError, Repo
@@ -146,7 +146,7 @@ class IntegrationCheckout(SourceCheckout):
     def create(cls, repository: Repo, path: Path, commit: str) -> IntegrationCheckout:
         if path.exists():
             raise IntegrationFailed(f"Preserve existing qualification checkout: {path}")
-        Repo.require_commits(repository.checkout, repository.remote, commit)
+        repository.acquire(commit)
         path.parent.mkdir(parents=True, exist_ok=True)
         created = cls.add(repository.checkout, path, DetachedStart(commit))
         created.require_editable()
@@ -366,7 +366,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
             self.publish_merge_review()
             if self.require_merge_review(repositories) != inputs:
                 raise IntegrationFailed("The hosted input changed during review publication")
-        except (ToolRefusedError, GitCommandError, IntegrationFailed):
+        except (ToolRefusedError, GitCommandError):
             self.withdraw_merge_review()
             raise
         print(f"COMBINED CARRIER #{self.carrier.pr} {self.carrier.head}; inputs {inputs.digest}", flush=True)
@@ -380,44 +380,39 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         payload = IntegrationInput.from_message(
             WorkBranches(self.repository.checkout).commit_message(self.carrier.head))
         urls = IntegrationInput.source_urls(self.repository, self.baseline, self.tested)
-        repositories = [self.repository]
+        companions: list[Repo] = []
         for name, url in sorted(urls.items(), key=lambda item: item[0].key):
-            if name == self.repository.github:
-                raise IntegrationFailed("The stack repeats Core as a Git companion source")
             checkout = directory / "repositories" / Path(*name.key)
             checkout.parent.mkdir(parents=True, exist_ok=True)
             Repo.git(self.repository.checkout, "clone", "--no-checkout", url, str(checkout), timeout=300)
             repository = Repo.of(checkout)
             if repository.github != name:
                 raise IntegrationFailed("A declared source clone has a different actual Git origin")
-            repositories.append(repository)
+            companions.append(repository)
+        repositories = (self.repository, *companions)
         if payload:
             inputs, = payload
         else:
-            sources: list[IntegrationSource] = [MergedIntegrationSource(RepositoryCommit(self.repository.github, self.baseline),
+            sources: list[IntegrationSource] = [LocalIntegrationSource(RepositoryCommit(self.repository.github, self.baseline),
                                          (self.carrier,), self.tree)]
-            for repository in repositories[1:]:
+            for repository in companions:
                 commit = IntegrationSource.main_head(repository)
-                Repo.require_commits(repository.checkout, repository.remote, commit)
+                repository.acquire(commit)
                 tree = Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
                 sources.append(MergedIntegrationSource(RepositoryCommit(repository.github, commit), (), tree))
             inputs = OrdinaryInput(tuple(sorted(sources, key=lambda source: source.repository.key)))
-        self.validate(inputs, tuple(repositories))
+        self.validate(inputs, repositories)
         for source in inputs.sources:
             repository = Repo.selected(tuple(repositories), source.repository.to_wire())
             IntegrationCheckout.create(repository, BaseSide.checkout(directory, source.repository), source.baseline.commit)
-            # The actual tested Core merge already carries all local parents. Fetching its
-            # earlier own PR head through refs/pull would instead fetch the new carrier.
-            if source.repository == self.repository.github:
-                IntegrationCheckout.create(repository, HeadSide.checkout(directory, source.repository), self.tested)
-            else:
-                IntegrationCheckout.materialize(source, repository, HeadSide.checkout(directory, source.repository))
+            source.materialize_head(repository, HeadSide.checkout(directory, source.repository),
+                                    self.tested, IntegrationCheckout)
             for side in Side.sides():
                 side.require_materialized(directory, source)
                 checkout = side.checkout(directory, source.repository)
                 print(f"SOURCE {side.declared_name} {source.repository.to_wire()} "
                       f"{Repo.git(checkout, 'rev-parse', 'HEAD').strip()} {checkout}", flush=True)
-        self.validate(inputs, tuple(repositories))
+        self.validate(inputs, repositories)
         inputs.write(directory)
         print(f"CI INPUT {inputs.digest}; source computation only, no review or merge permission", flush=True)
         return inputs
@@ -436,7 +431,8 @@ class TestedSources(DeclaredFamily, affix="Sources"):
     def validate(self, inputs: IntegrationInput, repositories: tuple[Repo, ...]) -> None:
         """Re-run at job exit: source checks compute, but never publish a verdict."""
         self.require_carrier()
-        local = inputs.source(self.repository.github)
+        local = inputs.local
+        local.require_origin(self.repository)
         if local.baseline.commit != self.baseline or local.candidate_tree != self.tree:
             raise IntegrationFailed("Tested base/tree differs from the frozen source input; recapture")
         inputs.require_repositories(IntegrationInput.declared_repositories(
@@ -448,17 +444,15 @@ class TestedSources(DeclaredFamily, affix="Sources"):
                 raise IntegrationFailed("The tested carrier and materialized input disagree")
             inputs.require_carrier(self.repository, self.carrier)
         else:
-            # Ordinary mode is precisely one actual carrier plus unchanged captured mains.
-            if local.heads != (self.carrier,) or any(source.heads for source in inputs.sources
-                                                    if source.repository != self.repository.github):
-                raise IntegrationFailed("An ordinary comparison cannot supply companion overlays")
+            for source in inputs.sources:
+                source.require_ordinary(self.carrier)
         mains = self.main_commits(inputs)
         for source in inputs.sources:
             repository = Repo.selected(repositories, source.repository.to_wire())
             if IntegrationSource.main_head(repository) != mains[source.repository]:
                 raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
         self.require_local_candidate(inputs)
-        for source in inputs.companions(self.repository.github):
+        for source in inputs.companions:
             source.require_candidate(Repo.selected(repositories, source.repository.to_wire()), self.carrier)
 
 
@@ -562,7 +556,7 @@ class MainSources(TestedSources, declared_name="push"):
 
     def require_local_candidate(self, inputs: IntegrationInput) -> None:
         """Main owns the transition from exact open sources to exact merged ancestry."""
-        source = inputs.source(self.repository.github)
+        source = inputs.local
         source.require_ancestry(self.repository, self.carrier.head)
         for head in (head for head in source.heads if not head.same_pull_request(self.carrier)):
             rows = tuple(row for row in PullRequests().rows(head.repo, (head.pr,))
@@ -618,20 +612,22 @@ class IntegrationRun:
         candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
         if current.repo != core.github or current.base != WorkBranches.main or current.head != candidate_commit:
             raise IntegrationFailed("Capture requires the actual published combined carrier at this checkout's HEAD")
-        Repo.require_commits(registered_core.checkout, registered_core.remote, base, candidate_commit)
+        registered_core.acquire(base, candidate_commit)
         required = IntegrationInput.declared_repositories(registered_core, base, candidate_commit)
         linked_repositories = {link.repo for todo in todos for order in todo.order.declarations
                                for link in order.pull_requests}
         if linked_repositories - set(required):
             raise IntegrationFailed("A selected order links an unknown stack repository")
-        repositories = {name: Repo.selected(context.repos, name.to_wire()) for name in required}
+        companion_repositories = {name: Repo.selected(context.repos, name.to_wire()) for name in required}
+        companion_repositories.pop(core.github)
+        repositories = {core.github: registered_core, **companion_repositories}
         carriers = (carrier, *companions)
         mains = {core.github: base, **{name: IntegrationSource.main_head(repo)
-                                     for name, repo in repositories.items() if name != core.github}}
+                                     for name, repo in companion_repositories.items()}}
         pulls = PullRequests(todos)
         heads: dict[RepositoryName, tuple[PullRequestHead, ...]] = {}
         for repo in repositories.values():
-            Repo.require_commits(repo.checkout, repo.remote, mains[repo.github])
+            repo.acquire(mains[repo.github])
             linked = PullRequests.linked_among(todos, repo.github)
             selected = []
             for row in pulls.rows(repo.github, tuple(sorted(linked))):
@@ -650,7 +646,7 @@ class IntegrationRun:
                 for container in carriers:
                     if (container.repo == repo.github
                             and not head.same_pull_request(container)):
-                        Repo.require_commits(repo.checkout, repo.remote, head.head, container.head)
+                        repo.acquire(head.head, container.head)
                         if Repo.descends(repo.checkout, head.head, container.head):
                             selected.append(head)
             heads[repo.github] = tuple(sorted({head.pr: head for head in selected}.values(), key=lambda head: head.pr))
@@ -658,13 +654,10 @@ class IntegrationRun:
         IntegrationCheckout.create(registered_core, BaseSide.checkout(self.output, core.github), base)
         tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
         resolved = {companion.repo: companion for companion in companions}
-        if len(resolved) != len(companions) or set(resolved) - (set(required) - {core.github}):
+        if len(resolved) != len(companions) or set(resolved) - companion_repositories.keys():
             raise IntegrationFailed("Select at most one actual carrier per declared companion repository")
-        sources: list[IntegrationSource] = [MergedIntegrationSource(RepositoryCommit(core.github, base), heads[core.github], tree)]
-        for name in required:
-            if name == core.github:
-                continue
-            repo = repositories[name]
+        sources: list[IntegrationSource] = [LocalIntegrationSource(RepositoryCommit(core.github, base), heads[core.github], tree)]
+        for name, repo in companion_repositories.items():
             baseline = mains[name]
             IntegrationCheckout.create(repo, BaseSide.checkout(self.output, name), baseline)
             # Resolved carrier selection is a foreign CLI boundary; all later consumers
@@ -673,7 +666,7 @@ class IntegrationRun:
             if name in resolved:
                 companion = resolved[name]
                 companion.current()
-                Repo.require_commits(repo.checkout, repo.remote, companion.head)
+                repo.acquire(companion.head)
                 tree = Repo.git(repo.checkout, "rev-parse", f"{companion.head}^{{tree}}").strip()
                 source = ResolvedIntegrationSource(
                     RepositoryCommit(name, baseline), heads[name], tree, companion)
@@ -683,23 +676,22 @@ class IntegrationRun:
                 tree = candidate.combine_sources(baseline, heads[name])
                 source = MergedIntegrationSource(RepositoryCommit(name, baseline), heads[name], tree)
             sources.append(source)
-        # Revalidate original sources before freezing the shared value or attaching its payload.
-        for source in sources:
+        inputs = CombinedInput(tuple(sorted(sources, key=lambda source: source.repository.key)), carrier)
+        inputs.local.require_ancestry(registered_core, candidate_commit)
+        for source in inputs.companions:
+            source.require_tree(repositories[source.repository])
+        # Revalidate original sources before attaching the shared value's payload.
+        for source in inputs.sources:
             repo = repositories[source.repository]
             if IntegrationSource.main_head(repo) != source.baseline.commit:
                 raise IntegrationFailed("A captured main moved; preserve this failed attempt and recapture")
             for head in source.heads:
                 head.current()
-            if source.repository == core.github:
-                source.require_ancestry(repo, candidate_commit)
-            else:
-                source.require_tree(repo)
         current_todos = tuple(context.comms.goals.todos.get(todo.id) for todo in todos)
         for todo in current_todos:
             todo.require_commander(context.incarnation)
-        inputs = CombinedInput(tuple(sorted(sources, key=lambda source: source.repository.key)), carrier)
         context.comms.goals.todos.require_input_sources(inputs)
-        if Repo.git(self.checkout.path, "rev-parse", f"{base}^{{tree}}").strip() == inputs.source(core.github).candidate_tree:
+        if Repo.git(self.checkout.path, "rev-parse", f"{base}^{{tree}}").strip() == inputs.local.candidate_tree:
             raise IntegrationFailed("The Core carrier has no substantive source change")
         original_message = WorkBranches(self.checkout.path).commit_message(candidate_commit)
         if IntegrationInput.from_message(original_message):

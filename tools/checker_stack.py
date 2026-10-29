@@ -52,8 +52,9 @@ class CheckerStack(Stack, StackSources):
     @cached_property
     def local_names(self) -> frozenset[str]:
         source = self.inputs.source(CorePackage.repository)
-        return frozenset({CorePackage.distribution, *(name for side in Side.sides()
-            for name in self.sources(side.require_materialized(self.source_directory, source) / "stack"))})
+        return self.local_packages(*(tomllib.loads((
+            side.require_materialized(self.source_directory, source) / "stack/pyproject.toml"
+        ).read_text()) for side in Side.sides()))
 
     def require_uv(self) -> None:
         declared = DeclaredUv.of(self.core / "pyproject.toml", self.uv)

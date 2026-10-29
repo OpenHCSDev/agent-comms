@@ -198,6 +198,10 @@ class Repo(GitLaunch, BaseModel, WireValue):
                 raise UnavailableCommitError(checkout, missing, f"remote {remote}: {error}") from error
             cls.require_local_commits(checkout, *objects)
 
+    def acquire(self, *objects: str) -> None:
+        """Acquire exact commits from this repository's own remote."""
+        self.require_commits(self.checkout, self.remote, *objects)
+
     def contains(self, sha: str, revision: str = "HEAD") -> bool:
         """Strict local ancestry; only valid local non-ancestors mean False."""
         self.require_local_commits(self.checkout, sha, revision)

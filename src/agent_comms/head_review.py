@@ -128,6 +128,14 @@ class SourceCheckout(Checkout, ABC):
     @abstractmethod
     def combine_sources(self, base: str, heads: tuple[PullRequestHead, ...]) -> str: ...
 
+    @classmethod
+    @abstractmethod
+    def create(cls, repository: Repo, path: Path, commit: str) -> SourceCheckout: ...
+
+    @classmethod
+    @abstractmethod
+    def materialize(cls, source: IntegrationSource, repository: Repo, path: Path) -> SourceCheckout: ...
+
 
 @dataclass(frozen=True)
 class IntegrationSource(DeclaredFamily, affix="Source"):
@@ -168,6 +176,22 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
         return commit
 
     @property
+    def local_sources(self) -> tuple[LocalIntegrationSource, ...]:
+        return ()
+
+    @property
+    def companion_sources(self) -> tuple[IntegrationSource, ...]:
+        return (self,)
+
+    def require_ordinary(self, carrier: PullRequestHead) -> None:
+        if self.heads:
+            raise ToolRefusedError("An ordinary comparison cannot supply companion overlays")
+
+    def materialize_head(self, repository: Repo, path: Path, tested: str,
+                         checkout: type[SourceCheckout]) -> SourceCheckout:
+        return checkout.materialize(self, repository, path)
+
+    @property
     def candidate_commit(self) -> str:
         return self.baseline.commit
 
@@ -191,9 +215,7 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
     def require_ancestry(self, repository: Repo, candidate: str) -> None:
         """A resolved Git combination retains every actual source, not a guessed patch."""
         self.require_origin(repository)
-        Repo.require_commits(
-            repository.checkout, repository.remote,
-            self.baseline.commit, candidate, *(head.head for head in self.heads))
+        repository.acquire(self.baseline.commit, candidate, *(head.head for head in self.heads))
         if not Repo.descends(repository.checkout, self.baseline.commit, candidate) or any(
                 not Repo.descends(repository.checkout, head.head, candidate) for head in self.heads):
             raise ToolRefusedError("The resolved candidate dropped a captured source parent")
@@ -218,8 +240,7 @@ class MergedIntegrationSource(IntegrationSource):
     """Ordered source heads whose reproducible Git merge owns the candidate tree."""
 
     def expected_tree(self, repository: Repo) -> str:
-        Repo.require_commits(repository.checkout, repository.remote,
-                             self.baseline.commit, *(head.head for head in self.heads))
+        repository.acquire(self.baseline.commit, *(head.head for head in self.heads))
         commit = self.baseline.commit
         for head in self.heads:
             tree = Repo.git(repository.checkout, "merge-tree", "--write-tree", commit, head.head).strip()
@@ -232,6 +253,27 @@ class MergedIntegrationSource(IntegrationSource):
         self.require_origin(repository)
         if self.expected_tree(repository) != self.candidate_tree:
             raise ToolRefusedError(f"{self.repository.to_wire()} candidate tree is not its captured combination")
+
+
+@dataclass(frozen=True)
+class LocalIntegrationSource(MergedIntegrationSource):
+    """The tested repository's actual merge, not a replay of its own published PR."""
+
+    @property
+    def local_sources(self) -> tuple[LocalIntegrationSource, ...]:
+        return (self,)
+
+    @property
+    def companion_sources(self) -> tuple[IntegrationSource, ...]:
+        return ()
+
+    def require_ordinary(self, carrier: PullRequestHead) -> None:
+        if self.heads != (carrier,):
+            raise ToolRefusedError("An ordinary comparison requires its exact local carrier")
+
+    def materialize_head(self, repository: Repo, path: Path, tested: str,
+                         checkout: type[SourceCheckout]) -> SourceCheckout:
+        return checkout.create(repository, path, tested)
 
 
 @dataclass(frozen=True)
@@ -280,6 +322,19 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
             raise MalformedRecord("Integration inputs require unique, nonempty repository sources.")
         if repositories != tuple(sorted(repositories, key=lambda repo: repo.key)):
             raise MalformedRecord("Integration sources must be in repository-name order.")
+        _ = self.local
+
+    @property
+    def local(self) -> LocalIntegrationSource:
+        selected = tuple(local for source in self.sources for local in source.local_sources)
+        if len(selected) != 1:
+            raise MalformedRecord("Integration inputs require exactly one local source.")
+        local, = selected
+        return local
+
+    @property
+    def companions(self) -> tuple[IntegrationSource, ...]:
+        return tuple(companion for source in self.sources for companion in source.companion_sources)
 
     def require_repositories(self, repositories: tuple[RepositoryName, ...]) -> None:
         """The actual stack declaration supplies coverage, never a caller's package roster."""
@@ -308,7 +363,10 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
             if len(set(identities)) != len(identities):
                 raise ToolRefusedError("One stack cut declares a Git repository more than once")
             for url, branch in declared.values():
-                urls[Repo.repository_url(url)] = url
+                identity = Repo.repository_url(url)
+                if identity == core.github:
+                    raise ToolRefusedError("The stack repeats Core as a Git companion source")
+                urls[identity] = url
         return urls
 
     def validate(self, repositories: tuple[Repo, ...], carrier: PullRequestHead) -> None:
@@ -319,14 +377,12 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
             raise ToolRefusedError("The integration carrier no longer targets main")
         self.require_carrier(core, carrier)
         self.require_local_candidate(core, carrier)
-        local = self.source(carrier.repo)
+        local = self.local
+        local.require_origin(core)
         if IntegrationSource.main_head(core) != local.baseline.commit:
             raise ToolRefusedError(f"{core.github.to_wire()} main moved; recapture inputs")
-        for entry in self.companions(carrier.repo):
+        for entry in self.companions:
             entry.validate(Repo.selected(repositories, entry.repository.to_wire()), carrier)
-
-    def companions(self, repository: RepositoryName) -> tuple[IntegrationSource, ...]:
-        return tuple(source for source in self.sources if source.repository != repository)
 
     def require_source_reviews(self) -> None:
         """Native promotion and the hosted gate require these same exact source decisions."""
@@ -351,7 +407,8 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
         raise ToolRefusedError("An individual source is not a captured combined carrier")
 
     def require_local_candidate(self, core: Repo, carrier: PullRequestHead) -> None:
-        self.source(core.github).require_candidate(core, carrier)
+        self.local.require_origin(core)
+        self.local.require_candidate(core, carrier)
 
     @property
     def canonical(self) -> str:
@@ -415,22 +472,25 @@ class CombinedInput(IntegrationInput):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        self.source(self.carrier.repo)
+        if self.local.repository != self.carrier.repo:
+            raise MalformedRecord("The local source must belong to the captured carrier repository")
         if len(self.carrier.head) != 40 or self.carrier.head != self.carrier.head.lower():
             raise MalformedRecord("A combined carrier requires its full prepublication Git identity")
         if any(head.same_pull_request(self.carrier) for source in self.sources for head in source.heads):
             raise MalformedRecord("The combined carrier is separate from every source member")
 
     def require_local_candidate(self, core: Repo, carrier: PullRequestHead) -> None:
-        self.source(core.github).require_heads(carrier)
+        self.local.require_origin(core)
+        self.local.require_heads(carrier)
 
     def require_carrier(self, core: Repo, carrier: PullRequestHead) -> None:
         """Review and hosted merge checks consume this same Git-bound carrier distinction."""
         if not self.carrier.same_pull_request(carrier) or core.github != self.carrier.repo:
             raise ToolRefusedError("This is not the captured combined carrier pull request")
         reader = WorkBranches(core.checkout)
-        Repo.require_commits(core.checkout, core.remote, self.carrier.head, carrier.head)
-        source = self.source(core.github)
+        core.acquire(self.carrier.head, carrier.head)
+        source = self.local
+        source.require_origin(core)
         self.require_repositories(self.declared_repositories(core, source.baseline.commit, carrier.head))
         source.require_ancestry(core, self.carrier.head)
         source.require_ancestry(core, carrier.head)

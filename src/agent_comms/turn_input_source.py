@@ -177,7 +177,7 @@ class TurnInputSource(StartedInput, ABC):
             # The queue grants a send, not a running tool's lifetime. Once Pi
             # starts this exact input, StartedInput removes its queue entry.
             self.acceptance.require_current(
-                sender.inputs, AcpSessionId(sender.session_id), self, current, sender.claim_generation,
+                sender.inputs, sender.session_id, self, current, sender.claim_generation,
             )
         except ReservationViolationError as error:
             return sender._refusal(error.rule)
@@ -385,7 +385,7 @@ class FollowingTurnInput(TurnInputSource):
     owner_check = RunningOrdinaryOwnerCheck
 
     def require_context_source(self, sender: OwnedSend) -> None:
-        self.acceptance.require_following_source(sender.inputs, AcpSessionId(sender.session_id), self)
+        self.acceptance.require_following_source(sender.inputs, sender.session_id, self)
 
     def continue_response(self, response, parts):
         """An actual following request may revise the turn's automatic answer."""

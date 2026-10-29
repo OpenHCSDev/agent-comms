@@ -17,7 +17,7 @@ from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.head_review import (
-    CombinedInput, DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ReadPullRequestHead,
+    CombinedInput, DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, LocalIntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ReadPullRequestHead,
 )
 from agent_comms.integration import IntegrationRun
 from commander_heartbeat_fixture import capture_frame
@@ -148,7 +148,7 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
         (todo,), request, UnquotedHeadReview.of))
     qualify_unchanged()  # Reviewing: the recorded source cut changes no held work.
     posts = review_posts(github, request.head)
-    assert len(posts) == 8
+    assert len(posts) == 7
     assert all("state=pending" in call for call in posts)
     assert not any(call[:2] == ("pr", "merge") for call in github.calls())
 
@@ -460,7 +460,7 @@ def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head
 @pytest.fixture
 def captured_input(reviewed_source: SourceRepository) -> IntegrationInput:
     source = reviewed_source
-    return OrdinaryInput((MergedIntegrationSource(
+    return OrdinaryInput((LocalIntegrationSource(
         RepositoryCommit(source.github, source.main_commit),
         (PullRequestHead(source.github, source.number, source.branch_commit),),
         source.git(source.checkout, "rev-parse", f"{source.branch_commit}^{{tree}}").strip(),
@@ -471,6 +471,8 @@ def test_integration_metadata_is_canonical_and_ordinary_messages_have_no_digest(
         captured_input: IntegrationInput) -> None:
     inputs = captured_input
     assert FieldCodec.decode(IntegrationInput, FieldCodec.parse(inputs.canonical)) == inputs
+    assert inputs.local is inputs.sources[0]
+    assert inputs.companions == ()
     message = f"Combine the real source changes\n\n{inputs.trailer}\n"
     assert IntegrationInput.from_message(message) == (inputs,)
     assert IntegrationInput.digest_from_message(message) == inputs.digest
@@ -529,6 +531,8 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
         companion.git(companion.checkout, "rev-parse", f"{companion.branch_commit}^{{tree}}").strip(),
     )
     inputs = replace(captured_input, sources=tuple(sorted((*captured_input.sources, client), key=lambda row: row.repository.key)))
+    assert inputs.local is captured_input.local
+    assert inputs.companions == (client,)
     companion.git(companion.checkout, "checkout", "feature")
     owner = companion.checkout / "owner.py"
     owner.write_text(owner.read_text() + "new_export = True\n")
@@ -885,7 +889,7 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
     judge.main(["reviewing", *common], context)
     posts = review_posts(github, request.head)
     assert [next(part for part in post if part.startswith("state=")) for post in posts] == [
-        "state=pending", "state=success", "state=pending", "state=pending"]
+        "state=pending", "state=success", "state=pending"]
 
 
 @pytest.mark.parametrize("verdict", (ReviewedHeadVerdict(ACCEPTED), QualifiedHeadVerdict(QUALIFIED)))

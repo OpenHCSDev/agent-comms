@@ -4137,24 +4137,23 @@ class HeadVerdict(HeadReview, declared_name=None):
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
         MergeHeadReview.require_merge(request, repositories)
 
-    def post(self, repo: RepositoryName, head: str, reviewer: str, subject: str) -> None:
-        # Withdraw first: a failed source-status write cannot leave an earlier promotion live.
-        UnpromotedHeadReview().post(repo, head, reviewer, subject)
-        super().post(repo, head, reviewer, subject)
+    @contextmanager
+    def recording(self, request: PullRequestHead, reviewer: str, subject: str) -> Iterator[None]:
+        """Withdraw both old permissions before the write; publish its decision once after it."""
+        UnpromotedHeadReview().post(request.repo, request.head, reviewer, subject)
+        UnderReviewHeadVerdict().post(request.repo, request.head, reviewer, subject)
+        yield
+        self.publish_recorded(request, reviewer, subject)
 
-    def begin_review(self, repo: RepositoryName, head: str, reviewer: str, subject: str) -> None:
-        UnpromotedHeadReview().post(repo, head, reviewer, subject)
-        # A failed final status write must not leave a newly rejected member source green.
-        HeadReview.post(UnderReviewHeadVerdict(), repo, head, reviewer, subject)
+    def publish_recorded(self, request: PullRequestHead, reviewer: str, subject: str) -> None:
+        """The reviewing mark already withdrew source permission; no second pending mark."""
 
     def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
                  reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
         request = replace(request, head=prepared.current.head)
-        # Do not store a rejection/reviewing row while its old merge permission remains live.
-        self.begin_review(request.repo, request.head, reviewer.name, prepared.subject)
-        recorded = order.record_review(goals, request, self, reviewer)
-        self.after_record(goals, recorded)
-        super().post(request.repo, request.head, reviewer.name, prepared.subject)
+        with self.recording(request, reviewer.name, prepared.subject):
+            recorded = order.record_review(goals, request, self, reviewer)
+            self.after_record(goals, recorded)
         return HeadReviewed(recorded, self.landing(prepared.current))
 
     def landing(self, current: OpenPullRequestHead) -> MergeArm:
@@ -4202,6 +4201,9 @@ class DecidedHeadVerdict(HeadVerdict, declared_name=None):
     reason: VerdictReason
     verb: ClassVar[str]
 
+    def publish_recorded(self, request: PullRequestHead, reviewer: str, subject: str) -> None:
+        self.post(request.repo, request.head, reviewer, subject)
+
     def settles_edits(self, record: HeadReviewRecord, began: float) -> float:
         return record.at.latest_with(began)
 
@@ -4244,9 +4246,8 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
-        verdict.begin_review(current.repo, current.head, record.actor.name, f"#{current.pr}")
-        goals.todos.record_head(carried)
-        HeadReview.post(verdict, current.repo, current.head, record.actor.name, f"#{current.pr}")
+        with verdict.recording(current, record.actor.name, f"#{current.pr}"):
+            goals.todos.record_head(carried)
         return True
 
     @classmethod

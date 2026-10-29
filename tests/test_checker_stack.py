@@ -14,7 +14,7 @@ import tomli_w
 from agent_comms.head_review import BaseSide, HeadSide
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.runtime_resolution import CorePackage, GitSource, ResolvedLock
+from agent_comms.installer.runtime_resolution import CorePackage, GitSource, ResolvedLock, StackSources
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import DraftListedPullRequest
@@ -24,6 +24,21 @@ from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("test_holder_standing_rules", "integration_source_fixture")
+
+
+def test_local_package_membership_comes_from_both_source_declarations() -> None:
+    before: dict[str, object] = {"tool": {"uv": {"sources": {
+        "Agent_Comms": {"path": "..", "editable": True},
+        "Source_Client": {"git": "https://github.com/example/client", "branch": "main"},
+        "registry-only": {"index": "public"},
+    }}}}
+    after: dict[str, object] = {"tool": {"uv": {"sources": {
+        "new-local": {"path": "../new"},
+        "registry-only": {"index": "private"},
+    }}}}
+    assert StackSources.local_packages(before, after) == frozenset({
+        "agent-comms", "source-client", "new-local",
+    })
 
 
 @pytest.mark.parametrize("dependencies,allowed,declared_python", [
