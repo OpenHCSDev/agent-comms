@@ -5,6 +5,7 @@ from __future__ import annotations
 import annotationlib
 import argparse
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -531,8 +532,13 @@ class Argument(FieldDirective):
 class ViewColumn(ABC):
     """Stored and computed fields expose one read-only presentation contract."""
 
-    name: str
-    annotation: object
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def annotation(self) -> object: ...
 
     @property
     def label(self) -> str:
@@ -579,7 +585,7 @@ class FieldPlan(ViewColumn):
     """One field's wire keys, checks and compiled value decoder."""
 
     declared: Field
-    annotation: object
+    _annotation: object
     directives: ClassVar[tuple[type[ValueDirective], ...]] = ()
     records: ClassVar[bool] = True
     _plans: ClassVar[list[type[FieldPlan]]] = []
@@ -595,6 +601,10 @@ class FieldPlan(ViewColumn):
     @property
     def name(self) -> str:
         return self.declared.name
+
+    @property
+    def annotation(self) -> object:
+        return self._annotation
 
     @cached_property
     def key(self) -> str:
@@ -2269,7 +2279,7 @@ class ValueDescription[Product](ABC):
 
     @classmethod
     @abstractmethod
-    def family_value(cls, value: FamilyMeta) -> Product: ...
+    def family_value(cls, value: type[DeclaredFamily]) -> Product: ...
 
     @classmethod
     @abstractmethod
@@ -2280,10 +2290,75 @@ class ValueDescription[Product](ABC):
     def sequence(cls, value: Sequence[object]) -> Product: ...
 
 
+@dataclass(frozen=True)
+class ValueShape(ABC):
+    """A Python value recovered once by the canonical foreign-shape boundary."""
+
+    value: object
+
+    @abstractmethod
+    def describe[T](self, presentation: type[ValueDescription[T]]) -> T: ...
+
+
+class ScalarShape(ValueShape):
+    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.scalar(self.value)
+
+
+class RecordShape(ValueShape):
+    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.record(self.value)
+
+
+@dataclass(frozen=True)
+class IdentifiedRecordShape(RecordShape):
+    identity: tuple[FieldPlan, ...]
+
+    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.identified_record(self.value, self.identity)
+
+
+@dataclass(frozen=True)
+class ClassShape(ValueShape):
+    value: type
+
+    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.class_value(self.value)
+
+
+@dataclass(frozen=True)
+class FamilyShape(ClassShape):
+    value: type[DeclaredFamily]
+
+    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.family_value(self.value)
+
+
+@dataclass(frozen=True)
+class MappingShape(ValueShape):
+    value: Mapping[Hashable, object]
+
+    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.mapping(self.value)
+
+
+@dataclass(frozen=True)
+class SequenceShape(ValueShape):
+    value: Sequence[object]
+
+    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.sequence(self.value)
+
+
 class Projected(ViewColumn, property):
     """A computed field declared by its owner for a named read-only view."""
 
     _declared: ClassVar[WeakKeyDictionary[type, dict[str, Projected]]] = WeakKeyDictionary()
+    fget: Callable[..., object]
+
+    @property
+    def name(self) -> str:
+        return self.__name__
 
     def __init__(self, getter, *, view: str, name: str | None = None):
         super().__init__(getter)
@@ -2292,12 +2367,12 @@ class Projected(ViewColumn, property):
 
     def __set_name__(self, owner: type, name: str) -> None:
         """Every class body declaring this field records it, a slots rebuild included."""
-        self.name = name
+        super().__set_name__(owner, name)
         Projected._declared.setdefault(owner, {})[name] = self
 
     @cached_property
     def annotation(self) -> object:
-        return get_type_hints(self.fget, include_extras=True)["return"]
+        return inspect.signature(self.fget, eval_str=True).return_annotation
 
     def current(self, record: object) -> object:
         return self.__get__(record, type(record))
@@ -2330,40 +2405,39 @@ class FieldCodec(MroDispatch, Sealed):
 
     @singledispatchmethod
     @classmethod
-    def describe[T](cls, value: object, presentation: type[ValueDescription[T]]) -> T:
+    def shape(cls, value: object) -> ValueShape:
         """Recover foreign presentation shape here, never in either renderer."""
         if is_dataclass(value):
             identity = tuple(plan for plan in cls.field_plans(type(value))
                              if DisclosureIdentity.read(plan.annotation, False))
-            return (presentation.identified_record(value, identity) if identity
-                    else presentation.record(value))
-        return presentation.scalar(value)
+            return IdentifiedRecordShape(value, identity) if identity else RecordShape(value)
+        return ScalarShape(value)
 
-    @describe.register(type)
+    @shape.register(type)
     @classmethod
-    def _describe_class[T](cls, value: type, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.class_value(value)
+    def _shape_class(cls, value: type) -> ValueShape:
+        return ClassShape(value)
 
-    @describe.register(FamilyMeta)
+    @shape.register(FamilyMeta)
     @classmethod
-    def _describe_family[T](cls, value: FamilyMeta, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.family_value(value)
+    def _shape_family(cls, value: type[DeclaredFamily]) -> ValueShape:
+        return FamilyShape(value)
 
-    @describe.register(Mapping)
+    @shape.register(Mapping)
     @classmethod
-    def _describe_mapping[T](cls, value: Mapping[Hashable, object], presentation: type[ValueDescription[T]]) -> T:
-        return presentation.mapping(value)
+    def _shape_mapping(cls, value: Mapping[Hashable, object]) -> ValueShape:
+        return MappingShape(value)
 
-    @describe.register(Sequence)
+    @shape.register(Sequence)
     @classmethod
-    def _describe_sequence[T](cls, value: Sequence[object], presentation: type[ValueDescription[T]]) -> T:
-        return presentation.sequence(value)
+    def _shape_sequence(cls, value: Sequence[object]) -> ValueShape:
+        return SequenceShape(value)
 
-    @describe.register(str)
-    @describe.register(bytes)
+    @shape.register(str)
+    @shape.register(bytes)
     @classmethod
-    def _describe_scalar[T](cls, value: str | bytes, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.scalar(value)
+    def _shape_scalar(cls, value: str | bytes) -> ValueShape:
+        return ScalarShape(value)
 
     @classmethod
     def decode_external[T](
@@ -2737,7 +2811,7 @@ class FieldCodec(MroDispatch, Sealed):
         """Resolve every per-row type decision for one record declaration once."""
         hints = cls._types(record)
         declarations = tuple(
-            cls._field_plan(item, hints[item.name])(declared=item, annotation=hints[item.name])
+            cls._field_plan(item, hints[item.name])(declared=item, _annotation=hints[item.name])
             for item in fields(record)
         )
         declared = tuple(plan for plan in declarations if plan.declared.init and plan.records)
@@ -2778,7 +2852,6 @@ class FieldCodec(MroDispatch, Sealed):
         return selected.pop()
 
     @classmethod
-    @cache
     def view_columns(cls, declaration: type, view: str) -> tuple[ViewColumn, ...]:
         """One column source for native tables and plain-text views."""
         return (

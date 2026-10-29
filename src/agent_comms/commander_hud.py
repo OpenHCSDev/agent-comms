@@ -306,7 +306,7 @@ class CommanderHud(ToolResult):
            states: tuple[UnitState, ...]) -> CommanderHud:
         """Cards follow ``states``, already in the UnitState family's declared order."""
         snapshot = comms.registry.snapshot()
-        owner = snapshot.require(commander).incarnation
+        owner = snapshot.require(commander).incarnation.require_recorded()
         pulls, reading = frame.pulls, frame.plan
         todo_history = reading.todos
         held = frame.todos
@@ -375,8 +375,8 @@ class CommanderHud(ToolResult):
             len(self.forks), self.usage.line(), self.heartbeat.age(now),
         ),))
 
-    def status_strip(self, now: float, *, width: int | None = None) -> str:
-        return "\n".join(self.status_table(now).labelled_lines(width))
+    def status_strip(self, now: float) -> str:
+        return "\n".join(self.status_table(now).labelled_lines())
 
     @property
     def display_facts(self) -> HudDisplayFacts:
@@ -394,10 +394,10 @@ class CommanderHud(ToolResult):
 
     @staticmethod
     def alarm_text(sections: tuple[AlarmSection, ...], now: float, *,
-                   width: int | None = None, colour: bool = False) -> tuple[str, ...]:
+                   colour: bool = False) -> tuple[str, ...]:
         return tuple(line for section in sections for line in (
             section.group.paint(section.heading(), colour),
-            *(line for table in section.tables(now) for line in table.labelled_lines(width)),
+            *(line for table in section.tables(now) for line in table.labelled_lines()),
         ))
 
     @staticmethod
@@ -405,16 +405,15 @@ class CommanderHud(ToolResult):
         """Every original line; the section title already owns its compact heading."""
         return tuple(ping.render(now) for section in sections for ping in section.pings)
 
-    def hud_text(self, now: float, *, colour: bool = False,
-                 width: int | None = None) -> tuple[str, ...]:
-        """The producer passes no width; an actual reader may supply its own viewport."""
-        result = list(self.status_strip(now, width=width).splitlines())
+    def hud_text(self, now: float, *, colour: bool = False) -> tuple[str, ...]:
+        """The heartbeat has no viewport; native readers own their concrete geometry."""
+        result = list(self.status_strip(now).splitlines())
         for section in self.groups():
             group = section.group
             result.extend(("", group.paint(section.heading(), colour)))
             result.extend(group.paint(line, colour) for line in group.table_lines(
-                table.lines(width) for table in section.tables))
-        result.extend(("", *self.alarm_text(self.alarms, now, width=width, colour=colour),
+                table.lines() for table in section.tables))
+        result.extend(("", *self.alarm_text(self.alarms, now, colour=colour),
                        *(line for packet in self.packets for line in packet.not_applied)))
         return tuple(result)
 

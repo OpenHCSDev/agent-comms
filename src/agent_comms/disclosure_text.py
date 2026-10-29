@@ -9,7 +9,7 @@ from itertools import zip_longest
 from textwrap import wrap
 from typing import ClassVar, Hashable
 
-from agent_comms.declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, FieldPlan, ValueDescription, ViewColumn
 
 
@@ -19,11 +19,10 @@ class DisclosureText:
 
     @classmethod
     def of(cls, value: object) -> DisclosureText:
-        return FieldCodec.describe(value, DisclosureShapes)
+        return FieldCodec.shape(value).describe(DisclosureShapes)
 
-    def summary(self, width: int | None = None) -> str:
-        text = str(self.value)[:width]
-        return text if width is None else text.partition("\n")[0]
+    def summary(self) -> str:
+        return str(self.value)
 
     @classmethod
     def view(cls, value: object, view: str) -> tuple[str, ...]:
@@ -86,32 +85,28 @@ class ViewTable[R]:
         return tuple(column.minimum_width(row[index] for row in self.texts)
                      for index, column in enumerate(self.columns))
 
-    def widths(self, available: int | None = None) -> tuple[int, ...]:
-        weights = tuple(max(len(column.label), max(
+    def natural_widths(self) -> tuple[int, ...]:
+        return tuple(max(len(column.label), max(
             (len(line) for row in self.texts for line in row[index].splitlines()), default=0,
         )) for index, column in enumerate(self.columns))
-        if available is None:
-            return weights
-        return ViewColumn.fit_widths(weights, available, self.minimums)
 
-    def layout(self, available: int | None) -> ViewTable[R]:
+    def widths(self, available: int) -> tuple[int, ...]:
+        return ViewColumn.fit_widths(self.natural_widths(), available, self.minimums)
+
+    def layout(self, available: int) -> ViewTable[R]:
         """Geometry classification happens once here, never again in the native adapter."""
-        if available is not None and sum(self.minimums) > available:
+        if sum(self.minimums) > available:
             return StackedViewTable(self.record, self.view, self.records)
         return self
 
     def header_rows(self) -> tuple[tuple[str, ...], ...]:
         return (tuple(column.label for column in self.columns),)
 
-    def lines(self, width: int | None = None) -> tuple[str, ...]:
-        available = None if width is None else width - len("  ") * (len(self.columns) - 1)
-        layout = self.layout(available)
-        available = None if width is None else width - len("  ") * (len(layout.columns) - 1)
-        return layout.render_lines(available)
+    def lines(self) -> tuple[str, ...]:
+        return self.render_lines(self.natural_widths())
 
-    def render_lines(self, available: int | None) -> tuple[str, ...]:
-        widths = self.widths(available)
-        lines = []
+    def render_lines(self, widths: tuple[int, ...]) -> tuple[str, ...]:
+        lines: list[str] = []
         for row in (*self.header_rows(), *self.texts):
             wrapped = tuple(tuple(part for line in text.splitlines() or ("",)
                                   for part in wrap(line, max(1, cell_width), replace_whitespace=False,
@@ -122,14 +117,10 @@ class ViewTable[R]:
             lines.extend(self.row_separator)
         return tuple(lines)
 
-    def labelled_lines(self, width: int | None = None) -> tuple[str, ...]:
+    def labelled_lines(self) -> tuple[str, ...]:
         """Compact strips use declared labels too, not another list of metric names."""
-        records = tuple(" · ".join(f"{column.label}: {cell}"
-                                    for column, cell in zip(self.columns, row)) for row in self.texts)
-        if width is None:
-            return records
-        return tuple(line for record in records
-                     for line in wrap(record, max(1, width), break_long_words=False, break_on_hyphens=False))
+        return tuple(" · ".join(f"{column.label}: {cell}"
+                                for column, cell in zip(self.columns, row)) for row in self.texts)
 
 
 class StackedViewTable[R](ViewTable[R]):
@@ -148,10 +139,10 @@ class StackedViewTable[R](ViewTable[R]):
                                  for column, cell in zip(self.declared_columns, row)),)
                      for row in self.cells)
 
-    def widths(self, available: int | None = None) -> tuple[int, ...]:
-        return (max(1, available),) if available is not None else super().widths()
+    def widths(self, available: int) -> tuple[int, ...]:
+        return (max(1, available),)
 
-    def layout(self, available: int | None) -> ViewTable[R]:
+    def layout(self, available: int) -> ViewTable[R]:
         return self
 
     def header_rows(self) -> tuple[tuple[str, ...], ...]:
@@ -205,19 +196,16 @@ class ViewHeading(DeclaredFamily, declared_name=None):
 
 
 class RecordText(DisclosureText):
-    def summary_fields(self) -> tuple[FieldPlan, ...]:
+    def fields(self) -> tuple[FieldPlan, ...]:
+        """All disclosed fields; identity-only summaries never remove detail children."""
         return tuple(plan for plan in FieldCodec.field_plans(type(self.value)) if plan.records)
 
-    def summary(self, width: int | None = None) -> str:
-        parts: list[str] = []
-        length = 0
-        for plan in self.summary_fields():
-            part = DisclosureText.of(plan.current(self.value)).summary(width)
-            parts.append(part)
-            length += len(part) + len(" · ")
-            if width is not None and length >= width:
-                break
-        return " · ".join(parts)[:width]
+    def summary_fields(self) -> tuple[FieldPlan, ...]:
+        return self.fields()
+
+    def summary(self) -> str:
+        return " · ".join(DisclosureText.of(plan.current(self.value)).summary()
+                          for plan in self.summary_fields())
 
 
 @dataclass(frozen=True)
@@ -232,25 +220,25 @@ class IdentifiedRecordText(RecordText):
 class ClassText(DisclosureText):
     value: type
 
-    def summary(self, width: int | None = None) -> str:
-        return self.value.__name__[:width]
+    def summary(self) -> str:
+        return self.value.__name__
 
 
 @dataclass(frozen=True)
 class FamilyText(ClassText):
-    value: FamilyMeta
+    value: type[DeclaredFamily]
 
-    def summary(self, width: int | None = None) -> str:
-        return self.value.declared_name[:width]
+    def summary(self) -> str:
+        return self.value.declared_name
 
 
 class CollectionText(DisclosureText):
     value: Collection[object]
     noun: ClassVar[str] = "item"
 
-    def summary(self, width: int | None = None) -> str:
+    def summary(self) -> str:
         count = len(self.value)
-        return f"{count} {self.noun}{'s' if count != 1 else ''}"[:width]
+        return f"{count} {self.noun}{'s' if count != 1 else ''}"
 
 
 @dataclass(frozen=True)
@@ -282,7 +270,7 @@ class DisclosureShapes(ValueDescription[DisclosureText]):
         return ClassText(value)
 
     @classmethod
-    def family_value(cls, value: FamilyMeta) -> DisclosureText:
+    def family_value(cls, value: type[DeclaredFamily]) -> DisclosureText:
         return FamilyText(value)
 
     @classmethod

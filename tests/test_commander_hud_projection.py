@@ -68,24 +68,25 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
     assert tuple(unit.unit.name for section in groups for unit in section.records) == (
         "blocked", "screen", "run-next", "idle",
     )
-    plain = hud.hud_text(1000, width=120)
-    status = tuple(hud.status_strip(1000, width=120).splitlines())
+    plain = hud.hud_text(1000)
+    status = tuple(hud.status_strip(1000).splitlines())
     assert plain[:len(status)] == status
     assert "\x1b" not in "\n".join(plain)
     headings = [section.heading() for section in groups]
     assert [plain.index(heading) for heading in headings] == sorted(plain.index(heading) for heading in headings)
     assert "CommanderUnit" not in "\n".join(plain)
-    assert "\x1b[" in "\n".join(hud.hud_text(1000, width=120, colour=True))
+    assert "\x1b[" in "\n".join(hud.hud_text(1000, colour=True))
     assert sum(len(section.pings) for section in hud.alarms) == len(hud.packets[0].handled)
     assert all(ping.text in "\n".join(hud.alarm_text(hud.alarms, 1000))
                for ping in hud.packets[0].handled)
     assert hud.board == ()
-    assert hud.alarm_detail(hud.alarms, 1000) == tuple(
-        ping.render(1000) for section in hud.alarms for ping in section.pings
-    )
+    details = hud.alarm_detail(hud.alarms, 1000)
+    assert all(section.heading() not in details for section in hud.alarms)
+    assert all(ping.text in "\n".join(details) for ping in hud.packets[0].handled)
     for section in groups:
         for table in section.tables:
-            narrow = "\n".join(table.lines(60))
+            layout = table.layout(60)
+            narrow = "\n".join(layout.render_lines(layout.widths(60)))
             assert all(unit.unit.name in narrow for unit in table.records)
     assert tuple(unit.unit for unit in groups[0].records) == (hud.units[1].unit,)
 

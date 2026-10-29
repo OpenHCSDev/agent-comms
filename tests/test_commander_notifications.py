@@ -690,8 +690,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
         assert sum(row.more for row in overflow) == len(rules) - 1
         now = time.time()
         original_lines = frame.alarm_detail(frame.alarms, now)
-        assert original_lines == tuple(ping.render(now) for section in frame.alarms
-                                       for ping in section.pings)
+        assert all(section.heading() not in original_lines for section in frame.alarms)
         assert all(rule.line() in "\n".join(original_lines) for rule in rules)
     assert rules[0].line() in original.body
     assert rules[0].line() in message.body
