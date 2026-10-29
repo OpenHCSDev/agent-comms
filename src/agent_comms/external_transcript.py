@@ -10,7 +10,6 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator
 from contextlib import aclosing, closing, contextmanager
 from dataclasses import dataclass, field
@@ -122,9 +121,6 @@ class OpeningReplies(ActiveReplies):
 @dataclass(frozen=True)
 class AnsweringReplies(ActiveReplies):
     """Later context cannot change which deliveries opened this answer."""
-
-    def answering(self) -> ReplyWindow:
-        return self
 
 
 @dataclass(frozen=True)
