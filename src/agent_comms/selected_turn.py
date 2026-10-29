@@ -2,16 +2,9 @@
 
 from __future__ import annotations
 
-from .native_child import PersistentPiSession
-
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .coordination_tables.assignments import WakeAssignment
-    from .selected_write_authority import SelectedWriteAuthority
 
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
@@ -24,7 +17,10 @@ from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeClaim
 from .optional_awareness_projection import OptionalAwarenessProjection
+from .native_child import PersistentPiSession
 from .native_failures import NativePiUnavailable
+from .coordination_tables.assignments import WakeAssignment
+from .selected_write_authority import SelectedWriteAuthority
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
 from .selected_actions import BatchSelectedAction, NoSelectedTools, SelectedAction

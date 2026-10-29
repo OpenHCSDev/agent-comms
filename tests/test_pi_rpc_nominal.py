@@ -197,7 +197,7 @@ for line in sys.stdin:
     async with BoundedRun.session(
         (sys.executable, "-u", "-c", responder), cwd=tmp_path, timeout=commands.CATALOG_TIMEOUT
     ) as proc:
-        child = PiChild(proc, PiRpcChannel(proc.stdout))
+        child = PiChild(proc)
         for index in range(2):
             request = commands.SetSteeringMode(
                 id=(

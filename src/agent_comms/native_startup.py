@@ -31,11 +31,11 @@ class SessionLoad(ABC):
 
     @classmethod
     @boundary_decoder
-    def capture(cls, session_file: str | None) -> SessionLoad:
+    def capture(cls, session_file: Path | None) -> SessionLoad:
         if session_file is None:
             return UnmeasuredSessionLoad()
         try:
-            return MeasuredSessionLoad(Path(session_file).stat().st_size)
+            return MeasuredSessionLoad(session_file.stat().st_size)
         except FileNotFoundError:
             return UnmeasuredSessionLoad()
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .native_child import PersistentPiSession
-
 import asyncio
 import time
 from abc import ABC, abstractmethod
@@ -29,6 +27,7 @@ from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
+from .native_child import PersistentPiSession
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_pi import (
@@ -347,7 +346,7 @@ class TrackedTurnSession(TurnSession):
                 # closes them before child cleanup can block, so an
                 # interrupted selected turn cannot leave its socket path behind.
                 async with AsyncExitStack() as transport:
-                    self.native = await self.acquire_native(transport, reuse=True)
+                    self.native = await self.acquire_native(transport)
                     ownership.push_async_callback(self.retain_or_close)
                     def acquire_draft() -> DraftPublication:
                         with self.startup.measurements.operation("draft_publication_worker"):

@@ -12,9 +12,8 @@ from typing import ClassVar, NoReturn, Self
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .declared_family import DeclaredFamily
-from .instruction_deck import CommanderReader, FleetReader, RuleReads
+from .instruction_deck import RuleReads
 from .turn_context import ContextObservations, RuleReadingSegment, TurnContext
-from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_pi import NativePiRpcLaunch
@@ -27,9 +26,9 @@ from .publication_measurements import PublicationMeasurements
 from .session_revision import SessionRevision, SessionRevisionUnavailable
 
 from .native_package import VerifiedNativePackage
+from .native_startup import NativeStartup
+from .turn_watchdog import ProgressWatchdog
 from .participant_identity import ParticipantIdentity
-from .registry_store import RegistryStore
-from .held_orders import HeldOrders
 from .pi_commands import ExtensionUiResponse, PiCommand
 from .pi_payloads import PiResponseData, StateData
 from .threads import Thread
@@ -139,11 +138,16 @@ class RunningInputForwarder(InputForwarder):
 @dataclass
 class PiChild:
     proc: AttachedChild
-    reader: PiRpcChannel
+    reader: PiRpcChannel = field(init=False)
+    event_type: ClassVar[type[PiEvent]] = PiEvent
     resources: ExitStack = field(default_factory=ExitStack, repr=False, kw_only=True)
     transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False, kw_only=True)
     forwarding: InputForwarder = field(default_factory=NoInputForwarder, init=False, repr=False)
     _close_job: asyncio.Task[RetirementState] | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """The channel reads this child's stdout, never a caller-supplied second pipe."""
+        self.reader = PiRpcChannel(self.proc.stdout, event_type=self.event_type)
 
     def send[Command: PiCommand](self, command: Command) -> PendingRequest[Command]:
         pending = self.reader.track(command)
@@ -169,20 +173,6 @@ class PiChild:
     async def reply_ui(self, response: ExtensionUiResponse) -> None:
         self.send(response)
         await asyncio.wait_for(self.drain(), timeout=2)
-
-    @classmethod
-    async def start_command(
-        cls,
-        argv: tuple[str, ...],
-        *,
-        cwd: str,
-        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
-        pass_fds: tuple[int, ...] = (),
-        event_type: type[PiEvent] = PiEvent,
-        **state,
-    ) -> Self:
-        proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
-        return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
 
     async def request(self, command: PiCommand) -> PiResponseData:
         if self.retired:
@@ -289,6 +279,7 @@ class PiSessionChild(PiChild, RuleReads, ContextObservations):
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
     rule_reading: RuleReadingSegment = field(kw_only=True)
+    prepare_rules: Callable[[], RuleReadingSegment] = field(kw_only=True, repr=False)
 
     @property
     def reading_sources(self) -> Mapping[Path, str]:
@@ -298,35 +289,26 @@ class PiSessionChild(PiChild, RuleReads, ContextObservations):
     def working_directory(self) -> Path:
         return self.key[0].cwd
 
-    @staticmethod
-    def prepare_rules(launch: NativePiRpcLaunch) -> RuleReadingSegment:
-        snapshot = RegistryStore.at(launch.root).snapshot()
-        owner = snapshot.by_lookup[launch.session.files(launch.root).owner.lookup]
-        reader = snapshot.commander_project.session_output(
-            owner.incarnation, commander=CommanderReader(), commanded=FleetReader())
-        parts = reader.prepare()
-        header = reader.header(lambda: HeldOrders.recalled(launch.root, snapshot, owner.name))
-        return RuleReadingSegment.for_parts(owner.incarnation, parts, header)
-
     async def forget_context(self) -> None:
         self.received_context.clear()
         self.reset_rule_reads()
-        self.rule_reading = await asyncio.to_thread(self.prepare_rules, self.key[0])
+        self.rule_reading = await asyncio.to_thread(self.prepare_rules)
 
     @classmethod
     async def start(
-        cls, key: tuple[NativePiRpcLaunch, tuple[int, int]], attestation: NativeAttestation,
+        cls: type[Self], key: tuple[NativePiRpcLaunch, tuple[int, int]], attestation: NativeAttestation,
+        prepare_rules: Callable[[], RuleReadingSegment],
     ) -> Self:
         launch, _ = key
-        reading = await asyncio.to_thread(cls.prepare_rules, launch)
+        reading = await asyncio.to_thread(prepare_rules)
         with ExitStack() as resources:
             environment = dict(launch.env)
             if "AGENT_COMMS_PROJECT_SOCKET" in environment:
                 address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
                 environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
-            return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
-                key=key, attestation=attestation,
-                rule_reading=reading, resources=resources.pop_all())
+            proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=environment)
+            return cls(proc, key=key, attestation=attestation,
+                rule_reading=reading, prepare_rules=prepare_rules, resources=resources.pop_all())
 
 
 class NativeChildState(ABC):
@@ -344,8 +326,20 @@ class NativeChildState(ABC):
             worktree=worktree, environment=environment, session_file=session_file,
         )
 
-    def reuse(self, key: tuple[NativePiRpcLaunch, tuple[int, int]]) -> PiSessionChild | None:
-        return None
+    async def opened(
+        self, persistent: PersistentPiSession, key: tuple[NativePiRpcLaunch, tuple[int, int]],
+        *, startup: NativeStartup, watchdog: ProgressWatchdog,
+        prepare_rules: Callable[[], RuleReadingSegment],
+    ) -> PiSessionChild:
+        """States without a reusable idle child retire before spawning its successor."""
+        await persistent.close()
+        launch, _ = key
+        watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
+        with startup.measurements.operation("native_spawn"):
+            child = await PiSessionChild.start(key, launch.session.attestation(), prepare_rules)
+        persistent.child_state = BorrowedNative(child, persistent.child_state)
+        watchdog.spawned(False)
+        return child
 
     async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
         return context
@@ -466,11 +460,20 @@ class RetainedNative(ChildNative):
                 await current.child.forget_context()
             return data
 
-    def reuse(self, key: tuple[NativePiRpcLaunch, tuple[int, int]]) -> PiSessionChild | None:
-        if self.child.key == key and self.current:
-            self.child.attestation = PendingAttestation(self.identity)
-            return self.child
-        return None
+    async def opened(
+        self, persistent: PersistentPiSession, key: tuple[NativePiRpcLaunch, tuple[int, int]],
+        *, startup: NativeStartup, watchdog: ProgressWatchdog,
+        prepare_rules: Callable[[], RuleReadingSegment],
+    ) -> PiSessionChild:
+        if self.child.key != key or not self.current:
+            return await super().opened(persistent, key, startup=startup,
+                                        watchdog=watchdog, prepare_rules=prepare_rules)
+        self.child.attestation = PendingAttestation(self.identity)
+        self.child.prepare_rules = prepare_rules
+        watchdog.launching(asyncio.get_running_loop().time, key[0].session.path)
+        persistent.child_state = BorrowedNative(self.child, EmptyNative())
+        watchdog.spawned(True)
+        return self.child
 
     def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:
         if self.current and self.child.key[0].package == package:
@@ -509,24 +512,15 @@ class PersistentPiSession(SessionRetainer[PiSessionChild]):
     def available(self) -> bool:
         return self.child_state.available
 
-    async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
+    async def open(
+        self, launch: NativePiRpcLaunch, *, startup: NativeStartup, watchdog: ProgressWatchdog,
+        prepare_rules: Callable[[], RuleReadingSegment],
+    ) -> PiSessionChild:
         key = (launch, launch.configuration.auth_revision())
-        child = self.child_state.reuse(key) if reuse else None
-        reused = child is not None
-        if child is None:
-            await self.close()
-            attestation = launch.session.attestation()
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
-            with startup.measurements.operation("native_spawn"):
-                child = await PiSessionChild.start(key, attestation)
-            self.child_state = BorrowedNative(child, self.child_state)
-        else:
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
-            self.child_state = BorrowedNative(child, EmptyNative())
-        watchdog.spawned(reused)
-        return child
+        return await self.child_state.opened(self, key, startup=startup,
+                                             watchdog=watchdog, prepare_rules=prepare_rules)
 
-    async def context_for_input(self, thread, context):
+    async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
         async with self.lock:
             return await self.child_state.context_for_input(thread, context)
 

@@ -278,7 +278,6 @@ class CatalogQuery(NativeQuery):
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .native_child import PiChild
-        from .pi_rpc import PiRpcChannel
 
         try:
             launch = await asyncio.to_thread(
@@ -293,7 +292,7 @@ class CatalogQuery(NativeQuery):
             async with BoundedRun.session(
                 launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
             ) as child:
-                yield PiChild(child, PiRpcChannel(child.stdout))
+                yield PiChild(child)
         except TimeoutError as error:
             raise NativePiUnavailable(
                 f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "

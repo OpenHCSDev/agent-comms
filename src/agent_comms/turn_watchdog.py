@@ -6,6 +6,7 @@ import asyncio
 import math
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from metaclass_registry.mro_dispatch import (
@@ -189,7 +190,7 @@ class ProgressWatchdog(MroDispatch):
         self.unbounded_wait = UnboundedWait()
         self.phase: phases.TurnPhase = phases.PromptAcceptancePhase()
 
-    def launching(self, clock: Callable[[], float], session_file: str | None) -> None:
+    def launching(self, clock: Callable[[], float], session_file: Path | None) -> None:
         self.clock = clock
         self.launch_started_at = clock()
         self.session_load = SessionLoad.capture(session_file)

@@ -58,6 +58,9 @@ from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
+from .instruction_deck import CommanderReader, FleetReader
+from .held_orders import HeldOrders
+from .registry_store import RegistryStore
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
@@ -65,7 +68,7 @@ from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
-from .turn_context import InputContributionCoordinates
+from .turn_context import InputContributionCoordinates, RuleReadingSegment
 from .turn_inputs import InputForwarding
 from .turn_item import PiRequestKey
 from .turn_output import TurnOutput
@@ -395,13 +398,23 @@ class NativeSession(MroDispatch, ABC):
         except NativePiUnavailable as error:
             self.prompt_state.raise_native_failure(error, self.launch.session.attestation())
 
-    async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
+    @staticmethod
+    def prepare_rules(launch: NativePiRpcLaunch) -> RuleReadingSegment:
+        """The operation owning this launch prepares rules; a retained process does no registry I/O."""
+        snapshot = RegistryStore.at(launch.root).snapshot()
+        owner = snapshot.by_lookup[launch.session.files(launch.root).owner.lookup]
+        reader = snapshot.commander_project.session_output(
+            owner.incarnation, commander=CommanderReader(), commanded=FleetReader())
+        return RuleReadingSegment.for_parts(owner.incarnation, reader.prepare(),
+            reader.header(lambda: HeldOrders.recalled(launch.root, snapshot, owner.name)))
+
+    async def acquire_native(self, resources: AsyncExitStack) -> PiSessionChild:
         """Acquire leaf transport once in the original turn's resource lifetime."""
         with self.native_acquisition():
             async with AsyncExitStack() as transport:
                 with self.startup.measurements.operation("open_transport"):
                     unbound = await self.open_transport(transport)
-                native = await self.open_native(reuse=reuse)
+                native = await self.open_native()
                 with self.startup.measurements.operation("native_process_binding"):
                     self.tool_socket = await unbound.bind_process(native.proc.pid)
                 native.transport = transport.pop_all()
@@ -411,11 +424,12 @@ class NativeSession(MroDispatch, ABC):
             resources.callback(self.active.pop, self.owner, None)
         return native
 
-    async def open_native(self, *, reuse: bool) -> PiSessionChild:
+    async def open_native(self) -> PiSessionChild:
         """Let the session manage child ownership for new or continued input."""
         with self.startup.measurements.operation("native_open"):
             native = await self.native_session.open(
-                self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,
+                self.launch, startup=self.startup, watchdog=self.watchdog,
+                prepare_rules=partial(self.prepare_rules, self.launch),
             )
         self.startup.native_process = native.proc.identity
         return native
@@ -425,9 +439,7 @@ class NativeSession(MroDispatch, ABC):
         self.owner = asyncio.current_task()
         async with AsyncExitStack() as resources:
             try:
-                self.native = await self.acquire_native(
-                    resources, reuse=True
-                )
+                self.native = await self.acquire_native(resources)
                 async with self.native.failures():
                     self.output.sensitive |= self.native.sensitive_diagnostics
                     try:

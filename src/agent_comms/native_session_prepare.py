@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from .native_child import PersistentPiSession
-
-from agent_comms.participant_identity import ParticipantIdentity
-
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from contextlib import aclosing
 from pathlib import Path
@@ -13,6 +9,8 @@ from functools import partial
 
 from . import agent_events as events
 from . import backend
+from agent_comms.participant_identity import ParticipantIdentity
+from .native_child import PersistentPiSession
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_startup import NativeStartup

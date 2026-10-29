@@ -17,8 +17,6 @@ import any runtime implementation at module level.
 
 from __future__ import annotations
 
-from . import backends
-
 import asyncio
 from abc import ABC, abstractmethod
 from collections import deque
@@ -26,6 +24,7 @@ from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from . import backends
 from .declared_family import DeclaredFamily, UniqueExternalSelector
 from .field_codec import InputId
 from .image_input import ImageInput

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
@@ -19,6 +19,7 @@ from ..agent_backend import (
     RuntimeLocation,
 )
 from ..agent_events import Error
+from ..child_process import AttachedChild
 from ..locked_store import SQLiteFile
 from ..external_transcript import ExternalCut
 from ..native_child import PiChild
@@ -35,6 +36,20 @@ from ..pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from ..pi_payloads import PiOmitted, PiResponseData
 from ..pi_vocabulary import ThinkingLevelField
 from ..transcript_sources import TranscriptSource
+
+
+class DurableChild(PiChild):
+    """The durable host declares its decoder once, rather than at both launch sites."""
+
+    event_type = DurablePiEvent
+
+    @classmethod
+    async def start_command(
+        cls: type[Self], argv: tuple[str, ...], *, cwd: Path, resources: ExitStack,
+        pass_fds: tuple[int, ...] = (),
+    ) -> Self:
+        proc = await AttachedChild.start(argv, cwd=cwd, pass_fds=pass_fds)
+        return cls(proc, resources=resources)
 
 
 @dataclass(frozen=True)
@@ -89,8 +104,8 @@ class DurableTranscript(TranscriptSource):
             yield replace(self, execute=lambda source, command: HistoryData(()))
             return
         with asyncio.Runner() as loop:
-            child = loop.run(PiChild.start_command(('node', str(PiDurableBackend.host_script)),
-                cwd=str(Path(self.location.path).parent), event_type=DurablePiEvent))
+            child = loop.run(DurableChild.start_command(('node', str(PiDurableBackend.host_script)),
+                cwd=Path(self.location.path).parent, resources=ExitStack()))
             try:
                 loop.run(child.request(OpenHistory(self.location.path)))
                 yield replace(self, execute=lambda source, command: loop.run(child.request(command)))
@@ -228,8 +243,8 @@ class PiDurableBackend(AgentBackend, Compacts):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with ExitStack() as resources:
                     lock = resources.enter_context(thread.writable_runtime.writer_claim.claimed())
-                    child = await PiChild.start_command(('node', str(self.host_script)),
-                        cwd=thread.worktree.path, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
+                    child = await DurableChild.start_command(('node', str(self.host_script)),
+                        cwd=thread.worktree.path, pass_fds=(lock.fileno(),), resources=resources.pop_all())
                 async with child.failures():
                     model = thread.model.set_model(SetModel)
                     await child.request(Open(str(path), str(thread.worktree), model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
