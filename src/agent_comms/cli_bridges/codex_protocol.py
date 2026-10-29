@@ -28,6 +28,7 @@ from agent_comms.field_codec import (
     MessageId,
     ToolCallId,
     boundary_decoder,
+    boundary_encoder,
 )
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
@@ -202,6 +203,7 @@ class ClientId(DeclaredFamily, ABC):
         return ForeignClientId(value)
 
     @property
+    @boundary_encoder
     @abstractmethod
     def external(self) -> str | None: ...
 

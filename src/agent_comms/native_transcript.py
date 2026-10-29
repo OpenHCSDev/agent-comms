@@ -202,12 +202,12 @@ class NativeRecord(TranscriptRecord):
             raise MalformedRecord("Native publication has incomplete evidence")
         return self.entry
 
-    def publication_producer(self) -> RecordedEntry | None:
+    def is_final_publication(self) -> bool:
         entry = self.require_entry()
         if entry.final_reply:
             entry.require_entry_id()
-            return entry
-        return None
+            return True
+        return False
 
 
 class NoNativeInput(NativeRecord):
@@ -442,8 +442,7 @@ class NativeTranscript(TranscriptSource):
         for record in self.reverse(through):
             if record.start < after:
                 break
-            producer = record.publication_producer()
-            if producer is None:
+            if not record.is_final_publication():
                 continue
             user = self.input_for(record)
             entry = user.require_entry().require_tracked_user()
