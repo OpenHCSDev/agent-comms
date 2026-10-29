@@ -585,8 +585,9 @@ class NoCommanderProject(CommanderProject):
     def deal_rules(self, deal: RuleDeal, incarnation: ThreadIncarnation, *,
                    commander: type[DealtSources], commanded: type[DealtSources],
                    prompts: tuple[str, ...]) -> None:
-        """A bus with no commander project has no fleet whose rules to deal."""
-        return
+        """A Pi unit started on a bus with no commander project has no rules to follow, so its
+        tools are refused, loudly, until one is declared."""
+        deal.deal_none("no commander project: no rules to deal")
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         return ()

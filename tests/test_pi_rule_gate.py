@@ -4,7 +4,6 @@ in full and written the audit, through the same deal the Claude Code hooks judge
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -16,8 +15,10 @@ from agent_comms.native_tools import ReadTool
 from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.repo import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
+from agent_comms.threads import Thread
 from agent_comms_hooks.read_gate import ReadInput
 from agent_comms_hooks.skill import CommanderReader, FleetReader
+from conftest import answer_deal
 
 
 def call(name: str, arguments: dict[str, object]) -> CodingCall:
@@ -25,20 +26,14 @@ def call(name: str, arguments: dict[str, object]) -> CodingCall:
 
 
 @pytest.fixture
-def private_home(tmp_path, monkeypatch):
-    """Set before the bus exists: its storage rule fixes the scratch base from HOME."""
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-
-
-@pytest.fixture
-def unit_deal(private_home, commander_bus):
-    """The deal Core renews for the bus's ordinary unit, in the private home's scratch."""
+def unit_deal(commander_bus):
+    """The deal Core renews for the bus's ordinary unit, in the bus's own scratch."""
     deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
-    assert deal.scratch.is_relative_to(Path.home())
+    assert deal.scratch.is_relative_to(commander_bus.root)
     return deal
 
 
-def test_a_spawned_thread_is_dealt_its_role_s_deck_sources_once(private_home, commander_bus):
+def test_a_spawned_thread_is_dealt_its_role_s_deck_sources_once(commander_bus):
     """The first start deals the registry role's deck sources; a restart keeps the deal."""
     for name, reader in (("claude-code", CommanderReader), ("unit-x", FleetReader)):
         deal = PiRedeal.of(commander_bus, commander_bus.registry.require(name))
@@ -105,21 +100,6 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         bash.judge_under(unit_deal)
 
 
-def answer(deal: PiRedeal) -> None:
-    """Read every dealt file in full and write an audit answering the deal."""
-    for source in deal.current().sources():
-        call("read", {"path": str(source)}).completed_under(deal)
-    due = deal.current().due
-    deal.audit.write_text(
-        json.dumps(
-            {
-                "rules": [{"rule": rule} for rule in sorted(due.rules)],
-                "owner_words": [{"words": text, "doing": "rereading"} for text in due.owner_words],
-            }
-        )
-    )
-
-
 def refused(deal: PiRedeal) -> bool:
     try:
         call("bash", {"command": "ls"}).judge_under(deal)
@@ -133,12 +113,23 @@ def test_the_rules_come_back_once_at_each_declared_share_of_context_left(unit_de
     left, once each, and each compaction arms both again."""
     assert [refresh.remaining for refresh in unit_deal.refreshes] == [0.66, 0.33]
     events.CompactionEnd().deal_rules(unit_deal)
-    answer(unit_deal)
+    answer_deal(unit_deal)
     for used, closes in ((30, False), (35, True), (40, False), (70, True), (95, False)):
         unit_deal.observe_context(ContextUsage(used, 100))
         assert refused(unit_deal) is closes, used
-        answer(unit_deal)
+        answer_deal(unit_deal)
     events.CompactionEnd().deal_rules(unit_deal)
-    answer(unit_deal)
+    answer_deal(unit_deal)
     unit_deal.observe_context(ContextUsage(40, 100))
     assert refused(unit_deal)
+
+
+def test_a_bus_with_no_commander_project_refuses_every_tool_loudly(comms, tmp_path):
+    """No commander project means no rules: never a silently open gate."""
+    unit = comms.registry.declare(Thread("unit-y", frozenset(), Checkout(tmp_path)))
+    deal = PiRedeal.of(comms, unit)
+    deal.start()
+    with pytest.raises(RulesUnread, match="no commander project: no rules to deal"):
+        call("bash", {"command": "ls"}).judge_under(deal)
+    with pytest.raises(RulesUnread, match="no commander project"):
+        call("read", {"path": "notes.md"}).judge_under(deal)
