@@ -13,7 +13,7 @@ Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlli
 
 **Five things, in this order, every tick:**
 1. **Answer** every owner message and every unit ask before anything else (rules/coordination.md).
-2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll. Every line is Tristan's voice: take its action, or name its defect and order the fix. Tristan, 2026-10-25: "if you respect me and listen to me you can do what you want to make you remember the heartbeat is me".
+2. **Work from Tristan.** Core's Tristan pass is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll. Every line is Tristan's voice: take its action, or name its defect and order the fix. Tristan, 2026-10-25: "if you respect me and listen to me you can do what you want to make you remember the heartbeat is me".
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
 4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
 5. **Dispatch from the main loop; units implement, Claude forks diagnose, shape and review.** Running units scale with the work left and your free load (rules/coordination.md).
@@ -35,7 +35,7 @@ Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `c
 
 Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `comms_turns` reads a selected unit's recorded turns; `comms_order_work` reads its tool calls since an order. Neither replaces the heartbeat, and no other poll is kept beside it.
 
-A silent heartbeat is a dead board, not a quiet one: ten minutes without one is investigated that tick. On 2026-10-25 it crashed every ~70 s from 09:34 while `comms_hud` kept working, and seven units sat idle behind 17 owed closes. Tristan: "Shouldn't comms HUD be shown on heartbeat ur supposed too help itself".
+A silent Tristan is a dead board, not a quiet one: ten minutes without him is investigated that tick. On 2026-10-25 it crashed every ~70 s from 09:34 while `comms_hud` kept working, and seven units sat idle behind 17 owed closes. Tristan: "Shouldn't comms HUD be shown on heartbeat ur supposed too help itself".
 
 ## Why a dictator
 

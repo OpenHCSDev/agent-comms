@@ -254,8 +254,8 @@ class CommsCommanderLoadTool(BoardReadTool):
 class CommsHudTool(ThreadReadTool):
     label = "Commander HUD"
     description = (
-        "Read the commander's latest published heartbeat frame: orders, review timers, "
-        "strikes, edits, PRs, plan phases and load. A missing or stale heartbeat is refused."
+        "Read the commander's latest published Tristan frame: orders, review timers, "
+        "strikes, edits, PRs, plan phases and load. A missing or stale Tristan frame is refused."
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CommanderHud:
@@ -324,8 +324,8 @@ class CommsTodoListTool(BoardReadTool):
 class CommsStandingRulesTool(CommsHudTool):
     label = "Read broken standing rules"
     description = (
-        "Read the published heartbeat's standing-rule board and HUD. The heartbeat owns "
-        "enforcement; this read never repeats it. A missing or stale heartbeat is refused."
+        "Read the published Tristan board and HUD. Tristan owns "
+        "enforcement; this read never repeats it. A missing or stale Tristan frame is refused."
     )
 
 
