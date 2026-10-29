@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from agent_comms.commander_hud import CommanderFrame, CommanderHud, HudUnavailableGroup
+from agent_comms.child_process import ReadWork
 from agent_comms.task_attachments.commander_pings import AlarmGroup, CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory
-from agent_comms.message_bus import WatchPass
+from agent_comms.message_bus import PreparedWatchPass
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
@@ -28,39 +29,37 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class CommanderObservation:
     thread: Thread
-    merged: tuple[Todo, ...]
+    frame: HeartbeatFrame
     rules: tuple[StandingRule, ...]
     states: tuple[UnitState, ...]
-    hud: CommanderHud
 
     @classmethod
     def read(cls, comms: Comms, thread: Thread,
-             reading: type[ProgressRead] = ProgressRead, *,
-             plans: PlanReadings = PlanReadings()) -> CommanderObservation:
-        """One frame's progress facts come from ``reading``; Core reads the live forge and Git."""
-        frame = HeartbeatFrame.capture(comms, thread.name, reading(), plans)
-        pulls = frame.pulls
-        for repo in comms.registry.snapshot().commander_project.repository_names():
-            pulls.carry_reviews(comms.goals, repo)
+             inputs: CommanderInputs, *,
+             plans: PlanReadings) -> CommanderObservation:
+        """Consume the prepared cut; Core observes the local Git, forge and plan answers."""
+        frame = HeartbeatFrame.capture(comms, thread.name, inputs, plans)
         states = UnitState.current(comms, thread.name, frame)
         rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
+        return cls(thread, frame, rules, states)
+
+    def merges(self, comms: Comms) -> tuple[Todo, ...]:
+        """Merge checks may fetch, prepare checkouts and run commands; never a read phase."""
         # An unreadable holder's checkout already has its card; its checks cannot run there.
-        unreadable = ({state.unit for state in states}
-                      - {unit for state in states for unit in state.readable_units()})
-        merged = tuple(
+        unreadable = ({state.unit for state in self.states}
+                      - {unit for state in self.states for unit in state.readable_units()})
+        return tuple(
             closed
-            for todo in comms.goals.todos.for_commander(thread.incarnation)
+            for todo in comms.goals.todos.for_commander(self.thread.incarnation)
             if not any(held.owner_identity in unreadable
                        for held in todo.current_holder.current_assignments())
             for closed in todo.order.closed_by_merge(
-                todo, pulls, comms.registry.storage_rule.checkout_base)
+                todo, self.frame.pulls, comms.registry.storage_rule.checkout_base)
         )
-        hud = CommanderHud.of(comms, thread.name, frame, states)
-        return cls(thread, merged, rules, states, hud)
 
 
-class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
-                         WatchPass[tuple[CommanderObservation, ...]]):
+class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
+                         PreparedWatchPass[Mapping[Thread, CommanderInputs], tuple[CommanderObservation, ...]]):
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -84,22 +83,26 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                         *CommanderHud.alarm_text(sections, now),
                     ))
 
-    def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
+    def prepare(self, comms: Comms) -> Mapping[Thread, CommanderInputs]:
+        return {thread: CommanderInputs.prepare(comms, thread.name, ProgressRead(), self)
+                for thread in self.commanders(comms.registry, comms.goals)}
+
+    def observe(self, comms: Comms, prepared: Mapping[Thread, CommanderInputs]) -> tuple[CommanderObservation, ...]:
         return tuple(
-            CommanderObservation.read(comms, thread, plans=self)
-            for thread in self.commanders(comms.registry, comms.goals)
+            CommanderObservation.read(comms, thread, inputs, plans=self)
+            for thread, inputs in prepared.items()
         )
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
         """The committed packet survives connector replacement; local memory owns nothing."""
         self.register(comms.registry)
-        published = {item.thread.incarnation: item.hud for item in observed}
+        published = {}
         completed = []
         now = time.time()
         try:
             for item in observed:
-                comms.goals.todos.record_merges(item.merged)
-                previous = item.hud.packets
+                comms.goals.todos.record_merges(item.merges(comms))
+                previous = CommanderUpdate.latest(comms, item.thread.incarnation)
                 known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
                     comms, item.thread.name,
@@ -107,8 +110,9 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                      *(state for state in item.states
                        if state.attention() and UnitPing.capture(state) not in known)),
                 )
-                # Observations may have waited on forge/provider reads. Acknowledgements
-                # committed during those reads belong to this publication, not the old capture.
+                hud = CommanderHud.of(comms, item.thread.name, item.frame, item.states)
+                published[item.thread.incarnation] = hud
+                # Include acknowledgements committed during forge/provider reads and enforcement.
                 actions = CommanderHistory.read(comms, self.actors(comms.registry.snapshot(), item.thread.name))
                 for delivery in CommanderUpdate.derive(
                     item.thread.incarnation,
@@ -121,15 +125,15 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 ):
-                    hud = replace(item.hud, packets=(delivery.packet,), open_pings=delivery.open_pings)
+                    hud = replace(hud, packets=(delivery.packet,), open_pings=delivery.open_pings)
                     published[item.thread.incarnation] = hud
                     changed = CommanderFrame.at(comms.root, hud.commander).changed(hud)
                     if delivery.packet.should_publish(changed):
                         delivery.packet.send(comms, now, hud.hud_text(now))
                 completed.append(item.thread.incarnation)
         finally:
+            # A later commander's failure does not erase frames/passes already completed.
             CommanderFrame.replace_all(comms.root, tuple(published.values()))
-            # A later commander's failure does not erase passes already completed.
             ServicePassStore.at(comms.root).heartbeat_passed(
                 completed,
                 (thread.incarnation for thread in comms.registry.all_threads().values()),

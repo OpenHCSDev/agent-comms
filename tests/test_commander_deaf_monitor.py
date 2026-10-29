@@ -3,7 +3,7 @@
 import asyncio
 import os
 import time
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from dataclasses import replace
 
 import pytest
@@ -44,8 +44,8 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
     operation = Serve(owner=owner, transcript=tmp_path / "deaf-session.jsonl")
     heartbeat = CommanderHeartbeat()
 
-    def beat():
-        heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
+    async def beat():
+        await heartbeat.run(lambda: nullcontext(held_bus))
 
     def alarms():
         with held_bus.bus.bus.observing() as db:
@@ -84,11 +84,11 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 paused = snapshot.seen_at("lead")
                 assert status.paused_since(paused) == (paused,)
                 assert type(snapshot.statuses["lead"]) is type(status)
-                beat()
+                await beat()
                 assert alarms() == ()
                 monkeypatch.setattr(time, "time", lambda: paused + 301)
-                beat()
-                beat()
+                await beat()
+                await beat()
                 alarm, = alarms()
                 assert alarm.body.startswith("lead: COMMANDER DEAF")
                 assert "agent-comms-claude-bridge watch" in alarm.body
@@ -98,7 +98,7 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 assert type(snapshot.status("lead")) is ConnectedThreadStatus
                 assert type(snapshot.statuses["lead"]) is ConnectedThreadStatus
                 assert snapshot.status("lead").paused_since(snapshot.seen_at("lead")) == ()
-                beat()
+                await beat()
                 assert alarms() == (alarm,)
                 update, = held_bus.bus.bus.latest_addressed(
                     frozenset({heartbeat.sender}), frozenset({"lead"}),

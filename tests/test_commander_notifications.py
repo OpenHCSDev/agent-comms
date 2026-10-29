@@ -1,5 +1,6 @@
 """Committed notifications survive a new watcher and use the real publisher/readers."""
 
+import asyncio
 import json
 import os
 import pickle
@@ -14,13 +15,14 @@ from agent_comms.registry_document import RegisteredCommanderProject
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.comms import Comms
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.commander_hud import (
     CommanderFrame, CommanderHud, CodexUsage, FinishedPlansGroup, UnreadableUsage,
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
@@ -33,7 +35,7 @@ from agent_comms.ui_model.observation import ReadCommanderUnit, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.standing_rules import ReviewTimerUp, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import (
-    PendingClock, Spinning, UnitState, UrgentGroup,
+    Spinning, UnitState, UrgentGroup,
 )
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin
@@ -59,6 +61,20 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
         yield held_bus
 
 
+def test_real_heartbeat_dispatches_watch_and_plan_roles_separately(notification_bus: Comms) -> None:
+    heartbeat = CommanderHeartbeat()
+    prepared = heartbeat.prepare(notification_bus)
+    lead = notification_bus.registry.require("lead")
+    inputs = prepared[lead]
+    observed = heartbeat.observe(notification_bus, prepared)
+    item = next(item for item in observed if item.thread == lead)
+    assert item.frame.plan is inputs.plan
+    assert item.frame.pulls is inputs.pulls
+    assert (item.frame.live, item.frame.orphaned) == (inputs.live, inputs.orphaned)
+    assert inputs.plan.reads
+    assert any(plan.main == inputs.plan.main for plan in heartbeat.plans)
+
+
 def notifications(comms):
     page = MessagePageRequest(DMDisplayScope.capture(
         CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
@@ -67,7 +83,7 @@ def notifications(comms):
 
 
 def lead_hud(comms, states=()):
-    return CommanderHud.of(comms, "lead", HeartbeatFrame.capture(comms, "lead", ProgressRead()), states)
+    return CommanderHud.of(comms, "lead", capture_frame(comms, "lead", ProgressRead()), states)
 
 
 def assert_status_fields(message, hud):
@@ -77,12 +93,12 @@ def assert_status_fields(message, hud):
 
 
 def beat(comms, rules=(), *, states=()):
-    frame = CommanderObservation(
-        comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states))
+    observed = CommanderObservation(
+        comms.registry.require("lead"), capture_frame(comms, "lead", ProgressRead()),
+        rules, states)
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
-    CommanderHeartbeat().pass_body(comms, (frame,))
-    return next(hud for hud in CommanderFrame.read_all(comms.root)
-                if hud.commander == frame.hud.commander)
+    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))
+    return CommanderFrame.current(comms, "lead")
 
 
 def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_stale_selection(
@@ -127,7 +143,7 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
 
 
 class BrokenHeartbeat(CommanderHeartbeat, declared_name=None):
-    def observe(self, comms):
+    def observe(self, comms, prepared):
         raise RuntimeError("forced heartbeat pass failure")
 
 
@@ -136,7 +152,7 @@ def failed_pass(comms, error):
     watcher's callback runs; the original exception still escapes the pass."""
     heartbeat = BrokenHeartbeat()
     with pytest.raises(RuntimeError) as raised:
-        heartbeat.watch_pass(lambda: nullcontext(comms))
+        asyncio.run(heartbeat.run(lambda: nullcontext(comms)))
     ServicePassStore.at(comms.root).failed(BrokenHeartbeat.__name__, error)
     heartbeat.failed(lambda: nullcontext(comms), error)
     return raised.value
@@ -244,18 +260,15 @@ def everything_to_lead(comms):
 
 def test_hidden_tool_time_does_not_append_quiet_bus_history(notification_bus):
     comms = notification_bus
-    states = state_cards(comms, UnitState)
-    hud = lead_hud(comms, states)
-    card = replace(hud.units[0], clock=PendingClock(1, 2))
-    hud = replace(hud, units=(card, *hud.units[1:]))
-    frame = CommanderObservation(comms.registry.require("lead"), (), (), states, hud)
-    CommanderHeartbeat().pass_body(comms, (frame,))
+    recorded_turn(comms, (False,))
+    hud = beat(comms, states=state_cards(comms, UnitState))
     first, = notifications(comms)
     assert isinstance(first.task, CommanderNotice)
-    for instant in (3, 4):
-        current = CommanderFrame.current(comms, "lead")
-        later = replace(current, units=(replace(card, clock=PendingClock(1, instant)), *hud.units[1:]))
-        CommanderHeartbeat().pass_body(comms, (replace(frame, hud=later),))
+    for _ in range(2):
+        recorded_turn(comms, (False,))
+        later = beat(comms, states=state_cards(comms, UnitState))
+        assert tuple(card.clock for card in hud.units) != tuple(card.clock for card in later.units)
+        assert hud.display_facts == later.display_facts
     assert tuple(message.reference for message in notifications(comms)) == (first.reference,)
 
 
@@ -429,10 +442,11 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
     failing = ServicePassFailing("following-rule", time.time(), "independent source")
-    frames = tuple(CommanderObservation(thread, (), (failing,), (), hud=lead_hud(comms))
+    frame = capture_frame(comms, "lead", ProgressRead())
+    frames = tuple(CommanderObservation(thread, frame, (failing,), ())
                    for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
-        CommanderHeartbeat().pass_body(comms, frames)
+        asyncio.run(ObservedHeartbeat(frames).run(lambda: nullcontext(comms)))
     completed = ServicePassStore.at(comms.root).read().commander_completed
     assert set(completed) == {lead.incarnation}
     assert missing.incarnation not in completed
@@ -440,13 +454,13 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     beat(comms, (failing,))
     assert len(notifications(comms)) == 2
     # A pass that misses a still-registered commander retires nothing but its frame.
-    CommanderHeartbeat().pass_body(comms, ())
+    asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
     assert CommanderFrame.read_all(comms.root) == ()
     assert set(ServicePassStore.at(comms.root).read().commander_completed) == {lead.incarnation}
     # Only the registry retiring the incarnation drops its completion.
     comms.registry.unregister("lead")
     comms.registry.remove("lead")
-    CommanderHeartbeat().pass_body(comms, ())
+    asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
     assert not ServicePassStore.at(comms.root).read().commander_completed
 
 
@@ -584,7 +598,7 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
 
 def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
     comms = notification_bus
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, "lead", ProgressRead())
     states = UnitState.current(comms, "lead", frame)
     @dataclass(frozen=True)
     class FailedScan(UndatedStandingRule):

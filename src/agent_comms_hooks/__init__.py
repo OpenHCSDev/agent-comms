@@ -72,8 +72,10 @@ class ClaudeHook(HookRecord):
         """Claude Code's answer to this event: its event name plus the given fields."""
         print(json.dumps({"hookSpecificOutput": {"hookEventName": self.hook_event_name, **fields}}))
 
-    def warn(self, reason: str) -> None:
-        self.respond(additionalContext=reason)
+    def warn(self, *texts: str) -> None:
+        """One event has one JSON answer, however many sources supply its context."""
+        if texts:
+            self.respond(additionalContext="\n\n".join(texts))
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,17 @@ class ClaudeTranscriptHook(ClaudeHook):
     transcript_path: str
     window: ClassVar[int] = 1_000_000
     """Transcript bytes read from the end."""
+
+    @property
+    def calls(self) -> Path:
+        """One byte per completed or refused tool call since this deal; atomic append
+        counts parallel calls once without another counter or history scan."""
+        return Path(self.transcript_path).with_suffix(".calls")
+
+    def count_call(self) -> int:
+        with self.calls.open("ab", buffering=0) as calls:
+            calls.write(b".")
+            return calls.tell()
 
     @property
     def dealt_files(self) -> Path:

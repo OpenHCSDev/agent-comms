@@ -19,6 +19,8 @@ import pytest
 from agent_comms.commander.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.commander_heartbeat import CommanderObservation
+from commander_heartbeat_fixture import observe_commander
+from agent_comms.commander_hud import CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import ToolCallId
@@ -103,8 +105,8 @@ class Fleet:
         ).stdout.strip()
 
     def observe(self) -> CommanderObservation:
-        return CommanderObservation.read(
-            self.comms, self.comms.registry.require(self.commander)
+        return observe_commander(
+            self.comms, self.comms.registry.require(self.commander), ProgressRead()
         )
 
     def thread(self, name: str) -> Thread:
@@ -475,8 +477,8 @@ def test_held_branch_rules_survive_an_order_checkout_retired_mid_frame(fleet):
                 Checkout(path).retire()
             return difference
 
-    observed = CommanderObservation.read(
-        built.comms, built.thread(Fleet.commander), RetiringRead)
+    observed = observe_commander(
+        built.comms, built.thread(Fleet.commander), RetiringRead())
     held = set(HeldBranchRule.members_with(HeldBranchRule))
     assert not any(path.exists() for path in allocated)
     assert Counter(rule for rule in observed.rules if type(rule) in held) == Counter(
@@ -570,8 +572,9 @@ def test_a_merged_order_running_its_proof_is_not_spinning(fleet):
     # This fixture's repository is no installed package: the HUD line says so, never raises.
     observed = built.observe()
     assert not any(type(rule) is SpinningUnit for rule in observed.rules)
+    hud = CommanderHud.of(built.comms, Fleet.commander, observed.frame, observed.states)
     assert any(order.state == "Merged, no runtime install, waiting on the run"
-               for unit in observed.hud.units for order in unit.orders)
+               for unit in hud.units for order in unit.orders)
 
 
 def test_a_stopped_unit_is_not_spinning(fleet):
