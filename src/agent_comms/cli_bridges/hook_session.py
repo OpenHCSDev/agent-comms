@@ -8,7 +8,6 @@ from pathlib import Path
 
 from .hook_forks import SessionSubagents
 from .hook_skill import DeckStart
-from .monitor import EndSession
 from .session_watch import WatchClaim
 from .shared import Serve
 from ..child_process import ProcessIdentity
@@ -42,15 +41,6 @@ class SessionHook(SessionSubagents, DeckStart):
         Serve.launch(WatchClaim(self.session_id), self.owner, Path(self.transcript_path))
         # Launch and the initial deal are one ordered startup, not parallel hooks racing a socket.
         self.warn(*self.take())
-
-    def end(self) -> None:
-        """The subagents end first, while the claim still names this session's role; a
-        refusal still lets the bridge stop, then fails the hook with Core's reason."""
-        refused = self.end_subagents()
-        claim = WatchClaim(self.session_id)
-        claim.state().end(lambda: EndSession(owner=self.owner()))
-        for refusal in refused:
-            raise SystemExit(refusal)
 
 
 if __name__ == "__main__":

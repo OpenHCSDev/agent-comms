@@ -62,8 +62,12 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
 
     @classmethod
     def event_type(cls) -> type[Event]:
-        # The only cast is this Python generic-metadata boundary, before an event exists.
+        # Python's generic metadata is untyped; narrow it at the event boundary.
         return cast(type[Event], cls.declared_argument(HookRequest))
+
+    def decode_event(self, comms: Comms, binding: Binding, output: ResidentHookOutput) -> Event:
+        """The request supplies non-wire context only where its event requires it."""
+        return cast(Event, self.event_type().of(self.payload, output=output))
 
     @abstractmethod
     def run_hook(self, event: Event, comms: Comms, binding: Binding) -> None: ...
@@ -89,7 +93,8 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         output = ResidentHookOutput()
         try:
-            event = cast(Event, await asyncio.to_thread(self.event_type().of, self.payload, output=output))
+            event = await asyncio.to_thread(self.decode_event, service.bridge.comms,
+                                            service.bridge.binding, output)
         except Exception:
             return SessionRefused(error=traceback.format_exc())
         if event.session_id != service.bridge.binding.thread or event.hook_event_name not in self.events:
@@ -121,6 +126,9 @@ class SkillRequest(SkillText, HookRequest[DeckStart], declared_name=SkillText.co
 
 @dataclass(frozen=True)
 class StopRequest(DeferralGuard, HookRequest[StopHook], declared_name=DeferralGuard.command()):
+    def decode_event(self, comms: Comms, binding: Binding, output: ResidentHookOutput) -> StopHook:
+        return self.event_type().decode(self.payload, output=output, comms=comms, binding=binding)
+
     def run_hook(self, event: StopHook, comms: Comms, binding: Binding) -> None:
         event.guard()
 
@@ -128,19 +136,19 @@ class StopRequest(DeferralGuard, HookRequest[StopHook], declared_name=DeferralGu
 @dataclass(frozen=True)
 class SubagentStartRequest(SubagentStartProgram, HookRequest[SubagentHook], declared_name=SubagentStartProgram.command()):
     def run_hook(self, event: SubagentHook, comms: Comms, binding: Binding) -> None:
-        event.register()
+        event.register(comms, binding)
 
 
 @dataclass(frozen=True)
 class SubagentStopRequest(SubagentStopProgram, HookRequest[SubagentStopHook], declared_name=SubagentStopProgram.command()):
     def run_hook(self, event: SubagentStopHook, comms: Comms, binding: Binding) -> None:
-        event.retire()
+        event.retire(comms, binding)
 
 
 @dataclass(frozen=True)
 class SessionEndRequest(SessionEnded, HookRequest[SessionSubagents], declared_name=SessionEnded.command()):
     def run_hook(self, event: SessionSubagents, comms: Comms, binding: Binding) -> None:
-        for refusal in event.end_subagents():
+        for refusal in event.end_subagents(comms, binding):
             raise SystemExit(refusal)
 
     def completed(self, service: MonitorService) -> None:

@@ -512,6 +512,12 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     recent: ClassVar[int] = 10 * 60
 
     @classmethod
+    def read_idle(cls, comms: Comms, commander: ThreadIncarnation) -> list[Thread]:
+        """A fresh read and an already captured frame share the same idle selection."""
+        (actor,) = comms.registry.snapshot().threads_for(commander.require_recorded())
+        return cls.idle(comms, actor.name, HeldOrders.read(comms, actor.name))
+
+    @classmethod
     def idle(cls, comms: Comms, commander: str, scan: HeldOrders) -> list[Thread]:
         """Units whose registered status is running, parked threads aside."""
         held = {todo.holder for todo in scan.todos}
