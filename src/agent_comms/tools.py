@@ -90,6 +90,7 @@ from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .ui_model.observation import ReadNotifications
 from .tool_result import ToolResult
 from .work_branches import WorkBranch, WorkBranches
+from .turn_item import SourceTurn, NoSourceTurn
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -861,6 +862,14 @@ class SendTool(PublishingTool[ThreadCaller]):
         *tool_field("Change report fields; required for the change-report kind"),
     ] = NoChangeReport()
 
+    source_turn: Annotated[
+        SourceTurn, *tool_field("Exact external source turn; never inferred from transcript recency")
+    ] = NoSourceTurn()
+    answers: Annotated[
+        tuple[MessageReference, ...],
+        *tool_field("Original received messages explicitly answered; external sends without a named source turn must name these to link answers"),
+    ] = ()
+
     def publish(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         sender = caller.own_thread()
         target = CommandTarget.named(self.target)
@@ -869,7 +878,8 @@ class SendTool(PublishingTool[ThreadCaller]):
             body = target.addressed(self.audience, self.body)
             result = comms.messaging.send(
                 sender, target.name, body, self.type, report=self.report,
-                task=self.attachment(comms, target), origin=caller.origin())
+                task=self.attachment(comms, target), origin=caller.origin(),
+                source_turn=self.source_turn, answers=self.answers)
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,

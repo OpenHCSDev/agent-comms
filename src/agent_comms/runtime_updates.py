@@ -27,7 +27,7 @@ from .transcript_events import (
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import NativeItemId, NativeTurnId, TurnItem
+from .turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, TurnItem
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
@@ -231,11 +231,11 @@ class ThreadOutput(activity.ThreadOutput):
                 del self.drafts[key]
 
     def end_all_turns(self) -> None:
-        self.transcript.finish_all_replies()
+        self.transcript.transition_replies(lambda window: window.finished())
         self.drafts.clear()
 
     def cancel_all_turns(self) -> None:
-        self.transcript.cancel_replies()
+        self.transcript.transition_replies(lambda window: window.cancelled())
         self.drafts.clear()
 
     @property
@@ -272,7 +272,7 @@ class ReplyingThreadOutput(ThreadOutput):
 
     def publish_item(self, item: FinishedItem) -> None:
         self.flush_before(item.key)
-        if self.transcript.opening_for(item.turn_id) and item.assistant_text:
+        if item.assistant_text:
             self.pending[item.key] = item
             self.transcript.draft(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
         else:
@@ -283,17 +283,17 @@ class ReplyingThreadOutput(ThreadOutput):
         super().publish_draft(item)
 
     def end_turn(self, turn_id: NativeTurnId) -> None:
+        opening = self.messaging.bus.bus.messages_for_references(self.transcript.opening_for(turn_id))
+        targets = {target for message in opening
+                   for target in CommandTarget.named(message.target).automatic_reply_targets(message.sender)}
         for key in tuple(self.pending):
             if key.turn_id != turn_id:
                 continue
             item = self.pending[key]
-            opening = self.messaging.bus.bus.messages_for_references(
-                self.transcript.opening_for(turn_id))
-            targets = {target for message in opening
-                       for target in CommandTarget.named(message.target).automatic_reply_targets(message.sender)}
             publications = tuple(
                 self.messaging.send(
                     sender=self.activity_thread, target=target, body=item.assistant_text,
+                    source_turn=NamedSourceTurn(turn_id),
                 ).message.reference
                 for target in sorted(targets)
             )
@@ -348,10 +348,6 @@ class RuntimeUpdate(ABC):
 
     async def observed(self, bridge: TranscriptBridge) -> RuntimeUpdate:
         """Carry source-owned confirmation into the ordered publication stream."""
-        return self
-
-    def in_turn(self, turn_id: NativeTurnId) -> RuntimeUpdate:
-        """Only input observations need their source turn attached."""
         return self
 
     def retain_before(self, later: set[TurnItem]) -> bool:

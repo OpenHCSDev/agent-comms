@@ -6,7 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import Id128, NominalSpelling, NominalText
+from .errors import RelationViolationError
+from .field_codec import Id128, NominalSpelling, NominalText, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
     from .routing import Routing
@@ -21,6 +22,31 @@ class NativeTurnId(NominalText):
 
 class NativeTurnIdText(NominalSpelling[NativeTurnId]):
     spelling = re.compile(r"\S{1,4096}")
+
+
+class SourceTurn(SubclassUnion, affix="SourceTurn"):
+    """A source-named turn, never a guess from the newest transcript row."""
+
+    def ids(self) -> tuple[NativeTurnId, ...]:
+        return ()
+
+    def require_id(self) -> NativeTurnId:
+        for turn_id in self.ids():
+            return turn_id
+        raise RelationViolationError("Confirmed input has no source turn")
+
+
+@dataclass(frozen=True)
+class NoSourceTurn(NullMember, SourceTurn):
+    """No external turn was supplied; no external answer links may be inferred."""
+
+
+@dataclass(frozen=True)
+class NamedSourceTurn(RecordMember, SourceTurn):
+    id: NativeTurnId
+
+    def ids(self) -> tuple[NativeTurnId, ...]:
+        return (self.id,)
 
 
 class FreshNativeId(NominalText):
