@@ -1,4 +1,4 @@
-"""The real SessionStart command works before a commander connects to the bus."""
+"""Resident session-start, rule permission and reminder consumers share one deal."""
 
 
 from agent_comms.cli_bridges.hook_deferral import StopHook
@@ -27,8 +27,7 @@ from agent_comms.cli_bridges.session_watch import (
     WatchRecord,
 )
 from agent_comms.repo import Checkout
-import inspect
-import io
+from functools import partial
 import json
 import os
 import socket
@@ -51,11 +50,13 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
+from agent_comms.cli_bridges.hook_requests import HookRequest, ResidentHookOutput, ReminderRequest, SkillRequest
+from agent_comms_hooks import ClaudeHook
+from pydantic import JsonValue
 from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.slop import Slop
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import OrderlessUnreviewedHead, ReviewTimerUp
@@ -97,23 +98,16 @@ def test_an_unbound_session_start_gets_no_commander_sources(tmp_path, monkeypatc
 def test_the_commander_session_start_reads_all_package_files(tmp_path, source, commanding_session):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    result = session_start(transcript, source)
-    assert result.returncode == 0, result.stderr
-    context = json.loads(result.stdout.splitlines()[0])["hookSpecificOutput"]["additionalContext"]
-    assert len(context) < 10_000
-    assert context.startswith("Commander: claude-code.")
-    dealt = tuple(Path(line) for line in context.splitlines()[1:])
-    assert dealt == (
-        CommanderPackage.voice(),
-        CommanderPackage.indictment(),
-        Path(inspect.getfile(PostmortemFailure)),
-        CommanderPackage.skill(),
-        *(rule.path for rule in RuleFile.packaged()),
-        Slop.catalog() / "README.md",
-    )
+    stdout = run_resident(commanding_session, transcript, SkillRequest, "SessionStart", source=source)
+    context = json.loads(stdout)["hookSpecificOutput"]["additionalContext"]
+    dealt = tuple(Path(line) for line in transcript.with_suffix(".dealt").read_text().splitlines())
+    assert dealt == tuple(path.resolve() for path in CommanderReader.sources())
+    assert all(str(path) in context for path in dealt)
+    assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
+    assert "FUCK YOUR COMPACTION" in context
 
 
-def hook_record(transcript, event="PostToolUse"):
+def hook_record(transcript: Path, event: str = "PostToolUse") -> dict[str, JsonValue]:
     return {"hook_event_name": event, "session_id": "s", "transcript_path": str(transcript),
             "tool_name": "Bash", "tool_input": {}}
 
@@ -131,11 +125,12 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
     assert start.take()
     hook = SliceReminder.decode(hook_record(transcript))
     slices = CommanderReader.slices()
-    taken = [hook.take() for _ in range(SliceReminder.every * 3)]
+    taken = [hook.take(number) for number in range(1, SliceReminder.every * 3 + 1)]
     assert taken[SliceReminder.every - 1::SliceReminder.every] == [(text,) for text in slices[:3]]
     assert sum(map(len, taken)) == 3
+    assert not hook.calls.exists()  # rendering consumes the ordinal; it never advances it
     assert start.take()  # compaction deals the deck again from its start
-    assert [hook.take() for _ in range(SliceReminder.every)][-1] == (slices[0],)
+    assert [hook.take(number) for number in range(1, SliceReminder.every + 1)][-1] == (slices[0],)
 
 
 def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(tmp_path, commanding_session):
@@ -319,59 +314,59 @@ def test_the_deck_carries_the_voice_every_fourth_slice_every_rule_reminder_and_e
     assert all(len(text) <= DeckReader.slice_chars for text in slices)
 
 
-def run_installed(monkeypatch, capsys, transcript):
-    from agent_comms_hooks import reread, skill
+def run_resident[Event: ClaudeHook](
+        comms: Comms, transcript: Path, program: type[HookRequest[Event]], event: str,
+        **extra: JsonValue) -> str:
+    """Exercise the real resident owner; socket/client acceptance is a separate journey."""
+    payload = {**hook_record(transcript, event), **extra}
+    request = program(payload=payload)
+    output = ResidentHookOutput()
+    hook = request.event_type().of(payload, output=output)
+    reply = request.evaluate(hook, comms, output)
+    assert reply.status == 0, reply.stderr
+    return reply.stdout
 
-    def run(program, event):
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(hook_record(transcript, event))))
-        {"PostToolUse": reread, "SessionStart": skill}[event].main()
-        return capsys.readouterr().out
 
-    return run
-
-
-def test_the_installed_commands_order_the_reads_once_then_put_slices_inline(
-        tmp_path, monkeypatch, capsys, commanding_session):
+def test_resident_requests_order_the_reads_once_then_put_slices_inline(
+        tmp_path, commanding_session):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    run = run_installed(monkeypatch, capsys, transcript)
-    assert run(None, "SessionStart")
-    outputs = [run(None, "PostToolUse") for _ in range(SliceReminder.every)]
+    run = partial(run_resident, commanding_session, transcript)
+    assert run(SkillRequest, "SessionStart")
+    outputs = [run(ReminderRequest, "PostToolUse") for _ in range(SliceReminder.every)]
     assert outputs[:-1] == [""] * (SliceReminder.every - 1)
-    (document,) = outputs[-1].splitlines()
-    context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
+    context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
     assert context == CommanderReader.slices()[0]
     assert "Read each of these" not in context
 
 
 def test_a_session_that_becomes_commander_is_dealt_its_sources_on_its_next_tool_call(
-        tmp_path, monkeypatch, capsys, commander_bus):
+        tmp_path, monkeypatch, commander_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    run = run_installed(monkeypatch, capsys, transcript)
-    assert not run(None, "SessionStart")
-    assert not run(None, "PostToolUse")
+    run = partial(run_resident, commander_bus, transcript)
+    assert not run(SkillRequest, "SessionStart")
+    assert not run(ReminderRequest, "PostToolUse")
     WatchClaim("s").enrol(WatchRecord("claude-code", str(commander_bus.root), (), tmp_path / "state"))
-    assert "Read each of these" in run(None, "PostToolUse")
+    assert "Read each of these" in run(ReminderRequest, "PostToolUse")
     assert transcript.with_suffix(".deck.json").exists()
 
 
 def test_a_unit_session_gets_the_fleet_deck_and_no_commander_reminders(
-        tmp_path, monkeypatch, capsys, commander_bus):
+        tmp_path, monkeypatch, commander_bus):
     """A bound session that is not commander follows the fleet rules: it is ordered to read
     them, its summary is called a paraphrase, and its slices come from the fleet deck."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), (), tmp_path / "state"))
-    run = run_installed(monkeypatch, capsys, transcript)
-    order, owner_words, header = (json.loads(line)["hookSpecificOutput"]["additionalContext"]
-                                  for line in run(None, "SessionStart").splitlines())
-    assert "Read each of these" in order and "Your summary is a paraphrase" in header
-    assert owner_words.startswith("WHAT TRISTAN ACTUALLY SAID LAST")
-    assert "What your units actually hold" not in header
-    outputs = [run(None, "PostToolUse") for _ in range(SliceReminder.every)]
+    run = partial(run_resident, commander_bus, transcript)
+    context = json.loads(run(SkillRequest, "SessionStart"))["hookSpecificOutput"]["additionalContext"]
+    assert "Read each of these" in context and "Your summary is a paraphrase" in context
+    assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
+    assert "What your units actually hold" not in context
+    outputs = [run(ReminderRequest, "PostToolUse") for _ in range(SliceReminder.every)]
     assert outputs[:-1] == [""] * (SliceReminder.every - 1)
     context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
     assert context == FleetReader.slices()[0]
@@ -472,10 +467,10 @@ def gated(transcript, tool, tool_input, **extra):
                          "tool_input": tool_input, **extra})
 
 
-def refused(capsys, call):
-    call.judge()
+def refused(capsys, call: GatedCall, comms: Comms) -> bool:
+    call.judge(comms)
     out = capsys.readouterr().out
-    return out and json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    return bool(out) and json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
@@ -488,22 +483,40 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()
     parts = [Path(line) for line in transcript.with_suffix(".dealt").read_text().splitlines()]
     assert set(parts) == {source.resolve() for source in CommanderReader.sources()}
-    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+    comms = commanding_session
+    commander = comms.registry.require("claude-code")
+    comms.registry.register(replace(commander, tags=commander.tags | {"comms"}))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}), comms)
     whole = {"file_path": str(parts[0])}
-    assert not refused(capsys, gated(transcript, "Read", whole))
-    assert refused(capsys, gated(transcript, "Edit", {}))  # a Read that never completed
-    gated(transcript, "Read", {**whole, "limit": 5}).completed()
-    assert refused(capsys, gated(transcript, "Edit", {}))  # a partial read is not a reading
+    assert not refused(capsys, gated(transcript, "Read", whole), comms)
+    assert refused(capsys, gated(transcript, "Edit", {}), comms)  # a Read that never completed
+    gated(transcript, "Read", {**whole, "limit": 5}).completed(comms)
+    assert refused(capsys, gated(transcript, "Edit", {}), comms)  # partial is not a reading
+    assert len(tuple(comms.bus.bus.message_history())) == 1
     for part in parts:
-        gated(transcript, "Read", {"file_path": str(part)}).completed()
+        gated(transcript, "Read", {"file_path": str(part)}).completed(comms)
+    assert len(tuple(comms.bus.bus.message_history())) == 2
     audit = transcript.with_suffix(".audit.json")
-    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # no audit yet
-    assert not refused(capsys, gated(transcript, "Write", {"file_path": str(audit)}))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}), comms)  # no audit yet
+    assert not refused(capsys, gated(transcript, "Write", {"file_path": str(audit)}), comms)
     audit.write_text(json.dumps({"rules": [{"rule": rule.name} for rule in CommanderReader.rules()],
                                  "owner_words": []}))
-    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}), comms)
+    assert len(tuple(comms.bus.bus.message_history())) == 2
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()  # compaction
-    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}), comms)
+    assert len(tuple(comms.bus.bus.message_history())) == 3
+
+
+def test_clean_first_rule_reads_publish_nothing(tmp_path, commanding_session):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()
+    source = CommanderReader.sources()[0]
+    read = gated(transcript, "Read", {"file_path": str(source)})
+    assert read.completed(commanding_session) == 1
+    assert read.completed(commanding_session) == 2
+    assert tuple(commanding_session.bus.bus.message_history()) == ()
 
 
 def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
@@ -530,7 +543,8 @@ def test_a_subagent_and_an_unbound_session_are_never_gated(
 
     commanding_session.registry.register_child(
         "claude-a9", "claude-code", CommanderForkExecution, commanding_session.goals)
-    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="a9"))
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, agent_id="a9"),
+                       commanding_session)
     elsewhere = tmp_path / "other.jsonl"
     elsewhere.write_text("")
-    assert not refused(capsys, gated(elsewhere, "Bash", {"command": "ls"}))
+    assert not refused(capsys, gated(elsewhere, "Bash", {"command": "ls"}), commanding_session)
