@@ -1565,9 +1565,10 @@ class ProgressRead(PullRequests, CheckoutReads):
         PullRequests.__init__(self, todos)
         self._progress: dict[str, OrderProgress] = {}
 
-    def unread(self, todo: Todo, error: Exception) -> None:
-        directory = todo.order.checked().check.directory
-        self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
+    def unread(self, todos: Iterable[Todo], error: Exception) -> None:
+        for todo in todos:
+            directory = todo.order.checked().check.directory
+            self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
 
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
         """Each held order's progress, read once per frame however many readers ask."""

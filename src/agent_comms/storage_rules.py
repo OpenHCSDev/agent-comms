@@ -738,8 +738,7 @@ class EditWorkplaces:
                                 if str(source) in worktrees:
                                     branches[branch] = (*branches.get(branch, ()), str(source))
                     except (OSError, GitCommandError, WorkBranchError, TimeoutExpired) as error:
-                        for todo in affected.values():
-                            pulls.unread(todo, error)
+                        pulls.unread(affected.values(), error)
         owners = prepared.owners
         # The allocation cut is the only problem ownership map. Qualify its source
         # identity once; absent Git never enables a generic check-root fallback.

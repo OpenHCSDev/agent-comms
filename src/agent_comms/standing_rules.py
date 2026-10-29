@@ -500,7 +500,7 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
                                                    pulls.checkout(directory).path))
             except (OSError, GitCommandError,
                     WorkBranchError, TimeoutExpired) as error:
-                pulls.unread(todo, error)
+                pulls.unread((todo,), error)
         for member in cls.members_with(cls):
             member.prepare_captured(tuple(prepared), pulls)
 
