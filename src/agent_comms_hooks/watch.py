@@ -95,7 +95,7 @@ class SessionEndpoint:
         Live and lapsed enrolled claims are both bound. An unrecorded launch or a
         session never enrolled has no bus; the endpoint never guesses its role.
         """
-        if self.path.exists() and self.record_path.exists():
+        if self.record_path.exists():
             return BoundSession(self)
         return UnboundSession()
 
