@@ -2410,7 +2410,7 @@ class TriageScope(OrderScope[ReportDelivery]):
     ) -> dict[ProgressClaim, tuple[str, ...]]:
         if claims:
             raise TodoError(
-                "scope triage returns a report, not merged, installed or working claims")
+                "scope triage returns its report directly, not progress claims")
         return {}
 
     def completed(self, todo: Todo, delivery: ReportDelivery) -> Todo:
