@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMappin
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal, Annotated, Self
+from typing import TYPE_CHECKING, Literal, Annotated, Self, cast
 
 from pydantic import JsonValue
 
@@ -55,6 +55,7 @@ from .thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
+    ThreadIncarnationRecord,
     ThreadAuthority,
     TurnIdentity,
 )
@@ -101,6 +102,13 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
 
     def children(self, name: str) -> tuple[Thread, ...]:
         return self.threads.children(self.canonical_name(name))
+
+    def incarnation(self, name: str) -> ThreadIncarnation:
+        """This captured row owns identity without acquiring its full declaration."""
+        canonical = self.canonical_name(name)
+        if canonical not in self.threads:
+            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.")
+        return self.threads.incarnation(canonical)
 
     def active_candidates(self) -> Iterator[Thread]:
         return (self.threads[name] for name, status in self.statuses.items()
@@ -344,6 +352,21 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
                 else self._raw[name].get(key) == expected)
         )
 
+    def creation_time(self, name: str) -> CreationTime:
+        """Read the declared birth only; absence must not invoke a generated default."""
+        try:
+            if name in self._decoded:
+                return self._decoded[name].created_at
+            plan = FieldCodec.field_plan(Thread, "created_at")
+            return cast(CreationTime, plan.value.decode_bound(plan.raw(self._raw[name]), {}))
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+
+    def incarnation(self, name: str) -> ThreadIncarnation:
+        if name in self._decoded:
+            return self._decoded[name].incarnation
+        return ThreadIncarnationRecord(name, self.creation_time(name).to_wire()).incarnation()
+
     def __getitem__(self, name: str) -> Thread:
         if name not in self._decoded:
             self._decoded[name] = self.decode_row(self._raw[name])
@@ -390,9 +413,11 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def checked_rows(cls, raw: object) -> dict[str, dict[str, JsonValue]]:
         if not isinstance(raw, dict):
             raise MalformedRecord("registry threads must be an object")
+        name_key = FieldCodec.field_plan(Thread, "name").key
         for name, row in raw.items():
-            if not isinstance(name, str) or not isinstance(row, dict) or row.get("name") != name:
+            if not isinstance(name, str) or not isinstance(row, dict) or row.get(name_key) != name:
                 raise MalformedRecord("thread name differs from its declaration")
+            Thread.require_name(name)
         return dict(raw)
 
     def require_distinct_births(self) -> None:
@@ -400,12 +425,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         a stored row's birth is read alone, without decoding the rest of its thread."""
         births: set[float] = set()
         for name in self:
-            try:
-                birth = (self._decoded[name].created_at if name in self._decoded
-                         else CreationTime.from_wire(self._raw[name].get("created_at")))
-            except ValueError as error:
-                raise InvalidRegistryDocument(error) from error
-            births.add(birth.distinct_from(births))
+            births.add(self.creation_time(name).distinct_from(births))
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:

@@ -125,11 +125,22 @@ class RegistryNames(Generic[Member]):
             name, suffix = f"{base}-{suffix}", suffix + 1
         return name
 
+    def declared_names(self) -> Iterator[str]:
+        """The current namespace, including each declaration's retained aliases."""
+        yield from self.threads
+        yield from self.aliases
+
     def named_members(self) -> Iterator[tuple[str, Member]]:
         """Original declarations under their canonical and retained alias names."""
-        yield from self.threads.items()
-        for alias in self.aliases:
-            yield alias, self.require(alias)
+        return ((name, self.require(name)) for name in self.declared_names())
+
+    def incarnation(self, name: str) -> ThreadIncarnation:
+        """Recorded namespaces already hold their original nominal members."""
+        return self.require(name).incarnation
+
+    def named_incarnations(self) -> Iterator[tuple[str, ThreadIncarnation]]:
+        """Project identity through the namespace owner, never a consumer's roster."""
+        return ((name, self.incarnation(name)) for name in self.declared_names())
 
     def names_for(self, name: str) -> frozenset[str]:
         """Current and retained names of one declared member."""

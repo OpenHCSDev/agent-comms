@@ -158,8 +158,8 @@ class DisplayReferences(RootedReferences):
     @staticmethod
     def recorded(root, source) -> DisplayReferences:
         registry = source.provenance
-        targets = {name: HistoricalDisplayReference(str(root), thread.incarnation, source.key)
-                   for name, thread in registry.named_members()}
+        targets = {name: HistoricalDisplayReference(str(root), incarnation, source.key)
+                   for name, incarnation in registry.named_incarnations()}
         return DisplayReferences(str(root), targets)
 
     def for_source(self, source) -> DisplayReferences:
@@ -209,7 +209,7 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
 
     @classmethod
     def from_registry(cls, root: str, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> Self:
-        return cls(root, {name: thread.incarnation for name, thread in registry.named_members()}, channels)
+        return cls(root, dict(registry.named_incarnations()), channels)
 
     def __post_init__(self) -> None:
         """The target and lookup views of the one stored member map."""

@@ -127,6 +127,25 @@ def test_current_reference_membership_and_lookup_share_the_retained_registry(com
             restored.targets["unowned"] = reference
 
 
+@pytest.mark.parametrize("decoded", (False, True))
+def test_current_reference_acquires_only_captured_incarnations(comms, declare_reference, decoded):
+    original = declare_reference()
+    comms.registry.rename(original.name, "renamed")
+    captured = comms.registry.snapshot()
+    snapshot = replace(captured, threads=ThreadRows.from_wire(captured.threads.to_wire()))
+    if decoded:
+        snapshot.require("renamed")
+    acquired_before = dict(snapshot.threads._decoded)
+
+    references = CurrentDisplayReferences.from_registry(str(comms.root), snapshot, ("#comms",))
+
+    assert snapshot.threads._decoded == acquired_before
+    assert references.members[original.name].name == "renamed"
+    assert references.members["renamed"].wire_birth == original.incarnation.wire_birth
+    assert references.find(f"@{original.name}")[0].reference.name == "renamed"
+    assert references.find("#comms")[0].reference.name == "#comms"
+
+
 def test_current_reference_source_projection_keeps_historical_identity(comms, declare_reference):
     original = declare_reference()
     references = comms.views.viewer_snapshot(Checkout(comms.root.parent)).references
