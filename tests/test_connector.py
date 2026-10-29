@@ -29,11 +29,12 @@ from agent_comms.connector import (
     ApprovalLink,
     AuthorizationCodeGrant,
     Connector,
+    ConnectorSendTool,
     ConnectorVerb,
     ServeVerb,
     RevokeVerb,
 )
-from agent_comms.connector_caller import CALLER, DirectorCaller
+from agent_comms.connector_caller import CALLER
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
     IssuedCode, TrustedBrowser, digest,
@@ -43,7 +44,7 @@ from agent_comms.locked_store import DocumentChange
 from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.host_services import ServiceNotServingError
 from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
@@ -60,11 +61,10 @@ from agent_comms.threads import Thread
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
 
-def test_serve_requires_explicit_root(tmp_path, capsys):
-    with pytest.raises(SystemExit) as missing:
+def test_serve_requires_explicit_root(tmp_path):
+    with pytest.raises(RecordProblems) as missing:
         ConnectorVerb.parse(["serve"])
-    assert missing.value.code == 2
-    assert "--root" in capsys.readouterr().err
+    assert set(missing.value.problems) == {"root"}
     command = ConnectorVerb.parse(["serve", "--root", str(tmp_path)])
     assert isinstance(command, ServeVerb)
     assert command.root == tmp_path
@@ -96,7 +96,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     import subprocess
     import sys
 
-    comms.registry.declare(Thread("claude-ai", frozenset(), Checkout(comms.root)))
+    original = comms.registry.declare(Thread("claude-ai", frozenset(), Checkout(comms.root)))
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -115,7 +115,9 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
             comms.registry.unregister("claude-ai")
             comms.registry.archive("claude-ai")
             comms.registry.begin_delete("claude-ai")
-            comms.registry.remove("claude-ai")
+            with comms.registry.store.editing() as edit:
+                edit.document.remove_originals((original,))
+                edit.commit()
         proof = ConnectorService(
             launch=LaunchRoot.from_path(comms.root),
             store=ConnectorStore(ConnectorStore.path_in(
@@ -398,19 +400,18 @@ async def test_watch_held_by_install_stops_when_cancelled(copied_connector):
         barrier.advance(held, ReadyPhase)
 
 
-def test_publishing_tool_held_mid_call_refuses_at_once(comms):
-    """A hold that begins after the call's entry check refuses the publication, as the entry
-    would have; waiting in the connector's worker thread would hold the connector's stop."""
+def test_fresh_connector_publication_refuses_before_entering_held_stores(connector, comms):
+    """A fresh external mutation refuses before caller lookup or publication."""
     before = comms.bus.bus.revision()
     barrier = MaintenanceBarrier(comms.registry.store.path)
     held = barrier.advance(barrier.advance(
         barrier.begin(MaintenanceOperator.current()), PausedPhase), InstallingPhase)
     try:
         with pytest.raises(MaintenanceHeldError):
-            invoke_tool(comms, "comms_send", {"to": "worker", "body": "Held send"},
-                        caller=DirectorCaller("claude-ai"))
+            connector.invoke(ConnectorSendTool, {"to": "worker", "body": "Held send"}, CALLER)
     finally:
         barrier.advance(held, ReadyPhase)
+    assert barrier.read().phase is ReadyPhase
     assert comms.bus.bus.revision() == before
 
 
@@ -627,6 +628,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
             elapsed = time.monotonic() - started
             assert elapsed < 1, (elapsed, reply)
             assert response.status == 200
+            assert reply["id"] == 1
             result = reply["result"]
             assert result["isError"] is True
             refusal = json.loads(result["content"][0]["text"])
@@ -634,6 +636,18 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
                 "type": "held", "error": "Maintenance holds ingress: the bus is under maintenance"}
             assert barrier.current_unlocked() == held
             assert copied_bus.revision() == before
+        # Reads borrow their actual stores, not the mutation admission capability.
+        response = await reader.post("/mcp", headers=headers, timeout=2, json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {"name": CommsChannelsTool.declared_name, "arguments": {}},
+        })
+        reply = await response.json()
+        assert response.status == 200
+        assert reply["id"] == 2
+        assert reply["result"]["isError"] is False, reply
+        assert "channels" in reply["result"]["structuredContent"]
+        assert barrier.read() == held
+        assert copied_bus.revision() == before
     assert comms.bus.bus.revision() == original.seq
     assert comms.owners.maintenance.read().turn_pending is False
 

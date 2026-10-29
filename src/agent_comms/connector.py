@@ -571,6 +571,7 @@ class Connector:
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object],
         caller: ConnectorCaller,
     ) -> dict[str, JsonValue]:
+        tool.require_connector_ingress(self.root)
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
             acting.commanding(comms, caller.own_thread())

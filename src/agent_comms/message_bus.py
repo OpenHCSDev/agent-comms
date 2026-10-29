@@ -177,10 +177,15 @@ class MessageBus[Writes: Publisher]:
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
+    def _run_open[Result](self, operation: Callable[[], Result]) -> Result:
+        """Check a new phase at its joined worker entry; do not hold a lock over its work."""
+        MaintenanceBarrier(self._registry.store.path).assert_open_unlocked()
+        return operation()
+
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         while True:
             try:
-                result = await Coordination.run_worker(operation)
+                result = await Coordination.run_worker(partial(self._run_open, operation))
                 return await result if inspect.isawaitable(result) else result
             except MaintenanceHeldError:
                 await self.resumed()

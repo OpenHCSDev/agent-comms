@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Annotated, ClassVar, NoReturn
 
 from pydantic import JsonValue
@@ -26,6 +27,8 @@ from .field_codec import (
     WireChoices,
     WireName,
 )
+from .locked_store import RegistryFile
+from .maintenance_barrier import MaintenanceBarrier
 from .native_tools import (
     ArgumentTool,
     CoordinationCall,
@@ -149,6 +152,11 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
 
     @classmethod
+    def require_connector_ingress(cls, root: Path) -> None:
+        """Admit a new external mutation before opening its registry or bus."""
+        MaintenanceBarrier(RegistryFile.path_in(root)).assert_open_unlocked()
+
+    @classmethod
     def invoke(
         cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
     ) -> dict[str, JsonValue]:
@@ -213,6 +221,10 @@ class ReadTool(ReadWork):
     __slots__ = ()
     bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
     read_only_hint: ClassVar[bool] = True
+
+    @classmethod
+    def require_connector_ingress(cls, root: Path) -> None:
+        """Declared reads remain available to the installer's readiness checks."""
 
 
 @dataclass(frozen=True, kw_only=True)
