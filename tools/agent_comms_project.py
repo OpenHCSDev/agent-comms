@@ -149,13 +149,12 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
     @staticmethod
     @cache
     def carry_family() -> tuple[type, ...]:
-        """Carry and every class derived from it, its steps' shared bases among them; reading
-        the members imports every step module, where those bases are declared."""
-        Carry.members_with(Carry)
-        found: list[type] = [Carry]
-        for family in found:
-            found.extend(derived for derived in family.__subclasses__() if derived not in found)
-        return tuple(found)
+        """Carry and every class a step derives from on its way to Carry: each member's MRO up to
+        Carry, so a base another step declares, such as ToadSettingsCarry, is one of them."""
+        return tuple(dict.fromkeys(
+            base for member in Carry.members_with(Carry)
+            for base in member.__mro__[:member.__mro__.index(Carry) + 1]
+        ))
 
     def guard_roots(self) -> frozenset[str]:
         declared = Path(inspect.getfile(PlanPhase)).resolve()
@@ -192,8 +191,6 @@ class ClientTypeErrors(audit.checkers.SideCounts):
     and an error the head adds is a name or signature the client uses that the change took away:
     #3110 deleted TurnState.settles as unused while Toad's conversation_turn.py:262 called it, and
     only the running app found it."""
-
-    finding = audit.checkers.TypeErrors.finding
 
     @staticmethod
     @cache
