@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
@@ -71,9 +71,6 @@ class RenameThreadResult(ToolResult):
 
 class TagChoice(SubclassUnion, affix="Tags"):
     """Select explicit, inherited or changed tags from an existing set."""
-
-    def for_new(self) -> frozenset[str]:
-        return self.for_child(frozenset())
 
     @abstractmethod
     def for_child(self, parent: frozenset[str]) -> frozenset[str]: ...
@@ -144,27 +141,36 @@ class SourceDirectory(NullMember, ImportDirectory):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class NewThreadSpec:
-    """Prepare the session, then register the thread under its registry lock."""
+class ThreadCreationSpec(ABC):
+    """Shared launch settings and construction after membership has been decided."""
 
     name: str
     project: LaunchCheckout
     model: ThreadModel
     thinking_level: ThinkingLevelField
     task: LaunchInput = field(default_factory=LaunchInput)
-    tags: TagChoice = InheritedTags()
 
     @classmethod
-    def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:
+    def from_task(cls, *, task: str = "", **values) -> Self:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
-    def declaration(self) -> Thread:
-        return Thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
+    def declaration(self, tags: frozenset[str]) -> Thread:
+        return Thread(name=self.name, task=self.task.thread_text(), tags=tags,
                       worktree=self.project, model=self.model, thinking_level=self.thinking_level)
+
+    @abstractmethod
+    def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread: ...
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NewThreadSpec(ThreadCreationSpec):
+    """A new thread has no parent; its creator supplies its membership."""
+
+    tags: GivenTags
 
     def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
         project = self.project.path
-        thread = self.declaration()
+        thread = self.declaration(self.tags.tags)
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
         saved = RegistrySessionLocation.from_path(location.read_key, threads.root)
@@ -172,10 +178,11 @@ class NewThreadSpec:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class ForkSpec(NewThreadSpec):
+class ForkSpec(ThreadCreationSpec):
     """A fork differs only in its parent-derived source and inherited settings."""
 
     parent: str
+    tags: TagChoice = InheritedTags()
 
     def _parent(self, threads: ThreadManagement) -> Thread:
         parent = threads.registry.require(self.parent)
@@ -185,8 +192,8 @@ class ForkSpec(NewThreadSpec):
 
     def child(self, parent: Thread, runtime: RuntimeLocation, threads: ThreadManagement) -> Thread:
         saved = RegistrySessionLocation.from_path(runtime.read_key, threads.root)
-        return replace(self.declaration(),
-                       parent=ForkedParent(parent.name), tags=self.tags.for_child(parent.tags),
+        return replace(self.declaration(self.tags.for_child(parent.tags)),
+                       parent=ForkedParent(parent.name),
                        backend=parent.backend, session_file=saved)
 
     def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:
@@ -541,7 +548,7 @@ class ThreadManagement:
                 for original in originals
             )
 
-    def create(self, spec: NewThreadSpec) -> Thread:
+    def create(self, spec: ThreadCreationSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""
         resolved_bin = ConfiguredBinary().configured()
         runtime = LaunchRuntime.running()

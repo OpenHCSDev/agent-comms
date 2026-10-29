@@ -670,7 +670,10 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     assert not launched.open_targets() and not batch.open_targets()
     created = ThreadCreatedResult("child", NoProcess())
     assert created.open_targets() == ("child",)
-    command = NewThreadCliCommand(name="child", project=LaunchCheckout(Path("/project")), model=UndeclaredModel())
+    from agent_comms.thread_management import GivenTags
+
+    command = NewThreadCliCommand(name="child", tags=GivenTags(frozenset()),
+                                  project=LaunchCheckout(Path("/project")), model=UndeclaredModel())
     from agent_comms.channel_targets import ProjectTarget
 
     completed = TargetCompleted(ProjectTarget(Checkout(Path("/project"))), command, created)
