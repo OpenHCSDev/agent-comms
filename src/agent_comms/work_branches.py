@@ -152,6 +152,7 @@ class BranchDifference:
     behind: int
     files: frozenset[str]
     growth: SourceGrowth
+    unpublished: tuple[UnpushedHead, ...]
 
     @property
     def changes_source(self) -> bool:
@@ -264,6 +265,9 @@ class BranchUpstream(DeclaredFamily):
     def prepare(self, reader: WorkBranches) -> None:
         """No configured publication means no remote acquisition."""
 
+    def require_prepared(self, reader: WorkBranches) -> None:
+        """An absent or local upstream requires no published remote head."""
+
     def tracking_name(self) -> str:
         return ""
 
@@ -302,11 +306,14 @@ class PublishedUpstream(TrackedUpstream):
         Repo.require_commits(reader.checkout, self.remote,
                              *reader.remote_heads(self.remote, self.reference))
 
+    def require_prepared(self, reader: WorkBranches) -> None:
+        Repo.require_local_commits(reader.checkout,
+                                  *reader.selected_heads(self.remote, self.reference))
+
     def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
         published = reader.selected_heads(self.remote, self.reference)
         if published:
             (remote_head,) = published
-            Repo.require_local_commits(reader.checkout, remote_head)
             count = int(reader._git("rev-list", "--count", f"{remote_head}..{head}"))
             return (UnpushedHead(head, count, self.tracking),) if count else ()
         return super().unpushed(reader, head)
@@ -412,6 +419,9 @@ query($owner: String!, $name: String!, $after: String) {
 
     def selected_heads(self, remote: str, reference: str) -> tuple[str, ...]:
         """Consume the prepared remote cut; an unexpected comparison never opens another cut."""
+        if (remote, reference) not in self._remote_heads:
+            raise WorkBranchError(
+                f"Unprepared remote head {remote}:{reference} in {self.checkout}")
         return self._remote_heads[remote, reference]
 
     def _pull_request_base(self, base: str) -> str:
@@ -507,10 +517,18 @@ query($owner: String!, $name: String!, $after: String) {
                 patches[commit] = frozenset((patch,))
         return patches
 
-    def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
-        """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
-        Repo.require_local_commits(self.checkout, difference.head)
-        return self.upstreams[difference.branch].unpushed(self, difference.head)
+    def require_upstream(self, branch: str) -> BranchUpstream:
+        """A local branch must belong to this reader's actual prepared publication cut."""
+        if branch not in self.upstreams:
+            raise WorkBranchError(f"Unprepared branch {branch!r} in {self.checkout}")
+        upstream = self.upstreams[branch]
+        upstream.require_prepared(self)
+        return upstream
+
+    def unpushed(self, branch: str, head: str) -> tuple[UnpushedHead, ...]:
+        """Capture publication at the source reader, never through another clone's refs."""
+        Repo.require_local_commits(self.checkout, head)
+        return self.require_upstream(branch).unpushed(self, head)
 
     @cached_property
     def repository(self) -> tuple[str, str]:
@@ -544,7 +562,7 @@ query($owner: String!, $name: String!, $after: String) {
         files = self.changed(base, head)
         return BranchDifference(
             RepositoryName(*self.repository), branch, head, moved_at, main, behind, files,
-            self.source_growth(base, head, files),
+            self.source_growth(base, head, files), self.unpushed(branch, head),
         )
 
     def changed(self, base: str, head: str) -> frozenset[str]:

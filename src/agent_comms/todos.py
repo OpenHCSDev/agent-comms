@@ -1528,6 +1528,18 @@ class CheckoutReads:
             self._branch_facts[path] = reader.difference(self._branch_mains[repository])
         return self._branch_facts[path]
 
+    @property
+    def captured_branch_paths(self) -> frozenset[Path]:
+        """Captured branch membership, including worktrees retired since this cut."""
+        return frozenset(self._branch_facts)
+
+    def require_branch_difference(self, path: Path) -> BranchDifference:
+        """Consume this cut's required branch input without opening another Git read."""
+        path = path.resolve()
+        if path not in self._branch_facts:
+            raise WorkBranchError(f"Unprepared branch difference in {path}")
+        return self._branch_facts[path]
+
 
 class ProgressRead(PullRequests, CheckoutReads):
     """One read of order progress: its GitHub facts and its checkouts' Git facts."""

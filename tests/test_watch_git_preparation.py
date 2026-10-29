@@ -15,7 +15,7 @@ from agent_comms.phase_evidence import (
 )
 from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
-from agent_comms.work_branches import WorkBranches
+from agent_comms.work_branches import WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
 
 
@@ -67,7 +67,7 @@ def test_missing_ready_pr_objects_are_acquired_once_and_comparison_is_local(git_
     draft.prepare_comparison(reader)
     assert draft.empty_changes(reader) == ()
     assert case.snapshot() == before
-    with pytest.raises(KeyError):
+    with pytest.raises(WorkBranchError, match="Unprepared remote head origin:refs/heads/main"):
         ready.empty_changes(reader)
     ready.prepare_comparison(reader)
     assert repo.has_commit(base) and repo.has_commit(head)
@@ -109,7 +109,7 @@ def test_upstream_preparation_preserves_publication_and_fallback_counts(git_prep
     reader.prepare_upstreams()
     difference = reader.difference(reader.origin_main)
     prepared = case.snapshot()
-    (unpublished,) = reader.unpushed(difference)
+    (unpublished,) = difference.unpublished
     assert (unpublished.head, unpublished.commits) == (head, 1)
     assert unpublished.upstream == Repo.git(
         repo.checkout, "for-each-ref", "--format=%(upstream)", "refs/heads/main",

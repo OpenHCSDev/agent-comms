@@ -164,8 +164,6 @@ class UnitObservation:
             for pull in self.pulls.open_for(todo):
                 pull.require_comparison(reader)
         if self.todos:
-            for path in self.thread.home_checkouts:
-                self.pulls.branch_difference(path)
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
                 self.pulls.checkout(path).require_read()
         for source in self.sources:
