@@ -21,7 +21,7 @@ from toad.preferences import ToadSettings, UiSettings
 
 
 class PreviousInvocationId(NominalText):
-    """A foreign saved identity, not yet admitted by the current catalog."""
+    """An old saved action name accepted only by this installer input decoder."""
 
 
 class PreviousInvocationSpelling(NominalSpelling[PreviousInvocationId]):
@@ -94,8 +94,8 @@ class ToadArrowKeys(ToadSettingsCarry):
             candidate = row.carried(replacements)
             if candidate.declaration in destinations:
                 identity = candidate.declaration, candidate.mode
-                existing = arrows.get(identity)
-                if existing is not None:
+                if identity in arrows:
+                    existing = arrows[identity]
                     if existing.keys != candidate.keys:
                         raise RelationViolationError(
                             f"Conflicting saved arrow choices for {candidate.declaration} "
