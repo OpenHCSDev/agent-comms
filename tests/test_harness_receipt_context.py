@@ -11,6 +11,7 @@ from agent_comms.harness_delivery_states import (
     ObservedMonitor, PersistedOutcome, UnconfirmedOutcome, UnrecordedMonitor,
 )
 from agent_comms.notification_progress import HarnessConsumedProgress
+from agent_comms.notification_evidence import UnansweredResponse
 from agent_comms.read_basis import AllOutcomes
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from transcript_record_fixture import transcript_record
@@ -53,9 +54,9 @@ def test_only_retained_complete_body_proof_promotes_consumption(
         AllOutcomes(), (source.reference,),
     ).outcomes[source.seq, source.message_id]
     assert current.state.consumed is consumed
-    assert current.answer is None
+    assert current.answer == UnansweredResponse()
     assert not current.displayed_to
-    assert recorded.arrival_count() == arrived
+    assert recorded.monitor.arrival_count(recorded.outcome) == arrived
     assert recorded.monitor == monitor
     if consumed:
         assert current.label == current.timed_state(HarnessConsumedProgress.label, 1791964800125)

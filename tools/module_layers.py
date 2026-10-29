@@ -27,6 +27,7 @@ import argparse
 import ast
 import atexit
 import inspect
+from io import StringIO
 import shutil
 import subprocess
 import sys
@@ -39,7 +40,8 @@ from dataclasses import dataclass, replace
 from functools import cache, cached_property
 from pathlib import Path
 
-from mypy.config_parser import toml_config_types
+from mypy.config_parser import parse_config_file
+from mypy.options import Options
 
 from agent_comms.field_codec import FieldCodec, boundary_decoder
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
@@ -325,10 +327,19 @@ class StackClient(StackSources):
         path dialect. An explicit empty override stays empty. Projects without an
         override retain the existing installed-package/src convention.
         """
-        project = tomllib.loads((self.checkout / "pyproject.toml").read_text())
-        declared = project.get("tool", {}).get("mypy", {}).get("mypy_path", ["src", "."])
-        roots = FieldCodec.decode(list[str], toml_config_types["mypy_path"](declared))
-        return tuple(str((self.checkout / root).resolve()) for root in roots)
+        options = Options()
+        options.mypy_path = ["src", "."]
+        errors = StringIO()
+        parse_config_file(options, self.source_strict_flags,
+                          str(self.checkout / "pyproject.toml"), stderr=errors)
+        diagnostics = errors.getvalue()
+        if diagnostics:
+            raise ValueError(diagnostics)
+        return tuple(str((self.checkout / root).resolve()) for root in options.mypy_path)
+
+    @staticmethod
+    def source_strict_flags() -> None:
+        """Strictness changes no source roots; the checker owns strict type checking."""
 
     @property
     def import_paths(self) -> tuple[str, ...]:

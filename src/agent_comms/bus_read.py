@@ -1,110 +1,56 @@
-"""One declaration per bus read: the operation owns its arguments and its read once.
-
-A ``BusRead`` member is the operation. Each boundary that serves it keeps only what is
-its own: the UI its root, request id and refusals (``ReadRequest``), MCP its caller,
-exposure and reply (``ToolRequest``). Neither boundary restates the read, and the
-reader's authority reaches the operation as a ``BusReader`` the boundary supplies,
-never as an argument the caller may choose.
-"""
+"""Read operations share their declaration; callers supply the read authority."""
 from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, NoReturn
 
-from .launch_runtime import CallingThreadUnavailable
+from .comms import Comms
 from .owner_connection import (
     OwnerConnection, OwnerReading, OwnerReplyConnection, ResultRuntimeRequest, RuntimeRequestContext,
 )
-from .read_basis import AllOutcomes, DisplayIdentity, NoDisplaySelection, OutcomeViewer
+from .read_basis import DisplayCut, NoDisplaySelection, OutcomeViewer, ReadAuthority
+from .registration import Registration
 from .tool_declaration import ToolDeclaration
+from .tool_request import ThreadReadTool
 from .tool_result import ToolResult
-
-if TYPE_CHECKING:
-    from .comms import Comms
-
-
-class BusReader(ABC):
-    """Whose authority a read runs under; each boundary supplies its own reader."""
-
-    @abstractmethod
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        """Whose recipient outcomes this reader may read."""
-
-    def subject(self, named: str) -> str:
-        return named or self.own_thread()
-
-    def own_thread(self) -> str:
-        """The thread a read targets when its call names none; a reader with no thread has none."""
-        return self.refuse_thread()
-
-    def refuse_thread(self) -> NoReturn:
-        raise CallingThreadUnavailable("This tool requires a thread caller.")
-
-
-class OperatorOutcomes:
-    """A reader speaking for the owner reads every recipient outcome, as the owner's UI does."""
-
-    __slots__ = ()
-
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        return AllOutcomes()
 
 
 @dataclass(frozen=True)
-class OperatorReader(OperatorOutcomes, BusReader):
-    """The owner's UI: it observes the whole bus as the operator. A read made for one painted
-    display reads under that display's captured identity, so the human's own read of what
-    the display shows is not reported back to them."""
+class OperatorReader(ReadAuthority):
+    """An operator read is scoped by its actual painted display, or is unscoped."""
 
-    display: DisplayIdentity | NoDisplaySelection = field(default_factory=NoDisplaySelection)
+    display: DisplayCut = field(default_factory=NoDisplaySelection)
 
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+    def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
         return self.display.outcome_viewer()
 
 
 class BusRead[Result](ToolDeclaration, ABC):
-    """A read of Core's stores, declared once with its arguments; boundaries derive it."""
+    """One operation owns its arguments and its read; the boundary supplies authority."""
 
-    def apply(self, comms: Comms, caller: BusReader) -> Result:
-        """The MCP boundary runs the read under its calling thread's authority."""
+    def apply(self, comms: Comms, caller: ReadAuthority) -> Result:
         return self.read_as(comms, caller)
 
     @abstractmethod
-    def read_as(self, comms: Comms, reader: BusReader) -> Result:
-        """The read under the reader's authority."""
+    def read_as(self, comms: Comms, reader: ReadAuthority) -> Result: ...
 
 
 class UiRead[Result](BusRead[Result], ABC):
-    """The UI serves this read as the operator; its envelope (root, request id, refusal)
-    stays on ``ReadRequest``."""
-
     def read(self, comms: Comms) -> Result:
         return self.read_as(comms, OperatorReader())
 
 
-class OwnerLiveRead[Result: ToolResult = ToolResult](BusRead[Result], ABC):
-    """A read only the selected thread's live native owner can answer, from its own queue.
+class OwnerLiveRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadReadTool, ABC):
+    """Only the selected thread's live owner answers, through its own request queue."""
 
-    MCP and the UI both reach the owner through ``OwnerReadRuntimeRequest``; neither answers
-    from its own process, and owner loss reaches the caller as the original refusal. The
-    owner runs ``owned`` against its own registration and session, never against the public
-    thread selector.
-    """
-
-    if TYPE_CHECKING:
-        # The composed ThreadReadTool declares the field; an annotation here would shadow it.
-        thread: str
-
-    def read_as(self, comms: Comms, reader: BusReader) -> Result:
+    def read_as(self, comms: Comms, reader: ReadAuthority) -> Result:
         owner = comms.registry.require(reader.subject(self.thread)).incarnation
         request = OwnerReadRuntimeRequest(thread=owner.name, operation=self)
         return self.decode_reply(asyncio.run(OwnerReplyConnection.answer(comms, owner, request)))
 
     @abstractmethod
-    async def owned(self, ctx: RuntimeRequestContext) -> Result:
-        """The answer computed inside the owner, under its own context."""
+    async def owned(self, ctx: RuntimeRequestContext) -> Result: ...
 
     @abstractmethod
     def decode_reply(self, raw: object) -> Result: ...
@@ -112,9 +58,6 @@ class OwnerLiveRead[Result: ToolResult = ToolResult](BusRead[Result], ABC):
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerReadRuntimeRequest(OwnerReading[object], ResultRuntimeRequest):
-    """The one runtime envelope for every owner-live read: sent once to the held owner, and
-    answered there by the operation under the owner's context."""
-
     operation: OwnerLiveRead
 
     async def read(self, owner: OwnerConnection) -> object:

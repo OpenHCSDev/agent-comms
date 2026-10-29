@@ -574,7 +574,7 @@ class RefreshTranscript(ReadRequest):
             return None
         operation = TranscriptPageRead(
             thread=identity.requested_name, position=identity.position, limit=identity.limit,
-            historical_source=identity.historical_source,
+            page_source=identity.page_source,
         )
         return UnreadableHistory.outcome(lambda: operation.read(comms)).raised()
 

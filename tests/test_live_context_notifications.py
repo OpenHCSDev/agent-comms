@@ -10,6 +10,7 @@ import pytest
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import InputId
+from agent_comms.notification_evidence import UnansweredResponse
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.read_basis import AllOutcomes
@@ -70,7 +71,7 @@ async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Pa
         after = comms.views.message_notifications_for_references(AllOutcomes(), originals)
         after_rows = tuple(row for rows in after.outcomes.values() for row in rows)
         assert after_rows and all(row.state.consumed for row in after_rows)
-        assert all(row.answer is None for row in after_rows)
+        assert all(row.answer == UnansweredResponse() for row in after_rows)
         assert all(not row.displayed_to for row in after_rows)
         assert claim.stage.progress.current.starting
         with Coordination(claim.store_path) as store:
@@ -91,7 +92,7 @@ async def test_triage_consumption_precedes_and_survives_later_verdict(tmp_path: 
         await acknowledge_context(claim, context)
         active = claim.selected.comms.views.message_notifications_for_references(AllOutcomes(), originals)
         assert sum(row.state.consumed for rows in active.outcomes.values() for row in rows) == 1
-        assert all(row.answer is None and not row.displayed_to
+        assert all(row.answer == UnansweredResponse() and not row.displayed_to
                    for rows in active.outcomes.values() for row in rows)
         with Coordination(claim.store_path) as store:
             original = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)

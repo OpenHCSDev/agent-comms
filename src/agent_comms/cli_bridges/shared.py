@@ -1529,7 +1529,14 @@ class TranscriptConfirmsDelivery:
     """Delivery is confirmed only by observing it in the bridge's own transcript subscription."""
 
 
+@dataclass(frozen=True)
 class MonitorIncomingFrame(IncomingFrame):
+    reception: type[PendingMonitor] = ReceivingMonitor
+
+    @property
+    def body(self) -> str:
+        return self.reception.displayed_body(self.message.body)
+
     @property
     @abstractmethod
     def parts(self) -> tuple[str, ...]: ...
@@ -1660,7 +1667,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         self, attachment: MonitorAttachment, message: messages.Message,
         reception: type[PendingMonitor],
     ) -> type[Outcome]:
-        frame = self.incoming_frame(message)
+        frame = self.incoming_frame(message, reception=reception)
         receiving = partial(replace, monitor=reception.for_parts(len(frame.parts)))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))

@@ -1,3 +1,4 @@
+from agent_comms.transcripts import RecordedPageSource
 from agent_comms.repo import Checkout
 from conftest import transcript_records
 from agent_comms.session_file import RegistrySessionLocation
@@ -68,7 +69,7 @@ def shared_page(comms, operation: TranscriptPageRead) -> TranscriptSnapshotUpdat
     all three carry the same page, draft and witness as the domain capture."""
     expected = TranscriptSnapshotUpdate.from_read(comms.transcripts.capture_page_read(
         operation.thread, position=operation.position, limit=operation.limit,
-        historical_source=operation.historical_source))
+        page_source=RecordedPageSource(operation.historical_source)))
     direct = operation.read(comms)
     assert ReadTranscript(str(comms.root), operation).read(comms) == direct == expected
     assert invoke_tool(comms, operation.declared_name, FieldCodec.encode_fields(operation),

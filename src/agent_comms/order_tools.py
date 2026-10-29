@@ -35,7 +35,8 @@ from agent_comms.todos import (
     ToolCallVerdict,
 )
 from .acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate, TurnChangedUpdate, UpdateMetadata
-from .bus_read import BusReader, OwnerLiveRead, UiRead
+from .bus_read import OwnerLiveRead, UiRead
+from .read_basis import ReadAuthority
 from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
 from .comms import Comms
@@ -50,6 +51,7 @@ from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .plan_phases import OrderPhase
+from .owner_connection import RuntimeRequestContext
 from .progress_claims import ProgressClaim
 from .send_result import CorrectionResult, SendResult
 from .thread_identity import ThreadIncarnation
@@ -63,7 +65,7 @@ from .tool_request import (
     tool_field,
 )
 from .tool_result import ToolResult
-from .transcripts import AtFrontier, LatestPage, PageLimit, PagePosition, TranscriptRead
+from .transcripts import AtFrontier, LatestPage, LivePageSource, PageLimit, PagePosition, PageSource, TranscriptRead
 from .transcript_events import SentTranscript
 from .turn_digests import (
     ActivityTurnView,
@@ -75,10 +77,6 @@ from .turn_digests import (
     TurnsSince,
     UnjudgedEdits,
 )
-
-if TYPE_CHECKING:
-    from .owner_connection import RuntimeRequestContext
-
 
 @dataclass(frozen=True)
 class TodoChanged(ToolResult):
@@ -517,7 +515,7 @@ class CommsTurnsTool(ThreadReadTool):
 
 @dataclass(frozen=True, kw_only=True)
 class InputDeliveryRead(
-    OwnerLiveRead[DeliveryOverview], ThreadReadTool, declared_name="comms_input_delivery",
+    OwnerLiveRead[DeliveryOverview], declared_name="comms_input_delivery",
 ):
     """The one declaration of a unit's input delivery, answered by its live native owner."""
 
@@ -540,7 +538,7 @@ class InputDeliveryRead(
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], ThreadReadTool, declared_name="comms_owner_goal"):
+class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], declared_name="comms_owner_goal"):
     """A unit's goal snapshot and the turn it was read with, answered by its live native owner
     under the owner's own registration and session; the thread selector only finds the owner."""
 
@@ -572,24 +570,24 @@ class TranscriptPageRead(
     label = "Transcript page"
     description = ("Read one bounded page of a thread's transcript with its current draft. "
                    "Send a returned cursor as an earlier_than or later_than position for the "
-                   "next page; historical_source reads an archived source.")
+                   "next page; page_source selects live history or an archive.")
     position: Annotated[PagePosition, *tool_field(
         "latest_page, or earlier_than/later_than a returned cursor")] = LatestPage()
     limit: Annotated[PageLimit, *tool_field(
         "at_frontier, or through a cursor already shown")] = AtFrontier()
-    historical_source: Annotated[
-        str | None, *tool_field("Archived source to read instead of current history")
-    ] = None
+    page_source: Annotated[
+        PageSource, *tool_field("Live history or a recorded archive identity")
+    ] = LivePageSource()
 
-    def capture_as(self, comms: Comms, reader: BusReader) -> TranscriptRead:
+    def capture_as(self, comms: Comms, reader: ReadAuthority) -> TranscriptRead:
         return comms.transcripts.capture_page_read(
             reader.subject(self.thread),
             position=self.position,
             limit=self.limit,
-            historical_source=self.historical_source,
+            page_source=self.page_source,
         )
 
-    def read_as(self, comms: Comms, reader: BusReader) -> TranscriptSnapshotUpdate:
+    def read_as(self, comms: Comms, reader: ReadAuthority) -> TranscriptSnapshotUpdate:
         return TranscriptSnapshotUpdate.from_read(self.capture_as(comms, reader))
 
 
@@ -609,7 +607,7 @@ class CommanderUnitRead(
     unit: Annotated[ThreadIncarnation, *tool_field("Unit incarnation on that card")]
     orders: Annotated[tuple[OrderId, ...], *tool_field("The card's orders, exactly as published")]
 
-    def read_as(self, comms: Comms, reader: BusReader) -> CommanderUnitDetail:
+    def read_as(self, comms: Comms, reader: ReadAuthority) -> CommanderUnitDetail:
         snapshot = comms.registry.snapshot()
         if not self.commander.current(snapshot) or not self.unit.current(snapshot):
             raise ToolRefusedError("The selected commander or unit incarnation is no longer current")

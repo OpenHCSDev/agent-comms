@@ -564,7 +564,7 @@ async def test_board_wake_observation_cannot_confirm_original_packet(bridge, ori
     retained, = await bridge.attempts(message.message_id)
     assert retained.outcome is EmittedOutcome
     assert retained.monitor == WakeOnlyMonitor()
-    assert not retained.consumed_progress(SentProgress(round(message.timestamp * 1000))).consumed
+    assert not retained.monitor.consumed_progress(SentProgress(round(message.timestamp * 1000))).consumed
     assert await bridge.coordinator_read(lambda db: HarnessObservedPart.of(db, retained)) == ()
     assert not await bridge.coordinator_write(initial.begin)
     assert ReadLedger.at(bridge.comms.root).read() == human_reads

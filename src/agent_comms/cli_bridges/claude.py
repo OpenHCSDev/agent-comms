@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, ClassVar
 
 from agent_comms.bus import Bus
-from agent_comms.harness_delivery_states import Outcome, WakeOnlyMonitor
+from agent_comms.harness_delivery_states import BoardWake, Outcome, WakeOnlyMonitor
 from agent_comms.messages import Message
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
@@ -26,18 +26,13 @@ if TYPE_CHECKING:
     from agent_comms.task_attachments.commander_pings import CommanderUpdate
 
 
-class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
+class ClaudeBridge(BoardWake, ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
     """Follow this Claude session's file without submitting an input.
 
     Heartbeat packets reach the session through the board its tool-call hook prints, which
     this bridge derives from Core whenever the hook asks, not through the Monitor: the harness
     frames Monitor events as routine background, so a line said once there scrolls away. The
     Monitor only gets a wake line, since an idle session runs no tool calls."""
-
-    board_wake: ClassVar[str] = (
-        "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
-        "tool call; later calls print one unchanged count."
-    )
 
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
@@ -58,9 +53,7 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
         return await update.wake(self, message)
 
     async def wake(self, message: Message) -> type[Outcome]:
-        return await self.deliver(
-            replace(message, body=self.board_wake), reception=WakeOnlyMonitor,
-        )
+        return await self.deliver(message, reception=WakeOnlyMonitor)
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         """On restart only the last 4 MiB is published again; Core's finish is idempotent, so

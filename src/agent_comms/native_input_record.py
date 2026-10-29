@@ -450,6 +450,14 @@ class NativeInputContext:
     def reference_stage(self) -> type[NativeInputExecution]:
         return self.context_value("stage")
 
+    def context_columns(self, context: NativeContextProof) -> dict[str, object]:
+        """Build the context group through each column's declared codec, not a caller roster."""
+        return {
+            plan.name: plan.value.decode(FieldCodec.encode(getattr(context, plan.name)))
+            for plan in FieldCodec.field_plans(type(self))
+            if NativeContext.single(plan.annotation)
+        }
+
     def context_value(self, name: str) -> object:
         """A context field decoded as its NativeContext directive declares it."""
         plan = next(plan for plan in FieldCodec.field_plans(type(self)) if plan.name == name)

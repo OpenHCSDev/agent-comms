@@ -1,3 +1,5 @@
+from agent_comms.transcripts import RecordedPageSource
+from agent_comms.historical_views import HistorySourceKey
 import pickle
 import sys
 from dataclasses import replace
@@ -47,7 +49,7 @@ def test_notification_read_states_use_the_request_revision_contract(comms):
     original = WireRevision.empty()
     later = replace(original, expiry_tick=original.expiry_tick + 60)
     live = LiveNotificationRead(())
-    recorded = RecordedNotificationRead((), "archive")
+    recorded = RecordedNotificationRead((), HistorySourceKey("archive"))
     settled = NotificationsRead(original, {})
     assert not live.changed_since(comms, original, settled)
     assert not live.changed_since(comms, later, settled)
@@ -169,7 +171,7 @@ REFERENCES = (MessageReference(1, MessageId.mint("original")),)
 
 
 @pytest.mark.parametrize("operation", [
-    LiveNotificationRead(REFERENCES), RecordedNotificationRead(REFERENCES, "archive"),
+    LiveNotificationRead(REFERENCES), RecordedNotificationRead(REFERENCES, HistorySourceKey("archive")),
 ], ids=["live", "recorded"])
 def test_notification_operations_are_root_free_family_records(operation: NotificationRead) -> None:
     assert operation.references == REFERENCES
@@ -187,26 +189,26 @@ def test_notification_operations_are_root_free_family_records(operation: Notific
 
 def test_root_request_references_and_archive_each_distinguish_a_notification_request():
     other_reference = (MessageReference(2, MessageId.mint("other")),)
-    request = ReadNotifications("root", RecordedNotificationRead(REFERENCES, "archive"), request_id=4)
+    request = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("archive")), request_id=4)
     distinct = (
         replace(request, root="other-root"),
         replace(request, request_id=5),
-        replace(request, operation=RecordedNotificationRead(other_reference, "archive")),
-        replace(request, operation=RecordedNotificationRead(REFERENCES, "other-archive")),
+        replace(request, operation=RecordedNotificationRead(other_reference, HistorySourceKey("archive"))),
+        replace(request, operation=RecordedNotificationRead(REFERENCES, HistorySourceKey("other-archive"))),
         replace(request, operation=LiveNotificationRead(REFERENCES)),
     )
     assert len({request, *distinct}) == 1 + len(distinct)
 
 
 def test_equal_requests_keep_their_read_state_and_a_new_archive_drops_it():
-    kept = ReadNotifications("root", RecordedNotificationRead(REFERENCES, "archive"))
-    replaced = ReadNotifications("root", RecordedNotificationRead(REFERENCES, "detached"))
-    reattached = ReadNotifications("root", RecordedNotificationRead(REFERENCES, "attached"))
+    kept = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("archive")))
+    replaced = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("detached")))
+    reattached = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("attached")))
     previous = ObserveNotifications(frozenset((kept, replaced))).observation()
     state = NotificationsRead(WireRevision.empty())
     previous.read_states = {kept: state, replaced: state}
     requested = ObserveNotifications(frozenset((
-        ReadNotifications("root", RecordedNotificationRead(REFERENCES, "archive")), reattached,
+        ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("archive"))), reattached,
     ))).observation()
 
     assert previous.for_interest(requested) is requested
@@ -280,7 +282,7 @@ UI_ONLY_FIELDS = {"root", "request_id", "previous", "owner", "identity"}
 SHARED_UI_READS = [
     CommanderUnitRead(commander=LEAD, unit=WORKER, orders=ORDERS),
     TranscriptPageRead(thread="worker", position=EarlierThan(NativeTranscriptCursor("session.jsonl", 7)),
-                       historical_source="archive"),
+                       page_source=RecordedPageSource("archive")),
 ]
 
 
@@ -316,7 +318,7 @@ def test_witnesses_cursors_and_archive_each_distinguish_a_shared_read_request():
         replace(commander, operation=replace(SHARED_UI_READS[0], orders=(OrderId.mint(),))),
         page,
         replace(page, operation=replace(SHARED_UI_READS[1], position=EarlierThan(NativeTranscriptCursor("session.jsonl", 8)))),
-        replace(page, operation=replace(SHARED_UI_READS[1], historical_source="other-archive")),
+        replace(page, operation=replace(SHARED_UI_READS[1], page_source=RecordedPageSource("other-archive"))),
     )
     assert len({commander, *distinct}) == 1 + len(distinct)
 

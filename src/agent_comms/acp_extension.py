@@ -54,7 +54,7 @@ from .routing import MessageRoute, NoMessageRoute
 from .thread_identity import ClaimScoped, ThreadIncarnation
 from .tool_result import ToolResult
 from .transcripts import (
-    NativeCommittedPrefix, TranscriptCursor, TranscriptPage, TranscriptRead, TranscriptReadIdentity,
+    LivePageSource, NativeCommittedPrefix, PageSource, TranscriptCursor, TranscriptPage, TranscriptRead, TranscriptReadIdentity,
 )
 from .turn_context import ContextManifest
 from .turn_lease import TurnState
@@ -711,9 +711,9 @@ class TranscriptSnapshotUpdate(AgentCommsUpdate, ToolResult):
         return cls(page, read.identity, draft.external_row())
 
     @classmethod
-    def capture(cls, transcripts, name, *, historical_source=None):
+    def capture(cls, transcripts, name, *, page_source: PageSource = LivePageSource()):
         """Publish the page together with the source witness that read it."""
-        read = transcripts.capture_page_read(name, historical_source=historical_source)
+        read = transcripts.capture_page_read(name, page_source=page_source)
         return cls.from_read(read)
 
 

@@ -10,11 +10,12 @@ import sqlite3
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .field_codec import TranscriptRecordId
+from .notification_evidence import ConsumptionEvidence
 from .notification_progress import HarnessConsumedProgress
 
 if TYPE_CHECKING:
@@ -109,7 +110,7 @@ class EmittedOutcome(UnconfirmedOutcome):
 
 
 @dataclass(frozen=True)
-class MonitorEvidence(DeclaredFamily):
+class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
@@ -142,8 +143,21 @@ class UnrecordedMonitor(MonitorEvidence):
     pass
 
 
+class BoardWake:
+    """The board notice's text, shared by its publisher and its transport evidence."""
+
+    board_wake: ClassVar[str] = (
+        "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
+        "tool call; later calls print one unchanged count."
+    )
+
+
 class PendingMonitor(MonitorEvidence, declared_name=None):
     """The emission owns whether its later observation can prove the original body."""
+
+    @classmethod
+    def displayed_body(cls, body: str) -> str:
+        return body
 
     @classmethod
     @abstractmethod
@@ -151,8 +165,12 @@ class PendingMonitor(MonitorEvidence, declared_name=None):
 
 
 @dataclass(frozen=True)
-class WakeOnlyMonitor(PendingMonitor):
+class WakeOnlyMonitor(BoardWake, PendingMonitor):
     """A board wake is not the original packet, even if its bytes happen to match."""
+
+    @classmethod
+    def displayed_body(cls, body: str) -> str:
+        return cls.board_wake
 
     @classmethod
     def for_parts(cls, total: int) -> WakeOnlyMonitor:

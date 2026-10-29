@@ -27,7 +27,7 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .notification_evidence import (AssignmentResponse, NotificationAssignmentRead, NotificationWindow,
+from .notification_evidence import (AssignmentResponse, ConsumptionEvidence, NotificationAssignmentRead, NotificationWindow,
                                     NotificationSelection, UnansweredResponse)
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
@@ -233,12 +233,15 @@ class NotificationAssignment(NotificationSource):
         own input row, keyed as the delivery recorded it; one keyed read covers the window.
         """
         registry = RegistryStore.at(root).snapshot()
-        keys = {InputDispositions.bus_key(page.source.message, thread):
-                    (recipient.recipient_lookup, page.source.message.reference)
-                for page in read.selection.pages for recipient in page.recipients
+        keys = {InputDispositions.bus_key(page.source.message, thread): key
+                for page in read.selection.pages for key, recipient in page.entries
                 for thread in registry.recipient(recipient, page.source).input_owners()}
         rows = InputDispositions(root).read(tuple(keys)).rows
-        return replace(read, inputs=MappingProxyType({keys[key]: row for key, row in rows.items()}))
+        consumption = dict(read.consumption)
+        for key, row in rows.items():
+            selected = keys[key]
+            consumption[selected] = (*consumption.get(selected, ()), row)
+        return replace(read, consumption=MappingProxyType(consumption))
 
     @classmethod
     def capture_detached(cls, root: Path, read: NotificationAssignmentRead) -> NotificationAssignmentRead:
@@ -290,10 +293,13 @@ class NotificationAssignment(NotificationSource):
                 ),
                 AssignmentActivityEvidence,
             ))
-        attempts = HarnessDelivery.for_recipients(connection, keys)
+        consumption: dict[tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]] = {}
+        for attempt in HarnessDelivery.for_recipients(connection, keys):
+            key = (attempt.recipient_lookup, attempt.reference)
+            consumption[key] = (*consumption.get(key, ()), attempt.monitor)
         return NotificationAssignmentRead(
             selection, tuple(sorted(rows, key=lambda row: (-row[0].wire_seq, row[0].recipient))),
-            attempts)
+            MappingProxyType(consumption))
 
     @classmethod
     def read(

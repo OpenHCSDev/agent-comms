@@ -10,8 +10,7 @@ from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
-from .bus_read import BusReader, OperatorOutcomes
-from .read_basis import OutcomeViewer, OwnerOutcomes
+from .read_basis import OperatorOutcomes, OutcomeViewer, OwnerOutcomes, ReadAuthority
 from .presentation import SentMessageSummary, ThreadRecord
 from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
@@ -32,7 +31,7 @@ class ThreadListing(ToolResult):
     sent_messages: tuple[SentMessageSummary, ...]
 
 
-class ToolCaller(BusReader):
+class ToolCaller(ReadAuthority):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return self
 
@@ -138,8 +137,8 @@ class ThreadCaller(ToolCaller):
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
         return ThreadListing(threads, SentMessageSummary.for_sources(presentation.sent_notifications()))
 
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        return OwnerOutcomes.of(comms.registry.require(self.name))
+    def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
+        return OwnerOutcomes.of(registry.require(self.name))
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(

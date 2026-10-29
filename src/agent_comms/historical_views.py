@@ -3,6 +3,7 @@
 from __future__ import annotations
 from agent_comms.repo import Checkout
 
+import re
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
@@ -21,7 +22,7 @@ from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec, ScratchName
+from .field_codec import FieldCodec, NominalSpelling, NominalText, ScratchName
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
 from .message_page import (
@@ -257,6 +258,14 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         )
 
 
+class HistorySourceKey(NominalText):
+    """The archive's catalogue identity, distinct from a thread or runtime key."""
+
+
+class HistorySourceKeyText(NominalSpelling[HistorySourceKey]):
+    spelling = re.compile(r"[^\x00]+")
+
+
 @dataclass(frozen=True, slots=True)
 class HistorySource:
     """An immutable bus/registry snapshot attached by the destination MessageBus."""
@@ -274,8 +283,8 @@ class HistorySource:
         object.__setattr__(self, "provenance", self.provenance.bound_to(Path(self.original_root)))
 
     @property
-    def key(self) -> str:
-        return self.root
+    def key(self) -> HistorySourceKey:
+        return HistorySourceKey(self.root)
 
     @classmethod
     def capture_original(cls, root: Path) -> HistorySource:
@@ -349,7 +358,7 @@ class HistorySource:
             raise ValueError("Recorded provenance lost original bus ownership")
 
     @classmethod
-    def require(cls, sources: tuple[HistorySource, ...], key: str) -> HistorySource:
+    def require(cls, sources: tuple[HistorySource, ...], key: HistorySourceKey) -> HistorySource:
         source = next((item for item in sources if item.key == key), None)
         if source is None:
             raise HistoricalSourceChanged("Historical source detached; refresh history")

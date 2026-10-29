@@ -702,7 +702,7 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
         except ValueError as error:
             raise ToolRefusedError(str(error)) from error
         source, = comms.bus.bus.deliveries_for_references((self.reference,))
-        if not caller.outcome_viewer(comms).sees(source):
+        if not caller.outcome_viewer(comms.registry).sees(source):
             raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")
         window = LiveNotificationRead(
             (self.reference,), after=self.after, limit=self.limit).read_as(comms, caller)

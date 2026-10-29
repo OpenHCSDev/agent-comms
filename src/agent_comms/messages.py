@@ -32,7 +32,7 @@ from agent_comms.typed_table import (
 )
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence, SourceRoots
-from .channel_targets import CommandTarget
+from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
@@ -1011,6 +1011,11 @@ class Message(MessageInput, TurnOrigin):
         plan = FieldCodec.field_plan(Message, 'type')
         kind = cast(builtins.type[MessageKind], plan.value.decode(plan.raw(data)))
         return kind.decode_message({"ts": 0.0, **data})
+
+    def awaits_answer_from(self, recipient: ThreadTarget) -> bool:
+        """The original message owns whether this named recipient owes its sender an answer."""
+        return (self.sender == recipient.name or self.target == recipient.name
+                or bool(self.response_eligibility((recipient.name,)).required_responders))
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES

@@ -13,7 +13,7 @@ from .field_codec import FieldCodec, MalformedRecord
 from .head_review import HeadReviewOrder, PullRequestHead
 from .thread_identity import ThreadIncarnation
 from .todos import DirectiveText
-from .bus_read import OperatorOutcomes
+from .read_basis import OperatorOutcomes
 from .tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_request import ToolArgumentsRefusedError, ToolRequest
 

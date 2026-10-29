@@ -19,17 +19,14 @@ from agent_comms.field_codec import MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference
-from agent_comms.notification_evidence import ConsumptionEvidence
 from agent_comms.typed_table import Column, ForeignKey, FrozenColumn, ImmutableRows, Index, NoDelete
 
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
-    from agent_comms.notification_progress import DeliveryProgress
-    from agent_comms.presentation import MessageNotification
 
 
 @dataclass(frozen=True, slots=True)
-class HarnessDelivery(NoDelete, CoordinatorRow, ConsumptionEvidence, declared_name="harness_deliveries"):
+class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliveries"):
     """One original attempt to put a bus message into a recipient's harness session."""
 
     bridge: Annotated[type[HarnessSession], FrozenColumn(primary_key=True)]
@@ -74,15 +71,6 @@ class HarnessDelivery(NoDelete, CoordinatorRow, ConsumptionEvidence, declared_na
             return False
         self.insert(db)
         return True
-
-    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
-        return self.monitor.consumed_progress(progress)
-
-    def arrival_count(self) -> int:
-        return self.monitor.arrival_count(self.outcome)
-
-    def arrival_label(self, notification: MessageNotification) -> str:
-        return self.monitor.arrival_label(self.outcome, notification)
 
     def settle_claims(self, assignments: AssignmentStore, db: sqlite3.Connection) -> None:
         """What this attempt means for the recipient's claim on its message: the claim left the

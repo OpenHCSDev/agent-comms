@@ -15,6 +15,13 @@ from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, b
 from .message_reference import MessageReference
 from .thread_identity import ThreadIncarnation
 
+
+class ConsumptionEvidence(ABC):
+    """A recorded fact that may prove a delivery entered the model's context."""
+
+    @abstractmethod
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress: ...
+
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
     from .read_basis import OutcomeViewer
@@ -25,14 +32,6 @@ if TYPE_CHECKING:
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import AssignmentProgress, DeliveryProgress
     from .presentation import MessageNotification, WireRevision
-
-
-class ConsumptionEvidence(ABC):
-    """A recorded fact about one delivery that may prove it entered the model's context."""
-
-    @abstractmethod
-    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
-        """The delivery's progress after this fact; only a context proof moves it."""
 
 
 @dataclass(frozen=True)
@@ -55,6 +54,12 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
             MessageReference(FieldCodec.decode(int, seq), FieldCodec.decode(MessageId, message_id)),
             FieldCodec.decode(int, received_at_ms),
         )
+
+    def detail_texts(self) -> tuple[str, ...]:
+        return ()
+
+    def notification_label(self, notification: MessageNotification, label: str) -> str:
+        raise ValueError("An unanswered source has no answer timestamp")
 
     @abstractmethod
     def completed_notification(
@@ -85,12 +90,16 @@ class AnsweredResponse(AssignmentResponse):
     received_at_ms: int
 
     def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
-        return progress.answered_notification(
-            notification, self.reference, self.received_at_ms
-        )
+        return progress.answered_notification(notification, self)
 
     def answered(self, notification: MessageNotification) -> MessageNotification:
-        return notification.state.answered_notification(notification, self.reference, self.received_at_ms)
+        return notification.state.answered_notification(notification, self)
+
+    def detail_texts(self) -> tuple[str, ...]:
+        return (f"Answer #{self.reference.seq} · {self.reference.message_id}",)
+
+    def notification_label(self, notification: MessageNotification, label: str) -> str:
+        return notification.timed_state(label, self.received_at_ms)
 
 
 @dataclass(frozen=True)
@@ -99,8 +108,7 @@ class SourceEvidence:
     grouped by frozen recipient. Equality over all of them is the window's change test."""
 
     claims: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...] = ()
-    attempts: Mapping[ThreadLookup, tuple[HarnessDelivery, ...]] = field(default_factory=dict)
-    inputs: Mapping[ThreadLookup, tuple[ConsumptionEvidence, ...]] = field(default_factory=dict)
+    consumption: Mapping[ThreadLookup, tuple[ConsumptionEvidence, ...]] = field(default_factory=dict)
     responses: Mapping[ThreadLookup, AssignmentResponse] = field(default_factory=lambda: MappingProxyType({}))
 
     def answered(self, recipient: ThreadLookup, notification: MessageNotification) -> MessageNotification:
@@ -110,7 +118,7 @@ class SourceEvidence:
                           progress: DeliveryProgress) -> DeliveryProgress:
         """The recipient's progress after each of its own harness attempts and stored inputs
         of this original."""
-        for attempt in (*self.attempts.get(recipient, ()), *self.inputs.get(recipient, ())):
+        for attempt in self.consumption.get(recipient, ()):
             progress = attempt.consumed_progress(progress)
         return progress
 
@@ -144,6 +152,11 @@ class RecipientSelection:
     def recipients(self) -> tuple[FrozenRecipient, ...]:
         return tuple(self.source.recipients[position] for position in self.positions)
 
+    @property
+    def entries(self) -> tuple[tuple[tuple[ThreadLookup, MessageReference], FrozenRecipient], ...]:
+        return tuple(((recipient.recipient_lookup, self.source.message.reference), recipient)
+                     for recipient in self.recipients)
+
 
 @dataclass(frozen=True)
 class NotificationSelection:
@@ -158,8 +171,7 @@ class NotificationSelection:
 
     @property
     def keys(self) -> tuple[tuple[ThreadLookup, MessageReference], ...]:
-        return tuple((recipient.recipient_lookup, page.source.message.reference)
-                     for page in self.pages for recipient in page.recipients)
+        return tuple(key for page in self.pages for key, _recipient in page.entries)
 
 
 @dataclass(frozen=True)
@@ -173,10 +185,9 @@ class NotificationAssignmentRead:
 
     selection: NotificationSelection
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
-    attempts: tuple[HarnessDelivery, ...] = ()
-    responses: Mapping[tuple[ThreadLookup, MessageReference], AssignmentResponse] = field(
+    consumption: Mapping[tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]] = field(
         default_factory=lambda: MappingProxyType({}))
-    inputs: Mapping[tuple[ThreadLookup, MessageReference], ConsumptionEvidence] = field(
+    responses: Mapping[tuple[ThreadLookup, MessageReference], AssignmentResponse] = field(
         default_factory=lambda: MappingProxyType({}))
 
     @property
@@ -189,27 +200,21 @@ class NotificationAssignmentRead:
         claims: dict[MessageReference, list[tuple[WakeAssignment, AssignmentActivityEvidence]]] = {
             source.message.reference: [] for source in self.sources
         }
-        attempts: dict[MessageReference, dict[ThreadLookup, list[HarnessDelivery]]] = {
+        consumption: dict[MessageReference, dict[ThreadLookup, tuple[ConsumptionEvidence, ...]]] = {
             source.message.reference: {} for source in self.sources
         }
         responses: dict[MessageReference, dict[ThreadLookup, AssignmentResponse]] = {
             source.message.reference: {} for source in self.sources
         }
-        inputs: dict[MessageReference, dict[ThreadLookup, tuple[ConsumptionEvidence, ...]]] = {
-            source.message.reference: {} for source in self.sources
-        }
         for (lookup, source), response in self.responses.items():
             responses[source][lookup] = response
-        for (lookup, source), stored in self.inputs.items():
-            inputs[source][lookup] = (stored,)
+        for (lookup, source), facts in self.consumption.items():
+            consumption[source][lookup] = facts
         for row in self.rows:
             claims.setdefault(row[0].source, []).append(row)
-        for attempt in self.attempts:
-            attempts[attempt.reference].setdefault(attempt.recipient_lookup, []).append(attempt)
-        return {source: SourceEvidence(tuple(claims[source]), {
-                    lookup: tuple(rows) for lookup, rows in attempts[source].items()},
-                    responses=MappingProxyType(responses[source]),
-                    inputs=MappingProxyType(inputs[source]))
+        return {source: SourceEvidence(
+                    tuple(claims[source]), MappingProxyType(consumption[source]),
+                    MappingProxyType(responses[source]))
                 for source in claims}
 
     def differs_from(self, fresh: Mapping[MessageReference, SourceEvidence]) -> bool:

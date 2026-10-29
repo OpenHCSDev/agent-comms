@@ -108,12 +108,12 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     def parts(self) -> tuple[str, ...]:
         # At least one body character fits each part. Using the maximum possible
         # ordinal width avoids rebuilding the body to discover its final count.
-        upper = len(self.message.body)  # Message already requires a nonempty body.
+        upper = len(self.body)  # The displayed body does not replace the original identity.
         budget = self.EVENT_CHARS - self.event_size(self.header(upper, upper))
         bodies: list[str] = []
         current: list[str] = []
         used = 0
-        for character in self.message.body:
+        for character in self.body:
             size = self.event_size(character) - 2  # JSON quotes belong to the header budget.
             if size > budget:
                 raise ValueError('Claude Monitor header leaves no room for a body character')

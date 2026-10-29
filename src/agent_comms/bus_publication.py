@@ -32,6 +32,7 @@ from agent_comms.typed_table import Column, Generated, sql_literal
 from .field_codec import FieldCodec, MessageId, ThreadLookup
 from .repo import Checkout
 from .wake_policy import RecipientDecision
+from .channel_targets import ThreadTarget
 
 if TYPE_CHECKING:
     from agent_comms.bus import Bus, BusReader, RecordBuilder
@@ -56,24 +57,15 @@ class Delivered(BusRecord, AudiencedMessage, declared_name=None):
             raise ValueError("Frozen recipients and their decisions must have equal length")
 
     def projections(self):
-        from .bus_tables import AwaitingAnswerSource, ReceivedSource, SentSource
-
         yield from super().projections()
         yield SentSource(self.sender_lookup, self.seq)
         for recipient in self.recipients:
             yield ReceivedSource(recipient.recipient_lookup, self.seq)
-            if self.awaits_answer_from(recipient.canonical_thread):
+            if self.awaits_answer_from(ThreadTarget(recipient.canonical_thread)):
                 yield AwaitingAnswerSource(
                     recipient.recipient_lookup, self.seq, recipient.canonical_thread,
                     self.role.response_policy(self).starts_direct_turn,
                 )
-
-    def awaits_answer_from(self, recipient: str) -> bool:
-        """Whether this delivery leaves the recipient owing its sender an answer: the
-        recipient sent it to itself, it was addressed to the recipient directly, or its
-        response policy names the recipient a required responder."""
-        return (self.sender == recipient or self.target == recipient
-                or bool(self.response_eligibility((recipient,)).required_responders))
 
     @property
     def history_record(self) -> Self:

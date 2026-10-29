@@ -298,7 +298,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     assert sent.label.startswith("Sent ") and sent.state == SentProgress(1_000)
     assert queued.label.startswith("Queued ") and queued.state == QueuedProgress(1_000)
     assert consumed.label.startswith("Consumed ") and consumed.state == SelectedConsumedProgress(2_000)
-    assert answered.label.startswith("Answered ") and answered.answered_at_ms == 3_000
+    assert answered.label.startswith("Answered ") and answered.answer == AnsweredResponse(MessageReference(99, reply_id), 3_000)
     # A delivered claim carries no consumed time of its own: without native or harness proof
     # its message is not consumed, whatever the claim's update time says. A running turn took
     # it; that is not a decision to ignore it.
@@ -334,7 +334,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     assert sum(row.state.consumed for row in (working, declined, unconfirmed, idle)) == 3
     assert not unconfirmed.state.consumed
     assert delivered_answer.label.startswith("Answered ")
-    assert delivered_answer.answer == MessageReference(99, reply_id)
+    assert delivered_answer.answer == AnsweredResponse(MessageReference(99, reply_id), 3_000)
     assert sent.recipient_identity == consumed.recipient_identity == answered.recipient_identity
 
 
@@ -365,7 +365,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     ).outcomes[original.seq, original.message_id]
     assert unrelated.answers == ()
     assert not notification.state.consumed
-    assert notification.answer is None
+    assert notification.answer == UnansweredResponse()
 
     import os
     from uuid import uuid4
@@ -413,8 +413,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
 
     assert response.answers == (original.reference,)
     assert notification.label.startswith("Answered ")
-    assert notification.answer == response.reference
-    assert notification.answered_at_ms == int(response.timestamp * 1000)
+    assert notification.answer == AnsweredResponse(response.reference, int(response.timestamp * 1000))
 
 
 def test_recorded_response_resolution_keeps_other_collective_lifecycles(

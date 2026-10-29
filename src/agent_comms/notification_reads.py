@@ -1,32 +1,21 @@
-"""Root-free notification window operations; UI transport and MCP paging stay at their boundaries.
-
-A notification read owns its references (and, when recorded, the archive it reads) and how
-its settled evidence goes stale. The UI carries one in ``ReadNotifications`` with its own root
-and request id; MCP's single-message page calls the live read directly under its caller.
-"""
+"""Root-free notification reads retain their original source and display cut."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
-from .bus_read import BusReader, UiRead
-from .historical_views import HistorySource
+from .bus_read import UiRead
+from .comms import Comms
+from .historical_views import HistorySource, HistorySourceKey
 from .message_reference import MessageReference
 from .notification_evidence import NotificationWindow, RecipientSelection
 from .notification_read import NotificationsRead
-from .read_basis import FirstRecipient, RecipientCursor
-
-if TYPE_CHECKING:
-    from .comms import Comms
-    from .presentation import WireRevision
+from .presentation import WireRevision
+from .read_basis import FirstRecipient, ReadAuthority, RecipientCursor
 
 
 @dataclass(frozen=True)
 class NotificationRead(UiRead[NotificationWindow], ABC):
-    """Every notification read declares its references and the bounded recipient page it
-    reads after its cursor; members own evidence freshness."""
-
     references: tuple[MessageReference, ...]
     after: RecipientCursor = field(default_factory=FirstRecipient, kw_only=True)
     limit: int = field(default=RecipientSelection.max_limit, kw_only=True)
@@ -38,12 +27,9 @@ class NotificationRead(UiRead[NotificationWindow], ABC):
 
 @dataclass(frozen=True)
 class LiveNotificationRead(NotificationRead):
-    """Recipient handling of the referenced original messages, as its reader may see them.
-    The UI reads as the operator; an MCP caller reads under its own viewer."""
-
-    def read_as(self, comms: Comms, reader: BusReader) -> NotificationWindow:
+    def read_as(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:
         return comms.views.message_notifications_for_references(
-            reader.outcome_viewer(comms), self.references, after=self.after, limit=self.limit)
+            reader.outcome_viewer(comms.registry), self.references, after=self.after, limit=self.limit)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:
@@ -52,15 +38,13 @@ class LiveNotificationRead(NotificationRead):
 
 @dataclass(frozen=True)
 class RecordedNotificationRead(LiveNotificationRead):
-    """The selected archive's recorded handling, independent of today's recipients."""
+    source: HistorySourceKey
 
-    source: str
-
-    def read_as(self, comms: Comms, reader: BusReader) -> NotificationWindow:
+    def read_as(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
             return source.notification_references(
-                sources, self.references, reader.outcome_viewer(comms),
+                sources, self.references, reader.outcome_viewer(comms.registry),
                 after=self.after, limit=self.limit)
 
     def changed_since(self, comms: Comms, revision: WireRevision,

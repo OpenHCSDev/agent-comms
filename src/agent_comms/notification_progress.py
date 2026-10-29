@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredOrder
-from .message_reference import MessageReference
+from .notification_evidence import AssignmentResponse
 from .thread_presentation import ThreadPresentationStatus, WorkingThreadPresentationStatus
 
 if TYPE_CHECKING:
@@ -73,10 +73,9 @@ class DeliveryProgress(ThreadPresentationStatus):
         return (notification.label,)
 
     def answered_notification(self, notification: MessageNotification,
-                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
+                              response: AssignmentResponse) -> MessageNotification:
         """An independent answer preserves this state's actual context proof."""
-        return replace(notification, state=AnsweredProgress(self),
-                       answer=reference, answered_at_ms=answered_at_ms, changed=True)
+        return replace(notification, state=AnsweredProgress(self), answer=response, changed=True)
 
     def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
         """The first proof that the message entered the model's context, at its own time."""
@@ -188,12 +187,12 @@ class AnsweredProgress(SettledDelivery, ContextualProgress):
     label = "Answered"
 
     def answered_notification(self, notification: MessageNotification,
-                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
+                              response: AssignmentResponse) -> MessageNotification:
         """A later independent response cannot replace an already recorded answer."""
         return notification
 
     def notification_label(self, notification: MessageNotification) -> str:
-        return notification.timed_state(self.label, notification.answered_at_ms)
+        return notification.answer.notification_label(notification, self.label)
 
 
 class CompletedProgress(AnsweredProgress):
