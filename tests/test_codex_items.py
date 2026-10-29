@@ -1,6 +1,11 @@
 
 from agent_comms.repo import Checkout
-from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
+import pytest
+
+from agent_comms.cli_bridges.codex_protocol import (
+    BusClientId, BusInput, ForeignClientId, ItemsPage, NoClientId, UserItem,
+)
+from agent_comms.field_codec import MessageId
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.threads import Thread
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -35,8 +40,24 @@ def test_items_page_decodes_every_declared_user_input():
 
 
 def test_bus_input_encodes_its_text_with_the_codex_tag():
-    params = BusInput.for_message("thread", "m1", "hi").model_dump(mode="json")
+    params = BusInput.for_message("thread", MessageId.mint("test-bus-input"), "hi").model_dump(mode="json")
     assert params["input"] == [{"type": "text", "text": "hi"}]
+
+
+@pytest.mark.parametrize(('wire', 'decoded'), (
+    (None, NoClientId()),
+    ('foreign-client', ForeignClientId('foreign-client')),
+    ('', ForeignClientId('')),
+    (BusClientId(MessageId.mint('client-round-trip')).external,
+     BusClientId(MessageId.mint('client-round-trip'))),
+))
+def test_client_id_boundary_retains_its_member_through_item_use(wire, decoded):
+    item = UserItem.model_validate(dict(id='input', content=[dict(type='text', text='body')], clientId=wire))
+    assert item.clientId == decoded
+    assert item.model_dump(mode='json')['clientId'] == wire
+    member = item.clientId
+    item.completed(NativeTurnId('source-turn'), item.events(1.0))
+    assert item.clientId is member
 
 
 def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
