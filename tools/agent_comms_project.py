@@ -141,9 +141,8 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         families = self.carry_family()
         for path, source in self.sources(head, set(added)):
             tree = ast.parse(source, path)
-            bindings = [
-                audit.lexical.DecoratorBinding.of(family, tree, path) for family in families
-            ]
+            module = audit.lexical.ModuleScope(tree, path)
+            bindings = [audit.lexical.DecoratorBinding.of(family, module) for family in families]
             if any(binding.marks(base) for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
                    for base in node.bases for binding in bindings):
                 return True
