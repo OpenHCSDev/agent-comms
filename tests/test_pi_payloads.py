@@ -198,7 +198,7 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
     from agent_comms.native_failures import NativePiUnavailable
-    from agent_comms.tracked_turn import ObservedNativeCommit, PendingNativeCommit
+    from agent_comms.backend import ObservedNativeCommit, PendingNativeCommit
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry", "sessionEntryStart": 128})
     pending = PendingNativeCommit()

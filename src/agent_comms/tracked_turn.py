@@ -7,13 +7,11 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack, ExitStack
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Generic, TypeVar
-
-from metaclass_registry.mro_dispatch import handles
+from typing import TYPE_CHECKING
 
 from . import pi_commands as commands
 from . import pi_events as pi
@@ -34,10 +32,7 @@ from .native_pi import (
     NativeEmptyAnswer,
     NativePiPromptRejected,
     NativeTurnResult,
-    _verify_context,
-    read_tracked_input_commitment,
 )
-from .private_sidecar import native_request_digest
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_session_reopen import SessionRetention
 from .native_startup import NativeStartup
@@ -57,9 +52,6 @@ if TYPE_CHECKING:
     from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
     from .native_entries import NativeEvidenceScope
-    from .native_tool_transport import UnboundToolTransport
-    from .native_session_files import NativeSessionFiles
-    from .native_session_reopen import PiSessionId
     from .pi_native_backend import PersistentPiSession
     from .pi_payloads import UserMessage
     from .turn_failure import TurnFailure
@@ -75,79 +67,6 @@ class NoObserver:
 
 NO_NATIVE_OBSERVER = NoObserver()
 NO_FOLLOWING_INPUTS = FollowingInputs()
-
-T = TypeVar("T")
-
-
-class NativeCommitObservation(ABC, Generic[T]):
-    """Observed native input records, without permission to start or replay input."""
-
-    @abstractmethod
-    def require(self) -> T: ...
-
-    def capture(self, event: T) -> NativeCommitObservation[T]:
-        raise NativePiUnavailable("Native Pi repeated the input commitment")
-
-
-class PendingNativeCommit(NativeCommitObservation[T]):
-    def require(self) -> T:
-        raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-
-    def capture(self, event: T) -> NativeCommitObservation[T]:
-        return ObservedNativeCommit(event)
-
-
-@dataclass(frozen=True)
-class ObservedNativeCommit(NativeCommitObservation[T]):
-    event: T
-
-    def require(self) -> T:
-        return self.event
-
-
-@dataclass
-class TrackedInputContext:
-    """One actually sent command owns its emitted join, bounded by this run's scope."""
-
-    command: commands.Prompt
-    input_commit: NativeCommitObservation[pi.InputCommitted] = field(default_factory=PendingNativeCommit)
-    context_commit: NativeCommitObservation[pi.ContextCommitted] = field(default_factory=PendingNativeCommit)
-
-    async def committed_input(self, turn: TrackedTurnSession, event: pi.InputCommitted) -> None:
-        self.input_commit = self.input_commit.capture(event)
-        async with turn.cursor_delivery.reading() as source_reads:
-            await Coordination.run_worker(lambda:
-                source_reads.for_source(turn.active_session_file).observe(event))
-        await self.command.input_committed(turn, event)
-
-    def proof(
-        self, files: NativeSessionFiles, session_id: PiSessionId,
-        source_reads: NativeEvidenceScope,
-    ) -> NativeContextProof:
-        evidence = source_reads.for_source(files.session)
-        proof = _verify_context(
-            files, self.command.input_id, session_id,
-            self.input_commit.require(), self.context_commit.require(), evidence=evidence,
-        )
-        committed = read_tracked_input_commitment(
-            proof.session_file, self.command.input_id, evidence=evidence,
-        )
-        if not committed.matches(native_request_digest(
-            self.command.message, streaming_behavior=self.command.streaming_behavior,
-            images=self.command.images,
-        )):
-            raise NativePiUnavailable("Native context differs from its actual scoped input request")
-        return proof
-
-    async def committed_context(self, turn: TrackedTurnSession, event: pi.ContextCommitted) -> None:
-        self.context_commit = ObservedNativeCommit(event)
-        async with turn.cursor_delivery.reading() as source_reads:
-            proof = await Coordination.run_worker(partial(
-                self.proof, turn.launch.session.files(turn.launch.root),
-                turn.native.attestation.require_identity().session_id, source_reads,
-            ))
-            await self.command.context_committed(turn, proof, source_reads)
-
 
 class TrackedTerminal(ABC):
     """Relate completed assistant responses to their streamed text."""
@@ -301,26 +220,20 @@ class TrackedTurnSession(TurnSession):
             launch,
             command,
             tool_mode=selected_tool_mode,
+            cursor_delivery=cursor_delivery,
             model_wait=model_wait,
             startup=startup,
             request_observer=request_observer,
             native_session=pi_session,
         )
         self.retainable = False
-        self.cursor_delivery = cursor_delivery
         self.following = following
         self.model = model
         self.prompt_send_boundary = prompt_send_boundary
         self.ingress = ingress
         self.observe_event = observe_event
-        self.contexts: dict[InputId, TrackedInputContext] = {}
         self.draft_written_at = 0.0
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
-
-    async def open_transport(self, resources: AsyncExitStack) -> UnboundToolTransport:
-        transport = await super().open_transport(resources)
-        self.contexts[self.command.input_id] = TrackedInputContext(self.command)
-        return transport
 
     @classmethod
     async def execute(
@@ -518,21 +431,14 @@ class TrackedTurnSession(TurnSession):
     def reject_prompt(self, response):
         raise NativePiPromptRejected(response)
 
-    def following_started(self, command: commands.FollowingPrompt) -> None:
-        if command.input_id in self.contexts:
-            raise NativePiUnavailable("A tracked following input reused an in-scope native identity")
-        self.contexts[command.input_id] = TrackedInputContext(command)
+    async def original_committed(self, event: pi.InputCommitted) -> None:
+        self.prompt_state = self.prompt_state.start(event)
+        await self.following.open(self)
 
-    async def finish_input(self) -> None:
-        try:
-            await super().finish_input()
-        finally:
-            self.contexts.clear()
-
-    @handles(pi.InputCommitted)
-    async def committed_input(self, event: pi.InputCommitted) -> None:
-        if context := self.contexts.get(event.input_id):
-            await context.committed_input(self, event)
+    async def original_context_committed(
+        self, context: NativeContextProof, source_reads: NativeEvidenceScope,
+    ) -> None:
+        await self.prompt_send_boundary.context_committed(context, source_reads)
 
     def forward_inbox(self, inbox: TurnInbox, sender: OwnedSend) -> None:
         """Later inputs go to the running child under the owner's write checks."""
@@ -553,11 +459,6 @@ class TrackedTurnSession(TurnSession):
             self.output.discard_text()
             return ()
         raise NativePiUnavailable("Native Pi started a user message this turn did not send")
-
-    @handles(pi.ContextCommitted)
-    async def committed_context(self, event: pi.ContextCommitted) -> None:
-        if context := self.contexts.get(event.input_id):
-            await context.committed_context(self, event)
 
     async def assistant_started(self) -> None:
         await super().assistant_started()
@@ -593,14 +494,7 @@ class TrackedTurnSession(TurnSession):
     async def context_proof(self) -> NativeContextProof:
         if not self.prompt_state.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-        # The recipient serializes this read with cursor and settlement reads.
-        # Cancellation joins the worker before its borrowed scope is released.
-        async with self.cursor_delivery.reading() as source_reads:
-            return await Coordination.run_worker(partial(
-                self.contexts[self.command.input_id].proof,
-                self.launch.session.files(self.launch.root),
-                self.native.attestation.require_identity().session_id, source_reads,
-            ))
+        return await super().context_proof()
 
     async def invalidate_identity(self) -> tuple[AgentEvent, ...]:
         # A tracked turn has no authority to recover a session another command replaced.

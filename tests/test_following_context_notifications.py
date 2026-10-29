@@ -24,7 +24,7 @@ from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import FollowingPrompt
-from agent_comms.tracked_turn import ObservedNativeCommit, TrackedInputContext
+from agent_comms.backend import ObservedNativeCommit, TrackedInputContext
 from agent_comms.turn_lease import TurnLeaseFence
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.pi_events import ContextCommitted, InputCommitted

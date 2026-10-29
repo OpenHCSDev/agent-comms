@@ -58,7 +58,6 @@ if TYPE_CHECKING:
     from .pi_events import Response, ResponseOutcome
     from .pending_requests import PendingRequest
     from .launch_runtime import RestartEnvironment
-    from .tracked_turn import TrackedTurnSession
     from .native_entries import NativeEvidenceScope
     from .native_input_proof import NativeContextProof
     from .pi_events import InputCommitted
@@ -214,15 +213,14 @@ class Prompt(PiCommand):
         WireName("streamingBehavior"),
     ] = None
 
-    async def input_committed(self, session: TrackedTurnSession, event: InputCommitted) -> None:
-        session.prompt_state = session.prompt_state.start(event)
-        await session.following.open(session)
+    async def input_committed(self, session: TurnSession, event: InputCommitted) -> None:
+        await session.original_committed(event)
 
     async def context_committed(
-        self, session: TrackedTurnSession, context: NativeContextProof,
+        self, session: TurnSession, context: NativeContextProof,
         source_reads: NativeEvidenceScope,
     ) -> None:
-        await session.prompt_send_boundary.context_committed(context, source_reads)
+        await session.original_context_committed(context, source_reads)
 
     @classmethod
     def response_type(cls) -> type[PiCommand]:
@@ -253,14 +251,14 @@ class FollowingPrompt(Prompt, declared_name=None):
 
     input: Annotated[InputRequest, WireTransient()]
 
-    async def input_committed(self, session: TrackedTurnSession, event: InputCommitted) -> None:
+    async def input_committed(self, session: TurnSession, event: InputCommitted) -> None:
         """This accepted following input cannot restart the original prompt or inbox."""
 
     async def context_committed(
-        self, session: TrackedTurnSession, context: NativeContextProof,
+        self, session: TurnSession, context: NativeContextProof,
         source_reads: NativeEvidenceScope,
     ) -> None:
-        await session.following.context_committed(self.input.input_id, self.message, context)
+        await session.input_start.following_context_committed(self.input.input_id, self.message, context)
 
     def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         # PendingRequest already records this acknowledgement.
