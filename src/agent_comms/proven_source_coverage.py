@@ -25,7 +25,7 @@ from .bus_source_page import CoveragePage
 from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from .coordination_cohort import AcceptedCohort, _claim_record
 from .coordination_session import NativeCapture
-from .field_codec import FieldCodec, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn

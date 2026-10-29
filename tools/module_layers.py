@@ -41,7 +41,7 @@ from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
 from typing_names import TypingImports, TypingReference
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"

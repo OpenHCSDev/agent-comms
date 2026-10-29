@@ -16,9 +16,9 @@ from pydantic import JsonValue
 
 from .activity import ActivityCapture
 from .child_process import NoProcess, ProcessIdentity
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     ExternalJsonShape,
     FieldCodec,
     MalformedRecord,

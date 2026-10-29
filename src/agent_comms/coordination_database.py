@@ -24,7 +24,7 @@ from agent_comms.typed_table import (
 )
 
 from .child_process import Platform
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .store_files import DEFAULT_STORE_CONTENTION, StoreContention
 
 

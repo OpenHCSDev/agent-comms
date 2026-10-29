@@ -13,7 +13,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
 from .errors import RelationViolationError
-from .field_codec import InputId, MalformedRecord, NominalSpelling, NominalText, NullMember, SingleFieldValue
+from agent_comms.nominal.field_codec import InputId, MalformedRecord, NominalSpelling, NominalText, NullMember, SingleFieldValue
 from .input_disposition import InputDispositions
 from .private_path import FileObservation, FileRevision
 from .routing import NoTurnRouting, Routing, TurnRouting

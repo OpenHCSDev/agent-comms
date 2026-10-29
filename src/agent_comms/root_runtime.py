@@ -12,9 +12,9 @@ from typing import Annotated, TextIO
 
 from .bus import Bus
 from .child_process import NoProcess, ObservedProcess, OutlivesLauncherLifetime, ProcessIdentity, ProcessState, SpawnedProcess
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import PathText, WireOmitDefault
+from agent_comms.nominal.field_codec import PathText, WireOmitDefault
 from .launch_runtime import LaunchRuntime
 from .locked_store import DocumentChange, LockedStore, RegistryFile, RollbackRetained
 from .maintenance_barrier import MaintenanceBarrier

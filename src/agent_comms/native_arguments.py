@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:

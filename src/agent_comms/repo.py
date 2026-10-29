@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
 from .coordination_errors import CommandFailure
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .field_codec import FieldCodec, PresentMember, SingleFieldValue, WireValue
+from agent_comms.nominal.field_codec import FieldCodec, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
 

@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, Annotated
 
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     NullMember,
     projected,

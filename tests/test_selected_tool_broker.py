@@ -18,7 +18,7 @@ from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeClaim
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     AssignmentId,
     ClaimId,
     FieldCodec,

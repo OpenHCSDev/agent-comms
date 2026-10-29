@@ -38,7 +38,7 @@ from agent_comms.cli_bridges.opencode import OpenCodeServer, OpenCodeConnection
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness, PiHarness
 from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry

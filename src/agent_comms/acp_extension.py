@@ -26,9 +26,9 @@ from .agent_backend import SendNow, TurnInbox
 from .agent_events import CompactionEvent
 from .child_process import ProcessIdentity
 from .context_reading import ContextReading
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .external_transcript import DraftRow
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     AssignmentId,
     ClaimId,
     AcceptsNull,

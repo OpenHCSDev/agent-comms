@@ -9,7 +9,7 @@ from functools import partial
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 
 from .child_process import ChildResult
 from .launch_runtime import LaunchRuntime

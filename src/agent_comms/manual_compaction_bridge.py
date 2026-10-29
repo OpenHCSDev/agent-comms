@@ -15,7 +15,7 @@ from .coordination_errors import Refused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
-from .field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, encode_updates
 from .agent_backend import (
     CompactionOutcome,

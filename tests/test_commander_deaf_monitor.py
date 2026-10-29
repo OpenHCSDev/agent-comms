@@ -15,7 +15,7 @@ from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.monitor import AttachMonitor, MonitorService, SessionReady
 from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve, StoredBinding
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.messages import Addressed
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ConnectedThreadStatus

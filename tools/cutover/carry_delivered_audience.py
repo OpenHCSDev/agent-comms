@@ -14,7 +14,7 @@ from agent_comms.audience_manifest import (
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import Delivered
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, MessageId, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.messages import Message

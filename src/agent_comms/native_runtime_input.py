@@ -18,8 +18,8 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordination_tables.responses import ResponseObligation
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,

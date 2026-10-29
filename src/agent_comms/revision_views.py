@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from itertools import zip_longest
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .private_path import FileObservation, MissingFile
 
 

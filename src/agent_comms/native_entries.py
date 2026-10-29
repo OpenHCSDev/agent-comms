@@ -27,8 +27,8 @@ if TYPE_CHECKING:
     from .native_pi import NativeContextProof
     from .importing import ImportedConversation
 
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,

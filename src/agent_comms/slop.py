@@ -16,8 +16,8 @@ from pydantic import JsonValue
 
 from agent_comms import skills
 from agent_comms.change_report import Declaration, FileLine
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     FieldRepresentation,
     MalformedRecord,

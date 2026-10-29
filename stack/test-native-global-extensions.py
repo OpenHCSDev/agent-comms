@@ -19,7 +19,7 @@ import time
 import tempfile
 
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
 from agent_comms.launch_runtime import RestartEnvironment

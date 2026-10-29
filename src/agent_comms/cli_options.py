@@ -7,7 +7,7 @@ import json
 from collections.abc import Sequence
 from typing import ClassVar, Self
 
-from .field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 class JsonFlagRecord:

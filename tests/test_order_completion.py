@@ -11,7 +11,7 @@ from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.commander.order import Commander, main
 from agent_comms.commander.standing import HolderGone
 from agent_comms.goals import CountCheckResult, OrderCheck
-from agent_comms.field_codec import RecordProblems
+from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.repo import Checkout, DetachedStart
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime

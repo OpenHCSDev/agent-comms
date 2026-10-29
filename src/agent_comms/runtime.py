@@ -41,7 +41,7 @@ from acp.schema import (
 from .controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller, SessionUpdateSink,
 )
-from .field_codec import AcpSessionId, FieldCodec, MalformedRecord, WireName
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, WireName
 from .owner_protocol import (
     ClientLine,
     IncompatibleOwnerError,

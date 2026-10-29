@@ -13,7 +13,7 @@ from packaging.markers import Marker
 from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.launch_runtime import LaunchRuntime

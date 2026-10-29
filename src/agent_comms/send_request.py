@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 from agent_comms import messages
 from agent_comms.change_report import NoChangeReport
 from agent_comms.change_report import ReportEvidence
 from agent_comms.declared_verb import DeclaredOptions
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.send_result import SendResult
 from agent_comms.target_fields import ChoiceTargetField
 from dataclasses import dataclass

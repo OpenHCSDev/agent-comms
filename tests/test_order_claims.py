@@ -14,7 +14,7 @@ from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.standing_rules import OwedAnswer
 from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
     OrderId,

@@ -24,7 +24,7 @@ from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeCapture, NativeCommit
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
-from .field_codec import ClaimId, InputId, TurnId
+from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .tool_denial import SelectedToolDenied

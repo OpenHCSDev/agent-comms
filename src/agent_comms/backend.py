@@ -49,7 +49,7 @@ from .acp_failure import UnrecordedFailureSource
 from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener, TurnInbox
 from .coordinator import Coordination
 from .extension_ui import ExtensionUiSession
-from .field_codec import InputId, MalformedRecord, boundary_decoder
+from agent_comms.nominal.field_codec import InputId, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild

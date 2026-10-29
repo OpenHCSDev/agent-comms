@@ -13,10 +13,10 @@ from pydantic import JsonValue
 
 from .bus import Bus
 from .context_store import ContextStore
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
-from .field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
 from .repo import Checkout, GitCommandError, Repo

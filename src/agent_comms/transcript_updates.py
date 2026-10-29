@@ -16,7 +16,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .turn_lease import TurnState
 from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
 

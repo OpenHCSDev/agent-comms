@@ -19,8 +19,8 @@ from pydantic import JsonValue
 
 from agent_comms.errors import MissingSourceLine
 
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     MalformedRecord,
     NullMember,
     RecordMember,

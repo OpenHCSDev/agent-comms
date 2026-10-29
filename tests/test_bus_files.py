@@ -12,7 +12,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_session import NativeCapture
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
-from agent_comms.field_codec import ClaimId, GoalId, InputId, TurnId
+from agent_comms.nominal.field_codec import ClaimId, GoalId, InputId, TurnId
 from agent_comms.installer.backup import bus_files
 from agent_comms.locked_store import DeclaredFile, DurableFile, LiveFilesRequest, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.native_pi import NativeContextJournal

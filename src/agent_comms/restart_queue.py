@@ -23,9 +23,9 @@ from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, 
 from .comms import Comms, wire
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
+from agent_comms.nominal.field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .locked_store import RuntimeFile

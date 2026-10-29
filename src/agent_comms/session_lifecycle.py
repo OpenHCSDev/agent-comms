@@ -44,7 +44,7 @@ from .turn_input_source import NoTurnAcceptance
 from .session_config_options import SessionConfigOptions
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .registry_document import RegistryEntry
 from .runtime import RuntimeProxy, RuntimeServer

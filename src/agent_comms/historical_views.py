@@ -21,7 +21,7 @@ from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec, ScratchName
+from agent_comms.nominal.field_codec import FieldCodec, ScratchName
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
 from .message_page import (

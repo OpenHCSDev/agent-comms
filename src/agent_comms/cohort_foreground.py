@@ -8,7 +8,7 @@ from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_session import NativeCommit
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import RootId, ThreadLookup
+from agent_comms.nominal.field_codec import RootId, ThreadLookup
 
 from .cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
 from .coordination_cohort import AcceptedCohort

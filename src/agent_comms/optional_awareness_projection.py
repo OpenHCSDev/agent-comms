@@ -45,7 +45,7 @@ from .context_segments.optional_awareness import (
 )
 from .coordination_cohort import _claim_record
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy

@@ -37,7 +37,7 @@ from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderHud
 from .comms import Comms
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead

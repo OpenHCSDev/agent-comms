@@ -29,7 +29,7 @@ from agent_comms.response_acknowledgement import (
 )
 from agent_comms.typed_table import Column, Generated, sql_literal
 
-from .field_codec import FieldCodec, MessageId, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, ThreadLookup
 from .repo import Checkout
 from .read_basis import RepliesDisplayScope
 from .wake_policy import RecipientDecision

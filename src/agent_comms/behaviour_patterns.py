@@ -17,7 +17,7 @@ from agent_comms.commander.standing import PlanIdle, PlanStalled
 
 from .child_process import CountPrinted, NoIntegerPrinted
 from .commander.order import CheckRequest
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .pattern_sources import (
     CeremonyFailure,
     CommanderRule,

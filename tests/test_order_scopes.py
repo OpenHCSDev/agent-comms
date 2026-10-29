@@ -13,7 +13,7 @@ from agent_comms.errors import MissingSourceLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
 from cli_command import core
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.held_orders import HeldOrders
 from agent_comms.recorded_time import RecordedEventTime

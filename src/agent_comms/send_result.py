@@ -2,8 +2,8 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .declared_family import DeclaredFamily
-from .field_codec import MessageId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import MessageId
 from .messages import Message
 
 
@@ -43,7 +43,7 @@ class SendResult:
         return self.correction.notices(self.message.message_id)
 
 from agent_comms.cli_result import CliResult
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 @dataclass(frozen=True)
 class MessageSentResult(CliResult):

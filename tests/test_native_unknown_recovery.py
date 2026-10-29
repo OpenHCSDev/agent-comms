@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from agent_comms.field_codec import InputId, TurnId
+from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.lifecycle_capability import Failed
 import asyncio
 import multiprocessing

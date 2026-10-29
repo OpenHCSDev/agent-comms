@@ -5,9 +5,9 @@ from .coordinator import Coordination
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from .thread_presentation import LiveThreadOwnerBinding, ThreadOwnerBinding
 from .native_arguments import GivenArguments
 

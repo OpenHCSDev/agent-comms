@@ -18,9 +18,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus import Bus
 from .child_process import Platform
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, ScratchName
 from .launch_root import LaunchRoot
 from .locked_store import DocumentBytes
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import ClaimId
+from agent_comms.nominal.field_codec import ClaimId
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport
 from .selected_claim import (

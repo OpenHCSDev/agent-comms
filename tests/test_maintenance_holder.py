@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.maintenance_barrier import (
     DeadHolderReleasedPhase,
     DrainingPhase,

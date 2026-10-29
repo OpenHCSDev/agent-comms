@@ -26,7 +26,7 @@ from commander_heartbeat_fixture import ObservedHeartbeat, observe_commander
 from agent_comms.commander_hud import CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import ToolCallId
+from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import CommanderInputs
 from agent_comms.launch_runtime import LaunchRoot

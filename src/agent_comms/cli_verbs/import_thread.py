@@ -6,9 +6,9 @@ from agent_comms.cli_bridges.history import OfflineHistory
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.importing import ImportingCliCommand
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import Editor
-from agent_comms.field_codec import PathText
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import Editor
+from agent_comms.nominal.field_codec import PathText
 from agent_comms.harness_install import Harness
 from agent_comms.target_fields import ChoiceTargetField
 from dataclasses import dataclass

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.child_process import IdentityMismatchError, Platform, ProcessIdentity
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_children import ApplicationChildInitiator
 

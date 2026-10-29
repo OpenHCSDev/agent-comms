@@ -57,7 +57,7 @@ from agent_comms.typed_table import (
     WithoutRowid,
 )
 
-from .field_codec import MessageId, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import MessageId, RootId, ThreadLookup
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
 from .response_conversation import ResponseConversation

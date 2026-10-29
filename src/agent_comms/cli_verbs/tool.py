@@ -4,9 +4,9 @@ from agent_comms.comms import Comms
 
 from agent_comms import cli as comms_cli
 from agent_comms.cli_command import CliCommand
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import FieldCodec
-from agent_comms.field_codec import Normalize
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import Normalize
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import ToolReplyResult

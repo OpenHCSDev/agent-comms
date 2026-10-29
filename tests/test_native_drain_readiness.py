@@ -9,7 +9,7 @@ from agent_comms.activity import (
     StoppedDrainDiagnostic, UnavailableDrainDiagnostic, UnavailableDrainReadiness,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.thread_identity import OwnerIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 

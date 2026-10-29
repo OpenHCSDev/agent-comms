@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.commander.unit_talk import BlockedTalk, Ceremony, UnitTalk
-from agent_comms.field_codec import MessageId
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 UNIT = RecordedThreadIncarnation("install-speed", 1792869186.2298183)

@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, InputId, MalformedRecord, TextRepresentation, TurnId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord, TextRepresentation, TurnId
 
 if TYPE_CHECKING:
     from .acp_extension import InputStartedUpdate

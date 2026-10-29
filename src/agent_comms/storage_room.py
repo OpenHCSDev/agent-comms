@@ -18,8 +18,8 @@ from typing import Annotated, ClassVar
 
 from .activity import ActivityState
 from .child_process import ProcessIdentity, ResidentMemory
-from .declared_family import DeclaredFamily
-from .field_codec import RoomTicket
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import RoomTicket
 from .store_files import StoreContention
 from .thread_identity import ThreadIncarnation
 from .typed_table import (

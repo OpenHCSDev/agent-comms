@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.field_codec import MessageId, ThreadLookup, TranscriptRecordId
+from agent_comms.nominal.field_codec import MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference

@@ -6,7 +6,7 @@ import os
 
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurn, NoTurnLease
 

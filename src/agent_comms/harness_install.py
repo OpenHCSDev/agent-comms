@@ -20,9 +20,9 @@ from typing import ClassVar, Self
 from agent_comms_hooks import ClaudeHookProgram
 
 from .child_process import Platform, ResidentManager
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import ScratchName
+from agent_comms.nominal.field_codec import ScratchName
 from .host_services import SystemdUserService
 from .host_services.codex_inbox import CodexInboxService
 

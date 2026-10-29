@@ -9,7 +9,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_presentation import UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus

@@ -1,5 +1,5 @@
 from agent_comms.repo import Checkout, Repo
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 
 """External contracts and adding commands without editing any consumer catalog."""
 

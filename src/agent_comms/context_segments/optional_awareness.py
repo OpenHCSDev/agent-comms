@@ -26,7 +26,7 @@ from ..cohort_schema import (
     CohortDeliveries,
     SelectedClaim,
 )
-from ..field_codec import FieldCodec, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 from ..turn_context import ContextSegment, InstructionFile, InstructionSegment, TurnContext
 from ..wake_candidate_index import ProjectionUnavailableError
 

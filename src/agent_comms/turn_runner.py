@@ -30,7 +30,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import GoalId, InputId, TurnId
+from agent_comms.nominal.field_codec import GoalId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (

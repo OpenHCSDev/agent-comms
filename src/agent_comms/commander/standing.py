@@ -17,9 +17,9 @@ from agent_comms import commander
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, HeartbeatSubject, PassSubject

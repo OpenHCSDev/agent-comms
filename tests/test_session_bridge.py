@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.cli_bridges.monitor import AttachMonitor, InspectSession, SessionReady
 from agent_comms.cli_bridges.shared import BridgeLog
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms_hooks.watch import (
     SessionConnectionClosed, SessionRequestTimeout, WatchClaim, WatchRecord,
 )

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
-from .field_codec import FieldCodec, WireName
+from agent_comms.nominal.field_codec import FieldCodec, WireName
 from .head_review import HeadReview, PullRequestHead
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, GitCommandError, Repo

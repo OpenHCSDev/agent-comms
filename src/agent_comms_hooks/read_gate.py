@@ -21,8 +21,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.pattern_sources import ReadThenRepeatedFailure
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord

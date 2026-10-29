@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination

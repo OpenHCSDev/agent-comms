@@ -39,10 +39,10 @@ from pathlib import Path
 
 from agent_comms.comms import Comms
 from agent_comms.change_report import FileLine
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems,
 )
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, NoReturn
 from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
-from .field_codec import WireForm
+from agent_comms.nominal.field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
 from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord

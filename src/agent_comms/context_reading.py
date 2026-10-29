@@ -3,7 +3,7 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 class ContextReading(DeclaredFamily):

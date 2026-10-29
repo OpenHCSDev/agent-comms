@@ -42,11 +42,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Annotated, Any, BinaryIO, ClassVar, NoReturn, Self, TextIO
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
+from agent_comms.nominal.field_codec import FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
-from .sealed import Sealed
+from agent_comms.nominal.sealed import Sealed
 from .systemd_unit import AgentsSlice, SystemdUnit
 
 if TYPE_CHECKING:

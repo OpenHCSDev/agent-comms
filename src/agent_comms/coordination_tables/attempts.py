@@ -21,7 +21,7 @@ from agent_comms.coordination_tables.participants import (
     OwnerRecord,
     Participants,
 )
-from agent_comms.field_codec import SnapshotExclude, ThreadLookup, projected
+from agent_comms.nominal.field_codec import SnapshotExclude, ThreadLookup, projected
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (

@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .attempt_resolution import RecordedResolution
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import StaleAttemptError
 from .native_arguments import SelectedModel
 from .native_failures import NativePiUnavailable

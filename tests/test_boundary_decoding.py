@@ -7,7 +7,7 @@ import pytest
 from agent_comms.channel_coding_tools import CodingToolRequest
 from agent_comms.input_key import BusInputKey
 from agent_comms.cli_bridges.claude_protocol import ClaudeHeader
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_attempt import (
     HistoricalInput, OwnerQueueInputDeliveryScope, UnobservedInputDeliveryScope, UnresolvedInput,
 )
@@ -84,4 +84,4 @@ def test_raw_shape_guard_reuses_the_existing_overlay_detector():
     typed = b'def read(row):\n return row.a, row.b, row.c\n'
     assert RawRecordShapes.count(raw, 'src/example.py') == 1
     assert RawRecordShapes.count(typed, 'src/example.py') == 0
-    assert RawRecordShapes.count(raw, 'src/agent_comms/field_codec.py') == 1
+    assert RawRecordShapes.count(raw, 'src/agent_comms/nominal/field_codec.py') == 1

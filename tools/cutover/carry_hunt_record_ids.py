@@ -11,7 +11,7 @@ from __future__ import annotations
 from contextlib import closing
 from typing import ClassVar
 
-from agent_comms.field_codec import FieldCodec, HuntId, Id128Text
+from agent_comms.nominal.field_codec import FieldCodec, HuntId, Id128Text
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHolder

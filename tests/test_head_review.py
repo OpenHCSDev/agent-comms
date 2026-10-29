@@ -23,7 +23,7 @@ from agent_comms.standing_rules import (
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import RecordProblems
+from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth, WorkBranches
 from agent_comms.order_tools import CommsHeadVerdictTool

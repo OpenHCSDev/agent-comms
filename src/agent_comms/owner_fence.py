@@ -12,7 +12,7 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 
 
 @dataclass(frozen=True, slots=True)

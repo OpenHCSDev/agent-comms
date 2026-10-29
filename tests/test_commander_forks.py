@@ -27,7 +27,7 @@ from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, TodoConflict, TodoError
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
     OrderId,

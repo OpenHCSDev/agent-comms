@@ -13,7 +13,7 @@ from agent_comms.child_process import ProcessIdentity
 from test_locked_store import RegistryWithConcurrentDecoder, _hold_lock, event, process
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import TurnId, GoalId
+from agent_comms.nominal.field_codec import TurnId, GoalId
 from agent_comms.goals import Goal
 from agent_comms.store_files import SharedLock, store_lock_path
 from agent_comms.thread_identity import UserThreadRole

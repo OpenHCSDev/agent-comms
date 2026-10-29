@@ -31,7 +31,7 @@ from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import RequestFailure, ProviderQuotaFailure
 from agent_comms.comms import wire
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.threads import Thread
 
 from native_context_budget_installed_journey import ReceiptSubscriber

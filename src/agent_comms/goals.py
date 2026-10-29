@@ -26,9 +26,9 @@ from .child_process import (
     TimedOutOutcome,
 )
 from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RejectedEnforcementError, RelationViolationError
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
     GoalWaitId,

@@ -10,7 +10,7 @@ import pytest
 from agent_comms.registry_document import ThreadRows
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.display_references import CurrentDisplayReferences, HistoricalDisplayReference
 from agent_comms.historical_views import HistorySource
 from agent_comms.registry_document import HistoricalRootPurpose

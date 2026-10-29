@@ -51,10 +51,10 @@ from .cli_protocol import CoreError
 from .command import Command
 from .comms import Comms, client_wire, wire
 from .repo import Checkout
-from .declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
 from .coordination_errors import CoordinationError, Refused
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
     RecordMember, boundary_decoder, projected,
 )

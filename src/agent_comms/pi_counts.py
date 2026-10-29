@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext, UnsizedContextUsage
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     AcceptsNull,
     ExternalField,
     ExternalJsonShape,

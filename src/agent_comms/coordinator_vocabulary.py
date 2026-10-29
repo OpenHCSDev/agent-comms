@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from functools import cache
 from typing import ClassVar
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .typed_table import sql_literal
 
 

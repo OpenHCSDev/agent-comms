@@ -16,7 +16,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import NativeTurnError
 from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import (
     PausedGoalAction,
     RetryGoalAction,

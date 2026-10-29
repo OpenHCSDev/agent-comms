@@ -47,7 +47,7 @@ from agent_comms.selected_triage import IgnoreSelectedTriage
 from contextlib import AsyncExitStack, closing, contextmanager
 from abc import abstractmethod
 import sqlite3
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.native_prompt_binding import PromptBinding, PromptBindings
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
@@ -117,7 +117,7 @@ async def configured_pure_channel(arguments):
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.selected_triage import FullSelectedTriage
     from agent_comms.coordination_tables.publications import PublicationEvidence
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.store_files import _store_lock
     from agent_comms.native_entries import NativeEntry
     from agent_comms.coordination_cohort import _claim_record
@@ -390,7 +390,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
     """Use ordinary originals and the existing joined ACP cancellation boundary."""
     from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
     from agent_comms.coordination_tables.publications import PublicationEvidence
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.store_files import _store_lock
 
@@ -473,7 +473,7 @@ async def configured_mixed_routes(arguments):
     """
     from agent_comms.comms import wire
     from agent_comms.native_input_record import FullNativeExecution
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.native_entries import NativeEntry
     from agent_comms.pi_payloads import ToolResultMessage
     from agent_comms.coordination_tables.publications import PublicationEvidence

@@ -16,7 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.runtime import RuntimeProxy, socket_path

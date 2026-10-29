@@ -19,7 +19,7 @@ from agent_comms.cli_bridges.shared import Binding, BridgeDeliveryStore, BridgeS
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, MessageId, TranscriptRecordId
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, TranscriptRecordId
 from agent_comms.harness_delivery_states import EmittedOutcome, MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile

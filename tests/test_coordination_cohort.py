@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import AssignmentId
+from agent_comms.nominal.field_codec import AssignmentId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import (
     DeferredAssignment,

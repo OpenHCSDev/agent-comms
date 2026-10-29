@@ -15,7 +15,7 @@ from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .registry_document import RegistryEntry, RegistrySnapshot
-from .field_codec import AcpSessionId, FieldCodec
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from .owner_connection import OwnerConnection, ResultRuntimeRequest, RuntimeRequestContext
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .tool_result import DeclaredReply

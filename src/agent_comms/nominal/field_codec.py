@@ -53,7 +53,7 @@ from .sealed import Sealed
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-    from .registration_inheritance import RegistrationInheritance
+    from ..registration_inheritance import RegistrationInheritance
 
 T = TypeVar("T")
 
@@ -1748,8 +1748,8 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
 class TextRepresentation[V](FieldRepresentation[V]):
     """External text scalars share strict decoding at the canonical boundary.
 
-    Its schema names the representation, so text with no declared spelling never shares a stored
-    form with plain ``str`` or with another representation; SpelledText declares one.
+    Its schema derives the external form's description from its class name, independently
+    of the Python module containing it. SpelledText declares its accepted spelling.
     """
 
     @classmethod
@@ -1770,13 +1770,8 @@ class TextRepresentation[V](FieldRepresentation[V]):
     def from_text(cls, value: str) -> V: ...
 
     @classmethod
-    def text_form(cls) -> type[TextRepresentation]:
-        return cls
-
-    @classmethod
     def schema(cls) -> dict[str, JsonValue]:
-        form = cls.text_form()
-        return {"type": "string", "description": f"{form.__module__}.{form.__qualname__} text"}
+        return {"type": "string", "description": f"{cls.__qualname__} text"}
 
 
 class ValidatedScalar(FieldRepresentation):
@@ -2770,10 +2765,6 @@ class _PathDecoder(PathText, ValueDecoder[Path]):
     """The path representation also owns direct and concrete-subclass values."""
 
     origins = (Path,)
-
-    @classmethod
-    def text_form(cls) -> type[TextRepresentation]:
-        return PathText
 
 
 class _NullDecoder(_ExactScalarDecoder[None]):

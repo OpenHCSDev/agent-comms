@@ -26,7 +26,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.field_codec import PathText
+from agent_comms.nominal.field_codec import PathText
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
@@ -219,7 +219,7 @@ def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Pa
 def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) -> None:
     comms, _, root_id, _ = _root(tmp_path)
     program = (
-        "import sys\nfrom agent_comms.comms import wire\nfrom agent_comms.channel_targets import CommandTarget\nfrom agent_comms.field_codec import FieldCodec\nfrom agent_comms.repo import Checkout\nm = wire(sys.argv[1]).messaging.send_user_message(CommandTarget.named('#team'), sys.argv[2], worktree=FieldCodec.decode(Checkout, sys.argv[3]))\nprint(m.seq, m.message_id)"
+        "import sys\nfrom agent_comms.comms import wire\nfrom agent_comms.channel_targets import CommandTarget\nfrom agent_comms.nominal.field_codec import FieldCodec\nfrom agent_comms.repo import Checkout\nm = wire(sys.argv[1]).messaging.send_user_message(CommandTarget.named('#team'), sys.argv[2], worktree=FieldCodec.decode(Checkout, sys.argv[3]))\nprint(m.seq, m.message_id)"
     )
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     processes = [

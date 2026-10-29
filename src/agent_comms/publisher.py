@@ -20,7 +20,7 @@ from agent_comms.change_report import OrderRoots
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
-from agent_comms.field_codec import ClaimId
+from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
 

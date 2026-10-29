@@ -26,11 +26,11 @@ from .cli_result import CliResult
 from .commander_frame_file import CommanderFrameFile
 from .coordination_database import CoordinationStore
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import CurrentDisplayReferences
 from .external_transcript import ExternalTranscript
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     Differs,
     FieldCodec,
     JsonShapeFamily,

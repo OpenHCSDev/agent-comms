@@ -6,7 +6,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from .projection_source import ProducedRow, ProjectionSource
 from .typed_table import TypedRow
 

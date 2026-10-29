@@ -8,9 +8,9 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, UnmeasuredContext
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
+from agent_comms.nominal.field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .pi_counts import PiCount, UnreportedCount

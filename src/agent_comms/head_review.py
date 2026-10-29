@@ -11,9 +11,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 from collections.abc import Sequence
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
+from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .repo import Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches

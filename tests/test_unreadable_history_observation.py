@@ -21,7 +21,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
     TranscriptChanged,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable, ToolRefusedError
 from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyLostError
 from agent_comms.context_store import ContextRequest

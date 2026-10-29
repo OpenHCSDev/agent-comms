@@ -15,7 +15,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.comms import Comms
-from agent_comms.field_codec import MessageId
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.standing_rules import (
     DatedStandingRule,
     FamilyScan,

@@ -4,7 +4,7 @@ from __future__ import annotations
 import signal
 import sys
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.launch import InstallRun, stopped
 from agent_comms.installer.prepared import PreparedInstall

@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.cli_result import CliResult
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 from agent_comms.locked_store import DocumentChange
 from agent_comms.maintenance_barrier import CarriedDocument
 from agent_comms.thread_owned_state import ThreadOwnedState

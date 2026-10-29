@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredFamily
-from .field_codec import InputId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import InputId
 from .image_input import ImageInput
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField

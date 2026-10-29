@@ -20,7 +20,7 @@ from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import DisclosureIdentity, OrderId, WireTransient, projected
+from agent_comms.nominal.field_codec import DisclosureIdentity, OrderId, WireTransient, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase

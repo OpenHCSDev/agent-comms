@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus_tables import ReceivedSource
 from .class_fact import ClassFact
-from .field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 from .messages import BusProjectionTables, BusRow, MessageInput, PublicRecord, PublicSender
 from .projection_source import ProducedRow
 from .read_basis import ReadCursor

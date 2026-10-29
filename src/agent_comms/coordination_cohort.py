@@ -35,7 +35,7 @@ from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 
-from .field_codec import AssignmentId, MessageId, WireName, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import AssignmentId, MessageId, WireName, RootId, ThreadLookup
 
 _LOG = logging.getLogger(__name__)
 

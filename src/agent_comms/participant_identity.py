@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from .field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 
 
 class ParticipantIdentity(ABC):

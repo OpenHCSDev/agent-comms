@@ -15,7 +15,7 @@ from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.turn_item import FreshNativeId
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
 from agent_comms.installer.backup import bus_files
@@ -243,7 +243,7 @@ def test_stale_cursor_is_rejected(migrated):
 
 
 def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.transcripts import RecordedTranscriptReadIdentity, TranscriptReadIdentity
 
     old, live = setup(tmp_path / "old", 1), setup(tmp_path / "live", 0)
@@ -368,7 +368,7 @@ def test_missing_historical_peer_is_browsable_without_live_registration(migrated
 def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migrated):
     from dataclasses import fields
 
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.threads import ThreadProvenance
 
