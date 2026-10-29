@@ -19,7 +19,7 @@ from functools import cache
 from importlib import import_module
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import ClassVar, Self, get_type_hints
+from typing import ClassVar, NoReturn, Self, get_type_hints
 
 
 class ToolRefusedError(ValueError):
@@ -178,7 +178,9 @@ class ClaudeHookProgram(ABC):
 
     @classmethod
     def descendants(cls) -> tuple[type[ClaudeHookProgram], ...]:
-        return (cls, *(member for child in cls.__subclasses__() for member in child.descendants()))
+        # Multiple capabilities reach the same declaration through several paths, not several programs.
+        descendants = (member for child in cls.__subclasses__() for member in child.descendants())
+        return tuple(dict.fromkeys((cls, *descendants)))
 
     @classmethod
     @abstractmethod
@@ -191,6 +193,16 @@ class ClaudeHookProgram(ABC):
         scripts = entry_points(group="console_scripts")
         (name,) = {point.name for point in scripts if point.value == target}
         return name
+
+    @classmethod
+    def failure_status(cls, status: int = 1) -> int:
+        """Notification programs retain the failed operation's exit status."""
+        return status
+
+    @classmethod
+    def failed(cls, error: BaseException) -> NoReturn:
+        sys.stderr.write(f"{error}\n")
+        raise SystemExit(cls.failure_status())
 
     @classmethod
     def unbound(cls, record: Mapping[str, object]) -> None:
@@ -224,6 +236,14 @@ class ClaudeHookProgram(ABC):
         return {"writer": cls.writer, "hooks": [cls.hook()]}
 
 
+class PermissionHookProgram(ClaudeHookProgram, ABC):
+    """Claude Code blocks a permission event only on its blocking exit code."""
+
+    @classmethod
+    def failure_status(cls, status: int = 1) -> int:
+        return 2
+
+
 class ClaudeToolHookProgram(ClaudeHookProgram, ABC):
     """A program Claude Code runs only on calls of the one tool it names."""
 
@@ -245,7 +265,7 @@ class HookRefused(ToolRefusedError):
     """An owned hook refusal, rendered as a denial rather than a hook crash."""
 
 
-class BashRefusal(ClaudeToolHookProgram, ABC):
+class BashRefusal(ClaudeToolHookProgram, PermissionHookProgram, ABC):
     """A program that refuses a Bash command before it runs, for every reason it finds;
     each member says only what it refuses and why."""
 

@@ -77,20 +77,21 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
         try:
             self.run_hook(event, comms)
         except SystemExit as stopped:
-            if stopped.code is None:
+            if stopped.code is None or stopped.code == 0:
                 return output.answer()
             if isinstance(stopped.code, int):
-                return output.answer(status=stopped.code)
-            return output.answer(stderr=f"{stopped.code}\n", status=1)
-        except (OSError, ValueError, TypeError, KeyError, RuntimeError, HookRefused):
-            return output.answer(stderr=traceback.format_exc(), status=1)
+                return output.answer(status=self.failure_status(stopped.code))
+            return output.answer(stderr=f"{stopped.code}\n", status=self.failure_status())
+        except Exception:
+            # A program failure is a failed hook result, never success or death of the serving owner.
+            return output.answer(stderr=traceback.format_exc(), status=self.failure_status())
         return output.answer()
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         output = ResidentHookOutput()
         try:
             event = cast(Event, await asyncio.to_thread(self.event_type().of, self.payload, output=output))
-        except (OSError, ValueError, TypeError, KeyError, RuntimeError):
+        except Exception:
             return SessionRefused(error=traceback.format_exc())
         if event.session_id != service.bridge.binding.thread or event.hook_event_name not in self.events:
             return SessionRefused(error="Hook event does not belong to this resident session/program")
