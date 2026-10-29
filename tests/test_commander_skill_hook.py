@@ -425,10 +425,13 @@ def test_a_demoted_commander_keeps_its_deck_files_but_they_get_no_vote(
     assert transcript.with_suffix(".fleet-deck.json").exists()
     StopHook.decode({"hook_event_name": "Stop", "session_id": "s",
                      "transcript_path": str(transcript), "stop_hook_active": False}).guard()
-    SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": "s",
-                         "transcript_path": str(transcript), "agent_id": "a9"}).register()
     assert capsys.readouterr().out == ""
+    SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": "s",
+                         "transcript_path": str(transcript), "agent_id": "a9",
+                         "agent_type": "Explore"}).register()
+    assert "slot claude-code-explore" in capsys.readouterr().out  # a fleet slot, not a fork
     assert "claude-a9" not in commanding_session.registry
+    commanding_session.registry.require("claude-code-explore").execution.require_subagent()
     assert transcript.with_suffix(".deck.json").exists()
 
 

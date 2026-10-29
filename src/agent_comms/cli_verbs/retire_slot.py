@@ -14,5 +14,5 @@ class RetireSlotCliCommand(NameArgument, CliCommand[ThreadArchivedResult],
     help = "Archive a subagent's slot when its occupant stops; the next occupant redeclares onto it"
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
-        SubagentCaller(self.name).retire(ctx)
+        SubagentCaller(self.name).end(ctx)
         return ThreadArchivedResult(self.name)
