@@ -4,7 +4,6 @@ import json
 import pytest
 
 from agent_comms.native_entries import NativeEvidenceScope
-from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from native_proof_cases import write_proof_rows
 from test_native_pi import INPUT_ID, _evidence
@@ -32,7 +31,7 @@ def test_shared_input_reader_indexes_the_whole_committed_cut(tmp_path, newest_fi
         evidence = scope.for_source(session)
         NativeSessionIdentity.from_evidence(evidence)
         order = (newer, INPUT_ID) if newest_first else (INPUT_ID, newer)
-        proofs = [NativeContextProof.read_evidence(files, input_id, evidence=evidence,
+        proofs = [evidence.context_proof(files, input_id,
                                                   session_entry_start=offsets[input_id])
                   for input_id in order]
         assert {proof.input_id for proof in proofs} == {INPUT_ID, newer}

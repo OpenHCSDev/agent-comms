@@ -402,7 +402,7 @@ def test_durable_writer_drops_a_declared_dropped_field_and_keeps_rows():
 
 
 def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
-    from agent_comms.native_pi import NativeContextJournal
+    from agent_comms.native_input_proof import NativeContextJournal
 
     with sqlite3.connect(':memory:') as db:
         NativeContextJournal.create(db, if_not_exists=True)

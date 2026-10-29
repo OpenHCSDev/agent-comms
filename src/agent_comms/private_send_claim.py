@@ -30,7 +30,8 @@ from .message_bus import MessageBus
 from .native_arguments import SelectedModel
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_entries import NativeEvidenceScope
-from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
+from .native_input_proof import NativeContextProof
+from .native_pi import NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary
 from .native_session_reopen import NativeSessionIdentity
@@ -228,8 +229,25 @@ class PrivateSendClaim(PromptBoundary):
             )
         return result
 
+    async def context_committed(
+        self, context: NativeContextProof, source_reads: NativeEvidenceScope,
+    ) -> None:
+        """Publish corroborated entry while the model is still running.
+
+        The context journal is borrowed before coordinator locking, as on the
+        terminal path. Neither the RPC event nor model activity proves context inclusion.
+        """
+        def acknowledge(store: Coordination) -> None:
+            self.verify(store, context, source_reads)
+            self.stage.acknowledge_context(
+                store, self.participant, self.input_id, self.token_digest, context,
+            )
+        await Coordination.run_async(self.store_path, acknowledge)
+
     def commit(self, store: Coordination, context: NativeContextProof) -> None:
-        self.stage.commit(store, self.participant, self.input_id, self.token_digest, context)
+        self.stage.acknowledge_context(
+            store, self.participant, self.input_id, self.token_digest, context,
+        )
 
     def _start_once(self, identity: NativeSessionIdentity) -> None:
         """Commit the exact grant under original fences, then release them.

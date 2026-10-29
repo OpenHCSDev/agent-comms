@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
 
     from .goal_waits import GoalWait
     from .input_drain import InputDrain
+    from .native_input_proof import NativeContextProof
     from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .turn_goal_permission import TurnGoalPermission
@@ -171,6 +173,35 @@ class OwnedSend(CodingToolOwner, InputStartListener, SendBoundary):
 
     def following(self, public_id: InputId, native_id: InputId, text: str) -> bool:
         return self._started(self.source(public_id), native_id, text)
+
+    async def original_context_committed(self, sent_text: str, context: NativeContextProof) -> None:
+        await Coordination.run_worker(partial(
+            self._record_context, self.original_source, sent_text, context,
+        ))
+
+    async def following_context_committed(
+        self, public_id: InputId, sent_text: str, context: NativeContextProof,
+    ) -> None:
+        await Coordination.run_worker(partial(
+            self._record_context, self.source(public_id), sent_text, context,
+        ))
+
+    def _record_context(
+        self, source: TurnInputSource, sent_text: str, context: NativeContextProof,
+    ) -> None:
+        with self.inputs.comms.registry.store.current_snapshot() as cut:
+            snapshot = cut.snapshot
+            source.require_context_source(self)
+            canonical = snapshot.canonical_name(self.thread.name)
+            current = self.require_owner(snapshot, canonical)
+            self._check_owner(
+                current, snapshot, canonical, source, sent_text,
+                check_type=RunningOrdinaryOwnerCheck,
+            )
+            self.inputs.dispositions.context_committed(
+                source.keys, lease=self.thread.require_turn_lease(),
+                sent_text=sent_text, context=context, snapshot=snapshot,
+            )
 
     def _started(self, source: TurnInputSource, native_id: InputId, sent_text: str) -> bool:
         return source.valid_keys(sent_text) and all(

@@ -56,7 +56,8 @@ from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
 from .page_traversal import LiveCursor
-from .notification_evidence import NotificationWindow
+from .notification_evidence import NotificationWindow, RecipientSelection
+from .read_basis import OutcomeViewer, FirstRecipient, RecipientCursor
 from .presentation import (
     BusPresentation,
     ChannelView,
@@ -65,7 +66,6 @@ from .presentation import (
     InboxRead,
     MessageNotification,
     NoRevision,
-    OutcomeViewer,
     ReadState,
     ThreadRecord,
     ThreadView,
@@ -222,9 +222,10 @@ class HistoryViews:
 
     def message_notifications_for_references(
         self, viewer: OutcomeViewer, references: Sequence[MessageReference],
+        *, after: RecipientCursor = FirstRecipient(), limit: int = RecipientSelection.max_limit,
     ) -> NotificationWindow:
         return MessageNotification.references(
-            self.root, self.registry, self.bus.bus, references, viewer=viewer)
+            self.root, self.registry, self.bus.bus, references, viewer=viewer, after=after, limit=limit)
 
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
                      *, viewer: DisplayViewer = AnonymousViewer()) -> MessagePage:

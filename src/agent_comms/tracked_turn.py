@@ -11,9 +11,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Generic, TypeVar
-
-from metaclass_registry.mro_dispatch import handles
+from typing import TYPE_CHECKING
 
 from . import pi_commands as commands
 from . import pi_events as pi
@@ -29,12 +27,11 @@ from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
+from .native_input_proof import NativeContextProof
 from .native_pi import (
-    NativeContextProof,
     NativeEmptyAnswer,
     NativePiPromptRejected,
     NativeTurnResult,
-    _verify_context,
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_session_reopen import SessionRetention
@@ -54,6 +51,7 @@ if TYPE_CHECKING:
     from .coordinated_runtime import NativeExecution
     from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
+    from .native_entries import NativeEvidenceScope
     from .pi_native_backend import PersistentPiSession
     from .pi_payloads import UserMessage
     from .turn_failure import TurnFailure
@@ -69,35 +67,6 @@ class NoObserver:
 
 NO_NATIVE_OBSERVER = NoObserver()
 NO_FOLLOWING_INPUTS = FollowingInputs()
-
-T = TypeVar("T")
-
-
-class NativeCommitObservation(ABC, Generic[T]):
-    """Observed native input records, without permission to start or replay input."""
-
-    @abstractmethod
-    def require(self) -> T: ...
-
-    def capture(self, event: T) -> NativeCommitObservation[T]:
-        raise NativePiUnavailable("Native Pi repeated the input commitment")
-
-
-class PendingNativeCommit(NativeCommitObservation[T]):
-    def require(self) -> T:
-        raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-
-    def capture(self, event: T) -> NativeCommitObservation[T]:
-        return ObservedNativeCommit(event)
-
-
-@dataclass(frozen=True)
-class ObservedNativeCommit(NativeCommitObservation[T]):
-    event: T
-
-    def require(self) -> T:
-        return self.event
-
 
 class TrackedTerminal(ABC):
     """Relate completed assistant responses to their streamed text."""
@@ -251,20 +220,18 @@ class TrackedTurnSession(TurnSession):
             launch,
             command,
             tool_mode=selected_tool_mode,
+            cursor_delivery=cursor_delivery,
             model_wait=model_wait,
             startup=startup,
             request_observer=request_observer,
             native_session=pi_session,
         )
         self.retainable = False
-        self.cursor_delivery = cursor_delivery
         self.following = following
         self.model = model
         self.prompt_send_boundary = prompt_send_boundary
         self.ingress = ingress
         self.observe_event = observe_event
-        self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
-        self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.draft_written_at = 0.0
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
 
@@ -464,16 +431,14 @@ class TrackedTurnSession(TurnSession):
     def reject_prompt(self, response):
         raise NativePiPromptRejected(response)
 
-    @handles(pi.InputCommitted)
-    async def committed_input(self, event: pi.InputCommitted) -> None:
-        if event.input_id == self.command.input_id:
-            self.input_commit = self.input_commit.capture(event)
-            self.prompt_state = self.prompt_state.start(event)
-            async with self.cursor_delivery.reading() as source_reads:
-                await Coordination.run_worker(lambda:
-                    source_reads.for_source(self.active_session_file).observe(event)
-                )
-            await self.following.open(self)
+    async def original_committed(self, event: pi.InputCommitted) -> None:
+        self.prompt_state = self.prompt_state.start(event)
+        await self.following.open(self)
+
+    async def original_context_committed(
+        self, context: NativeContextProof, source_reads: NativeEvidenceScope,
+    ) -> None:
+        await self.prompt_send_boundary.context_committed(context, source_reads)
 
     def forward_inbox(self, inbox: TurnInbox, sender: OwnedSend) -> None:
         """Later inputs go to the running child under the owner's write checks."""
@@ -494,11 +459,6 @@ class TrackedTurnSession(TurnSession):
             self.output.discard_text()
             return ()
         raise NativePiUnavailable("Native Pi started a user message this turn did not send")
-
-    @handles(pi.ContextCommitted)
-    async def committed_context(self, event: pi.ContextCommitted) -> None:
-        if event.input_id == self.command.input_id:
-            self.context_commit = ObservedNativeCommit(event)
 
     async def assistant_started(self) -> None:
         await super().assistant_started()
@@ -534,17 +494,7 @@ class TrackedTurnSession(TurnSession):
     async def context_proof(self) -> NativeContextProof:
         if not self.prompt_state.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-        # The recipient serializes this read with cursor and settlement reads.
-        # Cancellation joins the worker before its borrowed scope is released.
-        async with self.cursor_delivery.reading() as source_reads:
-            return await Coordination.run_worker(lambda: _verify_context(
-                self.launch.session.files(self.launch.root),
-                self.command.input_id,
-                self.native.attestation.require_identity().session_id,
-                self.input_commit.require(),
-                self.context_commit.require(),
-                evidence=source_reads.for_source(self.active_session_file),
-            ))
+        return await super().context_proof()
 
     async def invalidate_identity(self) -> tuple[AgentEvent, ...]:
         # A tracked turn has no authority to recover a session another command replaced.

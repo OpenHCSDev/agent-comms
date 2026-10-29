@@ -72,9 +72,15 @@ class DeliveryProgress(ThreadPresentationStatus):
         """The lead a counted wrapper prints; a consumed proof is already named by its count."""
         return (notification.label,)
 
-    def harness_consumed(self) -> DeliveryProgress:
-        """This progress once a harness confirmed the message entered its session."""
-        return HarnessConsumedProgress()
+    def answered_notification(self, notification: MessageNotification,
+                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
+        """An independent answer preserves this state's actual context proof."""
+        return replace(notification, state=AnsweredProgress(self),
+                       answer=reference, answered_at_ms=answered_at_ms, changed=True)
+
+    def harness_consumed(self, observed_at_ms: int) -> DeliveryProgress:
+        """Retain the original complete-body transcript observation time."""
+        return HarnessConsumedProgress(observed_at_ms)
 
 
 class ConsumedDelivery(SettledDelivery):
@@ -84,7 +90,7 @@ class ConsumedDelivery(SettledDelivery):
     ignored_label: ClassVar[str] = "Seen, not answering"
     consumed: ClassVar[bool] = True
 
-    def harness_consumed(self) -> Self:
+    def harness_consumed(self, observed_at_ms: int) -> Self:
         """An earlier proof already timed the entry; a harness confirmation adds nothing."""
         return self
 
@@ -93,11 +99,6 @@ class ConsumedDelivery(SettledDelivery):
 
     def counted_summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
         return ()
-
-
-@dataclass(frozen=True)
-class HarnessConsumedProgress(ConsumedDelivery, DeliveryProgress):
-    """A harness confirmed context entry with no claim to time it; the attempt has no clock."""
 
 
 @dataclass(frozen=True)
@@ -121,16 +122,16 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     def consumed(self) -> bool:
         return self.proof.consumed
 
-    def harness_consumed(self) -> DeliveryProgress:
-        return replace(self, proof=self.proof.harness_consumed())
+    def harness_consumed(self, observed_at_ms: int) -> DeliveryProgress:
+        return replace(self, proof=self.proof.harness_consumed(observed_at_ms))
 
 
 class PendingProgress(ContextualProgress):
     """A pending claim adds no label of its own: once a harness proves entry, the proof is
     the whole state."""
 
-    def harness_consumed(self) -> DeliveryProgress:
-        return self.proof.harness_consumed()
+    def harness_consumed(self, observed_at_ms: int) -> DeliveryProgress:
+        return self.proof.harness_consumed(observed_at_ms)
 
 
 class PassiveProgress(ContextualProgress):
@@ -186,6 +187,11 @@ class FailedProgress(ContextualProgress):
 class AnsweredProgress(SettledDelivery, ContextualProgress):
     label = "Answered"
 
+    def answered_notification(self, notification: MessageNotification,
+                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
+        """A later independent response cannot replace an already recorded answer."""
+        return notification
+
     def notification_label(self, notification: MessageNotification) -> str:
         return notification.timed_state(self.label, notification.answered_at_ms)
 
@@ -209,11 +215,6 @@ class AssignmentProgress(DeliveryProgress):
 
     @abstractmethod
     def consumed_notification(self, notification: MessageNotification) -> MessageNotification: ...
-
-    def answered_notification(self, notification: MessageNotification,
-                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
-        return replace(notification, state=AnsweredProgress(self),
-                       answer=reference, answered_at_ms=answered_at_ms)
 
 
 @dataclass(frozen=True)
@@ -261,6 +262,10 @@ class ShownToModelProgress(ConsumedDelivery, AssignmentProgress):
 
     def consumed_notification(self, notification: MessageNotification) -> MessageNotification:
         return replace(notification, state=self)
+
+
+class HarnessConsumedProgress(ShownToModelProgress):
+    """Complete original body observed in the harness transcript, at its recorded time."""
 
 
 class SelectedConsumedProgress(ActiveDelivery, ShownToModelProgress):

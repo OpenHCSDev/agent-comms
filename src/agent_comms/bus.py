@@ -441,6 +441,15 @@ class BusReader(RouteCounts, ABC):
             headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
             return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
+    def recipient_replies(
+        self, keys: tuple[tuple[ThreadLookup, MessageReference], ...],
+    ) -> tuple[BusRecord, ...]:
+        """Read only the first reply of each bounded original/recipient pair."""
+        with self.observing() as db:
+            sequences = {row.seq for row in AnsweredSource.first_for_recipients(db, keys)}
+            headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
+            return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
     def changed_names(self, after: int) -> frozenset[str]:
         with self.observing() as db:
             return frozenset(FieldCodec.decode(str, row[0]) for row in db.execute(

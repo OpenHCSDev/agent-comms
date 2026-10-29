@@ -8,12 +8,8 @@ from __future__ import annotations
 
 import sqlite3
 from abc import ABC, abstractmethod
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Literal
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
 
@@ -34,11 +30,10 @@ from .field_codec import (
     JsonShapeMember,
     MalformedRecord,
     NativeContext,
-    WireName,
 )
 from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
-from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
+from .typed_table import SqlStorage, TextStorage
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
@@ -52,39 +47,8 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_entries import MessageEntry, RecordedEntry, TranscriptProjection
     from .native_runtime_input import NativeRuntimeInput
+    from .native_input_proof import NativeContextProof
     from .transcript_events import TranscriptEvent
-
-
-@dataclass(frozen=True, slots=True)
-class NativeInputCommit:
-    """Original emitted input identity shared with its assembled context."""
-
-    input_id: Annotated[
-        InputId,
-        WireName("inputId"),
-        Column(primary_key=True),
-    ]
-    session_id: Annotated[PiSessionId, WireName("sessionId")]
-    session_entry_id: Annotated[str, WireName("sessionEntryId")]
-
-    @property
-    def input_commit(self) -> NativeInputCommit:
-        return NativeInputCommit(self.input_id, self.session_id, self.session_entry_id)
-
-
-@dataclass(frozen=True)
-class NativeInputLocation(NativeInputCommit):
-    """Emitted byte placement; only the original runtime input row persists it."""
-
-    # SQL permits an uncommitted row; the emitted offset remains a required int.
-    position_column: ClassVar[Column] = Column(
-        check="session_entry_start>0",
-        nullable=True,
-        storage=IntegerStorage,
-    )
-    session_entry_start: Annotated[
-        int, WireName("sessionEntryStart"), position_column
-    ] = field(kw_only=True)
 
 
 class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
@@ -402,6 +366,10 @@ class NativeContextReference(DeclaredFamily, affix="Reference"):
     def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         """An unrecorded context grants no committed-input identity."""
 
+    def acknowledge_context(self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof) -> None:
+        """The first verified entry is immutable; later settlement does not own it."""
+        row.write_context(db, context)
+
 
 @dataclass(frozen=True)
 class UnrecordedNativeInputReference(NativeContextReference):
@@ -440,6 +408,9 @@ class NativeInputReference(NativeContextReference):
             return result
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context reference is incomplete") from error
+
+    def acknowledge_context(self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof) -> None:
+        row.require_context_proof().require_continuation(context)
 
     def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         owner.require_recorded_reference(db, self)

@@ -13,7 +13,8 @@ from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.presentation import AllOutcomes, MessageNotification, OwnerOutcomes
+from agent_comms.read_basis import AllOutcomes, OwnerOutcomes
+from agent_comms.presentation import MessageNotification
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.read_basis import ConversationCursor, ReadCursor
@@ -86,9 +87,10 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
     original = comms.bus.bus.delivery(sent.seq)
     lookups = {name: thread.incarnation.lookup
                for name, thread in comms.registry.snapshot().threads.items()}
+    viewer = viewer_of(lookups)
     window = MessageNotification.delivery_window(
-        comms.root, comms.registry, (original,),
-        NotificationAssignment.read(comms.root, (original,), viewer=viewer_of(lookups)),
+        comms.root, comms.registry,
+        NotificationAssignment.read(comms.root, viewer.selection((original,))),
     )
     assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == seen
 
@@ -103,9 +105,9 @@ def test_a_viewer_follows_frozen_lookups_through_rename_and_never_into_a_rebirth
 
     def seen_by(name: str) -> set[str]:
         viewer = OwnerOutcomes.of(comms.registry.require(name))
-        read = NotificationAssignment.read(comms.root, (original,), viewer=viewer)
-        assert read.viewer == viewer
-        window = MessageNotification.delivery_window(comms.root, comms.registry, (original,), read)
+        read = NotificationAssignment.read(comms.root, viewer.selection((original,)))
+        assert read.selection.viewer == viewer
+        window = MessageNotification.delivery_window(comms.root, comms.registry, read)
         return {item.recipient for item in window.outcomes[key]}
 
     assert seen_by("peer-a") == {"peer-a"}
@@ -127,9 +129,9 @@ def test_a_public_root_without_a_coordinator_keeps_its_viewer_and_projects_visib
     original = comms.bus.bus.delivery(sent.seq)
     CoordinationStore.path_in(comms.root).unlink(missing_ok=True)
     viewer = OwnerOutcomes.of(comms.registry.require("peer-a"))
-    read = NotificationAssignment.read(comms.root, (original,), viewer=viewer)
-    assert (read.sources, read.rows, read.attempts, read.viewer) == ((original,), (), (), viewer)
-    window = MessageNotification.delivery_window(comms.root, comms.registry, (original,), read)
+    read = NotificationAssignment.read(comms.root, viewer.selection((original,)))
+    assert (read.sources, read.rows, read.attempts, read.selection.viewer) == ((original,), (), (), viewer)
+    window = MessageNotification.delivery_window(comms.root, comms.registry, read)
     assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == {"peer-a"}
 
 
@@ -143,4 +145,4 @@ def test_a_private_root_without_a_coordinator_still_refuses_notification_reads(p
     original = private_comms.bus.bus.delivery(sent.seq)
     CoordinationStore.path_in(private_comms.root).unlink()
     with pytest.raises(PublicationActivationBlocked):
-        NotificationAssignment.read(private_comms.root, (original,), viewer=AllOutcomes())
+        NotificationAssignment.read(private_comms.root, AllOutcomes().selection((original,)))

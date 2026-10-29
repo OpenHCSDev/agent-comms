@@ -14,7 +14,8 @@ from . import input_attempt
 from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
-from .field_codec import InputId, TurnId
+from .errors import RelationViolationError
+from .field_codec import AcpSessionId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message
@@ -54,12 +55,12 @@ class TurnAcceptance(ABC):
 
     @abstractmethod
     def require_current(
-        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
         current: Thread, claim_generation: int,
     ) -> None: ...
 
     async def started_update(
-        self, source: TurnInputSource, inputs: InputDrain, session_id: str,
+        self, source: TurnInputSource, inputs: InputDrain, session_id: AcpSessionId,
         row: input_attempt.StartedInput, scope: QueueScope,
     ) -> InputStartedUpdate:
         current = await inputs.queue_binding(session_id)
@@ -72,24 +73,29 @@ class TurnAcceptance(ABC):
         return source.started_update_of(row, accepted)
 
     async def accepted_start(
-        self, update: InputStartedUpdate, inputs: InputDrain, session_id: str,
+        self, update: InputStartedUpdate, inputs: InputDrain, session_id: AcpSessionId,
     ) -> InputStartedUpdate:
         return update
 
+    def require_following_source(
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
+    ) -> None:
+        raise RelationViolationError("An input without an acceptance cannot own following context")
+
     @abstractmethod
-    def release(self, inputs: InputDrain, session_id: str) -> None: ...
+    def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None: ...
 
 
 class NoTurnAcceptance(TurnAcceptance):
     """A scheduled or selected turn has no queued ACP acceptance."""
 
     def require_current(
-        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
         current: Thread, claim_generation: int,
     ) -> None:
         return
 
-    def release(self, inputs: InputDrain, session_id: str) -> None:
+    def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
         return
 
 
@@ -101,7 +107,7 @@ class AcceptedTurn(TurnAcceptance):
         return state.queued[self.input_id].controller
 
     def require_current(
-        self, inputs: InputDrain, session_id: str, source: TurnInputSource,
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
         current: Thread, claim_generation: int,
     ) -> None:
         try:
@@ -117,14 +123,20 @@ class AcceptedTurn(TurnAcceptance):
         ).require_valid()
 
     async def accepted_start(
-        self, update: InputStartedUpdate, inputs: InputDrain, session_id: str,
+        self, update: InputStartedUpdate, inputs: InputDrain, session_id: AcpSessionId,
     ) -> InputStartedUpdate:
         queued = inputs.state(session_id).queued
         if self.input_id in queued:
             update = replace(update, text=await queued[self.input_id].started(inputs))
         return update.identified(self.input_id)
 
-    def release(self, inputs: InputDrain, session_id: str) -> None:
+    def require_following_source(
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
+    ) -> None:
+        if inputs.state(session_id).following.get(self.input_id) is not source:
+            raise RelationViolationError("Following context outlived its actual accepted input")
+
+    def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
         inputs.state(session_id).queued.pop(self.input_id, None)
 
 
@@ -165,7 +177,7 @@ class TurnInputSource(StartedInput, ABC):
             # The queue grants a send, not a running tool's lifetime. Once Pi
             # starts this exact input, StartedInput removes its queue entry.
             self.acceptance.require_current(
-                sender.inputs, sender.session_id, self, current, sender.claim_generation,
+                sender.inputs, AcpSessionId(sender.session_id), self, current, sender.claim_generation,
             )
         except ReservationViolationError as error:
             return sender._refusal(error.rule)
@@ -198,6 +210,9 @@ class TurnInputSource(StartedInput, ABC):
             ) if self.origins else NoTurnRouting(),
         )
         return GrantedSend()
+
+    def require_context_source(self, sender: OwnedSend) -> None:
+        """An original's lease and durable binding fence its retained context."""
 
     def valid_keys(self, text: str) -> bool:
         return len(self.keys) <= 1
@@ -368,6 +383,9 @@ class FollowingTurnInput(TurnInputSource):
     keys: tuple[InputKey, ...]
     when_busy: ClassVar[type[BusyInputPolicy]] = SteerInputPolicy
     owner_check = RunningOrdinaryOwnerCheck
+
+    def require_context_source(self, sender: OwnedSend) -> None:
+        self.acceptance.require_following_source(sender.inputs, AcpSessionId(sender.session_id), self)
 
     def continue_response(self, response, parts):
         """An actual following request may revise the turn's automatic answer."""

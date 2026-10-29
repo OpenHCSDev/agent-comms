@@ -1,6 +1,6 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
-from agent_comms.presentation import AllOutcomes, OwnerOutcomes
+from agent_comms.read_basis import AllOutcomes, OwnerOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
@@ -34,23 +34,24 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
-    captured = NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
-    original = NotificationAssignment.resolve(root, captured)
+    selection = AllOutcomes().selection((initial,))
+    captured = NotificationAssignment.read(root, selection)
+    original = NotificationAssignment.resolve(captured)
     wire_before = comms.bus.bus.revision()
     assert original
     with Coordination(str(database)) as writer:
         with writer.session.writing():
             with pytest.raises(CoordinationReadUnavailable) as unavailable:
-                NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
+                NotificationAssignment.read(root, selection)
             assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (
                 sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
             )
             with pytest.raises(CoordinationReadUnavailable):
                 with TranscriptRead.publication_source(root):
                     pytest.fail("Busy acquisition reached the native schema decoder")
-    reopened = NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
+    reopened = NotificationAssignment.read(root, selection)
     assert reopened == captured
-    assert NotificationAssignment.resolve(root, reopened) == original
+    assert NotificationAssignment.resolve(reopened) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.bus.revision() == wire_before
@@ -62,7 +63,7 @@ def test_a_read_selects_only_its_viewers_claims_and_attempts_before_decoding(tmp
     root, _root_id, comms, initial, people = _root(tmp_path)
     lookups = {person.name: person.incarnation.lookup for person in people}
     reference = initial.message.reference
-    everyone = NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
+    everyone = NotificationAssignment.read(root, AllOutcomes().selection((initial,)))
     recipients = {recipient.canonical_thread: recipient.recipient_lookup
                   for recipient in initial.recipients}
     assert len(recipients) >= 2 and "sender" not in recipients
@@ -81,17 +82,17 @@ def test_a_read_selects_only_its_viewers_claims_and_attempts_before_decoding(tmp
         profiling = sys.getprofile()
         sys.setprofile(count_decodes)
         try:
-            own = NotificationAssignment.read(root, (initial,), viewer=viewer)
+            own = NotificationAssignment.read(root, viewer.selection((initial,)))
         finally:
             sys.setprofile(profiling)
         assert decoded == 1
-        assert own.viewer == viewer and own.sources == (initial,)
+        assert own.selection.viewer == viewer and own.sources == (initial,)
         assert own.rows == tuple(row for row in everyone.rows if row[0].recipient == name)
         assert own.evidence[reference].claims == own.rows
         assert own.evidence[reference].attempts == {
             recipient: attempts for recipient, attempts in everyone.evidence[reference].attempts.items()
             if recipient == lookup}
-    sender = NotificationAssignment.read(root, (initial,), viewer=OwnerOutcomes(lookups["sender"]))
+    sender = NotificationAssignment.read(root, OwnerOutcomes(lookups["sender"]).selection((initial,)))
     assert sender.rows == everyone.rows
     assert sender.evidence == everyone.evidence
 
@@ -101,11 +102,11 @@ def test_invisible_recipients_allocate_no_placeholder_source(tmp_path):  # noqa:
     lookups = {person.name: person.incarnation.lookup for person in people}
     recipient = initial.recipients[0]
     (source, outcomes), = NotificationAssignment.for_deliveries(
-        (initial,), (), OwnerOutcomes(recipient.recipient_lookup))
+        OwnerOutcomes(recipient.recipient_lookup).selection((initial,)), ())
     assert source is initial
     assert [outcome.recipient() for outcome in outcomes] == [recipient]
     (_source, all_outcomes), = NotificationAssignment.for_deliveries(
-        (initial,), (), OwnerOutcomes(lookups["sender"]))
+        OwnerOutcomes(lookups["sender"]).selection((initial,)), ())
     assert [outcome.recipient() for outcome in all_outcomes] == list(initial.recipients)
 
 
@@ -118,12 +119,12 @@ def test_retained_reads_refresh_only_for_changes_their_viewer_sees(tmp_path):  #
     changed, unchanged = initial.recipients[:2]
     reads = {
         "changed": NotificationAssignment.read(
-            root, (initial,), viewer=OwnerOutcomes(changed.recipient_lookup)),
+            root, OwnerOutcomes(changed.recipient_lookup).selection((initial,))),
         "foreign": NotificationAssignment.read(
-            root, (initial,), viewer=OwnerOutcomes(unchanged.recipient_lookup)),
+            root, OwnerOutcomes(unchanged.recipient_lookup).selection((initial,))),
         "sender": NotificationAssignment.read(
-            root, (initial,), viewer=OwnerOutcomes(lookups["sender"])),
-        "operator": NotificationAssignment.read(root, (initial,), viewer=AllOutcomes()),
+            root, OwnerOutcomes(lookups["sender"]).selection((initial,))),
+        "operator": NotificationAssignment.read(root, AllOutcomes().selection((initial,))),
     }
     assert NotificationAssignment.changed(reads.values(), root) == ()
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -208,15 +209,16 @@ def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # n
 
 def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
     root, _root_id, comms, initial, _people = _root(tmp_path)
-    records = NotificationAssignment.resolve(root, NotificationAssignment.read(root, (initial,), viewer=AllOutcomes()))
+    selection = AllOutcomes().selection((initial,))
+    records = NotificationAssignment.resolve(NotificationAssignment.read(root, selection))
     assert records
-    projected = tuple(NotificationAssignment.for_deliveries((initial,), records, AllOutcomes()))
+    projected = tuple(NotificationAssignment.for_deliveries(selection, records))
     assert projected[0][0] is initial
     assert any(outcome is records[0] for outcome in projected[0][1])
     with pytest.raises(ValueError):
-        tuple(NotificationAssignment.for_deliveries((initial,), (*records, records[0]), AllOutcomes()))
+        tuple(NotificationAssignment.for_deliveries(selection, (*records, records[0])))
     # Duplicate evidences outside the acquired deliveries do not change their result.
-    assert tuple(NotificationAssignment.for_deliveries((), (*records, records[0]), AllOutcomes())) == ()
+    assert tuple(NotificationAssignment.for_deliveries(AllOutcomes().selection(()), (*records, records[0]))) == ()
 
 
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
@@ -370,7 +372,8 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
                  for source in sources for recipient in source.recipients)
     distinct = tuple(dict.fromkeys(tuple(key.values()) for key in keys))
     assert key_fields * len(distinct) > limit and len(keys) > len(distinct)
-    ordinary = NotificationAssignment.read(root, sources, viewer=AllOutcomes())
+    selection = AllOutcomes().selection(sources)
+    ordinary = NotificationAssignment.read(root, selection)
     assert ordinary.rows
     statements: list[str] = []
     with Coordination(str(database)) as store, store.session.read():
@@ -382,7 +385,7 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
         try:
             bound = connection.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER)
             batches = tuple(WakeAssignment.requested_keys(connection, keys))
-            limited = NotificationAssignment.capture(connection, sources, privacy, AllOutcomes())
+            limited = NotificationAssignment.capture(connection, selection, privacy)
         finally:
             connection.set_trace_callback(None)
             connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, previous)
@@ -399,7 +402,7 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
     assert all(len(batch.bindings) <= bound for batch in batches)
     assert sum(len(batch.bindings) for batch in batches) == key_fields * len(distinct)
     assert tuple(value for batch in batches for value in batch.bindings) == unlimited.bindings
-    assert limited.viewer == AllOutcomes() and limited.sources == sources
+    assert limited.selection.viewer == AllOutcomes() and limited.sources == sources
     assert limited.rows == ordinary.rows
     assert limited.attempts == ordinary.attempts
     assert limited.evidence == ordinary.evidence

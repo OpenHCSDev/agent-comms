@@ -22,7 +22,7 @@ from .field_codec import (
     WireOmitDefault,
 )
 from .native_failures import NativePiUnavailable
-from .native_input_record import NativeInputCommit, NativeInputLocation
+from .native_input_proof import NativeInputCommit, NativeInputLocation
 from .native_output import NativeOutputLocation, NativeRecordLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData

@@ -35,7 +35,9 @@ from .message_reference import MessageReference
 from .messages import CarriesEnvelope, Message
 from .notification_evidence import NotificationWindow
 from .page_traversal import HistoryCursor, OlderTraversal
-from .presentation import MessageNotification, OutcomeViewer
+from .read_basis import OutcomeViewer, FirstRecipient, RecipientCursor
+from .presentation import MessageNotification
+from .notification_evidence import RecipientSelection
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (
     AnonymousViewer,
@@ -356,7 +358,8 @@ class HistorySource:
 
     def notification_references(self, sources: tuple[HistorySource, ...],
                                 references: Sequence[MessageReference],
-                                viewer: OutcomeViewer) -> NotificationWindow:
+                                viewer: OutcomeViewer, *, after: RecipientCursor = FirstRecipient(),
+                                limit: int = RecipientSelection.max_limit) -> NotificationWindow:
         """Read this namespace within its archive's current catalogue read, as this viewer
         may see it."""
 
@@ -366,7 +369,7 @@ class HistorySource:
         result = MessageNotification.read_references(
             Bus(Bus.path_in(root)), references,
             partial(MessageNotification.recorded_delivery_window, root, self.provenance,
-                    viewer=viewer),
+                    viewer=viewer, after=after, limit=limit),
         )
         self.validate()
         return result

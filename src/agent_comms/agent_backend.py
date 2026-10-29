@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 
     from .agent_events import AgentEvent
     from .launch_runtime import LaunchRuntime
+    from .native_input_proof import NativeContextProof
     from .owned_turn import TurnDelivery
     from .threads import Thread
     from .transcript_sources import TranscriptSource
@@ -306,6 +307,15 @@ class InputStartListener(ABC):
 
     @abstractmethod
     def following(self, public_id: InputId, native_id: InputId, text: str) -> bool: ...
+
+
+    async def original_context_committed(self, sent_text: str, context: NativeContextProof) -> None:
+        """An unowned input has no durable ordinary disposition to acknowledge."""
+
+    async def following_context_committed(
+        self, public_id: InputId, sent_text: str, context: NativeContextProof,
+    ) -> None:
+        """An unowned following input has no durable ordinary disposition."""
 
 
 class NoInputStartListener(InputStartListener):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Generator, Sequence
+from collections.abc import Awaitable, Callable, Generator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import partial
@@ -14,7 +14,6 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from .agent_events import CompactionEvent, NativePhaseChanged
-from .bus_publication import Delivered
 from .cohort_schema import CohortTable
 from .comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeTable
@@ -38,7 +37,8 @@ from .notification_assignment import NotificationAssignment
 from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
+from .read_basis import OwnerOutcomes
+from .presentation import MessageNotification, SentMessageOutcome
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .turn_phase import PreparingPhase, TurnPhase
@@ -202,12 +202,11 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     def capture_sent_outcomes(
-        comms: Comms, sources: Sequence[Delivered],
-        assignment_read: NotificationAssignmentRead,
+        comms: Comms, assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
         notifications = MessageNotification.for_sources(
-            comms.root, comms.registry, sources, assignment_read=assignment_read,
+            comms.root, comms.registry, assignment_read,
         )
         return tuple(
             outcome
@@ -251,11 +250,14 @@ class SelectedParticipant(MroDispatch):
                 store, lookup, after_seq=after_seq
             )
             sent_read = NotificationAssignment.capture(
-                store.session._connection, sent_sources, privacy, OwnerOutcomes.of(sent_owner),
+                store.session._connection, OwnerOutcomes.of(sent_owner).selection(sent_sources), privacy,
             )
+        sent_read = NotificationAssignment.capture_responses(comms.root, sent_read)
         if pending:
             participant.pointer.require_idle()
-        sent_outcomes = SelectedParticipant.capture_sent_outcomes(comms, sent_sources, sent_read)
+        sent_outcomes = SelectedParticipant.capture_sent_outcomes(
+            comms, sent_read
+        )
         return owner, participant, pending, sent_outcomes
 
     @staticmethod

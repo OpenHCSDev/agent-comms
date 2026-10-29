@@ -16,7 +16,7 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from bisect import bisect_left, bisect_right
-from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from itertools import product
@@ -28,13 +28,126 @@ from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember, PathText, SingleFieldValue, SubclassUnion
+from .field_codec import FieldCodec, NullMember, RecordMember, PathText, SingleFieldValue, SubclassUnion, ThreadLookup
 from .mentions import ThreadMention
 from .message_reference import MessageReference
+from .notification_evidence import NotificationSelection, RecipientSelection
+from .audience_manifest import FrozenRecipient
+from .bus_publication import Delivered
 from .private_path import FileObservation, MissingFile
 from .projection_source import ProducedRow, ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+
+
+class RecipientCursor(SubclassUnion, affix=""):
+    """Select frozen, lookup-ordered positions before expensive evidence acquisition."""
+
+    @abstractmethod
+    def positions(self, source: Delivered) -> range: ...
+
+
+@dataclass(frozen=True)
+class FirstRecipient(NullMember, RecipientCursor):
+    def positions(self, source: Delivered) -> range:
+        return range(len(source.recipients))
+
+
+@dataclass(frozen=True)
+class AfterRecipient(RecordMember, RecipientCursor):
+    recipient: FrozenRecipient
+
+    def positions(self, source: Delivered) -> range:
+        start = bisect_right(source.recipients, self.recipient.recipient_lookup,
+                             key=lambda item: item.recipient_lookup)
+        return range(start, len(source.recipients))
+
+
+class OutcomeViewer(ABC):
+    """Who reads a delivery window decides which of its outcomes are shown."""
+
+    @abstractmethod
+    def positions(self, source: Delivered) -> range: ...
+
+    def selection(self, sources: Sequence[Delivered], *, after: RecipientCursor = FirstRecipient(),
+                  limit: int = RecipientSelection.max_limit) -> NotificationSelection:
+        RecipientSelection.require_limit(limit)
+        pages = []
+        for source in sources:
+            eligible, following = self.positions(source), after.positions(source)
+            pages.append(RecipientSelection(
+                source, range(max(eligible.start, following.start), min(eligible.stop, following.stop)), limit))
+        return NotificationSelection(self, tuple(pages))
+
+    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
+                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
+        """Unscoped/operator and agent readers retain every human read mark."""
+        return displayed_to
+
+    @abstractmethod
+    def sees_direct_read(self, source: Delivered) -> bool:
+        pass
+
+    @abstractmethod
+    def sees(self, source: Delivered) -> bool:
+        """Whether this reader may read the message at all."""
+
+
+@dataclass(frozen=True, slots=True)
+class AllOutcomes(OutcomeViewer):
+    """An unscoped reader sees every recipient's outcome and every human read."""
+
+    def positions(self, source: Delivered) -> range:
+        return range(len(source.recipients))
+
+    def sees_direct_read(self, source: Delivered) -> bool:
+        return True
+
+    def sees(self, source: Delivered) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class DisplayOutcomes(AllOutcomes):
+    """Full operator access, minus only this display's source-matching viewer.
+
+    Incarnation equality owns rename/recreation; the captured bus owns namespace.
+    The live registry cannot establish either fact for an archived display.
+    """
+
+    viewer: ThreadIncarnation
+    bus_identity: RecordedBusIdentity
+
+    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
+                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
+        return tuple(reader for reader in displayed_to
+                     if reader != self.viewer or not self.bus_identity.matches(source))
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerOutcomes(OutcomeViewer):
+    """A sender sees all outcomes; a recipient sees only its original outcome."""
+
+    lookup: ThreadLookup
+
+    @classmethod
+    def of(cls, owner: ThreadProvenance) -> OwnerOutcomes:
+        return cls(owner.incarnation.require_recorded().lookup)
+
+    def positions(self, source: Delivered) -> range:
+        if source.sender_lookup == self.lookup:
+            return range(len(source.recipients))
+        position = bisect_left(source.recipients, self.lookup, key=lambda item: item.recipient_lookup)
+        if position < len(source.recipients) and source.recipients[position].recipient_lookup == self.lookup:
+            return range(position, position + 1)
+        return range(0)
+
+    def sees_direct_read(self, source: Delivered) -> bool:
+        return source.sender_lookup == self.lookup
+
+    def sees(self, source: Delivered) -> bool:
+        """The message's sender and its original recipients may read it."""
+        return self.lookup == source.sender_lookup or bool(self.positions(source))
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):
@@ -143,18 +256,26 @@ class DisplayIdentity:
 
     viewer: ThreadIncarnation
     history_revision: FileObservation
+    bus_identity: RecordedBusIdentity
+
+    @property
+    def notification_identity(self) -> DisplayIdentity:
+        """The captured viewer/source cut, without an unrelated channel/DM payload."""
+        return DisplayIdentity(viewer=self.viewer, history_revision=self.history_revision,
+                               bus_identity=self.bus_identity)
+
+    def outcome_viewer(self) -> OutcomeViewer:
+        return DisplayOutcomes(self.viewer, self.bus_identity)
 
 
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayIdentity(DisplayIdentity):
-    bus_identity: RecordedBusIdentity
     scope: ChannelDisplayScope
 
 
 @dataclass(frozen=True, slots=True)
 class DMDisplayIdentity(DisplayIdentity):
     root_identity: tuple[int, int]
-    bus_identity: RecordedBusIdentity
     project_path: Annotated[Path, PathText]
     requested_peer: str
     peer: ThreadIncarnation
@@ -171,6 +292,10 @@ class SelectedDisplay(ABC):
     @property
     @abstractmethod
     def identity(self) -> DisplayIdentity | NoDisplaySelection: ...
+
+    @property
+    def notification_identity(self) -> DisplayIdentity | NoDisplaySelection:
+        return self.identity.notification_identity
 
     @abstractmethod
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None: ...
@@ -193,6 +318,13 @@ class NoDisplaySelection(SelectedDisplay):
     @property
     def identity(self):
         return self
+
+    @property
+    def notification_identity(self) -> NoDisplaySelection:
+        return self
+
+    def outcome_viewer(self) -> OutcomeViewer:
+        return AllOutcomes()
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         raise DMPaintedBoundChanged()
@@ -248,7 +380,8 @@ class HistoricalSelection(SelectedDisplay):
     @property
     def identity(self):
         return DisplayIdentity(viewer=self.displayed.displayed.viewer_identity,
-                               history_revision=self.history_revision)
+                               history_revision=self.history_revision,
+                               bus_identity=self.displayed.displayed.bus_identity)
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         self.displayed.acknowledge(views.bus.history, views.registry)
@@ -294,6 +427,7 @@ class LineOutput:
 
 
 if TYPE_CHECKING:
+    from .threads import ThreadProvenance
     import sqlite3
 
     from .private_registry_guard import RegistryPrivacy

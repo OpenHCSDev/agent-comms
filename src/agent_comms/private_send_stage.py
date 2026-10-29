@@ -29,7 +29,7 @@ from .private_send_rules import (
 )
 from .native_input_owner import ParticipantOwner
 from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
-from .native_pi import NativeContextProof
+from .native_input_proof import NativeContextProof
 from .native_entries import NativeEvidenceScope
 from .native_prompt_binding import (
     PromptBinding,
@@ -132,8 +132,20 @@ class NativeSendStage(ABC):
             ).require_valid()
         except ReservationViolationError as error:
             raise StaleFence(f"native dispatch identity changed: {error}") from error
-        row.require_unproven(token_digest)
+        row.require_dispatch(token_digest)
         return row
+
+    def require_acknowledgement(self, store: Coordination) -> None:
+        self.require_claim(store)
+
+    def acknowledge_context(
+        self, store: Coordination, owner: ParticipantOwner, input_id: InputId,
+        token_digest: str, context: NativeContextProof,
+    ) -> None:
+        with store.session.writing() as db:
+            row = self.pending_input(store, input_id, owner, token_digest)
+            self.require_acknowledgement(store)
+            row.commit_context(db, context)
 
     def verify(
         self,
@@ -311,7 +323,8 @@ class TriageNativeSend(NativeSendStage):
         with store.session.writing() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             self.require_claim(store)
-            row.commit_context(db, context, verdict=DecidedTriageRecord(type(decision)))
+            row.commit_context(db, context)
+            row.settle_verdict(db, DecidedTriageRecord(type(decision)))
             for captured in self.assignments:
                 decision.settle(store, db, store.assignments.get(captured.assignment_id))
             # This is the settlement transaction's witness, not a replacement
@@ -381,21 +394,11 @@ class FullNativeSend(NativeSendStage):
         ):
             raise IdentityConflict("this execution attempt already has a native input")
 
-    def commit(
-        self,
-        store: Coordination,
-        owner: ParticipantOwner,
-        input_id: InputId,
-        token_digest: str,
-        context: NativeContextProof,
-    ) -> None:
-        with store.session.writing() as db:
-            row = self.pending_input(store, input_id, owner, token_digest)
-            snapshot, _ = store.require_fence(self.fence)
-            for assignment in self.assignments:
-                engagement = assignment.lifecycle.require_engagement()
-                snapshot.require_wire_response(engagement.exact_target)
-            row.commit_context(db, context)
+    def require_acknowledgement(self, store: Coordination) -> None:
+        snapshot, _ = store.require_fence(self.fence)
+        for assignment in self.assignments:
+            engagement = assignment.lifecycle.require_engagement()
+            snapshot.require_wire_response(engagement.exact_target)
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         snapshot, attempt = store.require_fence(self.fence)

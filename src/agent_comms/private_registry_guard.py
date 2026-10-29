@@ -22,7 +22,7 @@ import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
@@ -46,14 +46,12 @@ from .private_nk_entrypoint import (
 from .private_path import PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
-from .notification_evidence import NotificationAssignmentRead
+from .notification_evidence import NotificationAssignmentRead, NotificationSelection
 
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
-    from .bus_publication import Delivered
     from .cursor_publication import CursorPublication
-    from .presentation import OutcomeViewer
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
     from .typed_table import TableSchema
@@ -163,7 +161,7 @@ class RegistryPrivacy(ABC):
 
     @abstractmethod
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered], viewer: OutcomeViewer,
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead: ...
 
     @abstractmethod
@@ -203,9 +201,9 @@ class PublicRegistry(RegistryPrivacy):
         return "0"
 
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered], viewer: OutcomeViewer,
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead:
-        return NotificationAssignmentRead(tuple(sources), (), viewer=viewer)
+        return NotificationAssignmentRead(selection, ())
 
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
@@ -284,7 +282,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         return f"EXISTS (SELECT 1 {NativeRuntimeInput.context_entered_from(members, assignment)})"
 
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered], viewer: OutcomeViewer,
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead:
         raise PublicationActivationBlocked("Private notification coordinator is missing")
 

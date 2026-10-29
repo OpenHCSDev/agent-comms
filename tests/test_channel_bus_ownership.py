@@ -1,6 +1,6 @@
 """Channel membership and notifications have one canonical bus authority."""
 
-from agent_comms.presentation import AllOutcomes
+from agent_comms.read_basis import AllOutcomes
 from agent_comms.repo import Checkout
 from contextlib import AsyncExitStack
 from dataclasses import replace

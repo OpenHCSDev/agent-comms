@@ -268,15 +268,16 @@ class ThreadPresentation(ThreadStatusDisplay):
         """Incoming and sent outcomes are views of one captured notification window, read
         as the thread's owner may see them; the incoming outcomes carry public envelopes."""
         from .notification_assignment import NotificationAssignment
-        from .presentation import MessageNotification, OwnerOutcomes
+        from .presentation import MessageNotification
+        from .read_basis import OwnerOutcomes
 
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
-        notification_read = NotificationAssignment.read(
-            transcripts.root, sources, viewer=OwnerOutcomes.of(window.read.identity.thread))
+        viewer = OwnerOutcomes.of(window.read.identity.thread)
+        notification_read = NotificationAssignment.read(transcripts.root, viewer.selection(sources))
         projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, sources, notification_read)
+            transcripts.root, transcripts.registry, notification_read)
         incoming = tuple(
             replace(notification, message=source.envelope)
             for source in window.sources

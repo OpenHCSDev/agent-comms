@@ -1,5 +1,5 @@
 """Read real persisted notification assignments without scheduling a model."""
-from agent_comms.presentation import AllOutcomes
+from agent_comms.read_basis import AllOutcomes
 from agent_comms.repo import Checkout
 from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
@@ -15,7 +15,7 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     receipts = comms.views.thread_presentations(('beta',)).require('beta').notifications
     assert len(receipts) == 1
     acknowledgement = receipts[0]
-    assert acknowledgement.message == message
+    assert acknowledgement.message == initial.envelope
     assert acknowledgement.message.target == '#team'
     assert replace(acknowledgement, message=None) in per_message.outcomes[(message.seq, message.message_id)]
     assert acknowledgement.label == acknowledgement.timed_state('Sent', acknowledgement.state.sent_at_ms)

@@ -17,7 +17,7 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import ThreadTarget
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
+from agent_comms.harness_delivery_states import FilteredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, OrderId
@@ -326,7 +326,7 @@ class CommanderNotice(CommanderUpdate):
 
     async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
         """Cleared lines leave the board; nothing new needs the session."""
-        return DeliveredOutcome
+        return FilteredOutcome
 
     def lines(self, now: float) -> tuple[str, ...]:
         return (f"Cleared · {len(self.handled)} requests remain on the board.", *self.not_applied)

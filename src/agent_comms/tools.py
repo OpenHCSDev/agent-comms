@@ -57,7 +57,9 @@ from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .presentation import AfterRecipient, ChannelView, FirstRecipient, MessageNotification, RecipientCursor
+from .read_basis import AfterRecipient, FirstRecipient, RecipientCursor
+from .presentation import ChannelView, MessageNotification
+from .notification_evidence import RecipientSelection
 from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
 from .relationships import (
@@ -79,9 +81,6 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .progress_claims import ProgressClaim
-from .relationships import RelationshipEdit
 from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl, StartOwnerControl
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
@@ -692,23 +691,24 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
     reference: Annotated[
         MessageReference, *tool_field("The message's seq and message_id, as comms_threads lists them")
     ]
-    limit: Annotated[int, *tool_field("Maximum recipient rows in this page")] = 100
+    limit: Annotated[int, *tool_field("Maximum recipient rows in this page")] = RecipientSelection.max_limit
     after: Annotated[
         RecipientCursor, *tool_field("The previous page's next cursor; omit for the first page")
     ] = FirstRecipient()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessageOutcomes:
-        if self.limit < 1:
-            raise ToolRefusedError("limit must be positive.")
+        try:
+            RecipientSelection.require_limit(self.limit)
+        except ValueError as error:
+            raise ToolRefusedError(str(error)) from error
         source, = comms.bus.bus.deliveries_for_references((self.reference,))
         if not caller.outcome_viewer(comms).sees(source):
             raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")
-        window = LiveNotificationRead((self.reference,)).read_as(comms, caller)
-        following = self.after.following(
-            window.outcomes.get((source.message.seq, source.message.message_id), ()))
-        page = following[:self.limit]
+        window = LiveNotificationRead(
+            (self.reference,), after=self.after, limit=self.limit).read_as(comms, caller)
+        page = window.outcomes.get((source.message.seq, source.message.message_id), ())
         return MessageOutcomes(
-            source.message, page, len(following) - len(page),
+            source.message, page, window.remaining(self.reference),
             AfterRecipient(page[-1].recipient_identity) if page else self.after,
         )
 

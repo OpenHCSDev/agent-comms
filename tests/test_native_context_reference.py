@@ -36,7 +36,7 @@ from agent_comms.native_input_record import (
     UnrecordedNativeColumn,
     UnrecordedNativeInputReference,
 )
-from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_input_proof import NativeContextProof
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.private_path import FileIdentity
 from agent_comms.proven_source_coverage import InjectedInput, NoInjectedInput, ProvenSourceCoverage, SourcePrefix
