@@ -29,6 +29,7 @@ type: hard-rule
 ```
 
 - **The point is to make the reader feel like a fucking dumbass, because the fix was soooo obvious.** The rule exists because an agent really did the dumb thing. The story shows the obvious fix sitting right there the whole time, in plain sight, one click or one line away, while the agent keeps walking past it to do something busier and stupider. Every `wait` is another chance to do the obvious thing, skipped. The reader should be screaming the answer at the screen by line ten. That is what makes it funny, and funny is what makes it stick. Never soften this signal.
+- **A refrain carries the rhythm.** One short line repeated after every beat: `> wait` after each step of a stall, `> nice` after each claim that sounds like progress. It lets the reader feel each skipped chance land, and the more reasonable the line before it sounds, the harder the refrain hits. Never drop it mid-story.
 - The wake-up is the leading block of `>` lines before `**Why:**`. A long build-up is the point: the reader agrees with each reasonable-sounding step, the loop keeps going far past where any sane agent would have stopped (`wait` ... `wait` ... `wait` ... and then more `wait`), and the last lines land the defect and the obvious fix together.
 - Every line is a fact from the rule's own record or tonight's work: a seq, a PR, a time, a measured number. No invented incidents; exaggeration is in rhythm and framing, never in the facts.
 - One wake-up per file. Several incidents in one rule become one story, or the rule is two rules.
@@ -113,20 +114,23 @@ These are drafts to steer, built from each file's own record. Tristan's correcti
 > commander opens the commit
 > it is old work from yesterday
 > the actual change was never committed
-> fine, next unit reports "sent the answer"
+> next unit reports "sent the answer"
 > nice
 > the send was refused by a hook
 > no message id
 > nobody read the output, it looked like output
 > next: "tests pass"
+> nice
 > the run errored before collecting a single test
 > 0 passed, 0 failed, exit code 4
 > "no failures" is technically correct
 > next: "Deadlines are dead (PR 2356)" posted to #comms
+> nice
 > it merged. it was not installed.
 > Core keeps striking units on deadlines for 40 more minutes
 > strikes for a rule we announced dead, enforced by the build we didn't install
 > next: a fork's final report says "reviewed, all good"
+> nice
 > its tool calls show it looped on 30 refused retries
 > "all good" was the 31st
 > mfw the fleet runs on vibes shaped like receipts
@@ -283,7 +287,9 @@ These are drafts to steer, built from each file's own record. Tristan's correcti
 > polished, tested, reviewed, merged
 > into the bin
 > every agent followed every rule
+> nice
 > PRs merged, units alive, checks green
+> nice
 > none of it was what he asked for
 > he asks why
 > "industry best practice is to stabilise before refactoring"
