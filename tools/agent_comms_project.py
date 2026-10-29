@@ -108,6 +108,9 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
                    for path in sorted(changed)]
         reader = Path(inspect.getfile(stored_formats)).relative_to(REPOSITORY)
+        if not self.tracks(ref, str(reader)):
+            # A revision older than its reader (164c80ca9) declares no stored format.
+            return {}
         with tempfile.TemporaryDirectory(prefix="ratchet-formats-") as scratch:
             # Each side runs its own revision's probe script: the head's may import modules
             # that only the head's package declares (#3576 moved field_codec under nominal).

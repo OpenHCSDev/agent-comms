@@ -407,6 +407,9 @@ class AuditPatternPresent(PatternPresent):
         installed = Path(skills.__path__[0]).relative_to(Path(agent_comms.__path__[0]).parent)
         submodule = Path(main.repo.source, installed, SKILL.name)
         package = Path(audit.__path__[0]).relative_to(SKILL)
+        if not main.has(submodule.as_posix()):
+            # A commit that pins no audit holds none of its patterns.
+            return self.satisfied(0)
         pinned = main.pinned(submodule.as_posix())
         return self.satisfied(pinned.count(self.pattern, (package.as_posix(),)))
 

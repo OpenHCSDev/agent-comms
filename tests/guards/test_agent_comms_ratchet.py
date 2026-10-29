@@ -183,7 +183,7 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
 def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch):
     repo = Checkout(tmp_path, "src/agent_comms")
     source = subprocess.check_output(
-        ["git", "archive", "HEAD", "--", "src/agent_comms"], timeout=20
+        ["git", "archive", "HEAD", "--", "src/agent_comms", "tools/stored_formats.py"], timeout=20
     )
     subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=source, check=True, timeout=60)
     # A Git archive carries no submodule: the complete producer stamp's child reaches the

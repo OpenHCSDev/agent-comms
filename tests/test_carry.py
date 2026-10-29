@@ -120,7 +120,7 @@ SPELLED = "    root: Annotated[str, Id128Text]\n"
 def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
         tmp_path, before, version, fields, step, uncarried):
     repo = Repository(tmp_path)
-    AgentCommsProject(REPO).extract("HEAD", tmp_path, "src/agent_comms")
+    AgentCommsProject(REPO).extract("HEAD", tmp_path, "src/agent_comms", "tools/stored_formats.py")
     record = tmp_path / "src" / "agent_comms" / "record.py"
     record.write_text(record_source(1, before))
     base = repo.commit({})
