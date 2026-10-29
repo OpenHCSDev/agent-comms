@@ -50,8 +50,7 @@ from .pi_commands import (
 )
 from .pi_payloads import StateData
 from .queued_input import InitialInput
-from .pi_rule_gate import PiRuleGate
-from .rule_deal import DealtSources
+from .pi_rule_gate import PiRedeal
 from .routing import NoTurnRouting, Routing
 from .runtime import (
     RuntimeServer,
@@ -69,6 +68,7 @@ from .goal_scope import OneGoal
 if TYPE_CHECKING:
     from . import pi_events as pi
     from .comms import Comms
+    from .context_reading import ContextUsage
     from .coordinated_runtime import SelectedExecution
     from .input_drain import DrainTurn, InputDrain, OwnerSession
     from .session_lifecycle import SessionLifecycle
@@ -89,7 +89,7 @@ class CompactionObservation(MroDispatch):
     async def start(self, event):
         await self.publish(self.phase.compacting())
 
-    @handles(events.CompactionEnd)
+    @handles(events.CompactionFinish)
     async def end(self, event):
         await self.publish(self.phase.compaction_ended())
 
@@ -145,11 +145,18 @@ class TurnRunner:
         for lease in thread.turn_lease.held():
             await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
 
+    async def observe_context(self, session_id: str, usage: ContextUsage) -> None:
+        """Pi's own context-use report deals the rules again at each declared share left."""
+        if session_id not in self.sessions.published:
+            return
+        thread = await Coordination.run_worker(partial(
+            self.comms.registry.require, self.sessions.require(session_id)))
+        await Coordination.run_worker(partial(PiRedeal.of(self.comms, thread).observe_context, usage))
+
     def deal_rules(self, thread: Thread, event: events.CompactionEvent) -> None:
         """Every compaction Core observes, Pi's own or one it asked for, deals the thread the
-        rules its role follows; its tool owner refuses other calls until they are read."""
-        event.deal_rules(PiRuleGate.of(self.comms, thread),
-                         DealtSources.for_thread(self.comms.registry.snapshot(), thread))
+        rules its role follows; its tool transports refuse other calls until they are read."""
+        event.deal_rules(PiRedeal.of(self.comms, thread))
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""

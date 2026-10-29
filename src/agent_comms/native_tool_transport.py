@@ -35,6 +35,7 @@ from .tool_denial import SelectedToolDenied
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import ToolExecutionEnd, ToolExecutionStart
+    from .pi_rule_gate import PiRuleGate
 
 _LOG = logging.getLogger(__name__)
 
@@ -336,10 +337,19 @@ class ToolTransport(Generic[Call]):
         for call in self.calls.values():
             call.progress.observation.require(Complete, ToolOutcomeUnknown())
 
+    def admit(self, call: Call) -> None:
+        """Refuse a call before its policy is asked; a transport exposing no tools admits none."""
+        raise SelectedToolDenied("Native tools are disabled for this input")
+
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))
-        await call.authorize(lambda: self.allow(self.calls.identity_for(call).round_number, call))
+        await call.authorize(lambda: self.admitted(self.calls.identity_for(call).round_number, call))
         return {"ok": True}
+
+    async def admitted(self, round_number: int, call: Call) -> None:
+        """Inside the call's one claim, so a refusal is the call's own failed terminal."""
+        self.admit(call)
+        await self.allow(round_number, call)
 
     @staticmethod
     def failure_response(error: Exception) -> dict[str, object]:
@@ -400,3 +410,15 @@ class ToolTransport(Generic[Call]):
             response = self.failure_response(error)
             answer = "refused"
         return await ToolConnectionOutcome.send(writer, response, answer)
+
+
+class GatedToolTransport(ToolTransport[Call]):
+    """A transport exposing model tools to Pi. Every call any of its policies receives is judged
+    against the thread's dealt rules first, before a room wait, a claim or a slot is spent."""
+
+    def __init__(self, listener: ToolListener, gate: PiRuleGate, *, pid: int) -> None:
+        super().__init__(listener, pid=pid)
+        self.rule_gate = gate
+
+    def admit(self, call: Call) -> None:
+        call.judge_under(self.rule_gate)

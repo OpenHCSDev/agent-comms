@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pydantic import JsonValue
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
+from agent_comms.pi_rule_gate import PiRuleGate
 from agent_comms.native_entries import SessionEntry
 from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
 from contextlib import AsyncExitStack, contextmanager
@@ -219,6 +220,12 @@ async def tool_listener() -> AsyncIterator[Callable[[Path, str], ToolListener]]:
             resources.push_async_callback(listener.close)
             return listener
         yield create
+
+
+@pytest.fixture
+def undealt_gate(tmp_path: Path) -> PiRuleGate:
+    """A Pi rule gate never dealt any rules, so it admits every call."""
+    return PiRuleGate(tmp_path / "scratch", tmp_path)
 
 
 @pytest.fixture

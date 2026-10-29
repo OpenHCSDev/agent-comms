@@ -27,7 +27,7 @@ from .lifecycle_capability import Executing
 from .native_arguments import NativeArguments
 from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
-from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
+from .native_tool_transport import GatedToolTransport, ToolListener, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
 from .pi_rule_gate import PiRuleGate
@@ -82,7 +82,6 @@ class CodingToolOwner(ABC):
         def check(store: Coordination) -> None:
             snapshot = self.comms.registry.snapshot()
             self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
-            call.judge_under(self.rule_gate(), self.thread.worktree.path)
             self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(store, slot, call.call_id)
@@ -98,14 +97,9 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
 
-    def rule_gate(self) -> PiRuleGate:
-        return PiRuleGate.of(self.comms, self.thread)
-
     def tool_completed(self, call: CodingCall, result: PiToolResult) -> None:
-        """The checked terminal shares its actual publication with this turn's grant, and a
-        completed read counts toward the dealt rules."""
+        """The checked terminal shares its actual publication with this turn's grant."""
         call.published_goal(result, self.goal_permission)
-        call.completed_under(self.rule_gate(), self.thread.worktree.path)
 
     @abstractmethod
     def verify(self, store, turn, snapshot): ...
@@ -169,7 +163,8 @@ class CodingToolMode(NativeToolMode):
         )
 
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:
-        return await CodingToolSocket.open(turn, ownership, self.owner)
+        return await CodingToolSocket.open(
+            turn, ownership, self.owner, PiRuleGate.of(self.owner.comms, self.owner.thread))
 
 @dataclass(frozen=True)
 class CodingToolRequest:
@@ -186,11 +181,12 @@ class CodingToolRequest:
         return CodingCall.decode(self.call_id, self.name, self.arguments)
 
 
-class CodingToolSocket(ToolTransport[CodingCall]):
+class CodingToolSocket(GatedToolTransport[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
 
-    def __init__(self, listener: ToolListener, owner: CodingToolOwner, *, pid: int) -> None:
-        super().__init__(listener, pid=pid)
+    def __init__(self, listener: ToolListener, owner: CodingToolOwner, gate: PiRuleGate,
+                 *, pid: int) -> None:
+        super().__init__(listener, gate, pid=pid)
         self.owner = owner
         self.completions = set()
 
@@ -221,6 +217,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         )
         if not event.is_error.value_or(False):
             self.owner.tool_completed(call, event.result)
+            call.completed_under(self.rule_gate)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 

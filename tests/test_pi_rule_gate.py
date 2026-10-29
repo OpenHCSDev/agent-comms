@@ -4,13 +4,20 @@ in full and written the audit, through the same deal the Claude Code hooks judge
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 from agent_comms import agent_events as events
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.context_reading import ContextUsage
 from agent_comms.native_tool_call import CodingCall
-from agent_comms.pi_rule_gate import PiRuleGate, RulesUnread
-from agent_comms.rule_deal import CommanderSources, DealtSources, FleetSources
+from agent_comms.native_tools import ReadTool
+from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
+from agent_comms.repo import Checkout
+from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
+from agent_comms_hooks.read_gate import ReadInput
+from agent_comms_hooks.skill import CommanderReader, FleetReader
 
 
 def call(name: str, arguments: dict[str, object]) -> CodingCall:
@@ -18,44 +25,120 @@ def call(name: str, arguments: dict[str, object]) -> CodingCall:
 
 
 @pytest.fixture
-def unit_gate(tmp_path, monkeypatch, commander_bus):
-    """The scratch-directory gate of the bus's ordinary unit, under a private home."""
+def private_home(tmp_path, monkeypatch):
+    """Set before the bus exists: its storage rule fixes the scratch base from HOME."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    return PiRuleGate.of(commander_bus, commander_bus.registry.require("unit-x"))
 
 
-def test_the_registry_role_picks_the_dealt_sources(commander_bus):
-    snapshot = commander_bus.registry.snapshot()
-    commander, unit = snapshot.require("claude-code"), snapshot.require("unit-x")
-    assert type(DealtSources.for_thread(snapshot, commander)) is CommanderSources
-    assert type(DealtSources.for_thread(snapshot, unit)) is FleetSources
+@pytest.fixture
+def unit_deal(private_home, commander_bus):
+    """The deal Core renews for the bus's ordinary unit, in the private home's scratch."""
+    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
+    assert deal.scratch.is_relative_to(Path.home())
+    return deal
 
 
-def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(tmp_path, unit_gate):
-    worktree = tmp_path
+def test_a_spawned_thread_is_dealt_its_role_s_deck_sources_once(private_home, commander_bus):
+    """The first start deals the registry role's deck sources; a restart keeps the deal."""
+    for name, reader in (("claude-code", CommanderReader), ("unit-x", FleetReader)):
+        deal = PiRedeal.of(commander_bus, commander_bus.registry.require(name))
+        deal.start()
+        assert deal.current().sources() == tuple(path.resolve() for path in reader.sources())
+        deal.audit.write_text("{}")
+        deal.start()
+        assert deal.audit.exists()
+
+
+def test_every_dealt_file_fits_one_default_read_on_every_backend():
+    """A dealt file over a read tool's cap could never count as read, locking the thread out."""
+    sources = CommanderReader.sources()
+    spans = (ReadTool.default_span(), ReadInput(sources[0]).span())
+    assert all(span.covers(source) for span in spans for source in sources)
+
+
+def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
+    tmp_path, unit_deal, commander_bus
+):
+    words = ("read the rules", "then fix the gate")
+    for body in words:
+        commander_bus.messaging.send_user_message(
+            CommandTarget.named("unit-x"), body, worktree=Checkout(tmp_path)
+        )
     bash = call("bash", {"command": "ls"})
-    bash.judge_under(unit_gate, worktree)  # never dealt: nothing to read
-    events.CompactionEnd(aborted=True).deal_rules(unit_gate, FleetSources())
-    bash.judge_under(unit_gate, worktree)  # an aborted compaction kept the context
-    events.CompactionEnd().deal_rules(unit_gate, FleetSources())
+    bash.judge_under(unit_deal)  # never dealt: nothing to read
+    events.CompactionAbort().deal_rules(unit_deal)
+    bash.judge_under(unit_deal)  # an aborted compaction kept the context
+    events.CompactionEnd().deal_rules(unit_deal)
+    assert unit_deal.current().due.owner_words == words
     with pytest.raises(RulesUnread, match="You just tried bash before reading. Call #1"):
-        bash.judge_under(unit_gate, worktree)
-    sources = FleetSources.sources()
-    first = call("read", {"path": str(sources[0])})
-    first.judge_under(unit_gate, worktree)  # reading is the way through
-    call("read", {"path": str(sources[0]), "limit": 3}).completed_under(unit_gate, worktree)
+        bash.judge_under(unit_deal)
+    with pytest.raises(RulesUnread):  # a file nobody dealt is not a way through
+        call("read", {"path": "notes.md"}).judge_under(unit_deal)
+    with pytest.raises(RulesUnread):  # neither is the selected write tool
+        SelectedToolRequest("call-write", SelectedWriteArguments("notes.md", "x")).judge_under(
+            unit_deal
+        )
+    sources = FleetReader.sources()
+    call("read", {"path": str(sources[0])}).judge_under(unit_deal)  # a dealt file is
+    call("read", {"path": str(sources[0]), "limit": 3}).completed_under(unit_deal)
     with pytest.raises(RulesUnread, match=str(sources[0].resolve())):
-        bash.judge_under(unit_gate, worktree)  # a partial read is not a reading
+        bash.judge_under(unit_deal)  # a partial read is not a reading
     for source in sources:
-        call("read", {"path": str(source)}).completed_under(unit_gate, worktree)
-    with pytest.raises(RulesUnread, match="before writing the required audit"):
-        bash.judge_under(unit_gate, worktree)
+        call("read", {"path": str(source)}).completed_under(unit_deal)
+    with pytest.raises(RulesUnread, match="then fix the gate"):
+        bash.judge_under(unit_deal)  # the audit answers the owner's words too
     with pytest.raises(RulesUnread):
-        call("write", {"path": "notes.md", "content": "x"}).judge_under(unit_gate, worktree)
-    call("write", {"path": str(unit_gate.audit), "content": "{}"}).judge_under(unit_gate, worktree)
-    unit_gate.audit.write_text(json.dumps({
-        "rules": [{"rule": rule.name} for rule in FleetSources.rules()], "owner_words": []}))
-    bash.judge_under(unit_gate, worktree)
-    events.CompactionEnd().deal_rules(unit_gate, FleetSources())  # the next compaction
+        call("write", {"path": "notes.md", "content": "x"}).judge_under(unit_deal)
+    call("write", {"path": str(unit_deal.audit), "content": "{}"}).judge_under(unit_deal)
+    unit_deal.audit.write_text(
+        json.dumps(
+            {
+                "rules": [{"rule": rule.name} for rule in FleetReader.rules()],
+                "owner_words": [{"words": text, "doing": "reading the gate"} for text in words],
+            }
+        )
+    )
+    bash.judge_under(unit_deal)
+    call("read", {"path": "notes.md"}).judge_under(unit_deal)
+    events.CompactionEnd().deal_rules(unit_deal)  # the next compaction
     with pytest.raises(RulesUnread, match="Call #1 since this compaction"):
-        bash.judge_under(unit_gate, worktree)
+        bash.judge_under(unit_deal)
+
+
+def answer(deal: PiRedeal) -> None:
+    """Read every dealt file in full and write an audit answering the deal."""
+    for source in deal.current().sources():
+        call("read", {"path": str(source)}).completed_under(deal)
+    due = deal.current().due
+    deal.audit.write_text(
+        json.dumps(
+            {
+                "rules": [{"rule": rule} for rule in sorted(due.rules)],
+                "owner_words": [{"words": text, "doing": "rereading"} for text in due.owner_words],
+            }
+        )
+    )
+
+
+def refused(deal: PiRedeal) -> bool:
+    try:
+        call("bash", {"command": "ls"}).judge_under(deal)
+    except RulesUnread:
+        return True
+    return False
+
+
+def test_the_rules_come_back_once_at_each_declared_share_of_context_left(unit_deal):
+    """Pi's own context report deals the rules again when 66% and then 33% of the window is
+    left, once each, and each compaction arms both again."""
+    assert [refresh.remaining for refresh in unit_deal.refreshes] == [0.66, 0.33]
+    events.CompactionEnd().deal_rules(unit_deal)
+    answer(unit_deal)
+    for used, closes in ((30, False), (35, True), (40, False), (70, True), (95, False)):
+        unit_deal.observe_context(ContextUsage(used, 100))
+        assert refused(unit_deal) is closes, used
+        answer(unit_deal)
+    events.CompactionEnd().deal_rules(unit_deal)
+    answer(unit_deal)
+    unit_deal.observe_context(ContextUsage(40, 100))
+    assert refused(unit_deal)

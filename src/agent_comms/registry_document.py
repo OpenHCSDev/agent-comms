@@ -77,6 +77,7 @@ if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
     from .bus_publication import Delivered
+    from .rule_deal import DealtSources, RuleDeal
 
 
 @dataclass(frozen=True, slots=True)
@@ -565,16 +566,27 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
 
-    def session_output[Output](self, incarnation: ThreadIncarnation, *,
-                               commander: Output, commanded: Output) -> Output:
-        """A commanded session's last item replies to the senders delivered in its turn; the
-        commander answers its owner in its own transcript and messages units only by tool."""
+    def by_role[Answer](self, incarnation: ThreadIncarnation, *,
+                        commander: Answer, commanded: Answer) -> Answer:
+        """The answer for the commander this project names, or for a thread it commands."""
         return commanded
+
+    def deal_rules(self, deal: RuleDeal, incarnation: ThreadIncarnation, *,
+                   commander: type[DealtSources], commanded: type[DealtSources],
+                   prompts: tuple[str, ...]) -> None:
+        """The fleet's rules are dealt by the role this project gives the thread."""
+        deal.deal(self.by_role(incarnation, commander=commander, commanded=commanded), prompts)
 
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
+
+    def deal_rules(self, deal: RuleDeal, incarnation: ThreadIncarnation, *,
+                   commander: type[DealtSources], commanded: type[DealtSources],
+                   prompts: tuple[str, ...]) -> None:
+        """A bus with no commander project has no fleet whose rules to deal."""
+        return
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         return ()
@@ -623,8 +635,8 @@ class RegisteredCommanderProject(CommanderProject):
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
         return replace(self, repos=repositories.applied(self.repos))
 
-    def session_output[Output](self, incarnation: ThreadIncarnation, *,
-                               commander: Output, commanded: Output) -> Output:
+    def by_role[Answer](self, incarnation: ThreadIncarnation, *,
+                        commander: Answer, commanded: Answer) -> Answer:
         return commander if incarnation == self.commander else commanded
 
 

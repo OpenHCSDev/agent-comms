@@ -17,6 +17,7 @@ from .field_codec import (
     WireOmitDefault,
 )
 from .native_tool_call import CodingCall
+from .pi_payloads import PiReported
 from .recorded_time import EventTime
 from .rule_deal import ReadSpan
 from .shell_effects import WriteStorageEffect, physical_path, shell_storage_effects
@@ -35,13 +36,23 @@ from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .pi_payloads import PiToolResult
-    from .rule_deal import RuleDeal, ToolGate
+    from .pi_rule_gate import PiRuleGate
     from .turn_goal_permission import TurnGoalPermission
 
 
 @dataclass(frozen=True, slots=True)
 class UnsuppliedArgument(NullMember):
     """The model left this optional tool argument out; Pi applies its own default."""
+
+    def value_or[D](self, default: D) -> D:
+        return default
+
+
+@dataclass(frozen=True)
+class SuppliedLine(PiReported[float]):
+    """A line number or line count the model supplied to Pi's read."""
+
+    value: float
 
 
 class NativeToolDeclaration(ToolDeclaration):
@@ -153,27 +164,32 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 @dataclass(frozen=True, kw_only=True)
 class ReadTool(ReadAction, PathTool, CodingTool):
     label = "Read"
-    offset: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
-    limit: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
+    offset: Annotated[SuppliedLine | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
+    limit: Annotated[SuppliedLine | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
     max_lines: ClassVar[int] = 2_000
     max_bytes: ClassVar[int] = 50 * 1024
     """Pi's read truncates at DEFAULT_MAX_LINES and DEFAULT_MAX_BYTES (dist/core/tools/truncate.js),
-    the byte cap applying after a supplied limit too."""
+    the byte cap applying after a supplied limit too; test_pi_rule_gate checks every dealt file
+    fits one default read."""
 
     def _parse_resource(self) -> None:
         return None
 
+    @classmethod
+    def default_span(cls) -> ReadSpan:
+        """What a read with neither offset nor limit returns."""
+        return ReadSpan(1, cls.max_lines, cls.max_bytes)
+
     def span(self) -> ReadSpan:
-        """An argument the model left out is absent from the wire, and Pi applies its default."""
-        supplied = self.arguments
-        return ReadSpan(int(supplied.get("offset", 1)),
-                        int(supplied.get("limit", self.max_lines)), self.max_bytes)
+        """An argument the model left out takes Pi's default."""
+        return ReadSpan(int(self.offset.value_or(1)), int(self.limit.value_or(self.max_lines)),
+                        self.max_bytes)
 
-    def judge_under(self, gate: ToolGate, cwd: Path) -> None:
-        """Reading is the way through the gate."""
+    def judge_under(self, gate: PiRuleGate) -> None:
+        gate.judge_read(self.declared_name, physical_path(self.path, gate.worktree))
 
-    def completed_under(self, gate: RuleDeal, cwd: Path) -> None:
-        gate.record_read(physical_path(self.path, cwd), self.span())
+    def completed_under(self, gate: PiRuleGate) -> None:
+        gate.record_read(physical_path(self.path, gate.worktree), self.span())
 
     def context_read_paths(self) -> tuple[str, ...]:
         return (self.path,)
@@ -244,8 +260,8 @@ class WriteTool(MutatingPathTool, CodingTool):
     def replacements(self) -> tuple[ReplacementEdit, ...]:
         return (ReplacementEdit(old_text='', new_text=self.content),)
 
-    def judge_under(self, gate: ToolGate, cwd: Path) -> None:
-        gate.judge_write(self.declared_name, physical_path(self.path, cwd))
+    def judge_under(self, gate: PiRuleGate) -> None:
+        gate.judge_write(self.declared_name, physical_path(self.path, gate.worktree))
 
     claim_type = WritableFileClaim
 

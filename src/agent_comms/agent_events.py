@@ -7,6 +7,7 @@ ACP publication constructs SDK updates directly from these declared fields.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
@@ -62,7 +63,7 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .native_turn_context import NativeContextManifestData
     from .pi_commands import PiCommand
-    from .rule_deal import DealtSources, RuleDeal
+    from .rule_deal import Redeals
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
     from .transcript_events import SentTranscript
@@ -256,8 +257,8 @@ class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
     def summary(self) -> str | None:
         return None
 
-    def deal_rules(self, gate: RuleDeal, dealt: DealtSources) -> None:
-        """Only a finished compaction drops the rules from context."""
+    def deal_rules(self, deal: Redeals) -> None:
+        """Only a compaction that placed its summary drops the rules from context."""
 
     @property
     def will_retry(self) -> bool:
@@ -273,20 +274,37 @@ class CompactionStart(CompactionEvent):
 
 
 @dataclass(frozen=True)
-class CompactionEnd(CompactionEvent):
-    aborted: bool = False
-    summary: str | None = None
+class CompactionFinish(CompactionEvent, declared_name=None):
+    """A compaction stopped: it placed its summary, or it aborted and left the context alone."""
+
     context_used: PiCount = field(default_factory=UnreportedCount)
     will_retry: bool = False
 
+    async def transcript_changed(self, publish: Callable[[], Awaitable[None]]) -> None:
+        """An aborted compaction left the transcript as it was."""
+
+
+@dataclass(frozen=True)
+class CompactionAbort(CompactionFinish):
     @property
     def phase(self) -> str:
-        return "abort" if self.aborted else "end"
+        return "abort"
 
-    def deal_rules(self, gate: RuleDeal, dealt: DealtSources) -> None:
+
+@dataclass(frozen=True)
+class CompactionEnd(CompactionFinish):
+    summary: str | None = None
+
+    @property
+    def phase(self) -> str:
+        return "end"
+
+    def deal_rules(self, deal: Redeals) -> None:
         """The summary that replaced the context is a paraphrase of the rules: deal them again."""
-        if not self.aborted:
-            gate.deal(dealt, ())
+        deal.redeal()
+
+    async def transcript_changed(self, publish: Callable[[], Awaitable[None]]) -> None:
+        await publish()
 
 
 @dataclass(frozen=True)

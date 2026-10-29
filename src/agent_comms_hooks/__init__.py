@@ -91,6 +91,11 @@ class ClaudeTranscriptHook(ClaudeHook):
         """A session's deal and deck files sit beside its transcript, each with its own suffix."""
         return Path(self.transcript_path)
 
+    @property
+    def subagents(self) -> Path:
+        """Claude Code keeps each subagent's transcript in this directory beside the session's."""
+        return Path(self.transcript_path).with_suffix("") / "subagents"
+
     def tail(self) -> list[bytes]:
         """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""
         with open(self.transcript_path, "rb") as transcript:

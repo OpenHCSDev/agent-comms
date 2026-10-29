@@ -12,7 +12,6 @@ the Claude Code hooks deny a PreToolUse event, Core's Pi tool owner raises a too
 
 from __future__ import annotations
 
-import inspect
 import json
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -20,15 +19,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .commander.package import CommanderPackage
-from .commander.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
 from .field_codec import FieldCodec, MalformedRecord
-from .pattern_sources import PostmortemFailure, ReadThenRepeatedFailure
-from .slop import Slop
+from .pattern_sources import ReadThenRepeatedFailure
+from .store_files import AtomicFile
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
+    from .commander.rule_file import RuleFile
+    from .context_reading import ContextUsage
 
 
 @dataclass(frozen=True)
@@ -43,8 +40,11 @@ class ReadSpan:
     def covers(self, source: Path) -> bool:
         """Whether this read returned every line of the file."""
         text = source.read_bytes()
-        return (self.offset <= 1 and self.limit >= len(text.splitlines())
-                and self.max_bytes >= len(text))
+        return (
+            self.offset <= 1
+            and self.limit >= len(text.splitlines())
+            and self.max_bytes >= len(text)
+        )
 
 
 @dataclass(frozen=True)
@@ -90,16 +90,20 @@ class AuditDue:
             rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
             owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
         )
-        return "\n\n".join((
-            *(f"Tristan told you, verbatim:\n{words}\nYou did not."
-              for words in self.owner_words[-1:]),
-            f"{failure.title}\n{failure.cite()}\n"
-            "This session is repeating it, not observing another session's mistake.",
-            f"Write this SessionAudit to {audit_path}. Fill only broke and doing; keep every"
-            " rule name and quoted words unchanged. Empty broke means the rule was kept;"
-            " doing must name your current action:\n"
-            + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
-        ))
+        return "\n\n".join(
+            (
+                *(
+                    f"Tristan told you, verbatim:\n{words}\nYou did not."
+                    for words in self.owner_words[-1:]
+                ),
+                f"{failure.title}\n{failure.cite()}\n"
+                "This session is repeating it, not observing another session's mistake.",
+                f"Write this SessionAudit to {audit_path}. Fill only broke and doing; keep every"
+                " rule name and quoted words unchanged. Empty broke means the rule was kept;"
+                " doing must name your current action:\n"
+                + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
+            )
+        )
 
     def refusal(self, audit: SessionAudit) -> str:
         """Why this audit does not answer the deal, or nothing when it does: every dealt rule
@@ -110,79 +114,122 @@ class AuditDue:
         if idle := [answer.words for answer in audit.owner_words if not answer.acts()]:
             return "the audit names no action for: " + " | ".join(idle)
         unanswered = Counter(self.owner_words) - Counter(
-            answer.words for answer in audit.owner_words)
+            answer.words for answer in audit.owner_words
+        )
         if unanswered:
             return "the audit does not answer the owner's prompts: " + " | ".join(
-                unanswered.elements())
+                unanswered.elements()
+            )
         return ""
 
 
 class DealtSources(ABC):
-    """Which packaged files a session is dealt, by the audiences its rules declare.
-
-    Every bound session follows the fleet rules; the thread the registry names commander also
-    follows the commander's. RuleFile's audience is the one owner of that split, and a member's
-    audiences are its bases' plus its own declaration.
-    """
-
-    audiences: ClassVar[frozenset[type[RuleAudience]]] = frozenset()
-
-    def __init_subclass__(cls, audience: tuple[type[RuleAudience], ...] = (),
-                          **options: object) -> None:
-        super().__init_subclass__(**options)
-        cls.audiences = frozenset(audience).union(*(base.audiences for base in cls.__bases__))
+    """Which packaged files a session is dealt and which rules its audit answers. The deck
+    readers (agent_comms_hooks.skill.DeckReader) are the one list, for every backend."""
 
     @classmethod
-    def rules(cls) -> tuple[RuleFile, ...]:
-        return tuple(rule for rule in RuleFile.packaged() if rule.audience in cls.audiences)
+    @abstractmethod
+    def rules(cls) -> tuple[RuleFile, ...]: ...
 
     @classmethod
     @abstractmethod
     def sources(cls) -> tuple[Path, ...]:
-        """The packaged files this session is ordered to read in full after a start or
-        compaction: the rules themselves, never a copy of them."""
-
-    @staticmethod
-    def for_thread(snapshot: RegistrySnapshot, thread: Thread) -> DealtSources:
-        """The commander's sources for the thread the registry names commander, the fleet's for
-        any other."""
-        commanding = any(commander.incarnation == thread.incarnation
-                         for commander in snapshot.commander_project.commanders(snapshot))
-        return CommanderSources() if commanding else FleetSources()
+        """The packaged files ordered read in full: the rules themselves, never a copy."""
 
 
-class FleetSources(DealtSources, audience=(FleetAudience,)):
-    """A bound session the registry does not name commander: the fleet rules, the voice they
-    are said in and the failures already caught."""
+class DealState(ABC):
+    """Whether a session holds an open deal, and what that deal still requires."""
 
-    @classmethod
-    def sources(cls) -> tuple[Path, ...]:
-        return (
-            CommanderPackage.voice(),
-            Path(inspect.getfile(PostmortemFailure)),
-            *(rule.path for rule in cls.rules()),
-        )
+    @abstractmethod
+    def sources(self) -> tuple[Path, ...]:
+        """The resolved paths of the files dealt."""
+
+    @abstractmethod
+    def unread(self, read: Path) -> tuple[Path, ...]:
+        """The dealt files the read log does not list."""
+
+    @abstractmethod
+    def audit_refusal(self, audit: Path) -> str:
+        """Why the audit does not answer the deal, or nothing when it does."""
+
+    @abstractmethod
+    def reminders(self, audit: Path) -> tuple[str, ...]:
+        """The audit template a refusal carries."""
+
+    @abstractmethod
+    def started(self, deal: Redeals) -> None:
+        """What a session's start does to its deal."""
+
+    @abstractmethod
+    def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
+        """What a report of the context's use does to the deal."""
 
 
-class CommanderSources(FleetSources, audience=(CommanderAudience,)):
-    """The commander: the fleet's sources plus the indictment, the commander skill, the
-    commander's own rules and the slop catalog's index."""
+class NoDeal(DealState):
+    """A session never dealt: nothing to read and no audit owed."""
 
-    @classmethod
-    def sources(cls) -> tuple[Path, ...]:
-        return (
-            CommanderPackage.voice(),
-            CommanderPackage.indictment(),
-            Path(inspect.getfile(PostmortemFailure)),
-            CommanderPackage.skill(),
-            *(rule.path for rule in cls.rules()),
-            Slop.catalog() / "README.md",
-        )
+    def sources(self) -> tuple[Path, ...]:
+        return ()
+
+    def unread(self, read: Path) -> tuple[Path, ...]:
+        return ()
+
+    def audit_refusal(self, audit: Path) -> str:
+        return ""
+
+    def reminders(self, audit: Path) -> tuple[str, ...]:
+        return ()
+
+    def started(self, deal: Redeals) -> None:
+        """A session never dealt is dealt at its first start."""
+        deal.redeal()
+
+    def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
+        """No deal, nothing to refresh."""
+        return
+
+
+@dataclass(frozen=True)
+class DealRecord(DealState):
+    """One deal, written whole and atomically: the files dealt and what the audit must answer.
+    The read log and the audit hang off it, and a new deal resets both before it is written."""
+
+    dealt: tuple[Path, ...]
+    due: AuditDue
+
+    def sources(self) -> tuple[Path, ...]:
+        return self.dealt
+
+    def unread(self, read: Path) -> tuple[Path, ...]:
+        done = frozenset(Path(line) for line in read.read_text(encoding="utf-8").splitlines())
+        return tuple(source for source in self.dealt if source not in done)
+
+    def audit_refusal(self, audit: Path) -> str:
+        if not audit.exists():
+            return "no audit is written"
+        try:
+            written = FieldCodec.decode(SessionAudit, FieldCodec.parse(audit.read_bytes()))
+        except MalformedRecord as error:
+            return f"the audit does not decode: {error}"
+        return self.due.refusal(written)
+
+    def reminders(self, audit: Path) -> tuple[str, ...]:
+        return (self.due.reminder(audit),)
+
+    def started(self, deal: Redeals) -> None:
+        """A restart keeps the context it had, and the deal it still answers."""
+        return
+
+    def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
+        deal.refresh_due(usage)
 
 
 class RuleDeal(ABC):
     """One session's deal: the files beside its `stem` that record what it was dealt, what it
-    has read in full, what its audit must answer, and the audit itself."""
+    has read in full and the audit it wrote."""
+
+    owner_prompts: ClassVar[int] = 6
+    """How many of the person's own last prompts a deal puts back in front of the session."""
 
     @property
     @abstractmethod
@@ -190,16 +237,14 @@ class RuleDeal(ABC):
         """Where this session's deal files live; each takes its own suffix."""
 
     @property
+    def record(self) -> Path:
+        return self.stem.with_suffix(".deal.json")
+
+    @property
     def calls(self) -> Path:
         """One byte per gated call since this deal; atomic append counts parallel calls once
         without another counter or history scan."""
         return self.stem.with_suffix(".calls")
-
-    @property
-    def dealt_files(self) -> Path:
-        """The packaged files dealt, one resolved path per line. It names the files themselves:
-        a copy of a rule is a paraphrase the session reads instead of the rule."""
-        return self.stem.with_suffix(".dealt")
 
     @property
     def dealt_read(self) -> Path:
@@ -211,94 +256,88 @@ class RuleDeal(ABC):
         """The session's audit of the dealt rules and the owner's words, written after reading."""
         return self.stem.with_suffix(".audit.json")
 
-    @property
-    def audit_due(self) -> Path:
-        """What the audit must answer: every dealt rule and each owner prompt shown."""
-        return self.stem.with_suffix(".audit-due.json")
-
     def count_call(self) -> int:
         with self.calls.open("ab", buffering=0) as calls:
             calls.write(b".")
             return calls.tell()
 
-    def deal(self, dealt: DealtSources, prompts: tuple[str, ...]) -> None:
-        """A start or compaction drops what was read: no file counts as read until it is read
-        again, and the audit is owed again."""
+    def current(self) -> DealState:
+        """The deal this session holds; the record is its one declaration."""
+        if not self.record.exists():
+            return NoDeal()
+        return FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
+
+    def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...]) -> None:
+        """A start or compaction drops what was read: the read log and the audit reset first,
+        then the record is published whole, so no reader sees a half-written deal."""
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.calls.unlink(missing_ok=True)
         self.dealt_read.write_text("", encoding="utf-8")
         self.audit.unlink(missing_ok=True)
-        self.audit_due.write_text(json.dumps({
-            "rules": [rule.name for rule in dealt.rules()],
-            "owner_words": list(prompts),
-        }), encoding="utf-8")
-        self.dealt_files.write_text(
-            "".join(f"{source.resolve()}\n" for source in dealt.sources()), encoding="utf-8")
-
-    def sources(self) -> tuple[str, ...]:
-        """The resolved paths the last deal named; a session never dealt names none."""
-        if not self.dealt_files.exists():
-            return ()
-        return tuple(self.dealt_files.read_text(encoding="utf-8").splitlines())
-
-    def unread(self) -> tuple[Path, ...]:
-        """The dealt files not yet read in full since the last deal. A deal writes the read
-        record, so a session with no record was dealt nothing to read."""
-        if not self.dealt_read.exists():
-            return ()
-        read = set(self.dealt_read.read_text(encoding="utf-8").splitlines())
-        return tuple(Path(source) for source in self.sources() if source not in read)
+        record = DealRecord(
+            tuple(source.resolve() for source in dealt.sources()),
+            AuditDue(frozenset(rule.name for rule in dealt.rules()), prompts),
+        )
+        AtomicFile(self.record).write_bytes(json.dumps(FieldCodec.encode(record)).encode())
 
     def record_read(self, path: Path, span: ReadSpan) -> None:
         """A completed read covering a whole dealt file counts it; any other read counts nothing."""
-        if str(path) not in self.sources() or not span.covers(path):
+        if path not in self.current().sources() or not span.covers(path):
             return
         with self.dealt_read.open("a", encoding="utf-8") as record:
             record.write(f"{path}\n")
 
-    def required_audits(self) -> tuple[AuditDue, ...]:
-        if not self.audit_due.exists():
-            return ()
-        return (FieldCodec.decode(AuditDue, FieldCodec.parse(self.audit_due.read_bytes())),)
 
-    def unaudited(self, due: AuditDue) -> str:
-        """Why no tool may run yet for want of the audit, or nothing once it answers the deal."""
-        if not self.audit.exists():
-            return "no audit is written"
-        try:
-            audit = FieldCodec.decode(SessionAudit, FieldCodec.parse(self.audit.read_bytes()))
-        except MalformedRecord as error:
-            return f"the audit does not decode: {error}"
-        return due.refusal(audit)
+class GateAnswer(ABC):
+    """What the gate answers one tool call."""
+
+    @abstractmethod
+    def enforce(self, gate: ToolGate, tool: str) -> None: ...
+
+
+class GateOpen(GateAnswer):
+    """Every composed requirement is met: the call runs."""
+
+    def enforce(self, gate: ToolGate, tool: str) -> None:
+        return
 
 
 @dataclass(frozen=True)
-class GateRefusal:
+class GateRefusal(GateAnswer):
     """One requirement the deal still holds open: what the session skipped, and why."""
 
     before: str
     reason: str
 
-    def render(self, gate: ToolGate, tool: str) -> str:
-        return "\n\n".join((
-            f"You just tried {tool} before {self.before}. Call #{gate.count_call()}"
-            " since this compaction, refused.", self.reason,
-            *(due.reminder(gate.audit) for due in gate.required_audits()),
-        ))
+    def enforce(self, gate: ToolGate, tool: str) -> None:
+        gate.refuse(
+            "\n\n".join(
+                (
+                    f"You just tried {tool} before {self.before}. Call #{gate.count_call()}"
+                    " since this compaction, refused.",
+                    self.reason,
+                    *gate.current().reminders(gate.audit),
+                )
+            )
+        )
 
 
 class ToolGate(RuleDeal):
     """A deal that judges each tool call before it runs. Each requirement is a parent that
     refuses or hands on to the next by the MRO; this base requires nothing."""
 
-    def blocked(self) -> tuple[GateRefusal, ...]:
-        """The first requirement still open; empty once every composed requirement is met."""
-        return ()
+    def blocked(self, deal: DealState) -> GateAnswer:
+        """The first requirement still open, or the open gate."""
+        return GateOpen()
 
     def judge_tool(self, tool: str) -> None:
         """Refuse this call while a requirement is open, or let it run."""
-        for refusal in self.blocked():
-            self.refuse(refusal.render(self, tool))
+        self.blocked(self.current()).enforce(self, tool)
+
+    def judge_read(self, tool: str, path: Path) -> None:
+        """Reading a dealt file is the way through the gate; any other read waits."""
+        if path not in self.current().sources():
+            self.judge_tool(tool)
 
     def judge_write(self, tool: str, path: Path) -> None:
         """Writing the audit itself is the way through the gate; any other write waits."""
@@ -313,26 +352,82 @@ class ToolGate(RuleDeal):
 class ReadsDealtSources(ToolGate):
     """Every dealt file is read in full before anything else runs."""
 
-    def blocked(self) -> tuple[GateRefusal, ...]:
-        if unread := self.unread():
-            return (GateRefusal(
+    def blocked(self, deal: DealState) -> GateAnswer:
+        if unread := deal.unread(self.dealt_read):
+            return GateRefusal(
                 "reading",
                 "Read the rules you were dealt first, each in full with your read tool (no"
-                " offset or limit): " + ", ".join(str(source) for source in unread)
-                + ". Your summary is a paraphrase of them, not a reading."),)
-        return super().blocked()
+                " offset or limit): "
+                + ", ".join(str(source) for source in unread)
+                + ". Your summary is a paraphrase of them, not a reading.",
+            )
+        return super().blocked(deal)
 
 
 class AuditsDealtRules(ToolGate):
     """After reading, the session writes an audit answering every dealt rule and prompt."""
 
-    def blocked(self) -> tuple[GateRefusal, ...]:
-        for due in self.required_audits():
-            if refusal := self.unaudited(due):
-                return (GateRefusal("writing the required audit",
-                                    f"Reading is passive; {refusal}."),)
-        return super().blocked()
+    def blocked(self, deal: DealState) -> GateAnswer:
+        if refusal := deal.audit_refusal(self.audit):
+            return GateRefusal("writing the required audit", f"Reading is passive; {refusal}.")
+        return super().blocked(deal)
 
 
 class DealtRuleGate(ReadsDealtSources, AuditsDealtRules):
     """Read every dealt file, then write the audit: the gate every backend runs today."""
+
+
+@dataclass(frozen=True)
+class RefreshAt:
+    """Deal the rules again, once per compaction, when the context left falls to `remaining`
+    of the window the backend itself reports."""
+
+    remaining: float
+
+    def due(self, usage: ContextUsage) -> bool:
+        return usage.used >= (1 - self.remaining) * usage.size
+
+    @property
+    def key(self) -> str:
+        return f"{self.remaining}"
+
+
+class Redeals(RuleDeal):
+    """A deal its backend renews itself: at the first start, after each compaction, and at
+    each declared share of context left, read from the backend's own context-use report."""
+
+    refreshes: ClassVar[tuple[RefreshAt, ...]] = (RefreshAt(0.66), RefreshAt(0.33))
+
+    @property
+    def refreshed(self) -> Path:
+        """The refreshes already dealt since the last compaction, one key per line."""
+        return self.stem.with_suffix(".refreshed")
+
+    @abstractmethod
+    def renew(self) -> None:
+        """Deal this session's sources and its owner's latest words again."""
+
+    def redeal(self) -> None:
+        """A start or compaction arms every refresh again, then deals."""
+        self.stem.parent.mkdir(parents=True, exist_ok=True)
+        self.refreshed.write_text("", encoding="utf-8")
+        self.renew()
+
+    def start(self) -> None:
+        """A spawned session is dealt before its first tool call; a restart keeps its deal."""
+        self.current().started(self)
+
+    def observe_context(self, usage: ContextUsage) -> None:
+        self.current().context_observed(self, usage)
+
+    def refresh_due(self, usage: ContextUsage) -> None:
+        """Every refresh the context passed that this compaction has not dealt yet deals once."""
+        done = frozenset(self.refreshed.read_text(encoding="utf-8").split())
+        if due := [
+            refresh.key
+            for refresh in self.refreshes
+            if refresh.due(usage) and refresh.key not in done
+        ]:
+            with self.refreshed.open("a", encoding="utf-8") as record:
+                record.write("".join(f"{key}\n" for key in due))
+            self.renew()

@@ -1,8 +1,8 @@
 """The Claude Code leaf of the rule gate (agent_comms.rule_deal): its deal lives beside the
 transcript, and a refusal is a PreToolUse denial.
 
-PreToolUse only judges: it refuses any tool but Read while a dealt file is unread or the audit
-does not answer the deal. PostToolUse, which Claude Code sends only after a tool completes,
+PreToolUse only judges: it refuses any tool but reading a dealt file while one is unread or the
+audit does not answer the deal. PostToolUse, which Claude Code sends only after a tool completes,
 records a Read that covered a whole dealt file; a failed or partial Read leaves the gate closed.
 A subagent runs on its parent's transcript and is never gated: the parent reads the rules, while
 the subagent reports tool activity through its existing seat.
@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import json
 import sys
-from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.rule_deal import DealtRuleGate, ReadSpan
+from agent_comms.rule_deal import DealtRuleGate, ReadSpan, RuleDeal
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
 from agent_comms_hooks.forks import SeatedSubagent
@@ -45,69 +44,100 @@ class WriteInput(HookRecord):
     file_path: Path
 
 
-class DefaultGate(ABC):
-    """The gated call every tool the family does not name decodes as."""
+class ToolMeaning(DeclaredFamily):
+    """What one Claude tool means to the gate; a member names its tool in its declaration."""
+
+    @classmethod
+    def of(cls, tool: str) -> ToolMeaning:
+        return cls.member_or_default(tool, OtherTool)()
+
+    def judge(self, call: GatedCall) -> None:
+        """Any tool waits for every dealt file to be read and the audit to answer the deal."""
+        call.judge_tool(call.tool_name)
+
+    def completed(self, call: GatedCall) -> None:
+        """What a completed call records; most record nothing."""
+        return
+
+
+class OtherTool(ToolMeaning):
+    """Every tool the family does not name."""
+
+
+class ReadTool(ToolMeaning, declared_name="Read"):
+    """Reading a dealt file always runs, and a read covering all of it counts once complete;
+    any other read waits like the rest."""
+
+    def judge(self, call: GatedCall) -> None:
+        call.judge_read(call.tool_name, ReadInput.decode(call.tool_input).file_path.resolve())
+
+    def completed(self, call: GatedCall) -> None:
+        read = ReadInput.decode(call.tool_input)
+        call.record_read(read.file_path.resolve(), read.span())
+
+
+class WriteTool(ToolMeaning, declared_name="Write"):
+    """Writing the audit itself is the way through the gate; any other write waits."""
+
+    def judge(self, call: GatedCall) -> None:
+        call.judge_write(call.tool_name, WriteInput.decode(call.tool_input).file_path.resolve())
 
 
 @dataclass(frozen=True)
-class GatedCall(ClaudeToolHook, DealtRuleGate, DeclaredFamily):
-    """One tool call the read gate judges before it runs and sees after it completes; a member
-    names its tool in its declaration and says only what that tool means. The deal lives beside
-    the transcript, and a refusal is Claude Code's PreToolUse denial."""
+class SessionDeal(RuleDeal):
+    """The deal of the session's own agent, beside the transcript Claude Code names."""
+
+    transcript: Path
+
+    @property
+    def stem(self) -> Path:
+        return self.transcript
+
+
+@dataclass(frozen=True)
+class GatedCall(ClaudeToolHook, DealtRuleGate):
+    """One tool call of the session's own agent, judged before it runs and seen after it
+    completes. Its deal lives beside the transcript, and a refusal is a PreToolUse denial."""
 
     @classmethod
     def of(cls, record: Mapping[str, object]) -> GatedCall:
-        """The boundary decode: a subagent's call, a tool the family names, or any other."""
+        """The boundary decode: Claude Code names a subagent's call by its agent_id."""
         if "agent_id" in record:
             return SubagentCall.decode(record)
-        tool = ClaudeToolHook.decode(record).tool_name
-        return cls.member_or_default(tool, DefaultGate).decode(record)
+        return cls.decode(record)
 
-    @abstractmethod
     def judge(self) -> None:
         """PreToolUse: refuse this call, or let it run."""
+        ToolMeaning.of(self.tool_name).judge(self)
 
     def completed(self) -> None:
-        """PostToolUse: what this completed call records; most record nothing."""
+        """PostToolUse: what this completed call records."""
+        ToolMeaning.of(self.tool_name).completed(self)
 
     def refuse(self, reason: str) -> None:
         self.respond(permissionDecision="deny", permissionDecisionReason=reason)
 
 
 @dataclass(frozen=True)
-class ReadCall(GatedCall, declared_name="Read"):
-    """A Read always runs; once it completes, a read covering a whole dealt file counts it."""
-
-    def judge(self) -> None:
-        return
-
-    def completed(self) -> None:
-        read = ReadInput.decode(self.tool_input)
-        self.record_read(read.file_path.resolve(), read.span())
-
-
-@dataclass(frozen=True)
-class OtherCall(GatedCall, DefaultGate):
-    """Any other tool waits for every dealt file to be read and the audit to answer the deal."""
-
-    def judge(self) -> None:
-        self.judge_tool(self.tool_name)
-
-
-@dataclass(frozen=True)
-class WriteCall(GatedCall, declared_name="Write"):
-    """Writing the audit itself is the way through the gate; any other write waits like the rest."""
-
-    def judge(self) -> None:
-        self.judge_write(self.tool_name, WriteInput.decode(self.tool_input).file_path.resolve())
-
-
-@dataclass(frozen=True)
 class SubagentCall(GatedCall, SeatedSubagent):
-    """A subagent bypasses its parent's read gate but reports its own tool activity."""
+    """A subagent shares its session's id and transcript path, but its deal is its own: it
+    lives beside the subagent's own transcript, so its reads, its audit and its calls never
+    touch the main agent's, and it reports its own tool activity."""
+
+    @property
+    def stem(self) -> Path:
+        return self.subagents / f"agent-{self.agent_id}.jsonl"
 
     def judge(self) -> None:
         self.enter(ToolRunningPhase(self.tool_name))
+        super().judge()
+
+    def judge_write(self, tool: str, path: Path) -> None:
+        """The main agent's audit is never a subagent's to write, whatever its context says."""
+        if path == SessionDeal(super().stem).audit.resolve():
+            self.refuse(f"{path} is the main agent's audit; yours is {self.audit}.")
+            return
+        super().judge_write(tool, path)
 
 
 class ReadGateProgram(ClaudeHookProgram):

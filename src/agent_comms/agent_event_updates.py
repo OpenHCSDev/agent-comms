@@ -225,6 +225,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(ContextUsage)
     async def on_context_usage(self, usage: ContextUsage) -> None:
+        await self.agent.turns.observe_context(self.session_id, usage)
         await self.client.publish_update(
             session_id=self.session_id,
             update=UsageUpdate(session_update="usage_update", used=usage.used, size=usage.size),
