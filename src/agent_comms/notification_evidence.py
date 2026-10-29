@@ -19,7 +19,160 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import DeliveryProgress
+    from .presentation import MessageNotification, WireRevision, OutcomeViewer
+    from .thread_identity import ThreadIncarnation
+
+
+@dataclass(frozen=True)
+class SourceEvidence:
+    """One original's captured claims and harness attempts, the attempts grouped once by
+    their frozen recipient. Equality over both is the window's change test."""
+
+    claims: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...] = ()
+    attempts: Mapping[ThreadLookup, tuple[HarnessDelivery, ...]] = field(default_factory=dict)
+
+    def consumed_progress(self, recipient: ThreadLookup,
+                          progress: DeliveryProgress) -> DeliveryProgress:
+        """The recipient's progress after each of its own attempts on this original."""
+        for attempt in self.attempts.get(recipient, ()):
+            progress = attempt.consumed_progress(progress)
+        return progress
+
+
+@dataclass(frozen=True)
+class RecipientSelection:
+    """A bounded slice of original frozen positions, never a replacement audience."""
+
+    source: Delivered
+    eligible: range
+    limit: int
+    max_limit: ClassVar[int] = 100
+
+    def __post_init__(self) -> None:
+        self.require_limit(self.limit)
+
+    @classmethod
+    def require_limit(cls, limit: int) -> None:
+        if not 1 <= limit <= cls.max_limit:
+            raise ValueError(f"Recipient limit must be between 1 and {cls.max_limit}")
+
+    @property
+    def positions(self) -> range:
+        return self.eligible[:self.limit]
+
+    @property
+    def remaining(self) -> int:
+        return len(self.eligible) - len(self.positions)
+
+    @property
+    def recipients(self) -> tuple[FrozenRecipient, ...]:
+        return tuple(self.source.recipients[position] for position in self.positions)
+
+
+@dataclass(frozen=True)
+class NotificationSelection:
+    """The exact per-original recipient cuts used by every expensive evidence reader."""
+
+    viewer: OutcomeViewer
+    pages: tuple[RecipientSelection, ...]
+
+    @property
+    def sources(self) -> tuple[Delivered, ...]:
+        return tuple(page.source for page in self.pages)
+
+    @property
+    def keys(self) -> tuple[tuple[ThreadLookup, MessageReference], ...]:
+        return tuple((recipient.recipient_lookup, page.source.message.reference)
+                     for page in self.pages for recipient in page.recipients)
+
+
+@dataclass(frozen=True)
+class NotificationAssignmentRead:
+    """A window's claims and its harness attempts, both keyed by the exact original, as the
+    viewer captured with them may see them: every later projection and change check of this
+    read answers for that same viewer.
+
+    A harness attempt is its own consumption evidence: a no-wake or passive recipient has no
+    claim for the attempt to move, and its message still entered the session."""
+
+    selection: NotificationSelection
+    rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
+    attempts: tuple[HarnessDelivery, ...] = ()
 
     @property
     def sources(self) -> tuple[Delivered, ...]:
         return self.selection.sources
+
+    @cached_property
+    def evidence(self) -> Mapping[MessageReference, SourceEvidence]:
+        """Each original's evidence, grouped once per captured window."""
+        claims: dict[MessageReference, list[tuple[WakeAssignment, AssignmentActivityEvidence]]] = {
+            source.message.reference: [] for source in self.sources
+        }
+        attempts: dict[MessageReference, dict[ThreadLookup, list[HarnessDelivery]]] = {
+            source.message.reference: {} for source in self.sources
+        }
+        for row in self.rows:
+            claims.setdefault(row[0].source, []).append(row)
+        for attempt in self.attempts:
+            attempts[attempt.reference].setdefault(attempt.recipient_lookup, []).append(attempt)
+        return {source: SourceEvidence(tuple(claims[source]), {
+                    lookup: tuple(rows) for lookup, rows in attempts[source].items()})
+                for source in claims}
+
+    def differs_from(self, fresh: Mapping[MessageReference, SourceEvidence]) -> bool:
+        return any(previous != fresh.get(source, SourceEvidence())
+                   for source, previous in self.evidence.items())
+
+
+@dataclass(frozen=True)
+class NotificationReadMark:
+    """The exact display evidence used for a source/recipient, including no display.
+
+    A mark is identified by its source's message reference, not the source's value:
+    bus rows are append-only (typed_table's abort-on-UPDATE/DELETE triggers), so a
+    reference names one frozen delivery and its audience. Comparing the delivery
+    itself walked its whole audience once per mark, so a window of N marks on an
+    N-recipient channel message compared N squared recipients on every revision.
+    """
+
+    source: Delivered = field(compare=False)
+    recipient: FrozenRecipient
+    displayed_to: tuple[ThreadIncarnation, ...]
+    reference: MessageReference = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reference", self.source.message.reference)
+
+
+@dataclass(frozen=True)
+class NotificationWindow(ABC):
+    """One window owns its evidence, batching and change contract."""
+
+    window_limit: ClassVar[int] = 120
+    outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
+    reads: tuple[NotificationAssignmentRead, ...]
+    read_marks: tuple[NotificationReadMark, ...] = ()
+
+    def remaining(self, reference: MessageReference) -> int:
+        return next((page.remaining for read in self.reads for page in read.selection.pages
+                     if page.source.message.reference == reference), 0)
+
+    @classmethod
+    def chunks[T](cls, items: Iterable[T]) -> Iterator[tuple[T, ...]]:
+        return batched(items, cls.window_limit)
+
+    def activity_names(self) -> frozenset[str]:
+        return frozenset(name for items in self.outcomes.values()
+                         for item in items for name in item.activity_names())
+
+    @abstractmethod
+    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool: ...
+
+
+class NoNotificationWindow(NotificationWindow):
+    def __init__(self) -> None:
+        super().__init__({}, ())
+
+    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool:
+        return False
