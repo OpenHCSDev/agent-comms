@@ -3,6 +3,7 @@
 Author does not execute these controls; the integration owner selects them once.
 """
 from dataclasses import replace
+import json
 
 import pytest
 
@@ -10,7 +11,8 @@ from agent_comms.cli import build_parser
 from agent_comms.cli_command import PendingCommandBinding
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.cli_verbs.new import NewThreadCliCommand
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import MalformedRecord, compile_decoder
+from agent_comms.target_fields import UnsuppliedTargetField
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Checkout
 from agent_comms.thread_management import GivenTags, InheritedTags
@@ -43,6 +45,11 @@ def test_new_cli_membership_reaches_registration(comms, source_repository, text,
 def test_pending_new_binding_offers_missing_tags_without_constructing_the_command(comms, source_repository):
     binding, = NewThreadCliCommand.project_bindings(comms, Checkout(source_repository.checkout))
     assert type(binding) is PendingCommandBinding
+    name = next(item for item in binding.editable_fields if item.name == 'name')
+    assert type(name) is UnsuppliedTargetField
+    assert name.argument(None) == {}
+    with pytest.raises(MalformedRecord):
+        binding.edited(NewThreadCliCommand.editor_arguments({'tags': ''}))
     tags = next(item for item in binding.editable_fields if item.name == 'tags')
     assert tags.required
     assert tags.editor_default is None
@@ -66,8 +73,9 @@ def test_pending_new_binding_distinguishes_explicit_empty_from_missing(comms, so
 
 def test_pending_catalog_context_can_change_before_tags_are_supplied(comms, source_repository):
     binding, = NewThreadCliCommand.project_bindings(comms, Checkout(source_repository.checkout))
-    prepared = binding.for_fields({'name': 'child'})
-    assert prepared.context.name == 'child'
+    prepared = binding.for_fields({'task': 'child task', 'name': 'child'})
+    assert prepared.context.task == 'child task'
+    assert type(next(item for item in prepared.editable_fields if item.name == 'name')) is UnsuppliedTargetField
     tags = next(item for item in prepared.editable_fields if item.name == 'tags')
     assert tags.argument(None) == {}
     assert tags.argument('') == {'tags': ''}
@@ -85,6 +93,14 @@ def test_complete_creation_commands_keep_command_edit_authorization(source_repos
         command.edited(forbidden)
 
 
+def test_structured_editor_reports_malformed_json_at_the_data_boundary():
+    decoder = compile_decoder(tuple[int, ...])
+    with pytest.raises(MalformedRecord) as refused:
+        decoder.decode_editor('[1,')
+    assert type(refused.value.__cause__) is json.JSONDecodeError
+    assert decoder.decode(decoder.decode_editor('[1, 2]')) == (1, 2)
+
+
 def test_fork_cli_defaults_to_actual_parent_membership(comms, source_repository):
     parent_command = parsed(['new', '--name', 'parent', '--project', str(source_repository.checkout),
                              '--tags', 'original'])
@@ -92,7 +108,15 @@ def test_fork_cli_defaults_to_actual_parent_membership(comms, source_repository)
     command = parsed(['fork', '--name', 'child', '--parent', parent.name,
                       '--project', str(source_repository.checkout)])
     assert command.tags == InheritedTags()
-    editor = ForkCliCommand.thread_binding(parent)
+    binding = ForkCliCommand.thread_binding(parent)
+    assert type(binding) is PendingCommandBinding
+    assert binding.context.parent == parent.name
+    assert type(next(item for item in binding.editable_fields if item.name == 'name')) is UnsuppliedTargetField
+    with pytest.raises(MalformedRecord):
+        binding.edited({})
+    with pytest.raises(ValueError, match='Target-bound'):
+        binding.edited({'name': 'child', 'parent': 'other'})
+    editor = binding.edited(ForkCliCommand.editor_arguments({'name': 'child'}))
     assert editor.tags == InheritedTags()
     # A real later parent record, not the stale tags at editor opening, supplies membership.
     current = comms.registry.declare(replace(parent, tags=frozenset({'current'})))

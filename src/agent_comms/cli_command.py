@@ -110,12 +110,17 @@ class CommandBinding(ABC):
             raise ValueError("Parameters not offered by this target command cannot be overridden")
         return bound
 
+    @staticmethod
+    def decoded_edits(declaration: type, arguments: Mapping[str, object]) -> dict[str, object]:
+        return {name: value
+                for entry in FieldCodec.argument_fields(declaration) if entry.key in arguments
+                for name, value in entry.decoded(arguments).items()}
+
     def edited(self, arguments: Mapping[str, object]) -> CliCommand:
         self.authorize_edits(arguments)
-        decoded = {name: value
-                   for entry in FieldCodec.argument_fields(self.declaration) if entry.key in arguments
-                   for name, value in entry.decoded(arguments).items()}
-        return FieldCodec.construct(self.declaration, {**self.retained_payload(), **decoded})
+        return FieldCodec.construct(self.declaration, {
+            **self.retained_payload(), **self.decoded_edits(self.declaration, arguments),
+        })
 
     @abstractmethod
     def confirmation(self) -> str: ...
@@ -175,11 +180,11 @@ class PendingCommandBinding(CatalogBinding):
 
     def for_fields(self, arguments: Mapping[str, object]) -> PendingCommandBinding:
         self.authorize_edits(arguments)
-        changes = {name: value
-                   for entry in FieldCodec.argument_fields(type(self.context)) if entry.key in arguments
-                   for name, value in entry.decoded({
-                       entry.key: entry.editor_payload(arguments[entry.key]),
-                   }).items()}
+        context_fields = {entry.key for entry in FieldCodec.argument_fields(type(self.context))}
+        wire = FieldCodec.editor_arguments(type(self.context), {
+            key: value for key, value in arguments.items() if key in context_fields,
+        })
+        changes = self.decoded_edits(type(self.context), wire)
         return replace(self, context=replace(self.context, **changes)) if changes else self
 
     def confirmation(self) -> str:

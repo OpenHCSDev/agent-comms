@@ -20,8 +20,8 @@ from agent_comms.thread_model import CatalogSelection, ThreadModel
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadCreationFields(NameArgument, CommandContext):
-    """Supplied launch context is also the complete command's field declaration."""
+class ThreadLaunchSettings(CommandContext):
+    """Acquired launch settings; the creator has not supplied a child name."""
     task: Annotated[str, Multiline(), Argument(flags=("--task",))] = ""
     project: Annotated[Checkout, Argument(flags=("--project",))]
     model: Annotated[
@@ -38,7 +38,7 @@ class ThreadCreationFields(NameArgument, CommandContext):
 
 @dataclass(frozen=True, kw_only=True)
 class ThreadCreationCliCommand(
-    ThreadCreationFields, CatalogBinding, CliCommand[ThreadCreatedResult], declared_name=None,
+    NameArgument, ThreadLaunchSettings, CatalogBinding, CliCommand[ThreadCreatedResult], declared_name=None,
 ):
     @property
     @abstractmethod

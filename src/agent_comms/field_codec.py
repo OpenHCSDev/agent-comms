@@ -962,7 +962,7 @@ class DecoderPlan(ABC):
 
     @boundary_decoder
     def parse_editor(self, text: object) -> object:
-        return None if text is None else json.loads(text)
+        return None if text is None else FieldCodec.parse(FieldCodec.decode(str, text))
 
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         """Stored-value predicates; the SQL owner quotes its column and constants."""
