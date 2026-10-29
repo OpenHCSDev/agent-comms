@@ -24,17 +24,11 @@ class NativeReopenError(ValueError):
     """Saved session cannot be safely reloaded; no provider input may start."""
 
 
-class NativeSessionIdValue:
-    """A native value can require a recorded session without recovering its kind."""
-
-    __slots__ = ()
+class NativeSessionSelection:
+    """The selected-id declaration owns the saved-session answer for an input."""
 
     def require_recorded_session(self) -> PiSessionId:
         raise MalformedRecord("Native reference lacks recorded session identity")
-
-
-class NativeSessionSelection(NativeSessionIdValue):
-    """The selected-id declaration owns the saved-session answer for an input."""
 
     def selected_session(self, row: NativeRuntimeInput) -> NativeSessionIdentity | NoSessionRetention:
         FieldCodec.decode(type(None), row.session_file)

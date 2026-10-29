@@ -32,7 +32,7 @@ from .field_codec import (
     NativeContext,
 )
 from .native_integer import PositiveNativeIntegerBounds
-from .native_session_reopen import NativeSessionIdValue, PiSessionId
+from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import SqlStorage, TextStorage
 
@@ -88,7 +88,7 @@ class NativeStageStorage(SqlStorage):
         return (NativeInputExecution.sql_constraint(column),)
 
 
-class NativeColumn(DeclaredFamily, JsonShapeFamily, NativeSessionIdValue, affix="NativeColumn"):
+class NativeColumn(DeclaredFamily, JsonShapeFamily, affix="NativeColumn"):
     """One nullable column of an original native row: SQL NULL until its group is recorded.
 
     The group's owner (the stage, or the context acknowledgement) decides what a
@@ -126,9 +126,6 @@ class UnrecordedNativeColumn(NativeColumn, JsonShapeMember):
 @dataclass(frozen=True)
 class TextNativeColumn(NativeColumn, JsonShapeMember):
     value: str
-
-    def require_recorded_session(self) -> PiSessionId:
-        return FieldCodec.decode(PiSessionId, self.value)
 
     def holds(self, value: object) -> bool:
         return self.value == value
@@ -406,7 +403,7 @@ class NativeInputReference(NativeContextReference, PositiveNativeIntegerBounds):
             result = FieldCodec.construct(cls, dict(
                 input_id=row.context_value("input_id"),
                 stage=row.reference_stage,
-                session_id=row.session_id.require_recorded_session(),
+                session_id=row.reference_session_id,
                 request_generation=row.context_value("request_generation"),
             ))
             return result
@@ -442,7 +439,6 @@ class NativeInputContext:
 
     input_id: InputId | NativeColumn
     stage: type[NativeInputExecution] | NativeColumn
-    session_id: NativeSessionIdValue
     request_generation: NativeColumn
 
     @property
@@ -453,6 +449,11 @@ class NativeInputContext:
     @property
     def reference_stage(self) -> type[NativeInputExecution]:
         return self.context_value("stage")
+
+    @property
+    def reference_session_id(self) -> object:
+        """Acquire the session through its existing NativeContext column directive."""
+        return self.context_value("session_id")
 
     def context_columns(self, context: NativeContextProof) -> dict[str, object]:
         """Build the context group through each column's declared codec, not a caller roster."""

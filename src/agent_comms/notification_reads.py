@@ -37,7 +37,7 @@ class LiveNotificationRead(NotificationRead):
 
 
 @dataclass(frozen=True)
-class RecordedNotificationRead(LiveNotificationRead):
+class RecordedNotificationRead(NotificationRead):
     source: HistorySourceKey
 
     def read_as(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:

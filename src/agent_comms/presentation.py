@@ -24,7 +24,6 @@ from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .commander_frame_file import CommanderFrameFile
-from .coordination_database import CoordinationStore
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
@@ -799,7 +798,7 @@ def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
 
 
 def notification_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return CoordinationStore.source_paths(views.root)
+    return NotificationAssignment.source_paths(views.root)
 
 
 def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:

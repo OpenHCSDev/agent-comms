@@ -170,6 +170,15 @@ class NotificationAssignment(NotificationSource):
     activity: AssignmentActivity
 
     @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        """Commit sources for coordinator, independent replies and stored inputs."""
+        return (
+            *CoordinationStore.source_paths(root),
+            *Bus.source_paths(root),
+            *InputDispositions.source_paths(root),
+        )
+
+    @classmethod
     def changed(cls, reads: Iterable[NotificationAssignmentRead], root: Path) -> tuple[NotificationAssignmentRead, ...]:
         """Acquire fresh bounded rows once; retained reads own their equality."""
         # A retained read owns its recipient cut. Re-reading a different viewer's

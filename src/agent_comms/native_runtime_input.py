@@ -157,6 +157,10 @@ class NativeRuntimeInput(
         self.reference
 
     @property
+    def reference_session_id(self) -> PiSessionId:
+        return self.session_id.require_recorded_session()
+
+    @property
     def selected_session(self) -> NativeSessionIdentity | NoSessionRetention:
         """The original SQL session group owns its selected and absent cases."""
         return self.session_id.selected_session(self)
