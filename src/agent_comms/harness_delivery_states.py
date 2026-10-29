@@ -184,7 +184,9 @@ class ReceivingMonitor(PendingMonitor):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
             return ()
         await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
-        return (message.exact_reply_target,)
+        return ((message.exact_reply_target,)
+                if message.role.response_policy(message).starts_turn_for(message, bridge.binding.bus)
+                else ())
 
 
 @dataclass(frozen=True)
