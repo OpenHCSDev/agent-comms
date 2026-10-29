@@ -22,6 +22,7 @@ import shlex
 import subprocess
 import sys
 import time
+from textwrap import dedent
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
@@ -161,6 +162,7 @@ class OverrideNames(ast.NodeVisitor):
     def __init__(self) -> None:
         self.classes: dict[str, ClassNames] = {}
         self.names: set[str] = set()
+        self.bodies: dict[tuple[str, ...], tuple[str, int, int]] = {}
 
     def generic_visit(self, node: ast.AST) -> None:
         """Do not turn names nested inside an expression or body into declarations."""
@@ -176,9 +178,18 @@ class OverrideNames(ast.NodeVisitor):
         for base in node.bases:
             bases.visit(base)
         self.classes[node.name] = ClassNames(frozenset(body.names), frozenset(bases.names))
+        declaration = ast.dump(ast.ClassDef(
+            name=node.name, bases=node.bases, keywords=node.keywords, body=[],
+            decorator_list=node.decorator_list, type_params=node.type_params,
+        ))
+        self.bodies.update({(declaration, *identity): source
+                            for identity, source in body.bodies.items()})
 
     def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.names.add(node.name)
+        assert node.end_lineno is not None
+        first = min((node.lineno, *(decorator.lineno for decorator in node.decorator_list)))
+        self.bodies[(node.name,)] = (ast.dump(node), first, node.end_lineno)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self.visit_FunctionDef(node)
@@ -195,6 +206,25 @@ class OverrideNames(ast.NodeVisitor):
 
     def visit_Subscript(self, node: ast.Subscript) -> None:
         self.visit(node.value)
+
+    @classmethod
+    def introduced(cls, before: str, after: str) -> str:
+        """Replacement additions minus identical methods under the same declaration.
+
+        Parse failures grant no retention credit. Decorators, owner bases and method bodies
+        participate in identity; a renamed owner or changed body is still introduced source.
+        """
+        old, new = cls(), cls()
+        try:
+            old.visit(ast.parse(dedent(before)))
+            new.visit(ast.parse(dedent(after)))
+        except SyntaxError:
+            return ''.join('+' + line + '\n' for line in after.splitlines())
+        retained = {line for identity, (body, first, last) in new.bodies.items()
+                    if identity in old.bodies and old.bodies[identity][0] == body
+                    for line in range(first, last + 1)}
+        return ''.join('+' + line + '\n' for number, line in enumerate(after.splitlines(), 1)
+                       if number not in retained)
 
     @property
     def overrides(self) -> frozenset[str]:

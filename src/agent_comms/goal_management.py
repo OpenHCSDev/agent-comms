@@ -25,6 +25,7 @@ from .goal_actions import (
     GoalActionContext,
     GoalPublicationContext,
     GoalPrecondition,
+    HeadReviewedOrderGoalAction,
     RuntimeInvocable,
     SentBackOrderGoalAction,
     SetGoalAction,
@@ -44,11 +45,11 @@ from .goal_waits import (
 from .native_input_owner import GoalLaunchOwner
 from .owner_requests import NewestOpenRequest, RequestDirective
 from .registration import Registration
+from .registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .messages import Message
-    from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
 from .goal_presentation import (
     GoalExecution,
@@ -69,7 +70,7 @@ from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .threads import Thread
 from .errors import TodoError
-from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
+from .todos import Assignment, RecordOrderHeadVerdict, SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 
 _LOG = logging.getLogger(__name__)
 HistoryReply = TypeVar("HistoryReply", bound=RecordedGoalHistory)
@@ -344,6 +345,24 @@ class Goals(GoalWaitRecovery):
         directive = RequestDirective.from_message(message)
         for request in NewestOpenRequest().select(self.todos, owner):
             self.todos.record_directive(request.id, directive)
+
+    def record_order_review(self, assignment: Assignment, current: Todo,
+                            operation: RecordOrderHeadVerdict) -> None:
+        """The Todo owns review validity; only its still-selected holder goal participates.
+
+        Source/forge preparation precedes registry publication. The Todo CAS and original
+        assignment fence still apply when the former holder has no matching current goal.
+        """
+        operation = operation.prepare(self, current)
+        with self.registry.store.editing() as edit:
+            self.todos.apply(current.id, operation)
+            for owner in assignment.holder_in(RegistrySnapshot.capture(edit.document)):
+                for goal in owner.goal.matching(assignment.generation):
+                    action = HeadReviewedOrderGoalAction(
+                        expect=GoalPrecondition(goal_id=OneGoal(goal.id), expected_goal=goal),
+                        problem=current.id, operation=operation,
+                    )
+                    action.apply(GoalPublicationContext(self, owner, edit=edit))
 
     def update_goal[Result: GoalDeclaration](
         self,

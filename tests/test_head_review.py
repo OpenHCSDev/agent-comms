@@ -11,9 +11,9 @@ import pytest
 
 
 from agent_comms.commander import judge, order
-from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.goal_actions import ClearGoalAction, CreateProblemGoalAction, SetGoalAction
 from commander_heartbeat_fixture import capture_frame
-from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
+from agent_comms.head_review import HeadReview, HeadReviewOrder, PullRequestHead, ReadPullRequestHead
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
@@ -21,6 +21,7 @@ from agent_comms.standing_rules import (
     LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
 )
 from agent_comms.repo import Checkout
+from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import RecordProblems
@@ -348,6 +349,63 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
     assert subject.disposed(CommanderHistory.read(comms, frozenset()), since)
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
+
+
+@pytest.mark.parametrize('goal_action', (None,
+    SetGoalAction(text='An unrelated current goal whose complete declaration must survive'),
+    ClearGoalAction(),
+))
+def test_retained_linked_review_does_not_depend_on_the_current_goal(head_bus, claim_order, goal_action):
+    comms, _, request = head_bus
+    for problem in ('P1', 'P2'):
+        claim_order(problem)
+    todo = comms.goals.todos.get('P2')
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity,
+                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
+    todo = comms.goals.todos.get(todo.id)
+    scope = OrderHeadReview.for_request((todo,), request,
+        lambda linked: LinkedHeadReview.of(linked, 'Repair the existing owner'))
+    assert isinstance(scope, OrderHeadReview)
+    if goal_action is not None:
+        comms.goals.update_goal('worker', goal_action)
+    before = comms.registry.require('worker').goal
+    waits = comms.goals.waits.read()
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    changed = comms.goals.todos.get(todo.id)
+    assert changed.held() == held
+    assert changed.order.checked().id == todo.order.checked().id
+    assert changed.revision == todo.revision + 1
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order == scope.link
+    after = comms.registry.require('worker').goal
+    if goal_action is None:
+        assert after.require().revision == before.require().revision + 1
+    else:
+        assert after == before
+        assert comms.goals.waits.read() == waits
+
+
+def test_qualified_companion_head_uses_its_declared_repository(
+        head_bus, reviewed_source, configured_repository, tmp_path):
+    comms, github, primary = head_bus
+    companion = SourceRepository.create(tmp_path / 'companion', RepositoryName.from_wire('example/toad'))
+    configured_repository(comms, reviewed_source, companion)
+    request = opened(github, companion, companion.number, companion.branch_commit)
+    todo = comms.goals.todos.get('P2')
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity, companion.link, held.generation).record(
+        comms.goals, todo.id)
+    todo = comms.goals.todos.get(todo.id)
+    assert todo.repo == primary.repo and todo.repo != request.repo
+    assert HeadReviewOrder.holding((todo,), request) == (todo,)
+    foreign = replace(request, repo=RepositoryName.from_wire('example/foreign'))
+    assert HeadReviewOrder.holding((todo,), foreign) == ()
+    scope = OrderHeadReview.for_request((todo,), request,
+        lambda linked: LinkedHeadReview.of(linked, 'Repair the existing owner'))
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].request == request
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, foreign)
+    assert comms.goals.todos.get(todo.id).held() == held
 
 
 def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus):

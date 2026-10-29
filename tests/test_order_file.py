@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from agent_comms.commander.order import OrderFile, forwarders_added, main, overrides
+from agent_comms.commander.order import OrderFile, OverrideNames, forwarders_added, main, overrides
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
@@ -51,6 +51,23 @@ def test_generic_base_identity_excludes_its_type_arguments():
                  '    def answer(self): return self.peer.answer()\n')
     assert not overrides((unrelated,))
     assert forwarders_added('+    def answer(self): return self.peer.answer()\n', (unrelated,))
+
+
+def test_retained_replacement_methods_keep_owner_decorators_and_body_identity():
+    # P952 call641730 retained binding_mode while inserting key_mode_label.
+    before = ('    @property\n'
+              '    def binding_mode(self) -> type[EditingMode]:\n'
+              '        return self.editing_mode.binding_mode\n')
+    after = ('    @property\n    def key_mode_label(self) -> str:\n'
+             '        return self.editing_mode.label\n\n' + before)
+    assert not forwarders_added(OverrideNames.introduced(before, after))
+    changed = before.replace('self.editing_mode', 'self.other_mode')
+    assert forwarders_added(OverrideNames.introduced(before, changed))
+    assert forwarders_added(OverrideNames.introduced('', before))
+    owner = 'class Original:\n' + before
+    moved = 'class Different:\n' + before
+    assert forwarders_added(OverrideNames.introduced(owner, moved))
+    assert forwarders_added(OverrideNames.introduced(before, before.replace('@property', '@different')))
 
 
 def test_override_scan_excludes_nested_and_qualified_names():

@@ -97,6 +97,37 @@ def test_a_replacement_order_carries_the_problem_pull_requests_once(tmp_path):
     assert isinstance(carried.cited_revision, CitedRevisions)
 
 
+def test_qualified_scope_uses_only_its_repository_carrier_and_keeps_the_cut(tmp_path):
+    primary = SourceRepository.create(tmp_path / 'primary', RepositoryName.from_wire('example/core'))
+    companion = SourceRepository.create(tmp_path / 'companion', RepositoryName.from_wire('example/toad'))
+    project = replace(primary.project, repos=(primary, companion))
+    location = FileLine.from_wire('example/toad:branch.py:2')
+    declaration = replace(order(primary), owner=location,
+        finding=LocatedProblemFinding(location),
+        scope=FixScope(FixShape(parents=(location,), members=())),
+        pull_requests=(primary.link, companion.link))
+    action = OrderGoalAction(problem='P1', order=declaration,
+        request=OwnerRequestId(OwnerRequestKey.mint()), review_at=RecordedEventTime(1000),
+        commander='lead', expected_revision=1, assigner=RecordedThreadIncarnation('lead', 1.0))
+    action.require_sendable(project)
+    with pytest.raises(MissingSourceLine):
+        replace(action, order=replace(declaration, pull_requests=(primary.link,))).require_sendable(project)
+    for bad in ('example/toad:branch.py:1', 'example/toad:absent.py:2'):
+        with pytest.raises(MissingSourceLine):
+            replace(action, order=replace(declaration,
+                scope=FixScope(FixShape(parents=(FileLine.from_wire(bad),), members=())))).require_sendable(project)
+    # Both repositories use PR7. Moving the companion ref after capture cannot rewrite
+    # this validation, and never changes which repository owns the primary carrier.
+    roots = OrderRoots(primary.checkout, project)
+    revision = declaration.cited_revision
+    location.require_class(roots, revision)
+    companion.git(companion.remote, 'update-ref', 'refs/pull/7/head', companion.main_commit)
+    location.require_class(roots, revision)
+    FileLine.from_wire('example/toad:owner.py:2').require_class(roots, revision)
+    with pytest.raises(MissingSourceLine):
+        location.require_class(roots, replace(declaration).cited_revision)
+
+
 def test_a_citation_names_its_repository_only_when_it_is_registered(tmp_path):
     source = SourceRepository.create(tmp_path / 'order')
     other = SourceRepository.create(tmp_path / 'other', RepositoryName.from_wire('example/other'))

@@ -218,7 +218,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
     assert comms.registry.require("worker").goal.require() == goal
     proposed = Assignment.of(previous.owner_identity, previous.parent_identity, GoalId.mint())
-    reassigned = accepted.assigned(proposed, accepted.order.owner)
+    reassigned = accepted.assigned(proposed, accepted.order.owner, accepted.order)
     assert reassigned.order.pull_requests == accepted.order.pull_requests
 
 
