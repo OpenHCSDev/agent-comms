@@ -83,7 +83,7 @@ def source_pair(
             'constraint-dependencies = ["typing-extensions>=4.15"]\n'
             '[tool.uv.pip]\nstrict = true\n'
             '[tool.uv.sources]\nagent-comms = {path = "..", editable = true}\n'
-            f'source-client = {{git = "{client.remote}", branch = "main"}}\n'
+            f'source-client = {{git = "{client.remote_path.as_uri()}", branch = "main"}}\n'
         ),
         Path("stack/uv.lock"): 'version = 1\nrevision = 3\nrequires-python = ">=3.14"\npackage = []\n',
         Path("uv.lock"): 'version = 1\nrevision = 3\nrequires-python = ">=3.14"\npackage = []\n',

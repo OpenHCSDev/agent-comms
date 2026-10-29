@@ -49,20 +49,20 @@ def test_seeded_source_publishes_descendants_and_merges_main_without_replacing_a
     candidate = source.publish_change("Replace the seeded API", *source.write_files({
         Path("src/api.py"): 'def new_api() -> str:\n    return "candidate"\n'}))
     assert source.descends(source.checkout, feature, candidate)
-    assert source.git(source.remote, "rev-parse", "refs/pull/7/head").strip() == candidate
+    assert source.git(source.remote_path, "rev-parse", "refs/pull/7/head").strip() == candidate
     source.git(source.checkout, "switch", "main")
     advanced = source.commit_change("Advance main independently", *source.write_files({
         Path("main_only.py"): "advanced = True\n"}))
     source.git(source.checkout, "push", "origin", "main")
-    assert source.git(source.remote, "rev-parse", "main").strip() == advanced
-    assert source.git(source.remote, "rev-parse", "refs/pull/7/head").strip() == candidate
+    assert source.git(source.remote_path, "rev-parse", "main").strip() == advanced
+    assert source.git(source.remote_path, "rev-parse", "refs/pull/7/head").strip() == candidate
     source.git(source.checkout, "switch", "feature")
     source.git(source.checkout, "merge", "--no-edit", "main")
     final = source.publish_change("Publish the merged descendant", *source.write_files({
         Path("src/next.py"): "next_value = 2\n"}))
     for ancestor in (candidate, advanced):
         assert source.descends(source.checkout, ancestor, final)
-    assert source.git(source.remote, "rev-parse", "refs/pull/7/head").strip() == final
+    assert source.git(source.remote_path, "rev-parse", "refs/pull/7/head").strip() == final
     assert source.git(source.checkout, "show", f"{final}:main_only.py") == "advanced = True\n"
 
 

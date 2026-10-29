@@ -167,12 +167,12 @@ def common_checker(
     core = tomllib.loads(pair.core.package_project("agent-comms",
         dependencies=("idna>=3.10,<4; python_version >= '3.10'",), extras={
             "checking": ["idna<3.11", "six==1.16.0", "checker-plugin"]}))
-    plugin_source = {"git": plugin.remote.as_uri(), "rev": plugin.main_commit, "subdirectory": "python package"}
+    plugin_source = {"git": plugin.remote_path.as_uri(), "rev": plugin.main_commit, "subdirectory": "python package"}
     core["tool"]["uv"] = {"sources": {"checker-plugin": plugin_source}}
     pair.core.write_files({Path("pyproject.toml"): tomli_w.dumps(core)})
     stack = tomllib.loads((pair.core.checkout / "stack/pyproject.toml").read_text())
     stack["tool"]["uv"]["sources"]["checker-plugin"] = plugin_source
-    stack["tool"]["uv"]["sources"]["source-client"]["git"] = pair.client.remote.as_uri()
+    stack["tool"]["uv"]["sources"]["source-client"]["git"] = pair.client.remote_path.as_uri()
     stack["project"]["dependencies"] = ["agent-comms>=0.0.1; python_version >= '3.10'", "source-client"]
     stack["tool"]["uv"]["override-dependencies"].append("agent-comms>=0.0.1; python_version >= '3.10'")
     pair.core.write_files({Path("stack/pyproject.toml"): tomli_w.dumps(stack)})
