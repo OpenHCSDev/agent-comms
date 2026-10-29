@@ -720,7 +720,7 @@ class EditWorkplaces:
         actual: dict[Path, Repo] = {}
         for path in present:
             affected = source_orders.get(path, {})
-            readable = (path,) if affected else ()
+            readable: tuple[Path, ...] = (path,) if affected else ()
             for todo in affected.values():
                 readable = progress[todo.id].readable_paths(readable)
             for source in readable:
