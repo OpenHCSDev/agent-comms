@@ -25,6 +25,7 @@ from .field_codec import (
     MalformedRecord,
     FieldPlan,
     SlicePolicy,
+    ThreadLookup,
     WireOmitDefault,
     WireRequired,
     WireTransient,
@@ -493,6 +494,31 @@ class FrozenThreadRows(ThreadRows):
 
     def __delitem__(self, name: str) -> None:
         raise TypeError("snapshot thread rows are read-only")
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class ThreadLookupIndex(Mapping[ThreadLookup, Thread]):
+    """A captured cut's lookup keys; complete values still belong to its thread rows."""
+
+    rows: ThreadRows
+    _names: Mapping[ThreadLookup, str] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_names", MappingProxyType({
+            self.rows.incarnation(name).require_recorded().lookup: name for name in self.rows
+        }))
+
+    def __getitem__(self, lookup: ThreadLookup) -> Thread:
+        return self.rows[self._names[lookup]]
+
+    def __contains__(self, lookup: object) -> bool:
+        return lookup in self._names
+
+    def __iter__(self) -> Iterator[ThreadLookup]:
+        return iter(self._names)
+
+    def __len__(self) -> int:
+        return len(self._names)
 
 
 class ThreadRowsSlice(OwnRow[ThreadRows]):
@@ -1123,9 +1149,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         self.threads.require_distinct_births()
 
     @cached_property
-    def by_lookup(self) -> Mapping[str, Thread]:
-        return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
-                                 for thread in self.threads.values()})
+    def by_lookup(self) -> Mapping[ThreadLookup, Thread]:
+        return ThreadLookupIndex(self.threads)
 
     def owner_generation(self, name: str) -> int:
         return self.owner_generations[self.canonical_name(name)]
