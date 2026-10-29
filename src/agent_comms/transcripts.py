@@ -515,6 +515,13 @@ class Transcripts:
         self.routes = TranscriptRoutes(root)
         self.page_reads = 0
 
+    def answered_inputs(
+        self, thread: Thread, references: tuple[MessageReference, ...], privacy: RegistryPrivacy,
+    ) -> frozenset[MessageReference]:
+        """The same source family owns bounded answer evidence for native and external turns."""
+        source = thread.runtime.history_source(self.root, thread.incarnation)
+        return source.answered_inputs(self.root, thread.incarnation, references, privacy)
+
     def bind_page_read(
         self,
         name: str,

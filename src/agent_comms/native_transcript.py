@@ -6,6 +6,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Generator
 from contextlib import closing, contextmanager, nullcontext
+from itertools import takewhile
 from dataclasses import dataclass
 from math import inf
 from pathlib import Path
@@ -13,19 +14,26 @@ from typing import TYPE_CHECKING, BinaryIO
 
 from .errors import RelationViolationError
 from .native_pi import NativeContextJournal
+from .coordinator import Coordination
+from .coordination_database import CoordinationStore
+from .coordination_session import ReadNativeCoordinationSession
+from .historical_native_inputs import read_historical_native_inputs
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
     from .native_output import NativeRecordLocation
     from .read_ledger import ReadLedger
-    from .thread_identity import RecordedThreadIncarnation
+    from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+    from .message_reference import MessageReference
+    from .private_registry_guard import RegistryPrivacy
 
 from agent_comms.native_session_files import NativeSessionFiles
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
-from .field_codec import MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord
 from .native_entries import (
     NativeEntry,
+    NativeEvidenceScope,
     NoEntryId,
     RecordedEntry,
     RootEntry,
@@ -64,9 +72,11 @@ def reverse_records(
                 stream.seek(start)
                 yield start, end, stream.read(end - start)
                 end = start
-        if floor == 0 and end:
-            stream.seek(0)
-            yield 0, end, stream.read(end)
+        if end > floor:
+            stream.seek(max(0, floor - 1))
+            if floor == 0 or stream.read(1) == b"\n":
+                stream.seek(floor)
+                yield floor, end, stream.read(end - floor)
 
 
 def record_end(stream: BinaryIO, size: int) -> int:
@@ -208,6 +218,46 @@ class StoredRecord(NativeRecord):
 class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
+
+    def answered_inputs(
+        self, root: Path, owner: ThreadIncarnation, references: tuple[MessageReference, ...],
+        privacy: RegistryPrivacy,
+    ) -> frozenset[MessageReference]:
+        """Reuse retained source proofs, then read only each proved input's own turn."""
+        with Coordination(str(CoordinationStore.path_in(root)),
+                          session_type=ReadNativeCoordinationSession) as store, NativeEvidenceScope() as source_reads:
+            sources = {reference: read_historical_native_inputs(
+                store, wire_root_id=privacy.namespace,
+                recipient_lookup=owner.require_recorded().lookup,
+                source_seq=reference.seq, source_reads=source_reads) for reference in references}
+            for reference, proofs in sources.items():
+                if any(proof.source_message_id != reference.message_id for proof in proofs):
+                    raise RelationViolationError("Native answer refers to another original message")
+            contexts = dict.fromkeys(proof.context for proofs in sources.values() for proof in proofs
+                                     if proof.execution.proves_full_source(proof))
+            completed = frozenset(context for context in contexts
+                if NativeTranscript(context.session_file).completed_input(context))
+        return frozenset(reference for reference, proofs in sources.items()
+                         if any(proof.context in completed for proof in proofs
+                                if proof.execution.proves_full_source(proof)))
+
+    def completed_input(self, context: NativeContextProof) -> bool:
+        """Start at the proved input byte offset; never borrow the following input's final."""
+        cut = self.cut()
+        with closing(self.forward(context.session_entry_start, cut.offset)) as records:
+            anchor = next(records)
+            entry_id = FieldCodec.decode(FreshNativeId, context.session_entry_id)
+            if not anchor.project(lambda original: original.entry.require_entry_id() == entry_id):
+                raise TranscriptChanged("Native answer input changed after its proof was read")
+            own_turn = takewhile(
+                lambda record: not record.project(lambda original: original.entry.input_boundary), records)
+            finals = tuple(record for record in own_turn if record.project(lambda original:
+                original.entry.final_reply and any(
+                    text for event in original.events for text in event.assistant_parts())))
+            answered = anchor in self.inputs_for(finals, floor=context.session_entry_start)
+        if not cut.holds(self.cut(), cut.offset):
+            raise TranscriptChanged("Native answer source changed during its read")
+        return answered
 
     def _tool_call_times(self, since: float = -inf) -> Generator[float]:
         try:
@@ -353,7 +403,7 @@ class NativeTranscript(TranscriptSource):
                 self.path.absolute(), header, user, session_entry_start=session_entry_start,
             )
 
-    def inputs_for(self, records) -> tuple:
+    def inputs_for(self, records, *, floor: int = 0) -> tuple:
         """Find the user input behind each record in one reverse walk for the batch.
 
         Parent IDs are followed back from the latest record; every intervening
@@ -376,7 +426,7 @@ class NativeTranscript(TranscriptSource):
         # A chain that reaches a root (no parent) has no input.
         waiting.pop(RootEntry(), [])
         if waiting:
-            for ancestor in self.reverse(latest):
+            for ancestor in self.reverse(latest, floor=floor):
                 entry = ancestor.entry
                 if entry is None or entry.id not in waiting:
                     continue
@@ -433,6 +483,6 @@ class NativeTranscript(TranscriptSource):
                     return
                 yield NativeRecord.read(start, stream.tell(), raw)
 
-    def reverse(self, before: int):
-        for start, end, raw in reverse_records(self.path, before):
+    def reverse(self, before: int, *, floor: int = 0):
+        for start, end, raw in reverse_records(self.path, before, floor=floor):
             yield NativeRecord.read(start, end, raw)
