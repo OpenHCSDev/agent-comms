@@ -9,7 +9,7 @@ import sqlite3
 from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from contextlib import contextmanager
 from threading import Event
 from datetime import UTC, datetime
@@ -423,10 +423,10 @@ class WireExportProvenance(CliResult):
     output_sha256: str
     truncated: bool
     redacted_messages: int
-    first_sequence: int | None
-    last_sequence: int | None
-    first_timestamp: float | None
-    last_timestamp: float | None
+    first_sequence: int | None = None
+    last_sequence: int | None = None
+    first_timestamp: float | None = None
+    last_timestamp: float | None = None
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -438,11 +438,37 @@ class WireExportProvenance(CliResult):
         }
 
 
+class WireExportSelection:
+    __slots__ = ()
+
+    def select_first(self, row: WireExportRow) -> WireExportSelection:
+        return self
+
+    def describe_first(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return metadata
+
+    def describe_last(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return metadata
+
+
+class NoSelection(WireExportSelection):
+    __slots__ = ()
+
+    def select_first(self, row: WireExportRow) -> WireExportRow:
+        return row
+
+
 @dataclass(frozen=True, slots=True)
-class WireExportRow:
+class WireExportRow(WireExportSelection):
     seq: int
     timestamp: float
     data: bytes
+
+    def describe_first(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return replace(metadata, first_sequence=self.seq, first_timestamp=self.timestamp)
+
+    def describe_last(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return replace(metadata, last_sequence=self.seq, last_timestamp=self.timestamp)
 
 
 @dataclass(frozen=True)
@@ -568,8 +594,8 @@ class WireTranscriptExporter:
 
         artifact = AtomicFile(destination) if overwrite else ExclusiveAtomicFile(destination)
         stats = ExportSelectionStats()
-        first_selected: WireExportRow | None = None
-        last_selected: WireExportRow | None = None
+        first_selected: WireExportSelection = NoSelection()
+        last_selected: WireExportSelection = NoSelection()
         with artifact.staged() as output:
             writer = _ArtifactWriter(output, observer)
             writer.write(header)
@@ -581,8 +607,7 @@ class WireTranscriptExporter:
                 if writer.size - reported >= 65536:
                     writer.report()
                     reported = writer.size
-                if first_selected is None:
-                    first_selected = row
+                first_selected = first_selected.select_first(row)
                 last_selected = row
             writer.report()
             observer.check()
@@ -591,7 +616,7 @@ class WireTranscriptExporter:
 
         exported = writer.messages
         omitted = stats.source_messages - exported
-        return WireExportProvenance(
+        metadata = WireExportProvenance(
             destination=str(destination),
             format=self.format,
             scope=self.scope,
@@ -607,11 +632,8 @@ class WireTranscriptExporter:
             output_sha256=output_sha256,
             truncated=omitted > 0,
             redacted_messages=0,
-            first_sequence=first_selected.seq if first_selected else None,
-            last_sequence=last_selected.seq if last_selected else None,
-            first_timestamp=first_selected.timestamp if first_selected else None,
-            last_timestamp=last_selected.timestamp if last_selected else None,
         )
+        return last_selected.describe_last(first_selected.describe_first(metadata))
 
     def _header(self) -> bytes:
         metadata = {

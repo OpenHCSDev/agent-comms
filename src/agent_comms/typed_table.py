@@ -2428,6 +2428,12 @@ class TypedTable(
         return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
 
     @classmethod
+    def wire_record(cls, plan: FieldPlan) -> str:
+        """Project one declared field's stored value into its public wire record."""
+        item, = cls._fields_named((plan.name,))
+        return item.wire_record(plan, cls.declared_name)
+
+    @classmethod
     def qualified(cls, *names: str) -> str:
         """Columns named through this table, for one select joining tables that share names."""
         table = _identifier(cls.declared_name)

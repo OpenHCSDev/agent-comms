@@ -433,8 +433,10 @@ class BusCapability(TypedRow, ProjectionSource):
             f' AND {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',
             tuple(BusRow._fields_named(("kind",))[0].encode(kind) for kind in kinds),
         )
+        columns = [BusRow.qualified(*BusRow.column_projection())]
+        columns.extend(table.qualified(*table.column_projection()) for table in tables)
         with closing(db.execute(
-            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in (BusRow, *tables))} "
+            f"SELECT {', '.join(columns)} "
             f'FROM "{BusRow.declared_name}" '
             + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
                        for table in tables)
@@ -1006,17 +1008,16 @@ class Message(MessageInput, TurnOrigin):
     def stored_wire_query(cls, identity: type[TypedTable]) -> str:
         """Project the public envelope from its declared stored fields, not domain objects."""
         tables = cls.tables()
-        stored = {item.name: (table, item) for table in tables for item in table._fields}
-        pieces = [item.wire_record(plan, table.declared_name)
-                  for plan in FieldCodec.field_plans(cls) if plan.records
-                  for table, item in (stored[plan.name],)]
+        stored = {name: table for table in tables for name in table.column_projection()}
+        pieces = [stored[plan.name].wire_record(plan)
+                  for plan in FieldCodec.field_plans(cls) if plan.records]
         identity_key = cls.message_id.wire_name
         pieces.append("json_object('" + identity_key + "', " + identity.qualified("message_id") + ")")
         fragments = " UNION ALL ".join(f"SELECT substr(({piece}), 2, length(({piece})) - 2) AS body"
                                        for piece in pieces)
         wire = "'{' || COALESCE((SELECT group_concat(NULLIF(body, ''), ',') FROM (" + fragments + ")), '') || '}'"
-        columns = ", ".join(f'{item.reference(table.declared_name)} AS "{name}"'
-                            for name, (table, item) in stored.items())
+        columns = ", ".join(f'{table.qualified(name)} AS "{name}"'
+                            for name, table in stored.items())
         joins = " ".join(table.join_to(BusRow) for table in (*tables, identity))
         extra = tuple(name for name in identity.column_projection() if name not in stored)
         identity_columns = ', '.join(f'{identity.qualified(name)} AS "{name}"' for name in extra)
