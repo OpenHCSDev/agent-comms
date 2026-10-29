@@ -52,7 +52,7 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     assert hud.units == original.units and hud.load == original.load
     assert hud.heartbeat == RecordedEventTime(old_completion)
     assert load.load == original.load and load.heartbeat == hud.heartbeat
-    for lines in (hud.frame, load.frame):
+    for lines in (hud.frame, load.header):
         assert 'original branch read failed' in lines[0]
         assert 'elapsed' in lines[0]
         assert 'last completed' in lines[1]
@@ -100,3 +100,33 @@ def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork
     assert not CommanderFrame.matching_in(comms.root)
     with pytest.raises(ToolRefusedError, match='no readable publication'):
         CommanderFrame.read_all(comms.root)
+
+
+def test_one_unreadable_source_preserves_the_other_original_edit(published_board, fork_bus, tmp_path):
+    from agent_comms.repo import Checkout
+    from agent_comms.storage_rules import StorageRule
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.thread_model import DeclaredModel
+    from agent_comms.threads import Thread
+    from test_edit_allocations import issue
+
+    comms, source, template = fork_bus
+    worker = comms.registry.declare(Thread(
+        'unreadable-worker', frozenset({'comms'}), Checkout(source.checkout),
+        model=DeclaredModel('anthropic/claude-opus-4-6'), execution=ExternalThreadExecution))
+    rule = StorageRule.load(comms.root)
+    checkout = rule.order_checkout(rule.roots_of(worker), 'P41')
+    checkout.parent.mkdir(parents=True, exist_ok=True)
+    source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'unreadable-edit-source', str(checkout))
+    issue(comms, source, replace(template, check=replace(template.check, directory=checkout)),
+          worker.name, 'P41')
+    metadata = checkout / '.git'
+    retained_metadata = tmp_path / 'unreadable-source-metadata'
+    metadata.rename(retained_metadata)
+    try:
+        result = ThreadCaller('lead').invoke(CommsUnjudgedTool(), comms)
+    finally:
+        retained_metadata.rename(metadata)
+    assert not result.complete
+    assert len(result.unavailable) == 1 and str(result.unavailable[0].problem) == 'P41'
+    assert tuple(edit.id for edit in result.edits) == (ToolCallId('parent-edit-0'),)

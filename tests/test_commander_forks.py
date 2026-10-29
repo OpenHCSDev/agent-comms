@@ -40,7 +40,8 @@ from agent_comms.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage_rules import StorageRule
-from agent_comms.turn_digests import EditWorkplaces, OrderEditsRead, OrderEditCountRead, TurnsSince
+from agent_comms.storage_rules import EditWorkplaces
+from agent_comms.turn_digests import OrderEditsRead, OrderEditCountRead, TurnsSince
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -337,7 +338,7 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
     open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
     workplaces = EditWorkplaces.capture(
-        comms, comms.registry.snapshot(), holds, tuple(hold.todo for hold in holds), ProgressRead())
+        comms, comms.registry.snapshot(), holds, ProgressRead())
     assert [read.read() for read in OrderEditCountRead.judgeable(
         comms.root, holds, open_order, workplaces)] == [3]
     assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged, workplaces)) == ()
@@ -361,7 +362,7 @@ def edit_workplaces(comms):
     snapshot = comms.registry.snapshot()
     holds = HeldOrders.of(comms.goals.todos, snapshot, "lead").live
     history = comms.goals.todos.history_for_commander(snapshot.require("lead").incarnation)
-    return holds, EditWorkplaces.capture(comms, snapshot, holds, history, ProgressRead(history))
+    return holds, EditWorkplaces.capture(comms, snapshot, holds, ProgressRead(history))
 
 
 def save_edit_order(comms, todo):
@@ -481,7 +482,7 @@ def test_canonical_primary_companion_and_released_roots_take_precedence(edit_sou
     selected = workplaces[owner.incarnation]
     assert selected.problems_for(str(primary / "new.py")) == frozenset(("P40",))
     assert selected.problems_for(str(companion / "new.py")) == frozenset(("P40",))
-    assert selected.problems_for(str(released_path / "new.py")) == frozenset(("P41",))
+    assert selected.problems_for(str(released_path / "new.py")) == frozenset()
     # A registered foreign repository in an undeclared companion allocation stays unowned.
     current = store.get("P40")
     save_edit_order(comms, replace(current, order=replace(

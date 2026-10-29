@@ -134,7 +134,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
-from agent_comms.storage_rules import StorageRule, UnitStorage
+from agent_comms.storage_rules import EditWorkplaces, StorageRule, UnitStorage
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,
@@ -182,7 +182,6 @@ if TYPE_CHECKING:
         Reassignment,
     )
     from agent_comms.comms import Comms
-    from agent_comms.turn_digests import EditWorkplaces
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
     from agent_comms.registry_document import CommanderProject, RegistrySnapshot
@@ -1943,7 +1942,7 @@ class DirectiveWords(OrderWords):
 class PlainText(DirectiveWords):
     """Prose in the words the user uses: no word that hides what happened."""
 
-    REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
+    REFUSED = re.compile(r'\b(edit ownership|prepared|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
     refusal = "Jargon {1} hides what happened; say it plainly."
 
     @staticmethod
@@ -3594,7 +3593,7 @@ class Assignment(TodoHolder):
 
     def require_available_in(self, db: sqlite3.Connection, problem: str, incoming: IncomingWork,
                              snapshot: RegistrySnapshot, workplaces: EditWorkplaces) -> None:
-        """Compare prepared physical edit custody; launch/check paths confer no occupancy."""
+        """Compare prepared physical edit edit ownership; launch/check paths confer no occupancy."""
         proposed = workplaces.orders[problem]
         prepared = proposed.held()
         if (self.owner_identity, self.generation) != (prepared.owner_identity, prepared.generation):
@@ -3877,7 +3876,7 @@ class AssignTodo(TodoOperation):
         self.proposed.require_available_in(
             db, current.id, IncomingWork(
                 self.actor, self.group | {current.id}, frozenset({self.order.id})),
-            RegistryStore.at(store.root).snapshot(), store.edit_admission())
+            RegistryStore.at(store.root).snapshot(), store.prepared_edits())
         OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
@@ -4968,7 +4967,7 @@ class RestoreHolderTodo(TodoCommand):
         self.previous.require_available_in(db, current.id, IncomingWork(
             self.actor, frozenset({current.id}),
             frozenset(declared.id for declared in current.order.declarations)), snapshot,
-            store.edit_admission())
+            store.prepared_edits())
 
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
@@ -5995,17 +5994,16 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
 
-    def admitting(self, proposed: tuple[Todo, ...]) -> TodoStore:
-        """Prepare physical allocations outside SQL; the admitted store lives for this write only."""
+    def preparing_edits(self, proposed: tuple[Todo, ...]) -> TodoStore:
+        """Prepare physical allocations outside SQL; the prepared store lives for this write only."""
         if not proposed:
             return self
-        from .turn_digests import EditWorkplaces
         snapshot = RegistryStore.at(self.root).snapshot()
         held = self.held_orders()
         workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed)
-        return AdmittedTodoStore(self.root, workplaces)
+        return PreparedTodoStore(self.root, workplaces)
 
-    def edit_admission(self) -> EditWorkplaces:
+    def prepared_edits(self) -> EditWorkplaces:
         raise TodoError('Assignment allocation evidence was not prepared before the write.')
 
     def allocate_problem(self) -> str:
@@ -6254,11 +6252,11 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         proposed = Todo.ordered(
             todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
             review_at, order, request)
-        admitted = self.admitting((proposed,))
-        with admitted.writing() as db:
+        prepared = self.preparing_edits((proposed,))
+        with prepared.writing() as db:
             proposed.held().require_available_in(
                 db, todo_id, IncomingWork(assigner, frozenset({todo_id}), frozenset({order.id})),
-                RegistryStore.at(self.root).snapshot(), admitted.edit_admission())
+                RegistryStore.at(self.root).snapshot(), prepared.prepared_edits())
             OwnerRequest.require(db, id=request).require_open(identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -6288,10 +6286,10 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         the rows the commands before it wrote, and any refusal writes none of them."""
         proposed = tuple(todo for command in commands
                          for todo in command.operation.proposed_work(self, command.problem))
-        admitted = self.admitting(proposed)
-        with admitted.writing() as db:
+        prepared = self.preparing_edits(proposed)
+        with prepared.writing() as db:
             for command in commands:
-                command.write(db, admitted)
+                command.write(db, prepared)
             return self._snapshot_rows(
                 db, tuple(self._current(db, command.problem) for command in commands))
 
@@ -6346,12 +6344,12 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
 
 @dataclass(frozen=True, slots=True)
-class AdmittedTodoStore(TodoStore):
-    """One mutation's immutable allocation cut, not another persisted custody authority."""
+class PreparedTodoStore(TodoStore):
+    """One mutation's immutable allocation cut, not another persisted edit ownership authority."""
 
     workplaces: EditWorkplaces
 
-    def edit_admission(self) -> EditWorkplaces:
+    def prepared_edits(self) -> EditWorkplaces:
         return self.workplaces
 
 

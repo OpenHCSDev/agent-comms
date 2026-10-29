@@ -38,6 +38,9 @@ from .service_passes import ServicePassStore
 from .comms import Comms
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
+from .problem_number import ProblemNumber
+from .tool_declaration import EditCall
+from .work_branches import WorkBranchError
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
@@ -69,6 +72,7 @@ from .turn_digests import (
     TurnView,
     TurnsSince,
     UnjudgedEdits,
+    UnavailableOrderEdits,
 )
 
 
@@ -230,13 +234,14 @@ class CommsUnjudgedTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
         owner = comms.registry.require(caller.subject(self.thread)).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
-        edits = []
-        unavailable = []
+        edits: list[EditCall] = []
+        unavailable: list[UnavailableOrderEdits] = []
         for read in OrderEditsRead.for_commander(comms, owner.name):
             try:
                 edits.extend(read.read())
-            except ToolRefusedError as error:
-                unavailable.append(f'{read.todo.id}: {error}')
+            except (WorkBranchError, OSError) as error:
+                unavailable.append(UnavailableOrderEdits(
+                    ProblemNumber.parse(read.todo.id), read.thread.incarnation, str(error)))
         return UnjudgedEdits(tuple(edits), tuple(unavailable)).with_services(passes, owner)
 
 

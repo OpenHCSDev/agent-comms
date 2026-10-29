@@ -35,7 +35,7 @@ from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import GitCommandError
-from agent_comms.service_passes import ServicePasses, ServicePassStore
+from agent_comms.service_passes import FailingPass, ServicePasses, ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.root_runtime import RootRuntimeStore
@@ -1208,11 +1208,10 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan):
+class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule, FamilyScan):
     """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
 
     watch: str
-    since: float
     error: str = field(compare=False)
 
     @classmethod
@@ -1228,10 +1227,7 @@ class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan)
         return self.since
 
     def line(self) -> str:
-        return (f"FIX service pass {self.watch} failing since {RecordedEventTime(self.since).clock()}"
-                f" ({max(0, int(time.time() - self.since))}s elapsed):"
-                f" {self.error}. is anyone fixing it, or letting it pile up?"
-                " -> fix the owner of the failing read this wake")
+        return self.failure_line(self.watch)
 
 @dataclass(frozen=True)
 class BoardDisagrees(UndatedStandingRule):

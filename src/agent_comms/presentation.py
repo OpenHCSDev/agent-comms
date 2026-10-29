@@ -23,6 +23,7 @@ from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
+from .commander_frame_file import CommanderFrameFile
 from .coordination_database import CoordinationStore
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .declared_family import DeclaredFamily
@@ -894,8 +895,7 @@ def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
 
 
 def commander_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
-    from .commander_hud import CommanderFrame
-    return CommanderFrame.source_paths(views.root)
+    return CommanderFrameFile.source_paths(views.root)
 
 
 def expiry_period_changed(before: int, now: int) -> bool:

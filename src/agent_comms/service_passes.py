@@ -8,9 +8,9 @@ from dataclasses import dataclass, field, replace
 from typing import Annotated, ClassVar, Self
 
 from .locked_store import DocumentChange, DurableFile, LockedStore
+from .errors import ToolRefusedError
 from .field_codec import WireTransient, projected
 from .tool_result import ToolResult
-from .coordinator import Coordination
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -23,12 +23,21 @@ class FailingPass:
     since: float
     error: str
 
+    def failure_line(self, watch: str) -> str:
+        return (f'FIX service pass {watch} failing since {RecordedEventTime(self.since).clock()}'
+                f' ({max(0, int(time.time() - self.since))}s elapsed):'
+                f' {self.error}. is anyone fixing it, or letting it pile up?'
+                ' -> fix the owner of the failing read this wake')
+
 
 @dataclass(frozen=True)
 class ServicePasses:
     failing: dict[str, FailingPass] = field(default_factory=dict)
     commander_completed: dict[RecordedThreadIncarnation, float] = field(default_factory=dict)
     """Last observation completed for each commander, including quiet observations."""
+
+    def failure_lines(self) -> tuple[str, ...]:
+        return tuple(failure.failure_line(watch) for watch, failure in sorted(self.failing.items()))
 
     def heartbeat_completed_at(self, commander: RecordedThreadIncarnation) -> EventTime:
         """The original completion clock, or its declared unrecorded state."""
@@ -61,20 +70,18 @@ class ServiceReading(ToolResult):
     def with_services(self, passes: ServicePasses, owner: RecordedThreadIncarnation) -> Self:
         return replace(self, services=passes, heartbeat=passes.heartbeat_completed_at(owner))
 
-    def retained_status(self) -> str:
-        if not self.services.failing and self.heartbeat.since(time.time() - 3 * Coordination.watch_period):
-            return 'Retained board rows and load:'
-        return 'STALE retained board rows and load:'
-
-    def failure_lines(self) -> tuple[str, ...]:
-        # Standing-rule rendering remains the determining owner of failure text.
-        from .standing_rules import ServicePassFailing
-        return tuple(failure.line() for failure in ServicePassFailing.from_passes(self.services))
-
     @projected(view='wire')
     def service_status(self) -> tuple[str, ...]:
         clock = self.heartbeat.aged_line('Tristan last completed', time.time())
-        return (*self.failure_lines(), *(clock or ('Tristan last completed: unrecorded',)))
+        return (*self.services.failure_lines(), *(clock or ('Tristan last completed: unrecorded',)))
+
+
+class BoardUnavailable(ToolRefusedError):
+    """A missing or mismatched publication retains the service evidence that explains it."""
+
+    def __init__(self, reading: ServiceReading, reason: str) -> None:
+        self.reading = reading
+        super().__init__('\n'.join((*reading.service_status, f'Board unavailable: {reason}')))
 
 
 @dataclass(frozen=True, slots=True)
