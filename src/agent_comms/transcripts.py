@@ -122,6 +122,11 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
         """A changed transcript at a read position needs no commit before it is read again."""
         return False
 
+    def painted_read[Result](self, acknowledge: Callable[[TranscriptCursor], Result],
+                             nothing: Result) -> Result:
+        """Choose painted acknowledgement work before any reader or write lock is opened."""
+        return acknowledge(self)
+
     async def read_page(self, loader: Callable[..., Awaitable[TranscriptPage]],
                         position: PagePosition) -> TranscriptPage:
         return await loader(position=position, limit=self.page_limit())
@@ -175,6 +180,10 @@ class UnreadTranscriptCursor(TranscriptCursor):
     def requires_commit(self) -> bool:
         """A replaced source with nothing read must be committed before it is read again."""
         return True
+
+    def painted_read[Result](self, acknowledge: Callable[[TranscriptCursor], Result],
+                             nothing: Result) -> Result:
+        return nothing
 
     def at_offset(self, offset: int) -> TranscriptCursor:
         return self
