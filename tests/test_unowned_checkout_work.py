@@ -24,7 +24,7 @@ from agent_comms.commander_heartbeat import (
     CommanderObservation,
 )
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing
-from commander_heartbeat_fixture import ObservedHeartbeat
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
@@ -41,7 +41,6 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment, ExpectedProblem, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason,
@@ -186,7 +185,7 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
 
 def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
     lead = c.registry.require('lead')
-    frame = HeartbeatFrame.capture(c, lead.name, ProgressRead())
+    frame = capture_frame(c, lead.name, ProgressRead())
     observed = CommanderObservation(lead, frame, rules, ())
     asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(c)))
 
@@ -286,7 +285,7 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
         read = WorkBranches(checkout).read_checkout()
         assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
         unreadable, = (state for state in UnitState.current(
-            c, 'lead', HeartbeatFrame.capture(c, 'lead', ProgressRead()))
+            c, 'lead', capture_frame(c, 'lead', ProgressRead()))
                       if isinstance(state, Unreadable))
         assert unreadable.unit == c.registry.require('worker').incarnation
         assert str(checkout) in unreadable.reason
@@ -300,7 +299,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
     practice.include(tuple(RootFile.existing_in(practice.root)))
     c = wire(practice.path)
     with LaunchRoot.from_path(practice.path).selected():
-        frame = HeartbeatFrame.capture(c, 'lead', ProgressRead())
+        frame = capture_frame(c, 'lead', ProgressRead())
         worker, = (state for state in UnitState.current(c, 'lead', frame)
                    if state.unit == c.registry.require('worker').incarnation)
         assert 'P1' in worker.orders and not isinstance(worker, Unreadable)

@@ -18,6 +18,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from threading import Lock
+from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
 
 from agent_comms.declared_family import DeclaredFamily
@@ -25,7 +26,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
 from agent_comms.private_path import FileObservation, FileRevision
-from agent_comms.repo import Repo
+from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 
 if TYPE_CHECKING:
     from agent_comms.todos import Todo
@@ -133,7 +134,10 @@ class MainTree:
         yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
-        return self.repo.contains(sha, self.commit)
+        try:
+            return self.repo.contains(sha, self.commit)
+        except (GitCommandError, UnavailableCommitError) as error:
+            raise UnreadableEvidenceError(str(error)) from error
 
 
 @dataclass(frozen=True)
@@ -223,6 +227,13 @@ class PlanReading:
         default_factory=dict, compare=False, repr=False
     )
 
+    def prepare(self, evidence: PhaseEvidence) -> None:
+        if evidence not in self.reads:
+            try:
+                evidence.prepare(self)
+            except (GitCommandError, UnavailableCommitError, OSError, TimeoutExpired) as error:
+                self.reads[evidence] = EvidenceUnread(str(error))
+
     def read(self, evidence: PhaseEvidence) -> EvidenceRead:
         if evidence not in self.reads:
             try:
@@ -251,13 +262,23 @@ class PlanReadings:
     def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
         return PlanReading(todos, MainTree.of(repo))
 
-    def read(self, repo: Repo, todos: tuple[Todo, ...],
-             evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+    def prepare(self, repo: Repo, todos: tuple[Todo, ...],
+                evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+        """Capture the main cut and acquire inputs without evaluating the plan."""
         reading = self.observed(repo, todos)
+        for declared in evidence:
+            reading.prepare(declared)
+        return reading
+
+    def observe(self, reading: PlanReading, evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
         for declared in evidence:
             declared.recorded(reading)
         self.retain(reading)
         return reading
+
+    def read(self, repo: Repo, todos: tuple[Todo, ...],
+             evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+        return self.observe(self.prepare(repo, todos, evidence), evidence)
 
     def retain(self, reading: PlanReading) -> None:
         """An ordinary command releases its reading when its caller does."""
@@ -288,6 +309,9 @@ class RetainedPlanReadings(PlanReadings):
 
 
 class PhaseEvidence(ABC):
+    def prepare(self, reading: PlanReading) -> None:
+        """Most evidence needs only the selected local tree."""
+
     def recorded(self, reading: PlanReading) -> None:
         reading.read(self)
 
@@ -326,6 +350,9 @@ class MainEvidence(PhaseEvidence):
 @dataclass(frozen=True)
 class CommitMerged(MainEvidence):
     sha: str
+
+    def prepare(self, reading: PlanReading) -> None:
+        Repo.require_commits(reading.main.repo.checkout, "origin", self.sha, reading.main.commit)
 
     def read(self, main: MainTree) -> bool:
         return main.contains(self.sha)
@@ -461,6 +488,10 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
 @dataclass(frozen=True)
 class AllEvidence(PhaseEvidence):
     parts: tuple[PhaseEvidence, ...]
+
+    def prepare(self, reading: PlanReading) -> None:
+        for part in self.parts:
+            reading.prepare(part)
 
     def recorded(self, reading: PlanReading) -> None:
         for part in self.parts:

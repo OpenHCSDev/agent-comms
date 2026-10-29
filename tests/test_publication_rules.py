@@ -14,7 +14,7 @@ from agent_comms.commander.publication_rules import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import PullRequestHead
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import capture_frame
 from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.recorded_time import RecordedEventTime
@@ -43,13 +43,13 @@ def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
         return (ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame),
                 ClosedPullRequestScanPending.scan_observed(comms, 'lead', (), frame))
 
-    lost, pending = rules(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans))
+    lost, pending = rules(capture_frame(comms, 'lead', ProgressRead(()), plans))
     assert lost == ()
     assert {rule.repo for rule in pending} == set(repos)
 
     watch = ClosedPullRequestWatch()
     asyncio.run(watch.run(lambda: nullcontext(comms)))
-    lost, pending = rules(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans))
+    lost, pending = rules(capture_frame(comms, 'lead', ProgressRead(()), plans))
     assert {rule.request.pr for rule in lost} == {7}
     assert source.github not in {rule.repo for rule in pending}
 
@@ -67,7 +67,7 @@ def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed
             base='main', reviewable_times=(stamp,)))
     watch = ClosedPullRequestWatch()
     asyncio.run(watch.run(lambda: nullcontext(comms)))
-    frame = HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
+    frame = capture_frame(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
     rules = {rule.request.pr: rule for rule in
              ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
     assert set(rules) == {7, 10}
@@ -118,7 +118,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
 
     def capture():
         asyncio.run(watch.run(lambda: nullcontext(comms)))
-        return HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans)
+        return capture_frame(comms, 'lead', ProgressRead(()), plans)
 
     frame = capture()
     found = {rule.request.pr: rule for rule in scan(frame)}

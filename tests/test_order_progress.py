@@ -14,9 +14,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander_heartbeat import CommanderObservation
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from commander_heartbeat_fixture import ObservedHeartbeat
+from commander_heartbeat_fixture import ObservedHeartbeat, observe_commander
 from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.launch_runtime import LaunchRoot
@@ -162,15 +161,16 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
 
     class DeletingRead(ProgressRead):
         def progress(self, held, registry):
-            # This happens after UnitState.read guarded the checkout, but before
-            # CommanderHud consumes its commit clock. No production code is patched.
+            # Retire the ref after progress capture, before the remaining source reads.
+            # No production code is patched; the card must retain this Git failure.
+            progress = super().progress(held, registry)
             git(checkout, 'update-ref', '-d', f'refs/heads/{branch}')
-            return super().progress(held, registry)
+            return progress
 
     with LaunchRoot.from_path(comms.root).selected():
-        before = CommanderObservation.read(comms, lead, ProgressRead())
+        before = observe_commander(comms, lead, ProgressRead())
         healthy = tuple(card for card in before.states if card.unit.name != 'worker')
-        interrupted = CommanderObservation.read(comms, lead, DeletingRead())
+        interrupted = observe_commander(comms, lead, DeletingRead())
         asyncio.run(ObservedHeartbeat((interrupted,)).run(lambda: nullcontext(comms)))
         published, = CommanderFrame.read_all(comms.root)
         assert tuple(card.unit for card in published.units) == tuple(card.unit for card in interrupted.states)
@@ -179,7 +179,7 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
         with pytest.raises(GitCommandError) as git_failure:
             reader.difference(reader.origin_main)
         for _ in range(2):
-            frame = CommanderObservation.read(comms, lead, ProgressRead())
+            frame = observe_commander(comms, lead, ProgressRead())
             (broken,) = (card for card in frame.states if card.unit.name == 'worker')
             assert isinstance(broken, Unreadable)
             assert broken.reason == str(git_failure.value)

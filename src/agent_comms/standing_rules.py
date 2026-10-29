@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, fields
 from functools import cache
 from itertools import combinations
 from pathlib import Path
+from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 from agent_comms.declared_family import DeclaredFamily, RegisteredFamily
@@ -33,6 +34,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
+from agent_comms.repo import GitCommandError, UnavailableCommitError
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
@@ -46,7 +48,7 @@ from agent_comms.todos import (
     ProgressSource,
     StoredHeadReview,
 )
-from agent_comms.work_branches import BranchDifference, SourceGrowth
+from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -289,11 +291,25 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         return next((owner for owner in cls.__mro__ if FamilyScan in owner.__bases__), cls)
 
     @classmethod
+    def scan_owners(cls) -> tuple[type[StandingRule], ...]:
+        return tuple(dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls)))
+
+    @classmethod
+    def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
+                pulls: ProgressRead) -> None:
+        """Rules acquire nothing unless their scan owner declares an input effect."""
+
+    @classmethod
+    def prepare_all(cls, comms: Comms, commander: str, holds: HeldOrders,
+                    pulls: ProgressRead) -> None:
+        for owner in cls.scan_owners():
+            owner.prepare(comms, commander, holds, pulls)
+
+    @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
                observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
         """Read each owner once against the supplied frame and its one progress reader."""
-        owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
-        return tuple(rule for owner in owners
+        return tuple(rule for owner in cls.scan_owners()
                      for rule in owner.scan_observed(comms, commander, observed, frame)
                      if rule.attention() and rule.broke_after(after))
 
@@ -433,6 +449,21 @@ class HeadLine(StandingRule, declared_name=None):
 
 class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=None):
     """Branch rules share the heartbeat's existing progress frame and one scan."""
+
+    @classmethod
+    def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
+                pulls: ProgressRead) -> None:
+        for held in holds.live:
+            todo = held.todo
+            directory = todo.order.checked().check.directory
+            try:
+                reader = pulls.checkout(directory).branches
+                reader.prepare_upstreams()
+                for pull in pulls.open_for(todo):
+                    pull.prepare_comparison(reader)
+            except (OSError, GitCommandError, UnavailableCommitError,
+                    WorkBranchError, TimeoutExpired) as error:
+                pulls.unread(todo, f"Comparison preparation in {directory}: {error}")
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,

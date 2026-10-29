@@ -23,7 +23,7 @@ from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import CommanderAudience, RuleFile
 from agent_comms.commander.standing import PlanIdle
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import capture_frame
 from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import wire
@@ -208,7 +208,7 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
     claim = WatchClaim(hook.session_id)
     claim.path.parent.mkdir(parents=True)
     record = WatchRecord("lead", str(comms.root), ("watch",), tmp_path / "inbox")
-    reading = HeartbeatFrame.capture(comms, "lead", ProgressRead()).plan
+    reading = capture_frame(comms, "lead", ProgressRead()).plan
     beat(comms, (PlanIdle(BusWriterPhase, reading),))
     phase_name = f"{BusWriterPhase.plan.declared_name}/{BusWriterPhase.declared_name}"
     lead = comms.registry.require("lead").incarnation

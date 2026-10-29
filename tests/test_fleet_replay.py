@@ -19,6 +19,7 @@ import pytest
 from agent_comms.commander.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.commander_heartbeat import CommanderObservation
+from commander_heartbeat_fixture import observe_commander
 from agent_comms.commander_hud import CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
@@ -104,7 +105,7 @@ class Fleet:
         ).stdout.strip()
 
     def observe(self) -> CommanderObservation:
-        return CommanderObservation.read(
+        return observe_commander(
             self.comms, self.comms.registry.require(self.commander), ProgressRead()
         )
 
@@ -476,7 +477,7 @@ def test_held_branch_rules_survive_an_order_checkout_retired_mid_frame(fleet):
                 Checkout(path).retire()
             return difference
 
-    observed = CommanderObservation.read(
+    observed = observe_commander(
         built.comms, built.thread(Fleet.commander), RetiringRead())
     held = set(HeldBranchRule.members_with(HeldBranchRule))
     assert not any(path.exists() for path in allocated)

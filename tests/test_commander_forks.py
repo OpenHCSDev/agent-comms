@@ -22,8 +22,7 @@ from agent_comms.change_report import FileLine, NamedRepository
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from commander_heartbeat_fixture import ObservedHeartbeat
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, TodoConflict, TodoError
@@ -241,7 +240,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     ctx = CommanderContext.read_root(comms.root).model_copy(
         update={"actor": CommanderForkCaller(fork.name)}
     )
-    frame = HeartbeatFrame.capture(comms, parent.name, ProgressRead())
+    frame = capture_frame(comms, parent.name, ProgressRead())
     states = UnitState.current(comms, parent.name, frame)
     observed = CommanderObservation(parent, frame, (), states)
     asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))

@@ -8,11 +8,11 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.commander.standing import InstallDue
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from agent_comms.child_process import ReadWork
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.message_bus import WatchPass
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import ServicePassStore
@@ -34,10 +34,10 @@ class CommanderObservation:
 
     @classmethod
     def read(cls, comms: Comms, thread: Thread,
-             reading: ProgressRead, *,
-             plans: PlanReadings = PlanReadings()) -> CommanderObservation:
-        """One frame's progress facts come from ``reading``; Core reads the live forge and Git."""
-        frame = HeartbeatFrame.capture(comms, thread.name, reading, plans)
+             inputs: CommanderInputs, *,
+             plans: PlanReadings) -> CommanderObservation:
+        """Consume the prepared cut; Core observes the local Git, forge and plan answers."""
+        frame = HeartbeatFrame.capture(comms, thread.name, inputs, plans)
         states = UnitState.current(comms, thread.name, frame)
         rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
         return cls(thread, frame, rules, states)
@@ -57,8 +57,8 @@ class CommanderObservation:
         )
 
 
-class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
-                         WatchPass[Mapping[Thread, ProgressRead], tuple[CommanderObservation, ...]]):
+class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
+                         WatchPass[Mapping[Thread, CommanderInputs], tuple[CommanderObservation, ...]]):
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -77,20 +77,14 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                 ):
                     update.send(comms, now, ())
 
-    def prepare(self, comms: Comms) -> Mapping[Thread, ProgressRead]:
-        prepared: dict[Thread, ProgressRead] = {}
-        for thread in self.commanders(comms.registry, comms.goals):
-            pulls = ProgressRead(comms.goals.todos.for_commander(thread.incarnation))
-            for repo in comms.registry.snapshot().commander_project.repository_names():
-                pulls.carry_reviews(comms.goals, repo)
-            InstallDue.prepare(comms)
-            prepared[thread] = pulls
-        return prepared
+    def prepare(self, comms: Comms) -> Mapping[Thread, CommanderInputs]:
+        return {thread: CommanderInputs.prepare(comms, thread.name, ProgressRead(), self)
+                for thread in self.commanders(comms.registry, comms.goals)}
 
-    def observe(self, comms: Comms, prepared: Mapping[Thread, ProgressRead]) -> tuple[CommanderObservation, ...]:
+    def observe(self, comms: Comms, prepared: Mapping[Thread, CommanderInputs]) -> tuple[CommanderObservation, ...]:
         return tuple(
-            CommanderObservation.read(comms, thread, pulls, plans=self)
-            for thread, pulls in prepared.items()
+            CommanderObservation.read(comms, thread, inputs, plans=self)
+            for thread, inputs in prepared.items()
         )
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:

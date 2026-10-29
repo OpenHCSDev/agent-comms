@@ -25,7 +25,7 @@ from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.repo import GitCommandError
+from agent_comms.repo import GitCommandError, UnavailableCommitError
 from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
@@ -156,6 +156,13 @@ class UnitObservation:
         )
 
     def require_read(self) -> None:
+        for progress in self.pulls.progress(self.todos, self.comms.registry).values():
+            progress.require_read()
+        for todo in self.todos:
+            reader = self.pulls.checkout(todo.order.checked().check.directory).branches
+            reader.require_prepared()
+            for pull in self.pulls.open_for(todo):
+                pull.require_comparison(reader)
         if self.todos:
             for path in self.thread.home_checkouts:
                 self.pulls.branch_difference(path)
@@ -206,10 +213,12 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     @classmethod
     def read(cls, source: UnitObservation) -> UnitState:
         try:
+            source.require_read()
             return next(state for member in cls.worst_first() for state in member.derive(source))
         except (
             OSError,
             GitCommandError,
+            UnavailableCommitError,
             WorkBranchError,
             TimeoutExpired,
             NativePiUnavailable,

@@ -62,6 +62,14 @@ class GitCommandError(RuntimeError, CommandFailure):
         )
 
 
+class UnavailableCommitError(RuntimeError, CommandFailure):
+    """Required comparison objects are unavailable, not a negative ancestry answer."""
+
+    def __init__(self, checkout: Path | str, objects: tuple[str, ...], detail: str = ""):
+        super().__init__(f"Git in {checkout}: required commit objects unavailable: "
+                         f"{', '.join(objects)}" + (f"; {detail}" if detail else ""))
+
+
 class Repo(GitLaunch, BaseModel, WireValue):
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
 
@@ -142,15 +150,38 @@ class Repo(GitLaunch, BaseModel, WireValue):
             ) from error
         return reference.removeprefix("origin/")
 
-    def contains(self, sha: str, revision: str = "HEAD") -> bool:
-        """Prove ancestry in the requested fetched revision without moving the checkout.
+    @classmethod
+    def missing_commits(cls, checkout: Path | str, *objects: str) -> tuple[str, ...]:
+        """Resolve Git expressions, including abbreviated SHAs, as commit objects in one batch."""
+        requested = tuple(dict.fromkeys(objects))
+        if not requested:
+            return ()
+        answers = cls.git(checkout, "cat-file", "--batch-check=%(objectname) %(objecttype)",
+                          input="".join(f"{name}^{{commit}}\n" for name in requested))
+        return tuple(name for name, answer in zip(requested, answers.splitlines(), strict=True)
+                     if not answer.endswith(" commit"))
 
-        A commit merged after the last fetch is fetched once first; a commit origin does not
-        have either is in no revision of this checkout."""
-        if not self.has_commit(sha):
-            self.git(self.checkout, "fetch", "-q", "origin")
-            if not self.has_commit(sha):
-                return False
+    @classmethod
+    def require_local_commits(cls, checkout: Path | str, *objects: str) -> None:
+        """Observation never acquires objects or mistakes an unavailable one for False."""
+        missing = cls.missing_commits(checkout, *objects)
+        if missing:
+            raise UnavailableCommitError(checkout, missing)
+
+    @classmethod
+    def require_commits(cls, checkout: Path | str, remote: str, *objects: str) -> None:
+        """The explicit acquisition boundary: fetch missing objects, then prove availability."""
+        missing = cls.missing_commits(checkout, *objects)
+        if missing:
+            try:
+                cls.git(checkout, "fetch", "--quiet", "--no-tags", "--", remote, *missing)
+            except GitCommandError as error:
+                raise UnavailableCommitError(checkout, missing, f"remote {remote}: {error}") from error
+            cls.require_local_commits(checkout, *objects)
+
+    def contains(self, sha: str, revision: str = "HEAD") -> bool:
+        """Strict local ancestry; only valid local non-ancestors mean False."""
+        self.require_local_commits(self.checkout, sha, revision)
         return self.descends(self.checkout, sha, revision)
 
     def has_commit(self, sha: str) -> bool:

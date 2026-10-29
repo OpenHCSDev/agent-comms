@@ -15,14 +15,13 @@ from agent_comms.registry_document import RegisteredCommanderProject
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from commander_heartbeat_fixture import ObservedHeartbeat
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.commander_hud import (
     BoardRow, CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, QuietUnits, UnreadableUsage,
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
@@ -70,12 +69,12 @@ def notifications(comms):
 
 
 def lead_hud(comms, states=()):
-    return CommanderHud.of(comms, "lead", HeartbeatFrame.capture(comms, "lead", ProgressRead()), states)
+    return CommanderHud.of(comms, "lead", capture_frame(comms, "lead", ProgressRead()), states)
 
 
 def beat(comms, rules=(), *, states=()):
     observed = CommanderObservation(
-        comms.registry.require("lead"), HeartbeatFrame.capture(comms, "lead", ProgressRead()),
+        comms.registry.require("lead"), capture_frame(comms, "lead", ProgressRead()),
         rules, states)
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))
@@ -408,7 +407,7 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
     failing = ServicePassFailing("following-rule", time.time(), "independent source")
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, "lead", ProgressRead())
     frames = tuple(CommanderObservation(thread, frame, (failing,), ())
                    for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
@@ -547,7 +546,7 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
 
 def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
     comms = notification_bus
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, "lead", ProgressRead())
     states = UnitState.current(comms, "lead", frame)
     @dataclass(frozen=True)
     class FailedScan(UndatedStandingRule):

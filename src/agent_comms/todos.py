@@ -131,7 +131,7 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, GitCommandError, Repo
+from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import StorageRule, UnitStorage
@@ -459,6 +459,8 @@ class CommitSourceDelivery(BranchPointCheck, CheckedDelivery, declared_name=None
         return (self.commit,)
 
     def merged_commits(self, repo: Repo) -> tuple[str, ...]:
+        # Called by the joined merge closure, never by the observation frame.
+        Repo.require_commits(repo.checkout, "origin", self.commit, f"origin/{WorkBranches.main}")
         return (self.commit,) if repo.contains(self.commit, f"origin/{WorkBranches.main}") else ()
 
     def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
@@ -679,6 +681,12 @@ class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
     def head_review_due(self, now: float, due_at: float) -> tuple[float, ...]:
         return () if self.has_head_review or now < due_at else (due_at,)
 
+    def prepare_comparison(self, reader: WorkBranches) -> None:
+        reader.prepare_pull_request(self.base, self.head)
+
+    def require_comparison(self, reader: WorkBranches) -> None:
+        reader.pull_request_base(self.base, self.head)
+
     def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
         compared = reader.pull_request_diff(self.base, self.head)
         return () if compared.paths else (compared,)
@@ -718,6 +726,12 @@ class DraftPullRequest(UnmergedPullRequest):
 
     def head_review_due(self, now: float, due_at: float) -> tuple[float, ...]:
         return ()
+
+    def prepare_comparison(self, reader: WorkBranches) -> None:
+        """Drafts promise no comparison, matching their empty_changes policy."""
+
+    def require_comparison(self, reader: WorkBranches) -> None:
+        """There is no required comparison object for a draft."""
 
     def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
         return ()
@@ -1522,6 +1536,9 @@ class ProgressRead(PullRequests, CheckoutReads):
         PullRequests.__init__(self, todos)
         self._progress: dict[str, OrderProgress] = {}
 
+    def unread(self, todo: Todo, reason: str) -> None:
+        self._progress[todo.id] = UnreadProgress(reason)
+
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
         """Each held order's progress, read once per frame however many readers ask."""
         self.register(held)
@@ -1646,8 +1663,12 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
             source.checkout.require_read()
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
-        except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as unread:
+        except (OSError, GitCommandError, UnavailableCommitError,
+                WorkBranchError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
+
+    def require_read(self) -> None:
+        """A normal progress answer has no acquisition failure."""
 
     @property
     @abstractmethod
@@ -1712,6 +1733,9 @@ class NoCommitProgress(OrderProgress):
 @dataclass(frozen=True)
 class UnreadProgress(OrderProgress):
     reason: str
+
+    def require_read(self) -> None:
+        raise WorkBranchError(self.reason)
 
     @property
     def state(self) -> str:
@@ -2673,8 +2697,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def observed_merges(
         self, repo: Repo, source: PullRequestSource
     ) -> tuple[MergedProblemOrder, ...]:
-        return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
-                     if repo.contains(merged.sha))
+        candidates = tuple(MergedProgress.found(source))
+        Repo.require_commits(repo.checkout, "origin", *(merged.sha for merged in candidates))
+        return tuple(self.merged(merged.sha) for merged in candidates if repo.contains(merged.sha))
 
     def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str,
                           store: TodoStore, actor: ThreadIncarnation) -> str:
@@ -4161,9 +4186,11 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
               reader: WorkBranches) -> bool:
         try:
+            reader.prepare_pull_request(current.base, record.request.head)
+            reader.prepare_pull_request(current.base, current.head)
             reviewed_change = record.request.change_identity(reader, current.base)
             current_change = current.change_identity(reader, current.base)
-        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired):
+        except (GitCommandError, UnavailableCommitError, WorkBranchError, subprocess.TimeoutExpired):
             return False
         if reviewed_change != current_change:
             return False

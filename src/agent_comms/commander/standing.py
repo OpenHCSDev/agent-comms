@@ -58,6 +58,7 @@ from agent_comms.todos import (
     Assignment,
     OwnerRequest,
     PullRequests,
+    ProgressRead,
     UnmergedListedPullRequest,
     RestoreHolderTodo,
     Todo,
@@ -132,7 +133,8 @@ class InstallDue(UndatedStandingRule, FamilyScan):
                      if any(repo.github == record.repository for record in installed.commits))
 
     @classmethod
-    def prepare(cls, comms: Comms) -> None:
+    def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
+                pulls: ProgressRead) -> None:
         """Fetching changes Git state, so the heartbeat joins it before observation."""
         for repo in cls.repositories(comms, RecordedBuildIdentity.installed()):
             repo.git(repo.checkout, "fetch", "-q", "origin", "main")

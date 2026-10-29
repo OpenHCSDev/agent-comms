@@ -103,8 +103,9 @@ class ClosedPullRequestWatch(Watch):
         (published,) = reader.remote_heads('origin', f'refs/heads/{reader.main}')
         old_tips = tuple(row.main for row in previous)
         closed = tuple(pull for change in changes for pull in change.as_closed())
-        reader.require_commits('origin', published, *old_tips, *(pull.head for pull in closed),
-                               *(row.request.head for row in recorded))
+        Repo.require_commits(reader.checkout, 'origin', published, *old_tips,
+                             *(pull.head for pull in closed),
+                             *(row.request.head for row in recorded))
         for old in old_tips:
             if not Repo.descends(reader.checkout, old, published):
                 raise WorkBranchError(f'{repo.github.to_wire()} main rewrote its indexed history')
