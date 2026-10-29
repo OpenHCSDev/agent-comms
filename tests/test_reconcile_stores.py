@@ -376,16 +376,19 @@ def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_canno
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     stored = tmp_path / "home" / CodexBridge.state_directory / "unit-old" / "delivery.sqlite3"
     stored.parent.mkdir(parents=True)
-    with closing(sqlite3.connect(stored)) as db:
-        db.execute('CREATE TABLE observed_part (id TEXT NOT NULL, number TEXT NOT NULL, '
-                   'sender TEXT NOT NULL, body TEXT NOT NULL, record_id TEXT NOT NULL, '
-                   'timestamp REAL NOT NULL, PRIMARY KEY (id, number))')
-        db.execute("INSERT INTO observed_part VALUES ('m', 'first', 'a', 'b', 'r', 0)")
-        db.commit()
     if readable:
-        stored.unlink()
         with closing(SQLiteFile.writer(stored)) as db, db:
             BridgeStateTable.install_schema(db, WriterOwnedFile())
+            db.execute('CREATE TABLE observed_part (id TEXT NOT NULL, number TEXT NOT NULL, '
+                       'sender TEXT NOT NULL, body TEXT NOT NULL, record_id TEXT NOT NULL, '
+                       'timestamp REAL NOT NULL, PRIMARY KEY (id, number))')
+            db.execute("INSERT INTO observed_part VALUES ('m', 'first', 'a', 'b', 'r', 0)")
+    else:
+        with closing(sqlite3.connect(stored)) as db:
+            db.execute('CREATE TABLE board_delivery (content TEXT NOT NULL, since TEXT, '
+                       'delivered_at REAL NOT NULL, PRIMARY KEY (content))')
+            db.execute("INSERT INTO board_delivery VALUES ('line', 'not-a-time', 0)")
+            db.commit()
     sibling = stored.parent.with_name("unit-second") / BridgeStateTable.filename
     sibling.parent.mkdir()
     with closing(SQLiteFile.writer(sibling)) as db, db:
@@ -400,7 +403,7 @@ def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_canno
     practice = PracticeCopy(root, tmp_path / "practice")
     practice.include(tuple(originals))
     copied = practice.request
-    probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,))
+    probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,), scratch=tmp_path / "scratch")
     copied_paths = tuple(copied.location(resource) for resource in resources)
     planned = subprocess.run(
         [sys.executable, "-m", "agent_comms.cli", "--root", str(root),

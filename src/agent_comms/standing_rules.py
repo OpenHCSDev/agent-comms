@@ -303,25 +303,6 @@ class FamilyScan(StandingRule, declared_name=None):
     scan selects is never scanned a second time."""
 
 
-class OrderRefusingStandingRule(StandingRule, declared_name=None):
-    """An overdue review prevents new orders, through the same backend admission path."""
-
-    @classmethod
-    @abstractmethod
-    def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]: ...
-
-    @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_reviews(comms.goals, commander, frame.pulls)
-
-    @classmethod
-    def refusals(cls, goals: Goals, commander: str) -> tuple[str, ...]:
-        pulls = ProgressRead(goals.todos.held_for_commander(goals.registry.require(commander).incarnation))
-        owners = dict.fromkeys(member.scan_owner() for member in cls.members_with(cls))
-        return tuple(rule.line() for owner in owners
-                     for rule in owner.scan_reviews(goals, commander, pulls))
-
 
 class CoreActsStandingRule(StandingRule, declared_name=None):
     """Core's own enforce acts on this line, so no commander verb disposes of it and it locks none."""
@@ -884,9 +865,8 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
 
 
 @dataclass(frozen=True)
-class LinkedUnreviewedHead(OrderHeadReviewCommands, UnreviewedHead, OrderRefusingStandingRule):
-    """A head linked to the caller's held order: the reader is registered with exactly the
-    caller's holds, so another commander's heads never freeze its orders."""
+class LinkedUnreviewedHead(OrderHeadReviewCommands, UnreviewedHead):
+    """An overdue linked head remains visible without preventing unrelated recovery work."""
 
     @classmethod
     def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
