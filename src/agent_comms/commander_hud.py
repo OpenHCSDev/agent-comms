@@ -28,7 +28,9 @@ from agent_comms.order_story import OrderStory
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest
+from agent_comms.todos import (
+    OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest, PullRequestLink,
+)
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import LastTurns, OrderEditCountRead
 from agent_comms.ui_model.unit_state import UnitClock, UnitState
@@ -77,8 +79,8 @@ class CommanderUnit(HudRow):
     clock: UnitClock
     orders: tuple[CommanderOrder, ...]
     strikes: int
-    ready_prs: tuple[PullRequest, ...]
-    draft_prs: tuple[PullRequest, ...]
+    ready_prs: dict[PullRequestLink, PullRequest]
+    draft_prs: dict[PullRequestLink, PullRequest]
 
     def line(self) -> str:
         orders = "; ".join(
@@ -88,17 +90,18 @@ class CommanderUnit(HudRow):
             f"{self.unit.name}: {self.state.question} orders={orders} "
             f"review timers={sum(len(order.review_timers_up) for order in self.orders)} "
             f"strikes={self.strikes} edits={sum(order.unjudged_edits for order in self.orders)} "
-            f"ready={','.join(str(pr.number) for pr in self.ready_prs)} "
-            f"draft={','.join(str(pr.number) for pr in self.draft_prs)}"
+            f"ready={','.join(map(str, self.ready_prs))} "
+            f"draft={','.join(map(str, self.draft_prs))}"
         )
 
     def brief_parts(self) -> tuple[str, ...]:
-        """The scan line's coherent pieces: the unit, each held order, its pull requests, its next
-        action. A narrow view breaks the line between pieces, never inside one."""
+        """The scan line's coherent pieces: the unit, each held order, its pull requests and
+        next action. The view owns wrapping, including sections wider than its viewport."""
         orders = tuple(
             f"{order.problem} {order.state} · {order.progress.line}" for order in self.orders
         ) or ("no held orders",)
-        pulls = ", ".join(f"#{pr.number}@{pr.head[:9]}" for pr in (*self.ready_prs, *self.draft_prs))
+        pulls = ", ".join(f"{link}@{pr.head[:9]}"
+                          for link, pr in (*self.ready_prs.items(), *self.draft_prs.items()))
         return (self.unit.name, *orders, pulls or "no PR", f"→ {self.state.action}")
 
     def brief(self) -> str:
@@ -303,7 +306,7 @@ class CommanderHud(ToolResult):
         for state in states:
             unit, orders = state.unit, state.source.todos
             requests = {
-                (todo.repo, request.number): request
+                PullRequestLink(todo.repo, request.number): request
                 for todo in orders
                 for request in pulls.open_for(todo)
             }
@@ -316,8 +319,8 @@ class CommanderHud(ToolResult):
                     todo.strike_count, edits[todo.id],
                 ) for todo in orders),
                 sum(todo.strikes_against(unit) for todo in history),
-                tuple(ready for request in requests.values() for ready in request.as_ready()),
-                tuple(draft for request in requests.values() for draft in request.as_draft()),
+                {link: ready for link, request in requests.items() for ready in request.as_ready()},
+                {link: draft for link, request in requests.items() for draft in request.as_draft()},
             ))
         phases = tuple(CommanderPhase(
             phase, phase.done(reading), phase.ready(reading),

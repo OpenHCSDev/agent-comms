@@ -366,7 +366,7 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_p
     now = time.time()
     awaiting = CommanderUnit(
         RecordedThreadIncarnation("waiting-run", 1.0), AwaitingApplicationRun,
-        NoPendingClock(), (), 0, (), (),
+        NoPendingClock(), (), 0, {}, {},
     )
     stuck = replace(
         awaiting, unit=RecordedThreadIncarnation("stuck-worker", 2.0),
