@@ -13,7 +13,6 @@ from .activity import ObservedActivity
 from .channel_targets import CommandTarget
 from .child_process import ProcessIdentity, ProcessState
 from .coordination_session import NativeCapture
-from .bus_tables import MessageIdentitySource
 from .errors import RelationViolationError
 from .field_codec import (
     NullMember,
@@ -32,7 +31,6 @@ from .locked_store import (
     PatternFile,
 )
 from .message_reference import MessageReference
-from .read_basis import ChannelConversation, DMConversation
 from .reported_turn import NoReportedTurn, ReportedTurn, ReportedTurnState
 from .routing import NoTurnRouting, Routing
 from .store_files import DependentStateTier, SingleFileStore
@@ -390,21 +388,7 @@ class NoTurnLease(NullMember, TurnLease):
     def answered_inputs(
         self, messaging: Messaging, owner: Thread, target: str,
     ) -> tuple[MessageReference, ...]:
-        with NativeCapture(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
-            snapshot = boundary.registry
-            route = CommandTarget.named(target)
-            conversation = route.conversation_key(
-                owner.name, snapshot, ChannelConversation, DMConversation,
-            )
-            reads = messaging.bus.reads
-            document = reads.read_conversation(owner.name, conversation, snapshot)
-            cursor = reads.cursor(owner.name, snapshot, document=document)
-            references = source.delivered_unanswered(
-                owner.incarnation.require_recorded(), conversation.scope(snapshot),
-                cursor, snapshot,
-            )
-            with source.observing() as db:
-                return MessageIdentitySource.answering(db, references, route, snapshot)
+        return ()
 
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return False

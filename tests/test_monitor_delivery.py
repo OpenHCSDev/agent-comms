@@ -403,10 +403,10 @@ def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
 
 
-def notification(line, record_id=transcript_record('notification-record')):
+def notification(line, record_id=transcript_record('notification-record'), *, prompt_id='prompt'):
     return decoded_record(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
-        sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
+        sessionId='session', promptId=prompt_id, origin=dict(kind='task-notification'),
         message=dict(content='<task-notification><event>'+escape(line)+
                      '</event></task-notification>')))
 
@@ -1125,14 +1125,16 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
     for speaker, sender in ((lead, unit), (unit, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
-        output.delivered_targets((sender.name,))
+        original = comms.messaging.send(sender.name, speaker.name, "Open this answer").message
         turn = NativeTurnId(f"{speaker.name}-turn")
+        output.delivered(turn, (original.reference,))
         item_id = NativeItemId("a")
         output.publish_item(FinishedItem(turn, item_id, (AssistantTranscript(
             f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
-    assert comms.bus.pending_count("unit") == 0
-    assert comms.bus.pending_count("lead") == 1
+    replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
+                    if message.body in {"lead answers", "unit answers"})
+    assert replies == (("lead", "unit answers"),)
 
 
 @pytest.mark.parametrize(('rows', 'start', 'frames'), (

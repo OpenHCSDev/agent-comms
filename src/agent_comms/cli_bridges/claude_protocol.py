@@ -38,7 +38,7 @@ from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
-    AllTurnsEnded,
+    AllTurnsCancelled, AllTurnsEnded,
     FinishedItem,
     HiddenItem,
     HistoryNotice,
@@ -63,7 +63,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, NoSourceTurn, SourceTurn
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import WireModel
@@ -244,16 +244,21 @@ class ClaudeToolDraft(ToolDraft):
         return (*self.events, self.call.ended(text, ok, record.position, record.timestamp))
 
     def read_results(self, record: TimedRecord, text: str, ok: bool,
-                     reading: frozenset[str]) -> tuple[RuntimeUpdate, ...]:
+                     reading: frozenset[str], source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
         """What a Read showed the model, timed by its own result record, beside the paths other
         Reads in this session still have open. A failed Read showed no file but ends its call."""
         observed = ReadResultObserved if ok else FailedReadObserved
-        return tuple(observed(path, text, ObservedMonitor(record.uuid, record.timestamp), reading)
+        return tuple(observed(path, text, ObservedMonitor(record.uuid, record.timestamp), reading,
+                              source_turn=source_turn)
                      for path in self.call.context_read_paths())
 
 
 class ClaudeTurn(ABC):
     """The transcript's identified turn owns item identities."""
+
+    @property
+    def source(self) -> SourceTurn:
+        return NoSourceTurn()
 
     @abstractmethod
     def started(self, tool: ClaudeToolDraft,
@@ -285,6 +290,10 @@ class UnknownTurn(ClaudeTurn):
 @dataclass(frozen=True)
 class KnownTurn(ClaudeTurn):
     id: NativeTurnId
+
+    @property
+    def source(self) -> SourceTurn:
+        return NamedSourceTurn(self.id)
 
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
@@ -350,7 +359,7 @@ class ClaudeSession:
                 *self.turn.active(tool_id, self.phase, ModelWaitPhase()),
                 *tool.read_results(record, text, ok, frozenset(
                     path for other in self.tools.values()
-                    for path in other.call.context_read_paths())))
+                    for path in other.call.context_read_paths()), self.turn.source))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
@@ -590,7 +599,7 @@ class TaskNotification(PromptOrigin, declared_name='task-notification'):
 
     def absorbed(self, record: TimedRecord, text: str,
                  session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return TaskEnvelope.from_text(text).updates(record)
+        return TaskEnvelope.from_text(text).updates(record, session.turn.source)
 
 
 class PeerMessage(AgentPrompt, declared_name='peer'):
@@ -631,7 +640,7 @@ class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
-            return (AllTurnsEnded(),)
+            return (AllTurnsCancelled(),)
         return record.origin.prompt(record, self.text, session)
 
 
@@ -662,13 +671,13 @@ class TaskEnvelope(WireModel, ABC):
         return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
 
     @abstractmethod
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]: ...
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]: ...
 
 
 class ForeignTaskNotification(TaskEnvelope):
     text: str
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
@@ -710,8 +719,8 @@ class ReadResultObserved(ConfirmedDelivery):
             lines.pop()
         return tuple(ClaudeMonitorFrame.decode_line(line) for line in lines)
 
-    async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
-        return replace(self, targets=await bridge.read_export(self))
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:
+        return replace(self, references=await bridge.read_export(self))
 
 
 @dataclass(frozen=True)
@@ -726,9 +735,9 @@ class FailedReadObserved(ReadResultObserved):
 class MonitorTaskNotification(TaskEnvelope):
     frames: tuple[MonitorFrame, ...]
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
-        return tuple(MonitorObservation(frame,
-                                        ObservedMonitor(record.uuid, record.timestamp))
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
+        return tuple(MonitorObservation(frame, ObservedMonitor(record.uuid, record.timestamp),
+                                        source_turn=source_turn)
                      for frame in self.frames)
 
 
@@ -741,8 +750,8 @@ class TaskContent(WireModel):
     def envelope(cls, value: str) -> TaskEnvelope:
         return TaskEnvelope.from_text(value)
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
-        return self.text.updates(record)
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
+        return self.text.updates(record, source_turn)
 
 
 class TaskText(TaskContent):
@@ -752,8 +761,8 @@ class TaskText(TaskContent):
 class TaskMessage(ContentBlocks):
     content: list[TaskText]
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
-        return tuple(update for block in self.content for update in block.updates(record))
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
+        return tuple(update for block in self.content for update in block.updates(record, source_turn))
 
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
@@ -774,12 +783,23 @@ class UserMessage(ContentBlocks):
         return '\n'.join(text for block in self.content if (text := block.prompt_text()))
 
 
-class UserRecord(ClaudeRecord, TimedRecord, Originated, declared_name='user'):
-    promptId: str
-    message: UserMessage
+class PromptRecord(ClaudeRecord, TimedRecord, ABC, declared_name=None):
+    """Every prompt shape opens its own source turn at the wire boundary."""
+
+    promptId: NativeTurnId
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
+        session.turn = KnownTurn(self.promptId)
+        return self.opened_updates(session)
+
+    @abstractmethod
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
+
+
+class UserRecord(PromptRecord, Originated, declared_name='user'):
+    message: UserMessage
+
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
     def request(self) -> str:
@@ -792,20 +812,19 @@ class UserRecord(ClaudeRecord, TimedRecord, Originated, declared_name='user'):
 class CompactSummary(UserRecord, declared_name='compact-summary'):
     """Claude's summary of the conversation before its latest compaction."""
 
-    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(), Summarized(self.message.text()))
 
     def request(self) -> str:
         return ''
 
 
-class TaskUserRecord(ClaudeRecord, TimedRecord, declared_name='task-user'):
+class TaskUserRecord(PromptRecord, declared_name='task-user'):
     origin: TaskNotification
     message: TaskMessage
 
-    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return self.message.updates(self)
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return self.message.updates(self, session.turn.source)
 
 
 class SubtypeHeader(WireHeader):

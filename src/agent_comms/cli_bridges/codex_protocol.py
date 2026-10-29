@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
 
 from pydantic import (
@@ -20,7 +21,7 @@ from pydantic import (
 )
 
 from agent_comms.cli_protocol import Declared, TaggedWire, TextWire
-from agent_comms.declared_family import UnknownFamilyMember
+from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.field_codec import (
     FieldCodec,
@@ -58,10 +59,11 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import DeclaredWireFamily, WireModel
+from .shared import BridgeInputObserved
 
 
 class UserInput(TaggedWire, ABC, affix=""):
@@ -187,17 +189,63 @@ class MessageInput(TurnInput):
     input: tuple[TextInput, ...] = Field(min_length=1)
 
 
-class BusInput(MessageInput):
-    client_prefix: ClassVar[str] = 'comms:'
+class ClientId(DeclaredFamily, ABC):
+    """Codex's optional wire key is decoded once, before item behavior is selected."""
 
+    @classmethod
+    @boundary_decoder
+    def decode(cls, value: str | None) -> ClientId:
+        if value is None:
+            return NoClientId()
+        if value.startswith(BusClientId.prefix):
+            return BusClientId(FieldCodec.decode(MessageId, value[len(BusClientId.prefix):]))
+        return ForeignClientId(value)
+
+    @property
+    @abstractmethod
+    def external(self) -> str | None: ...
+
+    def completed(self, item: UserItem, turn_id: NativeTurnId,
+                  events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
+        return CompletedItem(turn_id, item.id, events)
+
+
+@dataclass(frozen=True)
+class NoClientId(ClientId):
+    @property
+    def external(self) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class ForeignClientId(ClientId):
+    text: str
+
+    @property
+    def external(self) -> str:
+        return self.text
+
+
+@dataclass(frozen=True)
+class BusClientId(ClientId):
+    message_id: MessageId
+    prefix: ClassVar[str] = 'comms:'
+
+    @property
+    def external(self) -> str:
+        return self.prefix + self.message_id
+
+    def completed(self, item: UserItem, turn_id: NativeTurnId,
+                  events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
+        return BridgeInputObserved(events, self.message_id, item.input_text,
+                                   source_turn=NamedSourceTurn(turn_id))
+
+
+class BusInput(MessageInput):
     @classmethod
     def for_message(cls, thread: str, message_id: MessageId, text: str) -> BusInput:
-        return cls(threadId=thread, clientUserMessageId=cls.client_prefix + message_id,
+        return cls(threadId=thread, clientUserMessageId=BusClientId(message_id).external,
                    input=(TextInput(text=text),))
-
-    @classmethod
-    def identifies(cls, client_id: str | None) -> bool:
-        return client_id is not None and client_id.startswith(cls.client_prefix)
 
 
 SEND_TOOL = 'comms_send'
@@ -428,18 +476,22 @@ class ReasoningItem(AccumulatedItem):
 class UserItem(Item):
     wire_tag = 'userMessage'
     content: list[Declared[UserInput]]
-    clientId: str | None = None
+    clientId: Annotated[
+        ClientId, ValidateAs(str | None, ClientId.decode),
+        PlainSerializer(lambda identity: identity.external),
+    ] = Field(default_factory=NoClientId)
+
+    @property
+    def input_text(self) -> str:
+        return '\n'.join(part.display for part in self.content)
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (UserTranscript('\n'.join(part.display for part in self.content), position=self.id, timestamp=timestamp),)
+        return (UserTranscript(self.input_text, position=self.id, timestamp=timestamp),)
 
     def completed(
         self, turn_id: NativeTurnId, events: tuple[TranscriptEvent, ...]
     ) -> RuntimeUpdate:
-        # Bus inputs already appear in Core's inbox; the live view does not echo them as new input.
-        if BusInput.identifies(self.clientId):
-            return HiddenItem(events)
-        return super().completed(turn_id, events)
+        return self.clientId.completed(self, turn_id, events)
 
 
 class ToolItem(ToolCallItem, Item, ABC):

@@ -16,6 +16,8 @@ from . import activity
 from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
+from .channel_targets import CommandTarget
+from .message_reference import MessageReference
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import (
     LiveTextTranscript,
@@ -25,7 +27,7 @@ from .transcript_events import (
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import NativeItemId, NativeTurnId, TurnItem
+from .turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, TurnItem
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
@@ -174,9 +176,9 @@ class ThreadOutput(activity.ThreadOutput):
     def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
         return cls(transcript, comms.agents)
 
-    def delivered_targets(self, targets: tuple[str, ...]) -> None:
-        """Ordinary transcript outputs do not publish session replies."""
-        return None
+    def delivered(self, turn_id: NativeTurnId, references: tuple[MessageReference, ...]) -> None:
+        """Every external turn records the original deliveries that opened it."""
+        self.transcript.delivered(turn_id, references)
 
     def publish_item(self, item: FinishedItem) -> None:
         self.transcript.finish(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
@@ -223,11 +225,17 @@ class ThreadOutput(activity.ThreadOutput):
         return finished
 
     def end_turn(self, turn_id: NativeTurnId) -> None:
+        self.transcript.finish_replies(turn_id)
         for key in tuple(self.drafts):
             if key.turn_id == turn_id:
                 del self.drafts[key]
 
     def end_all_turns(self) -> None:
+        self.transcript.transition_replies(lambda window: window.finished())
+        self.drafts.clear()
+
+    def cancel_all_turns(self) -> None:
+        self.transcript.transition_replies(lambda window: window.cancelled())
         self.drafts.clear()
 
     @property
@@ -237,19 +245,16 @@ class ThreadOutput(activity.ThreadOutput):
 
 @dataclass
 class ReplyingThreadOutput(ThreadOutput):
-    """The last finished assistant item replies to this turn's confirmed deliveries."""
+    """The last finished assistant item replies only to deliveries that opened its turn."""
 
     messaging: Messaging = field(kw_only=True)
-    reply_targets: set[str] = field(default_factory=set)
     pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
 
     def staged(self) -> Self:
-        return replace(super().staged(), reply_targets=self.reply_targets.copy(),
-                       pending=self.pending.copy())
+        return replace(super().staged(), pending=self.pending.copy())
 
     def commit(self, staged: Self) -> None:
         super().commit(staged)
-        self.reply_targets = staged.reply_targets
         self.pending = staged.pending
 
     @classmethod
@@ -260,9 +265,6 @@ class ReplyingThreadOutput(ThreadOutput):
             commanded=cls(transcript, comms.agents, messaging=comms.messaging),
         )
 
-    def delivered_targets(self, targets: tuple[str, ...]) -> None:
-        self.reply_targets.update(targets)
-
     def flush_before(self, key: TurnItem) -> None:
         for previous in tuple(self.pending):
             if previous != key:
@@ -270,7 +272,7 @@ class ReplyingThreadOutput(ThreadOutput):
 
     def publish_item(self, item: FinishedItem) -> None:
         self.flush_before(item.key)
-        if self.reply_targets and item.assistant_text:
+        if item.assistant_text:
             self.pending[item.key] = item
             self.transcript.draft(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
         else:
@@ -281,6 +283,9 @@ class ReplyingThreadOutput(ThreadOutput):
         super().publish_draft(item)
 
     def end_turn(self, turn_id: NativeTurnId) -> None:
+        opening = self.messaging.bus.bus.messages_for_references(self.transcript.opening_for(turn_id))
+        targets = {target for message in opening
+                   for target in CommandTarget.named(message.target).automatic_reply_targets(message.sender)}
         for key in tuple(self.pending):
             if key.turn_id != turn_id:
                 continue
@@ -288,21 +293,24 @@ class ReplyingThreadOutput(ThreadOutput):
             publications = tuple(
                 self.messaging.send(
                     sender=self.activity_thread, target=target, body=item.assistant_text,
+                    source_turn=NamedSourceTurn(turn_id),
                 ).message.reference
-                for target in sorted(self.reply_targets)
+                for target in sorted(targets)
             )
             super().publish_item(replace(item, events=tuple(
                 event.with_publications(publications) for event in item.events
             )))
             del self.pending[key]
-        self.reply_targets.clear()
         super().end_turn(turn_id)
 
     def end_all_turns(self) -> None:
         for turn_id in dict.fromkeys(key.turn_id for key in self.pending):
             self.end_turn(turn_id)
-        self.reply_targets.clear()
         super().end_all_turns()
+
+    def cancel_all_turns(self) -> None:
+        self.pending.clear()
+        super().cancel_all_turns()
 
 
 class ReadingPhase(ABC):
@@ -623,3 +631,10 @@ class AllTurnsEnded(TurnEnded):
 
     def retire(self, output: ThreadOutput) -> None:
         output.end_all_turns()
+
+
+class AllTurnsCancelled(TurnEnded):
+    """Interrupted output is retained context, not a completed answer."""
+
+    def retire(self, output: ThreadOutput) -> None:
+        output.cancel_all_turns()
