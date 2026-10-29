@@ -184,6 +184,11 @@ class InputAnswerRead(ThreadRead[frozenset[MessageReference]]):
     references: tuple[MessageReference, ...]
     privacy: RegistryPrivacy
 
+    def read(self) -> frozenset[MessageReference]:
+        if not self.references:
+            return frozenset()
+        return super().read()
+
     def native(self) -> frozenset[MessageReference]:
         return HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy).answered_inputs(
             self.references)

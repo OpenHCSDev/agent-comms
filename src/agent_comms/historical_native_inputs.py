@@ -25,7 +25,6 @@ from .native_entries import NativeEvidenceScope
 from .native_transcript import NativeTranscript
 from .private_registry_guard import RegistryPrivacy
 from .thread_identity import ThreadIncarnation
-from .transcript_sources import TranscriptSource
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .declared_family import DeclaredFamily
 from .field_codec import AssignmentId, InputId, MessageId, WireName, RootId, ThreadLookup
@@ -97,7 +96,7 @@ class FullHistoricalNativeInput(HistoricalNativeInput):
 
 
 @dataclass(frozen=True)
-class HistoricalNativeAnswers(TranscriptSource):
+class HistoricalNativeAnswers:
     """Join retained input proofs to their own bounded transcript output."""
 
     root: Path
@@ -105,15 +104,18 @@ class HistoricalNativeAnswers(TranscriptSource):
     privacy: RegistryPrivacy
 
     def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
-        if not references:
-            return frozenset()
         with Coordination(str(CoordinationStore.path_in(self.root)),
                           session_type=ReadNativeCoordinationSession) as store, NativeEvidenceScope() as reads:
-            sources = {reference: tuple(proof for proof in read_historical_native_inputs(
-                store, wire_root_id=self.privacy.namespace,
-                recipient_lookup=self.owner.require_recorded().lookup,
-                source_seq=reference.seq, source_reads=reads)
-                if proof.execution.proves_full_source(proof)) for reference in references}
+            sources: dict[MessageReference, tuple[HistoricalNativeInput, ...]] = {}
+            for reference in references:
+                proofs = read_historical_native_inputs(
+                    store, wire_root_id=self.privacy.namespace,
+                    recipient_lookup=self.owner.require_recorded().lookup,
+                    source_seq=reference.seq, source_reads=reads)
+                if any(proof.source_message_id != reference.message_id for proof in proofs):
+                    raise IdentityConflict("Native answer source differs from its named message")
+                sources[reference] = tuple(proof for proof in proofs
+                                           if proof.execution.proves_full_source(proof))
             contexts = dict.fromkeys(proof.context for proofs in sources.values() for proof in proofs)
             completed = frozenset(context for context in contexts
                                   if NativeTranscript(context.session_file).completed_input(context))
