@@ -34,7 +34,7 @@ class OwnerNotice(TaskAttachment, declared_name=None):
 
     role: ClassVar[MessageRole] = ConversationRole()
 
-    def user_task_facts(self, message: Message):
+    def user_task_facts(self, message: Message) -> tuple[()]:
         """Nobody typed it, so it is no owner source for any task."""
         return ()
 
@@ -115,28 +115,19 @@ class EscalationNotice(OwnerNotice, declared_name=None):
         return tuple(message for message in sent if message.task == notice)
 
     @classmethod
-    def answers(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
-                lines: Sequence[Message]) -> tuple[Message, ...]:
-        """The commander's answers naming any of those lines, oldest first."""
-        names = snapshot.names_for(commander)
-        return tuple(sorted((reply for reply in source.replies(tuple(line.reference for line in lines))
-                             if reply.sender in names), key=lambda reply: reply.seq))
+    def newest_answer(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
+                      lines: Sequence[Message]) -> tuple[Message, ...]:
+        """The commander's newest answer naming any of those lines, from one read."""
+        return source.latest_reply(tuple(line.reference for line in lines), snapshot.names_for(commander))
 
     @classmethod
     def unanswered(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
                    before: float) -> tuple[Message, ...]:
         """Lines sent by ``before`` and after the newest answer to any line of this burst kind."""
         sent = cls.lines(source, snapshot, commander, time.time())
-        covered = max((answer.timestamp for answer in cls.answers(source, snapshot, commander, sent)),
+        covered = max((answer.timestamp for answer in cls.newest_answer(source, snapshot, commander, sent)),
                       default=0.0)
         return tuple(message for message in sent if covered < message.timestamp <= before)
-
-    @classmethod
-    def newest_answer(cls, source: BusReader, snapshot: RegistrySnapshot,
-                      commander: str) -> tuple[Message, ...]:
-        answers = cls.answers(source, snapshot, commander,
-                              cls.lines(source, snapshot, commander, time.time()))
-        return answers[-1:]
 
 
 @dataclass(frozen=True)

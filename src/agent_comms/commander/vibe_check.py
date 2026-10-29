@@ -26,7 +26,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.messages import Message
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
+from agent_comms.task_attachments.owner_notices import ChokeholdNotice, EscalationNotice, VibeCheckNotice
 from agent_comms.standing_rules import (
     BlocksRelease,
     Degradation,
@@ -50,9 +50,10 @@ class Escalation:
     """An answer owed to an escalation itself. Ignoring one is the chokehold's signal."""
 
     message: Message
+    notice: ClassVar[type[EscalationNotice]]
 
     def clearing_action(self) -> str:
-        return (f"Answer the {self.message.task.title} burst by its protocol, naming it with "
+        return (f"Answer the {self.notice.title} burst by its protocol, naming it with "
                 f"--answers {self.message.message_id}.")
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
@@ -157,6 +158,8 @@ class VibeCheck(UndatedStandingRule):
 class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """A vibe check is owed an answer like a directive: the gate refuses until it gets one."""
 
+    notice = VibeCheckNotice
+
     seconds: ClassVar[int] = 5 * 60
 
     @classmethod
@@ -258,6 +261,8 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """Every chokehold message gates the commander from the moment it lands."""
 
+    notice = ChokeholdNotice
+
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
@@ -300,7 +305,8 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
         with comms.bus.bus.reading() as source:
             if ChokeholdNotice.unanswered(source, snapshot, commander, time.time()):
                 return ()
-            return ChokeholdNotice.newest_answer(source, snapshot, commander)
+            return ChokeholdNotice.newest_answer(
+                source, snapshot, commander, ChokeholdNotice.lines(source, snapshot, commander, time.time()))
 
     @staticmethod
     def blocking_signs(comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:

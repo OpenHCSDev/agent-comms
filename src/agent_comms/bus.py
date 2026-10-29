@@ -422,6 +422,11 @@ class BusReader(RouteCounts, ABC):
                 db, scope, since, before, upper, limit, kinds,
             )
 
+    def latest_reply(self, references: tuple[MessageReference, ...],
+                     responders: frozenset[str]) -> tuple[BusRecord, ...]:
+        with self.observing() as db:
+            return AnsweredSource.latest_reply(db, tuple(reference.seq for reference in references), responders)
+
     def replies(self, references: tuple[MessageReference, ...]) -> tuple[BusRecord, ...]:
         with self.observing() as db:
             sequences = {row.seq for original in references

@@ -222,6 +222,26 @@ class AnsweredSource(messages.BusProjectionTables):
         return tuple(MessageReference.iterate(rows))
 
     @classmethod
+    def latest_reply(
+        cls, db: sqlite3.Connection, sequences: tuple[int, ...], responders: frozenset[str],
+    ) -> tuple[messages.BusRecord, ...]:
+        """The newest reply the responders sent naming any of those originals, from one read."""
+        if not sequences:
+            return ()
+        asked = ",".join("?" for _ in sequences)
+        replying = ",".join("?" for _ in responders)
+        identity = MessageIdentitySource.declared_name
+        rows = db.execute(
+            f'SELECT answered.seq FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{identity}" AS author ON author.seq=answered.seq '
+            + cls._sql(f'WHERE answered.{{original}} IN ({asked}) ')
+            + f'AND author.sender IN ({replying}) ORDER BY answered.seq DESC LIMIT 1',
+            (*sequences, *responders),
+        )
+        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+    @classmethod
     def unanswered(
         cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
         since: float, before: float, upper: int, limit: int,
