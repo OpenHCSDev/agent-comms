@@ -136,7 +136,7 @@ def test_recent_relationships_keep_the_global_cut_and_exact_preview(tmp_path):
     ))
     for _ in range(comms.relationships.RECENT_MESSAGES):
         bus.append(lambda seq, db: PublicRecord.from_message(
-            Message("peer", "peer", "unrelated global row", InfoKind, seq=seq),
+            Message("peer", "origin", "unrelated global row", InfoKind, seq=seq),
         ))
     snapshot = comms.relationships.snapshot("owner")
     assert snapshot.history_limited and snapshot.history_messages == comms.relationships.RECENT_MESSAGES

@@ -331,7 +331,7 @@ class ThreadRow(GoalOwner, DeclaredWireType):
     def to_wire(self) -> dict[str, JsonValue]:
         return dict(self.raw)
 
-    def __reduce__(self):
+    def __reduce__(self) -> tuple[Callable[[object], Self], tuple[dict[str, JsonValue]]]:
         return type(self).from_wire, (self.to_wire(),)
 
     def decoded(self) -> Thread:
@@ -378,16 +378,19 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
                 else self._raw[name].raw.get(key) == expected)
         )
 
+    def determining(self, name: str) -> GoalOwner:
+        """The current nominal determining row, without acquiring a complete declaration."""
+        return self._decoded[name] if name in self._decoded else self._raw[name]
+
     def creation_time(self, name: str) -> CreationTime:
-        return ChainMap(self._decoded, self._raw)[name].created_at
+        return self.determining(name).created_at
 
     def incarnation(self, name: str) -> ThreadIncarnation:
-        return ChainMap(self._decoded, self._raw)[name].incarnation
+        return self.determining(name).incarnation
 
     def active_goal_owners(self) -> Iterator[Thread]:
         """Select through the shared goal/role declarations before full thread acquisition."""
-        return (self[name] for name, row in ChainMap(self._decoded, self._raw).items()
-                for _ in row.active_goals())
+        return (self[name] for name in self for _ in self.determining(name).active_goals())
 
     def __getitem__(self, name: str) -> Thread:
         if name not in self._decoded:
@@ -424,8 +427,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def to_wire(self) -> dict[str, JsonValue]:
         # A read memo is not an edit: __setitem__ removes raw only for actual writes.
-        return {name: FieldCodec.encode(row)
-                for name, row in ChainMap(self._raw, self._decoded).items()}
+        return {name: FieldCodec.encode(self._raw[name] if name in self._raw else self._decoded[name])
+                for name in self}
 
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:

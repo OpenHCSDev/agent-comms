@@ -3,6 +3,7 @@
 from agent_comms.repo import Checkout
 import json
 import os
+import pickle
 import subprocess
 import sys
 from dataclasses import dataclass, field, replace
@@ -157,21 +158,21 @@ def test_lifecycle_document_survives_fresh_process_restart(tmp_path):
     assert restored.snapshot().owner_generations["renamed"] > 0
 
 
-def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(tmp_path):
+def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(comms, tmp_path):
     from agent_comms.field_codec import FieldCodec
     from agent_comms.registry_document import InvalidRegistryDocument, ThreadRows
     from agent_comms.thread_execution import ExternalThreadExecution
 
     # A real declaration with malformed non-determining data stays lazy until a full read.
-    row = FieldCodec.encode_fields(Thread('unread', frozenset(), Checkout(tmp_path)))
+    thread = comms.registry.declare(Thread('unread', frozenset(), Checkout(tmp_path)))
+    row = FieldCodec.encode_fields(thread)
     row[FieldCodec.field_plan(Thread, 'model').key] = 123
     stored = {'unread': row}
     with pytest.raises(InvalidRegistryDocument):
         ThreadRows.from_wire(stored)['unread']
     assert ThreadRows.from_wire(stored) == ThreadRows.from_wire(stored)
     written = ThreadRows.from_wire(stored)
-    written['unread'] = Thread(
-        'unread', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)
+    written['unread'] = replace(thread, execution=ExternalThreadExecution)
     other = ThreadRows.from_wire({})
     other['unread'] = written['unread']
     assert written == other
@@ -188,10 +189,10 @@ def test_birth_projection_agrees_for_full_thread_and_stored_float_records(tmp_pa
     assert FieldCodec.decode(type(stored), FieldCodec.encode(stored)) == stored
 
 
-def test_full_thread_read_keeps_original_raw_wire_until_an_actual_assignment(tmp_path):
+def test_full_thread_read_keeps_original_raw_wire_until_an_actual_assignment(comms, tmp_path):
     from agent_comms.registry_document import ThreadRows
 
-    thread = Thread("owner", frozenset({"kept"}), Checkout(tmp_path))
+    thread = comms.registry.declare(Thread("owner", frozenset({"kept"}), Checkout(tmp_path)))
     rows = ThreadRows.from_wire({thread.name: FieldCodec.encode_fields(thread)})
     tags_key = FieldCodec.field_plan(Thread, "tags").key
     kept_tags = rows.to_wire()[thread.name][tags_key]
@@ -200,3 +201,18 @@ def test_full_thread_read_keeps_original_raw_wire_until_an_actual_assignment(tmp
     assert rows.to_wire()[thread.name][tags_key] is kept_tags
     rows[thread.name] = replace(loaded, tags=frozenset({"assigned"}))
     assert rows.to_wire()[thread.name][tags_key] == ["assigned"]
+
+
+def test_captured_thread_row_uses_its_wire_decode_and_pickle_protocol(comms, tmp_path):
+    from agent_comms.registry_document import ThreadRow
+
+    thread = comms.registry.declare(Thread("captured", frozenset({"kept"}), Checkout(tmp_path)))
+    row = ThreadRow.from_wire(FieldCodec.encode_fields(thread))
+    decoded = FieldCodec.decode(ThreadRow, FieldCodec.encode(row))
+    restored = pickle.loads(pickle.dumps(row, protocol=5))
+    for captured in (decoded, restored):
+        assert type(captured) is ThreadRow
+        assert captured == row
+        assert captured.to_wire() == row.to_wire()
+        assert captured.incarnation == thread.incarnation
+        assert captured.decoded() == thread

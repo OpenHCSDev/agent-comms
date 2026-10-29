@@ -649,8 +649,8 @@ class FieldPlan:
     def wire_keys(self) -> tuple[str, ...]:
         return (self.key,)
 
-    def encoded(self, value: JsonValue, *, key: str | None = None) -> dict[str, JsonValue]:
-        return {key or self.key: value}
+    def encoded(self, value: JsonValue, *, key: str) -> dict[str, JsonValue]:
+        return {key: value}
 
     def schema_fields(self):
         annotation, declared = self.annotation, self.declared
@@ -780,7 +780,7 @@ class ContextFieldPlan(DeclaredFieldPlan):
     def wire_keys(self) -> tuple[str, ...]:
         return ()
 
-    def encoded(self, value: JsonValue, *, key: str | None = None) -> dict[str, JsonValue]:
+    def encoded(self, value: JsonValue, *, key: str) -> dict[str, JsonValue]:
         return {}
 
     def decoded(self, data: object) -> dict[str, object]:
@@ -841,7 +841,7 @@ class InlineFieldPlan(DeclaredFieldPlan):
     def wire_keys(self) -> tuple[str, ...]:
         return tuple(entry.key for entry in self.record.fields)
 
-    def encoded(self, value: JsonValue, *, key: str | None = None) -> dict[str, JsonValue]:
+    def encoded(self, value: JsonValue, *, key: str) -> dict[str, JsonValue]:
         if not isinstance(value, dict):
             raise MalformedRecord("An inline record must encode a JSON object.")
         return value

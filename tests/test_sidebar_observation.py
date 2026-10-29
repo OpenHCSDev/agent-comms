@@ -205,7 +205,7 @@ def test_captured_lookup_acquires_and_binds_only_requested_complete_rows(
 
 @pytest.mark.parametrize("decoded", (False, True))
 def test_current_reference_acquires_only_captured_incarnations(comms, declare_reference, decoded):
-    original = declare_reference()
+    original = declare_reference(status=RunningThreadStatus())
     unread = declare_reference("unread")
     comms.registry.rename(original.name, "renamed")
     captured = comms.registry.snapshot()

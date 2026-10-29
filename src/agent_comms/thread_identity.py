@@ -435,11 +435,6 @@ class ThreadIncarnationRecord:
             return RecordedThreadIncarnation(self.name, birth)
         return member.recorded_as(self.name)
 
-    @classmethod
-    def decode(cls, name: str, birth: float) -> ThreadIncarnation:
-        return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation
-
-
 
 @dataclass(frozen=True, kw_only=True)
 class ThreadBirthRecord(ThreadIncarnationRecord):

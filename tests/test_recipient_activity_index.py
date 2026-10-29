@@ -88,6 +88,7 @@ def test_captured_lookup_keeps_original_recipient_identity_and_retirement(tmp_pa
     comms.registry.rename(peer.name, "renamed")
     renamed = comms.registry.snapshot()
     assert renamed.recipient(recipient, original) == RegisteredRecipient(renamed.require("renamed"))
+    comms.registry.unregister("renamed")
     comms.threads.delete("renamed")
     deleted = comms.registry.snapshot()
     assert deleted.recipient(recipient, original) == RetiredRecipient(recipient.recipient_lookup)

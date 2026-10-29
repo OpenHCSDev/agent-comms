@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
@@ -113,12 +113,11 @@ class MutualThreadRelation(ABC):
                           if current else self.entry_goal_contacts(),
         )
 
-    def counterpart(self, thread: Thread) -> ThreadIncarnation | None:
+    def counterparts(self, thread: Thread) -> Iterator[ThreadIncarnation]:
         if self.owner_incarnation == thread.incarnation:
-            return self.peer_incarnation
-        if self.peer_incarnation == thread.incarnation:
-            return self.owner_incarnation
-        return None
+            yield self.peer_incarnation
+        elif self.peer_incarnation == thread.incarnation:
+            yield self.owner_incarnation
 
 
 @dataclass(frozen=True, slots=True)
@@ -424,8 +423,7 @@ class CollaboratingRelationshipGroup(SortableRelationshipGroup):
     def sources(cls, inputs: RelationshipInputs) -> tuple[RelationshipEntrySource, ...]:
         selected: dict[ThreadIncarnation, list[MutualThreadRelation]] = {}
         for relation in (*inputs.edges, *inputs.goal_contacts):
-            identity = relation.counterpart(inputs.thread)
-            if identity is not None:
+            for identity in relation.counterparts(inputs.thread):
                 selected.setdefault(identity, []).append(relation)
         return tuple(MutualEntrySource(identity, tuple(relations))
                      for identity, relations in selected.items())
@@ -449,11 +447,11 @@ class RelationshipInputs:
 class RelationshipContext(RelationshipInputs):
     people: Mapping[str, presentation.ThreadView]
 
-    def entry(self, target: NamedTarget, *, message: MessageInput | None = None,
+    def entry(self, target: NamedTarget, *, sequence: int = 0, timestamp: float = 0,
               detail: str = "") -> RelationshipEntry:
         return RelationshipEntry(
             target.name, target.kind, self.people.get(target.name, presentation.NoThreadView()),
-            message.seq if message else 0, message.timestamp if message else 0, detail,
+            sequence, timestamp, detail,
         )
 
 
@@ -493,7 +491,7 @@ class RecentEntrySource(NamedEntrySource):
 
     def entry(self, context: RelationshipContext) -> RelationshipEntry:
         return context.entry(
-            self.target, message=self.message,
+            self.target, sequence=self.message.seq, timestamp=self.message.timestamp,
             detail=f"{self.message.sender} → {self.message.target}\n{self.message.body[:240]}",
         )
 
@@ -644,7 +642,7 @@ class RelationshipEditContext:
                 edge
                 for edge in self.pairs
                 if self.second is not None
-                and edge.counterpart(self.first) == self.second.incarnation
+                and self.second.incarnation in edge.counterparts(self.first)
             ),
             None,
         )
@@ -840,10 +838,10 @@ class ThreadRelationships:
                 granted[peer.incarnation].append(ChannelmateRelevance)
         relation: MutualThreadRelation
         for relation in (*edges, *contacts):
-            identity = relation.counterpart(thread)
-            if identity in granted:
-                granted[identity].append(relation.relevance)
-                records.setdefault(identity, []).append(relation.record(identity))
+            for identity in relation.counterparts(thread):
+                if identity in granted:
+                    granted[identity].append(relation.relevance)
+                    records.setdefault(identity, []).append(relation.record(identity))
         return tuple(sorted(
             (
                 PeerRelation(
@@ -890,10 +888,11 @@ class ThreadRelationships:
         contacts, diagnostics = self._goal_contacts(registry, thread)
         visible: dict[ThreadIncarnation, RelationshipEntry] = {}
         for relation in (*explicit, *contacts):
-            identity = relation.counterpart(thread)
-            visible[identity] = relation.entry(
-                identity, None, identity.current(registry), visible.get(identity),
-            )
+            for identity in relation.counterparts(thread):
+                visible[identity] = relation.entry(
+                    identity, presentation.NoThreadView(), identity.current(registry),
+                    visible.get(identity),
+                )
         return Contacts(
             explicit,
             tuple(sorted(visible.values(), key=lambda row: (row.target, not row.available))),
