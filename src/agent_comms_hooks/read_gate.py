@@ -1,9 +1,10 @@
 """PreToolUse is a lightweight request to the existing resident session owner."""
 
+from . import PermissionHookProgram
 from .watch import SessionHookProgram
 
 
-class ReadGateProgram(SessionHookProgram):
+class ReadGateProgram(SessionHookProgram, PermissionHookProgram):
     events = ("PreToolUse",)
 
     @classmethod

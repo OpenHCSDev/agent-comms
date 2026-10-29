@@ -320,10 +320,10 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
             "probe_record.py": (
                 "from dataclasses import dataclass\nfrom typing import ClassVar, Literal\n"
                 "from parent_only_dependency import VERSION\n"
-                "from agent_comms.owner_protocol import CORE_COMMIT\n"
+                "from agent_comms.package_stamp import STAMP\n"
                 "@dataclass(frozen=True)\nclass Record:\n"
                 "    version: ClassVar[int] = VERSION\n    value: str\n"
-                "    commit: Literal[CORE_COMMIT]\n"
+                "    commit: Literal[STAMP.commit()]\n"
             )
         }
     )

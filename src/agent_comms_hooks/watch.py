@@ -49,11 +49,11 @@ class HookAnswer(HookRecord, SessionWire):
             raise HookBridgeUnavailable(f"The session bridge refused the hook: {member}: {record!r}")
         return cls.decode(record)
 
-    def print(self) -> None:
+    def print(self, program: type[ClaudeHookProgram]) -> None:
         sys.stdout.write(self.stdout)
         sys.stderr.write(self.stderr)
         if self.status:
-            raise SystemExit(self.status)
+            raise SystemExit(program.failure_status(self.status))
 
 
 @dataclass(frozen=True)
@@ -95,7 +95,7 @@ class SessionEndpoint:
         Live and lapsed enrolled claims are both bound. An unrecorded launch or a
         session never enrolled has no bus; the endpoint never guesses its role.
         """
-        if self.path.exists() and self.record_path.exists():
+        if self.record_path.exists():
             return BoundSession(self)
         return UnboundSession()
 
@@ -141,7 +141,7 @@ class BoundSession(HookSession):
                 f"Bound session {self.endpoint.thread} cannot answer its hook: {error}. "
                 "Start its existing agent-comms-claude-bridge; no unbound fallback was used."
             ) from error
-        answer.print()
+        answer.print(program)
 
 
 class SessionHookProgram(ClaudeHookProgram, ABC):
@@ -149,6 +149,10 @@ class SessionHookProgram(ClaudeHookProgram, ABC):
 
     @classmethod
     def main(cls) -> None:
-        record = json.load(sys.stdin)
-        hook = ClaudeHook.decode(record)
-        SessionEndpoint(hook.session_id).session().invoke(cls, record)
+        try:
+            record = json.load(sys.stdin)
+            hook = ClaudeHook.decode(record)
+            SessionEndpoint(hook.session_id).session().invoke(cls, record)
+        except Exception as error:
+            # This process boundary reports the failure; it never substitutes an unbound answer.
+            cls.failed(error)
