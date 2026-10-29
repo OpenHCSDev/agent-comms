@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr
 from dataclasses import dataclass
 from io import StringIO
 
@@ -32,7 +32,9 @@ class CliUndecodableError(Exception):
 class CliOutput:
     """What a command line printed. The worker encodes it on the runtime that ran the
     command (an older Core than the installer's, during an upgrade), so it stays plain
-    text; the installer decodes it into the command's answer here, once."""
+    text; the installer decodes it into the command's answer here, once. stderr contains
+    Python writes during the call; native writes and pre-bound logging go to worker diagnostics.
+    """
 
     returncode: int
     stdout: str
@@ -82,6 +84,6 @@ class CliCommandProbe(CliInvocation, RuntimeProbe[CliOutput]):
 
     def run(self) -> CliOutput:
         output, errors = StringIO(), StringIO()
-        with redirect_stdout(output), redirect_stderr(errors):
+        with redirect_stderr(errors):
             returncode = self.invoke(self.arguments, output)
         return CliOutput(returncode, output.getvalue(), errors.getvalue())

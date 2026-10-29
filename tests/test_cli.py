@@ -353,7 +353,7 @@ class TestSelectedTargetActions:
         explicit = RestartCliCommand(name=OneOwner('alpha'), agent_bin=GivenBinary('/operator/native'),
                                       agent_args=GivenArguments(('--no-extensions',)))
         from agent_comms.cli import build_parser
-        options = build_parser().parse_args([
+        options = build_parser(output=sys.stdout).parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
             '--agent-args=--no-extensions'])
         parsed = options.command_declaration.from_arguments(options)

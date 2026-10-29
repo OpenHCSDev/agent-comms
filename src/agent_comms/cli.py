@@ -28,10 +28,11 @@ def _fail(error: BaseException, output: TextIO) -> int:
     return 1
 
 
-def build_parser(arguments: Sequence[str] = ()) -> argparse.ArgumentParser:
-    parser = CliArgumentParser(prog="agent-comms", description=__doc__)
+def build_parser(arguments: Sequence[str] = (), *, output: TextIO) -> argparse.ArgumentParser:
+    parser_type = CliArgumentParser.writing_to(output)
+    parser = parser_type(prog="agent-comms", description=__doc__)
     parser.add_root_options()
-    selection = CliArgumentParser.command_parsing(arguments)
+    selection = parser_type.command_parsing(arguments)
     subparsers = parser.add_subparsers(required=True)
     for declaration in selection.declarations():
         declaration.add_parser(subparsers)
@@ -44,7 +45,8 @@ class CliInvocation:
     def execute(self, arguments: Sequence[str], output: TextIO) -> int:
         """Own parsing, root selection and dispatch for every registered command."""
         arguments = list(arguments)
-        args, unknown = build_parser(arguments).parse_known_args(arguments, namespace=CliArguments())
+        args, unknown = build_parser(arguments, output=output).parse_known_args(
+            arguments, namespace=CliArguments())
         if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
             raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
         declaration = args.command_declaration
@@ -62,8 +64,6 @@ class CliInvocation:
         with LaunchRoot.unstarted().selected():
             try:
                 return self.execute(arguments, output)
-            except KeyboardInterrupt:
-                return 130
             except CLI_FAILURES as exc:
                 return _fail(exc, output)
             except CliParserExit as exited:
@@ -71,8 +71,11 @@ class CliInvocation:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    arguments = argv if isinstance(argv, Sequence) else sys.argv[1:]
-    return CliInvocation().invoke(arguments, sys.stdout)
+    try:
+        arguments = argv if isinstance(argv, Sequence) else sys.argv[1:]
+        return CliInvocation().invoke(arguments, sys.stdout)
+    except KeyboardInterrupt:
+        return 130
 
 
 if __name__ == "__main__":

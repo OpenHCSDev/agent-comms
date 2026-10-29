@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import argparse
-import sys
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Never, Self
+from typing import TYPE_CHECKING, Never, Self, TextIO
 
 from agent_comms.cli_command import CliCommand
 from agent_comms.launch_root import DefaultLaunch, LaunchRequest, LaunchRoot
+from agent_comms.field_codec import FieldCodec, SubclassUnion
+from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.shared import BindingThread
@@ -50,12 +52,38 @@ class CliParserExit(SystemExit):
 
     code: int
 
-    def __init__(self, code: int) -> None:
-        super().__init__(code)
+
+class CliParserText(SubclassUnion, TextChoice, affix="CliParserText"):
+    """Argparse's printed text, decoded once at the parser boundary."""
 
 
-class CliArgumentParser(argparse.ArgumentParser):
+@dataclass(frozen=True)
+class GivenCliParserText(GivenText, CliParserText):
+    text: str
+
+
+@dataclass(frozen=True)
+class NoCliParserText(AbsentText, CliParserText):
+    pass
+
+
+class CliArgumentParser(argparse.ArgumentParser, ABC):
     """Argument errors use Core's JSON failure boundary, including subcommands."""
+
+    @property
+    @abstractmethod
+    def output(self) -> TextIO: ...
+
+    @staticmethod
+    def writing_to(stream: TextIO) -> type[CliArgumentParser]:
+        class WritingParser(CliArgumentParser):
+            output = stream
+
+        return WritingParser
+
+    def _print_message(self, message: object, file: object = None) -> None:
+        for text in FieldCodec.decode(CliParserText, message).texts():
+            self.output.write(text)
 
     def add_root_options(self) -> None:
         self.add_argument(
@@ -74,8 +102,8 @@ class CliArgumentParser(argparse.ArgumentParser):
         args, _ = selection.parse_known_args(arguments, namespace=_CommandParsingArguments())
         return args.command
 
-    def exit(self, status: int = 0, message: str | None = None) -> Never:
-        self._print_message(message, sys.stderr)
+    def exit(self, status: int = 0, message: object = None) -> Never:
+        self._print_message(message)
         raise CliParserExit(status)
 
     def error(self, message: str) -> Never:
