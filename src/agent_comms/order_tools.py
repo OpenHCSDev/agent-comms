@@ -409,7 +409,7 @@ class CommsOrderDoneTool(CommsTodoTool):
     claims: Annotated[
         tuple[ProgressClaim, ...],
         *tool_field(
-            "Merged, installed or working claims, each with the artifact Core verifies in the order's "
+            "Typed evidence claims, each with the artifact Core verifies in the order's "
             "checkout; at least one for fix, none for triage reports"
         ),
     ]
