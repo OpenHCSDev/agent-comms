@@ -20,14 +20,14 @@ from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
-from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, OrdinaryInput, PullRequestHead, Side
+from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, MergeHeadReview, OrdinaryInput, PullRequestHead, Side
 from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, DetachedStart, GitCommandError, Repo
 from .systemd_unit import AgentsSlice
 from .repository_name import RepositoryName
 from .test_lease import LeaseStart, TestLease
-from .todos import PromotedHeadVerdict, PullRequests
+from .todos import PullRequests
 from .work_branches import WorkBranches
 
 class IntegrationFailed(ToolRefusedError):
@@ -458,9 +458,7 @@ class PullRequestSources(TestedSources, declared_name="pull_request"):
 
 class MergeGroupSources(TestedSources, declared_name="merge_group"):
     def require_merge_review(self) -> None:
-        if not (HeadReview.accepted(self.carrier.repo, self.carrier.head)
-                and PromotedHeadVerdict.accepted(self.carrier.repo, self.carrier.head)):
-            raise IntegrationFailed("The exact combined carrier has no explicit reviewed merge promotion")
+        MergeHeadReview.require_merge(self.carrier)
 
     @classmethod
     @boundary_decoder

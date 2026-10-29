@@ -603,6 +603,49 @@ class MergeHeadReview(HeadReview, declared_name=None):
 
     context = "agent-comms/merge"
 
+    @classmethod
+    def require_merge(cls, request: PullRequestHead) -> None:
+        if not (HeadReview.accepted(request.repo, request.head)
+                and cls.accepted(request.repo, request.head)):
+            raise ToolRefusedError("The exact combined carrier has no explicit reviewed merge promotion")
+
+
+@dataclass(frozen=True)
+class PromotedHeadReview(MergeHeadReview):
+    """A forge permission, never a persisted source-review verdict."""
+
+    state = "success"
+
+    @classmethod
+    def allows_integration(cls) -> bool:
+        return True
+
+    def description(self, reviewer: str, subject: str) -> str:
+        return f"Explicitly promoted by {reviewer} on {subject}"
+
+    def require_sources(self, goals: Goals, request: PullRequestHead,
+                        reviewer: ThreadIncarnation) -> None:
+        project = goals.registry.snapshot().commander_project.require()
+        if reviewer.commanding_identity != project.commander:
+            raise ToolRefusedError("Only this root's commander may promote the combined carrier")
+        repository = Repo.selected(project.repos, request.repo.to_wire())
+        captured = IntegrationInput.from_message(WorkBranches(repository.checkout).commit_message(request.head))
+        if not captured:
+            raise ToolRefusedError(
+                "Only a captured combined carrier can be promoted; accept individual source with judge ok")
+        inputs, = captured
+        goals.todos.require_input_links(inputs)
+        inputs.validate(project.repos, request)
+        inputs.require_source_reviews()
+
+    def enqueue(self, record: HeadReviewRecord) -> MergeArm:
+        request = record.request
+        if not HeadReview.accepted(request.repo, request.head):
+            raise ToolRefusedError("The exact combined source review must succeed before promotion")
+        current = request.current()
+        self.post(request.repo, request.head, record.actor.name, f"#{request.pr}")
+        return current.arm()
+
 
 @dataclass(frozen=True)
 class UnpromotedHeadReview(MergeHeadReview):

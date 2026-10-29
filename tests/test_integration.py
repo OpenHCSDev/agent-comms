@@ -14,12 +14,12 @@ import tomli_w
 
 from agent_comms import integration
 from agent_comms.errors import ToolRefusedError
-from agent_comms.head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, PullRequestHead
+from agent_comms.head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, PromotedHeadReview, PullRequestHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.todos import (
     DraftListedPullRequest, MergedListedPullRequest, PullRequestCommit, QualifiedHeadVerdict,
-    PromotedHeadVerdict, ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
+    ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -166,8 +166,9 @@ def test_required_hosted_merge_gate_distinguishes_source_review_from_combined_pr
     assert (result.returncode == 0) == (event == "pull_request"), result.stdout + result.stderr
     if event == "merge_group":
         assert "no explicit reviewed merge promotion" in result.stderr
-    PromotedHeadVerdict(VerdictReason("The actual combined carrier is explicitly reviewed for merge")).post(
-        carrier.repo, carrier.head, "lead", "promotion")
+    ReviewedHeadVerdict(VerdictReason("The actual combined carrier is explicitly reviewed for merge")).post(
+        carrier.repo, carrier.head, "lead", "source")
+    PromotedHeadReview().post(carrier.repo, carrier.head, "lead", "promotion")
     promoted = subprocess.run((*command, str(tmp_path / "after-promotion")), cwd=checkout.path,
                               env=environment, capture_output=True, text=True, timeout=120)
     assert promoted.returncode == 0, promoted.stdout + promoted.stderr

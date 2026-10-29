@@ -4086,16 +4086,10 @@ class HeadVerdict(HeadReview, declared_name=None):
     @classmethod
     def require_merge(cls, request: PullRequestHead) -> None:
         """Source review cannot authorize even the owner's direct merge path."""
-        if not cls.allows_merge():
+        if not cls.allows_integration():
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
-
-    @classmethod
-    def allows_merge(cls) -> bool:
-        return False
-
-    def prepare_sources(self, goals: Goals, request: ReadPullRequestHead) -> None:
-        """Marking review pending or rejecting it grants no source promotion permission."""
+        MergeHeadReview.require_merge(request)
 
     def post(self, repo: RepositoryName, head: str, reviewer: str, subject: str) -> None:
         # Withdraw first: a failed source-status write cannot leave an earlier promotion live.
@@ -4111,7 +4105,7 @@ class HeadVerdict(HeadReview, declared_name=None):
         return HeadReviewed(recorded, self.landing(prepared.current))
 
     def landing(self, current: OpenPullRequestHead) -> MergeArm:
-        """Source verdicts never request merge; combined promotion overrides this behavior."""
+        """Source verdicts never request merge; native explicit promotion owns enqueueing."""
         return UntouchedMergeArm()
 
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
@@ -4192,10 +4186,6 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
             return False
         if reviewed_change != current_change:
             return False
-        try:
-            self.prepare_sources(goals, current)
-        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired, ToolRefusedError, MalformedRecord):
-            return False
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
@@ -4250,58 +4240,6 @@ class ExplainedGrowth:
 @dataclass(frozen=True)
 class GrownHeadVerdict(ExplainedGrowth, ReviewedHeadVerdict):
     """Acceptance of a source whose growth the reviewer explains file by file."""
-
-
-@dataclass(frozen=True)
-class PromotedHeadVerdict(ReviewedHeadVerdict, MergeHeadReview):
-    """Only the root's explicit review of a captured combined carrier requests merge."""
-
-    verb = "Promoted"
-
-    @classmethod
-    def allows_merge(cls) -> bool:
-        return True
-
-    @classmethod
-    def grown(cls, reason: VerdictReason, growth: GrowthReason) -> ReviewedHeadVerdict:
-        return GrownPromotedHeadVerdict(reason, growth)
-
-    def carry(self, goals: Goals, record: HeadReviewRecord, current: ReadPullRequestHead,
-              reader: WorkBranches) -> bool:
-        """A combined promotion belongs to the reviewed exact head, never a later patch."""
-        return False
-
-    def prepare_sources(self, goals: Goals, request: ReadPullRequestHead) -> None:
-        project = goals.registry.snapshot().commander_project.require()
-        repository = Repo.selected(project.repos, request.repo.to_wire())
-        captured = IntegrationInput.from_message(WorkBranches(repository.checkout).commit_message(request.head))
-        if not captured:
-            raise TodoError("Only a captured combined carrier can be promoted; accept individual source with judge ok")
-        inputs, = captured
-        goals.todos.require_input_links(inputs)
-        inputs.validate(project.repos, request)
-        inputs.require_source_reviews()
-
-    def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
-                 reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
-        project = goals.registry.snapshot().commander_project.require()
-        if reviewer.commanding_identity != project.commander:
-            raise TodoError("Only this root's commander may promote the combined carrier")
-        return super().reviewed(goals, request, prepared, reviewer, order)
-
-    def post(self, repo: RepositoryName, head: str, reviewer: str, subject: str) -> None:
-        # Review and permission to merge are different facts. Pending/rejected source
-        # review still invalidates an earlier promotion in the hosted required check.
-        ReviewedHeadVerdict(self.reason).post(repo, head, reviewer, subject)
-        HeadReview.post(self, repo, head, reviewer, subject)
-
-    def landing(self, current: OpenPullRequestHead) -> MergeArm:
-        return current.arm()
-
-
-@dataclass(frozen=True)
-class GrownPromotedHeadVerdict(ExplainedGrowth, PromotedHeadVerdict):
-    """The same growth explanation, with explicit combined-carrier merge authority."""
 
 
 @dataclass(frozen=True)

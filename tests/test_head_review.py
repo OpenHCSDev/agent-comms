@@ -18,7 +18,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.head_review import (
-    CombinedInput, DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, OrdinaryInput, PullRequestHead, ReadPullRequestHead,
+    CombinedInput, DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, OrdinaryInput, PromotedHeadReview, PullRequestHead, ReadPullRequestHead,
 )
 from agent_comms.integration import IntegrationRun
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
@@ -39,7 +39,7 @@ from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
     CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, OrderClaim, ProgressRead, PullRequestLink, PullRequests, RecordPullRequest, RejectedHeadVerdict,
-    HeadVerdict, PromotedHeadVerdict, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
+    HeadVerdict, HeadReviewed, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason, WithdrawTodo,
 )
 from github_fixture import GitHubFixture
@@ -103,6 +103,11 @@ def linked_head_bus(head_bus):
 def invoke(comms, request, verdict, order=NoHeadOrder()):
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=order)
     return tool.invoke(comms, tool.arguments, caller=ThreadCaller("lead"))
+
+
+def promote(context: order.CommanderContext, request: PullRequestHead) -> HeadReviewed:
+    return judge.PromoteVerb(pr=request.pr, head=request.head, repo=request.repo.to_wire(),
+                             why=ACCEPTED.text).review_head(context, request, NoHeadOrder())
 
 
 def review_posts(github: GitHubFixture, head: str) -> tuple[tuple[str, ...], ...]:
@@ -346,7 +351,7 @@ def test_qualification_withdraws_acceptance_without_claiming_to_disarm_the_reque
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     arms = tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))
     assert arms == () and HeadReview.accepted(request.repo, request.head)
-    with pytest.raises(TodoError):
+    with pytest.raises(ToolRefusedError, match="no explicit reviewed merge promotion"):
         ReviewedHeadVerdict.require_merge(request)
     invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
     assert StoredHeadReview.current_verdict(comms.goals.todos, request) is QualifiedHeadVerdict
@@ -533,27 +538,27 @@ def test_pending_sources_can_compute_but_only_reviewed_other_heads_allow_carrier
     invoke(comms, carrier, UnderReviewHeadVerdict())
     for verdict in (UnderReviewHeadVerdict(), QualifiedHeadVerdict(QUALIFIED)):
         invoke(comms, client, verdict)
-        with pytest.raises(TodoError, match="no accepted exact-head source review"):
-            invoke(comms, carrier, PromotedHeadVerdict(ACCEPTED))
+        with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
+            promote(pair.context, carrier)
         assert not HeadReview.accepted(carrier.repo, carrier.head)
     invoke(comms, client, ReviewedHeadVerdict(ACCEPTED))
     assert HeadReview.accepted(client.repo, client.head)
     original, = inputs.source(pair.core.github).heads
     assert not HeadReview.accepted(original.repo, original.head)
-    with pytest.raises(TodoError, match="no accepted exact-head source review"):
-        invoke(comms, carrier, PromotedHeadVerdict(ACCEPTED))
+    with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
+        promote(pair.context, carrier)
     invoke(comms, original, ReviewedHeadVerdict(ACCEPTED))
-    invoke(comms, carrier, PromotedHeadVerdict(ACCEPTED))
+    promote(pair.context, carrier)
     assert HeadReview.accepted(carrier.repo, carrier.head)
-    assert PromotedHeadVerdict.accepted(carrier.repo, carrier.head)
-    assert StoredHeadReview.current_verdict(comms.goals.todos, carrier) is PromotedHeadVerdict
+    assert PromotedHeadReview.accepted(carrier.repo, carrier.head)
+    assert StoredHeadReview.current_verdict(comms.goals.todos, carrier) is ReviewedHeadVerdict
     assert carrier.current().arm() == DraftMergeArm()
     assert run.accepted_heads() == ()
     invoke(comms, carrier, QualifiedHeadVerdict(QUALIFIED))
-    assert not PromotedHeadVerdict.accepted(carrier.repo, carrier.head)
+    assert not PromotedHeadReview.accepted(carrier.repo, carrier.head)
     invoke(comms, carrier, ReviewedHeadVerdict(ACCEPTED))
     assert HeadReview.accepted(carrier.repo, carrier.head)
-    assert not PromotedHeadVerdict.accepted(carrier.repo, carrier.head)
+    assert not PromotedHeadReview.accepted(carrier.repo, carrier.head)
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 
@@ -570,8 +575,8 @@ def test_a_moved_companion_refuses_final_review_without_writing_acceptance(
     github_cli.put(pair.client.github, DraftListedPullRequest(
         pair.client.number, "feature", pair.client.branch_commit, stamp, "main", reviewable_times=(stamp,),
     ))
-    with pytest.raises(TodoError, match="moved"):
-        invoke(pair.context.comms, carrier, PromotedHeadVerdict(ACCEPTED))
+    with pytest.raises(ToolRefusedError, match="moved"):
+        promote(pair.context, carrier)
     assert not HeadReview.accepted(carrier.repo, carrier.head)
     assert not StoredHeadReview.head_reviews(pair.context.comms.goals.todos, carrier)
 
@@ -606,8 +611,8 @@ def test_combined_promotion_refuses_changed_members_trees_carriers_and_missing_s
         pair.core.git(pair.checkout.path, "commit", "--allow-empty", "-m", incomplete.trailer)
         carrier = pair.publish_carrier(github_cli)
     with pytest.raises(ToolRefusedError):
-        invoke(comms, carrier, PromotedHeadVerdict(ACCEPTED))
-    assert not PromotedHeadVerdict.accepted(carrier.repo, carrier.head)
+        promote(pair.context, carrier)
+    assert not PromotedHeadReview.accepted(carrier.repo, carrier.head)
     assert not StoredHeadReview.head_reviews(comms.goals.todos, carrier)
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
@@ -698,9 +703,9 @@ def test_only_explicit_combined_promotion_arms_the_reviewed_head_and_reports_for
                      "--auto", "--merge", "--match-head-commit", request.head)] if ready else [])
     if not ready:
         assert f"#{request.pr} is a draft, so not armed" in capsys.readouterr().out
-    assert StoredHeadReview.current_verdict(comms.goals.todos, request) is PromotedHeadVerdict
-    assert PromotedHeadVerdict.accepted(request.repo, request.head)
-    PromotedHeadVerdict.require_merge(request)
+    assert StoredHeadReview.current_verdict(comms.goals.todos, request) is ReviewedHeadVerdict
+    assert PromotedHeadReview.accepted(request.repo, request.head)
+    ReviewedHeadVerdict.require_merge(request)
 
 
 def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_member(head_bus) -> None:
@@ -712,7 +717,7 @@ def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_me
     assert HeadReview.accepted(request.repo, request.head)
     with pytest.raises(ToolRefusedError, match="captured combined carrier"):
         judge.main(["promote", *arguments], context)
-    assert not PromotedHeadVerdict.accepted(request.repo, request.head)
+    assert not PromotedHeadReview.accepted(request.repo, request.head)
     assert not any(call[:2] == ("pr", "merge") for call in github.calls())
 
 
