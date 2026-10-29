@@ -25,7 +25,9 @@ class StoredForm:
 
     version: int
     fields: dict[object, object]
-    required: list[str]
+    required: frozenset[str]
+    """The keys every record carries: a set, because declaring a field in a parent class
+    reorders the schema's list without changing what is written."""
 
     @classmethod
     def of(cls, record: type) -> StoredForm | None:
@@ -38,6 +40,10 @@ class StoredForm:
             case {"properties": properties, "required": required} if isinstance(declared, int):
                 return cls(declared, properties, required)
         return None
+
+    def __post_init__(self) -> None:
+        """Each revision's probe prints the keys as a JSON list; their order means nothing."""
+        object.__setattr__(self, "required", frozenset(self.required))
 
 
 def stored_formats(module_name: str) -> dict[str, StoredForm]:
@@ -62,6 +68,7 @@ def main(modules: list[str]) -> None:
                 name: dataclasses.asdict(form)
                 for module in modules
                 for name, form in stored_formats(module).items()
-            }
+            },
+            default=sorted,
         )
     )
