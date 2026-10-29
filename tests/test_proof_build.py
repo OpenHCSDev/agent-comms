@@ -69,12 +69,10 @@ class ProofBuildCheckout:
 
 @pytest.fixture
 def proof_build_checkouts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, durable_home: Path
 ) -> tuple[ProofBuildCheckout, ...]:
     """Own each package's distinct commit graph and the installed manifest."""
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    home = durable_home
     checkouts = []
     packages = {}
     for package in RuntimePackage.members_with(RuntimePackage):
@@ -345,8 +343,9 @@ def test_build_containment_does_not_turn_git_failure_into_absence_or_success(pro
 
 
 @pytest.mark.parametrize("advance_main", (False, True), ids=("installed-main", "newer-main"))
+@pytest.mark.parametrize("extra_repositories", (False, True), ids=("runtime-only", "qualification-repos"))
 def test_install_due_compares_fetched_main_to_installed_build(
-    tmp_path, proof_build_checkouts, advance_main, github_cli,
+    tmp_path, proof_build_checkouts, advance_main, extra_repositories, github_cli,
 ):
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -364,7 +363,18 @@ def test_install_due_compares_fetched_main_to_installed_build(
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = wire(tmp_path / "bus")
     bus.registry.declare(Thread("lead", frozenset(), Checkout(checkout)))
-    Commander.on_root("lead", (graph.repository,), bus.root)
+    extras = tuple(SourceRepository.create(
+        tmp_path / "qualification", RepositoryName("example", f"qualification-{number}"))
+        for number in range(2 if extra_repositories else 0))
+    for extra in extras:
+        extra.git(extra.checkout, "commit", "--allow-empty", "-m", "Advance qualification-only main")
+        extra.git(extra.checkout, "push", "origin", "main")
+        # An install scan must not fetch even a deliberately stale extra source.
+        extra.git(extra.checkout, "update-ref", "refs/remotes/origin/main", "main^")
+        with pytest.raises(UninstalledRepositoryError):
+            RecordedBuildIdentity.installed().for_repository(extra)
+    registered = (graph.repository, *extras)
+    Commander.on_root("lead", registered, bus.root)
 
     github_cli.configure(graph.repository.github)
     due = InstallDue.due(bus, ProgressRead())
@@ -377,6 +387,11 @@ def test_install_due_compares_fetched_main_to_installed_build(
         assert alarm.repo == graph.repository.github
         assert alarm.main == graph.newer
         assert alarm.installed == graph.installed
+    for extra in extras:
+        assert extra.git(extra.checkout, "rev-parse", "HEAD").strip() == extra.main_commit
+        assert extra.git(extra.checkout, "rev-parse", "origin/main") == extra.git(
+            extra.checkout, "rev-parse", "main^")
+    assert InstallLogs(bus.root).units() == ()
 
     # An install advances the canonical manifest, not a clock or bus schedule.
     runtime = LaunchRuntime.installed().prefix
@@ -385,6 +400,14 @@ def test_install_due_compares_fetched_main_to_installed_build(
     after_install = InstallDue.due(bus, ProgressRead())
     assert after_install == ()
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
+    configured = bus.registry.snapshot().commander_project.require().repos
+    assert tuple(repo.github for repo in configured) == tuple(repo.github for repo in registered)
+    assert tuple(repo.checkout for repo in configured) == tuple(repo.checkout for repo in registered)
+    for extra in extras:
+        assert extra.git(extra.checkout, "rev-parse", "HEAD").strip() == extra.main_commit
+        assert extra.git(extra.checkout, "rev-parse", "origin/main") == extra.git(
+            extra.checkout, "rev-parse", "main^")
+    assert InstallLogs(bus.root).units() == ()
 
 
 def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(

@@ -9,7 +9,6 @@ from collections.abc import Iterable
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Annotated, ClassVar
 
 from typing_extensions import TypeForm
@@ -209,15 +208,12 @@ class WriterOwnedOpeningProbe(TargetProbe, RuntimeProbe[tuple[Annotated[Path, Pa
 
     files: FilesRequest
     stores: tuple[type[ExternalStore], ...]
+    scratch: Annotated[Path, PathText]
 
     def run(self) -> tuple[Annotated[Path, PathText], ...]:
-        paths: list[Path] = []
-        with TemporaryDirectory() as directory:
-            for store in self.stores:
-                store.practice_opening(self.files, Path(directory))
-                paths.extend(self.files.location(resource)
-                             for resource in store.resources(self.files))
-        return tuple(paths)
+        ExternalStore.practice_openings(self.files, scratch=self.scratch, stores=self.stores)
+        return tuple(self.files.location(resource)
+                     for store in self.stores for resource in store.resources(self.files))
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -51,8 +51,9 @@ from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
+from agent_comms.read_basis import CursorRow
 from agent_comms.read_basis import (
-    DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope,
+    DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope, UnreadQuery,
 )
 from agent_comms.typed_table import (
     CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
@@ -113,34 +114,45 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
 
-class DisplayUnread:
-    """Before the first count, acquire the complete unread selection."""
-
-    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> CountedDisplayUnread:
-        return source.display_unread(selection, through=source.revision())
-
-
 @dataclass(frozen=True)
-class CountedDisplayUnread(DisplayUnread):
-    """A counted selection advances only the newly appended interval."""
+class DisplayUnread:
+    """Unread counts keyed by the query that counted them, through one bus revision. A query
+    seen before counts only the rows appended since; a query never seen counts its whole
+    interval; a query no longer selected is dropped."""
 
-    through: int
-    selection: DisplayUnreadSelection
-    counts: Mapping[str, int]
+    through: int = -1
+    counted: Mapping[UnreadQuery, int] = field(default_factory=dict)
 
-    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> CountedDisplayUnread:
-        if self.selection != selection:
-            return super().advanced(source, selection)
+    @property
+    def counts(self) -> dict[str, int]:
+        return {query.channel: count for query, count in self.counted.items()}
+
+    def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> DisplayUnread:
+        queries = selection.queries()
         through = source.revision()
-        if through == self.through:
+        if through == self.through and tuple(self.counted) == queries:
             return self
-        counted = source.display_unread(
-            selection, through=through, after=self.through,
-        )
-        return replace(counted, counts={
-            channel: self.counts[channel] + count
-            for channel, count in counted.counts.items()
-        })
+        earlier = {query.counting: query for query in self.counted}
+        kept = {query: query for query in queries if query in self.counted}
+        moved = {query: (earlier[query.counting], parts) for query in queries
+                 if query not in kept and query.counting in earlier
+                 and (parts := query.moved(earlier[query.counting]))}
+        progressed = (*kept, *(previous for previous, _ in moved.values()))
+        appended = source.count_unread(
+            progressed if through != self.through else (), through=through, after=self.through)
+        corrections = source.count_unread(
+            tuple(part for _, parts in moved.values() for part in parts), through=through)
+        fresh = source.count_unread(
+            tuple(query for query in queries if query not in kept and query not in moved),
+            through=through)
+        counted = {
+            **fresh,
+            **{query: self.counted[query] + appended.get(query, 0) for query in kept},
+            **{query: self.counted[previous] + appended.get(previous, 0)
+               - corrections[before] + corrections[after]
+               for query, (previous, (before, after)) in moved.items()},
+        }
+        return DisplayUnread(through, {query: counted[query] for query in queries})
 
 
 class BusReader(RouteCounts, ABC):
@@ -437,26 +449,28 @@ class BusReader(RouteCounts, ABC):
             ))
 
     def display_unread(
-        self, selection: DisplayUnreadSelection, *, through: int, after: int = -1,
-    ) -> CountedDisplayUnread:
-        """Count one explicit sequence interval with the captured cursor predicate."""
+        self, selection: DisplayUnreadSelection, *, through: int,
+    ) -> DisplayUnread:
+        """Count every selected scope's whole interval through one revision."""
+        return DisplayUnread(through, self.count_unread(selection.queries(), through=through))
+
+    def count_unread(
+        self, queries: tuple[UnreadQuery, ...], *, through: int, after: int = -1,
+    ) -> dict[UnreadQuery, int]:
+        """Count each query's unread rows in (max(after, its lower bound), through]."""
         counts = {}
         with self.observing() as db:
-            for scope in selection.scopes:
-                bindings = ReadCursor.sql_bindings(selection.registry, {
-                    "viewer": selection.seen.counted(scope, selection.registry),
-                })
-                predicate, parameters = scope.index_predicate
-                counts[scope.channel] = FieldCodec.decode(int, db.execute(
+            for query in queries:
+                counts[query] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
-                    f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
+                    f'AND ({query.predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
-                    (*bindings.values(), max(after, selection.seen.lower_bound(scope, selection.registry)),
-                     through, *parameters, json.dumps(selection.viewer_names)),
+                    (CursorRow.binding(query.cursors), max(after, query.lower_bound), through,
+                     *query.parameters, query.viewer_names),
                 ).fetchone()[0])
-        return CountedDisplayUnread(through, selection, counts)
+        return counts
 
     def delivered_unanswered(
         self, recipient: RecordedThreadIncarnation, scope: MessageDisplayScope,
@@ -573,13 +587,42 @@ class Bus(FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, B
             return committed
 
     def _insert(self, db: sqlite3.Connection, build: RecordBuilder) -> int:
+        seq, record = self._built(db, build)
+        return record.append_to(db, seq)
+
+    @staticmethod
+    def _built(db: sqlite3.Connection, build: RecordBuilder) -> tuple[int, BusRecord]:
         seq = BusRow.next_seq(db)
         record = build(seq, db)
         FieldCodec.require_fields(record)
-        return record.append_to(db, seq)
+        return seq, record
 
     def append(self, build: RecordBuilder) -> BusRecord:
         return self._publish(lambda db: self._insert(db, build))
+
+    def append_original(self, build: RecordBuilder) -> BusRecord:
+        """Publish a sender's original message once, decided inside the same write.
+
+        The proposed record is built once with its final identity. A committed record with
+        that sender and message identity and the same publication content is the answer,
+        with its original sequence and frozen audience; different content, or an identity
+        naming more than one record, is refused. Otherwise the proposal is appended."""
+        def insert(db: sqlite3.Connection) -> int:
+            seq, record = self._built(db, build)
+            match MessageIdentitySource.select(
+                    db, sender=record.sender, message_id=record.message_id, limit=2):
+                case []:
+                    return record.append_to(db, seq)
+                case [identity]:
+                    original = BusRow.require(db, seq=identity.seq).kind.read_from(db, identity.seq)
+                    if original.publication_snapshot != record.publication_snapshot:
+                        raise RelationViolationError(
+                            "A resend under this message identity has different content.")
+                    return identity.seq
+                case _:
+                    raise RelationViolationError(
+                        "This message identity names more than one recorded message.")
+        return self._publish(insert)
 
     def resource_claim(self, db: sqlite3.Connection, resource: str) -> ResourceClaim:
         return HeldResources.owner_for(db, resource)

@@ -207,8 +207,8 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assert assigned.revision == fresh.revision + 1
         assert not assigned.strikes_against(c.registry.require('worker').incarnation)
         assert stale.redecided(c, 'lead', assigned) == ()
-        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
-        assert update is not None and not update.not_applied
+        update, = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
+        assert not update.not_applied
         assert RulePing.capture(following) in update.handled
         assert c.registry.require('lead').incarnation in (
             ServicePassStore.at(c.root).read().commander_completed)
@@ -229,8 +229,7 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
     following = ServicePassFailing('following-rule', time.time(), 'independent source')
     with LaunchRoot.from_path(c.root).selected():
         run_heartbeat_rules(c, (stale, following))
-        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
-        assert update is not None
+        update, = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
         assert update.not_applied == (stale.rejected_line(StaleTodoDecision(current)),)
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
@@ -266,8 +265,7 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
         assert caught.value.previous == previous
         assert caught.value.current == current
         run_heartbeat_rules(c, (stale, following))
-        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
-        assert update is not None
+        update, = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
         assert update.not_applied == (stale.rejected_line(caught.value),)
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled

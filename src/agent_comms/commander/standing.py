@@ -131,13 +131,15 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
+        runtime_repos = tuple(repo for repo in repos
+                              if any(repo.github == record.repository for record in installed.commits))
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
-        for repo in repos:
+        for repo in runtime_repos:
             repo.git(repo.checkout, "fetch", "-q", "origin", "main")
         core = {repo.github: repo for repo in repos}[CorePackage.repository]
         target = core.git(core.checkout, "rev-parse", "origin/main").strip()
-        for repo in repos:
+        for repo in runtime_repos:
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
             recorded = installed.for_repository(repo)
             # Main is in the build exactly when git logs no first-parent commit past it.
@@ -401,9 +403,16 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule, HeadReviewR
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        return tuple(cls(claim.original(source), owner.name, todo.id, claim.request())
+        """The retained claim owns the report and the head owed a verdict, published or not:
+        a claim whose answer never reached the bus is still owed its judgement."""
+        return tuple(cls(claim.message, owner.name, todo.id, claim.request())
                      for owner, todos in held.items() for todo in todos
                      for claim in todo.order.owed_claims())
+
+    @property
+    def cited(self) -> str:
+        """The claim by its problem and head; its message may have no bus sequence yet."""
+        return f"{self.problem} claim of {self.request.head[:9]}"
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         """A verdict on the delivered head acts on the delivery; a chat reply does not."""

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import subprocess
-import sys
+from contextlib import redirect_stderr
 from dataclasses import dataclass
+from io import StringIO
 
 from pydantic import TypeAdapter, ValidationError
 
+from agent_comms.cli import CliInvocation
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.field_codec import FieldCodec, MalformedRecord
@@ -31,7 +32,9 @@ class CliUndecodableError(Exception):
 class CliOutput:
     """What a command line printed. The worker encodes it on the runtime that ran the
     command (an older Core than the installer's, during an upgrade), so it stays plain
-    text; the installer decodes it into the command's answer here, once."""
+    text; the installer decodes it into the command's answer here, once. stderr contains
+    Python writes during the call; native writes and pre-bound logging go to worker diagnostics.
+    """
 
     returncode: int
     stdout: str
@@ -68,28 +71,19 @@ class CliOutput:
 
 
 @dataclass(frozen=True)
-class CliCommandProbe(RuntimeProbe[CliOutput]):
-    """One command-line call, answered by the selected runtime's own command line in its
-    own process of this interpreter."""
+class CliCommandProbe(CliInvocation, RuntimeProbe[CliOutput]):
+    """One CLI invocation in the selected runtime's existing interpreter worker.
+
+    The worker key owns cwd and environment; CliInvocation scopes each call's root.
+    """
 
     arguments: tuple[str, ...]
 
     def install_phase(self) -> CliProbePhase:
         return CliProbePhase(probe=type(self), arguments=self.arguments)
 
-    def entry(self) -> tuple[str, ...]:
-        return "-m", "agent_comms.cli"
-
-    def source(self) -> str:
-        """Ordinary CLI invocations supply no stdin; scripted probes override it."""
-        return ""
-
     def run(self) -> CliOutput:
-        completed = subprocess.run(
-            (sys.executable, *self.entry(), *self.arguments),
-            capture_output=True,
-            input=self.source(),
-            text=True,
-            check=False,
-        )
-        return CliOutput(completed.returncode, completed.stdout, completed.stderr)
+        output, errors = StringIO(), StringIO()
+        with redirect_stderr(errors):
+            returncode = self.invoke(self.arguments, output)
+        return CliOutput(returncode, output.getvalue(), errors.getvalue())

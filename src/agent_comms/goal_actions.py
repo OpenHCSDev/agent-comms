@@ -34,7 +34,7 @@ from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
-from .errors import OverdueHeadRefusalError, RelationViolationError
+from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
@@ -53,7 +53,6 @@ from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
-from .standing_rules import OrderRefusingStandingRule
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
@@ -574,15 +573,6 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
                        revision=revision, mention_source=bind_goal_mentions(
                            ProblemGoalOrder.text, goal.id, revision, ctx.thread,
                            ctx.goals.registry.snapshot()))
-
-    def prepare(self, goals: Goals, name: str, actor: type) -> ProblemOrderGoalAction:
-        self.require_reviewed(goals)
-        return super().prepare(goals, name, actor)
-
-    def require_reviewed(self, goals: Goals) -> None:
-        """Read remote review facts before the registry lock or child allocation."""
-        if refused := OrderRefusingStandingRule.refusals(goals, self.commander):
-            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\n" + "\n".join(refused))
 
     def require_ready(self, ctx: GoalActionContext) -> None:
         """Recheck local request facts before goal reservation or allocating a child."""

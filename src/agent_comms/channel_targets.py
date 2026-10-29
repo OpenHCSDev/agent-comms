@@ -292,6 +292,10 @@ class NamedTarget(CommandTarget):
     def reply_target(self, sender: str) -> str:
         return self.route.target(self.name, sender)
 
+    def automatic_reply_targets(self, sender: str) -> tuple[str, ...]:
+        """Shared destinations require an explicit send, never a session's final text."""
+        return ()
+
     def answered_sql(
         self, target: str, sender: str, snapshot: RegistryProvenance,
     ) -> tuple[str, tuple[str, ...]]:
@@ -353,6 +357,9 @@ class NamedTarget(CommandTarget):
 
 
 class ThreadTarget(NamedTarget):
+    def automatic_reply_targets(self, sender: str) -> tuple[str, ...]:
+        return (self.reply_target(sender),)
+
     sigil = "@"
     route: ClassVar[ReplyRoute] = SenderReply()
     history_result_type = DmHistoryPageResult

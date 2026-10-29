@@ -12,8 +12,10 @@ from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .bus_read import BusReader, OperatorOutcomes
 from .presentation import OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
+from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
+from .turn_phase import IdlePhase
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -59,6 +61,9 @@ class ToolCaller(BusReader):
         return None
 
     def retire(self, comms: Comms) -> None:
+        self.end(comms)
+
+    def end(self, comms: Comms) -> None:
         raise ToolRefusedError('Only a commander fork can retire through this verb.')
 
     @abstractmethod
@@ -159,11 +164,31 @@ class ThreadCaller(ToolCaller):
 
 
 @dataclass(frozen=True)
-class CommanderForkCaller(ThreadCaller):
+class SubagentCaller(ThreadCaller):
+    """A child working inside its parent session's turn."""
+
+    def end(self, comms: Comms) -> None:
+        """A child that has stopped is archived, so no ended child stays subscribed; the next
+        declaration of the same name redeclares onto it and keeps its history, and a child
+        already archived has already ended."""
+        if comms.registry.status(self.name).archived:
+            return
+        comms.registry.require(self.name).execution.require_subagent()
+        self.leaving(comms)
+        comms.agents.enter_phase(self.name, IdlePhase())
+        comms.registry.unregister(self.name)
+        comms.threads.archive(self.name)
+
+    def leaving(self, comms: Comms) -> None:
+        """What a child reports as it ends; a role slot's history is already on its thread."""
+
+
+@dataclass(frozen=True)
+class CommanderForkCaller(SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
     def commanding(self, comms: Comms, commander: str) -> None:
-        comms.registry.register_commander_child(self.name, commander, comms.goals)
+        comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
 
     def commander(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)
@@ -174,13 +199,23 @@ class CommanderForkCaller(ThreadCaller):
         fork = comms.registry.require(self.name)
         return fork.incarnation.require_recorded().acting_for(self.commander(comms).incarnation)
 
+    def recorded(self, comms: Comms) -> bool:
+        """Every commander verb that records announces it on the bus, so a fork that sent
+        nothing recorded nothing."""
+        return self.name in comms.bus.bus.activity_clocks().sent
+
     def retire(self, comms: Comms) -> None:
-        """A fork stops only after the bus holds something it sent, since every commander verb
-        that records announces it there; its thread is then archived, and a resumed fork of
-        the same name redeclares onto it."""
-        if self.name not in comms.bus.bus.activity_clocks().sent:
+        """A fork asking to stop is sent back once to record what it found."""
+        if not self.recorded(comms):
             raise ToolRefusedError(
                 f"{self.name} recorded nothing in Core: post what it found with"
                 f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
-        comms.registry.unregister(self.name)
-        comms.threads.archive(self.name)
+        self.end(comms)
+
+    def leaving(self, comms: Comms) -> None:
+        """A fork that recorded nothing tells its commander the work is missing."""
+        if not self.recorded(comms):
+            commander = self.commander(comms).name
+            comms.messaging.send(self.name, commander, (
+                f"{self.name} stopped without recording what it found: its work is missing."
+                " Read its transcript or give the work to another fork."))

@@ -1,10 +1,13 @@
 """Claude's completed JSONL blocks own transcript items and activity."""
 from __future__ import annotations
 
+import asyncio
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Literal, Self
+from dataclasses import dataclass, field, replace
+from functools import cached_property
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal, Self
 from xml.etree import ElementTree
 
 from pydantic import (
@@ -66,14 +69,20 @@ from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 from ..wire_models import WireModel
 from .shared import (
     MONITOR_FRAME,
+    ConfirmedDelivery,
     ForeignMonitorFrame,
+    LineMonitorBridge,
     MonitorFrame,
     MonitorIncomingFrame,
     MonitorObservation,
     MonitorPart,
     MonitorProtocolFrame,
+    MonitorReadFile,
     ObservedMonitor,
 )
+
+if TYPE_CHECKING:
+    from .monitor import MonitorAttachment
 
 
 class ClaudeMonitorFrame(MonitorIncomingFrame):
@@ -83,15 +92,19 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     HEADER = 'Comms in'
     JSON_TEXT = WireModel.adapter(str)
 
+    @staticmethod
+    def units(line: str) -> int:
+        return len(line.encode('utf-16-le')) // 2
+
     @classmethod
     def event_size(cls, text: str) -> int:
-        return len(json.dumps(text, ensure_ascii=False).encode('utf-16-le')) // 2
+        return cls.units(json.dumps(text, ensure_ascii=False))
 
     def header(self, number: int, total: int) -> str:
         return (f'{self.HEADER} · {self.message.sender} · '
                 f'{self.message.message_id} · {number}/{total}\n')
 
-    @property
+    @cached_property
     def parts(self) -> tuple[str, ...]:
         # At least one body character fits each part. Using the maximum possible
         # ordinal width avoids rebuilding the body to discover its final count.
@@ -113,6 +126,22 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         total = len(bodies)
         return tuple(self.header(number, total) + body
                      for number, body in enumerate(bodies, 1))
+
+    async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
+        """A body that fits one event goes inline as its one part. Any larger body is exported
+        as all its parts, one per line, and only the notice naming that file is emitted, so no
+        part reaches the model as an instruction on its own."""
+        lines = tuple(LineMonitorBridge.encode(part) for part in self.parts)
+        if len(lines) == 1:
+            await attachment.emit(self.message.message_id, 1, lines[0], window_bytes)
+            return
+        notice = MonitorReadFile.naming(exports, self.message.reference)
+        line = notice.model_dump_json()
+        if self.units(line) > self.EVENT_CHARS:
+            raise ValueError(f'The read notice for {self.message.message_id} exceeds one '
+                             f'Monitor event: {notice.path}')
+        await asyncio.to_thread(notice.export, lines)
+        await attachment.emit(self.message.message_id, notice.reservation, line, window_bytes)
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
@@ -143,7 +172,8 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
-        return tuple(cls.decode_line(line) for line in event.splitlines())
+        """Monitor joins event lines with LF only; an encoded part may hold U+2028 or U+0085."""
+        return tuple(cls.decode_line(line) for line in event.split('\n'))
 
 
 class ClaudeReaderPhase(ReadingPhase):
@@ -212,6 +242,14 @@ class ClaudeToolDraft(ToolDraft):
         self, record: TimedRecord, text: str, ok: bool,
     ) -> tuple[TranscriptEvent, ...]:
         return (*self.events, self.call.ended(text, ok, record.position, record.timestamp))
+
+    def read_results(self, record: TimedRecord, text: str, ok: bool,
+                     reading: frozenset[str]) -> tuple[RuntimeUpdate, ...]:
+        """What a Read showed the model, timed by its own result record, beside the paths other
+        Reads in this session still have open. A failed Read showed no file but ends its call."""
+        observed = ReadResultObserved if ok else FailedReadObserved
+        return tuple(observed(path, text, ObservedMonitor(record.uuid, record.timestamp), reading)
+                     for path in self.call.context_read_paths())
 
 
 class ClaudeTurn(ABC):
@@ -309,7 +347,10 @@ class ClaudeSession:
         except KeyError:
             return self.phase.missing_tool(tool_id)
         return (*self.finished(tool_id, tool.completed(record, text, ok)),
-                *self.turn.active(tool_id, self.phase, ModelWaitPhase()))
+                *self.turn.active(tool_id, self.phase, ModelWaitPhase()),
+                *tool.read_results(record, text, ok, frozenset(
+                    path for other in self.tools.values()
+                    for path in other.call.context_read_paths())))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
@@ -617,6 +658,57 @@ class ForeignTaskNotification(TaskEnvelope):
     text: str
 
     def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class ReadResultObserved(ConfirmedDelivery):
+    """The text a successful Read showed the model. Only the bridge that exported the file
+    decides whether it was a message; any other read confirms nothing."""
+
+    path: str
+    text: str
+    record: ObservedMonitor
+    reading: frozenset[str]
+    """Paths other Reads in this session had open when this one returned."""
+
+    def closing(self, export: MonitorReadFile) -> tuple[MonitorReadFile, ...]:
+        """The export this Read may retire: none while another Read of it is still open."""
+        return () if export.path in self.reading else (export,)
+
+    def frames(self) -> tuple[MonitorFrame, ...]:
+        """Claude shows each file line as its number, a tab, then the line. The leading
+        numbered block is the file; numbers that do not run consecutively make no line count.
+        Records end only at a physical LF: a JSON line may hold U+2028, U+0085 or other
+        characters str.splitlines would split on. A Read reaching the end of a file that ends
+        in LF also numbers the empty row after that LF: once the numbering holds, that one
+        final empty row is the tool's terminator, not a record. Any other row, empty or not,
+        stays a frame the all-lines gate judges."""
+        numbers: list[int] = []
+        lines: list[str] = []
+        for row in self.text.split('\n'):
+            number, tab, line = row.partition('\t')
+            if not (tab and number.isdecimal()):
+                break
+            numbers.append(int(number))
+            lines.append(line)
+        start = numbers[0] if numbers else 0
+        if numbers != list(range(start, start + len(numbers))):
+            return ()
+        if len(lines) > 1 and lines[-1] == '':
+            lines.pop()
+        return tuple(ClaudeMonitorFrame.decode_line(line) for line in lines)
+
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> RuntimeUpdate:
+        return replace(self, targets=await bridge.read_export(self))
+
+
+@dataclass(frozen=True)
+class FailedReadObserved(ReadResultObserved):
+    """A failed Read's text is its error, never file lines: it confirms no part, and only
+    releases the export once no other Read of it is open."""
+
+    def frames(self) -> tuple[MonitorFrame, ...]:
         return ()
 
 

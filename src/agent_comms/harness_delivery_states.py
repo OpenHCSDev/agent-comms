@@ -11,13 +11,14 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
+from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .field_codec import TranscriptRecordId
 
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState
     from .assignment_store import AssignmentStore
-    from .cli_bridges.shared import LineMonitorBridge, MonitorPart
+    from .cli_bridges.shared import LineMonitorBridge, MonitorPart, MonitorReadFile
     from .coordination_tables.harness_deliveries import HarnessDelivery
     from .notification_progress import DeliveryProgress
 
@@ -43,6 +44,10 @@ class Outcome(DeclaredFamily, affix="Outcome"):
         attempt proves no context entry and leaves it."""
         return progress
 
+    @classmethod
+    def finished_with(cls, export: MonitorReadFile) -> None:
+        """An unconsumed body keeps its export for a later Read."""
+
 
 class FilteredOutcome(Outcome):
     @classmethod
@@ -65,6 +70,10 @@ class DeliveredOutcome(FilteredOutcome):
     @classmethod
     def consumed_progress(cls, progress: DeliveryProgress) -> DeliveryProgress:
         return progress.harness_consumed()
+
+    @classmethod
+    def finished_with(cls, export: MonitorReadFile) -> None:
+        export.retire()
 
 
 class EmittedOutcome(UnconfirmedOutcome):
@@ -107,7 +116,9 @@ class ReceivingMonitor(MonitorEvidence):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
             return ()
         await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
-        return (message.exact_reply_target,)
+        return (CommandTarget.named(message.target).automatic_reply_targets(message.sender)
+                if message.role.response_policy(message).starts_turn_for(message, bridge.binding.bus)
+                else ())
 
 
 @dataclass(frozen=True)

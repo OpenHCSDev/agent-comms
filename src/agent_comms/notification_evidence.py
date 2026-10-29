@@ -77,11 +77,22 @@ class NotificationAssignmentRead:
 
 @dataclass(frozen=True)
 class NotificationReadMark:
-    """The exact display evidence used for a source/recipient, including no display."""
+    """The exact display evidence used for a source/recipient, including no display.
 
-    source: Delivered
+    A mark is identified by its source's message reference, not the source's value:
+    bus rows are append-only (typed_table's abort-on-UPDATE/DELETE triggers), so a
+    reference names one frozen delivery and its audience. Comparing the delivery
+    itself walked its whole audience once per mark, so a window of N marks on an
+    N-recipient channel message compared N squared recipients on every revision.
+    """
+
+    source: Delivered = field(compare=False)
     recipient: FrozenRecipient
     displayed_to: tuple[ThreadIncarnation, ...]
+    reference: MessageReference = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reference", self.source.message.reference)
 
 
 @dataclass(frozen=True)

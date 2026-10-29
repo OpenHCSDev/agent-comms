@@ -116,6 +116,10 @@ class AgentActivity:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
         self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
 
+    def enter_phase(self, thread: str, phase: TurnPhase) -> None:
+        """Native turns, bridges and seated subagents publish the phase's own activity."""
+        self.set_activity(thread, phase.activity_state, " ".join(phase.activity_detail.split()))
+
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:
         participant = snapshot.require(thread)
         return self.all_activity((participant,), snapshot=snapshot)[participant.name]
@@ -153,7 +157,8 @@ class AgentActivity:
             return ActivityCapture.empty()
         events = self.activity.captured_for(
             requested,
-            active=frozenset(name for name, thread in requested.items() if thread.executing),
+            active=frozenset(name for name, thread in requested.items()
+                             if thread.execution.holds_activity(thread, snapshot.status(name))),
         )
         claims = self.registry.storage_rule.room_ledger.claims(
             self.registry.store.path.parent, requested.values())

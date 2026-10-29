@@ -443,13 +443,16 @@ def bus_installed_at(root: Path, commit: str) -> Path:
     return root
 
 
-def test_an_install_refuses_a_bus_that_never_held_a_retired_step(tmp_path):
+def test_an_install_refuses_a_bus_that_never_held_a_retired_step(tmp_path: Path) -> None:
     """Laptop, 10-24: its bus was built at f3194f95f while `git pull` had moved the checkout
     to 456726ace, past the 37 steps that bus never ran. The guard asks the bus, not HEAD."""
     checkout = tmp_path / "checkout"
     checkout.mkdir()
     repository = Repository(checkout)
+    format_source = checkout / "stored_format.py"
+    format_source.write_text(record_source(1, "    original: str\n"))
     before = repository.commit({"carry_first": step_source()})
+    format_source.write_text(record_source(2, "    renamed: str\n"))
     held = repository.commit({"carry_retired": step_source()})
     target = repository.commit({"carry_retired": None})
     deleting = target[:12]
@@ -463,3 +466,112 @@ def test_an_install_refuses_a_bus_that_never_held_a_retired_step(tmp_path):
         "install: refused: "
         f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "
         f"tools/cutover/carry_retired.py (deleted by {deleting}; install {deleting}^ first)")
+
+
+@pytest.mark.parametrize("repetitions", (1, 2))
+@pytest.mark.parametrize("later_change", (False, True))
+@pytest.mark.parametrize("earlier_change", (False, True))
+def test_a_fully_reverted_source_interval_owes_no_retired_carry(
+    tmp_path: Path, repetitions: int, later_change: bool, earlier_change: bool,
+) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    repository = Repository(checkout)
+    original = record_source(1, "    original: str\n")
+    format_source = checkout / "stored_format.py"
+    format_source.write_text(original)
+    before = repository.commit({"carry_first": step_source()})
+    if earlier_change:
+        (checkout / "unrelated.py").write_text("class EarlierDisplayLabel: pass\n")
+        repository.commit({})
+    cancelled = []
+    for index in range(repetitions):
+        original_tree = repository.git("rev-parse", "HEAD^{tree}")
+        format_source.write_text(record_source(2, "    renamed: str\n"))
+        cancelled.append(repository.commit({f"carry_temporary_{index}": step_source()}))
+        format_source.write_text(original)
+        reverted = repository.commit({f"carry_temporary_{index}": None})
+        cancelled.append(reverted)
+        assert repository.git("rev-parse", f"{reverted}^{{tree}}") == original_tree
+    target = reverted
+    if later_change:
+        (checkout / "unrelated.py").write_text("class DisplayLabel: pass\n")
+        target = repository.commit({})
+    root = bus_installed_at(tmp_path / "before/bus", before)
+    installed = RootRuntimeStore.at(root).read()
+    assert not CarryChain.effective_revisions(checkout, before, target).intersection(cancelled)
+    CarryChain.require_crossed(checkout, root, target)
+    assert RootRuntimeStore.at(root).read() == installed
+    assert not FinishedCarryStore.at(root).path.exists()
+
+
+def test_a_new_retirement_after_a_reverted_interval_still_refuses(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    repository = Repository(checkout)
+    original = record_source(1, "    original: str\n")
+    format_source = checkout / "stored_format.py"
+    format_source.write_text(original)
+    before = repository.commit({"carry_first": step_source()})
+    format_source.write_text(record_source(2, "    renamed: str\n"))
+    repository.commit({"carry_cancelled": step_source()})
+    format_source.write_text(original)
+    reverted = repository.commit({"carry_cancelled": None})
+    format_source.write_text(record_source(3, "    current: str\n"))
+    repository.commit({"carry_required": step_source()})
+    target = repository.commit({"carry_required": None})
+    root = bus_installed_at(tmp_path / "before/bus", before)
+    assert reverted not in CarryChain.effective_revisions(checkout, before, target)
+    with pytest.raises(UpgradeRefused) as refused:
+        CarryChain.require_crossed(checkout, root, target)
+    assert str(refused.value) == (
+        "install: refused: "
+        f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "
+        f"tools/cutover/carry_required.py (deleted by {target[:12]}; install {target[:12]}^ first)")
+
+
+def test_a_bus_installed_inside_a_reverted_interval_keeps_its_actual_revision(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    repository = Repository(checkout)
+    original = record_source(1, "    original: str\n")
+    format_source = checkout / "stored_format.py"
+    format_source.write_text(original)
+    before = repository.commit({"carry_first": step_source()})
+    format_source.write_text(record_source(2, "    renamed: str\n"))
+    held = repository.commit({"carry_retired": step_source()})
+    format_source.write_text(original)
+    target = repository.commit({"carry_retired": None})
+    assert repository.git("rev-parse", f"{target}^{{tree}}") == repository.git(
+        "rev-parse", f"{before}^{{tree}}")
+    root = bus_installed_at(tmp_path / "held/bus", held)
+    installed = RootRuntimeStore.at(root).read()
+    assert held in CarryChain.effective_revisions(checkout, held, target)
+    CarryChain.require_crossed(checkout, root, target)
+    assert RootRuntimeStore.at(root).read() == installed
+
+
+def test_an_earlier_retirement_survives_a_later_cancelled_interval(tmp_path: Path) -> None:
+    """A later source loop must not erase a genuine missed migration before it."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    repository = Repository(checkout)
+    format_source = checkout / "stored_format.py"
+    format_source.write_text(record_source(1, "    original: str\n"))
+    before = repository.commit({"carry_first": step_source()})
+    format_source.write_text(record_source(2, "    renamed: str\n"))
+    repository.commit({"carry_required": step_source()})
+    retired = repository.commit({"carry_required": None})
+    (checkout / "temporary.py").write_text("class TemporaryDisplay: pass\n")
+    repository.commit({"carry_cancelled": step_source()})
+    (checkout / "temporary.py").unlink()
+    target = repository.commit({"carry_cancelled": None})
+    assert repository.git("rev-parse", f"{target}^{{tree}}") == repository.git(
+        "rev-parse", f"{retired}^{{tree}}")
+    root = bus_installed_at(tmp_path / "before/bus", before)
+    with pytest.raises(UpgradeRefused) as refused:
+        CarryChain.require_crossed(checkout, root, target)
+    assert str(refused.value) == (
+        "install: refused: "
+        f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "
+        f"tools/cutover/carry_required.py (deleted by {retired[:12]}; install {retired[:12]}^ first)")

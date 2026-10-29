@@ -27,7 +27,7 @@ from agent_comms.threads import Thread
     (ValueError('first\nsecond'), FailedCoreError),
 ])
 def test_exception_declaration_encodes_one_line(error, expected, capsys):
-    assert _fail(error) == 1
+    assert _fail(error, sys.stdout) == 1
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
     decoded = WATCH_LINE.validate_json(output)
@@ -42,7 +42,7 @@ def test_error_keeps_cause_without_using_cause_text_as_policy(capsys):
     except ValueError as cause:
         error = CoordinationReadUnavailable('not ready')
         error.__cause__ = cause
-    _fail(error)
+    _fail(error, sys.stdout)
     decoded = WATCH_LINE.validate_json(capsys.readouterr().out)
     assert isinstance(decoded, UnavailableCoreError)
     assert 'ValueError: bad\ninput' in decoded.error

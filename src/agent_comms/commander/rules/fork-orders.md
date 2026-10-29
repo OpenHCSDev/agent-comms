@@ -6,6 +6,28 @@ audience: fleet
 type: feedback
 ---
 
+> fork starts work
+> no branch pushed
+> no PR
+> works two hours
+> it is excellent work
+> session ends
+> it is gone
+> next fork opens a draft PR first, like the rule says
+> empty
+> does nothing else for an hour
+> "PR is open"
+> it is a PR in the sense that a parking space is a car
+> next fork lands a fix
+> then a follow-up PR for the one-line fix it found in review
+> then a PR for the test
+> then a PR for the docstring
+> four PRs, four reviews, four merge-queue runs, one idea
+> merge queue: 40 minutes deep
+> the follow-up fixes a bug the first PR introduced
+> it is waiting behind the first PR
+> mfw I turned one change into a supply chain
+
 **Why:** the commander writes orders from habit, and habit ends with "push, PR, merge"; on 2026-10-20 five forks held uncommitted work with no PR, a closed PR threw away two hours of good work, and orders said to run ratchets locally after the merge queue already ran them. Tristan: "branches should always have prs for them, if you don't it gets lost"; 2026-10-24: "always make a pr before starting to no allow brnches to disappear"; "don't have two versions of a system when one supersedes the other"; "no backwards compat".
 
 Every order starts with these steps, before its own:

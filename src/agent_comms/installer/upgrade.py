@@ -32,7 +32,7 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
 
 from agent_comms.active_route import (
     ActiveRoute,
@@ -419,6 +419,16 @@ class RehearsedUpgrade(Upgrade):
 
     def live_lines(self) -> tuple[str, ...]:
         return ()
+
+    def write_phases(self, output: TextIO) -> None:
+        """Retain the whole clock in the install's diagnostics, not just its bus summary.
+
+        Called after the run closes, so publication and worker/tree cleanup are included.
+        The result JSON retains the same timings as structured records.
+        """
+        output.write("Phases in run order (own seconds, name, elapsed seconds):\n")
+        output.writelines(f"{timed.line()}\n" for timed in self.phases)
+        output.flush()
 
     def lines(self) -> tuple[str, ...]:
         slowest = sorted(self.phases, key=lambda timed: timed.seconds, reverse=True)[:5]
@@ -923,7 +933,7 @@ class PracticeBus:
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
             runtime: LaunchRuntime,
-            harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> Upgrade:
+            harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> RehearsedUpgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     commands = InstallCommands()
@@ -1253,7 +1263,9 @@ class PreparedMigration(Extendable):
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
-        staged.probe(WriterOwnedOpeningProbe(self.files, self.writer_stores))
+        staged.probe(WriterOwnedOpeningProbe(
+            self.files, self.writer_stores,
+            scratch=StorageRule.load(self.files.source_root()).scratch_base))
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand, *reconcile_arguments)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
@@ -1445,7 +1457,7 @@ class FreshInstall(Install[FreshRehearsal]):
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> CreatedRun:
         self.checkout_target()
-        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        RootRuntimeStore.at(self.root).adopt(self.staged.runtime)
         RegistryStore.at(self.root).prepare_native_root()
         report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
