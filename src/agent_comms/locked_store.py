@@ -29,7 +29,7 @@ from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
-from .private_path import FileObservation, FileRevision, PrivateDirectoryRole, PrivateFileRole
+from .private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole, PrivateFileRole
 from .store_files import (
     AtomicFile,
     DEFAULT_ISOLATION,
