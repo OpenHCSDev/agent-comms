@@ -1133,12 +1133,10 @@ class PullRequestSelection(DeclaredFamily, affix="PullRequestSelection"):
 class NewPullRequestSelection(PullRequestSelection):
     def run(self, ctx: Commander, todo: Todo, source: Repo,
             title: str, body_file: str) -> str:
-        if not source.holds(todo):
-            raise ValueError(f"Create this order's PR in {todo.repo.to_wire()}, not {source.github.to_wire()}.")
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
         return todo.order.checked().open_pull_request(
-            todo, source.checkout, title, Path(body_file).read_text(),
+            todo, source, title, Path(body_file).read_text(),
             ctx.comms.goals.todos, ctx.incarnation)
 
 

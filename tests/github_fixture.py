@@ -42,6 +42,17 @@ class GitHubFixture:
         data[repository.to_wire()]["requests"][str(number)]["read_refusal"] = refusal
         self.path.write_text(json.dumps(data))
 
+    def create_next(self, repository: RepositoryName, row: ListedPullRequest) -> None:
+        """The external forge will create this real checkout's declared PR, not edit another."""
+        data = json.loads(self.path.read_text())
+        data[repository.to_wire()]["next_creation"] = FieldCodec.encode(row)
+        self.path.write_text(json.dumps(data))
+
+    def refuse_status(self, repository: RepositoryName, head: str, context: str, refusal: str) -> None:
+        data = json.loads(self.path.read_text())
+        data[repository.to_wire()].setdefault("status_refusals", {}).setdefault(head, {})[context] = refusal
+        self.path.write_text(json.dumps(data))
+
     def refuse_arm(self, repository: RepositoryName, number: int, refusal: str) -> None:
         """GitHub's answer when enabling auto-merge on this pull request fails."""
         data = json.loads(self.path.read_text())

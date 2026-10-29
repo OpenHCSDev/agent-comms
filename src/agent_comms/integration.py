@@ -20,7 +20,7 @@ from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
-from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, MergeHeadReview, OrdinaryInput, PullRequestHead, Side
+from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource, Side, UnpromotedHeadReview
 from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, DetachedStart, GitCommandError, Repo
@@ -338,15 +338,31 @@ class TestedSources(DeclaredFamily, affix="Sources"):
     def require_local_candidate(self, inputs: IntegrationInput) -> None:
         inputs.require_local_candidate(self.repository, self.carrier)
 
-    def require_merge_review(self) -> None:
-        """A PR can compute before its review; queue admission requires explicit promotion."""
+    def require_merge_review(self, repositories: tuple[Repo, ...]) -> IntegrationInput:
+        """Source computation precedes promotion; its exact combined proof is still required."""
+        return MergeHeadReview.require_combined(self.carrier, repositories)
+
+    def publish_merge_review(self) -> None:
+        """Only the validated merge-group event projects permission onto its tested SHA."""
+
+    def withdraw_merge_review(self) -> None:
+        """A failed group projection withdraws its permission; ordinary source checks post nothing."""
 
     def check_merge_inputs(self, directory: Path) -> IntegrationInput:
         """The required hosted check uses the same typed carrier proof as native promotion."""
+        self.withdraw_merge_review()
         inputs = self.materialize(directory)
-        inputs.require_carrier(self.repository, self.carrier)
-        inputs.require_source_reviews()
-        self.require_merge_review()
+        repositories = tuple(Repo.of(BaseSide.checkout(directory, source.repository))
+                             for source in inputs.sources)
+        if self.require_merge_review(repositories) != inputs:
+            raise IntegrationFailed("The hosted input changed after source materialization")
+        try:
+            self.publish_merge_review()
+            if self.require_merge_review(repositories) != inputs:
+                raise IntegrationFailed("The hosted input changed during review publication")
+        except (ToolRefusedError, GitCommandError, IntegrationFailed):
+            self.withdraw_merge_review()
+            raise
         print(f"COMBINED CARRIER #{self.carrier.pr} {self.carrier.head}; inputs {inputs.digest}", flush=True)
         return inputs
 
@@ -372,13 +388,13 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         if payload:
             inputs, = payload
         else:
-            sources = [IntegrationSource(RepositoryCommit(self.repository.github, self.baseline),
+            sources: list[IntegrationSource] = [MergedIntegrationSource(RepositoryCommit(self.repository.github, self.baseline),
                                          (self.carrier,), self.tree)]
             for repository in repositories[1:]:
                 commit = IntegrationSource.main_head(repository)
                 WorkBranches(repository.checkout).require_commits("origin", commit)
                 tree = Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
-                sources.append(IntegrationSource(RepositoryCommit(repository.github, commit), (), tree))
+                sources.append(MergedIntegrationSource(RepositoryCommit(repository.github, commit), (), tree))
             inputs = OrdinaryInput(tuple(sorted(sources, key=lambda source: source.repository.key)))
         self.validate(inputs, tuple(repositories))
         for source in inputs.sources:
@@ -389,8 +405,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
             if source.repository == self.repository.github:
                 IntegrationCheckout.create(repository, HeadSide.checkout(directory, source.repository), self.tested)
             else:
-                head = IntegrationCheckout.create(repository, HeadSide.checkout(directory, source.repository), source.baseline.commit)
-                head.combine_sources(source.baseline.commit, source.heads)
+                source.materialize(repository, HeadSide.checkout(directory, source.repository))
             for side in Side.sides():
                 side.require_materialized(directory, source)
                 checkout = side.checkout(directory, source.repository)
@@ -457,8 +472,26 @@ class PullRequestSources(TestedSources, declared_name="pull_request"):
 
 
 class MergeGroupSources(TestedSources, declared_name="merge_group"):
-    def require_merge_review(self) -> None:
-        MergeHeadReview.require_merge(self.carrier)
+    def require_merge_review(self, repositories: tuple[Repo, ...]) -> IntegrationInput:
+        return MergeHeadReview.require_merge(self.carrier, repositories)
+
+    def publish_merge_review(self) -> None:
+        """GitHub evaluates required contexts on the actual tested group, not the PR head.
+
+        The event has already proved the exact base, carrier, member decisions and tree.
+        Carry those decisions through the existing nominal status owners; no new verdict
+        is saved, and an ordinary PR never publishes a merge-group result.
+        """
+        from .todos import CarriedHeadVerdict, VerdictReason
+        CarriedHeadVerdict(VerdictReason(
+            "The validated merge group preserves this promoted carrier and its exact reviewed sources"),
+            self.carrier).post(self.carrier.repo, self.tested, "merge-group proof", f"#{self.carrier.pr}")
+        # Source posting leaves the group's permission pending until current carrier permission succeeds.
+        MergeHeadReview.require_permission(self.carrier)
+        PromotedHeadReview().post(self.carrier.repo, self.tested, "merge-group proof", f"#{self.carrier.pr}")
+
+    def withdraw_merge_review(self) -> None:
+        UnpromotedHeadReview().post(self.carrier.repo, self.tested, "merge-group proof", f"#{self.carrier.pr}")
 
     @classmethod
     @boundary_decoder
@@ -561,7 +594,8 @@ class IntegrationRun:
         )
 
     def qualify(self, context: CommanderContext, problems: tuple[str, ...], *,
-                carrier: PullRequestHead) -> CombinedInput:
+                carrier: PullRequestHead,
+                companions: tuple[PullRequestHead, ...] = ()) -> CombinedInput:
         """Capture the existing resolved carrier and its distinct stored source members."""
         self.checkout.require_editable()
         self.failure.require_qualification()
@@ -608,7 +642,10 @@ class IntegrationRun:
         required = IntegrationInput.declared_repositories(registered_core, base, candidate_commit)
         if linked_repositories - set(required):
             raise IntegrationFailed("A selected order links an unknown stack repository")
-        sources = [IntegrationSource(RepositoryCommit(core.github, base), heads[core.github], tree)]
+        resolved = {companion.repo: companion for companion in companions}
+        if len(resolved) != len(companions) or set(resolved) - (set(required) - {core.github}):
+            raise IntegrationFailed("Select at most one actual carrier per declared companion repository")
+        sources: list[IntegrationSource] = [MergedIntegrationSource(RepositoryCommit(core.github, base), heads[core.github], tree)]
         for name in required:
             if name == core.github:
                 continue
@@ -617,13 +654,24 @@ class IntegrationRun:
                 mains[name] = IntegrationSource.main_head(repositories[name])
                 heads[name] = ()
             repo = repositories[name]
-            if len(heads[name]) > 1:
-                raise IntegrationFailed("A companion repository has no unique existing linked carrier")
             baseline = mains[name]
             IntegrationCheckout.create(repo, BaseSide.checkout(self.output, name), baseline)
-            candidate = IntegrationCheckout.create(repo, HeadSide.checkout(self.output, name), baseline)
-            tree = candidate.combine_sources(baseline, heads[name])
-            sources.append(IntegrationSource(RepositoryCommit(name, baseline), heads[name], tree))
+            # Resolved carrier selection is a foreign CLI boundary; all later consumers
+            # take the source family and never rediscover this distinction.
+            source: IntegrationSource
+            if name in resolved:
+                companion = resolved[name]
+                companion.current()
+                WorkBranches(repo.checkout).require_commits("origin", companion.head)
+                tree = Repo.git(repo.checkout, "rev-parse", f"{companion.head}^{{tree}}").strip()
+                source = ResolvedIntegrationSource(
+                    RepositoryCommit(name, baseline), heads[name], tree, companion)
+                source.materialize(repo, HeadSide.checkout(self.output, name))
+            else:
+                candidate = IntegrationCheckout.create(repo, HeadSide.checkout(self.output, name), baseline)
+                tree = candidate.combine_sources(baseline, heads[name])
+                source = MergedIntegrationSource(RepositoryCommit(name, baseline), heads[name], tree)
+            sources.append(source)
         # Revalidate original sources before freezing the shared value or attaching its payload.
         for source in sources:
             repo = repositories[source.repository]
@@ -775,9 +823,14 @@ def run() -> int:
                            help="require a real combined carrier and its exact reviewed source members")
     operation.add_argument("--qualify", default="", metavar="PROBLEM",
                            help="prepare sources from this actual primary order, without running tests")
+    parser.add_argument("--workflow-output", type=Path,
+                        help="append derived base/job selection to GitHub's output file during CI resolution")
     local_options.add_argument("--with-problem", action="append", default=[], metavar="PROBLEM")
     local_options.add_argument("--carrier", type=int, default=0, metavar="PR",
                               help="the existing separate combined PR at this checkout's published HEAD")
+    local_options.add_argument("--companion-carrier", nargs=2, action="append", default=[],
+                              metavar=("REPOSITORY", "PR"),
+                              help="preserve a declared companion's actual resolved carrier; members come from Todo links")
     local_options.add_argument("--comms-root", type=Path,
                         help="the existing authorized root for stored-problem qualification")
     parser.add_argument(
@@ -794,6 +847,8 @@ def run() -> int:
         pytest_arguments = pytest_arguments[1:]
     arguments.pytest_arguments = pytest_arguments
     values = vars(arguments)
+    if arguments.workflow_output and not arguments.resolve_ci_inputs:
+        parser.error("--workflow-output requires --resolve-ci-inputs")
     if arguments.resolve_ci_inputs or arguments.revalidate_ci_inputs or arguments.check_merge_inputs:
         forbidden = {option.dest for option in local_options._group_actions if values[option.dest]}
         if forbidden:
@@ -802,7 +857,9 @@ def run() -> int:
         arguments.drop_on_failure.require_qualification()
         graph = TestedSources.read((arguments.checkout or Path.cwd()).resolve())
         if arguments.resolve_ci_inputs:
-            graph.materialize(arguments.resolve_ci_inputs.resolve())
+            inputs = graph.materialize(arguments.resolve_ci_inputs.resolve())
+            if arguments.workflow_output:
+                inputs.write_workflow_output(arguments.workflow_output, graph.repository.github)
         elif arguments.revalidate_ci_inputs:
             graph.revalidate(arguments.revalidate_ci_inputs.resolve())
         else:
@@ -827,11 +884,14 @@ def run() -> int:
         if arguments.carrier <= 0:
             parser.error("Qualification requires --carrier naming the actual separate combined PR")
         carrier = PullRequestHead.at(Repo.of(run.checkout.path).github, arguments.carrier)
+        companions = tuple(PullRequestHead.at(Repo.selected(context.repos, name).github, int(number))
+                           for name, number in arguments.companion_carrier)
         run.qualify(context, (arguments.qualify, *arguments.with_problem),
-                    carrier=PullRequestHead(carrier.repo, carrier.pr, carrier.head))
+                    carrier=PullRequestHead(carrier.repo, carrier.pr, carrier.head),
+                    companions=tuple(PullRequestHead(head.repo, head.pr, head.head) for head in companions))
         return 0
-    if arguments.with_problem or arguments.carrier:
-        parser.error("--with-problem and --carrier require --qualify")
+    if arguments.with_problem or arguments.carrier or arguments.companion_carrier:
+        parser.error("--with-problem, --carrier and --companion-carrier require --qualify")
     return run.execute()
 
 

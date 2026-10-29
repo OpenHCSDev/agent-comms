@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.head_review import HeadReview
+from agent_comms.head_review import HeadReview, MergeHeadReview
 from agent_comms.phase_evidence import (
     AllEvidence,
     ClassDeclared,
@@ -264,30 +264,37 @@ def test_only_foreign_comparison_refusal_exempts_an_owned_type_check(source, all
     assert (not checks.owned()) is allowed
 
 
-@pytest.mark.parametrize(("required", "actors", "expected"), (
-    ((HeadReview.context,), [], True),
-    ((HeadReview.context,), [{"actor_type": "RepositoryRole", "actor_id": 5}], True),
-    ((HeadReview.context,), [{"actor_type": "Integration", "actor_id": 15368}], False),
-    ((HeadReview.context,), [{"actor_type": "RepositoryRole", "actor_id": 5},
-                             {"actor_type": "Team", "actor_id": 9}], False),
-    (("review-verdict",), [], False),
-    (("smoke",), [], False),
+@pytest.mark.parametrize(("required", "queue", "actors", "expected"), (
+    (MergeHeadReview.required_contexts(), True, [], True),
+    (MergeHeadReview.required_contexts(), False, [], False),
+    (MergeHeadReview.required_contexts(), True, [{"actor_type": "RepositoryRole", "actor_id": 5}], False),
+    (MergeHeadReview.required_contexts(), True, [{"actor_type": "Integration", "actor_id": 15368}], False),
+    ((HeadReview.context,), True, [], False),
+    ((MergeHeadReview.context,), True, [], False),
+    (("review-verdict",), True, [], False),
+    (("smoke",), True, [], False),
 ))
-def test_ruleset_requires_exact_review_context_with_owner_only_bypass(
-    tmp_path, required, actors, expected,
+def test_ruleset_requires_both_owned_contexts_and_actual_queue_without_bypass(
+    tmp_path, required, queue, actors, expected,
 ):
     main = main_of(tmp_path, {"src/a.py": "x = 1\n"}).main
-    rules = [{"ruleset": 7, "required": ["smoke"]},
-             {"ruleset": 8, "required": list(required)}]
-    answers = {"rules/branches/main": rules, "rulesets/8": actors}
+    # The real API may split independent requirements across rulesets.
+    rules = [{"ruleset": 7, "required": ["smoke"], "queue": False},
+             *({"ruleset": 8, "required": [context], "queue": False} for context in required),
+             {"ruleset": 9, "required": [], "queue": queue}]
+    answers = {"rules/branches/main": rules, "rulesets/7": [],
+               "rulesets/8": actors, "rulesets/9": []}
+    reads = []
 
     class Answered(RulesetGates):
         @staticmethod
         def api(main, path, query):
+            reads.append(path)
             return answers[path]
 
     assert Answered().holds(PlanReading((), main)) is expected
-    assert HeadReview.context in RulesetGates().describe()
+    assert reads.count("rulesets/8") == 1
+    assert all(context in RulesetGates().describe() for context in MergeHeadReview.required_contexts())
 
 
 def test_cleanup_evidence_counts_restated_members_and_class_rosters(tmp_path):

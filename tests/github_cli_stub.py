@@ -22,7 +22,15 @@ def main():
     repositories = json.loads((directory / "pull_requests.json").read_text())
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
-    if arguments[:2] == ["pr", "view"]:
+    if arguments[:2] == ["pr", "create"]:
+        repository = arguments[arguments.index("-R") + 1]
+        data = repositories[repository]
+        row = data.pop("next_creation")
+        assert "--draft" in arguments and arguments[-2:] == ["--body-file", "-"]
+        data["requests"][str(row["number"])] = {"body": sys.stdin.read(), "listed": row}
+        (directory / "pull_requests.json").write_text(json.dumps(repositories))
+        print(f"https://github.com/{repository}/pull/{row['number']}")
+    elif arguments[:2] == ["pr", "view"]:
         data = repositories[arguments[arguments.index("-R") + 1]]
         request = data["requests"][arguments[2]]
         if refusal := request.get("read_refusal"):
@@ -51,20 +59,19 @@ def main():
                               or entry["listed"]["head"] == parts[1]]))
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
+            fields = dict(arguments[index + 1].split("=", 1)
+                          for index, word in enumerate(arguments) if word == "-f")
+            if refusal := data.get("status_refusals", {}).get(parts[1], {}).get(fields["context"]):
+                sys.exit(refusal)
+            data.setdefault("statuses", {}).setdefault(parts[1], {})[fields["context"]] = fields["state"]
+            (directory / "pull_requests.json").write_text(json.dumps(repositories))
             print("{}")
         elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "status":
             query = arguments[arguments.index("--jq") + 1]
             selected = re.search(r'select\(\.context == ("(?:\\.|[^"\\])*")\)', query)
             assert selected, query
             context = json.loads(selected.group(1))
-            states = {}
-            endpoint = f"repos/{owner}/{name}/statuses/{parts[1]}"
-            for line in (directory / "calls.jsonl").read_text().splitlines():
-                posted = json.loads(line)
-                if posted[:2] == ["api", endpoint] and "--method" in posted:
-                    fields = dict(posted[index + 1].split("=", 1)
-                                  for index, word in enumerate(posted) if word == "-f")
-                    states[fields["context"]] = fields["state"]
+            states = data.get("statuses", {}).get(parts[1], {})
             print(json.dumps([states[context]] if context in states else []))
         else:
             raise AssertionError(f"Unexpected repository endpoint: {parts}")

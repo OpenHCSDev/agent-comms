@@ -54,9 +54,10 @@ class MutualSources:
         self.checkout.combine_sources(IntegrationSource.main_head(self.core), heads)
         return self.publish_carrier(self.github)
 
-    def capture(self, problems: tuple[str, ...], risk: str) -> CombinedInput:
+    def capture(self, problems: tuple[str, ...], risk: str, *,
+                companions: tuple[PullRequestHead, ...] = ()) -> CombinedInput:
         return IntegrationRun(self.checkout, self.output, risk).qualify(
-            self.context, problems, carrier=self.prepare_carrier(problems))
+            self.context, problems, carrier=self.prepare_carrier(problems), companions=companions)
 
 
 @pytest.fixture
