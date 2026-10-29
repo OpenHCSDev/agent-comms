@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never, Self
@@ -44,6 +45,15 @@ class CliArguments(argparse.Namespace):
     binding_thread: BindingThread
 
 
+class CliParserExit(SystemExit):
+    """A parser exit carries its declared integer status, not arbitrary process state."""
+
+    code: int
+
+    def __init__(self, code: int) -> None:
+        super().__init__(code)
+
+
 class CliArgumentParser(argparse.ArgumentParser):
     """Argument errors use Core's JSON failure boundary, including subcommands."""
 
@@ -63,6 +73,10 @@ class CliArgumentParser(argparse.ArgumentParser):
         )
         args, _ = selection.parse_known_args(arguments, namespace=_CommandParsingArguments())
         return args.command
+
+    def exit(self, status: int = 0, message: str | None = None) -> Never:
+        self._print_message(message, sys.stderr)
+        raise CliParserExit(status)
 
     def error(self, message: str) -> Never:
         raise ValueError(message)

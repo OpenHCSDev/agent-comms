@@ -42,17 +42,6 @@ def test_owner_actions_decode_in_the_selected_worker(comms, command, source_repo
         outcomes[0].require_success(UpgradeRefused)
 
 
-@pytest.mark.parametrize("probe_type", [CliCommandProbe, OwnerActionsProbe])
-def test_cli_reply_preserves_declared_failure_from_each_entry(comms, probe_type):
-    runtime = LaunchRuntime.running()
-    with InstallCommands() as commands:
-        stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)
-        probe = probe_type(("--root", str(comms.root), "not-a-command"))
-        with pytest.raises(UpgradeRefused) as refused:
-            stack.cli_reply(probe, partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))
-    assert isinstance(refused.value.__cause__, CliRefusedError)
-
-
 def test_cli_probes_share_worker_and_keep_roots_and_refusals_separate(comms, tmp_path):
     comms.registry.declare(Thread("only-first-root", frozenset(), Checkout(tmp_path)))
     runtime = LaunchRuntime.running()
@@ -67,9 +56,10 @@ def test_cli_probes_share_worker_and_keep_roots_and_refusals_separate(comms, tmp
         assert help_output.returncode == 0
         assert help_output.stdout
         for probe_type in (CliCommandProbe, OwnerActionsProbe):
-            with pytest.raises(UpgradeRefused):
+            with pytest.raises(UpgradeRefused) as refused:
                 stack.cli_reply(probe_type(("--root", str(comms.root), "not-a-command")),
                                 partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))
+            assert isinstance(refused.value.__cause__, CliRefusedError)
         assert stack.cli(comms.root, ReadBackCliCommand).threads == 1
         stack.probe(DistributionVersionsProbe())
         assert tuple(commands.workers.values()) == (worker,)

@@ -9,7 +9,7 @@ orchestration semantics.
 
 from __future__ import annotations
 
-from agent_comms.cli_arguments import CliArgumentParser, CliArguments
+from agent_comms.cli_arguments import CliArgumentParser, CliArguments, CliParserExit
 
 import argparse
 import sys
@@ -66,14 +66,8 @@ class CliInvocation:
                 return 130
             except CLI_FAILURES as exc:
                 return _fail(exc, output)
-            except SystemExit as exited:
-                # CPython's process boundary accepts an integer, None, or error text.
-                if isinstance(exited.code, int):
-                    return exited.code
-                if exited.code is None:
-                    return 0
-                print(exited.code, file=sys.stderr)
-                return 1
+            except CliParserExit as exited:
+                return exited.code
 
 
 def main(argv: Sequence[str] | None = None) -> int:
