@@ -66,6 +66,8 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     wakeup: str
     why: str
     body: str
+    path: Path
+    """The packaged file this rule is read from: the deal points a session at it."""
     opening: ClassVar[re.Pattern[str]] = re.compile(
         r"\A(?P<wakeup>(?:>[^\n]*\n)+)\n\*\*Why:\*\*[ \t]*(?P<why>\S[^\n]*)$", re.M
     )
@@ -103,7 +105,8 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         if opening is None:
             raise ValueError(f"{path.name}: does not open with its wake-up greentext, then **Why:**")
         return FieldCodec.decode(cls, {**metadata, "wakeup": opening["wakeup"].rstrip(),
-                                       "why": opening["why"], "body": body[opening.end():].strip()})
+                                       "why": opening["why"], "body": body[opening.end():].strip(),
+                                       "path": str(path)})
 
     @classmethod
     def packaged(cls) -> tuple[Self, ...]:

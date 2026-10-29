@@ -211,6 +211,16 @@ class JsonLines:
                 return text
         return ''
 
+    def owner_words(self, stream: BinaryIO, boundary: int, count: int) -> tuple[str, ...]:
+        """The person's last `count` prompts, oldest first, read across any compaction: a
+        summary paraphrases them, so a reader that must answer to them reads the records."""
+        found: list[str] = []
+        for offset, raw in self.reverse_lines(stream, boundary):
+            found.extend(reversed(self.decode_line(raw, offset).owner_words()))
+            if len(found) >= count:
+                break
+        return tuple(reversed(found[:count]))
+
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         for offset, raw in self.reverse_lines(stream, boundary):
             record = self.decode_line(raw, offset)

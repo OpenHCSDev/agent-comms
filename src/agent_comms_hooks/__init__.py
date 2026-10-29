@@ -85,15 +85,27 @@ class ClaudeTranscriptHook(ClaudeHook):
     """Transcript bytes read from the end."""
 
     @property
-    def parts(self) -> Path:
-        """The sources dealt to a bound session, written by the session start hook beside the
-        transcript; they exist only in a session bound to a bus."""
-        return Path(self.transcript_path).with_suffix(".reread")
+    def dealt_files(self) -> Path:
+        """The packaged rule files dealt to a bound session, one path per line, written by the
+        session start hook beside the transcript; it exists only in a session bound to a bus.
+        It names the files themselves: a copy of a rule is a paraphrase the session reads
+        instead of the rule."""
+        return Path(self.transcript_path).with_suffix(".dealt")
 
     @property
-    def parts_read(self) -> Path:
-        """The names of the dealt parts read in full since the last deal, one per line."""
-        return Path(self.transcript_path).with_suffix(".reread-done")
+    def dealt_read(self) -> Path:
+        """The dealt files read in full since the last deal, one path per line."""
+        return Path(self.transcript_path).with_suffix(".dealt-read")
+
+    @property
+    def audit(self) -> Path:
+        """The session's audit of the dealt rules and the owner's words, written after reading."""
+        return Path(self.transcript_path).with_suffix(".audit.json")
+
+    @property
+    def audit_due(self) -> Path:
+        """What the audit must answer: every dealt rule and each owner prompt shown."""
+        return Path(self.transcript_path).with_suffix(".audit-due.json")
 
     def tail(self) -> list[bytes]:
         """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""
