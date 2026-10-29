@@ -116,7 +116,7 @@ class WakeOnlyMonitor(PendingMonitor):
     """A board wake is not the original packet, even if its bytes happen to match."""
 
     board_wake: ClassVar[str] = (
-        "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
+        "Tristan: your board changed. New and changed lines print once as BOARD: on your next "
         "tool call; later calls print one unchanged count."
     )
 

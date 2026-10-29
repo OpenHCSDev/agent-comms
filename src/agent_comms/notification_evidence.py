@@ -43,16 +43,17 @@ if TYPE_CHECKING:
 class RecipientLimit(SingleFieldValue):
     """Decode one bounded recipient-window size at the request boundary."""
 
+    minimum: ClassVar[int] = 1
     maximum: ClassVar[int] = 100
     value: int = maximum
 
     def __post_init__(self) -> None:
-        if not 1 <= self.value <= self.maximum:
-            raise ValueError(f"Recipient limit must be between 1 and {self.maximum}")
+        if not self.minimum <= self.value <= self.maximum:
+            raise ValueError(f"Recipient limit must be between {self.minimum} and {self.maximum}")
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        return {"type": "integer", "minimum": 1, "maximum": cls.maximum}
+        return {"type": "integer", "minimum": cls.minimum, "maximum": cls.maximum}
 
 
 @dataclass(frozen=True)
