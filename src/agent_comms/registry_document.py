@@ -427,8 +427,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
 
     def to_wire(self) -> dict[str, JsonValue]:
         # A read memo is not an edit: __setitem__ removes raw only for actual writes.
-        return {name: FieldCodec.encode(self._raw[name] if name in self._raw else self._decoded[name])
-                for name in self}
+        return {name: (self._raw[name].to_wire() if name in self._raw
+                       else FieldCodec.encode(self._decoded[name])) for name in self}
 
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:
