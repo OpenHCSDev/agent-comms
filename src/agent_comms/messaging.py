@@ -17,7 +17,6 @@ from .errors import (
 )
 from .message_bus import MessageBus
 from .message_reference import MessageReference
-from .bus_tables import MessageIdentitySource
 from .coordination_session import NativeCapture
 from .external_transcript import ExternalTranscript
 from .turn_item import NoSourceTurn, SourceTurn
@@ -118,11 +117,12 @@ class Messaging:
                      source_turn: SourceTurn) -> tuple[MessageReference, ...]:
         """Native lease or explicitly named external source; never a newest-row guess."""
         references = list(owner.turn_lease.answered_inputs(self, owner, target))
-        for turn_id in source_turn.ids():
-            opening = ExternalTranscript(self.root, owner.incarnation).opening_for(turn_id)
-            with NativeCapture(self.bus) as boundary, self.bus.bus.reading() as source:
-                references.extend(MessageIdentitySource.answering(
-                    source, opening, CommandTarget.named(target), boundary.registry))
+        with NativeCapture(self.bus) as boundary, self.bus.bus.reading() as source:
+            transcript = ExternalTranscript(self.root, owner.incarnation)
+            route = CommandTarget.named(target)
+            for turn_id in source_turn.ids():
+                opening = transcript.opening_for(turn_id)
+                references.extend(source.answering(opening, route, boundary.registry))
         return tuple(dict.fromkeys(references))
 
     def user_identity(self, worktree: Checkout) -> Thread:

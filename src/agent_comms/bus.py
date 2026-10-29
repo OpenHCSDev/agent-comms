@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Self
 from agent_comms.bus_activity_index import BusActivityIndex
 from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.bus_publication import Delivered, KeyedPublication
+from agent_comms.channel_targets import NamedTarget
 from agent_comms.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
     AnsweredSource,
@@ -159,6 +160,12 @@ class BusReader(RouteCounts, ABC):
     @abstractmethod
     def observing(self) -> AbstractContextManager[sqlite3.Connection]:
         """Borrow one read snapshot through the reader's declared lifetime."""
+
+    def answering(self, references: tuple[MessageReference, ...], route: NamedTarget,
+                  snapshot: RegistrySnapshot) -> tuple[MessageReference, ...]:
+        """Select answer links on this reader's own connection."""
+        with self.observing() as connection:
+            return MessageIdentitySource.answering(connection, references, route, snapshot)
 
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
