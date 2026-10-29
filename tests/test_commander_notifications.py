@@ -19,13 +19,13 @@ from agent_comms.commander_hud import (
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
-from agent_comms.errors import OverdueHeadRefusalError, RelationViolationError, UnregisteredThreadError
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.todos import ProgressRead
+from agent_comms.todos import ProgressRead, UnitOccupied
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
 from agent_comms.ui_model.observation import ReadCommanderUnit, ReadRefused
@@ -166,7 +166,7 @@ def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notificati
 
     class RefusedRule(ServicePassFailing):
         def enforce(self, _comms, _commander):
-            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
+            raise UnitOccupied("another order already holds the selected unit")
 
     recorded_turn(comms, (True, True))
     states = state_cards(comms, Spinning)
@@ -447,7 +447,7 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     assert unchanged.reference == first.reference
 
 
-def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notification_bus):
+def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notification_bus):
     comms = notification_bus
     enforced = []
 
@@ -455,18 +455,18 @@ def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notificatio
         def enforce(self, _comms, _commander):
             enforced.append(self.watch)
 
-    class OverdueRule(FollowingRule):
+    class OccupiedRule(FollowingRule):
         def enforce(self, _comms, _commander):
             super().enforce(_comms, _commander)
-            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
+            raise UnitOccupied("another order already holds the selected unit")
 
-    rules = (OverdueRule("overdue-head", 1.0, "review pending"),
+    rules = (OccupiedRule("occupied-unit", 1.0, "unit already holds work"),
              FollowingRule("following-rule", 1.0, "another rule"))
     beat(comms, rules)
 
-    assert enforced == ["overdue-head", "following-rule"]
+    assert enforced == ["occupied-unit", "following-rule"]
     message, = notifications(comms)
-    assert "Not applied (a reviewed head is overdue):" in message.body
+    assert f"Not applied ({UnitOccupied.reason}):" in message.body
     assert rules[0].line() in message.body
     assert RulePing.capture(rules[0]) not in message.task.handled
     assert RulePing.capture(rules[1]) in message.task.handled
