@@ -26,7 +26,7 @@ from .transcript_events import (
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import AutomaticReplyTurn, NativeItemId, NativeTurnId, TurnItem
+from .turn_item import NativeItemId, NativeTurnId, TurnItem
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
@@ -294,7 +294,7 @@ class ReplyingThreadOutput(ThreadOutput):
             publications = tuple(
                 self.messaging.send(
                     sender=self.activity_thread, target=target, body=item.assistant_text,
-                    source_turn=AutomaticReplyTurn(turn_id, tuple(references)),
+                    answers=tuple(references),
                 ).message.reference
                 for target, references in sorted(replies.items())
             )

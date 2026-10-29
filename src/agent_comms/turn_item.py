@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Self
 
 from .errors import RelationViolationError
 from .field_codec import Id128, NominalSpelling, NominalText, NullMember, RecordMember, SubclassUnion
-from .message_reference import MessageReference
 
 if TYPE_CHECKING:
     from .routing import Routing
@@ -31,10 +30,6 @@ class SourceTurn(SubclassUnion, affix="SourceTurn"):
     def ids(self) -> tuple[NativeTurnId, ...]:
         return ()
 
-    def answering_references(self, references: tuple[MessageReference, ...]) -> tuple[MessageReference, ...]:
-        """Explicit sends may answer any original selected by their source and destination."""
-        return references
-
     def require_id(self) -> NativeTurnId:
         for turn_id in self.ids():
             return turn_id
@@ -52,17 +47,6 @@ class NamedSourceTurn(RecordMember, SourceTurn):
 
     def ids(self) -> tuple[NativeTurnId, ...]:
         return (self.id,)
-
-
-@dataclass(frozen=True)
-class AutomaticReplyTurn(NamedSourceTurn):
-    """A named turn whose automatic answer cannot widen its eligible original references."""
-
-    references: tuple[MessageReference, ...]
-
-    def answering_references(self, references: tuple[MessageReference, ...]) -> tuple[MessageReference, ...]:
-        selected = frozenset(self.references)
-        return tuple(reference for reference in references if reference in selected)
 
 
 class FreshNativeId(NominalText):

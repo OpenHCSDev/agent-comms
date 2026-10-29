@@ -117,13 +117,13 @@ class Messaging:
                      source_turn: SourceTurn) -> tuple[MessageReference, ...]:
         """Native lease or explicitly named external source; never a newest-row guess."""
         references = list(owner.turn_lease.answered_inputs(self, owner, target))
-        with NativeCapture(self.bus) as boundary, self.bus.bus.reading() as source:
-            transcript = ExternalTranscript(self.root, owner.incarnation)
-            route = CommandTarget.named(target)
-            for turn_id in source_turn.ids():
+        for turn_id in source_turn.ids():
+            with NativeCapture(self.bus) as boundary, self.bus.bus.reading() as source:
+                transcript = ExternalTranscript(self.root, owner.incarnation)
+                route = CommandTarget.named(target)
                 opening = transcript.opening_for(turn_id)
                 references.extend(source.answering(opening, route, boundary.registry))
-        return source_turn.answering_references(tuple(dict.fromkeys(references)))
+        return tuple(dict.fromkeys(references))
 
     def user_identity(self, worktree: Checkout) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
