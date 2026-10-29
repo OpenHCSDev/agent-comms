@@ -28,7 +28,7 @@ from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, OrderId
-from agent_comms.pattern_sources import PostmortemFailure
+from agent_comms.pattern_sources import PostmortemFailure, ReadThenRepeatedFailure
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
 from agent_comms.commander.spinning import SpinningUnit
@@ -499,9 +499,10 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
         reason = output["permissionDecisionReason"]
-        assert f"You just tried {tool} before reading. Refused attempt #{attempt}" in reason
+        assert f"You just tried {tool} before reading. Call #{attempt} since this compaction, refused." in reason
         assert f"Tristan told you, verbatim:\n{words[0]}\nYou did not." in reason
-        assert "this session is repeating it" in reason
+        assert ReadThenRepeatedFailure().cite() in reason
+        assert ReadThenRepeatedFailure.title in reason
     for source in CommanderReader.sources():
         gated(transcript, "Read", {"file_path": str(source)}).completed()
     gated(transcript, "Bash", {}).judge()
@@ -521,7 +522,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         assert FieldCodec.decode(SessionAudit, json.loads(reason[reason.index("{\n"):])) == template
     start.prepare(CommanderReader(), words)
     gated(transcript, "Bash", {}).judge()
-    assert "Refused attempt #1" in capsys.readouterr().out
+    assert "Call #1 since this compaction, refused." in capsys.readouterr().out
 
 
 def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():

@@ -23,6 +23,7 @@ from pathlib import Path
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.pattern_sources import ReadThenRepeatedFailure
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
 from agent_comms_hooks.forks import SeatedSubagent
@@ -87,6 +88,7 @@ class AuditDue:
 
     def reminder(self, audit_path: Path) -> str:
         """Render the required answers from their declarations, not another JSON schema."""
+        failure = ReadThenRepeatedFailure()
         audit = SessionAudit(
             rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
             owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
@@ -94,8 +96,8 @@ class AuditDue:
         return "\n\n".join((
             *(f"Tristan told you, verbatim:\n{words}\nYou did not."
               for words in self.owner_words[-1:]),
-            "Failure 31: this session is repeating it, not observing another session's mistake."
-            " Reading without the required audit leaves your compaction summary in charge.",
+            f"{failure.title}\n{failure.cite()}\n"
+            "This session is repeating it, not observing another session's mistake.",
             f"Write this SessionAudit to {audit_path}. Fill only broke and doing; keep every"
             " rule name and quoted words unchanged. Empty broke means the rule was kept;"
             " doing must name your current action:\n"
@@ -160,8 +162,8 @@ class GatedCall(ClaudeToolHook, DeclaredFamily):
         self.respond(
             permissionDecision="deny",
             permissionDecisionReason="\n\n".join((
-                f"You just tried {self.tool_name} before {before}. Refused attempt #{attempt}"
-                " since this compaction.", reason,
+                f"You just tried {self.tool_name} before {before}. Call #{attempt}"
+                " since this compaction, refused.", reason,
                 *(requirement.reminder(self.audit) for requirement in due),
             )),
         )
