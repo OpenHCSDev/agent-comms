@@ -21,6 +21,8 @@ from agent_comms.todos import (
     TodoProblems,
     PlainText,
     ProgressRead,
+    PullRequestLink,
+    ResumeClaimOrder,
     HeadReviewed,
     HeadVerdict,
     NoHeadOrder,
@@ -377,6 +379,13 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
+        # The identical call resumes a retained claim's publication; nothing is claimed again.
+        link = PullRequestLink(todo.repo, self.pull_request)
+        for claim in todo.order.commander_claims():
+            if claim.resumed_by(link, self.head, self.report.text):
+                resumed = ResumeClaimOrder(todo.revision, actor, generation, claim).record(
+                    comms.goals, todo.id)
+                return TodoChanged(resumed, resumed.strike_count)
         original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report.text,

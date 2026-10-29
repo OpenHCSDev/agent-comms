@@ -12,18 +12,11 @@ import pytest
 from pydantic import ValidationError
 
 from agent_comms.cli import _fail, main
-from agent_comms.cli_bridges.shared import Binding, DeliveryRow, GivenBinding, StoredBinding
-from agent_comms.cli_protocol import (
-    WATCH_LINE,
-    DeliveredOutcome,
-    FailedCoreError,
-    UnavailableCoreError,
-    UnconfirmedOutcome,
-)
+from agent_comms.cli_bridges.shared import Binding, GivenBinding, StoredBinding
+from agent_comms.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.field_codec import RecordProblems
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 
@@ -119,21 +112,15 @@ print('opened', flush=True)
     await open_together(fresh=True)
     binding = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('viewer', 1.0),
                       thread='external-session', start=Binding.bus_head(str(tmp_path)))
-    message = Message(sender='peer', target='viewer', type=InfoKind,
-                      body='retained delivery', timestamp=1.0, seq=1)
-    pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
     with Binding.open(tmp_path) as db:
         assert binding.bind(db) == binding
-        with db:
-            assert pending.insert_if_absent(db).rowcount
     await open_together(fresh=False)
     with Binding.open(tmp_path) as db:
         assert StoredBinding().bind(db) == binding.address()
-        assert DeliveryRow.select(db) == [pending]
 
 
 @pytest.mark.parametrize('conflicting', [False, True])
-def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
+def test_concurrent_initial_binding_preserves_one_identity(
         tmp_path, conflicting, bus):
     from journal_binding_cases import concurrent_bindings
 
@@ -141,11 +128,6 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
                     thread='external-session', start=Binding.bus_head(str(tmp_path)))
     other = Binding(root=str(tmp_path), owner=RecordedThreadIncarnation('other-viewer', 2.0),
                     thread='external-session', start=Binding.bus_head(str(tmp_path)))
-    message = Message(sender='peer', target='viewer', type=InfoKind,
-                      body='retained delivery', timestamp=1.0, seq=1)
-    pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
-    with Binding.open(tmp_path) as db, db:
-        pending.insert(db)
     results = concurrent_bindings(tmp_path, (first, other if conflicting else first))
     assert sum(kind == 'bound' for kind, _ in results) == (1 if conflicting else 2)
     assert sum(kind == 'rejected' for kind, _ in results) == int(conflicting)
@@ -157,9 +139,6 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
         loser = other if winner == first else first
         with pytest.raises(ValueError):
             loser.bind(db)
-        with db:
-            assert not DeliveryRow(message.message_id, json.dumps(message.to_wire()), DeliveredOutcome).insert_if_absent(db).rowcount
-        assert DeliveryRow.select(db) == [pending]
         assert Binding.select(db) == [winner]
 
 
@@ -187,14 +166,13 @@ async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
     from goal_owner_fixture import canonical_goal_wire
 
     from agent_comms.cli_protocol import ArrivedMessage
-    from agent_comms.read_basis import ExplicitWatchAcknowledgment
     from agent_comms.threads import Thread
 
     comms = canonical_goal_wire(root)
     for name in ("a", "b"):
         comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
     sent = comms.messaging.send("a", "b", "crosses").message
-    async with aclosing(comms.watch("b", acknowledgment=ExplicitWatchAcknowledgment)) as watched:
+    async with aclosing(comms.watch("b")) as watched:
         async with asyncio.timeout(5):
             record = await anext(watched)
     line = WATCH_LINE.validate_json(ArrivedMessage(message=record).model_dump_json())

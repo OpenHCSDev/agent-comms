@@ -17,7 +17,6 @@ from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.input_attempt import BoundUnknownInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.message_page import PageBounds
-from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.text_digest import TextDigest
 from agent_comms.threads import Thread
@@ -72,7 +71,6 @@ def test_large_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comm
     authority_before = ledger.path.read_bytes()
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b").page.messages],
-        "acknowledged": 1,
         "remaining": 0,
         "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
     }
@@ -80,33 +78,31 @@ def test_large_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comm
     result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
 
     assert result == expected
-    assert comms.bus.pending_count("b") == 0
+    assert comms.bus.pending_count("b") == 1  # Reading records nothing.
     assert ledger.path.read_bytes() == authority_before
     assert not (comms.root / "tool-output").exists()
     assert "private-native-prompt" not in json.dumps(result)
     assert "native_id" not in json.dumps(result)
 
 
-@pytest.mark.parametrize("ack", [False, True])
-def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
+def test_small_inbox_keeps_existing_contract(inbox_comms):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "Earlier unresolved message")
     comms.messaging.send("a", "b", "hello").message.message_id
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b").page.messages],
-        "acknowledged": int(ack),
-        "remaining": int(not ack),
+        "remaining": 0,
         "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
     }
     authority_before = ledger.path.read_bytes()
-    assert invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": ack}, caller=NoThreadCaller()) == expected
-    assert comms.bus.pending_count("b") == int(not ack)
+    assert invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller()) == expected
+    assert comms.bus.pending_count("b") == 1
     assert ledger.path.read_bytes() == authority_before
     assert not (comms.root / "tool-output").exists()
 
 
 @pytest.mark.parametrize("limit", [0, -1])
-def test_invalid_page_limit_precedes_ack(inbox_comms, limit):
+def test_invalid_page_limit_refuses_before_reading(inbox_comms, limit):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "body" * 20_000)
     comms.messaging.send("a", "b", "Still unread after failure").message.message_id
@@ -162,11 +158,11 @@ def test_large_standby_review_returns_complete_messages_without_files(
     result = invoke_tool(
         comms,
         "comms_inbox",
-        {"thread": "b", "ack": False, "standby": {"goal_id": goal.id, "wait_for": ["a"]}}, caller=NoThreadCaller(),
+        {"thread": "b", "standby": {"goal_id": goal.id, "wait_for": ["a"]}}, caller=NoThreadCaller(),
     )
     assert result["standby_review"] == FieldCodec.encode(review)
-    assert result["acknowledged"] == 0
-    assert result["remaining"] == 2
+    # Nothing took either message, so every message the page did not show remains.
+    assert result["remaining"] == len(messages) - len(result["messages"])
     assert not (comms.root / "tool-output").exists()
     assert stored_inputs(dispositions.root) == before
     report = {
@@ -248,8 +244,8 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     assert review["goal_id"] == goal.id and review["wait_for"] == ["a"]
     assert len(review["already_reviewed_inputs"]) == 1
     assert len(review["excluded_inputs"]) == 930
-    assert result["acknowledged"] == 2 and comms.bus.pending_count("b") == 0
-    assert result["remaining"] == 0
+    assert comms.bus.pending_count("b") == len(messages)  # Reading records nothing.
+    assert result["remaining"] == len(messages) - len(result["messages"])
     assert stored_inputs(dispositions.root) == before
     assert review == FieldCodec.encode(comms.goals.goal_input_review("b", goal.id, ["a"]))
     assert not (comms.root / "tool-output").exists()
@@ -288,7 +284,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
         AcpInputKey(InputId("0" * 32))).goal_reviews
 
 
-def test_inbox_page_bound_and_no_ack_keep_the_next_page_unread(inbox_comms):
+def test_inbox_page_bound_keeps_the_next_page_unread(inbox_comms):
     comms = inbox_comms
     expected = [comms.messaging.send("a", "b", str(index)).message for index in range(5)]
     page = comms.bus.inbox_at("b", comms.registry.snapshot(), bounds=PageBounds(limit=2))
@@ -296,10 +292,10 @@ def test_inbox_page_bound_and_no_ack_keep_the_next_page_unread(inbox_comms):
     assert page.remaining == 3
     for _ in range(2):
         result = invoke_tool(
-            comms, "comms_inbox", {"thread": "b", "limit": 2, "ack": False}, caller=NoThreadCaller(),
+            comms, "comms_inbox", {"thread": "b", "limit": 2}, caller=NoThreadCaller(),
         )
         assert result["messages"] == [message.to_wire() for message in expected[:2]]
-        assert result["acknowledged"] == 0 and result["remaining"] == 5
+        assert result["remaining"] == 3
         assert comms.bus.pending_count("b") == 5
 
 
@@ -307,7 +303,7 @@ def test_inbox_page_bound_and_no_ack_keep_the_next_page_unread(inbox_comms):
 async def test_watch_drains_multiple_pages_without_another_file_event(inbox_comms):
     comms = inbox_comms
     expected = [comms.messaging.send("a", "b", str(index)).message for index in range(201)]
-    watcher = comms.watch("b", acknowledgment=ExplicitWatchAcknowledgment)
+    watcher = comms.watch("b")
     try:
         async with asyncio.timeout(5):
             received = [await anext(watcher) for _ in expected]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .input_key import InputKeyText
+from .agent_inbox import TakenInputStart
 
 from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTool, PublishingToolRequest, ReadTool, SubjectBinding, ThreadReadTool, ThreadToolRequest, ToolRequest, tool_field
 from .order_tools import MessagePublished
@@ -56,7 +57,7 @@ from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .presentation import ChannelView
+from .presentation import AfterRecipient, ChannelView, FirstRecipient, MessageNotification, RecipientCursor
 from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
 from .relationships import (
@@ -86,6 +87,7 @@ from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
+from .ui_model.observation import ReadNotifications
 from .tool_result import ToolResult
 from .work_branches import WorkBranch, WorkBranches
 
@@ -219,10 +221,9 @@ class TaskPublished(ToolResult):
 
 @dataclass(frozen=True)
 class InboxPageRead(ToolResult):
-    """One unread page; only its returned references can be acknowledged."""
+    """One page of messages nothing took yet; reading it records nothing."""
 
     messages: tuple[Annotated[Message, WireForm], ...]
-    acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
     standby_review: Annotated[StandbyReview | NoStandbyReview, WireOmitDefault()] = (
@@ -673,14 +674,59 @@ class CommsGoalHistoryTool(ThreadReadTool):
 class CommsThreadsTool(ReadTool, ToolRequest):
     label = "Comms Threads"
     description = (
-        "List agent threads with status and pending counts, plus this caller's "
-        "recent sent-message delivery outcomes."
+        "List agent threads with status and pending counts, plus one delivery summary "
+        "for each of this caller's recent sent messages; comms_message_outcomes reads one "
+        "message's recipients."
     )
     active_only: Annotated[bool, *tool_field("Exclude stopped threads")] = False
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadListing:
         threads = ThreadsCliCommand(active_only=self.active_only).apply(comms)
         return caller.listing(comms, threads.threads)
+
+
+@dataclass(frozen=True)
+class MessageOutcomes(ToolResult):
+    """One message once, then each recipient outcome its caller may read."""
+
+    message: Annotated[Message, WireForm]
+    outcomes: tuple[MessageNotification, ...]
+    remaining: int
+    next: RecipientCursor
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsMessageOutcomesTool(ReadTool, ToolRequest):
+    label = "Message outcomes"
+    description = (
+        "Read one message's recipient outcomes: the message once, then one page of recipient "
+        "rows, each with its delivery state, who it was shown to and its answer. Pass the "
+        "result's next cursor as after for the next page. A sender reads every recipient; "
+        "a recipient reads only its own row."
+    )
+    reference: Annotated[
+        MessageReference, *tool_field("The message's seq and message_id, as comms_threads lists them")
+    ]
+    limit: Annotated[int, *tool_field("Maximum recipient rows in this page")] = 100
+    after: Annotated[
+        RecipientCursor, *tool_field("The previous page's next cursor; omit for the first page")
+    ] = FirstRecipient()
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> MessageOutcomes:
+        if self.limit < 1:
+            raise ToolRefusedError("limit must be positive.")
+        source, = comms.bus.bus.deliveries_for_references((self.reference,))
+        viewer = caller.outcome_viewer(comms)
+        if not viewer.sees(source):
+            raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")
+        window = ReadNotifications(str(comms.root), (self.reference,), viewer=viewer).read(comms)
+        following = self.after.following(
+            window.outcomes.get((source.message.seq, source.message.message_id), ()))
+        page = following[:self.limit]
+        return MessageOutcomes(
+            source.message, page, len(following) - len(page),
+            AfterRecipient(page[-1].recipient_identity) if page else self.after,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -985,20 +1031,17 @@ class CommsHistoryTool(ReadTool, ToolRequest):
 class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
     description = (
-        "Fetch one oldest-first page of undelivered messages and unresolved native input "
-        "attempts for a thread. Optional target limits the conversation. ACK marks exactly "
-        "the returned message references; remaining counts unread messages in that snapshot "
-        "after this page's acknowledgment. "
-        "Call again to drain the next page. One oversized message is returned alone for "
+        "Fetch one oldest-first page of messages no harness attempted and no native input took, "
+        "and the unresolved input attempts, for a thread. Optional target limits the conversation. "
+        "Reading records nothing: a message leaves the page when its harness takes it, never "
+        "because a page showed it, and human read markers are never touched. remaining counts "
+        "the untaken messages after this page. One oversized message is returned alone for "
         "progress. Unresolved inputs remain UNKNOWN and are not paged. For standby, supply standby "
         "(goal_id and wait_for) to get standby_review: exact eligible keys and messages, "
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: Annotated[str, *tool_field("Thread name")]
     target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.address()
-    ack: Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = (
-        True
-    )
     limit: Annotated[int, *tool_field("Maximum messages in this page; must be positive")] = (
         100
     )
@@ -1013,15 +1056,11 @@ class CommsInboxTool(ToolRequest):
         review = self.standby.review(comms, thread)
         page = comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
-            bounds=PageBounds(limit=self.limit),
+            after=TakenInputStart(), bounds=PageBounds(limit=self.limit),
         )
-        messages = page.page.messages
-        unresolved = tuple(comms.goals.unresolved_inputs(thread))
-        references = tuple(message.reference for message in messages)
-        acknowledged = comms.messaging.acknowledge(thread, references) if self.ack else 0
         return InboxPageRead(
-            messages, acknowledged, page.remaining + len(messages) - acknowledged,
-            unresolved, standby_review=review,
+            page.page.messages, page.remaining, tuple(comms.goals.unresolved_inputs(thread)),
+            standby_review=review,
         )
 
 

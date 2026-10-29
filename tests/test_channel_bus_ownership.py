@@ -1,5 +1,6 @@
 """Channel membership and notifications have one canonical bus authority."""
 
+from agent_comms.presentation import AllOutcomes
 from agent_comms.repo import Checkout
 from contextlib import AsyncExitStack
 from dataclasses import replace
@@ -18,7 +19,7 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  # noqa: F811
     root, root_id, comms, original, _people = _root(tmp_path)
     # The initial agent-authored ordinary message addresses both channel peers.
-    receipts = comms.views.message_notifications_for_references((original.message.reference,))
+    receipts = comms.views.message_notifications_for_references(AllOutcomes(), (original.message.reference,))
     assert {
         row.recipient for row in receipts.outcomes[(original.message.seq, original.message.message_id)]
     } == {"alpha", "beta"}
@@ -33,7 +34,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accepted = accept_initial(comms.bus, root_id, message.seq, store)
     assert [assignment.recipient for assignment in accepted] == ["beta"]
-    current = comms.views.message_notifications_for_references((message.reference,)).outcomes[(message.seq, message.message_id)]
+    current = comms.views.message_notifications_for_references(AllOutcomes(), (message.reference,)).outcomes[(message.seq, message.message_id)]
     assert [(row.recipient, type(row.state)) for row in current] == [("beta", SentProgress)]
     assert not comms.registry.require("beta").executing
     assert original.message in read_history(comms, "#team")
@@ -54,8 +55,8 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     sent = tuple(comms.messaging.send("sender", "#team", f"@beta review {number}").message
                  for number in range(6))
     assert not comms.registry.require("alpha").executing
-    references = tuple(message.reference for message in comms.bus.inbox("alpha", CommandTarget.named("#team")).page.messages)
-    comms.messaging.acknowledge("alpha", references)
+    shown = comms.bus.inbox("alpha", CommandTarget.named("#team")).page.messages
+    comms.bus.mark_read_through("alpha", shown[-1].seq, target=CommandTarget.named("#team"))
     ledger = comms.bus.reads.path.read_bytes()
     revision = comms.bus.bus.revision()
     frame = "".join(segment.text() for segment in comms.bus.awareness_segments(observer, ()))

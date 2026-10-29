@@ -171,11 +171,17 @@ class SystemdUserService(SystemdUnit, HostService, declared_name=None):
 
     @classmethod
     def start_enabled_unit(cls) -> None:
-        """``render_unit`` installs into ``default.target``, so enabling links it there."""
+        """``render_unit`` installs into ``default.target``, so enabling links it there.
+
+        Systemd enables a template's instances (``name@session.service``), never the
+        template itself, so a template matches each named instance link and not the bare
+        ``name@.service``. Only a link this home's definition loads is started."""
         manager = ResidentManager.current()
-        enabled = cls.unit_file(Path.home()).parent / "default.target.wants" / cls.unit
-        if enabled.exists() and manager.loads(cls.unit, cls.unit_file(Path.home())):
-            manager.control("start", cls.unit)
+        definition = cls.unit_file(Path.home())
+        for enabled in sorted((definition.parent / "default.target.wants").glob(
+                cls.unit.replace("@.", "@?*."))):
+            if manager.loads(enabled.name, definition):
+                manager.control("start", enabled.name)
 
     def pid(self) -> int:
         return self._pid_for(self.unit_name())

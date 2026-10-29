@@ -20,7 +20,7 @@ from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.errors import MessageAcknowledgmentError, RelationViolationError, UnregisteredThreadError
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.message_page import PageBounds
@@ -62,42 +62,12 @@ class TestMessaging:
         wired.messaging.send("PR111", "#all", "green").message.message_id
         assert wired.bus.pending_count("fixer") == 1
 
-    def test_ack_clears_inbox(self, wired: Comms) -> None:
-        wired.messaging.send("PR111", "fixer", "hello").message.message_id
-        messages = wired.bus.inbox("fixer").page.messages
-        references = tuple(message.reference for message in messages)
-        assert wired.messaging.acknowledge("fixer", references) == 1
-        assert wired.bus.pending_count("fixer") == 0
-        with pytest.raises(MessageAcknowledgmentError) as caught:
-            wired.messaging.acknowledge("fixer", references)
-        assert caught.value.references == references
-        assert wired.messaging.acknowledge("fixer", ()) == 0
-
-    def test_ack_refuses_partial_selection_before_changing_reads(self, wired: Comms) -> None:
-        incoming = wired.messaging.send("PR111", "fixer", "incoming").message
-        outgoing = wired.messaging.send("fixer", "PR111", "not delivered to fixer").message
-        before = wired.bus.reads.read()
-        with pytest.raises(MessageAcknowledgmentError) as caught:
-            wired.messaging.acknowledge("fixer", (incoming.reference, outgoing.reference))
-        assert caught.value.recipient == "fixer"
-        assert caught.value.references == (outgoing.reference,)
-        assert wired.bus.reads.read() == before
-        assert [message.reference for message in wired.bus.inbox("fixer").page.messages] == [incoming.reference]
-
-    def test_ack_names_an_invalid_original_reference(self, wired: Comms) -> None:
-        incoming = wired.messaging.send("PR111", "fixer", "incoming").message
-        invalid = replace(incoming.reference, message_id="not-the-original")
-        with pytest.raises(MessageAcknowledgmentError) as caught:
-            wired.messaging.acknowledge("fixer", (invalid,))
-        assert caught.value.references == (invalid,)
-        assert [message.reference for message in wired.bus.inbox("fixer").page.messages] == [incoming.reference]
-
-    def test_scoped_ack_only_clears_selected_conversation(self, wired: Comms) -> None:
+    def test_scoped_read_only_clears_selected_conversation(self, wired: Comms) -> None:
         wired.messaging.send("PR111", "fixer", "direct").message.message_id
         wired.messaging.send("PR111", "#all", "global").message.message_id
 
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")).page.messages)
-        assert wired.messaging.acknowledge("fixer", references) == 1
+        shown = wired.bus.inbox("fixer", CommandTarget.named("PR111")).page.messages
+        wired.bus.mark_read_through("fixer", shown[-1].seq, target=CommandTarget.named("PR111"))
         assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 0
         assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 1
         assert wired.bus.pending_count("fixer") == 1
@@ -112,12 +82,12 @@ class TestMessaging:
             assert {message.body for message in wired.bus.inbox("fixer", target).page.messages} == bodies
             assert wired.bus.pending_count("fixer", target) == len(bodies)
 
-    def test_scoped_channel_ack_does_not_clear_dm(self, wired: Comms) -> None:
+    def test_scoped_channel_read_does_not_clear_dm(self, wired: Comms) -> None:
         wired.messaging.send("PR111", "fixer", "direct").message.message_id
         wired.messaging.send("PR111", "#all", "global").message.message_id
 
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("#all")).page.messages)
-        assert wired.messaging.acknowledge("fixer", references) == 1
+        shown = wired.bus.inbox("fixer", CommandTarget.named("#all")).page.messages
+        wired.bus.mark_read_through("fixer", shown[-1].seq, target=CommandTarget.named("#all"))
         assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 0
         assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 1
         assert wired.bus.pending_count("fixer") == 1
@@ -135,8 +105,8 @@ class TestMessaging:
 
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"PR111": 2, "#all": 1}
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")).page.messages)
-        wired.messaging.acknowledge("fixer", references)
+        shown = wired.bus.inbox("fixer", CommandTarget.named("PR111")).page.messages
+        wired.bus.mark_read_through("fixer", shown[-1].seq, target=CommandTarget.named("PR111"))
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"#all": 1}
 
@@ -361,8 +331,8 @@ class TestThreadOps:
 
     def test_rename_self_preserves_routing_history_and_state(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
         wired.messaging.send("fixer", "PR111", "before rename").message.message_id
-        references = tuple(message.reference for message in wired.bus.inbox("PR111", CommandTarget.named("fixer")).page.messages)
-        assert wired.messaging.acknowledge("PR111", references) == 1
+        shown = wired.bus.inbox("PR111", CommandTarget.named("fixer")).page.messages
+        wired.bus.mark_read_through("PR111", shown[-1].seq, target=CommandTarget.named("fixer"))
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
         wired.agents.observe_runtime_info("PR111", AgentInfo(model=DeclaredModel('test/model')))
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")

@@ -1,5 +1,6 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
+from agent_comms.presentation import AllOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
@@ -15,7 +16,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.notification_progress import (
-    ContextualProgress,
+    PendingProgress,
     SentProgress,
     UnrecordedProgress,
 )
@@ -95,9 +96,9 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)
     wire_before = comms.bus.bus.revision()
-    notices = comms.views.message_notifications_for_references((message.reference,)).outcomes[message.seq,message.message_id]
+    notices = comms.views.message_notifications_for_references(AllOutcomes(), (message.reference,)).outcomes[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
-    assert beta.state == ContextualProgress(UnrecordedProgress())
+    assert beta.state == PendingProgress(UnrecordedProgress())
     assert beta.state.detail == ''
     assert beta.recipient_identity.recipient_lookup==comms.registry.require('beta').incarnation.require_recorded().lookup
     with Coordination(str(root/'coordination.sqlite3')) as store:
@@ -107,7 +108,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     # The immutable source's recipient survives rename; current readiness must
     # join its original birth rather than manufacture a new membership/claim.
     comms.registry.rename('beta','renamed')
-    renamed = comms.views.message_notifications_for_references((message.reference,)).outcomes[message.seq,message.message_id]
+    renamed = comms.views.message_notifications_for_references(AllOutcomes(), (message.reference,)).outcomes[message.seq,message.message_id]
     assert {item.recipient_identity for item in renamed}=={item.recipient_identity for item in notices}
 
 

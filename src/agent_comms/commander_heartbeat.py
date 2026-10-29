@@ -9,16 +9,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.standing_rules import StandingRule
+from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead, Todo
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
@@ -66,16 +63,20 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
-        """The service loop owns the failure; the heartbeat tells its commanders."""
+        """The service loop has already recorded the failure; each commander's board gains that
+        retained occurrence once, and every line it already holds keeps its age."""
         with opened_wire() as comms:
             self.register(comms.registry)
+            name = type(self).__name__
+            retained = ServicePassStore.at(comms.root).read().failing[name]
+            failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error)
+            now = time.time()
             for thread in self.commanders(comms.registry, comms.goals):
-                comms.bus.publisher.publish_ordinary(
-                    Message(sender=self.sender, target=thread.name,
-                            body=f"Heartbeat pass failed: {type(error).__name__}: {error}",
-                            type=InfoKind, role=ConversationRole()),
-                    origin=AgentOrigin(), destination=ThreadTarget(thread.name),
-                )
+                for update in CommanderUpdate.report_failure(
+                    thread.incarnation, failure,
+                    CommanderUpdate.latest(comms, thread.incarnation), now=now,
+                ):
+                    update.send(comms, now, ())
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
         return tuple(
@@ -93,26 +94,26 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
             for item in observed:
                 comms.goals.todos.record_merges(item.merged)
                 previous = CommanderUpdate.latest(comms, item.thread.incarnation)
-                known = frozenset(previous.handled) if previous else frozenset()
+                known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
                     comms, item.thread.name,
                     (*(rule for rule in item.rules if RulePing.capture(rule) not in known),
                      *(state for state in item.states
                        if state.attention() and UnitPing.capture(state) not in known)),
                 )
-                update = CommanderUpdate.derive(
+                for update in CommanderUpdate.derive(
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
                     tuple(rule for rule in item.rules if rule not in rejected), previous,
                     now=now,
-                    undisposed=(previous.undisposed(comms, item.thread.name,
-                                                    now - AwaitingCommander.seconds)
-                                if previous else ()),
+                    undisposed=tuple(
+                        ping for packet in previous
+                        for ping in packet.undisposed(comms, item.thread.name,
+                                                      now - AwaitingCommander.seconds)),
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
-                )
-                if update is not None:
-                    update.send(comms, now, item.hud)
+                ):
+                    update.send(comms, now, item.hud.brief())
                 completed.append(item.thread.incarnation)
         finally:
             # A later commander's failure does not erase passes already completed.

@@ -375,8 +375,9 @@ class RecoveryMonitorCapability:
                                 for attempt in AttemptRecord.select(store.session._connection))
         inputs = InputDispositions(root)
         if inputs.path.is_file():
-            names = frozenset(Registration(RegistryFile.path_in(root)).snapshot().threads)
-            uncertain = uncertain or bool(inputs.unresolved(names).rows)
+            snapshot = Registration(RegistryFile.path_in(root)).snapshot()
+            entries = tuple(snapshot.entry(name) for name in snapshot.threads)
+            uncertain = uncertain or bool(inputs.unresolved(entries).rows)
         if uncertain:
             destination = root.with_name(f"{root.name}.unknown-{ScratchName.mint()}")
             root.rename(destination)

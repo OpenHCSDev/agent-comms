@@ -25,11 +25,12 @@ from .turn_context import Provenance, WireProvenance
 from .working_memory_requests import AnnotationBudgetExhausted
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from typing import Self
 
     from .bus import BusReader
     from .cli_bridges.shared import CliBridge
-    from .cli_protocol import Outcome
+    from .harness_delivery_states import Outcome
     from .task_attachments.commander_pings import CommanderUpdate
     from .goal_management import Goals
     from .input_attempt import StoredInput
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
     from .threads import Thread
+    from .typed_table import TypedTable
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -225,9 +227,13 @@ class TaskAttachment(
     def require_annotation_grant(self):
         raise RelationViolationError("Original wire message has no human disclosure grant")
 
-    def commander_update(self, commander: ThreadIncarnation) -> CommanderUpdate | None:
-        """The commander observations this attachment carries for that commander."""
-        return None
+    def projections(self, message: Message) -> Iterator[TypedTable]:
+        """Search rows this attachment adds beside its original message: none."""
+        return iter(())
+
+    def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
+        """The commander observations this attachment carries for that commander: none."""
+        return ()
 
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """How a harness bridge hands the message carrying this attachment to its session."""

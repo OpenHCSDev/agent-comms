@@ -23,6 +23,14 @@ def core(*argv: str) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(argv, code, output.getvalue(), error.getvalue())
 
 
+def core_process(*argv: str) -> subprocess.CompletedProcess[str]:
+    """Run the real Core process when testing launch-environment independence."""
+    return subprocess.run(
+        (sys.executable, '-m', cli.__name__, *argv),
+        capture_output=True, text=True, timeout=60,
+    )
+
+
 def commander(*argv: str) -> subprocess.CompletedProcess[str]:
     """``agent-comms-commander ARGV``, which reads its arguments from sys.argv."""
     argv = ('agent-comms-commander', *argv)

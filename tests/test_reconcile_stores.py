@@ -42,7 +42,7 @@ from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.probes.carry import WriterOwnedOpeningProbe
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import RegistryFile, RetainedCopyRequest, SQLiteFile
+from agent_comms.locked_store import RegistryFile, SQLiteFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceHolder, MaintenanceOperator, NoMaintenanceHolder,
 )
@@ -399,7 +399,7 @@ def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_canno
     assert len({resource.path for resource in resources}) == 2
     practice = PracticeCopy(root, tmp_path / "practice")
     practice.include(tuple(originals))
-    copied = RetainedCopyRequest(practice.path)
+    copied = practice.request
     probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,))
     copied_paths = tuple(copied.location(resource) for resource in resources)
     planned = subprocess.run(

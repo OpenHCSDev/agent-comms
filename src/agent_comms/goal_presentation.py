@@ -238,19 +238,12 @@ class BlockedExecution(WaitingExecution, declared_name=None):
 
 
 @dataclass(frozen=True)
-class DecidedBlockExecution(BlockedExecution, RetryableExecution):
+class RetryableBlockExecution(BlockedExecution, RetryableExecution):
     block_reason: str
 
     @property
     def reason(self) -> str:
         return self.block_reason
-
-
-@dataclass(frozen=True)
-class UnrecordedBlockExecution(BlockedExecution, RetryableExecution):
-    @property
-    def reason(self) -> str:
-        return "reason unavailable"
 
 
 @dataclass(frozen=True)

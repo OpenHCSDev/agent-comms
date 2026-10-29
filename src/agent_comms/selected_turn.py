@@ -165,7 +165,7 @@ class SelectedAttempt:
             comms=participant.comms,
             store=participant.store,
             resource_scope=claim_scope,
-            owner_name=participant.owner.thread.name,
+            thread=participant.owner.thread,
             session_dir=session.directory,
             input_id=input_id,
             goal_permission=participant.goal_permission,

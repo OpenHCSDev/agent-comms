@@ -219,3 +219,20 @@ def test_attachment_names_decode_in_a_process_that_never_imported_their_module()
     )
 
     assert result.stdout.split() == ["agent_comms.task_attachments.commander_pings"]
+
+
+@pytest.mark.parametrize("table", ["HarnessDelivery", "HarnessObservedPart"])
+def test_stored_schema_text_is_the_same_whichever_bridge_imports_first(table):
+    """The Claude and Codex bridges register HarnessSession members in opposite orders."""
+    def ddl(first: str, second: str) -> str:
+        probe = (
+            f"import agent_comms.cli_bridges.{first}\n"
+            f"import agent_comms.cli_bridges.{second}\n"
+            f"from agent_comms.coordination_tables.harness_deliveries import {table}\n"
+            f"print('\\n'.join({table}.ddl()))\n"
+        )
+        return subprocess.run(
+            [sys.executable, "-c", probe], capture_output=True, text=True, timeout=120, check=True,
+        ).stdout
+
+    assert ddl("claude", "codex") == ddl("codex", "claude")

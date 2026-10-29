@@ -225,9 +225,8 @@ def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp
     )
     assert [message["text"] for message in result["messages"]] == ["@alpha please review"]
     assert result["messages"][0]["mentions"][0]["thread"] == "alpha"
-    assert result["acknowledged"] == 1
-    # beta no longer sees the ping; alpha's delivery is untouched.
-    assert comms.bus.pending_count("beta", CommandTarget.named("#team")) == 0
+    # An agent reading its inbox records nothing; both deliveries stay unread.
+    assert comms.bus.pending_count("beta", CommandTarget.named("#team")) == 1
     assert comms.bus.pending_count("alpha", CommandTarget.named("#team")) == 1
 
 

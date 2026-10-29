@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.coordination_errors import DrainUnavailable
 
 if TYPE_CHECKING:
-    from agent_comms.message_reference import MessageReference
     from agent_comms.messages import BusRecord
     from agent_comms.todos import Todo
 
@@ -70,17 +69,6 @@ class UnclaimedError(RelationViolationError):
     def __init__(self, seq: int) -> None:
         self.seq = seq
         super().__init__(f"Bus row {seq} has no committed claim transition")
-
-
-class MessageAcknowledgmentError(RelationViolationError):
-    """Core could not confirm every requested message; no partial read is committed."""
-
-    def __init__(self, recipient: str, references: tuple[MessageReference, ...]) -> None:
-        self.recipient = recipient
-        self.references = references
-        named = ", ".join(f"{reference.seq}/{reference.message_id}" for reference in references)
-        super().__init__(f"Core cannot acknowledge messages for {recipient!r}: {named}. "
-                         "Delivery remains unconfirmed; no reads were changed.")
 
 
 class UnreceivedAnswerError(ToolRefusedError, RelationViolationError):

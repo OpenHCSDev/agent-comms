@@ -108,6 +108,15 @@ class NativeRuntimeInput(
     WithoutRowid,
 ):
     @classmethod
+    def context_entered_from(cls, members: str, assignment: str) -> str:
+        """The member inputs of ``assignment`` whose session entry committed them to context.
+
+        Membership alone is no evidence: an input can hold an assignment and never enter context.
+        """
+        return (f"FROM {cls.declared_name} n JOIN {members} AS member ON member.input_id=n.input_id "
+                f"WHERE member.assignment_id={assignment} AND n.session_entry_id IS NOT NULL")
+
+    @classmethod
     def notification_context_sql(cls) -> str:
         """Native context evidence for the caller's bounded assignment window ``w``."""
         triage_stage = sql_literal(TriageNativeExecution)
@@ -120,9 +129,7 @@ class NativeRuntimeInput(
             "JOIN member ON member.input_id=n.input_id "
             "WHERE member.assignment_id=w.assignment_id "
             f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) AS triage_inflight,"
-            f"(SELECT n.committed_at_ms FROM {cls.declared_name} n "
-            "JOIN member ON member.input_id=n.input_id "
-            "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
+            f"(SELECT n.committed_at_ms {cls.context_entered_from('member', 'w.assignment_id')} "
             f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
             "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms FROM w"
         )

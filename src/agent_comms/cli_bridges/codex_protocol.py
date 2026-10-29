@@ -286,10 +286,24 @@ class Initialized(WireModel):
     method: Literal['initialized'] = 'initialized'
 
 
+class CodexRefused(RuntimeError):
+    """The server answered a request with a JSON-RPC error. That alone does not prove the request
+    had no effect; only a specific refusal (``CodexDraining``) says so."""
+
+
+class CodexDraining(CodexRefused):
+    """The server is shutting down and asks for the same request again after reconnecting."""
+
+
 class RpcError(WireModel):
     code: int
     message: str
     data: JsonValue = None
+
+    def refusal(self) -> CodexRefused:
+        # Codex gives draining no error code of its own; its message is the only signal on the wire.
+        refused = CodexDraining if self.message.startswith('Server is draining') else CodexRefused
+        return refused(f'Codex: {self.message}')
 
 
 if TYPE_CHECKING:
@@ -317,7 +331,7 @@ class RpcRequestFailure(RpcFailure):
     id: int
 
     def route(self, connection: CodexConnection) -> None:
-        connection.answer(self.id).set_exception(RuntimeError(f'Codex: {self.error.message}'))
+        connection.answer(self.id).set_exception(self.error.refusal())
 
 
 class RpcConnectionFailure(RpcFailure):

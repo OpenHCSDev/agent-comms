@@ -76,6 +76,9 @@ def seed(root: Path, project: Path) -> None:
 
 def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     goal_id = comms.registry.require("claude-ai").goal.require().id
+    with comms.bus.bus.reading() as source:
+        original = next(message for message in source.message_history()
+                        if message.sender == "worker" and message.target == "claude-ai")
     actor = FieldCodec.encode(comms.registry.require("claude-ai").incarnation)
     pending = PendingProblemOrder(
         id=PROBE_ORDER_ID, scope=FIX_SCOPE,
@@ -241,6 +244,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_input_delivery": {"thread": "worker"},
         "comms_order_work": {"problem": "P1"},
         "comms_threads": {},
+        "comms_message_outcomes": {"reference": FieldCodec.encode(original.reference)},
         "comms_work_branches": {"checkout": str(checkout)},
         "comms_collaboration": {
             "action": "add",
@@ -262,7 +266,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_constraint": {"to": "worker", "text": "Preserve the original saved file."},
         "comms_subtask": {"to": "worker", "text": "Read the saved file.", "completed": False},
         "comms_history": {"peer": "worker"},
-        "comms_inbox": {"thread": "claude-ai", "ack": False},
+        "comms_inbox": {"thread": "claude-ai"},
         "comms_fork": {"name": "never-launched", "parent": "absent-owner"},
         "comms_stop": {"name": "absent-owner"},
         "comms_start": {"name": "absent-owner"},

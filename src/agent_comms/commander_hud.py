@@ -291,7 +291,8 @@ class CommanderHud(ToolResult):
         installed = InstalledBuild.read()
         edits = dict.fromkeys((todo.id for todo in held), 0) | {
             read.todo.id: read.read()
-            for read in OrderEditCountRead.judgeable(comms.root, frame.live, progress)
+            for read in OrderEditCountRead.judgeable(
+                comms.root, frame.live, progress, frame.workplaces)
         }
         units = []
         for state in states:
@@ -319,10 +320,11 @@ class CommanderHud(ToolResult):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
-        packet = CommanderUpdate.latest(comms, owner)
+        board = tuple(entry for packet in CommanderUpdate.latest(comms, owner)
+                      for entry in packet.board(comms, commander))
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, CodexUsage.read(), packet.board(comms, commander) if packet else ())
+                   forks, CodexUsage.read(), board)
 
     def rows(self) -> tuple[HudRow, ...]:
         """Committed board order, actionable cards, live phases, then folded quiet units."""

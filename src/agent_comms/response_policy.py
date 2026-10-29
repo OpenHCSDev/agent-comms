@@ -15,7 +15,7 @@ from .input_key import BusInputKey, InputKey, OwnedBusInputKey
 from .projection_source import ProducedRow, ProjectionSource
 
 if TYPE_CHECKING:
-    from .messages import Message
+    from .messages import Message, MessageInput
     from .threads import Thread
 
 
@@ -68,7 +68,7 @@ class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return None
 
-    def disposition_key(self, message: Message, owner: Thread) -> InputKey:
+    def disposition_key(self, message: MessageInput, owner: Thread) -> InputKey:
         return OwnedBusInputKey(message.seq, float(owner.created_at))
 
 
@@ -96,7 +96,7 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
         return target if sender == owner else sender if target == owner else None
 
-    def disposition_key(self, message: Message, owner: Thread) -> InputKey:
+    def disposition_key(self, message: MessageInput, owner: Thread) -> InputKey:
         return BusInputKey(message.seq)
 
 

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .bus_tables import ReceivedSource
 from .class_fact import ClassFact
 from .field_codec import ThreadLookup
-from .messages import BusProjectionTables, BusRow, Message, PublicRecord, PublicSender
+from .messages import BusProjectionTables, BusRow, MessageInput, PublicRecord, PublicSender
 from .projection_source import ProducedRow
 from .read_basis import ReadCursor
 from .routing import DeliveryScope
@@ -173,8 +173,8 @@ class RouteCounts:
     def unseen_counts(self, registry, deliveries, seen, *, after: int = 0):
         counts = {actor: {} for actor in deliveries}
         rows = self._route_rows(RouteUnread, registry, deliveries, seen, after,
-            f'''SELECT actor,target,sender,count(*) AS count FROM cursors
-            WHERE {ReadCursor.unread_sql} GROUP BY actor,target,sender''')
+            f'''SELECT actor,target,sender,count(*) AS count FROM cursors AS request
+            WHERE {ReadCursor.rule_of(seen.values())} GROUP BY actor,target,sender''')
         for row in rows:
             conversation = deliveries[row.actor].conversation(row.sender, row.target)
             counts[row.actor][conversation] = counts[row.actor].get(conversation, 0) + row.count
@@ -189,9 +189,9 @@ class RouteCounts:
         return tuple(self._route_rows(UnseenDelivery, registry, {delivery.actor: delivery},
             {delivery.actor: seen}, after,
             f''', unread AS (
-                SELECT request.seq,request.target,request.sender,message.mentions
-                FROM cursors AS request CROSS JOIN "{Message.table.declared_name}" AS message USING(seq)
-                WHERE actor=? AND {ReadCursor.unread_sql}
+                SELECT request.seq,request.target,request.sender,{MessageInput.render('message.{mentions}')}
+                FROM cursors AS request CROSS JOIN "{MessageInput.table.declared_name}" AS message USING(seq)
+                WHERE actor=? AND {seen.unread_rule()}
             ) SELECT seq,target FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)
             ORDER BY seq {traversal.seq_order} LIMIT ?''',
             (delivery.actor, *values, traversal.upper, traversal.upper, limit)))

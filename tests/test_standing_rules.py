@@ -38,7 +38,7 @@ def working(comms, name, created):
         comms.registry.register(replace(comms.registry.require(name), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     else:
         comms.registry.declare(Thread(
-            name, frozenset(), Checkout(comms.root), session_file=RegistrySessionLocation.from_path(str(path), tmp_path), created_at=created))
+            name, frozenset(), Checkout(comms.root), session_file=RegistrySessionLocation.from_path(str(path), comms.root), created_at=created))
 
 
 def test_plain_messages_need_no_order_labels():
@@ -48,7 +48,7 @@ def test_plain_messages_need_no_order_labels():
 @pytest.mark.parametrize("state, reason", (
     (BlockedGoal("Provider needs authorization: " + "x" * 220),
      "Provider needs authorization: " + "x" * 220),
-    (UnrecordedBlockGoal(), "no reason recorded"),
+    (UnrecordedBlockGoal(), "reason unavailable"),
 ))
 def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, state, reason):
     """No order is needed; the current state owns appearance and disappearance."""
@@ -68,8 +68,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     old = RulePing(RequestStalled, TextDigest.of("old housekeeping"),
                    text="IDLE housekeeping", since=RecordedEventTime(now - 600))
     previous = CommanderDecisions(thread.incarnation, (old,), (old,), ())
-    update = CommanderUpdate.derive(thread.incarnation, (), (rule,), previous, now=now)
-    assert update is not None
+    update, = CommanderUpdate.derive(thread.incarnation, (), (rule,), (previous,), now=now)
     assert update.handled[0].urgent
     current = comms.registry.require("paper")
     comms.registry.register(
@@ -77,8 +76,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
         comms.registry.status("paper"),
     )
     assert GoalBlocked.violations(comms, "paper") == ()
-    cleared = CommanderUpdate.derive(thread.incarnation, (), (), update, now=now + 60)
-    assert cleared is not None
+    cleared, = CommanderUpdate.derive(thread.incarnation, (), (), (update,), now=now + 60)
     assert cleared.handled == ()
 
 
