@@ -18,6 +18,9 @@ from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
 from .field_codec import FieldCodec
 from .held_orders import HeldOrders, LiveHold
+from .historical_native_inputs import HistoricalNativeAnswers
+from .message_reference import MessageReference
+from .private_registry_guard import RegistryPrivacy
 from .order_work import OrderWork
 from .repo import Checkout, GitCommandError, Repo
 from .storage_rules import CheckoutAllocation, StorageRule
@@ -168,15 +171,32 @@ class TurnsSince(TurnBound):
 
 
 @dataclass(frozen=True)
-class TranscriptRead[Result](ConversationPreparation):
+class ThreadRead[Result](ConversationPreparation):
     """The original native/external source selection, shared by typed readers."""
 
     root: Path
     thread: Thread
-    bound: TurnBound
 
     def read(self) -> Result:
         return self.thread.execution.prepare_conversation(self)
+
+
+@dataclass(frozen=True)
+class InputAnswerRead(ThreadRead[frozenset[MessageReference]]):
+    references: tuple[MessageReference, ...]
+    privacy: RegistryPrivacy
+
+    def native(self) -> frozenset[MessageReference]:
+        return HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy).answered_inputs(
+            self.references)
+
+    def external(self) -> frozenset[MessageReference]:
+        return ExternalTranscript(self.root, self.thread.incarnation).answered_inputs(self.references)
+
+
+@dataclass(frozen=True)
+class TranscriptRead[Result](ThreadRead[Result]):
+    bound: TurnBound
 
     def native(self) -> Result:
         source = self.thread.runtime.history_source(self.root, self.thread.incarnation)

@@ -31,6 +31,7 @@ from agent_comms.heartbeat_subjects import (
 )
 from agent_comms.held_orders import HeldOrders
 from agent_comms.messages import Message
+from agent_comms.message_reference import MessageReference
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -51,7 +52,6 @@ from agent_comms.todos import (
 from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError
 
 if TYPE_CHECKING:
-    from agent_comms.message_reference import MessageReference
     from agent_comms.bus import BusReader
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
@@ -653,8 +653,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
                            for rule in member.read_open(source, snapshot, held, commander, requests))
         references = tuple(dict.fromkeys(reference for rule in opened
                                          for reference in rule.session_questions()))
-        answered = (comms.transcripts.answered_inputs(thread, references, cut.privacy)
-                    if references else frozenset())
+        answered = comms.transcripts.answered_inputs(thread, references, cut.privacy)
         return tuple(rule for rule in opened if rule.undecided(comms.goals.todos)
                      and not rule.answered_in_session(answered))
 
@@ -663,7 +662,8 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         return ()
 
     def answered_in_session(self, answered: frozenset[MessageReference]) -> bool:
-        return False
+        questions = self.session_questions()
+        return bool(questions) and all(question in answered for question in questions)
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
@@ -1139,9 +1139,6 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     def session_questions(self) -> tuple[MessageReference, ...]:
         return (self.message.reference,)
-
-    def answered_in_session(self, answered: frozenset[MessageReference]) -> bool:
-        return self.message.reference in answered
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,

@@ -29,6 +29,7 @@ from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_send_rules import NativeIdentityCheck
 from .private_sidecar import PrivateSnapshotFile, native_request_digest
 from .reservation_rules import ReservationViolationError
+from .threads import Thread
 from .typed_table import (
     Column,
     DurableTables,
@@ -40,7 +41,6 @@ from .typed_table import (
 )
 
 if TYPE_CHECKING:
-    from .threads import Thread
     from .private_send_stage import NativeSendStage
 
 
