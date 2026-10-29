@@ -1,6 +1,7 @@
 """The AST's declarations and the actual commander JSON/command boundary."""
 
 from dataclasses import replace
+import ast
 import json
 from pathlib import Path
 import time
@@ -10,6 +11,7 @@ import pytest
 from agent_comms.commander.order import OrderFile, OverrideNames, forwarders_added, main, overrides
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
+from agent_comms.errors import MissingSourceLine
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -98,6 +100,37 @@ def test_retained_replacement_methods_keep_owner_decorators_and_body_identity():
     moved = 'class Different:\n' + before
     assert forwarders_added(OverrideNames.introduced(owner, moved))
     assert forwarders_added(OverrideNames.introduced(before, before.replace('@property', '@different')))
+
+
+@pytest.mark.parametrize('keyword', ('def', 'async def'))
+def test_override_declarations_keep_decorated_multiline_physical_spans(keyword):
+    source = ('class Owner:\n    @decorate(\n        marker,\n    )\n'
+              f'    {keyword} answer(\n        self,\n    ):\n'
+              '        return self.peer.answer()\n')
+    visitor = OverrideNames(source)
+    visitor.visit(ast.parse(source))
+    (_, first, last), = visitor.bodies.values()
+    assert first == 2
+    assert last == len(source.splitlines())
+    after = source.replace('class Owner:\n', 'class Owner:\n    added = 1\n')
+    assert OverrideNames.introduced(source, after) == '+    added = 1\n'
+
+
+def test_override_declaration_without_parser_locations_refuses_before_recording():
+    node = ast.FunctionDef(name='unlocated',
+        args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
+        body=[ast.Pass()], decorator_list=[], type_params=[])
+    visitor = OverrideNames('def unlocated(): pass\n')
+    with pytest.raises(MissingSourceLine, match='source segment is unavailable'):
+        visitor.visit(node)
+    assert not visitor.bodies and not visitor.names
+
+
+def test_introduced_source_gaps_include_initial_and_final_insertions_not_deletions():
+    before = 'first = 1\nremove = 2\nlast = 3\n'
+    after = 'start = 0\nfirst = 1\nlast = 3\nend = 4\n'
+    assert OverrideNames.introduced(before, after) == '+start = 0\n+end = 4\n'
+    assert OverrideNames.introduced(before, 'first = 1\nlast = 3\n') == ''
 
 
 def test_override_scan_excludes_nested_and_qualified_names():

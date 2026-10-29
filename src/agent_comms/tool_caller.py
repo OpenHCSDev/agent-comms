@@ -20,6 +20,7 @@ from .turn_phase import IdlePhase
 if TYPE_CHECKING:
     from .comms import Comms
     from .registration import Registration
+    from .registry_document import RegistrySnapshot
     from .head_review import HeadReviewOrder, PullRequestHead
     from .threads import Thread
     from .tool_request import ToolRequest
@@ -148,7 +149,19 @@ class ThreadCaller(ToolCaller):
         return comms.registry.require(self.name)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
-        return comms.registry.require(self.name).incarnation
+        return self.identity_in(comms.registry.snapshot())
+
+    def identity_in(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
+        return snapshot.require(self.name).incarnation
+
+    def require_repository_head_review_grant(self, snapshot: RegistrySnapshot,
+                                             actor: ThreadIncarnation) -> None:
+        snapshot.commander_project.require().require_head_review_grant_author(snapshot, actor)
+
+    def repository_head_review_grant_actor(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
+        actor = self.identity_in(snapshot)
+        self.require_repository_head_review_grant(snapshot, actor)
+        return actor
 
     def head_review_actor(self, comms: Comms, request: PullRequestHead,
                           order: HeadReviewOrder) -> ThreadIncarnation:
@@ -221,9 +234,11 @@ class CommanderForkCaller(SubagentCaller):
         parent, = fork.parent.names()
         return comms.registry.require(parent)
 
-    def identity(self, comms: Comms) -> ThreadIncarnation:
-        fork = comms.registry.require(self.name)
-        return fork.incarnation.require_recorded().acting_for(self.commander(comms).incarnation)
+    def identity_in(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
+        fork = snapshot.require(self.name)
+        fork.execution.require_commander_fork()
+        parent, = fork.parent.names()
+        return fork.incarnation.require_recorded().acting_for(snapshot.require(parent).incarnation)
 
     def recorded(self, comms: Comms) -> bool:
         """Every commander verb that records announces it on the bus, so a fork that sent

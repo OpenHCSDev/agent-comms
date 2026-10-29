@@ -147,7 +147,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     return copied_bus
 
 
-def test_shared_worktree_proposal_is_reported_without_aborting_the_board(held_bus):
+def test_shared_worktree_proposal_is_reported_without_aborting_the_board(held_bus, installed_runtime):
     comms = held_bus
     original = comms.goals.todos.get('P1')
     retained = comms.goals.todos.get('P2')
@@ -612,7 +612,7 @@ def test_latest_answer_retains_the_original_commander_alias(held_bus):
     ('lead', 'The worker needs an answer'),
     ('#comms', '@lead The worker needs an answer'),
 ])
-def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
+def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path, installed_runtime):
     question = held_bus.bus.publisher.publish_ordinary(
         Message(sender='worker', target=target, type=QuestionKind, body=body,
                 timestamp=time.time() - AwaitingCommander.seconds - 1), destination=CommandTarget.named(target), origin=AgentOrigin(),

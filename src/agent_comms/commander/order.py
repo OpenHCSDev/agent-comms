@@ -79,6 +79,7 @@ from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.commander.config import GivenRepos
 from agent_comms.repo import Repo
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
@@ -160,7 +161,8 @@ class ClassNames:
 class OverrideNames(ast.NodeVisitor):
     """The AST dispatches declarations; bodies and qualified bases are not direct names."""
 
-    def __init__(self) -> None:
+    def __init__(self, source: str) -> None:
+        self.source = source
         self.classes: dict[str, ClassNames] = {}
         self.names: set[str] = set()
         self.bodies: dict[tuple[str, ...], tuple[str, int, int]] = {}
@@ -173,7 +175,7 @@ class OverrideNames(ast.NodeVisitor):
             self.visit(statement)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        body, bases = type(self)(), type(self)()
+        body, bases = type(self)(self.source), type(self)(self.source)
         for statement in node.body:
             body.visit(statement)
         for base in node.bases:
@@ -186,11 +188,14 @@ class OverrideNames(ast.NodeVisitor):
         self.bodies.update({(declaration, *identity): source
                             for identity, source in body.bodies.items()})
 
+    @boundary_decoder
     def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        segment = ast.get_source_segment(self.source, node)
+        if segment is None:
+            raise MissingSourceLine('Parser declaration source segment is unavailable.')
         self.names.add(node.name)
-        assert node.end_lineno is not None
         first = min((node.lineno, *(decorator.lineno for decorator in node.decorator_list)))
-        self.bodies[(node.name,)] = (ast.dump(node), first, node.end_lineno)
+        self.bodies[(node.name,)] = (ast.dump(node), first, node.lineno + segment.count('\n'))
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self.visit_FunctionDef(node)
@@ -215,10 +220,11 @@ class OverrideNames(ast.NodeVisitor):
         Parse failures report unavailable declaration evidence. Decorators, owner bases and
         method bodies participate in identity; a renamed owner or changed body is introduced.
         """
-        old, new = cls(), cls()
+        before, after = dedent(before), dedent(after)
+        old, new = cls(before), cls(after)
         try:
-            old.visit(ast.parse(dedent(before)))
-            new.visit(ast.parse(dedent(after)))
+            old.visit(ast.parse(before))
+            new.visit(ast.parse(after))
         except SyntaxError as error:
             raise MissingSourceLine(f'Replacement declaration evidence unavailable: {error}') from error
         same = frozenset(identity for identity, (body, _, _) in new.bodies.items()
@@ -227,10 +233,11 @@ class OverrideNames(ast.NodeVisitor):
                     for line in range(first, last + 1)}
         changed = {line for identity, (_, first, last) in new.bodies.items() if identity not in same
                    for line in range(first, last + 1)}
-        changed.update(line + 1
-                       for kind, _, _, first, last in SequenceMatcher(
-                           None, before.splitlines(), after.splitlines(), autojunk=False).get_opcodes()
-                       if kind != 'equal' for line in range(first, last))
+        cursor = 0
+        for block in SequenceMatcher(None, before.splitlines(), after.splitlines(),
+                                     autojunk=False).get_matching_blocks():
+            changed.update(range(cursor + 1, block.b + 1))
+            cursor = block.b + block.size
         return ''.join('+' + line + '\n' for number, line in enumerate(after.splitlines(), 1)
                        if number in changed and number not in retained)
 
@@ -240,7 +247,7 @@ class OverrideNames(ast.NodeVisitor):
                          for name in declaration.own & declaration.inherited(self.classes))
 
 
-def overrides(sources):
+def overrides(sources: Sequence[str]) -> set[str]:
     """Names answered again for a question a same-module base declares."""
     found = set()
     for text in sources:
@@ -248,22 +255,22 @@ def overrides(sources):
             tree = ast.parse(text)
         except SyntaxError:
             continue
-        declarations = OverrideNames()
+        declarations = OverrideNames(text)
         declarations.visit(tree)
         found.update(declarations.overrides)
     return found
 
 
-def forwarders_added(diff, sources=()):
+def forwarders_added(diff: str, sources: Sequence[str] = ()) -> list[str]:
     """Lines a diff adds that only hand a call to another object. A subclass answering a question its base declares
     (sources: the files after the change) is a per-state override, which is the polymorphism the paper asks for.
     A call that passes the holder itself (`return self.state.ready(self)`) asks the current state object to decide
     for this owner: that is the state pattern doing the deciding, not a hand-off."""
     kept = overrides(sources)
     state_call = re.compile(r'return self\.\w+\.\w+\((?:[^()]*,\s*)?self\b')
-    defs = lambda text: re.search(r'def (\w+)', text)
     return ([m.group(0).strip() for m in FORWARDER.finditer(diff)
-             if not (defs(m.group(0)) and defs(m.group(0)).group(1) in kept) and not state_call.search(m.group(0))]
+             if not ((definition := re.search(r'def (\w+)', m.group(0)))
+                     and definition.group(1) in kept) and not state_call.search(m.group(0))]
             + [f'def {m.group(2)} -> self.?.{m.group(2)}' for m in FORWARD_BODY.finditer(diff)
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
@@ -397,9 +404,9 @@ class CommanderContext(BaseModel):
     def on_root(cls, commander: str, repos: tuple[Repo, ...], root: Path) -> Self:
         context = cls.read_root(root)
         thread = context.comms.registry.require(commander)
-        context.comms.registry.set_commander_project(
-            RegisteredCommanderProject(thread.incarnation, repos)
-        )
+        project = context.comms.registry.snapshot().commander_project
+        context.comms.registry.set_commander_project(project.named(
+            thread.incarnation, GivenRepos(tuple(repo.checkout for repo in repos))))
         return context
 
     @property

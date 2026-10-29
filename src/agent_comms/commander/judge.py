@@ -39,7 +39,7 @@ from pathlib import Path
 from agent_comms.comms import Comms
 from agent_comms.change_report import BranchHeadRevision, FileLine, MainRevision
 from agent_comms.field_codec import (
-    Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems,
+    Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems, ToolCallId,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
@@ -142,7 +142,7 @@ class Edit(EditCall):
                               revision: BranchHeadRevision) -> list[str]:
         """Retained hunk text, or an exact local declared main cut for whole-file writes.
 
-        Mutable checkout bytes are never a preimage. All edits in one admission share the
+        Mutable checkout bytes are never a preimage. All checked edits share the
         revision's per-repository commit capture. Failure to resolve it is unavailable
         source evidence, not proof that the edit created the file.
         """
@@ -299,13 +299,19 @@ class EditReview(ReviewSubject):
         """The verdicts these IDs carry; a refusal exits before anything is written."""
         orders = {todo.id: todo for todo in ctx.held_orders()}
         edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
-        ids = [token.split(':')[0] for token in self.ids]
+        selected: list[tuple[str, ToolCallId]] = []
         problems: dict[str, str] = {}
-        for token, i in zip(self.ids, ids):
+        for token in self.ids:
+            try:
+                selected.append((token, FieldCodec.decode(ToolCallId, token.split(':')[0])))
+            except ValueError as error:
+                problems |= MalformedRecord(str(error)).located(
+                    token, 'read judge show and select a current edit ID:CODE')
+        for token, i in selected:
             if i not in edits:
                 problems |= MalformedRecord('unknown edit id').located(
                     token, 'read judge show and select a current edit ID:CODE')
-        known = [(token, edits[i]) for token, i in zip(self.ids, ids) if i in edits]
+        known = [(token, edits[i]) for token, i in selected if i in edits]
         for token, edit in known:
             if options.problem and edit.problem != options.problem:
                 problems |= MalformedRecord(f'its checkout files this edit under {edit.problem}').located(
@@ -320,10 +326,10 @@ class EditReview(ReviewSubject):
                         f'{token} --line', 'quote an exact line from this edit with --line')
         if problems:
             raise RecordProblems(problems)
-        options.check_edits(ctx, [(orders[edits[i].problem], edits[i]) for i in ids])
+        options.check_edits(ctx, [(orders[edits[i].problem], edits[i]) for _, i in selected])
         return tuple(JudgedCall(edits[i].problem,
                                 options.operation(ctx, orders[edits[i].problem], edits[i]))
-                     for i in ids)
+                     for _, i in selected)
 
 
 def record(ctx: order.Commander, verb: JudgeVerb, verdicts: tuple[JudgedCall, ...], unjudged: int) -> None:
@@ -458,7 +464,7 @@ class VerdictVerb(JudgeVerb):
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict: ...
 
     def check_edits(self, ctx: order.Commander, edits: list[tuple[Todo, Edit]]) -> None:
-        """Only verdicts that admit or reject source impose an edit-source check."""
+        """Source acceptance performs the appropriate guard."""
 
     def selection_problems(self) -> dict[str, str]:
         """This verdict selects edits by ID alone."""

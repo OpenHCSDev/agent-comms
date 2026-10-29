@@ -3687,7 +3687,8 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
 class OpenTodoState(TodoState):
     @classmethod
-    def assign(cls, current, proposed, traced, incoming):
+    def assign(cls, current: Todo, proposed: Assignment, traced: SourceReference,
+               incoming: ProblemOrder) -> Todo:
         return current.assigned(proposed, traced, incoming)
 
 
@@ -4351,10 +4352,8 @@ class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
 
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
-        project = goals.registry.snapshot().commander_project.require()
-        if (actor.commanding_identity != project.commander or
-                request.repo not in {repo.github for repo in project.repos}):
-            raise TodoError("Only this repository's commander or the director may review its heads.")
+        snapshot = goals.registry.snapshot()
+        snapshot.commander_project.require().require_head_reviewer(snapshot, request.repo, actor)
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord:
@@ -4908,8 +4907,7 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
 
     def require_claim_successor(self, current: Todo, incoming: ProblemOrder) -> None:
         current.require_previous_assignment(self.previous)
-        if current.assignment is not None:
-            raise TodoConflict(current)
+        current.require_assignment(None)
         current.state.require_open(current)
         incoming.require_released_successor(current.order.checked())
 
