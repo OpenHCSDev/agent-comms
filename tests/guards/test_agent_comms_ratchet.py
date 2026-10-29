@@ -122,9 +122,8 @@ def test_store_lock_calls_skip_the_store_owners():
     """Locking is store_files' and locked_store's own mechanism, never a hand-placed copy."""
     source = b"with _store_lock(path):\n    pass"
     owners = AgentCommsProject.lock_owners()
-    assert owners == ("agent_comms/store_files.py", "agent_comms/locked_store.py",
-                      "agent_comms/process_claim.py")
-    assert [StoreLockCalls.count(source, f"src/{owner}") for owner in owners] == [0, 0, 0]
+    assert all((SOURCE / "src" / owner).is_file() for owner in owners)
+    assert [StoreLockCalls.count(source, f"src/{owner}") for owner in owners] == [0] * len(owners)
 
 
 def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):

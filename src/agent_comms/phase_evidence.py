@@ -23,7 +23,8 @@ from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
-from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
+from agent_comms import skills
+from agent_comms.pinned_audit import SKILL, ForeignAbsenceProbe, GodFunction, ParsedModule, audit
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.repo import Repo
 
@@ -102,11 +103,8 @@ class MainTree:
     def pinned(self, path: str) -> MainTree:
         """The tree of the submodule this commit pins at ``path``: another repository's tree,
         read at exactly the commit its gitlink names, from that repository's own objects."""
-        entry, _, _ = Repo.git(self.repo.checkout, "ls-tree", self.commit, "--", path).partition("\t")
-        match entry.split():
-            case [_, "commit", commit]:
-                return MainTree(Repo.of(self.repo.checkout / path), commit)
-        raise ValueError(f"{path} is no submodule at {self.commit}")
+        commit = Repo.git(self.repo.checkout, "rev-parse", f"{self.commit}:{path}").strip()
+        return MainTree(Repo.of(self.repo.checkout / path), commit)
 
     def module(self, path: str) -> ParsedModule:
         source = Repo.git(self.repo.checkout, "show", f"{self.commit}:{path}")
@@ -398,17 +396,19 @@ class PatternPresent(PatternEvidence):
 
 
 @dataclass(frozen=True)
-class PinnedPatternPresent(PatternPresent):
-    """A pattern in the tree of a submodule main pins, at the commit it pins: code this
-    repository runs from another repository."""
-
-    submodule: str = field(kw_only=True)
+class AuditPatternPresent(PatternPresent):
+    """A pattern in the audit package of the refactor-audit main pins, at the commit it pins:
+    code this repository runs from that repository. Where the submodule sits and where its
+    package sits inside it are pinned_audit's, read from the loaded skill."""
 
     def read(self, main: MainTree) -> bool:
-        return self.satisfied(main.pinned(self.submodule).count(self.pattern, self.paths))
+        submodule = main.repo.module_file(skills.__name__).with_suffix("") / SKILL.name
+        package = Path(audit.__path__[0]).relative_to(SKILL)
+        pinned = main.pinned(submodule.as_posix())
+        return self.satisfied(pinned.count(self.pattern, (package.as_posix(),)))
 
     def describe(self) -> str:
-        return f"{self.pattern!r} in {' '.join(self.paths)} of the {self.submodule} main pins"
+        return f"{self.pattern!r} in the audit package of the refactor-audit main pins"
 
 
 @dataclass(frozen=True)

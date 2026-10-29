@@ -11,7 +11,8 @@ from pathlib import Path
 
 from agent_comms import skills
 
-SCRIPTS = Path(str(files(skills) / "refactor-audit" / "scripts"))
+SKILL = Path(str(files(skills) / "refactor-audit"))
+SCRIPTS = SKILL / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
