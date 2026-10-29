@@ -123,11 +123,13 @@ class RoomLedger(TypedStore, DurableTables, RuntimeWriter):
     tables = RoomLedgerRows
 
     @classmethod
-    def _open_reader(cls, path: Path, contention: StoreContention) -> Connection:
+    def _open_reader(
+        cls, path: Path, contention: StoreContention, *, check_same_thread: bool = True,
+    ) -> Connection:
         """Carry this host-owned file before its first snapshot; then prohibit writes."""
         connection = cls.writer(
             path.resolve().as_uri() + "?mode=rw", contention,
-            isolation_level=None, uri=True,
+            isolation_level=None, uri=True, check_same_thread=check_same_thread,
         )
         try:
             cls.install_schema(connection, WriterOwnedFile())

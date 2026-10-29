@@ -174,6 +174,7 @@ class InputObservation(ABC):
         task = self.runtime.background(self.observe(session_id))
         state.observer = RunningBackgroundTask(task)
         task.add_done_callback(partial(self._retire_observer, state))
+        state.wake_observer()
         self.root_observer.wake()
 
     async def _own_entry(self, session_id: str) -> RegistryEntryRevision:
@@ -244,8 +245,7 @@ class InputObservation(ABC):
                         if state.observing():
                             # Pending producers have their own completion wake;
                             # only an explicit local request owes another tick.
-                            if (state.observation_watcher is None or inbox_changed
-                                    or state.repeat_observation):
+                            if inbox_changed or state.repeat_observation:
                                 state.observation_ready.set()
                             state.observation_watcher = watcher
         finally:

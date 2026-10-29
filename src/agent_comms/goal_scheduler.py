@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import AcpSessionId, GoalId
 from .agent_event_updates import AcpEventConsumer
 from .child_process import ProcessIdentity
 from .coordinator import Coordination
@@ -247,10 +247,10 @@ class GoalScheduler:
         return self.publication(session_id).in_standby()
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        await self._sync_requested_goal(session_id, thread_name, GoalRefresh())
+        await self._sync_requested_goal(AcpSessionId(session_id), thread_name, GoalRefresh())
 
     async def _sync_requested_goal(
-        self, session_id: str, thread_name: str, request: GoalRefresh,
+        self, session_id: AcpSessionId, thread_name: str, request: GoalRefresh,
     ) -> None:
         record = self.publication(session_id)
         async with record.lock:
@@ -269,12 +269,13 @@ class GoalScheduler:
     ) -> None:
         # RuntimeServer reports this task's original failure. Joining it keeps
         # its lifetime with the watcher without inventing a failed input drain.
+        attachments = tuple(AcpSessionId(session_id) for session_id in session_ids)
         publication = self.effects._runtime.background(
-            self._publish_root_goals(document, tuple(session_ids), paths))
+            self._publish_root_goals(document, attachments, paths))
         await asyncio.gather(publication, return_exceptions=True)
 
     async def _publish_root_goals(
-        self, document: RegistryDocument, session_ids: tuple[str, ...], paths: frozenset[Path],
+        self, document: RegistryDocument, session_ids: tuple[AcpSessionId, ...], paths: frozenset[Path],
     ) -> None:
         execution_changed = not paths.isdisjoint(GoalWakeFile.execution_paths_in(self.comms.root))
         publications: list[asyncio.Task[None]] = []
