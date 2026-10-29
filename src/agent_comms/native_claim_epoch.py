@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import StaleFence
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import JsonShapeFamily, JsonShapeMember
+from .nominal.field_codec import JsonShapeFamily, JsonShapeMember
 from .pi_vocabulary import PendingStopReason, PiStopReason
 from .thread_identity import ClaimedIdentity, GenerationCounter
 

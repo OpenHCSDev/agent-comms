@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.locked_store import DurableFile, SQLiteFile
 
-from .field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec
 
 if TYPE_CHECKING:
     from .agent_backend import StreamingInputPolicy

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 
-from .field_codec import GoalId, TurnId
+from .nominal.field_codec import GoalId, TurnId
 from .turn_item import UsageChargeId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal

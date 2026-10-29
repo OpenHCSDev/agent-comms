@@ -20,7 +20,7 @@ from agent_comms.coordination_tables.participants import (
     OwnerGenerations,
     Participants,
 )
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 
 
 @dataclass(frozen=True, slots=True)

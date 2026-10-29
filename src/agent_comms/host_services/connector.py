@@ -23,7 +23,7 @@ from ..connector import (
 )
 from ..connector_store import ConnectorStore
 from ..errors import RelationViolationError, ToolRefusedError
-from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
+from ..nominal.field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..launch_root import LaunchRoot
 from ..recorded_bus import RecordedBusIdentity
 from ..tools import CommsChannelsTool

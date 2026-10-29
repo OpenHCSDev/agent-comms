@@ -5,7 +5,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import ExpectedProblem, Todo, TodoStore

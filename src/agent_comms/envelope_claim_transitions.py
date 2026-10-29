@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .class_fact import ClassFact
 from .coordination_errors import IdentityConflict
-from .field_codec import (
+from .nominal.field_codec import (
     AssignmentId,
     BoundedText,
     ClaimId,

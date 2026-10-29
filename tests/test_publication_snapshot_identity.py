@@ -3,7 +3,7 @@
 from dataclasses import dataclass, replace
 from typing import Annotated
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import InfoKind, Message, MessageKind
 from agent_comms.thread_identity import UserThreadRole

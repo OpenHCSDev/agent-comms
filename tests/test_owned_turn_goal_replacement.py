@@ -13,7 +13,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_backend import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import InputId, OrderId, TurnId
+from agent_comms.nominal.field_codec import InputId, OrderId, TurnId
 from agent_comms.goal_actions import (
     BlockedGoalAction,
     CreateProblemGoalAction,

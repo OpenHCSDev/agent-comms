@@ -14,9 +14,9 @@ from typing import Annotated, ClassVar
 
 from typing_extensions import TypeForm
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldPlan, PathText
+from agent_comms.nominal.field_codec import FieldPlan, PathText
 from agent_comms.installer.interpreter_operation import (
     InstallClock,
     InterpreterOperation,

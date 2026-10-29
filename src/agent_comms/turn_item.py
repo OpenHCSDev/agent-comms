@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import Id128, NominalSpelling, NominalText
+from .nominal.field_codec import Id128, NominalSpelling, NominalText
 
 if TYPE_CHECKING:
     from .routing import Routing

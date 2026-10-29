@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 
 from .connector_caller import CALLER, ConnectorCaller, ForkingCaller
 from .errors import ToolRefusedError
-from .field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .store_files import DependentStateTier, SingleFileStore

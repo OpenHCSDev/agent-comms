@@ -23,7 +23,7 @@ from typing import Annotated, TextIO
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.installer.request import InstallRequest
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.nominal.field_codec import FieldCodec, PathText
 from agent_comms.installer.logs import InstallLogs, InstallUnit
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (

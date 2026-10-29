@@ -32,7 +32,7 @@ from agent_comms.child_process import (
     SystemdUserManager,
     TimedOutOutcome,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from process_tree_fixture import TREE, identities, ready
 
@@ -370,7 +370,7 @@ time.sleep(60)
 LAUNCHER = """import json,sys,time
 from pathlib import Path
 from agent_comms.child_process import OutlivesLauncherLifetime, SpawnedProcess
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
 children = (SpawnedProcess.launch(sleeper),
             SpawnedProcess.launch(sleeper, lifetime=OutlivesLauncherLifetime))
@@ -407,7 +407,7 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
 UNIT_LAUNCHER = """import json,subprocess,sys
 from pathlib import Path
 from agent_comms.child_process import OutlivesLauncherLifetime, Platform, SpawnedProcess
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
 # A new session and a reparent to init leave the process tree, never the unit's cgroup.
 plain = Platform.current().identity(subprocess.Popen(sleeper, start_new_session=True).pid)

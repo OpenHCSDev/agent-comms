@@ -15,7 +15,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.order_runs import MechanicalOrderRun

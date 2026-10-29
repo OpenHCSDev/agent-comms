@@ -10,9 +10,9 @@ from typing import Annotated, ClassVar, NoReturn
 from pydantic import JsonValue
 
 from .comms import Comms
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .field_codec import (
+from .nominal.field_codec import (
     ContextSource,
     DefaultNonNull,
     Description,

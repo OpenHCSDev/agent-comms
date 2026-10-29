@@ -7,7 +7,7 @@ from .native_failures import NativePiUnavailable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
-from .field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, boundary_decoder, WireName
+from .nominal.field_codec import FieldCodec, MalformedRecord, NullMember, PresentMember, boundary_decoder, WireName
 from abc import ABC, abstractmethod
 from .private_path import FileRevision
 from .turn_item import FreshNativeId

@@ -97,7 +97,7 @@ class Repository:
 
 def record_source(version: int, fields: str) -> str:
     return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
-            "from agent_comms.field_codec import Id128, Id128Text\n\n"
+            "from agent_comms.nominal.field_codec import Id128, Id128Text\n\n"
             "class RootKind(Id128):\n    \"\"\"Another kind written in the same spelling.\"\"\"\n\n"
             f"@dataclass(frozen=True)\nclass Record:\n    version: ClassVar[int] = {version}\n{fields}")
 

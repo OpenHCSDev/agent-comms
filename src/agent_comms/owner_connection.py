@@ -13,12 +13,12 @@ from abc import abstractmethod
 from collections.abc import Awaitable
 from dataclasses import dataclass, replace
 from .command import Command
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .tool_result import DeclaredReply
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import AcpSessionId, FieldCodec, NullMember, WireOmitDefault
+from .nominal.field_codec import AcpSessionId, FieldCodec, NullMember, WireOmitDefault
 from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .jsonl_stream import JsonlStreamReader
 from .owner_protocol import OwnerLine, OwnerResult

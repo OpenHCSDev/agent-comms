@@ -20,9 +20,9 @@ from typing import Annotated, ClassVar, Literal, Self
 
 from .child_process import ProcessIdentity
 from .private_path import PrivateFileRole
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     ClaimId,
     MalformedRecord,

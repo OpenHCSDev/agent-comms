@@ -16,7 +16,7 @@ from metaclass_registry.mro_dispatch import (
 from . import agent_events as events
 from . import turn_failure as failures
 from . import turn_phase as phases
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .native_startup import SessionLoad
 
 if TYPE_CHECKING:

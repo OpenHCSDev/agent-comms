@@ -34,7 +34,7 @@ from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.coordination_errors import Refused
-from agent_comms.field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer

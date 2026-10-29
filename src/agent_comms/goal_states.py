@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Terminal
 

@@ -18,8 +18,8 @@ from agent_comms.coordinator import Coordination
 
 from .cohort_schema import CohortTable
 from agent_comms.native_runtime_input import NativeRuntimeTable
-from .declared_family import DeclaredFamily
-from .field_codec import AssignmentId, InputId, MessageId, WireName, RootId, ThreadLookup
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import AssignmentId, InputId, MessageId, WireName, RootId, ThreadLookup
 from .native_input_record import (
     FullNativeExecution,
     NativeInputExecution,

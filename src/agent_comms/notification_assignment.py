@@ -16,8 +16,8 @@ from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import CurrentExecutions
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordination_tables.publications import PublicationEvidence
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
 from .message_reference import MessageReference
 from .notification_progress import (
     AnsweredProgress,

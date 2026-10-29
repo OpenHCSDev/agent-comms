@@ -17,9 +17,9 @@ from pydantic import JsonValue
 
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .cli_result import CliResult
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     IdentityExclude,
     NullMember,

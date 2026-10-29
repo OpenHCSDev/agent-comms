@@ -48,7 +48,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.message_reference import BridgeStart, MessageReference
 from agent_comms.runtime_updates import HiddenItem
 from agent_comms.turn_item import NativeTurnId

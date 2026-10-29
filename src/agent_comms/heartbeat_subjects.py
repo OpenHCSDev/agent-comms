@@ -13,8 +13,8 @@ from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Mapping, Self
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import MessageId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.service_passes import ServicePassStore

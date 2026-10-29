@@ -53,7 +53,7 @@ from .sealed import Sealed
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-    from .registration_inheritance import RegistrationInheritance
+    from ..registration_inheritance import RegistrationInheritance
 
 T = TypeVar("T")
 

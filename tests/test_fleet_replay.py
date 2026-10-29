@@ -21,7 +21,7 @@ from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.commander_heartbeat import CommanderObservation
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import ToolCallId
+from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun

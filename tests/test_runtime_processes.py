@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from agent_comms.child_process import Platform, ProcessIdentity, SpawnedProcess
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_processes import (
     RuntimeProcessOutcome,

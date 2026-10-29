@@ -26,7 +26,7 @@ from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, OrderId
+from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop

@@ -25,7 +25,7 @@ from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePi
 from agent_comms.commander_hud import CommanderHud, CodexUsage, UnreadableUsage
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.comms import Comms, wire
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile

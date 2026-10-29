@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import UnresolvedAttemptError
-from .field_codec import AttemptId, NoAttemptId
+from .nominal.field_codec import AttemptId, NoAttemptId
 from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,

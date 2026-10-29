@@ -12,8 +12,8 @@ from agent_comms.comms import Comms
 from agent_comms.context_store import ContextManifestCursor
 from agent_comms.context_store import LATEST_CONTEXT
 from agent_comms.coordination_errors import Refused
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.owner_connection import OwnerConnection
 from agent_comms.owner_connection import socket_path

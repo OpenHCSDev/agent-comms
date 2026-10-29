@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 
-from agent_comms.field_codec import NullMember, SingleFieldValue, SubclassUnion, boundary_decoder
+from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion, boundary_decoder
 
 if TYPE_CHECKING:
     pass

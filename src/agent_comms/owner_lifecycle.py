@@ -22,7 +22,7 @@ from .child_process import (
     ProcessState,
 )
 from .cli_result import CliResult
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .owner_connection import OwnerConnection
 from .owner_launch import RetainedOwnerLaunch, StartOwnerRuntimeRequest, StopOwnerRuntimeRequest
 from .root_runtime import RootRuntimeStore
@@ -31,7 +31,7 @@ from .diagnostics import OwnerProcessOutput
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
 from .input_key import AcpInputKey, InputKey
-from .field_codec import InputId
+from .nominal.field_codec import InputId
 from .input_disposition import InputDispositions
 from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier

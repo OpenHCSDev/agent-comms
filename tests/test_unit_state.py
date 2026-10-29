@@ -13,7 +13,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.commander_hud import CommanderFrame
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import ToolCallId
+from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot

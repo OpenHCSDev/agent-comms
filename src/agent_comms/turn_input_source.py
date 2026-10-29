@@ -14,7 +14,7 @@ from . import input_attempt
 from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
 from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
-from .field_codec import InputId, TurnId
+from .nominal.field_codec import InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message

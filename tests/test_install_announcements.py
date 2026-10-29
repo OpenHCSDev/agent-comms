@@ -15,7 +15,7 @@ from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.registry_document import NoCommanderProject
 from agent_comms.repo import GitCommandError
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace
 from agent_comms.installer.refusals import UpgradeRefused

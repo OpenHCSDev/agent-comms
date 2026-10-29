@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from agent_comms.cli_commands import PlannedStoresResult
 from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.typed_table import ReconciledFile
 from agent_comms.typed_table import StoreRewrite
 from agent_comms.typed_table import ExternalStore

@@ -13,7 +13,7 @@ from io import StringIO
 from agent_comms.cli import _fail, execute
 from agent_comms.cli_command import TargetBatchResult
 from agent_comms.cli_failures import CLI_FAILURES
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.owner_starts import OwnerStart
 
 

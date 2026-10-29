@@ -22,7 +22,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
-from agent_comms.field_codec import RootId
+from agent_comms.nominal.field_codec import RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import (
     RuntimeConnection, RuntimeProxy, present_session, socket_path,

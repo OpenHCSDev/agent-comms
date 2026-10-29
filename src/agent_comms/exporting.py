@@ -15,8 +15,8 @@ from typing import BinaryIO, ClassVar
 
 from .channels import Channel
 from .cli_result import CliResult
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
 from .messages import Message
 from .registration import Registration

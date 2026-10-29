@@ -30,9 +30,9 @@ from typing import Annotated, TYPE_CHECKING, BinaryIO, ClassVar, Final, TextIO
 
 from .child_process import LockHolder, Platform
 from .coordination_errors import CoordinationReadUnavailable, DeferredRead, StaleRevision
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import PathText, ScratchName
+from .nominal.field_codec import PathText, ScratchName
 from .private_path import FileIdentity, FileObservation, FileRevision, OwnedDirectoryRole, PrivateFileRole
 from .process_claim import ExclusiveFlock, FlockMode, SharedFlock
 

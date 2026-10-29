@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
     from .coordination_tables.harness_deliveries import HarnessDelivery
-    from .field_codec import ThreadLookup
+    from .nominal.field_codec import ThreadLookup
     from .message_reference import MessageReference
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import DeliveryProgress

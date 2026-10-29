@@ -11,7 +11,7 @@ from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.commander.publication_rules import (
     ClosedPullRequestScanPending, ClosedUnmergedPullRequest,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory

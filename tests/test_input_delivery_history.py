@@ -9,7 +9,7 @@ from dataclasses import replace
 from agent_comms.cli import main
 from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.comms import wire
-from agent_comms.field_codec import GoalId, InputId, TurnId
+from agent_comms.nominal.field_codec import GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope,
     UnobservedInputDeliveryScope,

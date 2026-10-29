@@ -9,7 +9,7 @@ from pydantic import JsonValue
 
 from .bus_publication import DirectorOrigin
 from .comms import Comms
-from .field_codec import FieldCodec, MalformedRecord
+from .nominal.field_codec import FieldCodec, MalformedRecord
 from .head_review import HeadReviewOrder, PullRequestHead
 from .thread_identity import ThreadIncarnation
 from .todos import DirectiveText

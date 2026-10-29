@@ -20,7 +20,7 @@ from metaclass_registry.mro_dispatch import (
 
 
 from .child_process import Platform
-from .field_codec import FieldCodec, InputId, ScratchName, TurnId
+from .nominal.field_codec import FieldCodec, InputId, ScratchName, TurnId
 from .locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
 from .store_files import AtomicFile

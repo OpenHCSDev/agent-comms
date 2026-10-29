@@ -17,8 +17,8 @@ from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
 from .agent_backend import InputRequest, StreamingInputPolicy
 from .child_process import BoundedRun
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from .nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,

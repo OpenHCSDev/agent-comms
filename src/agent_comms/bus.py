@@ -47,7 +47,7 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
-from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
+from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath

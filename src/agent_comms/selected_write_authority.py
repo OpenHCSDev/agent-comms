@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
-from .field_codec import ClaimId
+from .nominal.field_codec import ClaimId
 from .selected_write_plan import SelectedWritePlans
 
 if TYPE_CHECKING:

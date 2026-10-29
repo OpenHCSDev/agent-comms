@@ -11,8 +11,8 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .declared_family import DeclaredFamily
-from .field_codec import TranscriptRecordId
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import TranscriptRecordId
 
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState

@@ -31,8 +31,8 @@ from agent_comms.goal_turn_permit import GoalTurnPermit
 
 from .child_process import Platform
 from .turn_item import UsageChargeId
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     AttemptId,
     AttemptToken,
     FieldCodec,

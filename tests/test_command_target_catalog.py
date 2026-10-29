@@ -33,7 +33,7 @@ def test_batch_completed_result_round_trips_with_its_command_result_type(target)
     from agent_comms.cli_verbs.stop import StopCliCommand
     from agent_comms.cli_commands import ThreadStoppedResult
     from agent_comms.cli_command import TargetBatchResult, TargetCompleted, TargetFailed
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
 
     original = TargetBatchResult((
         TargetCompleted(target, StopCliCommand(name="first"), ThreadStoppedResult("first")),

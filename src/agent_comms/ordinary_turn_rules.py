@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from .input_key import InputKey
 
-from .field_codec import InputId, TurnId
+from .nominal.field_codec import InputId, TurnId
 from .reservation_rules import ReservationRule, RuleCheck
 
 if TYPE_CHECKING:

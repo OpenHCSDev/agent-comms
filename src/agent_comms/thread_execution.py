@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_presentation import UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus

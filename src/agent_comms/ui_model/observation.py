@@ -54,7 +54,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, ToolRefusedError
-from agent_comms.field_codec import FieldCodec, OrderId
+from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.historical_views import HistorySource
 from agent_comms.history_views import RetiredViews
 from agent_comms.message_reference import MessageReference

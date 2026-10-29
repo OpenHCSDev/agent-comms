@@ -28,7 +28,7 @@ from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
-from agent_comms.field_codec import InputId, MessageId, TurnId
+from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -465,7 +465,7 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.agent_activity import RecipientActivity
     from agent_comms.thread_execution import ExternalThreadExecution
 

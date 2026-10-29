@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from .build_identity import InstalledBuild
-from .field_codec import OrderId
+from .nominal.field_codec import OrderId
 from .recorded_time import EventTime
 from .tool_result import ToolResult
 

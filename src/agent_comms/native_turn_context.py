@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 
 from .coordinator import Coordination
 

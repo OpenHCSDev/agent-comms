@@ -12,9 +12,9 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.child_process import ResidentMemory
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
     MalformedRecord,

@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 
 from agent_comms.native_session_files import NativeSessionFiles
 from .coordination_errors import TranscriptChanged
-from .declared_family import DeclaredFamily
-from .field_codec import MalformedRecord
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import MalformedRecord
 from .native_entries import (
     NativeEntry,
     NoEntryId,

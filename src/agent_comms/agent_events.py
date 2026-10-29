@@ -27,8 +27,8 @@ from .acp_failure import (
 )
 from .child_process import ProcessIdentity
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     InputId,
     NullMember,
     ToolCallId,

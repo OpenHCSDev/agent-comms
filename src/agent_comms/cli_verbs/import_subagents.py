@@ -4,8 +4,8 @@ from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.cli_commands import SubagentsImportedResult
 from agent_comms.cli_support.importing import ImportingCliCommand
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import PathText
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import PathText
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated

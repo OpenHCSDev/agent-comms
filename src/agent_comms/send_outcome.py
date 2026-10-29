@@ -8,7 +8,7 @@ from contextlib import AbstractContextManager, contextmanager
 from typing import TYPE_CHECKING
 
 from . import turn_failure as failures
-from .field_codec import InputId
+from .nominal.field_codec import InputId
 
 if TYPE_CHECKING:
     from .agent_backend import TurnInbox, TurnInboxItem

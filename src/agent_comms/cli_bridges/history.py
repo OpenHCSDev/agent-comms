@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar, Self
 from pydantic import TypeAdapter
 
 from agent_comms.agent_runtime import ReadsHistory
-from agent_comms.field_codec import SubclassUnion
+from agent_comms.nominal.field_codec import SubclassUnion
 from agent_comms.harness_install import (
     ClaudeCodeHarness, CodexHarness, Harness, HarnessSession, OpenCodeHarness, PiHarness,
 )

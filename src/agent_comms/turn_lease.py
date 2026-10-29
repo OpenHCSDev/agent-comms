@@ -15,7 +15,7 @@ from .child_process import ProcessIdentity, ProcessState
 from .coordination_session import NativeCapture
 from .bus_tables import MessageIdentitySource
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     NullMember,
     RecordMember,
     SingleFieldValue,

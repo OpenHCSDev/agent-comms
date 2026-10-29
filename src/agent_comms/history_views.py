@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, Annotated
 from .catalog_store import ChannelCatalog
 from .cli_result import CliResult
 from .context_segments.retained import RetainedSegment
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, WireForm
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, WireForm
 from .input_disposition import InputDispositions
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot, RosterVisibility

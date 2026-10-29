@@ -12,8 +12,8 @@ from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendin
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import WireOrigin
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     FieldCodec,
     InputId,
     JsonShapeFamily,

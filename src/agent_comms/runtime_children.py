@@ -20,8 +20,8 @@ from .child_process import (
     ProcessIdentity,
     RecordedRuntimeGroup,
 )
-from .declared_family import DeclaredFamily
-from .field_codec import PathText
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import PathText
 from .launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument

@@ -11,7 +11,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import TurnId, GoalId
+from agent_comms.nominal.field_codec import TurnId, GoalId
 from agent_comms.turn_failure import BackendFailed, FinalStopMissing
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
 from agent_comms.errors import UnresolvedAttemptError

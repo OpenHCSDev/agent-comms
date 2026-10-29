@@ -20,7 +20,7 @@ from agent_comms.attempt_resolution import (
 )
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.field_codec import FieldCodec, GoalId, MessageId, OrderId, RetryDecisionId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, MessageId, OrderId, RetryDecisionId, TurnId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile

@@ -16,10 +16,10 @@ from .bus import Bus
 from .bus_publication import Delivered
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
-from .field_codec import ContentExclude, FieldCodec, WireName, projected
+from .nominal.field_codec import ContentExclude, FieldCodec, WireName, projected
 from .historical_views import HistorySource
 from .message_bus import MessageBus
 from .message_reference import MessageReference

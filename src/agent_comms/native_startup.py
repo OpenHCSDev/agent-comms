@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .diagnostics import PublicationMeasurements
-from .field_codec import boundary_decoder
+from .nominal.field_codec import boundary_decoder
 
 if TYPE_CHECKING:
     from .native_pi import NativePiRpcLaunch

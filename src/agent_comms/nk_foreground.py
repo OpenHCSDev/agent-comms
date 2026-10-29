@@ -31,7 +31,7 @@ from .comms import wire
 from .coordinated_runtime import SelectedExecution
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, RootId
+from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn

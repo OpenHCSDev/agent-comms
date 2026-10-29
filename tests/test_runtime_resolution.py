@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.packages import InstalledPackagesProbe

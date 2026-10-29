@@ -9,7 +9,7 @@ import pytest
 from delivery_owner_fixture import canonical_agent
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     OwnerInvocable,

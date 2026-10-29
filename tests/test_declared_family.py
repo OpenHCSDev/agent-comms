@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError
 
-from agent_comms.declared_family import DeclaredFamily, DeclaredOrder, RegisteredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredOrder, RegisteredFamily
 
 
 class SampleFamily(DeclaredFamily, affix="Case"):
@@ -204,6 +204,68 @@ def test_plain_order_uses_the_first_rank_in_the_mro_and_requires_a_rank():
     assert Rank.position_of(Override) == Rank.position_of(First)
     with pytest.raises(ValueError):
         Rank.position_of(object)
+
+
+@pytest.mark.parametrize("first", ("declared_family", "field_codec"))
+def test_nominal_import_order_preserves_identity_discovery_and_new_members(first):
+    """Exercise the real lazy reverse import and the same codec after either entry import."""
+    probe = f"import agent_comms.nominal.{first}\n" + '''
+from abc import abstractmethod
+from dataclasses import dataclass
+import sys
+
+from agent_comms.nominal import declared_family, field_codec, json_schema, sealed
+from agent_comms.task_sources import TaskAttachment
+
+assert field_codec.DeclaredFamily is declared_family.DeclaredFamily
+assert field_codec.JsonSchemaOwner is json_schema.JsonSchemaOwner
+assert field_codec.Sealed is sealed.Sealed
+assert field_codec.FieldCodec._sealed_home == field_codec.FieldCodec.__module__
+
+# No member-module import until the existing discovery owner receives its name.
+assert 'agent_comms.task_attachments.commander_pings' not in sys.modules
+selected = TaskAttachment.member_named('commander_decisions')
+from agent_comms.task_attachments import commander_pings
+assert selected is commander_pings.CommanderDecisions
+assert TaskAttachment.member_named(selected.declared_name) is selected
+
+from agent_comms import cli_command, tools
+assert cli_command.ModuleMembers is declared_family.ModuleMembers
+assert tools.FieldCodec is field_codec.FieldCodec
+command = cli_command.CliCommand.member_named('threads')
+from agent_comms.cli_verbs.threads import ThreadsCliCommand
+assert command is ThreadsCliCommand
+
+class Capability:
+    pass
+
+class ProbeFamily(declared_family.DeclaredFamily, affix='Case'):
+    @abstractmethod
+    def execute(self): ...
+
+class AbstractCase(ProbeFamily):
+    pass
+
+@dataclass(frozen=True, slots=True)
+class AddedCase(ProbeFamily, Capability):
+    value: int
+
+    def execute(self):
+        return self.value
+
+assert ProbeFamily.members_with(Capability) == (AddedCase,)
+assert ProbeFamily.members_with(ProbeFamily) == (AddedCase,)
+assert ProbeFamily.member_named(AddedCase.declared_name) is AddedCase
+value = AddedCase(7)
+encoded = field_codec.FieldCodec.encode(value)
+assert encoded == {ProbeFamily.family_discriminator: AddedCase.declared_name, 'value': 7}
+assert field_codec.FieldCodec.decode(ProbeFamily, encoded) == value
+assert field_codec.FieldCodec.decode(ProbeFamily, encoded).execute() == 7
+assert field_codec.FieldCodec.value_schema(ProbeFamily)
+'''
+    subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, timeout=120, check=True,
+    )
 
 
 def test_attachment_names_decode_in_a_process_that_never_imported_their_module():

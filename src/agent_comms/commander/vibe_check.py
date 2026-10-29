@@ -19,7 +19,7 @@ from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.questions import SenderMessages, UnansweredBurst
 from agent_comms.commander.standing import AnswersTo
 from agent_comms.comms import Comms
-from agent_comms.field_codec import projected
+from agent_comms.nominal.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.goal_actions import (
     ChokeholdPausedGoalAction,

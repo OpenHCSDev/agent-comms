@@ -20,8 +20,8 @@ from pathlib import Path, PurePosixPath
 from threading import Lock
 from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
 from agent_comms.private_path import FileObservation, FileRevision

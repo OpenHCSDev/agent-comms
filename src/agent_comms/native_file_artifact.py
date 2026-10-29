@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .text_digest import TextDigest
 
 

@@ -11,7 +11,7 @@ import pytest
 import agent_comms.pi_commands as commands
 import agent_comms.pi_events as pi
 import agent_comms.turn_failure as failures
-from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_payloads import AnonymousRequest, ReportedText, RequestId
