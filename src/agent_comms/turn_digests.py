@@ -16,7 +16,7 @@ from .context_store import ContextStore
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, projected
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
 from .repo import Checkout, GitCommandError, Repo
@@ -27,6 +27,7 @@ from .threads import Thread
 from .todos import ProgressRead, PullRequestLink, Todo, TodoStore
 from .tool_declaration import EditCall
 from .tool_result import ToolResult
+from .service_passes import ServiceReading
 from .transcript_events import IncomingTranscript, TurnDigest
 from .turn_item import NativeTurnId
 from .work_branches import WorkBranchError
@@ -75,8 +76,13 @@ class ThreadTurns(ToolResult):
 
 
 @dataclass(frozen=True)
-class UnjudgedEdits(ToolResult):
+class UnjudgedEdits(ServiceReading):
     edits: tuple[EditCall, ...]
+    unavailable: tuple[str, ...] = ()
+
+    @projected(view='wire')
+    def complete(self) -> bool:
+        return not self.unavailable
 
 
 class TurnBound(DeclaredFamily):

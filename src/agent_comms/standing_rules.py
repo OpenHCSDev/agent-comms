@@ -35,7 +35,7 @@ from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import GitCommandError
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.service_passes import ServicePasses, ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.root_runtime import RootRuntimeStore
@@ -1217,15 +1217,19 @@ class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        failing = ServicePassStore.at(comms.root).read().failing
+        return cls.from_passes(ServicePassStore.at(comms.root).read())
+
+    @classmethod
+    def from_passes(cls, passes: ServicePasses) -> tuple[Self, ...]:
         return tuple(cls(watch=watch, since=failed.since, error=failed.error)
-                     for watch, failed in sorted(failing.items()))
+                     for watch, failed in sorted(passes.failing.items()))
 
     def began(self) -> float:
         return self.since
 
     def line(self) -> str:
-        return (f"FIX service pass {self.watch} failing since {RecordedEventTime(self.since).clock()}:"
+        return (f"FIX service pass {self.watch} failing since {RecordedEventTime(self.since).clock()}"
+                f" ({max(0, int(time.time() - self.since))}s elapsed):"
                 f" {self.error}. is anyone fixing it, or letting it pile up?"
                 " -> fix the owner of the failing read this wake")
 

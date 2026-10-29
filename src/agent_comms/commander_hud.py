@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -18,15 +18,14 @@ from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
-from agent_comms.coordinator import Coordination
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import DisclosureIdentity, OrderId, WireTransient, projected
+from agent_comms.field_codec import DisclosureIdentity, OrderId, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.order_story import OrderStory
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.service_passes import ServicePassStore, ServiceReading
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest
 from agent_comms.tool_result import ToolResult
@@ -256,7 +255,18 @@ class CommanderForks(HudRow):
 
 
 @dataclass(frozen=True)
-class CommanderHud(ToolResult):
+class CommanderLoad(ServiceReading):
+    """Retained load with the same recorded service evidence as its published frame."""
+
+    load: OverloadDegradation
+
+    @projected(view='wire')
+    def frame(self) -> tuple[str, ...]:
+        return (*self.service_status(), self.retained_status(), str(self.load))
+
+
+@dataclass(frozen=True)
+class CommanderHud(ServiceReading):
     """One disposable view of native records, shared by comms_hud and the commander board.
 
     TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
@@ -272,10 +282,6 @@ class CommanderHud(ToolResult):
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
     board: tuple[BoardEntry, ...] = ()
-    heartbeat: Annotated[EventTime, WireTransient()] = field(
-        default_factory=UnrecordedEventTime, compare=False, kw_only=True,
-    )
-    """Read-time projection of ServicePassStore's clock; never written into the frame."""
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -370,8 +376,11 @@ class CommanderHud(ToolResult):
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
         """The load line, then one line per row in the order rows() declares."""
-        return (str(self.load), *self.heartbeat.aged_line("Tristan", time.time()),
+        return (*self.service_status(), self.retained_status(), str(self.load),
                 *(row.line() for row in self.rows()))
+
+    def load_reading(self) -> CommanderLoad:
+        return CommanderLoad(self.load, services=self.services, heartbeat=self.heartbeat)
 
 
 
@@ -397,15 +406,15 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
         """Read the heartbeat's publication, never repeat its forge and history work."""
         owner = comms.registry.require(commander).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
-        completed = passes.heartbeat_completed_at(owner)
-        if not completed.since(time.time() - 3 * Coordination.watch_period):
-            raise ToolRefusedError(
-                f"Tristan stale for {owner.name} since {completed.clock()}: {passes.stall()}"
-            )
-        hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup))).read()
+        try:
+            hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup))).read()
+        except ToolRefusedError as error:
+            health = ServiceReading().with_services(passes, owner)
+            raise ToolRefusedError('\n'.join((*health.service_status(),
+                                             f'Board unavailable: {error}'))) from error
         if hud.commander != owner:
             raise ToolRefusedError(f"Tristan frame belongs to another incarnation of {owner.name}")
-        return replace(hud, heartbeat=completed)
+        return hud.with_services(passes, owner)
 
     @classmethod
     def replace_all(cls, root: Path, huds: tuple[CommanderHud, ...]) -> None:
@@ -422,7 +431,6 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     @classmethod
     def read_all(cls, root: Path) -> tuple[CommanderHud, ...]:
         passes = ServicePassStore.at(root).read()
-        return tuple(sorted((replace(hud, heartbeat=passes.heartbeat_completed_at(
-            hud.commander.require_recorded()))
+        return tuple(sorted((hud.with_services(passes, hud.commander.require_recorded())
             for path in cls.matching_in(root) for hud in (cls(path).read(),)),
             key=lambda hud: hud.commander.name))

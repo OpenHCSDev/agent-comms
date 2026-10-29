@@ -5,9 +5,12 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from typing import ClassVar
+from typing import Annotated, ClassVar, Self
 
 from .locked_store import DocumentChange, DurableFile, LockedStore
+from .field_codec import WireTransient, projected
+from .tool_result import ToolResult
+from .coordinator import Coordination
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -44,6 +47,32 @@ class ServicePasses:
     def completed_since(self, commander: RecordedThreadIncarnation, since: float) -> bool:
         """A pass for this commander completed at or after ``since``."""
         return self.heartbeat_completed_at(commander).since(since)
+
+
+@dataclass(frozen=True)
+class ServiceReading(ToolResult):
+    """Read-time service evidence shared by board, load and independent edit replies."""
+
+    services: Annotated[ServicePasses, WireTransient()] = field(
+        default_factory=ServicePasses, compare=False, kw_only=True)
+    heartbeat: Annotated[EventTime, WireTransient()] = field(
+        default_factory=UnrecordedEventTime, compare=False, kw_only=True)
+
+    def with_services(self, passes: ServicePasses, owner: RecordedThreadIncarnation) -> Self:
+        return replace(self, services=passes, heartbeat=passes.heartbeat_completed_at(owner))
+
+    def retained_status(self) -> str:
+        if self.heartbeat.since(time.time() - 3 * Coordination.watch_period):
+            return 'Retained board rows and load:'
+        return 'STALE retained board rows and load; no recent completed pass:'
+
+    @projected(view='wire')
+    def service_status(self) -> tuple[str, ...]:
+        # Standing-rule rendering remains the determining owner of failure text.
+        from .standing_rules import ServicePassFailing
+        clock = self.heartbeat.aged_line('Tristan last completed', time.time())
+        return (*(failure.line() for failure in ServicePassFailing.from_passes(self.services)),
+                *(clock or ('Tristan last completed: unrecorded',)))
 
 
 @dataclass(frozen=True, slots=True)

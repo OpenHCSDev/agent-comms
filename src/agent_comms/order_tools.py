@@ -33,8 +33,8 @@ from agent_comms.todos import (
     JudgedCall,
     ToolCallVerdict,
 )
-from .commander.vibe_check import OverloadDegradation
-from .commander_hud import CommanderHud
+from .commander_hud import CommanderHud, CommanderLoad
+from .service_passes import ServicePassStore
 from .comms import Comms
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
@@ -228,8 +228,16 @@ class CommsUnjudgedTool(ThreadReadTool):
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
-        return UnjudgedEdits(tuple(edit for read in OrderEditsRead.for_commander(
-            comms, caller.subject(self.thread)) for edit in read.read()))
+        owner = comms.registry.require(caller.subject(self.thread)).incarnation.require_recorded()
+        passes = ServicePassStore.at(comms.root).read()
+        edits = []
+        unavailable = []
+        for read in OrderEditsRead.for_commander(comms, owner.name):
+            try:
+                edits.extend(read.read())
+            except ToolRefusedError as error:
+                unavailable.append(f'{read.todo.id}: {error}')
+        return UnjudgedEdits(tuple(edits), tuple(unavailable)).with_services(passes, owner)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -244,10 +252,10 @@ class BoardReadTool(ThreadReadTool, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(BoardReadTool):
     label = "Measured commander load"
-    description = "Read open orders, review timers and unjudged edits used by the overload rule."
+    description = "Read retained commander load with recorded service failures and its original completion clock."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
-        return CommanderHud.read(comms, caller.subject(self.thread)).load
+    def apply(self, comms: Comms, caller: ToolCaller) -> CommanderLoad:
+        return CommanderHud.read(comms, caller.subject(self.thread)).load_reading()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -255,7 +263,8 @@ class CommsHudTool(ThreadReadTool):
     label = "Commander HUD"
     description = (
         "Read the commander's latest published Tristan frame: orders, review timers, "
-        "strikes, edits, PRs, plan phases and load. A missing or stale Tristan frame is refused."
+        "strikes, edits, PRs, plan phases and load. Recorded failures precede retained data; "
+        "stale rows stay explicitly stale, and missing frames remain unavailable."
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CommanderHud:
@@ -325,7 +334,8 @@ class CommsStandingRulesTool(CommsHudTool):
     label = "Read broken standing rules"
     description = (
         "Read the published Tristan board and HUD. Tristan owns "
-        "enforcement; this read never repeats it. A missing or stale Tristan frame is refused."
+        "enforcement; this read never repeats it. Recorded failures precede stale retained rows; "
+        "a missing frame remains explicitly unavailable."
     )
 
 
