@@ -91,7 +91,7 @@ class ReplyWindow(DeclaredFamily, affix="Replies"):
 
 
 class ActiveReplies(ReplyWindow, declared_name=None):
-    """Only live windows admit context or transition on turn retirement."""
+    """Only active windows admit context or transition on turn retirement."""
 
     def delivered(self, connection: Connection, turn: ExternalTurn,
                   references: tuple[MessageReference, ...]) -> None:
@@ -276,7 +276,8 @@ class ExternalTurn(ExternalTranscriptRows, TypedTable):
         return cls.require(connection, thread=thread, turn_id=turn_id)
 
     def store(self, connection: Connection, replies: ReplyWindow) -> None:
-        self.update(connection, where="seq=?", parameters=(self.seq,), replies=replies)
+        if replies != self.replies:
+            self.update(connection, where="seq=?", parameters=(self.seq,), replies=replies)
 
     def opening_references(self, connection: Connection) -> tuple[MessageReference, ...]:
         return tuple(sorted((row.reference for row in ExternalTurnInput.select(
@@ -596,8 +597,6 @@ class ExternalTranscript(TranscriptSource, DurableStore):
 
     def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
         """Probe only named originals and the final items of the turns they opened."""
-        if not references:
-            return frozenset()
         with self.snapshot() as connection:
             inputs = ExternalTurnInput.select_keys(connection, tuple(
                 dict(thread=self.lookup, reference=reference) for reference in references))
@@ -614,7 +613,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
                 turn.store(connection, turn.replies.finished())
 
     def transition_replies(self, transition: Callable[[ReplyWindow], ReplyWindow]) -> None:
-        """Indexed live-state probes retire all open turns without decoding history."""
+        """Indexed active-state probes retire all open turns without decoding history."""
         with self.writing() as connection:
             for turn in ExternalTurn.select_keys(connection, tuple(
                 dict(thread=self.lookup, replies=member())
