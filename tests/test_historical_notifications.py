@@ -490,4 +490,15 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
             messages[0].seq, messages[0].message_id
         ]
     assert archived.label == "Sent" and not archived.displayed_to
+    # The root-free recorded operation reads the same archive, not today's live evidence,
+    # and a key that is no longer attached refuses instead of falling back to live reads.
+    from agent_comms.coordination_errors import HistoricalSourceChanged
+    from agent_comms.notification_reads import RecordedNotificationRead
+
+    recorded, = RecordedNotificationRead((messages[0].reference,), source.key).read(live).outcomes[
+        messages[0].seq, messages[0].message_id
+    ]
+    assert recorded == archived
+    with pytest.raises(HistoricalSourceChanged):
+        RecordedNotificationRead((messages[0].reference,), source.key + "-detached").read(live)
     assert FieldCodec.decode(RecipientActivity, FieldCodec.encode(RecordedRecipientActivity())) == RecordedRecipientActivity()

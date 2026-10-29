@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import DeliveryProgress
-    from .presentation import MessageNotification, WireRevision
+    from .presentation import MessageNotification, OutcomeViewer, WireRevision
     from .thread_identity import ThreadIncarnation
 
 
@@ -41,7 +41,9 @@ class SourceEvidence:
 
 @dataclass(frozen=True)
 class NotificationAssignmentRead:
-    """A window's claims and its harness attempts, both keyed by the exact original.
+    """A window's claims and its harness attempts, both keyed by the exact original, as the
+    viewer captured with them may see them: every later projection and change check of this
+    read answers for that same viewer.
 
     A harness attempt is its own consumption evidence: a no-wake or passive recipient has no
     claim for the attempt to move, and its message still entered the session."""
@@ -49,10 +51,7 @@ class NotificationAssignmentRead:
     sources: tuple[Delivered, ...]
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
     attempts: tuple[HarnessDelivery, ...] = ()
-
-    @classmethod
-    def empty(cls) -> NotificationAssignmentRead:
-        return cls((), ())
+    viewer: OutcomeViewer = field(kw_only=True)
 
     @cached_property
     def evidence(self) -> Mapping[MessageReference, SourceEvidence]:

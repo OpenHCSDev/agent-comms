@@ -41,7 +41,6 @@ from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
-from .threads import Thread
 from .turn_phase import PreparingPhase, TurnPhase
 from .turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
 
@@ -203,13 +202,12 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     def capture_sent_outcomes(
-        comms: Comms, owner: Thread, sources: Sequence[Delivered],
+        comms: Comms, sources: Sequence[Delivered],
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
         notifications = MessageNotification.for_sources(
-            comms.root, comms.registry, OwnerOutcomes.of(owner), sources,
-            assignment_read=assignment_read,
+            comms.root, comms.registry, sources, assignment_read=assignment_read,
         )
         return tuple(
             outcome
@@ -253,13 +251,11 @@ class SelectedParticipant(MroDispatch):
                 store, lookup, after_seq=after_seq
             )
             sent_read = NotificationAssignment.capture(
-                store.session._connection, sent_sources, privacy,
+                store.session._connection, sent_sources, privacy, OwnerOutcomes.of(sent_owner),
             )
         if pending:
             participant.pointer.require_idle()
-        sent_outcomes = SelectedParticipant.capture_sent_outcomes(
-            comms, sent_owner, sent_sources, sent_read
-        )
+        sent_outcomes = SelectedParticipant.capture_sent_outcomes(comms, sent_sources, sent_read)
         return owner, participant, pending, sent_outcomes
 
     @staticmethod

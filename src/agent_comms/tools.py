@@ -87,8 +87,8 @@ from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
-from .ui_model.observation import ReadNotifications
 from .tool_result import ToolResult
+from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
@@ -161,21 +161,6 @@ class GoalProgress(OwnGoalPublication, GoalSnapshot):
 @dataclass(frozen=True)
 class GoalUpdated(OwnGoalPublication):
     goal: GoalDeclaration
-
-
-@dataclass(frozen=True)
-class GoalHistory(ToolResult, RecordedGoalHistory):
-    pass
-
-
-
-
-
-
-
-
-
-
 
 
 @dataclass(frozen=True)
@@ -622,8 +607,8 @@ class CommsGoalHistoryTool(ThreadReadTool):
         OneGoal | AllGoals, *tool_field("Optional goal ID; omit for this thread's full history")
     ] = AllGoals()
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
-        return comms.goals.recorded_history(GoalHistory, caller.subject(self.thread), self.goal_id)
+    def apply(self, comms: Comms, caller: ToolCaller) -> RecordedGoalHistory:
+        return comms.goals.recorded_history(caller.subject(self.thread), self.goal_id)
 
 
 
@@ -716,10 +701,9 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
         if self.limit < 1:
             raise ToolRefusedError("limit must be positive.")
         source, = comms.bus.bus.deliveries_for_references((self.reference,))
-        viewer = caller.outcome_viewer(comms)
-        if not viewer.sees(source):
+        if not caller.outcome_viewer(comms).sees(source):
             raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")
-        window = ReadNotifications(str(comms.root), (self.reference,), viewer=viewer).read(comms)
+        window = LiveNotificationRead((self.reference,)).read_as(comms, caller)
         following = self.after.following(
             window.outcomes.get((source.message.seq, source.message.message_id), ()))
         page = following[:self.limit]

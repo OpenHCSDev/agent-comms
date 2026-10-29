@@ -23,6 +23,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_failure_observation import FailedTurnEvidence
+from agent_comms.goal_history import RecordedGoalHistory
 from agent_comms.goal_presentation import (
     AttemptFailedExecution,
     GoalExecution,
@@ -36,7 +37,7 @@ from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ToolCaller
-from agent_comms.tools import CommsGoalHistoryTool, GoalHistory
+from agent_comms.tools import CommsGoalHistoryTool
 from agent_comms.turn_failure import NativeChildSignaled
 from agent_comms.turn_input_source import NoTurnAcceptance
 
@@ -125,7 +126,7 @@ async def test_goal_history_shows_the_ledgers_failed_attempt_beside_active_revis
     assert recorded.failures[0].turn_id == turn.turn_id
     other = CommsGoalHistoryTool(thread="worker", goal_id=OneGoal(GoalId.mint())).apply(
         comms, ToolCaller.from_actor("worker"))
-    assert other == GoalHistory.empty()
+    assert other == RecordedGoalHistory.empty()
 
 
 @pytest.mark.asyncio

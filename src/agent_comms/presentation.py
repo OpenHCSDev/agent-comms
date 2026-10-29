@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
@@ -251,8 +251,8 @@ class MessageNotification:
         """Borrow mounted references in the original bounded delivery windows, as this
         viewer may see them."""
         def project(sources: Sequence[Delivered]) -> NotificationWindow:
-            read = NotificationAssignment.read(root, sources)
-            return cls.delivery_window(root, registry, sources, read, viewer=viewer)
+            read = NotificationAssignment.read(root, sources, viewer=viewer)
+            return cls.delivery_window(root, registry, sources, read)
 
         return cls.read_references(log, references, project)
 
@@ -276,20 +276,21 @@ class MessageNotification:
     @classmethod
     def delivery_window(
         cls, root: Path, registry: Registration, sources: Sequence[Delivered],
-        assignment_read: NotificationAssignmentRead, *, viewer: OutcomeViewer,
+        assignment_read: NotificationAssignmentRead,
     ) -> NotificationWindow:
-        """Project the original frozen audience even before handling is recorded."""
+        """Project the original frozen audience even before handling is recorded, as the
+        read's captured viewer may see it."""
         if not sources:
             return CapturedNotificationWindow({}, (assignment_read,))
         snapshot = registry.snapshot()
+        viewer = assignment_read.viewer
         observations = AgentActivity(root, registry).observe_recipients(
             ((source, recipient) for source in sources for recipient in source.recipients
              if viewer.includes(source.sender_lookup, recipient)),
             snapshot=snapshot,
         )
         return cls.project_delivery_window(
-            root, snapshot, sources, observations,
-            viewer=viewer, assignment_read=assignment_read,
+            root, snapshot, sources, observations, assignment_read=assignment_read,
         )
 
     @classmethod
@@ -299,37 +300,37 @@ class MessageNotification:
         observations = {
             recipient.recipient_lookup: RecordedRecipientActivity()
             for source in sources for recipient in source.recipients
+            if viewer.includes(source.sender_lookup, recipient)
         }
-        read = NotificationAssignment.read(root, sources)
+        read = NotificationAssignment.read(root, sources, viewer=viewer)
         return cls.project_delivery_window(
-            root, namespace, sources, observations,
-            assignment_read=read, viewer=viewer,
+            root, namespace, sources, observations, assignment_read=read,
         )
 
     @classmethod
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
         sources: Sequence[Delivered], observations: Mapping[ThreadLookup, RecipientActivity],
-        *, assignment_read: NotificationAssignmentRead, viewer: OutcomeViewer,
+        *, assignment_read: NotificationAssignmentRead,
     ) -> NotificationWindow:
-        """Original assignment and read authorities own both display projections."""
+        """Original assignment and read authorities own both display projections; the read's
+        captured viewer decides which recipients are projected at all."""
         if len(sources) > NotificationWindow.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         keys = {(source.message.seq, source.message.message_id) for source in sources}
         result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
         if not keys:
             return CapturedNotificationWindow({}, (assignment_read,))
+        viewer = assignment_read.viewer
         rows = NotificationAssignment.resolve(root, assignment_read)
         evidence = assignment_read.evidence
         read_marks = []
         reads = ReadLedger.at(root)
         document = reads.read()
-        for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
+        for source, outcomes in NotificationAssignment.for_deliveries(sources, rows, viewer):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
                 recipient = outcome.recipient()
-                if not viewer.includes(source.sender_lookup, recipient):
-                    continue
                 observation = observations[recipient.recipient_lookup]
                 notification = outcome.project(observation, source.sender_lookup)
                 state = evidence[source.message.reference].consumed_progress(
@@ -391,16 +392,14 @@ class MessageNotification:
 
     @classmethod
     def for_sources(
-        cls, root: Path, registry: Registration, viewer: OutcomeViewer,
-        sources: Sequence[Delivered], *,
+        cls, root: Path, registry: Registration, sources: Sequence[Delivered], *,
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
-        """Attach notification outcomes to the messages the caller already checked."""
-        projected = cls.delivery_window(
-            root, registry, sources, assignment_read, viewer=viewer,
-        )
+        """Attach notification outcomes, as the read's viewer sees them, to the public
+        envelopes of the messages the caller already checked."""
+        projected = cls.delivery_window(root, registry, sources, assignment_read)
         return tuple(
-            replace(notification, message=source.message)
+            replace(notification, message=source.envelope)
             for source in sources
             for notification in projected.outcomes[source.message.seq, source.message.message_id]
         )
@@ -460,14 +459,13 @@ class SentMessageSummary:
     summary: str
 
     @classmethod
-    def recent(cls, presentation: ThreadPresentation) -> tuple[SentMessageSummary, ...]:
-        """One summary per recent sent source, from the presentation's captured window."""
-        window = presentation.notification_window
-        return tuple(
-            cls(reference, MessageNotification.summary(
-                window.outcomes.get((reference.seq, reference.message_id), ())))
-            for reference in presentation.sent_references
-        )
+    def for_sources(
+        cls,
+        sources: Iterable[tuple[MessageReference, Iterable[MessageNotification]]],
+    ) -> tuple[Self, ...]:
+        """One summary per sent source, aggregated by MessageNotification.summary."""
+        return tuple(cls(reference, MessageNotification.summary(outcomes))
+                     for reference, outcomes in sources)
 
 
 class ChannelReadMark(ABC):

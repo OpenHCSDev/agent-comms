@@ -46,10 +46,12 @@ from debt_ratchet import (
     AnyName,
     BooleanChainTerms,
     BuiltinHandlerTypeSwitch,
+    ClientTypeErrors,
     CodecSubclass,
     FamilyFlattened,
     ForeignAbsenceProbe,
     GodClassExcess,
+    HeadSide,
     LintFindings,
     LongBooleanChain,
     Measure,
@@ -66,15 +68,34 @@ from debt_ratchet import (
     Unformatted,
     compare,
 )
+from module_layers import StackClient
 
 pytestmark = pytest.mark.refactor_guard
 
 
 def test_measure_owner_rejects_a_new_absence() -> None:
     name = NoneAbsence.at("tools/example.py")
-    result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {}, {})
+    result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {name: [1]}, {})
     assert result.delta[name] == 1
     assert result.failed
+
+
+GROWN_ABSENCE = NoneAbsence.at("tools/example.py")
+
+
+@pytest.mark.parametrize(
+    ("introduced", "failed", "missing"),
+    [({}, True, [GROWN_ABSENCE]), ({GROWN_ABSENCE: []}, False, []), ({GROWN_ABSENCE: [1]}, True, [])],
+    ids=["unreported", "reported_none_new", "reported_new"],
+)
+def test_clean_lines_growth_fails_only_on_a_new_site_or_a_missing_report(introduced, failed, missing):
+    """Raw growth alone is a move; an explicit empty report says nothing is new, while an
+    absent report proves nothing."""
+    result = Comparison("tools", "base", "head", (), {GROWN_ABSENCE: 0}, {GROWN_ABSENCE: 1}, introduced, {})
+    assert result.delta[GROWN_ABSENCE] == 1
+    assert result.failed is failed
+    assert result.missing == missing
+    assert FieldCodec.project(result, "report")["missing"] == [key.text for key in missing]
 
 
 @pytest.mark.parametrize(
@@ -834,6 +855,51 @@ def test_both_revisions_are_checked_under_the_head_configuration(repo: Repositor
         assert report["delta"][measure.at(f"{repo.root}/kept.py").text] == 0
 
 
+USES_EXTERNAL_VALUE = "import extdep\n\nvalue: int = extdep.VALUE\n"
+
+
+def typed_dependency(directory: Path, annotation: str, value: str) -> Path:
+    """An installed PEP 561 package outside every committed root, found through sys.path."""
+    package = directory / "extdep"
+    package.mkdir(parents=True)
+    (package / "py.typed").write_text("")
+    (package / "__init__.py").write_text(f"VALUE: {annotation} = {value}\n")
+    return directory
+
+
+def source_type_errors(repo: Repository, client: StackClient) -> int:
+    revision = repo.commit({"uses_external.py": USES_EXTERNAL_VALUE})
+    selected = [f"{repo.root}/uses_external.py"]
+    _, counted = TypeErrors.findings(repo.path, revision, revision, repo.root, selected, HeadSide)
+    return counted[selected[0]]
+
+
+def client_type_errors(repo: Repository, client: StackClient) -> int:
+    revision = repo.commit({"__init__.py": ""})
+    _, counted = ClientTypeErrors.findings(repo.path, revision, client, HeadSide)
+    return counted[f"{client.name}/src/uses_external.py"]
+
+
+@pytest.mark.parametrize("type_errors", [source_type_errors, client_type_errors])
+def test_type_counts_follow_the_installed_dependency_not_a_stored_count(
+    repo: Repository, tmp_path: Path, monkeypatch, type_errors
+) -> None:
+    """Mypy reads installed packages no content key names. With committed source, client and
+    configuration unchanged, switching the installed dependency must change the count, under
+    the same count-cache directory and mypy's own cache: hosted #3538 compared a base count
+    stored under a Core-only environment with a head count from the full stack."""
+    accepting = typed_dependency(tmp_path / "accepting", "int", "1")
+    rejecting = typed_dependency(tmp_path / "rejecting", "str", "'one'")
+    (tmp_path / "client").mkdir()
+    checkout = Repository(tmp_path / "client", "src")
+    checkout.commit({"uses_external.py": "import agent_comms\n" + USES_EXTERNAL_VALUE})
+    client = StackClient("probe-client", checkout.path)
+    monkeypatch.setenv("PYTHONPATH", search_path(accepting))
+    assert type_errors(repo, client) == 0
+    monkeypatch.setenv("PYTHONPATH", search_path(rejecting))
+    assert type_errors(repo, client) == 1
+
+
 def test_foreign_probes_and_codec_bases_use_ast_not_text(repo: Repository) -> None:
     base = repo.commit({})
     head = repo.commit(
@@ -1124,12 +1190,113 @@ def test_an_absence_moved_with_its_class_to_another_module_is_not_written(repo):
     base = repo.commit({"attempts.py": holder, "executions.py": "VALUE = 1\n"})
     moved = repo.commit({"attempts.py": "VALUE = 2\n", "executions.py": holder})
     status, report = repo.compare(base, moved, NoneAbsence)
+    assert status == 0
     assert report["introduced"][NoneAbsence.at(f"{repo.root}/executions.py").text] == []
     deleted = repo.commit({"attempts.py": holder, "executions.py": None})
     moved_out = repo.commit({"attempts.py": None, "owners.py": holder + "\n\n" + other})
     status, report = repo.compare(deleted, moved_out, NoneAbsence)
     assert status == 1
     assert report["introduced"][NoneAbsence.at(f"{repo.root}/owners.py").text] == [8]
+
+
+EXTRACTED_FROM = (
+    "class Request:\n    thread: str\n    before: int | None = None\n    archive: str | None = None\n"
+    "\n\nclass Other:\n    name: str\n"
+)
+HOLDER = "from .pages import Page\n\n\nclass Request:\n    thread: str\n    operation: Page\n"
+OTHER = "\n\nclass Other:\n    name: str\n"
+PAGE = (
+    "from typing import Annotated\n\n\nclass Page:\n"
+    "    before: Annotated[int | None, \"Read before this cursor\"] = None\n"
+    "    archive: str | None = None\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("holder", "pages", "written"),
+    [
+        (HOLDER + OTHER, PAGE, 0),
+        (HOLDER.replace("    operation", "    before: int | None = None\n    operation") + OTHER, PAGE, 1),
+        (HOLDER.replace("operation: Page", "operation: object") + OTHER, PAGE, 2),
+        (HOLDER + OTHER + "    page: Page\n", PAGE, 2),
+        (HOLDER + "\n\nPage = dict\n" + OTHER, PAGE, 2),
+        (HOLDER.replace(".pages", ".elsewhere") + OTHER, PAGE, 2),
+        (HOLDER + OTHER, PAGE.replace("before:", "earlier:"), 1),
+        (HOLDER + OTHER, PAGE.replace("int | None", "float | None"), 1),
+        (HOLDER + OTHER, PAGE.replace("archive: str | None = None", "archive: str | None = ''"), 1),
+        (HOLDER + OTHER, PAGE + "    limit: int | None = None\n", 1),
+        (HOLDER + OTHER, PAGE + "\n    def empty(self):\n        return self.before is None\n", 1),
+        (HOLDER.replace("import Page", "import Copy, Page").replace(
+            "operation: Page", "operation: Page\n    copy: Copy") + OTHER,
+         PAGE + "\n\nclass Copy:\n    before: int | None = None\n", 3),
+        (HOLDER.replace("import Page", "import Page as Held").replace("operation: Page", "operation: Held")
+         + OTHER, PAGE.replace("import Annotated", "import Annotated as Meta").replace("Annotated[", "Meta["), 0),
+        (HOLDER.replace("from .pages import Page\n", "def load():\n    from .pages import Page\n") + OTHER,
+         PAGE, 2),
+        (HOLDER + "\n\ndef make():\n    Page = dict\n    return Page\n" + OTHER, PAGE, 0),
+        (HOLDER + OTHER, PAGE + "\n\nAnnotated = list\n", 1),
+        (HOLDER + OTHER, PAGE.replace("from typing import Annotated\n", "def typed():\n    from typing import Annotated\n"), 1),
+        (HOLDER + OTHER, PAGE + "\n\nPage = dict\n", 2),
+        (HOLDER + OTHER, PAGE + "    archive = ''\n", 1),
+        (HOLDER.replace("    operation: Page", "    operation: Page\n    before, extra = 1, 2") + OTHER, PAGE, 1),
+        (HOLDER + OTHER, PAGE.replace("class Page:\n", "class Page:\n    Annotated = dict\n"), 1),
+        (HOLDER.replace("    operation: Page", "    Page = dict\n    operation: Page") + OTHER, PAGE, 2),
+    ],
+    ids=["extracted", "retained", "unheld", "second_owner", "shadowed", "unresolved", "renamed",
+         "retyped", "redefaulted", "extra_field", "method", "copied_twice", "aliased_imports",
+         "nested_only_import", "unrelated_local_name", "annotated_rebound", "annotated_local_only",
+         "export_rebound", "field_rebound", "source_rebound_by_unpacking",
+         "annotated_shadowed_in_class", "held_class_shadowed_in_owner"],
+)
+def test_fields_extracted_into_the_one_new_held_class_are_moved_not_written(repo, holder, pages, written):
+    """An old class that now holds one new class in a typed field carries each field it lost
+    into that class unchanged; anything the proof does not cover is still written."""
+    base = repo.commit({"holder.py": EXTRACTED_FROM, "pages.py": "VALUE = 1\n"})
+    head = repo.commit({"holder.py": holder, "pages.py": pages})
+    status, report = repo.compare(base, head, NoneAbsence)
+    source, destination = (NoneAbsence.at(f"{repo.root}/{name}").text for name in ("holder.py", "pages.py"))
+    assert status == int(written > 0)
+    assert len(report["introduced"][destination]) == written
+    assert report["introduced"][source] == []
+    assert report["base"][source] == 2 and report["head"][destination] >= 2
+    assert report["delta"][destination] == report["head"][destination]
+
+
+TYPED_FROM = (
+    "from .alpha import Cursor\n\n\nclass Request:\n    thread: str\n"
+    "    before: Cursor | None = None\n    archive: str | None = None\n"
+)
+TYPED_PAGE = (
+    "from .alpha import Cursor\n\n\nclass Page:\n"
+    "    before: Cursor | None = None\n    archive: str | None = None\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("source", "pages", "written"),
+    [
+        (TYPED_FROM, TYPED_PAGE, 0),
+        (TYPED_FROM, TYPED_PAGE.replace("import Cursor", "import Cursor as Mark").replace(
+            "before: Cursor", "before: Mark"), 0),
+        (TYPED_FROM, TYPED_PAGE.replace(".alpha", ".beta"), 1),
+        (TYPED_FROM, TYPED_PAGE + "\n\nstr = bytes\n", 1),
+        (TYPED_FROM, TYPED_PAGE.replace("    archive", "    str = bytes\n    archive"), 1),
+        (TYPED_FROM.replace("from .alpha import Cursor", "from typing import TypeVar\n\nCursor = TypeVar('Cursor')"),
+         TYPED_PAGE.replace("from .alpha import Cursor", "from typing import TypeVar\n\nCursor = TypeVar('Cursor')"), 1),
+    ],
+    ids=["same_owner", "same_owner_aliased", "changed_owner", "builtin_shadowed",
+         "builtin_shadowed_in_class", "type_variable"],
+)
+def test_extracted_field_types_are_compared_by_the_owner_they_import(repo, source, pages, written):
+    """A field type is the module and name its spelling is bound to, not the spelling: the same
+    Cursor imported from another module is another type, and an alias of the same is not."""
+    base = repo.commit({"holder.py": source + OTHER, "pages.py": "VALUE = 1\n"})
+    head = repo.commit({"holder.py": HOLDER + OTHER, "pages.py": pages})
+    status, report = repo.compare(base, head, NoneAbsence)
+    source_count, destination = (NoneAbsence.at(f"{repo.root}/{name}").text for name in ("holder.py", "pages.py"))
+    assert status == int(written > 0)
+    assert len(report["introduced"][destination]) == written
+    assert report["introduced"][source_count] == []
 
 
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):

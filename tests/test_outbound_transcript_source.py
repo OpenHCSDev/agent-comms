@@ -1,10 +1,11 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
-from agent_comms.presentation import AllOutcomes
+from agent_comms.presentation import AllOutcomes, OwnerOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 import sqlite3
+import sys
 from dataclasses import replace
 
 import pytest
@@ -33,26 +34,105 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
-    captured = NotificationAssignment.read(root, (initial,))
+    captured = NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
     original = NotificationAssignment.resolve(root, captured)
     wire_before = comms.bus.bus.revision()
     assert original
     with Coordination(str(database)) as writer:
         with writer.session.writing():
             with pytest.raises(CoordinationReadUnavailable) as unavailable:
-                NotificationAssignment.read(root, (initial,))
+                NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
             assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (
                 sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
             )
             with pytest.raises(CoordinationReadUnavailable):
                 with TranscriptRead.publication_source(root):
                     pytest.fail("Busy acquisition reached the native schema decoder")
-    reopened = NotificationAssignment.read(root, (initial,))
+    reopened = NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
     assert reopened == captured
     assert NotificationAssignment.resolve(root, reopened) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.bus.revision() == wire_before
+
+
+def test_a_read_selects_only_its_viewers_claims_and_attempts_before_decoding(tmp_path):  # noqa: F811
+    from agent_comms.notification_assignment import AssignmentActivityEvidence
+
+    root, _root_id, comms, initial, people = _root(tmp_path)
+    lookups = {person.name: person.incarnation.lookup for person in people}
+    reference = initial.message.reference
+    everyone = NotificationAssignment.read(root, (initial,), viewer=AllOutcomes())
+    recipients = {recipient.canonical_thread: recipient.recipient_lookup
+                  for recipient in initial.recipients}
+    assert len(recipients) >= 2 and "sender" not in recipients
+    assert {claim.recipient for claim, _evidence in everyone.rows} == recipients.keys()
+    decoded = 0
+    decode = AssignmentActivityEvidence._decode_row.__func__.__code__
+
+    def count_decodes(frame, event, argument):
+        nonlocal decoded
+        if event == "call" and frame.f_code is decode:
+            decoded += 1
+
+    for name, lookup in recipients.items():
+        viewer = OwnerOutcomes(lookup)
+        decoded = 0
+        profiling = sys.getprofile()
+        sys.setprofile(count_decodes)
+        try:
+            own = NotificationAssignment.read(root, (initial,), viewer=viewer)
+        finally:
+            sys.setprofile(profiling)
+        assert decoded == 1
+        assert own.viewer == viewer and own.sources == (initial,)
+        assert own.rows == tuple(row for row in everyone.rows if row[0].recipient == name)
+        assert own.evidence[reference].claims == own.rows
+        assert own.evidence[reference].attempts == {
+            recipient: attempts for recipient, attempts in everyone.evidence[reference].attempts.items()
+            if recipient == lookup}
+    sender = NotificationAssignment.read(root, (initial,), viewer=OwnerOutcomes(lookups["sender"]))
+    assert sender.rows == everyone.rows
+    assert sender.evidence == everyone.evidence
+
+
+def test_invisible_recipients_allocate_no_placeholder_source(tmp_path):  # noqa: F811
+    root, _root_id, _comms, initial, people = _root(tmp_path)
+    lookups = {person.name: person.incarnation.lookup for person in people}
+    recipient = initial.recipients[0]
+    (source, outcomes), = NotificationAssignment.for_deliveries(
+        (initial,), (), OwnerOutcomes(recipient.recipient_lookup))
+    assert source is initial
+    assert [outcome.recipient() for outcome in outcomes] == [recipient]
+    (_source, all_outcomes), = NotificationAssignment.for_deliveries(
+        (initial,), (), OwnerOutcomes(lookups["sender"]))
+    assert [outcome.recipient() for outcome in all_outcomes] == list(initial.recipients)
+
+
+def test_retained_reads_refresh_only_for_changes_their_viewer_sees(tmp_path):  # noqa: F811
+    from agent_comms.assignment_states import DeferredAssignment
+    from agent_comms.coordination_cohort import sealed_cohort_assignments
+
+    root, _root_id, _comms, initial, people = _root(tmp_path)
+    lookups = {person.name: person.incarnation.lookup for person in people}
+    changed, unchanged = initial.recipients[:2]
+    reads = {
+        "changed": NotificationAssignment.read(
+            root, (initial,), viewer=OwnerOutcomes(changed.recipient_lookup)),
+        "foreign": NotificationAssignment.read(
+            root, (initial,), viewer=OwnerOutcomes(unchanged.recipient_lookup)),
+        "sender": NotificationAssignment.read(
+            root, (initial,), viewer=OwnerOutcomes(lookups["sender"])),
+        "operator": NotificationAssignment.read(root, (initial,), viewer=AllOutcomes()),
+    }
+    assert NotificationAssignment.changed(reads.values(), root) == ()
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        assignment, = sealed_cohort_assignments(store, changed.recipient_lookup)
+        store.assignments.transition_preengagement(
+            assignment.assignment_id, DeferredAssignment, expected_revision=assignment.revision)
+    refreshed = NotificationAssignment.changed(reads.values(), root)
+    assert {name for name, read in reads.items() if read in refreshed} == {
+        "changed", "sender", "operator"}
 
 
 @pytest.mark.parametrize('direct', [False, True])
@@ -128,15 +208,15 @@ def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # n
 
 def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
     root, _root_id, comms, initial, _people = _root(tmp_path)
-    records = NotificationAssignment.resolve(root, NotificationAssignment.read(root, (initial,)))
+    records = NotificationAssignment.resolve(root, NotificationAssignment.read(root, (initial,), viewer=AllOutcomes()))
     assert records
-    projected = tuple(NotificationAssignment.for_deliveries((initial,), records))
+    projected = tuple(NotificationAssignment.for_deliveries((initial,), records, AllOutcomes()))
     assert projected[0][0] is initial
     assert any(outcome is records[0] for outcome in projected[0][1])
     with pytest.raises(ValueError):
-        tuple(NotificationAssignment.for_deliveries((initial,), (*records, records[0])))
+        tuple(NotificationAssignment.for_deliveries((initial,), (*records, records[0]), AllOutcomes()))
     # Duplicate evidences outside the acquired deliveries do not change their result.
-    assert tuple(NotificationAssignment.for_deliveries((), (*records, records[0]))) == ()
+    assert tuple(NotificationAssignment.for_deliveries((), (*records, records[0]), AllOutcomes())) == ()
 
 
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
@@ -257,3 +337,77 @@ def test_missing_bus_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     with pytest.raises(sqlite3.OperationalError) as missing:
         comms.views.thread_presentations(("beta",)).require("beta")
     assert missing.value.sqlite_errorcode == sqlite3.SQLITE_CANTOPEN
+
+
+def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_index(tmp_path):  # noqa: F811
+    from conftest import accept_initial, publish_initial
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.native_runtime_input import NativeRuntimeTable
+    from agent_comms.notification_evidence import NotificationWindow
+    from agent_comms.registry_store import RegistryStore
+
+    root, root_id, comms, initial, _people = _root(tmp_path)
+    database = root / "coordination.sqlite3"
+    privacy = RegistryStore.at(root).privacy()
+    # The lowered limit still admits capture's own schema validation: each catalog read
+    # binds every declared object name and every table name of its schema.
+    limit = max(6, *(
+        len({name for row in schema.schema_rows() for name in row.schema_names})
+        + len(schema.schema_rows())
+        for schema in (privacy.coordinator_schema(), NativeRuntimeTable)))
+    key_fields = 3
+    originals = limit // (key_fields * len(initial.recipients)) + 1
+    assert originals + 1 <= NotificationWindow.window_limit
+    sources = [initial]
+    for index in range(originals - 1):
+        later = publish_initial(comms, "sender", "#team", f"Broadcast {index} for the window")
+        with Coordination(str(database)) as store:
+            accept_initial(comms.bus, root_id, later.seq, store)
+        sources.append(comms.bus.bus.delivery(later.seq))
+    sources = (*sources, initial)
+    keys = tuple({"recipient_lookup": recipient.recipient_lookup, "wire_seq": source.message.seq,
+                  "message_id": source.message.message_id}
+                 for source in sources for recipient in source.recipients)
+    distinct = tuple(dict.fromkeys(tuple(key.values()) for key in keys))
+    assert key_fields * len(distinct) > limit and len(keys) > len(distinct)
+    ordinary = NotificationAssignment.read(root, sources, viewer=AllOutcomes())
+    assert ordinary.rows
+    statements: list[str] = []
+    with Coordination(str(database)) as store, store.session.read():
+        connection = store.session._connection
+        unlimited, = WakeAssignment.requested_keys(connection, keys)
+        previous = connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, limit)
+        assert limit < previous
+        connection.set_trace_callback(statements.append)
+        try:
+            bound = connection.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER)
+            batches = tuple(WakeAssignment.requested_keys(connection, keys))
+            limited = NotificationAssignment.capture(connection, sources, privacy, AllOutcomes())
+        finally:
+            connection.set_trace_callback(None)
+            connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, previous)
+        index, = (name for _seq, name, unique, *_rest in connection.execute(
+                      f'PRAGMA index_list("{WakeAssignment.declared_name}")')
+                  if unique and [column for _rank, _cid, column in connection.execute(
+                      f'PRAGMA index_info("{name}")')] == ["recipient_lookup", "wire_seq"])
+        claim_statements = [statement for statement in statements
+                            if statement.startswith("WITH requested") and "w AS MATERIALIZED" in statement]
+        plans = [[row[3] for row in connection.execute(f"EXPLAIN QUERY PLAN {statement}")]
+                 for statement in claim_statements]
+
+    assert len(batches) > 1
+    assert all(len(batch.bindings) <= bound for batch in batches)
+    assert sum(len(batch.bindings) for batch in batches) == key_fields * len(distinct)
+    assert tuple(value for batch in batches for value in batch.bindings) == unlimited.bindings
+    assert limited.viewer == AllOutcomes() and limited.sources == sources
+    assert limited.rows == ordinary.rows
+    assert limited.attempts == ordinary.attempts
+    assert limited.evidence == ordinary.evidence
+    assert len({claim.assignment_id for claim, _evidence in limited.rows}) == len(limited.rows)
+    order = [(-claim.wire_seq, claim.recipient) for claim, _evidence in limited.rows]
+    assert order == sorted(order)
+    assert len(claim_statements) >= 2
+    for plan in plans:
+        assert any(detail.startswith(f"SEARCH {WakeAssignment.declared_name} USING INDEX {index}")
+                   for detail in plan), plan
+        assert not any(detail.startswith(f"SCAN {WakeAssignment.declared_name}") for detail in plan), plan
