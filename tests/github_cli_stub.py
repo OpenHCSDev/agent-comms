@@ -25,6 +25,9 @@ def main():
     if arguments[:2] == ["pr", "view"]:
         data = repositories[arguments[arguments.index("-R") + 1]]
         request = data["requests"][arguments[2]]
+        if refusal := request.get("read_refusal"):
+            print(refusal, file=sys.stderr)
+            raise SystemExit(1)
         field = arguments[arguments.index("--json") + 1]
         assert arguments[arguments.index("--jq") + 1] == "." + field
         print({"number": request["listed"]["number"], "body": request["body"]}[field])
@@ -37,9 +40,15 @@ def main():
                     print(entry["listed"]["number"])
         elif parts[:1] == ["pulls"] and len(parts) == 2:
             assert arguments[arguments.index("--jq") + 1] == (
-                '.head.sha + " " + .base.ref + " " + (.draft | tostring)')
+                '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
             listed = data["requests"][parts[1]]["listed"]
-            print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower())
+            state = "open" if listed["kind"] in data["open_kinds"] else "closed"
+            print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower(), state)
+        elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "pulls":
+            assert arguments[arguments.index("--jq") + 1] == "map(.number)"
+            print(json.dumps([entry["listed"]["number"] for entry in data["requests"].values()
+                              if entry["listed"].get("merge", {}).get("oid") == parts[1]
+                              or entry["listed"]["head"] == parts[1]]))
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
             print("{}")

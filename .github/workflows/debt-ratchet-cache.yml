@@ -9,6 +9,18 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+
+# GitHub's actor supplies only Git object attribution, never merge permission.
+# Process-scoped configuration reaches merge/commit-tree without changing any checkout.
+env:
+  GIT_AUTHOR_NAME: ${{ github.actor }}
+  GIT_AUTHOR_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+  GIT_COMMITTER_NAME: ${{ github.actor }}
+  GIT_COMMITTER_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: commit.gpgsign
+  GIT_CONFIG_VALUE_0: "false"
 
 concurrency:
   group: debt-ratchet-cache
@@ -33,12 +45,20 @@ jobs:
         with:
           python-version-file: pyproject.toml
 
-      - name: Install agent-comms
+      - name: Bootstrap only Core and locked checker dependencies
         run: |
           python -m pip install packaging
           python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
-          uv sync --locked --all-extras
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/checker-venv" uv sync --locked --all-extras
+          echo "$RUNNER_TEMP/checker-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve main's actual merged source tuple once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+
+      - name: Build the one common checker environment
+        run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources"
 
       - uses: actions/cache/restore@v4
         with:
@@ -50,7 +70,12 @@ jobs:
       - name: Measure main against its parent
         run: |
           PYTHONPATH=src:tools python tools/debt_ratchet.py \
-            --root ${{ matrix.kind }} --base HEAD^1 --head HEAD || true
+            --root ${{ matrix.kind }} --base HEAD^1 --head HEAD --ci-inputs "$RUNNER_TEMP/paired-sources" || true
+
+      - name: The same sources are still current before saving cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
 
       - uses: actions/cache/save@v4
         with:

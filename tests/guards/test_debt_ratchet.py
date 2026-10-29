@@ -1170,6 +1170,49 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
     assert report["introduced"][plan] == [] and report["delta"][plan] == 0
 
 
+@pytest.mark.parametrize("declaration,expected", [
+    pytest.param("from agent_comms.field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
+                 id="imported"),
+    pytest.param("from agent_comms.field_codec import boundary_decoder as decode\n@decode\n{function}", 0,
+                 id="aliased"),
+    pytest.param("import agent_comms.field_codec as codec\n@codec.boundary_decoder\n{function}", 0,
+                 id="qualified"),
+    pytest.param("import agent_comms.field_codec\n@agent_comms.field_codec.boundary_decoder\n{function}", 0,
+                 id="module"),
+    pytest.param("from .field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
+                 id="relative"),
+    pytest.param("{function}", 1, id="undecorated"),
+    pytest.param("from elsewhere import boundary_decoder\n@boundary_decoder\n{function}", 1,
+                 id="different-owner"),
+    pytest.param("from agent_comms.field_codec import boundary_decoder\n"
+                 "from elsewhere import boundary_decoder\n@boundary_decoder\n{function}", 1,
+                 id="duplicate"),
+    pytest.param("if enabled:\n    from agent_comms.field_codec import boundary_decoder\n"
+                 "@boundary_decoder\n{function}", 1, id="conditional"),
+    pytest.param("from agent_comms.field_codec import *\n@boundary_decoder\n{function}", 1,
+                 id="star"),
+    pytest.param("from agent_comms.field_codec import boundary_decoder\nclass Decoder:\n"
+                 "    boundary_decoder = lambda function: function\n    @boundary_decoder\n"
+                 "    def decode(external):\n        return external.marker\n", 1, id="class-shadowed"),
+    pytest.param("from agent_comms.field_codec import boundary_decoder\ndef outer(boundary_decoder):\n"
+                 "    @boundary_decoder\n    def decode(external):\n        return external.marker\n", 1,
+                 id="parameter-shadowed"),
+])
+def test_declared_decoder_boundary_is_shared_by_both_contextual_absence_measures(
+    tmp_path: Path, declaration: str, expected: int,
+) -> None:
+    repository = Repository(tmp_path, "src/agent_comms")
+    source = declaration.format(function="def decode(external):\n    return external.marker\n")
+    base = repository.commit({"boundary.py": source})
+    head = repository.commit({"boundary.py": source.replace("return external.marker", "return external.marker is None")})
+    status, report = repository.compare(base, head, NoneAbsence, ForeignAbsenceProbe)
+    assert status == int(bool(expected))
+    for measure in (NoneAbsence, ForeignAbsenceProbe):
+        identity = measure.at(f"{repository.root}/boundary.py").text
+        assert report["head"][identity] == expected
+        assert report["delta"][identity] == expected
+
+
 def test_an_unchanged_absence_on_a_rewritten_line_is_not_written_but_a_new_one_is(repo):
     base = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.done\n"})
     kept = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.settled()\n"})

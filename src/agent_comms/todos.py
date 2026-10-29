@@ -100,6 +100,7 @@ from agent_comms.head_review import (
     HeadReviewOrder,
     HeadReviewRelation,
     HeadReviewStatus,
+    IntegrationInput,
     MergeArm,
     OpenPullRequestHead,
     PreparedHeadReview,
@@ -989,13 +990,13 @@ class PullRequests:
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
         self._worktrees: dict[Path, Mapping[str, tuple[str, ...]]] = {}
-        self._todos: dict[RepositoryName, dict[str, Todo]] = {}
+        self._todos: dict[str, Todo] = {}
         self.register(todos)
 
     def register(self, todos: Sequence[Todo]) -> Self:
         """Register a frame's orders while preserving this read's existing GitHub facts."""
         for todo in todos:
-            self._todos.setdefault(todo.repo, {})[todo.id] = todo
+            self._todos[todo.id] = todo
         return self
 
     def retained_assignments(self, todo: Todo, assignment: Assignment) -> tuple[Assignment, ...]:
@@ -1054,7 +1055,7 @@ class PullRequests:
                     yield claim, request
 
     def linked(self, repo: RepositoryName) -> dict[int, list[Todo]]:
-        return self.linked_among(self._todos.get(repo, {}).values(), repo)
+        return self.linked_among(self._todos.values(), repo)
 
     @staticmethod
     def linked_among(todos: Iterable[Todo], repo: RepositoryName) -> dict[int, list[Todo]]:
@@ -2484,7 +2485,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise TodoError("Only a pending order can be claimed by its holder.")
 
     def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return (ReviewedHeadVerdict, RejectedHeadVerdict)
+        return (ReviewedHeadVerdict, QualifiedHeadVerdict, RejectedHeadVerdict)
 
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
@@ -4087,6 +4088,9 @@ class HeadVerdict(HeadReview, declared_name=None):
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
 
+    def prepare_sources(self, goals: Goals, request: ReadPullRequestHead) -> None:
+        """Marking review pending or rejecting it grants no source promotion permission."""
+
     def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
                  reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
         request = replace(request, head=prepared.current.head)
@@ -4151,6 +4155,14 @@ class DecidedHeadVerdict(HeadVerdict, declared_name=None):
 
 
 @dataclass(frozen=True)
+class QualifiedHeadVerdict(DecidedHeadVerdict):
+    """A reviewed source stage, without permission to promote the whole change."""
+
+    state = "pending"
+    verb = "Qualified"
+
+
+@dataclass(frozen=True)
 class ReviewedHeadVerdict(DecidedHeadVerdict):
     state = "success"
     verb = "Accepted"
@@ -4167,6 +4179,10 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
             return False
         if reviewed_change != current_change:
             return False
+        try:
+            self.prepare_sources(goals, current)
+        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired, ToolRefusedError, MalformedRecord):
+            return False
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
@@ -4177,6 +4193,21 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     @classmethod
     def allows_integration(cls) -> bool:
         return True
+
+    def prepare_sources(self, goals: Goals, request: ReadPullRequestHead) -> None:
+        """Final acceptance checks the actual source owners, never an author's self-hash."""
+        project = goals.registry.snapshot().commander_project.require()
+        repository = Repo.selected(project.repos, request.repo.to_wire())
+        message = WorkBranches(repository.checkout).commit_message(request.head)
+        for inputs in IntegrationInput.from_message(message):
+            goals.todos.require_input_links(inputs)
+            inputs.validate(project.repos, request)
+            for source in inputs.sources:
+                for head in source.heads:
+                    if not head.same_pull_request(request) and not HeadReview.accepted(head.repo, head.head):
+                        raise TodoError(
+                            f"{head.repo.to_wire()}#{head.pr} at {head.head} has no accepted exact-head "
+                            "source review; pending qualification cannot promote the carrier.")
 
     def landing(self, current: OpenPullRequestHead) -> MergeArm:
         """Accepting the current head means landing it: arm it, pinned to that head."""
@@ -4996,13 +5027,19 @@ class RecordPullRequest(TodoCommand):
     link: PullRequestLink
     generation: GoalId
 
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        if self.link.repo != current.repo:
+            # TodoStore.writing retains this registry cut through the actual SQL write.
+            project = RegistryStore.at(store.root).snapshot().commander_project.require()
+            Repo.selected(project.repos, self.link.repo.to_wire())
+
     def changed(self, current: Todo) -> Todo:
         current.require_actor(self.actor, self.generation)
-        if self.link.repo != current.repo:
-            raise TodoError("A recorded pull request must belong to the todo's repository.")
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
+        order.require_linkable()
+        current.state.require_open(current)
         return replace(current, revision=current.revision + 1, order=order.linked_to(self.link))
 
 
@@ -6047,6 +6084,16 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def for_goal(self, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
         return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
                             reader=partial(self.held_in, unit=owner))
+
+    def require_input_links(self, inputs: IntegrationInput) -> None:
+        """Only current stored orders, never metadata supplied by an author, link these sources."""
+        todos = self.open_orders()
+        for source in inputs.sources:
+            linked = PullRequests.linked_among(todos, source.repository)
+            for head in source.heads:
+                if len(linked.get(head.pr, ())) != 1:
+                    raise TodoError(
+                        f"{head.repo.to_wire()}#{head.pr} has no unique actual Todo source authority")
 
     def open_orders(self) -> tuple[Todo, ...]:
         """Every open order, whichever commander created it: their links say which requests

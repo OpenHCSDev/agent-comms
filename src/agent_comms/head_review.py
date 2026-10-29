@@ -5,15 +5,19 @@ Every path that posts that status goes through here.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 from collections.abc import Sequence
 
+from .build_identity import RepositoryCommit
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
+from .installer.runtime_resolution import StackSources
 from .repo import Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches
@@ -40,6 +44,7 @@ class PullRequestChange:
     """Git's whitespace-preserving identity of a pull request's complete patch."""
 
     patch: str
+    integration_digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -82,11 +87,10 @@ class PullRequestHead:
     def at(cls, repo: RepositoryName, pr: int) -> OpenPullRequestHead:
         """Read GitHub's head, its base branch and draft state in one request."""
         read = repo.rest(f"pulls/{pr}", "--jq",
-                         '.head.sha + " " + .base.ref + " " + (.draft | tostring)')
+                         '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
-        head, base, draft = read.stdout.split()
-        return OpenPullRequestHead.drafted(draft)(repo, pr, head, base=base)
+        return OpenPullRequestHead.from_forge(repo, pr, read.stdout)
 
     def change_identity(self, reader: WorkBranches, base: str) -> PullRequestChange:
         """Compare the PR's patch, never the unrelated changes in its base tree.
@@ -94,7 +98,10 @@ class PullRequestHead:
         Verbatim patch IDs preserve Python indentation and whitespace in literals.
         The existing Git reader shares one base-head read and fetches missing objects.
         """
-        return PullRequestChange(reader.pull_request_patch_id(base, self.head))
+        return PullRequestChange(
+            reader.pull_request_patch_id(base, self.head),
+            IntegrationInput.digest_from_message(reader.commit_message(self.head)),
+        )
 
     def holds(self, commit: str) -> bool:
         return self.head.startswith(commit)
@@ -111,6 +118,262 @@ class PullRequestHead:
                 f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
             )
         return current
+
+
+@dataclass(frozen=True)
+class IntegrationSource:
+    """One repository's captured main, exact PR overlays and resulting Git tree."""
+
+    baseline: RepositoryCommit
+    heads: tuple[PullRequestHead, ...]
+    candidate_tree: Annotated[str, GitCommitText]
+
+    def __post_init__(self) -> None:
+        for commit in (self.baseline.commit, self.candidate_tree, *(head.head for head in self.heads)):
+            GitCommitText.decode(commit)
+            if len(commit) != 40 or commit != commit.lower():
+                raise MalformedRecord("Integration inputs require full lowercase 40-hex Git identities.")
+        if any(head.repo != self.repository for head in self.heads):
+            raise MalformedRecord("Every integration member must belong to its source repository.")
+        if len({head.pr for head in self.heads}) != len(self.heads):
+            raise MalformedRecord("An integration source cannot name a PR twice.")
+        if self.heads != tuple(sorted(self.heads, key=lambda head: head.pr)):
+            raise MalformedRecord("Integration members must be in PR-number order.")
+
+    @property
+    def repository(self) -> RepositoryName:
+        return self.baseline.repository
+
+    @staticmethod
+    def main_head(repository: Repo) -> str:
+        reference_name = f"refs/heads/{WorkBranches.main}"
+        rows = Repo.git(repository.checkout, "ls-remote", "--exit-code", "origin", reference_name).splitlines()
+        if len(rows) != 1:
+            raise ToolRefusedError(f"No unique main in {repository.github.to_wire()}")
+        commit, reference = rows[0].split()
+        if reference != reference_name:
+            raise ToolRefusedError("The remote answered with a different main reference")
+        GitCommitText.decode(commit)
+        if len(commit) != 40:
+            raise ToolRefusedError("Remote main did not resolve to a full Git identity")
+        return commit
+
+    def expected_tree(self, repository: Repo) -> str:
+        """Reproduce the ordered Git merge result without moving a registered checkout."""
+        reader = WorkBranches(repository.checkout)
+        reader.require_commits("origin", self.baseline.commit, *(head.head for head in self.heads))
+        commit = self.baseline.commit
+        for head in self.heads:
+            tree = Repo.git(repository.checkout, "merge-tree", "--write-tree", commit, head.head).strip()
+            commit = Repo.git(repository.checkout, "commit-tree", tree,
+                              "-p", commit, "-p", head.head,
+                              "-m", "Validate captured source combination").strip()
+        return Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
+
+    def require_origin(self, repository: Repo) -> None:
+        if Repo.of(repository.checkout).github != self.repository:
+            raise ToolRefusedError("A source checkout has a different Git origin")
+
+    def validate(self, repository: Repo, carrier: PullRequestHead) -> None:
+        self.require_origin(repository)
+        if self.main_head(repository) != self.baseline.commit:
+            raise ToolRefusedError(f"{self.repository.to_wire()} main moved; recapture inputs")
+        self.require_candidate(repository, carrier)
+
+    def require_tree(self, repository: Repo) -> None:
+        self.require_origin(repository)
+        if self.expected_tree(repository) != self.candidate_tree:
+            raise ToolRefusedError(f"{self.repository.to_wire()} candidate tree is not its captured combination")
+
+    def require_candidate(self, repository: Repo, carrier: PullRequestHead) -> None:
+        """The event/review owner verifies the current carrier; all other heads stay exact."""
+        self.require_tree(repository)
+        for head in self.heads:
+            if not head.same_pull_request(carrier):
+                current = head.current()
+                if current.base != WorkBranches.main:
+                    raise ToolRefusedError(f"#{head.pr} no longer targets captured main")
+
+
+@dataclass(frozen=True)
+class IntegrationInput:
+    """Immutable compared source cuts, bound by their carrier's reviewed Git commit.
+
+    This is not an authorization record. Exact-head review and draft state still decide
+    promotion. The canonical payload deliberately cannot contain its own carrier SHA.
+    """
+
+    sources: tuple[IntegrationSource, ...]
+    trailer_name: ClassVar[str] = "Agent-Comms-Integration"
+    filename: ClassVar[str] = "input.json"
+
+    def __post_init__(self) -> None:
+        repositories = tuple(source.repository for source in self.sources)
+        if not repositories or len(set(repositories)) != len(repositories):
+            raise MalformedRecord("Integration inputs require unique, nonempty repository sources.")
+        if repositories != tuple(sorted(repositories, key=lambda repo: repo.key)):
+            raise MalformedRecord("Integration sources must be in repository-name order.")
+
+    def require_repositories(self, repositories: tuple[RepositoryName, ...]) -> None:
+        """The actual stack declaration supplies coverage, never a caller's package roster."""
+        if {source.repository for source in self.sources} != set(repositories):
+            raise ToolRefusedError("Integration inputs omit a declared stack source or name an unknown one.")
+
+    def source(self, repository: RepositoryName) -> IntegrationSource:
+        selected = tuple(source for source in self.sources if source.repository == repository)
+        if len(selected) != 1:
+            raise ToolRefusedError(f"Integration inputs do not uniquely select {repository.to_wire()}.")
+        return selected[0]
+
+    @staticmethod
+    def declared_repositories(core: Repo, baseline: str, candidate: str) -> tuple[RepositoryName, ...]:
+        """Actual declarations on both sides own the universe, including added/removed clients."""
+        return tuple(sorted({core.github, *IntegrationInput.source_urls(core, baseline, candidate)},
+                            key=lambda name: name.key))
+
+    @staticmethod
+    def source_urls(core: Repo, baseline: str, candidate: str) -> dict[RepositoryName, str]:
+        urls: dict[RepositoryName, str] = {}
+        for commit in (baseline, candidate):
+            declared = StackSources.declared_sources(
+                Repo.git(core.checkout, "show", f"{commit}:stack/pyproject.toml"))
+            identities = tuple(Repo.repository_url(url) for url, branch in declared.values())
+            if len(set(identities)) != len(identities):
+                raise ToolRefusedError("One stack cut declares a Git repository more than once")
+            for url, branch in declared.values():
+                urls[Repo.repository_url(url)] = url
+        return urls
+
+    def validate(self, repositories: tuple[Repo, ...], carrier: PullRequestHead) -> None:
+        """Git and forge prove this frozen input; Todo and verdict owners decide permission."""
+        core = Repo.selected(repositories, carrier.repo.to_wire())
+        current = carrier.current()
+        if current.base != WorkBranches.main:
+            raise ToolRefusedError("The integration carrier no longer targets main")
+        self.require_carrier(core, carrier)
+        for entry in self.sources:
+            entry.validate(Repo.selected(repositories, entry.repository.to_wire()), carrier)
+
+    def require_carrier(self, core: Repo, carrier: PullRequestHead) -> None:
+        """The same immutable carrier proof is used by final review and tested Git events."""
+        WorkBranches(core.checkout).require_commits("origin", carrier.head)
+        source = self.source(carrier.repo)
+        self.require_repositories(self.declared_repositories(core, source.baseline.commit, carrier.head))
+        members = tuple(head for head in source.heads if head.same_pull_request(carrier))
+        if len(members) != 1:
+            raise ToolRefusedError("The integration carrier is not a unique captured local PR")
+        if members[0].head == carrier.head:
+            raise ToolRefusedError("An input captures the carrier's earlier source, never its own commit SHA")
+        for head in source.heads:
+            if not Repo.descends(core.checkout, head.head, carrier.head):
+                raise ToolRefusedError(f"The carrier dropped original source #{head.pr}")
+        if Repo.git(core.checkout, "rev-parse", f"{carrier.head}^{{tree}}").strip() != source.candidate_tree:
+            raise ToolRefusedError("The carrier tree differs from its captured candidate")
+        if self.from_message(WorkBranches(core.checkout).commit_message(carrier.head)) != (self,):
+            raise ToolRefusedError("The current carrier does not contain this exact canonical input")
+        StackSources.require_compatible(
+            Repo.git(core.checkout, "show", f"{source.baseline.commit}:stack/pyproject.toml"),
+            Repo.git(core.checkout, "show", f"{carrier.head}:stack/pyproject.toml"))
+
+    @property
+    def canonical(self) -> str:
+        return FieldCodec.compact(FieldCodec.encode(self), sort_keys=True, allow_nan=False)
+
+    @property
+    def digest(self) -> str:
+        return hashlib.sha256(self.canonical.encode("utf-8")).hexdigest()
+
+    @property
+    def trailer(self) -> str:
+        return f"{self.trailer_name}: {self.canonical}"
+
+    @classmethod
+    def from_message(cls, message: str) -> tuple[IntegrationInput, ...]:
+        """Absent is ordinary; any attempted malformed/duplicate trailer refuses."""
+        lines = message.rstrip("\n").split("\n")
+        marked = tuple(line for line in lines if line.lstrip().startswith(cls.trailer_name))
+        if not marked:
+            return ()
+        prefix = f"{cls.trailer_name}: "
+        if len(marked) != 1 or not marked[0].startswith(prefix) or marked[0] != lines[-1]:
+            raise MalformedRecord("Integration metadata requires one final canonical trailer.")
+        payload = marked[0].removeprefix(prefix)
+        return (cls.from_canonical(payload),)
+
+    @classmethod
+    def from_canonical(cls, payload: str) -> IntegrationInput:
+        decoded = FieldCodec.decode(cls, FieldCodec.parse(payload))
+        if decoded.canonical != payload:
+            raise MalformedRecord("Integration metadata is not canonical.")
+        return decoded
+
+    @classmethod
+    def at(cls, directory: Path) -> IntegrationInput:
+        """A derived execution artifact; Git/event validation remains mandatory in CI."""
+        return cls.from_canonical((directory / cls.filename).read_text().removesuffix("\n"))
+
+    def write(self, directory: Path) -> None:
+        (directory / self.filename).write_text(self.canonical + "\n")
+
+    @classmethod
+    def digest_from_message(cls, message: str) -> str:
+        return "".join(inputs.digest for inputs in cls.from_message(message))
+
+
+class Side(DeclaredFamily, affix="Side"):
+    """One compared source cut; selection and materialized path belong to this member."""
+
+    @staticmethod
+    @abstractmethod
+    def ref(base: str, head: str) -> str:
+        """This side's revision of the compared pair."""
+
+    @classmethod
+    def sides(cls) -> tuple[type[Side], ...]:
+        return cls.members_with(cls)
+
+    @classmethod
+    def checkout(cls, directory: Path, repository: RepositoryName) -> Path:
+        return directory / cls.declared_name / Path(*repository.key)
+
+    @classmethod
+    def require_materialized(cls, directory: Path, source: IntegrationSource) -> Path:
+        checkout = cls.checkout(directory, source.repository)
+        source.require_origin(Repo.of(checkout))
+        if Repo.git(checkout, "status", "--porcelain"):
+            raise ToolRefusedError(f"Preserve dirty materialized source: {checkout}")
+        cls.require_revision(checkout, source)
+        return checkout
+
+    @staticmethod
+    @abstractmethod
+    def require_revision(checkout: Path, source: IntegrationSource) -> None:
+        """Each side proves its own exact captured cut."""
+
+
+class BaseSide(Side):
+    @staticmethod
+    def ref(base: str, head: str) -> str:
+        return base
+
+    @staticmethod
+    def require_revision(checkout: Path, source: IntegrationSource) -> None:
+        if Repo.git(checkout, "rev-parse", "HEAD").strip() != source.baseline.commit:
+            raise ToolRefusedError("Materialized baseline is not the captured main commit")
+
+
+class HeadSide(Side):
+    @staticmethod
+    def ref(base: str, head: str) -> str:
+        return head
+
+    @staticmethod
+    def require_revision(checkout: Path, source: IntegrationSource) -> None:
+        if Repo.git(checkout, "rev-parse", "HEAD^{tree}").strip() != source.candidate_tree:
+            raise ToolRefusedError("Materialized candidate is not the captured source tree")
+        if not Repo.descends(checkout, source.baseline.commit, "HEAD") or any(
+                not Repo.descends(checkout, head.head, "HEAD") for head in source.heads):
+            raise ToolRefusedError("Materialized candidate dropped a captured source parent")
 
 
 @dataclass(frozen=True)
@@ -155,6 +418,17 @@ class OpenPullRequestHead(ReadPullRequestHead):
 
     # GitHub's REST ``draft`` field as ``tostring`` renders it.
     forge_draft: ClassVar[str]
+    forge_state: ClassVar[str] = "open"
+
+    @classmethod
+    def from_forge(cls, repo: RepositoryName, pr: int, response: str) -> OpenPullRequestHead:
+        head, base, draft, state = response.split()
+        if state != cls.forge_state:
+            raise ToolRefusedError(f"#{pr} is no longer an open source.")
+        GitCommitText.decode(head)
+        if len(head) != 40:
+            raise ToolRefusedError("The forge head must be a full Git commit")
+        return cls.drafted(draft)(repo, pr, head, base=base)
 
     @classmethod
     def drafted(cls, draft: str) -> type[OpenPullRequestHead]:
@@ -203,8 +477,7 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     @staticmethod
     def holding(todos: Sequence[Todo], request: PullRequestHead) -> tuple[Todo, ...]:
         """The open orders whose current declaration holds this head, held or released."""
-        return tuple(todo for todo in todos if todo.repo == request.repo
-                     and todo.order.holds_head(request))
+        return tuple(todo for todo in todos if todo.order.holds_head(request))
 
     @abstractmethod
     def require_reviewer(self, goals: Goals, request: PullRequestHead,

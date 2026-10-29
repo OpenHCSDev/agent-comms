@@ -216,8 +216,13 @@ class Repo(GitLaunch, BaseModel, WireValue):
     def of(cls, checkout: Path) -> Repo:
         """Its GitHub name comes from the checkout's own origin remote."""
         url = cls.git(checkout, "remote", "get-url", "origin").strip()
+        return cls(checkout=checkout, github=cls.repository_url(url))
+
+    @staticmethod
+    def repository_url(url: str) -> RepositoryName:
+        """The same Git-origin identity for a checkout and a declared stack source."""
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
-        return cls(checkout=checkout, github=RepositoryName.from_wire("/".join(github)))
+        return RepositoryName.from_wire("/".join(github))
 
 
 class CheckoutHoldsWorkError(ValueError):
