@@ -173,6 +173,9 @@ class ReadTool(ReadAction, PathTool, CodingTool):
     def completed_instruction_read(self, child: PiSessionChild, result: PiToolResult) -> None:
         child.completed_part_read(self.call_id, result)
 
+    def failed_instruction_read(self, child: PiSessionChild) -> None:
+        child.discard_part_read(self.call_id)
+
 
 @dataclass(frozen=True, kw_only=True)
 class BashTool(ExecuteAction, CodingTool):

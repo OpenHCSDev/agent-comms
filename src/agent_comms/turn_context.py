@@ -1052,7 +1052,7 @@ class InstructionSegment(PublicInstructionAnnotations, ContextSegment):
         return cls.declared_name.replace("_", "-") + ".md"
 
     @classmethod
-    def capture(cls, provenance=(), **values):
+    def capture(cls, provenance=(), **values) -> Self:
         instruction = InstructionFile.read(cls.instruction_name())
         return cls(provenance=(*provenance, instruction.source), instruction=instruction, **values)
 
@@ -1106,7 +1106,8 @@ class PeerState:
 @dataclass(frozen=True, kw_only=True)
 class OncePerContextSegment(InstructionSegment):
     def needed_after(self, received: Mapping[type[ContextSegment], tuple[Provenance, ...]]) -> bool:
-        return received.get(type(self), ()) != self.provenance
+        observed = received.get(type(self), ())
+        return not all(source in observed for source in self.provenance)
 
     @classmethod
     def remember_received(cls, child: PiSessionChild, provenance: tuple[Provenance, ...]) -> None:

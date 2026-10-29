@@ -342,6 +342,9 @@ class PiSessionChild(PiChild):
         # Every finished Read must have its checked call; a missing record fails closed.
         self.pending_part_reads.pop(call_id).complete(result, self.parts_read)
 
+    def discard_part_read(self, call_id: ToolCallId) -> None:
+        self.pending_part_reads.pop(call_id)
+
     @classmethod
     async def start(
         cls, key: tuple[NativePiRpcLaunch, tuple[int, int]], attestation: NativeAttestation,
