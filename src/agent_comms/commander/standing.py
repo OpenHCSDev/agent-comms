@@ -689,7 +689,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
 @dataclass(frozen=True)
 class MissedHeartbeat(HeartbeatSilent):
     def line(self) -> str:
-        return (f"FIX no completed heartbeat pass since "
+        return (f"FIX Tristan has been silent: no completed pass since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, silent past "
                 f"{RecordedEventTime(self.since).clock()}. I have to tell you it's hung? why?"
                 " -> read the connector journal for the failing pass and fix its owner")
@@ -700,9 +700,9 @@ class HeartbeatNotStarted(HeartbeatSilent):
     request: OwnerRequestId
 
     def line(self) -> str:
-        return (f"START request {self.request.value} has had no heartbeat, overdue since "
+        return (f"START request {self.request.value} has not heard from Tristan, overdue since "
                 f"{RecordedEventTime(self.since).clock()}. why isn't it running?"
-                " -> start the connector heartbeat and fix its failing pass")
+                " -> start the connector's Tristan pass and fix its failure")
 
 
 @dataclass(frozen=True)

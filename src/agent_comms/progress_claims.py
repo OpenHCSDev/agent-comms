@@ -1,8 +1,7 @@
 """What a unit's goal report or order delivery may claim, and the artifact Core verifies behind it.
 
-A claim is a typed record, never a word in free text: merged names a commit that resolves on
-origin, installed names the order whose check result is recorded, working names a screenshot
-that exists. A claim whose artifact does not verify is refused with that artifact named.
+A claim is a typed record, never a word in free text. Each declared member owns the
+artifact it authenticates; an artifact that does not verify is refused before completion.
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from .repo import Repo
+from .turn_context import FileProvenance
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -40,8 +40,7 @@ class ProgressClaim(DeclaredFamily, affix="Claim"):
         """A done or delivered report stands only on an attached claim, never on its prose."""
         if not claims:
             raise ValueError(
-                f"A {report} report needs a claim with its artifact: merged (a commit "
-                "on origin), installed (a recorded check) or working (a screenshot)."
+                f"A {report} report needs a typed claim with its verifiable artifact."
             )
 
 
@@ -103,3 +102,19 @@ class WorkingClaim(ProgressClaim):
                 f"{self.screenshot!r} does not."
             )
         return ()
+
+
+@dataclass(frozen=True)
+class ReportClaim(ProgressClaim):
+    """A delivered report names its original UTF-8 file and exact content digest."""
+
+    source: FileProvenance
+
+    def __post_init__(self) -> None:
+        if not Path(self.source.path).is_absolute():
+            raise ValueError("A report claim needs an absolute source path.")
+
+    def verify(self, comms: Comms, worktree: Path) -> tuple[str, ...]:
+        if not self.source.public_text(comms).strip():
+            raise ValueError(f"A report claim needs a nonempty report: {self.source.path!r}.")
+        return (self.source.public_description(),)

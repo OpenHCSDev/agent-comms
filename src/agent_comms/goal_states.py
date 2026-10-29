@@ -50,7 +50,7 @@ class ChokeholdPause(PauseSource):
 
     def instruction(self) -> str:
         return (
-            "Your commander ignored the heartbeat's vibe check, so the heartbeat paused every"
+            "Your commander ignored Tristan's vibe check, so Tristan paused every"
             " unit under it until it complies. Do not resume or continue this goal; Core resumes"
             " it when the commander answers."
         )

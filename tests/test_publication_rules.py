@@ -138,7 +138,9 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     assert not ping.acted(CommanderHistory.read(comms, frozenset(('lead',))))
     assert FieldCodec.decode(RulePing, FieldCodec.encode(ping)) == ping
 
-    verdict = judge.SupersededVerb(by='P2', why='The replacement includes the useful work and deliberately drops this obsolete implementation.').head_operation()
+    verdict = judge.SupersededVerb(
+        pr=request.pr, head=request.head, repo=request.repo.to_wire(), by='P2',
+        why='The replacement includes the useful work and deliberately drops this obsolete implementation.').head_operation()
     assert verdict == SupersededHeadVerdict(VerdictReason(
         'The replacement includes the useful work and deliberately drops this obsolete implementation.'), 'P2')
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=NoHeadOrder())
