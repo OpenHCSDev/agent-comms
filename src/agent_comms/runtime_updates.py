@@ -235,21 +235,49 @@ class ThreadOutput(activity.ThreadOutput):
         return self.transcript.incarnation.name
 
 
+@dataclass(frozen=True)
+class OpeningReplies:
+    """Only deliveries observed before assistant output can open this turn's reply routes."""
+
+    targets: frozenset[str] = frozenset()
+
+    def delivered_targets(self, targets: tuple[str, ...]) -> OpeningReplies:
+        return replace(self, targets=self.targets.union(targets))
+
+    def answering(self) -> OpeningReplies:
+        return AnsweringReplies(self.targets)
+
+    def observed(self, events: tuple[TranscriptEvent, ...]) -> OpeningReplies:
+        window = self
+        for event in events:
+            window = event.reply_window(window)
+        return window
+
+
+class AnsweringReplies(OpeningReplies):
+    """Output has started: later context does not become a recipient of this answer."""
+
+    def delivered_targets(self, targets: tuple[str, ...]) -> OpeningReplies:
+        return self
+
+    def answering(self) -> OpeningReplies:
+        return self
+
+
 @dataclass
 class ReplyingThreadOutput(ThreadOutput):
-    """The last finished assistant item replies to this turn's confirmed deliveries."""
+    """The last finished assistant item replies only to deliveries that opened its turn."""
 
     messaging: Messaging = field(kw_only=True)
-    reply_targets: set[str] = field(default_factory=set)
+    replies: OpeningReplies = field(default_factory=OpeningReplies)
     pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
 
     def staged(self) -> Self:
-        return replace(super().staged(), reply_targets=self.reply_targets.copy(),
-                       pending=self.pending.copy())
+        return replace(super().staged(), pending=self.pending.copy())
 
     def commit(self, staged: Self) -> None:
         super().commit(staged)
-        self.reply_targets = staged.reply_targets
+        self.replies = staged.replies
         self.pending = staged.pending
 
     @classmethod
@@ -261,7 +289,7 @@ class ReplyingThreadOutput(ThreadOutput):
         )
 
     def delivered_targets(self, targets: tuple[str, ...]) -> None:
-        self.reply_targets.update(targets)
+        self.replies = self.replies.delivered_targets(targets)
 
     def flush_before(self, key: TurnItem) -> None:
         for previous in tuple(self.pending):
@@ -269,14 +297,16 @@ class ReplyingThreadOutput(ThreadOutput):
                 super().publish_item(self.pending.pop(previous))
 
     def publish_item(self, item: FinishedItem) -> None:
+        self.replies = self.replies.observed(item.events)
         self.flush_before(item.key)
-        if self.reply_targets and item.assistant_text:
+        if self.replies.targets and item.assistant_text:
             self.pending[item.key] = item
             self.transcript.draft(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
         else:
             super().publish_item(item)
 
     def publish_draft(self, item: DraftItem) -> None:
+        self.replies = self.replies.observed(item.events)
         self.flush_before(item.key)
         super().publish_draft(item)
 
@@ -289,19 +319,19 @@ class ReplyingThreadOutput(ThreadOutput):
                 self.messaging.send(
                     sender=self.activity_thread, target=target, body=item.assistant_text,
                 ).message.reference
-                for target in sorted(self.reply_targets)
+                for target in sorted(self.replies.targets)
             )
             super().publish_item(replace(item, events=tuple(
                 event.with_publications(publications) for event in item.events
             )))
             del self.pending[key]
-        self.reply_targets.clear()
+        self.replies = OpeningReplies()
         super().end_turn(turn_id)
 
     def end_all_turns(self) -> None:
         for turn_id in dict.fromkeys(key.turn_id for key in self.pending):
             self.end_turn(turn_id)
-        self.reply_targets.clear()
+        self.replies = OpeningReplies()
         super().end_all_turns()
 
 
