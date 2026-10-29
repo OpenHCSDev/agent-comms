@@ -41,8 +41,6 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
     def install(cls, store: Coordination) -> None:
         """Install absent current state; reject drift without repairing it."""
         cls.declarations()
-        from .cohort_schema import AwarenessTable
-
         with store.session.writing() as db:
             CoordinatorTable.require_schema(db, cls.schema_rows())
             if not cls.stored_schema(db):
@@ -52,4 +50,3 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
                 SQLiteJournalMode("delete")
             ]:
                 raise SchemaVersionError("private coordinator requires rollback-journal mode")
-            AwarenessTable.install_optional(db)

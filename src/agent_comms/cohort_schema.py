@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import sqlite3
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -16,7 +15,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from .coordination_schema import CoordinatorTable
-from .field_codec import AssignmentId, MalformedRecord, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
+from .field_codec import AssignmentId, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
 from .thread_text import AbsentText, GivenText, TextChoice
 from .response_acknowledgement import _canonical
 from .typed_table import (
@@ -44,9 +43,6 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .private_registry_guard import RegistryPrivacy
 
-_LOG = logging.getLogger(__name__)
-
-
 class CohortTable(PrivateCoordinatorTable):
     """Mandatory sealed N/K acknowledgement declarations."""
 
@@ -58,20 +54,6 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
     __slots__ = ()
     schema_error = SchemaVersionError
-
-    @classmethod
-    def install_optional(cls, db: sqlite3.Connection) -> None:
-        """Optional provenance cannot roll back mandatory native preparation."""
-        db.execute("SAVEPOINT optional_awareness_install")
-        try:
-            if not cls.stored_schema(db):
-                cls.create_schema(db)
-            assert_optional_awareness_schema(db)
-        except (sqlite3.Error, SchemaVersionError, MalformedRecord) as error:
-            db.execute("ROLLBACK TO optional_awareness_install")
-            _LOG.warning("Optional awareness schema unavailable: %r", error, exc_info=error)
-        finally:
-            db.execute("RELEASE optional_awareness_install")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -403,9 +385,7 @@ class AwarenessClaimGenerations(
 class PrivateCoordinatorSchema(
     ComposedSchemas, CoordinatorTable, PrivateCoordinatorTable, AwarenessTable
 ):
-    """All coordination-file families share reconciliation, not runtime criticality."""
+    """All coordination-file families share reconciliation and file-open validation.
 
-
-def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
-    if not AwarenessTable.stored_schema(db) or AwarenessTable.schema_differs(db):
-        raise SchemaVersionError("optional awareness generation schema is unavailable")
+    Optional row evidence does not veto mandatory N/K acceptance.
+    """
