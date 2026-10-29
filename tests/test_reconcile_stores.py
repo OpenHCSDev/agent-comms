@@ -400,7 +400,7 @@ def test_planned_reconcile_refuses_a_bridge_delivery_store_its_declaration_canno
     practice = PracticeCopy(root, tmp_path / "practice")
     practice.include(tuple(originals))
     copied = practice.request
-    probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,))
+    probe = WriterOwnedOpeningProbe(copied, (BridgeDeliveryStore,), scratch=tmp_path / "scratch")
     copied_paths = tuple(copied.location(resource) for resource in resources)
     planned = subprocess.run(
         [sys.executable, "-m", "agent_comms.cli", "--root", str(root),

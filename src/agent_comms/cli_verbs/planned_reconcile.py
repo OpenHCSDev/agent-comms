@@ -4,6 +4,7 @@ from agent_comms.cli_commands import PlannedStoresResult
 from agent_comms.cli_support.store_reconcile import StoreReconcileCliCommand
 from agent_comms.field_codec import Argument
 from agent_comms.storage_rules import StorageRule
+from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.typed_table import ReconciledFile
 from agent_comms.typed_table import StoreRewrite
 from agent_comms.typed_table import ExternalStore
@@ -24,8 +25,9 @@ class PlannedReconcileCliCommand(
 
     def answer(self, root: Path) -> PlannedStoresResult:
         """A store outside the bus that the target's writer could not open refuses the plan."""
+        stores = tuple(set(ExternalStore.members_with(ExternalStore)) - set(self.carrying))
         ExternalStore.practice_openings(
-            root, scratch=StorageRule.load(root).scratch_base, excluding=self.carrying)
+            LiveFilesRequest(root), scratch=StorageRule.load(root).scratch_base, stores=stores)
         rewrites: list[StoreRewrite] = []
         for path, owner in sorted(ReconciledFile.existing_in(root).items()):
             schema = owner.schema_at(path)

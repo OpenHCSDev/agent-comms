@@ -2829,13 +2829,12 @@ class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
 
     @staticmethod
     def practice_openings(
-        root: Path, *, scratch: Path, excluding: tuple[type[ExternalStore], ...] = (),
+        files: FilesRequest, *, scratch: Path, stores: tuple[type[ExternalStore], ...],
     ) -> None:
-        stores = set(ExternalStore.members_with(ExternalStore)) - set(excluding)
         PrivateDirectoryRole.make_parents(scratch)
         with TemporaryDirectory(dir=scratch) as directory:
             for store in stores:
-                store.practice_opening(LiveFilesRequest(root), Path(directory))
+                store.practice_opening(files, Path(directory))
 
     @classmethod
     @abstractmethod

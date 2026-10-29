@@ -1263,7 +1263,9 @@ class PreparedMigration(Extendable):
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
-        staged.probe(WriterOwnedOpeningProbe(self.files, self.writer_stores))
+        staged.probe(WriterOwnedOpeningProbe(
+            self.files, self.writer_stores,
+            scratch=StorageRule.load(self.files.source_root()).scratch_base))
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand, *reconcile_arguments)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
