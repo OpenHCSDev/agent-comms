@@ -39,7 +39,7 @@ class TargetField(ABC):
 
     @property
     def editor_annotation(self) -> object:
-        return field_codec.compile_decoder(self.annotation).editor_annotation
+        return self.plan.value.editor_wire.native_editor_annotation
 
     @property
     def name(self) -> str:
@@ -54,14 +54,28 @@ class TargetField(ABC):
         return self.plan.description
 
     @property
+    def editor_members(self) -> tuple[field_codec.EditorMember, ...]:
+        return self.plan.value.editor_wire.editor_members
+
+    def editor_selection(self, value: object) -> object:
+        return self.plan.value.editor_wire.selected_editor_member(value).declaration
+
+    @property
     @abstractmethod
-    def editor_default(self) -> JsonValue: ...
+    def editor_initial(self) -> object: ...
+
+    @property
+    @abstractmethod
+    def editor_default(self) -> str | None: ...
 
     @abstractmethod
     def default_schema(self) -> dict[str, JsonValue]: ...
 
     def argument(self, value: object) -> Mapping[str, object]:
-        return {self.name: value}
+        return {self.name: self.editor_argument(value)}
+
+    def editor_argument(self, value: object) -> object:
+        return self.plan.value.editor_wire.editor_argument(value)
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
         """An unrestricted field does not declare a finite-choice editor."""
@@ -91,7 +105,11 @@ class SuppliedTargetField(TargetField):
     value: object
 
     @property
-    def editor_default(self) -> JsonValue:
+    def editor_initial(self) -> object:
+        return self.plan.editor_initial(self.value)
+
+    @property
+    def editor_default(self) -> str:
         return self.plan.editor_default(self.value)
 
     def default_schema(self) -> dict[str, JsonValue]:
@@ -104,14 +122,22 @@ class UnsuppliedTargetField(TargetField):
 
     @property
     def editor_annotation(self) -> object:
-        return field_codec.compile_decoder(self.annotation).editor_annotation | type(None)
+        return self.plan.value.editor_wire.native_editor_annotation | type(None)
 
     @property
-    def editor_default(self) -> JsonValue:
+    def editor_initial(self) -> object:
+        return None
+
+    @property
+    def editor_default(self) -> None:
         return None
 
     def default_schema(self) -> dict[str, JsonValue]:
         return {}
+
+    @boundary_decoder
+    def editor_selection(self, value: object) -> object:
+        return None if value is None else super().editor_selection(value)
 
     @boundary_decoder
     def argument(self, value: object) -> Mapping[str, object]:
@@ -123,6 +149,21 @@ class UnsuppliedTargetField(TargetField):
 class ChoiceTargetField(SuppliedTargetField):
     """A prepared finite declaration, from its annotation or configuration catalog."""
     options: tuple[CatalogChoice, ...] = ()
+
+    @property
+    def editor_annotation(self) -> object:
+        return self.plan.value.editor_wire.editor_annotation
+
+    @property
+    def editor_members(self) -> tuple[field_codec.EditorMember, ...]:
+        return ()
+
+    @property
+    def editor_initial(self) -> object:
+        return self.editor_default
+
+    def editor_argument(self, value: object) -> object:
+        return value
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:
