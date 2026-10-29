@@ -597,7 +597,7 @@ async def test_cancelled_watch_preserves_existing_service_failure(
     passes = ServicePassStore.at(comms.root)
     passes.failed(type(watch).__name__, RuntimeError("An earlier genuine failure"))
     before = passes.path.read_bytes()
-    with pytest.raises(GitAcquisitionCancelled):
+    with pytest.raises(asyncio.CancelledError):
         await Coordination.watch_worker(watch, lambda: nullcontext(comms), passes)
     assert passes.path.read_bytes() == before
     assert not failed.exists()
