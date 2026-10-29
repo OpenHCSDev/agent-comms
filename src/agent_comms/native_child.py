@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, NoReturn
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .declared_family import DeclaredFamily
 from .field_codec import ToolCallId
-from .instruction_deck import DeckParts, DeckReader
+from .instruction_deck import DeckParts, NotPartRead, PartRead, PartReadCompletion
 from .tool_denial import SelectedToolDenied
 from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
     from .native_package import VerifiedNativePackage
     from .participant_identity import ParticipantIdentity
+    from .registry_store import RegistryStore
     from .pi_commands import ExtensionUiResponse, PiCommand
     from .pi_native_backend import PiNativeBackend
     from .pi_payloads import PiResponseData, PiToolResult, StateData
@@ -292,27 +293,22 @@ class PiSessionChild(PiChild):
     key: tuple[NativePiRpcLaunch, tuple[int, int]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
+    registry: RegistryStore = field(kw_only=True)
     rule_parts: tuple[Path, ...] = field(kw_only=True)
     received_context: dict[type[ContextSegment], tuple[Provenance, ...]] = field(default_factory=dict)
     parts_read: set[Path] = field(default_factory=set)
-    pending_part_reads: dict[ToolCallId, Path] = field(default_factory=dict)
+    pending_part_reads: dict[ToolCallId, PartReadCompletion] = field(default_factory=dict)
 
     def remember_context(self, kind: type[ContextSegment], provenance: tuple[Provenance, ...]) -> None:
         self.received_context[kind] = provenance
-
-    @staticmethod
-    def prepare_rules(launch: NativePiRpcLaunch) -> tuple[Path, ...]:
-        from .registry_store import RegistryStore
-
-        snapshot = RegistryStore.at(launch.root).snapshot()
-        reader = DeckReader.for_owner(snapshot, launch.session.files(launch.root).owner)
-        return DeckParts.beside_session(launch.session.directory).prepare(reader)
 
     def forget_context(self) -> None:
         self.received_context.clear()
         self.parts_read.clear()
         self.pending_part_reads.clear()
-        self.rule_parts = self.prepare_rules(self.key[0])
+        launch = self.key[0]
+        self.rule_parts = self.registry.instruction_parts(
+            launch.session.directory, launch.session.files(launch.root).owner)
 
     def require_rule_reads(self) -> None:
         if not self.rule_parts:
@@ -321,32 +317,30 @@ class PiSessionChild(PiChild):
         if unread:
             raise SelectedToolDenied(DeckParts.order(unread))
 
-    def begin_part_read(self, call_id: ToolCallId, path: str) -> None:
+    def begin_part_read(self, call_id: ToolCallId, path: str, *, full_read: bool) -> None:
         selected = (self.key[0].cwd / path).resolve()
-        if selected in self.rule_parts:
-            self.pending_part_reads[call_id] = selected
+        self.pending_part_reads[call_id] = (
+            PartRead(selected) if full_read and selected in self.rule_parts else NotPartRead())
 
     def completed_part_read(self, call_id: ToolCallId, result: PiToolResult) -> None:
-        # Reset drops pending reads too: a pre-compaction call cannot satisfy the new deal.
-        path = self.pending_part_reads.pop(call_id, None)
-        if path is not None:
-            expected = path.read_text(encoding="utf-8")
-            if result.text(limit=len(expected) + 1) == expected:
-                self.parts_read.add(path)
+        # Reset withdraws prior admissions; an older completion has no part-read proof.
+        self.pending_part_reads.pop(call_id, NotPartRead()).complete(result, self.parts_read)
 
     @classmethod
     async def start(
         cls, key: tuple[NativePiRpcLaunch, tuple[int, int]], attestation: NativeAttestation,
+        *, registry: RegistryStore,
     ) -> Self:
         launch, _ = key
-        parts = await asyncio.to_thread(cls.prepare_rules, launch)
+        parts = await asyncio.to_thread(
+            registry.instruction_parts, launch.session.directory, launch.session.files(launch.root).owner)
         with ExitStack() as resources:
             environment = dict(launch.env)
             if "AGENT_COMMS_PROJECT_SOCKET" in environment:
                 address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
                 environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
             return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
-                key=key, attestation=attestation, rule_parts=parts, resources=resources.pop_all())
+                key=key, attestation=attestation, registry=registry, rule_parts=parts, resources=resources.pop_all())
 
 
 class NativeChildState(ABC):

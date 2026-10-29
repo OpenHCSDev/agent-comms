@@ -16,6 +16,7 @@ from .slop import Slop
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .participant_identity import ParticipantIdentity
+    from .pi_payloads import PiToolResult
 
 
 class DeckReader(ABC):
@@ -122,6 +123,29 @@ class CommanderReader(FleetReader):
 
     def header(self, held: Callable[[], str]) -> str:
         return held()
+
+
+class PartReadCompletion(ABC):
+    """The admitted read owns whether successful output can satisfy a rule part."""
+
+    @abstractmethod
+    def complete(self, result: PiToolResult, parts_read: set[Path]) -> None: ...
+
+
+@dataclass(frozen=True)
+class NotPartRead(PartReadCompletion):
+    def complete(self, result: PiToolResult, parts_read: set[Path]) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class PartRead(PartReadCompletion):
+    path: Path
+
+    def complete(self, result: PiToolResult, parts_read: set[Path]) -> None:
+        expected = self.path.read_text(encoding="utf-8")
+        if result.text(limit=len(expected) + 1) == expected:
+            parts_read.add(self.path)
 
 
 @dataclass(frozen=True)

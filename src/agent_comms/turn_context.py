@@ -8,6 +8,7 @@ import re
 from abc import abstractmethod, ABC
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self, Annotated
@@ -1124,14 +1125,7 @@ class RuleReadingSegment(OncePerContextSegment):
         snapshot = goals.registry.snapshot()
         reader = DeckReader.for_owner(snapshot, owner.incarnation.require_recorded())
         parts = DeckParts.beside_session(owner.native_session_directory(goals.root)).planned(reader)
-        def held() -> str:
-            from .held_orders import HeldOrders
-            from .todos import TodoStore
-
-            return "\n".join(hold.recalled()
-                             for hold in HeldOrders.of(TodoStore(goals.root), snapshot, owner.name).live)
-
-        header = reader.header(held)
+        header = reader.header(partial(goals.recalled_orders, snapshot, owner.name))
         revision = hashlib.sha256("\n".join(map(str, parts)).encode()).hexdigest()
         return super().capture((OwnerProvenance(owner.incarnation, revision),), parts=parts, header=header)
 
