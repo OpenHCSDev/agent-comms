@@ -142,6 +142,11 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
         return value
 
     @classmethod
+    def json_text(cls, expression: str) -> str:
+        """The stored value as JSON text, without a Python decode/encode trip."""
+        return f"json_quote({expression})"
+
+    @classmethod
     def for_type(cls, annotation: object) -> type[SqlStorage]:
         annotation, _ = _base_type(annotation)
         if get_origin(annotation) is Literal:
@@ -195,6 +200,10 @@ class BooleanStorage(SqlStorage):
     @classmethod
     def to_sql(cls, value: object) -> int | None:
         return None if value is None else int(value)
+
+    @classmethod
+    def json_text(cls, expression: str) -> str:
+        return f"CASE {expression} WHEN 1 THEN 'true' WHEN 0 THEN 'false' ELSE 'null' END"
 
     @classmethod
     def from_sql(cls, value: object) -> bool:
@@ -265,6 +274,10 @@ class JsonStorage(SqlStorage):
     @classmethod
     def to_sql(cls, value: object) -> str | None:
         return None if value is None else FieldCodec.compact(value, allow_nan=False)
+
+    @classmethod
+    def json_text(cls, expression: str) -> str:
+        return f"COALESCE({expression}, 'null')"
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -491,6 +504,20 @@ class _Field(SqlValue):
 
     def reference(self, alias: str) -> str:
         return f"{alias}.{_identifier(self.wire_name)}"
+
+    def wire_record(self, plan: FieldPlan, alias: str) -> str:
+        expression = self.reference(alias)
+        projected = plan.project_encoded(self.storage.json_text(expression), self.json_record)
+        if not plan.constructor_required and plan.omitted(plan.default()):
+            default = SQLiteLiteral.of(self.encode(plan.default()))
+            return f"CASE WHEN {expression} IS {default} THEN '{{}}' ELSE {projected} END"
+        return projected
+
+    @staticmethod
+    def json_record(values: Mapping[str, str]) -> str:
+        pieces = [sql_literal(json.dumps(key) + ':') + ' || ' + expression
+                  for key, expression in values.items()]
+        return "'{' || " + " || ',' || ".join(pieces) + " || '}'" if pieces else "'{}'"
 
     @property
     def lifecycle_family(self) -> type[LifecycleState]:

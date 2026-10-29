@@ -36,6 +36,7 @@ from agent_comms.messages import (
     Claimed,
     ClaimMessage,
     Message,
+    StoredWireHistory,
     MessageKind,
     PublicRecord,
 )
@@ -242,6 +243,20 @@ class BusReader(RouteCounts, ABC):
             return tuple(row.kind.read_from(db, row.seq) for row in BusRow.select(
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit))
+
+    @contextmanager
+    def stored_message_history(
+        self, predicate: str = "1", parameters: tuple[object, ...] = (),
+        *, through: int,
+    ) -> Iterator[StoredWireHistory]:
+        """Stream declared public wire fields from one read snapshot, without Messages."""
+        identity = MessageIdentitySource
+        query = Message.stored_wire_query(identity.qualified("message_id"))
+        query += (f' JOIN "{identity.declared_name}" ON '
+                  f'{identity.qualified("seq")} = {BusRow.qualified("seq")}')
+        query = f'SELECT * FROM ({query}) WHERE seq <= ? AND ({predicate})'
+        with self.observing() as db:
+            yield StoredWireHistory(db, query, (through, *parameters))
 
     def message_history(self) -> Iterator[Message]:
         """Public bulk export, paged within one committed SQLite snapshot."""

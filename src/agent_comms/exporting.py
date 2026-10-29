@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 from abc import abstractmethod
@@ -18,7 +19,7 @@ from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
-from .messages import Message
+from .messages import Message, StoredWireHistory, StoredWireMessage
 from .registration import Registration
 from .store_files import AtomicFile, ExclusiveAtomicFile
 
@@ -41,7 +42,20 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
 
     @staticmethod
     def json_record(record: Mapping[str, object]) -> str:
-        return FieldCodec.compact(record, ensure_ascii=False)
+        return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+
+    def stored_row(self, message: StoredWireMessage) -> bytes:
+        return self.row(message.decode())
+
+    def newest_suffix(self, source: StoredWireHistory, capacity: int) -> int:
+        first = 0
+        used = 0
+        for message in source.rows(descending=True):
+            used += len(self.stored_row(message))
+            if used > capacity:
+                return first or message.seq + 1
+            first = message.seq
+        return first
 
 
 class SelectableWireExportFormat(WireExportFormat):
@@ -59,6 +73,13 @@ class JsonlFormat(SelectableWireExportFormat):
         return (self.json_record({
             "record": "message", "message": Message.from_message(message).to_wire(),
         }) + "\n").encode()
+
+    def stored_row(self, message: StoredWireMessage) -> bytes:
+        return ('{"record":"message","message":' + message.wire + '}\n').encode()
+
+    def newest_suffix(self, source: StoredWireHistory, capacity: int) -> int:
+        overhead = len(b'{"record":"message","message":}\n')
+        return source.newest_suffix(f"length(CAST(wire AS BLOB)) + {overhead}", capacity)
 
 
 @dataclass(frozen=True)
@@ -97,6 +118,8 @@ class ResolvedExportScope:
 
     scope: WireExportScope
     matches: Callable[[Message], bool]
+    predicate: str = "1"
+    parameters: tuple[object, ...] = ()
 
 
 class WireExportScope(DeclaredFamily, affix="Scope"):
@@ -123,7 +146,9 @@ class AuthoredSourceScope(WireExportScope):
     sources: tuple[MessageReference, ...]
 
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
-        return ResolvedExportScope(self, lambda message: message.reference in self.sources)
+        sequences = tuple(reference.seq for reference in self.sources)
+        return ResolvedExportScope(self, lambda message: message.reference in self.sources,
+                                   'seq IN (' + ','.join('?' for _ in sequences) + ')', sequences)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +158,9 @@ class ChannelScope(WireExportScope):
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
         channel = require_channel(self.channel)
         channel.require_routable()
-        return ResolvedExportScope(self, channel.history_scope().includes)
+        history = channel.history_scope()
+        predicate, parameters = history.index_predicate
+        return ResolvedExportScope(self, history.includes, predicate, parameters)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +187,10 @@ class DmScope(WireExportScope):
                 message.sender in second_names and message.target in first_names
             )
 
-        return ResolvedExportScope(canonical, matches)
+        predicate = '((sender IN ({a}) AND target IN ({b})) OR (sender IN ({b}) AND target IN ({a})))'.format(
+            a=','.join('?' for _ in first_names), b=','.join('?' for _ in second_names))
+        return ResolvedExportScope(canonical, matches, predicate,
+                                   (*first_names, *second_names, *second_names, *first_names))
 
 
 class ScopeFlag(SubclassUnion, affix="ScopeFlag"):
@@ -214,6 +244,14 @@ class WireExportLimit(DeclaredFamily, affix="Limit"):
     def time_cutoff(self) -> float | None:
         return None
 
+    def stored_rows(
+        self, source: StoredWireHistory, format: WireExportFormat,
+        header_size: int, started_at: float, stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        stats.source_messages = source.count()
+        return self.select((WireExportRow(message.seq, message.timestamp, format.stored_row(message))
+                            for message in source.rows()), header_size, started_at, stats)
+
     def validate_header(self, size: int) -> None:
         ceiling = self.byte_ceiling()
         if ceiling is not None and size > ceiling:
@@ -231,7 +269,7 @@ class WireExportLimit(DeclaredFamily, affix="Limit"):
         def filtered() -> Iterable[WireExportRow]:
             for row in rows:
                 if cutoff is not None:
-                    timestamp = row.message.timestamp
+                    timestamp = row.timestamp
                     if not math.isfinite(timestamp) or timestamp <= 0:
                         stats.invalid_time += 1
                         continue
@@ -273,6 +311,15 @@ class MaxBytesLimit(WireExportLimit):
 
     def byte_ceiling(self) -> int:
         return self.value
+
+    def stored_rows(
+        self, source: StoredWireHistory, format: WireExportFormat,
+        header_size: int, started_at: float, stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        stats.source_messages = source.count()
+        first = format.newest_suffix(source, self.value - header_size)
+        return (WireExportRow(message.seq, message.timestamp, format.stored_row(message))
+                for message in source.rows(after=first))
 
     def retain(
         self,
@@ -397,7 +444,8 @@ class WireExportProvenance(CliResult):
 
 @dataclass(frozen=True, slots=True)
 class WireExportRow:
-    message: Message
+    seq: int
+    timestamp: float
     data: bytes
 
 
@@ -434,7 +482,23 @@ class WireTranscriptExporter:
         *,
         overwrite: bool = False,
     ) -> WireExportProvenance:
-        """Consume ascending messages once and atomically publish the artifact."""
+        """Export authored in-memory context through the same atomic stream writer."""
+        return self._export(destination, lambda stats, header: self.limit.select(
+            self._rows(messages, stats), header, self.boundary.export_started_at, stats),
+            overwrite=overwrite)
+
+    def export_stored(
+        self, source: StoredWireHistory, destination: Path, *, overwrite: bool = False,
+    ) -> WireExportProvenance:
+        """Select the stored suffix, then write ascending rows without Message construction."""
+        return self._export(destination, lambda stats, header: self.limit.stored_rows(
+            source, self.format, header, self.boundary.export_started_at, stats), overwrite=overwrite)
+
+    def _export(
+        self, destination: Path,
+        rows: Callable[[ExportSelectionStats, int], Iterable[WireExportRow]],
+        *, overwrite: bool,
+    ) -> WireExportProvenance:
         header = self._header()
         self.limit.validate_header(len(header))
 
@@ -446,20 +510,17 @@ class WireTranscriptExporter:
         artifact = AtomicFile(destination) if overwrite else ExclusiveAtomicFile(destination)
         stats = ExportSelectionStats()
         exported = 0
-        first_selected: Message | None = None
-        last_selected: Message | None = None
+        first_selected: WireExportRow | None = None
+        last_selected: WireExportRow | None = None
         with artifact.staged() as output:
             writer = _ArtifactWriter(output)
             writer.write(header)
-            rows = self._rows(messages, stats)
-            for row in self.limit.select(
-                rows, len(header), self.boundary.export_started_at, stats
-            ):
+            for row in rows(stats, len(header)):
                 writer.write(row.data)
                 exported += 1
                 if first_selected is None:
-                    first_selected = row.message
-                last_selected = row.message
+                    first_selected = row
+                last_selected = row
             bytes_written = writer.size
             output_sha256 = writer.digest.hexdigest()
 
@@ -511,7 +572,7 @@ class WireTranscriptExporter:
             if message.seq > self.boundary.through_seq:
                 return
             stats.source_messages += 1
-            yield WireExportRow(message, self.format.row(message))
+            yield WireExportRow(message.seq, message.timestamp, self.format.row(message))
 
     @staticmethod
     def _validate_sequence(message: Message, previous: int) -> int:

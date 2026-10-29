@@ -1002,6 +1002,26 @@ class Message(MessageInput, TurnOrigin):
         """Live messages carry no historical provenance decoration."""
         return {}
 
+    @classmethod
+    def stored_wire_query(cls, identity: str) -> str:
+        """Project the public envelope from its declared stored fields, not domain objects."""
+        tables = cls.tables()
+        stored = {item.name: (table, item) for table in tables for item in table._fields}
+        pieces = [item.wire_record(plan, table.declared_name)
+                  for plan in FieldCodec.field_plans(cls) if plan.records
+                  for table, item in (stored[plan.name],)]
+        identity_key = FieldCodec._projections(cls, "wire")["message_id"].wire_name
+        pieces.append("json_object('" + identity_key + "', " + identity + ")")
+        fragments = " UNION ALL ".join(f"SELECT substr(({piece}), 2, length(({piece})) - 2) AS body"
+                                       for piece in pieces)
+        wire = "'{' || COALESCE((SELECT group_concat(NULLIF(body, ''), ',') FROM (" + fragments + ")), '') || '}'"
+        columns = ", ".join(f'{item.reference(table.declared_name)} AS "{name}"'
+                            for name, (table, item) in stored.items())
+        sequence = BusRow.qualified("seq")
+        joins = " ".join(f'JOIN "{table.declared_name}" ON {table.qualified("seq")} = {sequence}'
+                         for table in tables)
+        return f'SELECT {columns}, {wire} AS wire FROM "{BusRow.declared_name}" {joins}'
+
     def to_wire(self) -> dict:
         return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self.envelope)}
 
@@ -1129,6 +1149,53 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         super().__init_subclass__()
         dataclass(cls, frozen=True, kw_only=True)
         cls.tables()
+
+
+@dataclass(frozen=True)
+class StoredWireMessage:
+    """One public encoded envelope from a held SQLite read, with no decoded Message."""
+
+    seq: int
+    timestamp: float
+    wire: str
+
+    def decode(self) -> Message:
+        return Message.from_wire(FieldCodec.parse(self.wire))
+
+
+@dataclass(frozen=True)
+class StoredWireHistory:
+    """A captured public-envelope query; cursors stream and retire with the read."""
+
+    db: sqlite3.Connection
+    query: str
+    parameters: tuple[object, ...]
+
+    def rows(self, *, after: int = 0, descending: bool = False) -> Iterator[StoredWireMessage]:
+        order = "DESC" if descending else "ASC"
+        with closing(self.db.execute(
+            f"SELECT seq, timestamp, wire FROM ({self.query}) WHERE seq >= ? ORDER BY seq {order}",
+            (*self.parameters, after),
+        )) as cursor:
+            for row in cursor:
+                yield StoredWireMessage(*row)
+
+    def count(self) -> int:
+        return self.db.execute(f"SELECT count(*) FROM ({self.query})", self.parameters).fetchone()[0]
+
+    def newest_suffix(self, size: str, capacity: int) -> int:
+        """SQLite sums encoded byte lengths newest-first; Python retains only a sequence."""
+        first = self.db.execute(f"SELECT COALESCE(max(seq), 0) + 1 FROM ({self.query})",
+                                self.parameters).fetchone()[0]
+        with closing(self.db.execute(
+            f"SELECT seq, sum({size}) OVER (ORDER BY seq DESC ROWS UNBOUNDED PRECEDING) "
+            f"FROM ({self.query})", self.parameters,
+        )) as cursor:
+            for sequence, retained_bytes in cursor:
+                if retained_bytes > capacity:
+                    break
+                first = sequence
+        return first
 
 
 class PublicRecord(BusRecord):
