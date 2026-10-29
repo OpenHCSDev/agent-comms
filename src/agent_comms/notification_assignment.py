@@ -315,6 +315,7 @@ class NotificationAssignment(NotificationSource):
             return NotificationAssignmentRead(selection, ())
         privacy.coordinator_schema().require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
+        context = privacy.notification_context_sql(connection)
         rows = []
         # Each batch's requested keys select their assignments through the
         # recipient/seq index; their native-input membership is selected once per
