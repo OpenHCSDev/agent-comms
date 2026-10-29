@@ -107,6 +107,16 @@ class RecordedEntry(PiPayload):
     def input_boundary(self):
         return any(message.user for message in self.messages)
 
+    @property
+    def tracked_user(self) -> MessageEntry | None:
+        return None
+
+    def require_tracked_user(self) -> MessageEntry:
+        tracked = self.tracked_user
+        if tracked is None:
+            raise MalformedRecord("Native publication requires an original tracked input")
+        return tracked
+
     def require_entry_id(self) -> str:
         return self.source_coordinates.original_id
 
@@ -206,16 +216,6 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         """Acquire a source reader, never input acceptance or replay authority."""
         with NativeEvidenceRead.open(session_file) as evidence:
             yield evidence
-
-    @property
-    def tracked_user(self) -> MessageEntry | None:
-        return None
-
-    def require_tracked_user(self) -> MessageEntry:
-        tracked = self.tracked_user
-        if tracked is None:
-            raise MalformedRecord("Native publication requires an original tracked input")
-        return tracked
 
     @property
     def model_choice(self) -> tuple[str, str] | None:

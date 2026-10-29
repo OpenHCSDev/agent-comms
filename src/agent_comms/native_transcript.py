@@ -10,7 +10,7 @@ from itertools import takewhile
 from dataclasses import dataclass
 from math import inf
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO
+from typing import TYPE_CHECKING, BinaryIO, Never
 
 from .errors import RelationViolationError
 from .native_pi import NativeContextJournal, NativeContextProof
@@ -192,13 +192,32 @@ class NativeRecord(TranscriptRecord):
     def events(self):
         return self.project(lambda original: original.entry.events(TranscriptProjection(position=original.start)))
 
-    def publication_producer(self) -> NativeEntry | None:
+    @property
+    def input_reported(self) -> bool:
+        return any(message.input_id.reported
+                   for message in self.project(lambda original: original.entry.messages))
+
+    def require_entry(self) -> RecordedEntry:
         if not self.complete or self.entry is None:
             raise MalformedRecord("Native publication has incomplete evidence")
-        if self.entry.final_reply:
-            self.entry.require_entry_id()
-            return self.entry
+        return self.entry
+
+    def publication_producer(self) -> RecordedEntry | None:
+        entry = self.require_entry()
+        if entry.final_reply:
+            entry.require_entry_id()
+            return entry
         return None
+
+
+class NoNativeInput(NativeRecord):
+    """A parent chain that reached its root without an input record."""
+
+    def __init__(self) -> None:
+        super().__init__(0, 0, None, False)
+
+    def require_entry(self) -> Never:
+        raise RelationViolationError("Native publication has no tracked input ancestry")
 
 
 class StoredRecord(NativeRecord):
@@ -372,7 +391,7 @@ class NativeTranscript(TranscriptSource):
                 self.path.absolute(), header, user, session_entry_start=session_entry_start,
             )
 
-    def inputs_for(self, records: Sequence[NativeRecord], *, floor: int = 0) -> tuple[NativeRecord | None, ...]:
+    def inputs_for(self, records: Sequence[NativeRecord], *, floor: int = 0) -> tuple[NativeRecord, ...]:
         """Find the user input behind each record in one reverse walk for the batch.
 
         Parent IDs are followed back from the latest record; every intervening
@@ -380,7 +399,7 @@ class NativeTranscript(TranscriptSource):
         chain reaches a user boundary or a root. Tool rounds and branches cannot
         lend another input's publication proof.
         """
-        found: list[NativeRecord | None] = [None] * len(records)
+        found: list[NativeRecord] = [NoNativeInput()] * len(records)
         waiting: dict[str | RootEntry, list[int]] = defaultdict(list)
         latest = 0
         for position, record in enumerate(records):
@@ -410,7 +429,7 @@ class NativeTranscript(TranscriptSource):
                     break
         return tuple(found)
 
-    def input_for(self, record: NativeRecord):
+    def input_for(self, record: NativeRecord) -> NativeRecord:
         """Follow the native record's parents to find the user input that started it."""
         return self.inputs_for((record,))[0]
 
@@ -427,9 +446,7 @@ class NativeTranscript(TranscriptSource):
             if producer is None:
                 continue
             user = self.input_for(record)
-            if user is None:
-                raise RelationViolationError("Native publication has no tracked input ancestry")
-            entry = user.entry.require_tracked_user()
+            entry = user.require_entry().require_tracked_user()
             self.require_publication_context(entry, session_entry_start=user.start, files=files)
             return record, entry
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
