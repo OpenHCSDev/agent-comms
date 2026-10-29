@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_comms_project import AgentCommsProject
-from audit.ratchet import main
+from agent_comms.pinned_audit import audit
 
 if __name__ == "__main__":
-    raise SystemExit(main(AgentCommsProject(Path.cwd())))
+    raise SystemExit(audit.ratchet.main(AgentCommsProject(Path.cwd())))

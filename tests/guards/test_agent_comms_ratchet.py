@@ -20,10 +20,7 @@ import pytest
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms_project import AgentCommsProject
-from audit.project import AUDIT_SCRIPTS
-from audit.project_measures import DonePhaseBroken, UncarriedRecordFormat
-from audit.ratchet import Compared, compare
-from audit.source_measures import BroadSwallow, FamilyFlattened, NoneAbsence, StoreLockCalls
+from agent_comms.pinned_audit import audit
 from fixture_git import IDENTITY
 from process_tree_fixture import TREE, identities, ready
 
@@ -84,10 +81,10 @@ class Checkout:
                                    output=subprocess.PIPE) as child:
             yield child
 
-    def compare(self, base: str, head: str, *measured: type[Compared]) -> tuple[int, dict]:
+    def compare(self, base: str, head: str, *measured: type[audit.ratchet.Compared]) -> tuple[int, dict]:
         """The comparison's exit status and report, taking only the named measures'
         measurements. The command line itself is proven by the tests that launch it."""
-        result = compare(AgentCommsProject(self.path), base, head, self.root, 2, measured)
+        result = audit.ratchet.compare(AgentCommsProject(self.path), base, head, self.root, 2, measured)
         return int(result.failed), json.loads(json.dumps(result.report()))
 
 
@@ -100,7 +97,7 @@ def repo(tmp_path: Path, request) -> Checkout:
 
 def test_agent_comms_broad_swallows_stay_within_their_budget():
     root = SOURCE / "src/agent_comms"
-    assert sum(BroadSwallow.count(PROJECT, path.read_bytes(), str(path)) for path in root.rglob("*.py")) <= 29
+    assert sum(audit.source_measures.BroadSwallow.count(PROJECT, path.read_bytes(), str(path)) for path in root.rglob("*.py")) <= 29
 
 
 @pytest.mark.parametrize(
@@ -116,7 +113,7 @@ def test_agent_comms_broad_swallows_stay_within_their_budget():
     ],
 )
 def test_store_lock_calls_count_calls_not_spellings(source, expected):
-    assert StoreLockCalls.count(PROJECT, source.encode(), "src/agent_comms/example.py") == expected
+    assert audit.source_measures.StoreLockCalls.count(PROJECT, source.encode(), "src/agent_comms/example.py") == expected
 
 
 def test_store_lock_calls_skip_the_store_owners():
@@ -124,7 +121,7 @@ def test_store_lock_calls_skip_the_store_owners():
     source = b"with _store_lock(path):\n    pass"
     owners = PROJECT.lock_owners()
     assert all((SOURCE / "src" / owner).is_file() for owner in owners)
-    assert [StoreLockCalls.count(PROJECT, source, f"src/{owner}") for owner in owners] == [0] * len(owners)
+    assert [audit.source_measures.StoreLockCalls.count(PROJECT, source, f"src/{owner}") for owner in owners] == [0] * len(owners)
 
 
 def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):
@@ -133,10 +130,10 @@ def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):
     head = repo.commit({"turns.py": "def save(store):\n    pass\n",
                         "other.py": "def read(store):\n    with _store_lock(store.path, mode, contention):\n        pass\n"
                                     "    with _store_lock(store.path, mode, contention):\n        pass\n"})
-    status, report = repo.compare(base, head, StoreLockCalls)
+    status, report = repo.compare(base, head, audit.source_measures.StoreLockCalls)
     assert status == 1
-    grown = StoreLockCalls.at(f"{repo.root}/other.py").text
-    assert report["delta"] == {StoreLockCalls.at(f"{repo.root}/turns.py").text: -1, grown: 1}
+    grown = audit.source_measures.StoreLockCalls.at(f"{repo.root}/other.py").text
+    assert report["delta"] == {audit.source_measures.StoreLockCalls.at(f"{repo.root}/turns.py").text: -1, grown: 1}
     assert report["found"] == {grown: [{"path": f"{repo.root}/other.py", "line": line}
                                        for line in (2, 4)]}
 
@@ -191,7 +188,7 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
     subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=source, check=True, timeout=60)
     # A Git archive carries no submodule: the complete producer stamp's child reaches the
     # pinned audit only through the measurement's own source paths.
-    assert not (tmp_path / AUDIT_SCRIPTS.resolve().relative_to(SOURCE) / "audit").exists()
+    assert not (tmp_path / audit.project.AUDIT_SCRIPTS.resolve().relative_to(SOURCE) / "audit").exists()
     dependency = tmp_path / "dependencies"
     dependency.mkdir()
     (dependency / "parent_only_dependency.py").write_text("VERSION = 7\n")
@@ -212,7 +209,7 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
     (tmp_path / "src/agent_comms/probe_record.py").write_text(
         "raise RuntimeError('not archived')\n"
     )
-    forms = UncarriedRecordFormat.formats(
+    forms = audit.project_measures.UncarriedRecordFormat.formats(
         AgentCommsProject(tmp_path), revision, repo.root, {"src/agent_comms/probe_record.py"}
     )
     assert forms["agent_comms.probe_record.Record"].version == 7
@@ -236,14 +233,14 @@ def test_a_done_phase_fails_the_change_that_breaks_it(tmp_path: Path) -> None:
     base = repo.commit({"agent_comms/owned.py": owned})
     head = repo.commit({"agent_comms/owned.py": owned + "\n\ndef owns(value):\n"
                         "    return isinstance(value, Owned)\n"})
-    status, report = repo.compare(base, head, DonePhaseBroken)
+    status, report = repo.compare(base, head, audit.project_measures.DonePhaseBroken)
     assert status == 1
     assert report["delta"] == {
         "DonePhaseBroken:OwnTypeChecksPhase::src/agent_comms/owned.py:6": 1,
     }
     clean = repo.commit({"agent_comms/owned.py": owned + "\n\ndef owns(value):\n"
                          "    return value.owned()\n"})
-    assert repo.compare(base, clean, DonePhaseBroken)[0] == 0
+    assert repo.compare(base, clean, audit.project_measures.DonePhaseBroken)[0] == 0
 
 
 @pytest.mark.parametrize("root", ["src/agent_comms", "src/toad", "src/textual"])
@@ -259,12 +256,12 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
             "second.py": "def carry(value):\n    return value.declared_name\n",
         }
     )
-    status, report = repo.compare(base, head, FamilyFlattened)
+    status, report = repo.compare(base, head, audit.source_measures.FamilyFlattened)
     assert status == 1
-    assert report["delta"][FamilyFlattened.at(f"{repo.root}/first.py").text] == -2
-    assert report["delta"][FamilyFlattened.at(f"{repo.root}/second.py").text] == 1
-    assert FamilyFlattened.count(PROJECT, original.encode(), "consumer.py") == (
-        FamilyFlattened.occurrences(ast.parse(original))
+    assert report["delta"][audit.source_measures.FamilyFlattened.at(f"{repo.root}/first.py").text] == -2
+    assert report["delta"][audit.source_measures.FamilyFlattened.at(f"{repo.root}/second.py").text] == 1
+    assert audit.source_measures.FamilyFlattened.count(PROJECT, original.encode(), "consumer.py") == (
+        audit.source_measures.FamilyFlattened.occurrences(ast.parse(original))
     )
     original_modules = tuple(
         module for module in PROJECT.mechanism_modules() if module.parent == Path(repo.root)
@@ -283,13 +280,13 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
             **{path: original for path in facades},
         }
     )
-    status, report = repo.compare(head, moved, FamilyFlattened)
+    status, report = repo.compare(head, moved, audit.source_measures.FamilyFlattened)
     assert status == 1
-    assert report["delta"][FamilyFlattened.at(f"{repo.root}/another_codec.py").text] == 2
+    assert report["delta"][audit.source_measures.FamilyFlattened.at(f"{repo.root}/another_codec.py").text] == 2
     for module in original_modules:
-        assert report["head"][FamilyFlattened.at(module.as_posix()).text] == 0
+        assert report["head"][audit.source_measures.FamilyFlattened.at(module.as_posix()).text] == 0
     for path in facades:
-        assert report["head"][FamilyFlattened.at(f"{repo.root}/{path}").text] == 2
+        assert report["head"][audit.source_measures.FamilyFlattened.at(f"{repo.root}/{path}").text] == 2
 
 
 def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decoder(repo):
@@ -306,13 +303,13 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
     head = repo.commit(
         {name: source.replace("value: str", "value: str | None") for name, source in files.items()}
     )
-    status, report = repo.compare(base, head, NoneAbsence)
+    status, report = repo.compare(base, head, audit.source_measures.NoneAbsence)
     assert status == 1
     assert {identity: lines for identity, lines in report["introduced"].items() if lines} == {
-        NoneAbsence.at(f"{repo.root}/owner.py").text: [1],
-        NoneAbsence.at(f"{repo.root}/foreign.py").text: [5],
+        audit.source_measures.NoneAbsence.at(f"{repo.root}/owner.py").text: [1],
+        audit.source_measures.NoneAbsence.at(f"{repo.root}/foreign.py").text: [5],
     }
-    plan = NoneAbsence.at(f"{repo.root}/plan.py").text
+    plan = audit.source_measures.NoneAbsence.at(f"{repo.root}/plan.py").text
     assert report["introduced"][plan] == [] and report["delta"][plan] == 0
 
 
@@ -337,5 +334,5 @@ def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
     change to it is a different cache key."""
     indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
     assert indirect in PROJECT.measuring_sources()
-    assert (AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in PROJECT.measuring_sources()
+    assert (audit.project.AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in PROJECT.measuring_sources()
     assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")

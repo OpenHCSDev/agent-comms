@@ -36,10 +36,6 @@ from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.pinned_audit import audit
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
-from audit.checkers import CheckerSite, SideCounts, TypeErrors
-from audit.project import Project, StoredFormat
-from audit.ratchet import BaseSide, Compared, FileCount, HeadSide, Side
-from audit.source_measures import DecoratorBinding
 from module_layers import PACKAGE, StackClient
 
 SOURCES = Path(inspect.getfile(agent_comms)).parents[1]
@@ -47,7 +43,7 @@ REPOSITORY = SOURCES.parent
 
 
 @dataclass(frozen=True)
-class AgentCommsProject(Project[PlanPhase]):
+class AgentCommsProject(audit.project.Project[PlanPhase]):
     """agent-comms' own facts, read from the modules that declare them."""
 
     probe = (
@@ -95,7 +91,7 @@ class AgentCommsProject(Project[PlanPhase]):
     def selecting_calls(self) -> frozenset[str]:
         return frozenset({DeclaredFamily.member_named.__name__})
 
-    def stored_formats(self, ref: str, root: str, changed: set[str]) -> dict[str, StoredFormat]:
+    def stored_formats(self, ref: str, root: str, changed: set[str]) -> dict[str, audit.project.StoredFormat]:
         package = Path(root)
         while self.tracks(ref, str(package / "__init__.py")):
             package = package.parent
@@ -107,7 +103,7 @@ class AgentCommsProject(Project[PlanPhase]):
             # that only the head's package declares (#3576 moved field_codec under nominal).
             tree = Path(scratch)
             self.extract(ref, tree, str(package), str(reader))
-            sources = Compared.source_paths(root, tree)
+            sources = audit.ratchet.Compared.source_paths(root, tree)
             for stamp in tree.rglob("package_stamp.py"):
                 WheelStamp.of_source(tree / package, self.revision(ref),
                                      source_paths=sources).write(stamp)
@@ -115,11 +111,11 @@ class AgentCommsProject(Project[PlanPhase]):
             result = SpawnedProcess.run(
                 (sys.executable, "-c", self.probe, str(tree / reader),
                  os.pathsep.join(paths), *modules), cwd=scratch,
-                env=Compared.environment(root, tree), timeout=300,
+                env=audit.ratchet.Compared.environment(root, tree), timeout=300,
             )
         if result.returncode:
             raise ValueError(f"stored formats could not be read at {ref}: {result.stderr.decode()}")
-        return {name: StoredFormat(**form) for name, form in json.loads(result.stdout).items()}
+        return {name: audit.project.StoredFormat(**form) for name, form in json.loads(result.stdout).items()}
 
     def carried(self, base: str, head: str) -> bool:
         """A carry step is a module under STEPS declaring a member of the Carry family: one of
@@ -129,7 +125,7 @@ class AgentCommsProject(Project[PlanPhase]):
         families = self.carry_family()
         for path, source in self.sources(head, set(added)):
             tree = ast.parse(source, path)
-            bindings = [DecoratorBinding.of(family, tree, path) for family in families]
+            bindings = [audit.source_measures.DecoratorBinding.of(family, tree, path) for family in families]
             if any(binding.marks(base) for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
                    for base in node.bases for binding in bindings):
                 return True
@@ -166,7 +162,7 @@ class AgentCommsProject(Project[PlanPhase]):
 
 
 @dataclass(frozen=True)
-class ClientFileCount(FileCount):
+class ClientFileCount(audit.ratchet.FileCount):
     """Type errors in one stack client file, which the client's own code cannot add: both sides
     check the same client commit."""
 
@@ -175,14 +171,14 @@ class ClientFileCount(FileCount):
                 "that client file uses; run mypy on it to see which")
 
 
-class ClientTypeErrors(SideCounts):
+class ClientTypeErrors(audit.checkers.SideCounts):
     """Mypy errors in each stack client file that imports agent_comms, checked against each
     revision's package. Both sides read the same client commit, so the client's own errors cancel
     and an error the head adds is a name or signature the client uses that the change took away:
     #3110 deleted TurnState.settles as unused while Toad's conversation_turn.py:262 called it, and
     only the running app found it."""
 
-    finding = TypeErrors.finding
+    finding = audit.checkers.TypeErrors.finding
 
     @staticmethod
     @cache
@@ -205,7 +201,7 @@ class ClientTypeErrors(SideCounts):
 
     @classmethod
     def findings(cls, repo: AgentCommsProject, ref: str, client: StackClient,
-                 side: type[Side]) -> tuple[type[Side], tuple[CheckerSite, ...]]:
+                 side: type[audit.ratchet.Side]) -> tuple[type[audit.ratchet.Side], tuple[audit.checkers.CheckerSite, ...]]:
         # The pinned audit's git boundary, which pinned_audit puts on the path.
         commit = audit.repository.Repository(client.checkout).revision("HEAD")
         return side, repo.memo(partial(cls.checked, repo, ref, client, side),
@@ -213,21 +209,21 @@ class ClientTypeErrors(SideCounts):
 
     @classmethod
     def checked(cls, repo: AgentCommsProject, ref: str, client: StackClient,
-                side: type[Side]) -> tuple[CheckerSite, ...]:
+                side: type[audit.ratchet.Side]) -> tuple[audit.checkers.CheckerSite, ...]:
         selected = cls.selected(client)
         cache = repo.beside("mypy-clients") / client.name / side.family_name
         with tempfile.TemporaryDirectory(prefix="ratchet-client-") as scratch:
             repo.extract(ref, Path(scratch), "src")
             # The client checks under its own configuration, from its checkout.
             result = SpawnedProcess.run(
-                (sys.executable, "-m", *TypeErrors.mypy(
+                (sys.executable, "-m", *audit.checkers.TypeErrors.mypy(
                     cache, "--follow-imports=silent", "--ignore-missing-imports", *selected)),
                 cwd=client.checkout, timeout=600,
                 env={**os.environ, "MYPYPATH": os.pathsep.join(
                     (str(Path(scratch, "src")), str(client.checkout / "src")))},
             )
         output = cls.checker_output(result, f"{client.name} at {ref}")
-        return tuple(CheckerSite(f"{client.name}/{match['path']}", int(match["line"]),
+        return tuple(audit.checkers.CheckerSite(f"{client.name}/{match['path']}", int(match["line"]),
                                  match["message"])
                      for match in cls.finding.finditer(output) if match["path"] in selected)
 
@@ -240,12 +236,12 @@ class ClientTypeErrors(SideCounts):
         return tuple(partial(cls.findings, repo, side.ref(base, head), client, side)
                      for client in cls.clients(repo, head)
                      if cls.selected(client)
-                     for side in Side.sides())
+                     for side in audit.ratchet.Side.sides())
 
     @classmethod
-    def measured(cls, found: dict[type[Side], Counter[str]], changed: set[str]) -> list[str]:
+    def measured(cls, found: dict[type[audit.ratchet.Side], Counter[str]], changed: set[str]) -> list[str]:
         """The client files with an error on either side; changed paths are the package's."""
-        return sorted(found[BaseSide].keys() | found[HeadSide].keys())
+        return sorted(found[audit.ratchet.BaseSide].keys() | found[audit.ratchet.HeadSide].keys())
 
     @classmethod
     def at(cls, path: str) -> ClientFileCount:

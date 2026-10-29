@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
+import agent_comms
 from agent_comms import skills
 from agent_comms.pinned_audit import SKILL, ForeignAbsenceProbe, GodFunction, ParsedModule, audit
 from agent_comms.private_path import FileObservation, FileRevision
@@ -402,7 +403,9 @@ class AuditPatternPresent(PatternPresent):
     package sits inside it are pinned_audit's, read from the loaded skill."""
 
     def read(self, main: MainTree) -> bool:
-        submodule = main.repo.module_file(skills.__name__).with_suffix("") / SKILL.name
+        # The skills package's place under the source root, read from the loaded package.
+        installed = Path(skills.__path__[0]).relative_to(Path(agent_comms.__path__[0]).parent)
+        submodule = Path(main.repo.source, installed, SKILL.name)
         package = Path(audit.__path__[0]).relative_to(SKILL)
         pinned = main.pinned(submodule.as_posix())
         return self.satisfied(pinned.count(self.pattern, (package.as_posix(),)))

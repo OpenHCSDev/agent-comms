@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms_project import AgentCommsProject
-from audit.project_measures import UncarriedRecordFormat
+from agent_comms.pinned_audit import audit
 
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.cli_verbs.stop import StopCliCommand
@@ -127,9 +127,9 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
     record.write_text(record_source(version, fields))
     head = repo.commit(step)
     changed = {"src/agent_comms/record.py"}
-    assert UncarriedRecordFormat.counted(AgentCommsProject(tmp_path), base, head, changed,
+    assert audit.project_measures.UncarriedRecordFormat.counted(AgentCommsProject(tmp_path), base, head, changed,
                                          "src/agent_comms") == (
-        {UncarriedRecordFormat.total(): 0}, {UncarriedRecordFormat.total(): uncarried})
+        {audit.project_measures.UncarriedRecordFormat.total(): 0}, {audit.project_measures.UncarriedRecordFormat.total(): uncarried})
 
 
 def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):

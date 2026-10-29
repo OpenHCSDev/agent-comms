@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms_project import AgentCommsProject
-from audit.source_measures import RawRecordShapes
+from agent_comms.pinned_audit import audit
 
 from agent_comms.channel_coding_tools import CodingToolRequest
 from agent_comms.input_key import BusInputKey
@@ -85,6 +85,6 @@ def test_raw_shape_guard_reuses_the_existing_overlay_detector():
     project = AgentCommsProject(Path(__file__).resolve().parents[1])
     raw = b'def read(row):\n return row["a"], row["b"], row.get("c")\n'
     typed = b'def read(row):\n return row.a, row.b, row.c\n'
-    assert RawRecordShapes.count(project, raw, 'src/example.py') == 1
-    assert RawRecordShapes.count(project, typed, 'src/example.py') == 0
-    assert RawRecordShapes.count(project, raw, 'src/agent_comms/field_codec.py') == 1
+    assert audit.source_measures.RawRecordShapes.count(project, raw, 'src/example.py') == 1
+    assert audit.source_measures.RawRecordShapes.count(project, typed, 'src/example.py') == 0
+    assert audit.source_measures.RawRecordShapes.count(project, raw, 'src/agent_comms/field_codec.py') == 1
