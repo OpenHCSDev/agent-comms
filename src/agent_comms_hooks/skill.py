@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
 from agent_comms.held_orders import HeldOrders
@@ -204,6 +205,8 @@ class DealtDeck(ClaudeTranscriptHook):
 class DeckStart(DealtDeck):
     part_chars: ClassVar[int] = 60_000
     """The most characters one Read of a part returns in full."""
+    owner_prompts: ClassVar[int] = 6
+    """How many of the person's own last prompts the deal puts back in front of the session."""
 
     def take(self) -> tuple[str, ...]:
         """What this hook says: nothing to a session no bus binding names, the fleet's deck to
@@ -228,11 +231,34 @@ class DeckStart(DealtDeck):
             " your last start or compaction against them and say, one line each, every rule you"
             " broke and the action that broke it, and fix what you can: reading alone is passive,"
             " the audit is what finds the breaks (on 2026-10-27 one reread found six broken rules"
-            " in one session). This order is given once per session start or compaction;"
-            " a short slice of them comes back inline every few tool calls.\n"
+            " in one session). That audit is not optional: every tool but Read, and Write of"
+            f" {self.audit}, is refused until the audit is written there as JSON:"
+            ' {"rules": [{"rule": NAME, "broke": [each action since the last start or'
+            ' compaction that broke it; empty means kept]}, one entry for every rule you were'
+            ' dealt], "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are'
+            " doing about it right now}]}. This order is given once per session start or"
+            " compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(part) for part in parts),
+            self.owner_words(),
             reader.header(self),
         )
+
+    def owner_words(self) -> str:
+        """The person's own last prompts, verbatim from the transcript: the summary turned them
+        into its paraphrase and a next step, and on 2026-10-29 the session followed the
+        paraphrase while his words sat unanswered."""
+        return "\n\n".join((
+            "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first. Not your summary of it."
+            " Your audit answers each one, and your next action serves them, not the summary's"
+            " next step:",
+            *(f"> {words}" for words in self.prompts()),
+        ))
+
+    def prompts(self) -> tuple[str, ...]:
+        transcript = Path(self.transcript_path)
+        with transcript.open("rb") as stream:
+            return ClaudeJsonLines().owner_words(
+                stream, transcript.stat().st_size, self.owner_prompts)
 
     def held(self) -> str:
         """Every order the units hold, from the Todo store: a summary is a paraphrase."""
@@ -256,6 +282,11 @@ class DeckStart(DealtDeck):
         and no part counts as read until it is read again."""
         self.calls.unlink(missing_ok=True)
         self.parts_read.write_text("", encoding="utf-8")
+        self.audit.unlink(missing_ok=True)
+        self.audit_due.write_text(json.dumps({
+            "rules": [rule.name for rule in reader.rules()],
+            "owner_words": len(self.prompts()),
+        }), encoding="utf-8")
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
         self.parts.mkdir(exist_ok=True)
         for old in self.parts.iterdir():

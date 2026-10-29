@@ -95,6 +95,16 @@ class ClaudeTranscriptHook(ClaudeHook):
         """The names of the dealt parts read in full since the last deal, one per line."""
         return Path(self.transcript_path).with_suffix(".reread-done")
 
+    @property
+    def audit(self) -> Path:
+        """The session's audit of the dealt rules and the owner's words, written after reading."""
+        return Path(self.transcript_path).with_suffix(".audit.json")
+
+    @property
+    def audit_due(self) -> Path:
+        """What the audit must answer: every dealt rule and each owner prompt shown."""
+        return Path(self.transcript_path).with_suffix(".audit-due.json")
+
     def tail(self) -> list[bytes]:
         """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""
         with open(self.transcript_path, "rb") as transcript:

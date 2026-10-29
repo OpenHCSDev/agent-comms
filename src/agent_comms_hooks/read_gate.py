@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
 from agent_comms_hooks.forks import SeatedSubagent
@@ -37,6 +38,55 @@ class ReadInput(HookRecord):
     def covers(self, part: Path) -> bool:
         """Whether this read returned every line of the part."""
         return self.offset <= 1 and self.limit >= len(part.read_text(encoding="utf-8").splitlines())
+
+
+@dataclass(frozen=True)
+class WriteInput(HookRecord):
+    """The Write tool's input: the gate only needs where it writes."""
+
+    file_path: Path
+
+
+@dataclass(frozen=True)
+class RuleAudit:
+    """One dealt rule, and each action since the last start or compaction that broke it."""
+
+    rule: str
+    broke: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class OwnerWordsAnswer:
+    """One of the owner's own prompts the deal showed, and what the session is doing about it."""
+
+    words: str
+    doing: str
+
+
+@dataclass(frozen=True)
+class SessionAudit:
+    """The audit a session writes after reading its deal, decoded once."""
+
+    rules: tuple[RuleAudit, ...]
+    owner_words: tuple[OwnerWordsAnswer, ...]
+
+
+@dataclass(frozen=True)
+class AuditDue:
+    """What the deal requires the audit to answer: the dealt rules and the prompts shown."""
+
+    rules: frozenset[str]
+    owner_words: int
+
+    def refusal(self, audit: SessionAudit) -> str:
+        """Why this audit does not answer the deal, or nothing when it does."""
+        missing = sorted(self.rules - {entry.rule for entry in audit.rules})
+        if missing:
+            return "the audit skips the dealt rules " + ", ".join(missing)
+        if len(audit.owner_words) < self.owner_words:
+            return (f"the audit answers {len(audit.owner_words)} of the owner's"
+                    f" {self.owner_words} prompts shown")
+        return ""
 
 
 class DefaultGate(ABC):
@@ -62,6 +112,40 @@ class GatedCall(ClaudeToolHook, DeclaredFamily):
 
     def completed(self) -> None:
         """PostToolUse: what this completed call records; most record nothing."""
+
+    def gate(self) -> None:
+        """Refuse this call while a dealt part is unread or the audit does not answer the deal."""
+        if unread := self.unread():
+            self.respond(
+                permissionDecision="deny",
+                permissionDecisionReason=(
+                    "Read the rules you were dealt first, each in full with the Read tool (no"
+                    " offset or limit): " + ", ".join(str(part) for part in unread)
+                    + ". Your summary is a paraphrase of them, not a reading."),
+            )
+        elif refusal := self.unaudited():
+            self.respond(
+                permissionDecision="deny",
+                permissionDecisionReason=(
+                    f"Reading is passive; {refusal}. Write the audit to {self.audit} as the deal"
+                    " ordered: every dealt rule with each action that broke it, and what you are"
+                    " doing about each of Tristan's prompts it quoted. On 2026-10-29 a session"
+                    " read every rule after compaction, skipped this audit, and repeated the"
+                    " first story in them for seven hours."),
+            )
+
+    def unaudited(self) -> str:
+        """Why no tool may run yet for want of the audit, or nothing once it answers the deal."""
+        if not self.audit_due.exists():
+            return ""
+        due = FieldCodec.decode(AuditDue, json.loads(self.audit_due.read_text(encoding="utf-8")))
+        if not self.audit.exists():
+            return "no audit is written"
+        try:
+            audit = FieldCodec.decode(SessionAudit, json.loads(self.audit.read_text(encoding="utf-8")))
+        except (ValueError, MalformedRecord) as error:
+            return f"the audit does not decode: {error}"
+        return due.refusal(audit)
 
     def unread(self) -> tuple[Path, ...]:
         """The dealt parts not yet read in full since the last deal. A deal writes the read
@@ -90,17 +174,19 @@ class ReadCall(GatedCall, declared_name="Read"):
 
 @dataclass(frozen=True)
 class OtherCall(GatedCall, DefaultGate):
-    """Any other tool waits for every dealt part to be read."""
+    """Any other tool waits for every dealt part to be read and the audit to answer the deal."""
 
     def judge(self) -> None:
-        if unread := self.unread():
-            self.respond(
-                permissionDecision="deny",
-                permissionDecisionReason=(
-                    "Read the rules you were dealt first, each in full with the Read tool (no"
-                    " offset or limit): " + ", ".join(str(part) for part in unread)
-                    + ". Your summary is a paraphrase of them, not a reading."),
-            )
+        self.gate()
+
+
+@dataclass(frozen=True)
+class WriteCall(GatedCall, declared_name="Write"):
+    """Writing the audit itself is the way through the gate; any other write waits like the rest."""
+
+    def judge(self) -> None:
+        if WriteInput.decode(self.tool_input).file_path.resolve() != self.audit.resolve():
+            self.gate()
 
 
 @dataclass(frozen=True)
