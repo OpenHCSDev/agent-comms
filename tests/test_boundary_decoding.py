@@ -4,6 +4,9 @@ import hashlib
 
 import pytest
 
+from agent_comms.pinned_audit import audit
+from audit.source_measures import RawRecordShapes
+
 from agent_comms.channel_coding_tools import CodingToolRequest
 from agent_comms.input_key import BusInputKey
 from agent_comms.cli_bridges.claude_protocol import ClaudeHeader
@@ -78,8 +81,6 @@ def test_native_source_receipt_checks_bytes_without_installing(tmp_path):
 
 
 def test_raw_shape_guard_reuses_the_existing_overlay_detector():
-    from debt_ratchet import RawRecordShapes
-
     raw = b'def read(row):\n return row["a"], row["b"], row.get("c")\n'
     typed = b'def read(row):\n return row.a, row.b, row.c\n'
     assert RawRecordShapes.count(raw, 'src/example.py') == 1

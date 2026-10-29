@@ -39,7 +39,8 @@ from pathlib import Path
 
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
-from typing_names import TypingImports, TypingReference
+from agent_comms.pinned_audit import audit
+from audit.typing_names import TypingImports, TypingReference
 
 from agent_comms.declared_family import DeclaredFamily
 

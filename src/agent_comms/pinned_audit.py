@@ -18,4 +18,4 @@ if str(SCRIPTS) not in sys.path:
 import audit as audit  # noqa: E402
 from audit.findings import GodFunction as GodFunction  # noqa: E402
 from audit.findings import ParsedModule as ParsedModule  # noqa: E402
-from audit.measures import ForeignAbsenceProbe as ForeignAbsenceProbe  # noqa: E402
+from audit.source_measures import ForeignAbsenceProbe as ForeignAbsenceProbe  # noqa: E402

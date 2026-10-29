@@ -41,6 +41,7 @@ from agent_comms.phase_evidence import (
     PatternAbsent,
     PatternPresent,
     PhaseEvidence,
+    PinnedPatternPresent,
     PlanReading,
     RestatedMembersAbsent,
     RulesetGates,
@@ -551,7 +552,8 @@ class PlainStrIdRatchetPhase(Id128NominalPhase):
     """2: no file gains a plain ``str`` annotation on an id-named field or parameter."""
 
     after = (NominalIdTypePhase,)
-    evidence = PatternPresent(r"^class PlainStrIdAnnotation\(", ("tools/debt_ratchet.py",))
+    evidence = PinnedPatternPresent(r"^class PlainStrIdAnnotation\(", ("scripts/audit",),
+                                    submodule="src/agent_comms/skills/refactor-audit")
 
 
 class ClaimIdsPhase(Id128NominalPhase):
@@ -1019,7 +1021,8 @@ class MaintenanceInWritePhase(StoreGuardsPhase):
 class LockCensusPhase(StoreGuardsPhase):
     """5: the debt ratchet counts lock calls outside the store owners and refuses growth."""
 
-    evidence = PatternPresent(r"^class StoreLockCalls\(", ("tools/debt_ratchet.py",))
+    evidence = PinnedPatternPresent(r"^class StoreLockCalls\(", ("scripts/audit",),
+                                    submodule="src/agent_comms/skills/refactor-audit")
 
 
 class ScopedReadsPhase(StoreGuardsPhase):

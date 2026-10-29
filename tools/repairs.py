@@ -25,7 +25,11 @@ from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
-from debt_ratchet import FunctionLocalImport, LocatedSource, compare, production_paths
+from agent_comms.pinned_audit import audit
+from audit import agent_comms_project
+from audit.ratchet import LocatedSource, compare
+from audit.repository import Repository
+from audit.source_measures import FunctionLocalImport
 from module_layers import Package, TopLevelNames
 from nominal_refactor_advisor.codemod import (
     CodemodPlanSequence,
@@ -421,13 +425,14 @@ def main() -> int:
     if args.all:
         files = {
             measure: sorted(
-                path for path in production_paths(repo, "HEAD") if path.startswith(root)
+                path for path in Repository(repo).production_paths("HEAD")
+                if path.startswith(root)
             )
             for measure in (repair.repairs for repair in Repair.members_with(Repair))
         }
     else:
         found = compare(
-            repo,
+            Repository(repo),
             args.base,
             args.head,
             args.root,

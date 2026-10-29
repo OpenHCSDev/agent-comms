@@ -99,6 +99,15 @@ class MainTree:
             )
         )
 
+    def pinned(self, path: str) -> MainTree:
+        """The tree of the submodule this commit pins at ``path``: another repository's tree,
+        read at exactly the commit its gitlink names, from that repository's own objects."""
+        entry, _, _ = Repo.git(self.repo.checkout, "ls-tree", self.commit, "--", path).partition("\t")
+        match entry.split():
+            case [_, "commit", commit]:
+                return MainTree(Repo.of(self.repo.checkout / path), commit)
+        raise ValueError(f"{path} is no submodule at {self.commit}")
+
     def module(self, path: str) -> ParsedModule:
         source = Repo.git(self.repo.checkout, "show", f"{self.commit}:{path}")
         return ParsedModule(path, source, ast.parse(source, filename=path), path)
@@ -389,6 +398,20 @@ class PatternPresent(PatternEvidence):
 
 
 @dataclass(frozen=True)
+class PinnedPatternPresent(PatternPresent):
+    """A pattern in the tree of a submodule main pins, at the commit it pins: code this
+    repository runs from another repository."""
+
+    submodule: str = field(kw_only=True)
+
+    def read(self, main: MainTree) -> bool:
+        return self.satisfied(main.pinned(self.submodule).count(self.pattern, self.paths))
+
+    def describe(self) -> str:
+        return f"{self.pattern!r} in {' '.join(self.paths)} of the {self.submodule} main pins"
+
+
+@dataclass(frozen=True)
 class DocumentPatternPresent(PatternPresent):
     """A recorded document fact, rather than executable Python source."""
 
@@ -668,7 +691,7 @@ class NoAbsenceProbes(MainEvidence):
     def read(self, main: MainTree) -> bool:
         """Every node is offered to the probe, whose own pattern decides what it counts."""
         return not any(
-            ForeignAbsenceProbe.count(node)
+            ForeignAbsenceProbe.occurrences(node)
             for module in main.present_modules(self.paths)
             for node in ast.walk(module.tree)
         )
