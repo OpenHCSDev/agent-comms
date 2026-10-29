@@ -1,4 +1,4 @@
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, Repo
 from agent_comms.field_codec import FieldCodec, GoalId
 
 """External contracts and adding commands without editing any consumer catalog."""
@@ -46,7 +46,8 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     send_arguments = ["user-send", "--to", "a", "--body", "hello"]
     with pytest.raises(ValueError):
         parse(send_arguments)
-    assert parse([*send_arguments, "--worktree", str(tmp_path)]).worktree == str(tmp_path)
+    Repo.git(tmp_path, "init", "--quiet")
+    assert parse([*send_arguments, "--worktree", str(tmp_path)]).worktree == Checkout.checked(tmp_path)
     invoke = parse(["tool", "--tool", "comms_threads"])
     assert invoke.arguments == {}
     send = parse(["send", "--from", "a", "--to", "b", "--body", "hello"])
