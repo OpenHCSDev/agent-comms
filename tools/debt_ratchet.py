@@ -2658,7 +2658,7 @@ class UncarriedRecordFormat(ChangeMeasure):
             )
         if result.returncode:
             raise ValueError(f"{cls.__name__} could not measure {ref}: {result.stderr.decode()}")
-        return {name: StoredForm.from_wire(form) for name, form in json.loads(result.stdout).items()}
+        return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
     @classmethod
     def counted(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
