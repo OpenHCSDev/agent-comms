@@ -501,6 +501,11 @@ class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind")
     def require_publishable(cls, message: Message, roots: SourceRoots) -> None:
         """Checks a send must pass before publication; base kinds declare none."""
 
+    @classmethod
+    def allows_automatic_reply(cls, message: Message) -> bool:
+        """Human inputs need a reply even when their committed kind is informational."""
+        return bool(message.sender_role.human(message))
+
 
 class SendableMessageKind(MessageKind, declared_name=None):
     """The declared kinds accepted by generic message commands."""
@@ -543,6 +548,10 @@ class InfoKind(SendableMessageKind):
 
 class NeedsAnswerKind(SendableMessageKind, declared_name=None):
     """Questions, alerts and handoffs ask their recipient to act."""
+
+    @classmethod
+    def allows_automatic_reply(cls, message: Message) -> bool:
+        return True
 
 
 class QuestionKind(NeedsAnswerKind):
@@ -1032,8 +1041,14 @@ class Message(MessageInput, TurnOrigin):
         """The exact response destination owned by this opening message."""
         return CommandTarget.named(self.target).reply_target(self.sender)
 
+    def automatic_reply_targets(self) -> tuple[str, ...]:
+        """An owed answer uses the destination's existing automatic-reply route."""
+        if not self.type.allows_automatic_reply(self):
+            return ()
+        return CommandTarget.named(self.target).automatic_reply_targets(self.sender)
+
     def opening_references(self, recipient: str) -> tuple[MessageReference, ...]:
-        """A confirmed delivery can open a reply only for its policy's intended reader."""
+        """A confirmed delivery may open its intended reader's turn without owing a reply."""
         return ((self.reference,)
                 if self.role.response_policy(self).starts_turn_for(self, recipient) else ())
 

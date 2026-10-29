@@ -10,13 +10,16 @@ from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import ClaudeRecord, ClaudeSession
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
-from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
+from agent_comms.cli_bridges.shared import Binding, Options, StoredBinding, Watch
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.harness_delivery_states import DeliveredOutcome
-from agent_comms.messages import Message, QuestionKind
+from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Message, MessageKind, NoticeRole, QuestionKind
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.repo import Checkout
+from agent_comms.turn_digests import LastTurns
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.errors import RelationViolationError
 from agent_comms.runtime_updates import AllTurnsCancelled, AllTurnsEnded, FinishedTurn, RuntimeUpdate, ThreadOutput
@@ -92,7 +95,7 @@ async def test_only_opening_deliveries_receive_the_turns_final(
     output.publish_batch(list(opening_record('reply-turn').updates(session)))
     for record in prefix:
         output.publish_batch(list(record.updates(session)))
-    direct = bridge.comms.messaging.send('claude-code', 'viewer', 'a delivered DM').message
+    direct = bridge.comms.messaging.send('claude-code', 'viewer', 'a delivered DM', QuestionKind).message
     observations = await confirm_messages(bridge, output, session, (direct,))
     output.publish_batch(list(assistant_record('final', 'Private answer').updates(session)))
     assert replies_after(bridge, direct.seq) == ()
@@ -108,7 +111,7 @@ async def test_only_opening_deliveries_receive_the_turns_final(
 
     # Completion opens a fresh window; another sender can open the next turn.
     following = session
-    next_dm = bridge.comms.messaging.send('peer', 'viewer', 'a later opening DM').message
+    next_dm = bridge.comms.messaging.send('peer', 'viewer', 'a later opening DM', QuestionKind).message
     await confirm_messages(bridge, output, following, (next_dm,), prompt_id='following-turn')
     output.publish_batch(list(assistant_record('next-final', 'Next answer').updates(following)))
     finish_reply(output, following)
@@ -123,8 +126,8 @@ async def test_channel_mention_and_dm_share_a_turn_without_broadcasting_the_fina
     comms.channels.create_tag('comms')
     for name in ('claude-code', 'viewer', 'peer'):
         comms.channels.update_tags(name, add=frozenset({'comms'}))
-    channel = comms.messaging.send('peer', '#comms', '@viewer please investigate').message
-    direct = comms.messaging.send('claude-code', 'viewer', 'please answer me privately').message
+    channel = comms.messaging.send('peer', '#comms', '@viewer please investigate', QuestionKind).message
+    direct = comms.messaging.send('claude-code', 'viewer', 'please answer me privately', QuestionKind).message
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     await confirm_messages(bridge, output, session, (channel, direct))
@@ -315,7 +318,7 @@ async def test_same_prompt_id_wake_after_retirement_refuses_instead_of_dropping(
 ) -> None:
     output = bridge.output_type.for_comms(bridge.comms.transcripts.external('viewer'), bridge.comms)
     session = ClaudeSession()
-    first = bridge.comms.messaging.send('peer', 'viewer', 'First source turn').message
+    first = bridge.comms.messaging.send('peer', 'viewer', 'First source turn', QuestionKind).message
     await confirm_messages(bridge, output, session, (first,), prompt_id='reused-prompt')
     finish_reply(output, session)
     later = bridge.comms.messaging.send('peer', 'viewer', 'New wake with reused prompt', QuestionKind).message
@@ -323,3 +326,130 @@ async def test_same_prompt_id_wake_after_retirement_refuses_instead_of_dropping(
         await confirm_messages(bridge, output, session, (later,), prompt_id='reused-prompt')
     assert output.transcript.opening_for(NativeTurnId('reused-prompt')) == ()
     assert bridge.comms.bus.bus.unanswered_references((later.seq,), frozenset({'viewer'})) == (later.reference,)
+
+
+def assert_retained_final(output: ThreadOutput, turn_id: str, text: str) -> None:
+    turn, = output.transcript.turns(LastTurns(count=1))
+    assert turn.turn_id == NativeTurnId(turn_id)
+    assert tuple(part for event in turn.events for part in event.assistant_parts()) == (text,)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('kind', 'targets'), (
+    (InfoKind, ()), (AckKind, ()),
+    (QuestionKind, ('claude-code',)), (HandoffKind, ('claude-code',)),
+    (AlertKind, ('claude-code',)),
+))
+async def test_original_kind_owns_automatic_answer_without_suppressing_the_turn(
+    bridge: ClaudeBridge, kind: type[MessageKind], targets: tuple[str, ...],
+) -> None:
+    comms = bridge.comms
+    original = comms.messaging.send('claude-code', 'viewer', 'An original direct message', kind).message
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
+    session = ClaudeSession()
+    observations = await confirm_messages(bridge, output, session, (original,), prompt_id='kind-turn')
+    assert output.transcript.opening_for(NativeTurnId('kind-turn')) == (original.reference,)
+    output.publish_batch(list(assistant_record('kind-final', 'Holding').updates(session)))
+    assert replies_after(bridge, original.seq) == ()
+    finish_reply(output, session)
+    expected = tuple((target, 'Holding') for target in targets)
+    assert replies_after(bridge, original.seq) == expected
+    assert_retained_final(output, 'kind-turn', 'Holding')
+    sent = tuple(message for message in comms.bus.bus.message_history()
+                 if message.sender == 'viewer' and message.seq > original.seq)
+    assert tuple(message.answers for message in sent) == tuple((original.reference,) for _ in targets)
+    finish_reply(output, session)
+    for record in observations:
+        output.publish_batch([await update.observed(bridge) for update in record.updates(session)])
+    assert replies_after(bridge, original.seq) == expected
+
+
+@pytest.mark.asyncio
+async def test_human_info_keeps_its_direct_answer(bridge: ClaudeBridge) -> None:
+    comms = bridge.comms
+    original = comms.messaging.send_user_message(
+        ThreadTarget('viewer'), 'A human input', worktree=Checkout(bridge.options.state.parent))
+    assert original.type is InfoKind
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
+    session = ClaudeSession()
+    await confirm_messages(bridge, output, session, (original,), prompt_id='human-turn')
+    assert output.transcript.opening_for(NativeTurnId('human-turn')) == (original.reference,)
+    output.publish_batch(list(assistant_record('human-final', 'Human answer').updates(session)))
+    finish_reply(output, session)
+    assert replies_after(bridge, original.seq) == ((original.sender, 'Human answer'),)
+    assert_retained_final(output, 'human-turn', 'Human answer')
+
+
+@pytest.mark.asyncio
+async def test_notice_question_is_confirmed_without_opening_a_reply(bridge: ClaudeBridge) -> None:
+    comms = bridge.comms
+    original = comms.messaging.send('peer', 'viewer', 'A question-shaped notice',
+                                    QuestionKind, role=NoticeRole()).message
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
+    session = ClaudeSession()
+    await confirm_messages(bridge, output, session, (original,), prompt_id='notice-turn')
+    assert output.transcript.opening_for(NativeTurnId('notice-turn')) == ()
+    output.publish_batch(list(assistant_record('notice-final', 'Holding').updates(session)))
+    finish_reply(output, session)
+    assert replies_after(bridge, original.seq) == ()
+    assert_retained_final(output, 'notice-turn', 'Holding')
+
+
+@pytest.mark.asyncio
+async def test_mixed_info_and_question_answer_only_the_asked_sender(bridge: ClaudeBridge) -> None:
+    comms = bridge.comms
+    information = comms.messaging.send('peer', 'viewer', 'An informational opening').message
+    question = comms.messaging.send('claude-code', 'viewer', 'An asked opening', QuestionKind).message
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
+    session = ClaudeSession()
+    await confirm_messages(bridge, output, session, (information, question), prompt_id='mixed-turn')
+    assert output.transcript.opening_for(NativeTurnId('mixed-turn')) == (
+        information.reference, question.reference)
+    output.publish_batch(list(assistant_record('mixed-final', 'One asked answer').updates(session)))
+    finish_reply(output, session)
+    assert replies_after(bridge, information.seq) == (('claude-code', 'One asked answer'),)
+    final, = (message for message in comms.bus.bus.message_history()
+              if message.sender == 'viewer' and message.seq > question.seq)
+    assert final.answers == (question.reference,)
+    assert_retained_final(output, 'mixed-turn', 'One asked answer')
+
+
+@pytest.mark.asyncio
+async def test_two_real_bridges_stop_after_the_question_receives_one_info_final(
+    bridge: ClaudeBridge, tmp_path: Path,
+) -> None:
+    comms = bridge.comms
+    question = comms.messaging.send('claude-code', 'viewer', 'An asked opening', QuestionKind).message
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
+    session = ClaudeSession()
+    await confirm_messages(bridge, output, session, (question,), prompt_id='asked-turn')
+    assert output.transcript.opening_for(NativeTurnId('asked-turn')) == (question.reference,)
+    output.publish_batch(list(assistant_record('asked-final', 'The requested answer').updates(session)))
+    finish_reply(output, session)
+    final, = (message for message in comms.bus.bus.message_history()
+              if message.sender == 'viewer' and message.seq > question.seq)
+    assert (final.target, final.type, final.answers) == ('claude-code', InfoKind, (question.reference,))
+    assert_retained_final(output, 'asked-turn', 'The requested answer')
+
+    state = tmp_path / 'answer-recipient-bridge'
+    binding = Binding(root=str(comms.root), owner=comms.registry.require('claude-code').incarnation,
+                      thread='session', start=Binding.bus_head(str(comms.root)))
+    with Binding.open(state) as db:
+        binding.bind(db)
+        recipient = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+        await recipient.options.operation.prepare(recipient)
+        recipient_output = recipient.output_type.for_comms(comms.transcripts.external('claude-code'), comms)
+        recipient_session = ClaudeSession()
+        observations = await confirm_messages(recipient, recipient_output, recipient_session,
+                                              (final,), prompt_id='info-turn')
+        assert recipient_output.transcript.opening_for(NativeTurnId('info-turn')) == (final.reference,)
+        recipient_output.publish_batch(list(assistant_record('info-final', 'Holding').updates(recipient_session)))
+        finish_reply(recipient_output, recipient_session)
+        assert replies_after(recipient, final.seq) == ()
+        assert comms.bus.bus.revision() == final.seq
+        assert_retained_final(recipient_output, 'info-turn', 'Holding')
+        finish_reply(recipient_output, recipient_session)
+        for record in observations:
+            recipient_output.publish_batch([await update.observed(recipient)
+                                            for update in record.updates(recipient_session)])
+        assert comms.bus.bus.revision() == final.seq

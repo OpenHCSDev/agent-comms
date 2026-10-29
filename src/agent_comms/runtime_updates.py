@@ -16,7 +16,6 @@ from . import activity
 from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
-from .channel_targets import CommandTarget
 from .message_reference import MessageReference
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import (
@@ -284,8 +283,7 @@ class ReplyingThreadOutput(ThreadOutput):
 
     def end_turn(self, turn_id: NativeTurnId) -> None:
         opening = self.messaging.bus.bus.messages_for_references(self.transcript.opening_for(turn_id))
-        targets = {target for message in opening
-                   for target in CommandTarget.named(message.target).automatic_reply_targets(message.sender)}
+        targets = {target for message in opening for target in message.automatic_reply_targets()}
         for key in tuple(self.pending):
             if key.turn_id != turn_id:
                 continue

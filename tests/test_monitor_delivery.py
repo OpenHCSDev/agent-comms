@@ -54,7 +54,7 @@ from agent_comms.runtime_updates import (
     AllTurnsEnded, FinishedItem, FinishedTurn, HiddenItem, RuntimeUpdate,
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.threads import Thread
 
 
@@ -1089,15 +1089,15 @@ async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_send
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(('target', 'body', 'expected'), (
-    ('viewer', 'ordinary direct request', ('claude-code',)),
-    ('#monitor', 'channel information', ()),
-    ('#monitor', '@viewer please answer this channel request', ()),
+@pytest.mark.parametrize(('target', 'body', 'kind', 'expected'), (
+    ('viewer', 'ordinary direct request', QuestionKind, ('claude-code',)),
+    ('#monitor', 'channel information', InfoKind, ()),
+    ('#monitor', '@viewer please answer this channel request', QuestionKind, ()),
 ))
 async def test_confirmed_reply_routes_follow_direct_and_channel_policy(
-    bridge, reply_end, target, body, expected,
+    bridge, reply_end, target, body, kind, expected,
 ):
-    message = bridge.comms.messaging.send('claude-code', target, body).message
+    message = bridge.comms.messaging.send('claude-code', target, body, kind).message
     await confirm_and_finish_reply(bridge, message, expected, reply_end)
 
 
