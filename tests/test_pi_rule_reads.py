@@ -60,7 +60,7 @@ async def test_saved_pi_requires_full_reads_and_rearms_on_compaction(tmp_path, n
                 ("bash", {"command": f"printf read > {marker}"}),
             ]
             async with fixture.original_input(agent, session_id, "Read the rules, then write the marker.") as turn:
-                assert isinstance(turn.context.segments[0], RuleReadingSegment)
+                assert sum(isinstance(segment, RuleReadingSegment) for segment in turn.context.segments) == 1
                 await turn.prepare_native()
                 await turn.stream()
             assert not blocked.exists()
@@ -105,8 +105,8 @@ async def test_saved_pi_requires_full_reads_and_rearms_on_compaction(tmp_path, n
             fixture.provider.plan = [("bash", {"command": f"touch {blocked}"})]
             async with fixture.original_input(agent, session_id, "After compaction, read before using bash.") as turn:
                 context = await persistent.context_for_input(turn.thread, turn.context)
-                assert isinstance(context.segments[0], RuleReadingSegment)
-                assert all(str(part) in context.segments[0].text() for part in child.rule_parts)
+                order = next(segment for segment in context.segments if isinstance(segment, RuleReadingSegment))
+                assert all(str(part) in order.text() for part in child.rule_parts)
                 await turn.prepare_native()
                 await turn.stream()
             assert not blocked.exists()

@@ -20,6 +20,8 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, TurnId
 from .locked_store import DocumentBytes, LockedStore, RegistryFile
 from .maintenance_barrier import CarriedDocument
+from .instruction_deck import DeckParts, DeckReader
+from .participant_identity import ParticipantIdentity
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
@@ -285,6 +287,11 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
 
     def empty(self) -> RegistryDocument:
         return RegistryDocument()
+
+    def instruction_parts(self, directory: Path, owner: ParticipantIdentity) -> tuple[Path, ...]:
+        """Read current commander membership when this session's context resets."""
+        reader = DeckReader.for_owner(self.snapshot(), owner)
+        return DeckParts.beside_session(directory).prepare(reader)
 
     def _read_unlocked(self) -> RegistryDocument:
         return self.read_revision_unlocked().document

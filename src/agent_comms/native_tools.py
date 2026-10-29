@@ -163,8 +163,9 @@ class ReadTool(ReadAction, PathTool, CodingTool):
 
     def require_instructions(self, child: PiSessionChild) -> None:
         # A slice never counts. Even an unsliced call must return the exact full text.
-        if self.offset == UnsuppliedArgument() and self.limit == UnsuppliedArgument():
-            child.begin_part_read(self.call_id, self.path)
+        child.begin_part_read(
+            self.call_id, self.path,
+            full_read=self.offset == UnsuppliedArgument() and self.limit == UnsuppliedArgument())
 
     def completed_instruction_read(self, child: PiSessionChild, result: PiToolResult) -> None:
         child.completed_part_read(self.call_id, result)

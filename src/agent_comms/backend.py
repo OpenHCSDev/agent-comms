@@ -63,6 +63,7 @@ from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
+from .registry_store import RegistryStore
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
@@ -416,6 +417,7 @@ class NativeSession(MroDispatch, ABC):
         with self.startup.measurements.operation("native_open"):
             return await self.native_session.open(
                 self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,
+                registry=RegistryStore.at(self.launch.root),
             )
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:

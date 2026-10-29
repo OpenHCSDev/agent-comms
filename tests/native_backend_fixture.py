@@ -147,6 +147,8 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 input_id=InputId.mint(),
             ) as reservation:
                 item = reservation.item
+                agent.inputs.state(session_id).queued[item.input_id] = item
+                resources.push_async_callback(item.finish, agent.inputs, session_id)
                 resources.push_async_callback(reservation.release().aclose)
             # Native acquisition begins after the wire reservation ends; its
             # rollback actions remain with this turn until acquisition finishes.
