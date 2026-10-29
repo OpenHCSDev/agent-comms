@@ -68,7 +68,7 @@ from agent_comms.message_reference import (
 )
 from agent_comms.registration import Registration
 from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.turn_item import NativeTurnId, NoSourceTurn, SourceTurn
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
@@ -115,7 +115,6 @@ from .monitor import (
 
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
-    from agent_comms.importing import ImportBuffer
     from .claude_protocol import ReadResultObserved
 
 
@@ -1493,12 +1492,10 @@ class DeliveredInput(RuntimeUpdate):
     """The observed original references, bound by their source turn."""
 
     references: tuple[MessageReference, ...] = field(default=(), kw_only=True)
+    source_turn: SourceTurn = field(default_factory=NoSourceTurn, kw_only=True)
 
     def publish(self, output: ThreadOutput) -> None:
-        """An observation without a source turn cannot open an answer."""
-
-    def in_turn(self, turn_id: NativeTurnId) -> RuntimeUpdate:
-        return TurnDelivery(turn_id, self)
+        output.delivered(self.source_turn.require_id(), self.references)
 
     async def observed(self, bridge: TranscriptBridge) -> DeliveredInput:
         return self
@@ -1516,24 +1513,7 @@ class ConfirmedDelivery(DeliveredInput):
 
 
 @dataclass(frozen=True)
-class TurnDelivery(RuntimeUpdate):
-    """The source's turn identity binds its observed delivery before publication."""
-
-    turn_id: NativeTurnId
-    delivery: DeliveredInput
-
-    async def observed(self, bridge: TranscriptBridge) -> RuntimeUpdate:
-        return replace(self, delivery=await self.delivery.observed(bridge))
-
-    def publish(self, output: ThreadOutput) -> None:
-        output.delivered(self.turn_id, self.delivery.references)
-
-    def add_to(self, history: ImportBuffer) -> None:
-        self.delivery.add_to(history)
-
-
-@dataclass(frozen=True)
-class BridgeInputObserved(HiddenItem, DeliveredInput):
+class BridgeInputObserved(DeliveredInput, HiddenItem):
     """A harness echoes our exact client input in its own ordered transcript."""
 
     message_id: MessageId

@@ -58,7 +58,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import DeclaredWireFamily, WireModel
@@ -442,7 +442,7 @@ class UserItem(Item):
             client_id = FieldCodec.decode(str, self.clientId)
             message_id = FieldCodec.decode(MessageId, client_id.removeprefix(BusInput.client_prefix))
             return BridgeInputObserved(events, message_id, '\n'.join(
-                part.display for part in self.content)).in_turn(turn_id)
+                part.display for part in self.content), source_turn=NamedSourceTurn(turn_id))
         return super().completed(turn_id, events)
 
 

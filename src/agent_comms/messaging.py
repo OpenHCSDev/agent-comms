@@ -17,6 +17,10 @@ from .errors import (
 )
 from .message_bus import MessageBus
 from .message_reference import MessageReference
+from .bus_tables import MessageIdentitySource
+from .coordination_session import NativeCapture
+from .external_transcript import ExternalTranscript
+from .turn_item import NoSourceTurn, SourceTurn
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
 from .registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, CorrectionResult, SendResult
@@ -71,6 +75,7 @@ class Messaging:
         report: ReportEvidence = NoChangeReport(),
         answers: Sequence[MessageReference] = (),
         origin: AgentOrigin = AgentOrigin(),
+        source_turn: SourceTurn = NoSourceTurn(),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
@@ -97,7 +102,7 @@ class Messaging:
             role=role,
             task=task,
             report=report,
-            answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
+            answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target, source_turn)))),
         )
         committed = self._publish(message, origin, destination=CommandTarget.named(target))
         correction: CorrectionResult
@@ -109,9 +114,16 @@ class Messaging:
             correction = CorrectionComplete()
         return SendResult(committed, correction)
 
-    def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
-        """What this owner's message to target answers among its running turn's inputs."""
-        return owner.turn_lease.answered_inputs(self, owner, target)
+    def _answered_by(self, owner: Thread, target: str,
+                     source_turn: SourceTurn) -> tuple[MessageReference, ...]:
+        """Native lease or explicitly named external source; never a newest-row guess."""
+        references = list(owner.turn_lease.answered_inputs(self, owner, target))
+        for turn_id in source_turn.ids():
+            opening = ExternalTranscript(self.root, owner.incarnation).opening_for(turn_id)
+            with NativeCapture(self.bus) as boundary, self.bus.bus.reading() as source:
+                references.extend(MessageIdentitySource.answering(
+                    source, opening, CommandTarget.named(target), boundary.registry))
+        return tuple(dict.fromkeys(references))
 
     def user_identity(self, worktree: Checkout) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""

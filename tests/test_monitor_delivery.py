@@ -401,10 +401,10 @@ def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
 
 
-def notification(line, record_id=transcript_record('notification-record')):
+def notification(line, record_id=transcript_record('notification-record'), *, prompt_id='prompt'):
     return decoded_record(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
-        sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
+        sessionId='session', promptId=prompt_id, origin=dict(kind='task-notification'),
         message=dict(content='<task-notification><event>'+escape(line)+
                      '</event></task-notification>')))
 

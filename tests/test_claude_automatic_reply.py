@@ -7,7 +7,7 @@ import pytest
 from aiohttp import web
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.claude_protocol import ClaudeRecord, ClaudeSession, KnownTurn
+from agent_comms.cli_bridges.claude_protocol import ClaudeRecord, ClaudeSession
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import ItemStream
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
@@ -18,8 +18,9 @@ from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.messages import Message, QuestionKind
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.turn_item import NativeTurnId
+from agent_comms.errors import RelationViolationError
+from agent_comms.runtime_updates import AllTurnsCancelled, AllTurnsEnded, FinishedTurn, RuntimeUpdate, ThreadOutput
+from agent_comms.turn_item import NamedSourceTurn, NativeTurnId
 from transcript_record_fixture import transcript_record
 from test_monitor_delivery import attached_monitor, bridge, decoded_record, notification
 
@@ -31,8 +32,17 @@ def assistant_record(label: str, text: str) -> ClaudeRecord:
     ))
 
 
+def opening_record(prompt_id: str) -> ClaudeRecord:
+    return decoded_record(dict(
+        type='user', uuid=transcript_record(prompt_id), timestamp='2026-10-29T01:00:00Z',
+        sessionId='session', promptId=prompt_id, origin=dict(kind='human'),
+        message=dict(content='An earlier user turn'),
+    ))
+
+
 async def confirm_messages(
     bridge: ClaudeBridge, output: ThreadOutput, session: ClaudeSession, messages: tuple[Message, ...],
+    *, prompt_id: str = 'reply-turn',
 ) -> None:
     """A real attached monitor and Claude notification feed the ordinary staged output."""
     async with attached_monitor(bridge) as reader:
@@ -41,7 +51,7 @@ async def confirm_messages(
             line = (await reader.readline()).decode().rstrip('\n')
             output.publish_batch([
                 await update.observed(bridge) for update in notification(
-                    line, record_id=transcript_record(str(message.seq))).updates(session)
+                    line, record_id=transcript_record(str(message.seq)), prompt_id=prompt_id).updates(session)
             ])
             delivered, = await bridge.attempts(message.message_id)
             assert delivered.outcome is DeliveredOutcome
@@ -77,7 +87,8 @@ async def test_only_opening_deliveries_receive_the_turns_final(
     bridge: ClaudeBridge, prefix: tuple[ClaudeRecord, ...], targets: tuple[str, ...],
 ) -> None:
     output = bridge.output_type.for_comms(bridge.comms.transcripts.external('viewer'), bridge.comms)
-    session = ClaudeSession(turn=KnownTurn(NativeTurnId('reply-turn')))
+    session = ClaudeSession()
+    output.publish_batch(list(opening_record('reply-turn').updates(session)))
     for record in prefix:
         output.publish_batch(list(record.updates(session)))
     direct = bridge.comms.messaging.send('claude-code', 'viewer', 'a delivered DM').message
@@ -91,9 +102,9 @@ async def test_only_opening_deliveries_receive_the_turns_final(
     assert replies_after(bridge, direct.seq) == expected
 
     # Completion opens a fresh window; another sender can open the next turn.
-    following = ClaudeSession(turn=KnownTurn(NativeTurnId('following-turn')))
+    following = session
     next_dm = bridge.comms.messaging.send('peer', 'viewer', 'a later opening DM').message
-    await confirm_messages(bridge, output, following, (next_dm,))
+    await confirm_messages(bridge, output, following, (next_dm,), prompt_id='following-turn')
     output.publish_batch(list(assistant_record('next-final', 'Next answer').updates(following)))
     finish_reply(output, following)
     assert replies_after(bridge, next_dm.seq) == (('peer', 'Next answer'),)
@@ -110,7 +121,7 @@ async def test_channel_mention_and_dm_share_a_turn_without_broadcasting_the_fina
     channel = comms.messaging.send('peer', '#comms', '@viewer please investigate').message
     direct = comms.messaging.send('claude-code', 'viewer', 'please answer me privately').message
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
-    session = ClaudeSession(turn=KnownTurn(NativeTurnId('reply-turn')))
+    session = ClaudeSession()
     await confirm_messages(bridge, output, session, (channel, direct))
     output.publish_batch(list(assistant_record('final', 'Private answer for Tristan').updates(session)))
     assert replies_after(bridge, channel.seq) == ()
@@ -123,8 +134,11 @@ async def test_channel_mention_and_dm_share_a_turn_without_broadcasting_the_fina
     assert replies_after(bridge, channel.seq)[-1] == ('#comms', 'explicit channel update')
 
 
-def assert_opening_send(comms: Comms, opening: Message, later: Message) -> None:
-    answered = comms.messaging.send('viewer', opening.sender, 'The opening question is answered').message
+def assert_opening_send(comms: Comms, opening: Message, later: Message, turn_id: str) -> None:
+    unbound = comms.messaging.send('viewer', opening.sender, 'No source identity was supplied').message
+    assert unbound.answers == ()
+    answered = comms.messaging.send('viewer', opening.sender, 'The opening question is answered',
+                                   source_turn=NamedSourceTurn(NativeTurnId(turn_id))).message
     assert answered.answers == (opening.reference,)
     unrelated = comms.messaging.send('viewer', later.sender, 'A separate status update').message
     assert unrelated.answers == ()
@@ -138,13 +152,13 @@ async def test_commander_send_answers_only_the_question_that_opened_its_turn(bri
     commander = comms.registry.require('viewer')
     comms.registry.set_commander_project(RegisteredCommanderProject(commander.incarnation, ()))
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
-    session = ClaudeSession(turn=KnownTurn(NativeTurnId('commander-turn')))
+    session = ClaudeSession()
     opening = comms.messaging.send('peer', 'viewer', 'Please investigate', QuestionKind).message
-    await confirm_messages(bridge, output, session, (opening,))
+    await confirm_messages(bridge, output, session, (opening,), prompt_id='commander-turn')
     output.publish_batch(list(assistant_record('commander-output', 'Investigating').updates(session)))
     later = comms.messaging.send('claude-code', 'viewer', 'Another question', QuestionKind).message
-    await confirm_messages(bridge, output, session, (later,))
-    assert_opening_send(comms, opening, later)
+    await confirm_messages(bridge, output, session, (later,), prompt_id='commander-turn')
+    assert_opening_send(comms, opening, later, 'commander-turn')
     finish_reply(output, session)
     outside = comms.messaging.send('viewer', 'claude-code', 'Outside that completed turn').message
     assert outside.answers == ()
@@ -209,7 +223,7 @@ async def test_codex_send_answers_only_the_question_that_opened_its_turn(
             await receive(dict(type='agentMessage', id='working', text='Investigating'))
             later = comms.messaging.send('claude-code', 'viewer', 'Another question', QuestionKind).message
             await deliver(later)
-            assert_opening_send(comms, opening, later)
+            assert_opening_send(comms, opening, later, 'codex-turn')
     finally:
         await runner.cleanup()
 
@@ -225,10 +239,11 @@ TURN_FINISHED = decoded_record(dict(type='system', subtype='turn_duration'))
         message=dict(content=[dict(type='thinking', thinking='Still considering the work')]),
     )), TURN_FINISHED), False),
     ((), (assistant_record('not-finished', 'An unfinished answer'),), False),
-    ((assistant_record('before-directives', 'Already answering something else'),),
+    ((opening_record('directive-turn'), assistant_record('before-directives', 'Already answering something else')),
      (assistant_record('following-directives', 'Finishing that older answer'), TURN_FINISHED), False),
     ((), (assistant_record('interrupted-output', 'A partial answer'), decoded_record(dict(
         type='user', uuid=transcript_record('interrupted'), timestamp='2026-10-29T01:00:00Z',
+        sessionId='session', promptId='directive-turn',
         message=dict(content='[Request interrupted by user]'),
     ))), False),
     ((), (assistant_record('empty-final', ''), TURN_FINISHED), False),
@@ -240,7 +255,9 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     commander = comms.registry.require('viewer')
     comms.registry.set_commander_project(RegisteredCommanderProject(commander.incarnation, ()))
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
-    session = ClaudeSession(turn=KnownTurn(NativeTurnId('directive-turn')))
+    session = ClaudeSession()
+    output.publish_batch(list(opening_record('previous-turn').updates(session)))
+    finish_reply(output, session)
     for record in prefix:
         output.publish_batch(list(record.updates(session)))
     directives = []
@@ -255,13 +272,49 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     originals = tuple(directives)
     assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == {
         message.reference for message in originals}
-    await confirm_messages(bridge, output, session, originals)
+    await confirm_messages(bridge, output, session, originals, prompt_id='directive-turn')
     before = comms.bus.bus.revision()
     for record in suffix:
         output.publish_batch(list(record.updates(session)))
     expected = set() if cleared else {message.reference for message in originals}
     assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == expected
     assert comms.bus.bus.revision() == before
+    for record in (opening_record('later-source'), assistant_record('later-final', 'A different turn answers')):
+        output.publish_batch(list(record.updates(session)))
+    output.publish_batch([FinishedTurn(NativeTurnId('later-source'))])
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == expected
     assert comms.bus.bus.unanswered_references(
         tuple(message.seq for message in originals), frozenset({'viewer'})) == tuple(
             message.reference for message in originals)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ending', (AllTurnsEnded(), AllTurnsCancelled()), ids=('finish', 'cancel'))
+async def test_retirement_visits_all_live_windows_not_the_newest_row(
+    bridge: ClaudeBridge, ending: RuntimeUpdate,
+) -> None:
+    output = bridge.output_type.for_comms(bridge.comms.transcripts.external('viewer'), bridge.comms)
+    session = ClaudeSession()
+    for prompt_id in ('older-open', 'newer-open'):
+        question = bridge.comms.messaging.send('peer', 'viewer', prompt_id, QuestionKind).message
+        await confirm_messages(bridge, output, session, (question,), prompt_id=prompt_id)
+        assert output.transcript.opening_for(NativeTurnId(prompt_id)) == (question.reference,)
+    output.publish_batch([ending])
+    assert output.transcript.opening_for(NativeTurnId('older-open')) == ()
+    assert output.transcript.opening_for(NativeTurnId('newer-open')) == ()
+
+
+@pytest.mark.asyncio
+async def test_same_prompt_id_wake_after_retirement_refuses_instead_of_dropping(
+    bridge: ClaudeBridge,
+) -> None:
+    output = bridge.output_type.for_comms(bridge.comms.transcripts.external('viewer'), bridge.comms)
+    session = ClaudeSession()
+    first = bridge.comms.messaging.send('peer', 'viewer', 'First source turn').message
+    await confirm_messages(bridge, output, session, (first,), prompt_id='reused-prompt')
+    finish_reply(output, session)
+    later = bridge.comms.messaging.send('peer', 'viewer', 'New wake with reused prompt', QuestionKind).message
+    with pytest.raises(RelationViolationError, match='reused-prompt'):
+        await confirm_messages(bridge, output, session, (later,), prompt_id='reused-prompt')
+    assert output.transcript.opening_for(NativeTurnId('reused-prompt')) == ()
+    assert bridge.comms.bus.bus.unanswered_references((later.seq,), frozenset({'viewer'})) == (later.reference,)

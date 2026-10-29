@@ -11,7 +11,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from contextlib import aclosing, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +19,7 @@ from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     InputId,
@@ -65,13 +66,14 @@ class ReplyWindow(DeclaredFamily, affix="Replies"):
 
     def delivered(self, connection: Connection, turn: ExternalTurn,
                   references: tuple[MessageReference, ...]) -> None:
-        """Output has started: later context cannot open this answer."""
+        raise RelationViolationError(
+            f"Stopped source turn {turn.turn_id} cannot accept opening references {references!r}")
 
-    @abstractmethod
-    def answering(self) -> ReplyWindow: ...
+    def answering(self) -> ReplyWindow:
+        return self
 
     def references_in(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
-        return turn.opening_references(connection)
+        return ()
 
     def answered(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
         return ()
@@ -83,6 +85,23 @@ class ReplyWindow(DeclaredFamily, affix="Replies"):
         return window
 
     def finished(self) -> ReplyWindow:
+        return self
+
+    def cancelled(self) -> ReplyWindow:
+        return self
+
+
+class ActiveReplies(ReplyWindow, declared_name=None):
+    """Only live windows admit context or transition on turn retirement."""
+
+    def delivered(self, connection: Connection, turn: ExternalTurn,
+                  references: tuple[MessageReference, ...]) -> None:
+        """Later context is observed, but cannot reopen the answer's input window."""
+
+    def references_in(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
+        return turn.opening_references(connection)
+
+    def finished(self) -> ReplyWindow:
         return FinishedReplies()
 
     def cancelled(self) -> ReplyWindow:
@@ -90,7 +109,7 @@ class ReplyWindow(DeclaredFamily, affix="Replies"):
 
 
 @dataclass(frozen=True)
-class OpeningReplies(ReplyWindow):
+class OpeningReplies(ActiveReplies):
     def delivered(self, connection: Connection, turn: ExternalTurn,
                   references: tuple[MessageReference, ...]) -> None:
         for reference in references:
@@ -101,22 +120,16 @@ class OpeningReplies(ReplyWindow):
 
 
 @dataclass(frozen=True)
-class AnsweringReplies(ReplyWindow):
+class AnsweringReplies(ActiveReplies):
     """Later context cannot change which deliveries opened this answer."""
 
     def answering(self) -> ReplyWindow:
         return self
 
 
-class StoppedReplies(AnsweringReplies):
-    def references_in(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
-        return ()
-
-    def finished(self) -> ReplyWindow:
-        return self
-
-    def cancelled(self) -> ReplyWindow:
-        return self
+@dataclass(frozen=True)
+class StoppedReplies(ReplyWindow):
+    """A retired window inherits refusal and cannot be reopened by output."""
 
 
 class FinishedReplies(StoppedReplies):
@@ -257,7 +270,7 @@ class ExternalTurn(ExternalTranscriptRows, TypedTable):
     turn_id: NativeTurnId
     replies: ReplyWindow
     unique = (("thread", "turn_id"),)
-    indexes = (Index(("thread", "seq")),)
+    indexes = (Index(("thread", "seq")), Index(("thread", "replies")))
 
     @classmethod
     def opened(cls, connection: Connection, thread: ThreadLookup, turn_id: NativeTurnId) -> ExternalTurn:
@@ -583,12 +596,6 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             turns = ExternalTurn.select(connection, thread=self.lookup, turn_id=turn_id)
             return next((turn.replies.references_in(connection, turn) for turn in turns), ())
 
-    def answering(self) -> tuple[MessageReference, ...]:
-        with self.snapshot() as connection:
-            turns = ExternalTurn.select(connection, thread=self.lookup,
-                                        order_by=("seq",), descending=True, limit=1)
-            return next((turn.replies.references_in(connection, turn) for turn in turns), ())
-
     def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
         """Probe only named originals and the final items of the turns they opened."""
         if not references:
@@ -608,17 +615,13 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             for turn in ExternalTurn.select(connection, thread=self.lookup, turn_id=turn_id):
                 turn.store(connection, turn.replies.finished())
 
-    def finish_all_replies(self) -> None:
+    def transition_replies(self, transition: Callable[[ReplyWindow], ReplyWindow]) -> None:
+        """Indexed live-state probes retire all open turns without decoding history."""
         with self.writing() as connection:
-            for turn in ExternalTurn.select(connection, thread=self.lookup,
-                                            order_by=("seq",), descending=True, limit=1):
-                turn.store(connection, turn.replies.finished())
-
-    def cancel_replies(self) -> None:
-        with self.writing() as connection:
-            for turn in ExternalTurn.select(connection, thread=self.lookup,
-                                            order_by=("seq",), descending=True, limit=1):
-                turn.store(connection, turn.replies.cancelled())
+            for turn in ExternalTurn.select_keys(connection, tuple(
+                dict(thread=self.lookup, replies=member())
+                for member in ReplyWindow.members_with(ActiveReplies))):
+                turn.store(connection, transition(turn.replies))
 
     def observe_output(self, connection: Connection, turn_id: NativeTurnId,
                        events: tuple[TranscriptEvent, ...]) -> None:
