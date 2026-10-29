@@ -6,6 +6,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms_hooks import ToolRefusedError
@@ -18,7 +19,7 @@ from .external_transcript import ExternalTranscript, StoreRead
 from .field_codec import FieldCodec
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
-from .repo import Checkout, Repo
+from .repo import Checkout, GitCommandError, Repo
 from .storage_rules import CheckoutAllocation, StorageRule
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
@@ -28,6 +29,7 @@ from .tool_declaration import EditCall
 from .tool_result import ToolResult
 from .transcript_events import IncomingTranscript, TurnDigest
 from .turn_item import NativeTurnId
+from .work_branches import WorkBranchError
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -311,30 +313,6 @@ class EditWorkplaces:
                   for worktrees in branches.values() for path in worktrees}
         explicit = {order.check.directory for hold in holds
                     for order in hold.todo.order.declarations}
-        paths = listed | explicit
-        for hold in holds:
-            roots = rule.roots_of(hold.holder)
-            paths.add(rule.order_checkout(roots, hold.todo.id))
-            paths.update(rule.repository_checkout(roots, hold.todo.id, repo)
-                         for repo in declared[hold.todo.id])
-        # Qualify only captured Git roots, never nearest parents of individual events.
-        # An alias cannot manufacture another problem allocation around the same source.
-        present = Checkout.git_roots(*paths)
-        actual: dict[Path, Repo] = {}
-        for path in present:
-            if path.is_absolute() and Checkout(path).resolved().path == path:
-                repository = Repo.of(path)
-                if repository.github in registered:
-                    actual[path] = repository
-        # An explicit retained source may be a separate clone, not a worktree of the
-        # registered checkout. Read its existing worktree owner once, never per edit;
-        # only that already-declared root joins the branch facts, not arbitrary siblings.
-        for path in explicit - listed:
-            if path in actual:
-                branches = trees[actual[path].github]
-                for branch, worktrees in pulls.worktrees(actual[path]).items():
-                    if str(path) in worktrees:
-                        branches[branch] = (*branches.get(branch, ()), str(path))
         links = tuple(dict.fromkeys(link for hold in holds
                                     for order in hold.todo.order.declarations
                                     for link in order.pull_requests))
@@ -342,6 +320,46 @@ class EditWorkplaces:
                     for repo in repositories
                     for row in pulls.rows(repo.github, tuple(
                         link.number for link in links if link.repo == repo.github))}
+        progress = pulls.progress(tuple(hold.todo for hold in holds), comms.registry)
+        source_orders: dict[Path, dict[str, Todo]] = {}
+        for hold in holds:
+            todo = hold.todo
+            roots = rule.roots_of(hold.holder)
+            paths = {order.check.directory for order in todo.order.declarations}
+            paths.add(rule.order_checkout(roots, todo.id))
+            paths.update(rule.repository_checkout(roots, todo.id, repo)
+                         for repo in declared[todo.id])
+            paths.update(Path(path) for order in todo.order.declarations
+                         for link in order.pull_requests if link in requests
+                         for path in trees[link.repo].get(requests[link].branch, ()))
+            for path in paths:
+                source_orders.setdefault(path, {})[todo.id] = todo
+        # Qualify only captured Git roots, never nearest parents of individual events.
+        # An alias cannot manufacture another problem allocation around the same source.
+        present = Checkout.git_roots(*listed, *source_orders)
+        actual: dict[Path, Repo] = {}
+        for path in present:
+            affected = source_orders.get(path, {})
+            readable = (path,) if affected else ()
+            for todo in affected.values():
+                readable = progress[todo.id].readable_paths(readable)
+            for source in readable:
+                if source.is_absolute() and Checkout(source).resolved().path == source:
+                    try:
+                        repository = Repo.of(source)
+                        if repository.github in registered:
+                            # A declared source can be a separate clone. Qualify its own
+                            # worktree facts within the same per-source failure boundary.
+                            extra = (pulls.worktrees(repository)
+                                     if source in explicit - listed else {})
+                            actual[source] = repository
+                            branches = trees[repository.github]
+                            for branch, worktrees in extra.items():
+                                if str(source) in worktrees:
+                                    branches[branch] = (*branches.get(branch, ()), str(source))
+                    except (OSError, GitCommandError, WorkBranchError, TimeoutExpired) as error:
+                        for todo in affected.values():
+                            pulls.unread(todo, error)
         owners = {rule.order_checkout(rule.roots_of(thread), ''): thread
                   for thread in snapshot.threads.values()}
         allocations: dict[Path, tuple[tuple[Thread, CheckoutAllocation], ...]] = {}

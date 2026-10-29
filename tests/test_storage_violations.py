@@ -17,7 +17,7 @@ from agent_comms.change_report import FileLine
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import capture_frame
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -139,7 +139,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         monitoring.set_local_events(
             monitoring.PROFILER_ID, TodoStore.held_for_commander.__code__, monitoring.events.PY_START,
         )
-        frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+        frame = capture_frame(comms, "lead", ProgressRead())
         found = StorageViolation.broken(
             comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
     finally:

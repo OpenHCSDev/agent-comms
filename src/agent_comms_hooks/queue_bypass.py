@@ -4,7 +4,7 @@ The owner's admin bypass stays. A commander-session admin or API merge needs
 Core's recorded ok verdict on the explicitly pinned head. Other hook sessions cannot
 bypass the checks. claude-ai's separate owner path is unchanged.
 
-Ordinary Bash calls stay standard-library-only; only a merge invokes Core's reader.
+The stdlib client uses the resident session's reader; unbound calls retain syntactic denial.
 """
 
 from __future__ import annotations
@@ -136,10 +136,6 @@ class QueueBypass(ABC):
                      if tuple(selectors[:len(member.prefix)]) == member.prefix
                      and member.selected(options, tuple(selectors[len(member.prefix):])))
 
-    @classmethod
-    def found(cls, command: ShellCommand) -> tuple[str, ...]:
-        return tuple(member.reason for member in cls.matching(command))
-
 
 class AdminMerge(QueueBypass):
     """GitHub's head precondition and Core's verdict name the same commit."""
@@ -206,9 +202,13 @@ class QueueBypassGuard(SessionHookProgram, BashRefusal):
     )
 
     @classmethod
+    def bypasses(cls, command: str) -> tuple[QueueBypass, ...]:
+        return tuple(bypass for simple in ShellCommand.split(command)
+                     for bypass in QueueBypass.matching(simple))
+
+    @classmethod
     def reasons(cls, command: str) -> tuple[str, ...]:
-        return tuple(reason for simple in ShellCommand.split(command)
-                     for reason in QueueBypass.found(simple))
+        return tuple(bypass.reason for bypass in cls.bypasses(command))
 
 
 main = QueueBypassGuard.main

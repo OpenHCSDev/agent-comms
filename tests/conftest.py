@@ -428,7 +428,7 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
         source = SourceRepository.create(tmp_path / 'runtime-sources', member.repository)
         packages[member.distribution] = PackageRecord(
             version='1', source=GitRecord(
-                url=str(source.remote), vcs_info=CommitRecord(commit_id=source.main_commit),
+                url=str(source.remote_path), vcs_info=CommitRecord(commit_id=source.main_commit),
             ),
         )
     runtime = tmp_path / 'installed-runtime'

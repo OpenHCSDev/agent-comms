@@ -299,6 +299,11 @@ class BashRefusal(ClaudeToolHookProgram, PermissionHookProgram, ABC):
             reasons = cls.reasons_for(hook)
         except HookRefused as refused:
             reasons = (str(refused),)
+        cls.refuse(hook, reasons)
+
+    @classmethod
+    def refuse(cls, hook: ClaudeToolHook, reasons: tuple[str, ...]) -> None:
+        """Both local syntax and resident authorization use the same permission response."""
         if reasons:
             hook.respond(
                 permissionDecision="deny",

@@ -38,7 +38,7 @@ class UnpushedBranch(HeldBranchRule):
         return tuple(cls(held.problem, held.todo.order.checked().id, held.holder,
                          held.worktree, unpublished)
                      for held in branches
-                     for unpublished in held.repository.branches.unpushed(held.difference))
+                     for unpublished in held.difference.unpublished)
 
     def line(self) -> str:
         return (f"{self.holder.name} has {self.unpublished.commits} unpushed commits on"

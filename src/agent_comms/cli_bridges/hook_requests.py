@@ -2,10 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess
-import sys
 import traceback
-from importlib.metadata import entry_points
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import ClassVar, cast
@@ -13,7 +10,7 @@ from typing import ClassVar, cast
 from agent_comms_hooks.watch import HookAnswer
 from pydantic import JsonValue
 
-from agent_comms_hooks import Bash, ClaudeHook, ClaudeHookProgram, ClaudeToolHook, HookOutput, HookRefused
+from agent_comms_hooks import Bash, ClaudeHook, ClaudeHookProgram, ClaudeToolHook, HookOutput, ToolRefusedError
 from agent_comms_hooks.bounded_waits import BoundedWaits
 from agent_comms_hooks.deferral import DeferralGuard
 from agent_comms_hooks.forks import SubagentStartProgram, SubagentStopProgram
@@ -29,7 +26,7 @@ from .hook_forks import SessionSubagents, SubagentHook, SubagentStopHook
 from .hook_read_gate import GatedCall
 from .hook_reread import BoardReminder
 from .hook_skill import DeckStart
-from .session_watch import WatchClaim
+from ..cli_verbs.merge_review import ReviewedMerge
 from .shared import Binding
 from .monitor import MonitorPeer, MonitorService, SessionReady, SessionRefused, SessionReply, SessionRequest
 
@@ -157,27 +154,17 @@ class BoundedWaitRequest(BoundedWaits, HookRequest[ClaudeToolHook], declared_nam
 
 
 @dataclass(frozen=True)
-class QueueBypassRequest(QueueBypassGuard, HookRequest[ClaudeToolHook], declared_name=QueueBypassGuard.command()):
+class QueueBypassRequest(ReviewedMerge, QueueBypassGuard, HookRequest[ClaudeToolHook],
+                         declared_name=QueueBypassGuard.command()):
     def run_hook(self, event: ClaudeToolHook, comms: Comms, binding: Binding) -> None:
-        self.judge(event)
-
-    @classmethod
-    def reasons_for(cls, hook: ClaudeToolHook) -> tuple[str, ...]:
-        command = Bash.decode(hook.tool_input).command
-        reasons = cls.reasons(command)
-        state = WatchClaim(hook.session_id).state()
-        if not reasons or not state.commands():
-            return reasons
-        (entry,) = entry_points(group="console_scripts", name="agent-comms")
-        for binding in state.bindings():
-            try:
-                checked = subprocess.run(
-                    (sys.executable, "-m", entry.module, "--root", binding.root,
-                     "merge-review", "--session", hook.session_id, "--bash", command),
-                    capture_output=True, text=True, timeout=60,
-                )
-            except (OSError, subprocess.TimeoutExpired) as error:
-                raise HookRefused(f"Core's merge-verdict reader failed: {error}") from error
-            if checked.returncode:
-                return (checked.stdout.strip(),)
-        return ()
+        if not self.binds(event):
+            return
+        reasons: tuple[str, ...] = ()
+        try:
+            bypasses = self.bypasses(Bash.decode(event.tool_input).command)
+            if bypasses:
+                self.reviewed_merges(comms, comms.registry.snapshot(),
+                                     binding.owner.require_recorded(), bypasses)
+        except ToolRefusedError as refused:
+            reasons = (str(refused),)
+        self.refuse(event, reasons)
