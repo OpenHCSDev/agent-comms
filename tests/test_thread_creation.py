@@ -68,6 +68,18 @@ def test_pending_catalog_context_can_change_before_tags_are_supplied(comms, sour
     assert not next(item for item in prepared.editable_fields if item.name == 'tags').supplied
 
 
+@pytest.mark.parametrize('creation_arguments,forbidden', (
+    (('new', '--tags', 'auth'), {'not_a_field': 'value'}),
+    (('fork', '--parent', 'parent'), {'not_a_field': 'value'}),
+    (('fork', '--parent', 'parent'), {'parent': 'different-parent'}),
+))
+def test_complete_creation_commands_keep_command_edit_authorization(source_repository, creation_arguments, forbidden):
+    command = parsed([*creation_arguments, '--name', 'child',
+                      '--project', str(source_repository.checkout)])
+    with pytest.raises(ValueError):
+        command.edited(forbidden)
+
+
 def test_fork_cli_defaults_to_actual_parent_membership(comms, source_repository):
     parent_command = parsed(['new', '--name', 'parent', '--project', str(source_repository.checkout),
                              '--tags', 'original'])
