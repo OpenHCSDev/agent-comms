@@ -3,10 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import ABC
 from collections.abc import (
     Iterator,
     Mapping,
@@ -164,38 +161,20 @@ class Waiting(Deferral):
                "trajectory or hunt a hot path now")
 
 
-class IdleRead(ABC):
-    """Core's idle answer or an explicit failed read, on the admitted resident context."""
-
-    @abstractmethod
-    def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]: ...
-
-    @staticmethod
-    def read(comms: Comms, binding: Binding) -> IdleRead:
-        try:
-            return ReadIdle(tuple(unit.name for unit in UnownedWheelSpin.read_idle(comms, binding.owner)))
-        except Exception as failed:
-            # A failed read is an explicit blocking result, never an empty/successful answer.
-            return FailedIdleRead(str(failed))
-
-
 @dataclass(frozen=True)
-class ReadIdle(IdleRead):
+class ReadIdle:
+    """The idle owner's answer; Core read bugs propagate instead of becoming a reply."""
+
     units: tuple[str, ...]
+
+    @classmethod
+    def read(cls, comms: Comms, binding: Binding) -> Self:
+        return cls(tuple(unit.name for unit in UnownedWheelSpin.read_idle(comms, binding.owner)))
 
     def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]:
         if self.units:
             yield (f"You deferred {quoted(deferred)} while {', '.join(self.units)} hold no order:"
                    " order it now.")
-
-
-@dataclass(frozen=True)
-class FailedIdleRead(IdleRead):
-    error: str
-
-    def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]:
-        yield (f"You deferred {quoted(deferred)} and Core's idle read failed ({self.error}):"
-               " repair the Core idle read and order every idle unit now.")
 
 
 def quoted(phrases: tuple[str, ...]) -> str:
@@ -209,8 +188,8 @@ class StopHook(ClaudeTranscriptHook):
     binding: Binding = field(kw_only=True, compare=False, repr=False)
 
     @cached_property
-    def idle(self) -> IdleRead:
-        return IdleRead.read(self.comms, self.binding)
+    def idle(self) -> ReadIdle:
+        return ReadIdle.read(self.comms, self.binding)
 
     def reply(self) -> str:
         """The text of the reply that ends the turn: what the model said after its last act."""
@@ -227,7 +206,7 @@ class StopHook(ClaudeTranscriptHook):
         if self.stop_hook_active:
             return
         selected = self.comms.registry.snapshot().commander_project.session_output(
-            self.binding.owner, commander=self.judge_reply, commanded=lambda: None)
+            self.binding.recipient(self.comms), commander=self.judge_reply, commanded=lambda: None)
         selected()
 
     def judge_reply(self) -> None:

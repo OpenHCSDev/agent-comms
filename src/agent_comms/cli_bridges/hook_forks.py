@@ -11,6 +11,7 @@ from .session_watch import WatchClaim
 from .shared import Binding
 from ..comms import Comms
 from ..store_files import AtomicFile
+from ..thread_identity import ThreadIncarnation
 from ..thread_text import SubagentRole
 from ..tool_caller import CommanderForkCaller, SubagentCaller
 from ..turn_phase import ModelWaitPhase, TurnPhase
@@ -44,7 +45,7 @@ class SeatedSubagent(SubagentSeats):
 
     def enter(self, comms: Comms, binding: Binding, phase: TurnPhase) -> None:
         selected = comms.registry.snapshot().commander_project.session_output(
-            binding.owner, commander=lambda: self.agent_id.fork, commanded=self.seat.read_text)
+            binding.recipient(comms), commander=lambda: self.agent_id.fork, commanded=self.seat.read_text)
         comms.agents.enter_phase(selected(), phase)
 
 
@@ -55,24 +56,25 @@ class SubagentHook(SeatedSubagent):
     agent_type: str
 
     def register(self, comms: Comms, binding: Binding) -> None:
+        actor = binding.recipient(comms)
         selected = comms.registry.snapshot().commander_project.session_output(
-            binding.owner, commander=self.join, commanded=self.claim)
-        selected(comms, binding)
+            actor, commander=self.join, commanded=self.claim)
+        selected(comms, actor)
         self.enter(comms, binding, ModelWaitPhase())
 
-    def join(self, comms: Comms, binding: Binding) -> None:
+    def join(self, comms: Comms, actor: ThreadIncarnation) -> None:
         fork = self.agent_id.fork
-        CommanderForkCaller(fork).commanding(comms, binding.owner.name)
+        CommanderForkCaller(fork).commanding(comms, actor.name)
         self.warn(f"Core registered you as commander fork {fork}: pass `--fork {fork}`"
                   " on every agent-comms-commander verb; your stop is refused until Core holds"
                   " a record of what you found.")
 
-    def claim(self, comms: Comms, binding: Binding) -> None:
+    def claim(self, comms: Comms, actor: ThreadIncarnation) -> None:
         slot = comms.registry.claim_slot(
-            binding.owner.name, SubagentRole(self.agent_type), comms.goals).name
+            actor.name, SubagentRole(self.agent_type), comms.goals).name
         self.seats.mkdir(parents=True, exist_ok=True, mode=0o700)
         AtomicFile(self.seat).write_text(slot)
-        self.warn(f"Core seated you in slot {slot}, a child of {binding.owner.name}: messages to {slot}"
+        self.warn(f"Core seated you in slot {slot}, a child of {actor.name}: messages to {slot}"
                   f" are for this role (`agent-comms inbox --name {slot}`), and its history is"
                   " what earlier occupants of the role did.")
 
@@ -85,7 +87,7 @@ class SubagentStopHook(SubagentHook):
 
     def retire(self, comms: Comms, binding: Binding) -> None:
         selected = comms.registry.snapshot().commander_project.session_output(
-            binding.owner, commander=self.retire_fork, commanded=self.leave)
+            binding.recipient(comms), commander=self.retire_fork, commanded=self.leave)
         selected(comms)
 
     def leave(self, comms: Comms) -> None:
@@ -116,7 +118,7 @@ class SessionSubagents(SubagentSeats):
 
     def end_subagents(self, comms: Comms, binding: Binding) -> tuple[str, ...]:
         selected = comms.registry.snapshot().commander_project.session_output(
-            binding.owner, commander=self.end_forks, commanded=self.vacate_seats)
+            binding.recipient(comms), commander=self.end_forks, commanded=self.vacate_seats)
         return selected(comms)
 
     def vacate_seats(self, comms: Comms) -> tuple[str, ...]:

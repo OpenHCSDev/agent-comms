@@ -514,7 +514,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     @classmethod
     def read_idle(cls, comms: Comms, commander: ThreadIncarnation) -> list[Thread]:
         """A fresh read and an already captured frame share the same idle selection."""
-        (actor,) = comms.registry.snapshot().threads_for(commander.require_recorded())
+        actor = comms.registry.require_lookup(commander.require_recorded().lookup)
         return cls.idle(comms, actor.name, HeldOrders.read(comms, actor.name))
 
     @classmethod

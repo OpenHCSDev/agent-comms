@@ -1,91 +1,90 @@
-"""The real Stop command sends back a commander reply that defers work while Core counts a unit idle."""
+"""Resident Stop evaluates actual recorded idle units, not a shell's invented answer."""
 
+import io
 import json
 import os
-import subprocess
 import sys
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
-from agent_comms.cli_bridges.hook_deferral import (
-    FutureOrder,
-    Later,
-    NextTick,
-)
-from agent_comms.cli_bridges.session_watch import (
-    WatchClaim,
-    WatchRecord,
-)
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.hook_deferral import FutureOrder, Later, NextTick
+from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
+from agent_comms.comms import Comms
+from agent_comms.repo import Checkout
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
+from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms_hooks import deferral
+from hook_session_fixture import resident_hook, resident_session
 
 
-def assistant(*blocks):
+def assistant(*blocks: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return {"type": "assistant", "message": {"content": list(blocks)}}
 
 
-def text(words):
+def text(words: str) -> dict[str, JsonValue]:
     return {"type": "text", "text": words}
 
 
-pytestmark = pytest.mark.usefixtures("commanding_session")
-
-
-TOOL = {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}
-RESULT = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}
-
-
-def stop(tmp_path: Path, records, *, idle: str, active: bool = False) -> subprocess.CompletedProcess:
-    """Run the installed hook module with Core's idle command answered by `idle` (a shell body)."""
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text("".join(json.dumps(record) + "\n" for record in records))
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    command = bin_dir / "agent-comms-commander"
-    command.write_text(f"#!/bin/sh\n{idle}\n")
-    command.chmod(0o755)
-    return subprocess.run(
-        [sys.executable, "-m", "agent_comms_hooks.deferral"],
-        input=json.dumps({"session_id": "s", "hook_event_name": "Stop",
-                          "transcript_path": str(transcript), "stop_hook_active": active}),
-        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
-        capture_output=True, text=True, timeout=60,
-    )
-
-
+TOOL: dict[str, JsonValue] = {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}
+RESULT: dict[str, JsonValue] = {
+    "type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}
 DEFERRING = [RESULT, assistant(text("The six failing tests have no owner. They go to a unit next."))]
 
 
-def test_deferral_while_a_unit_is_idle_blocks_with_the_phrase_and_units(tmp_path):
-    result = stop(tmp_path, DEFERRING, idle="printf 'pi-story-tool\\nunit-hygiene\\n'")
-    assert result.returncode == 0, result.stderr
+@pytest.fixture
+def stop_binding(durable_home: Path, commander_bus: Comms, tmp_path: Path) -> Iterator[ClaudeBridge]:
+    commander = commander_bus.registry.snapshot().commander_project.require().commander
+    with resident_session(commander_bus, tmp_path / "state", commander.name, "s") as bridge:
+        yield bridge
+
+
+def stop(bridge: ClaudeBridge, tmp_path: Path, records: list[dict[str, JsonValue]], *,
+         idle: tuple[str, ...] = (), active: bool = False) -> HookReply:
+    """The real idle owner reads registered running units and their retained turns."""
+    for name in idle:
+        bridge.comms.registry.declare(Thread(
+            name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution,
+            process_identity=ProcessIdentity.capture(os.getpid())))
+        bridge.comms.transcripts.external(name).finish(
+            turn_id=NativeTurnId(name), item_id=NativeItemId("idle"), events=(AssistantTranscript(
+                "Ready for work", position=NativeItemId("idle"), timestamp=time.time()),))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("".join(json.dumps(record) + "\n" for record in records))
+    return resident_hook(bridge, StopRequest, transcript, stop_hook_active=active)
+
+
+def test_deferral_while_a_unit_is_idle_blocks_with_the_phrase_and_units(stop_binding, tmp_path):
+    result = stop(stop_binding, tmp_path, DEFERRING, idle=("pi-story-tool", "unit-hygiene"))
+    assert result.status == 0, result.stderr
     decision = json.loads(result.stdout)
     assert decision["decision"] == "block"
     assert "go to a unit next" in decision["reason"]
     assert "pi-story-tool, unit-hygiene" in decision["reason"]
 
 
-def test_deferral_with_no_idle_unit_passes(tmp_path):
-    result = stop(tmp_path, DEFERRING, idle="exit 0")
-    assert (result.returncode, result.stdout) == (0, "")
+def test_deferral_with_no_idle_unit_passes(stop_binding, tmp_path):
+    result = stop(stop_binding, tmp_path, DEFERRING)
+    assert (result.status, result.stdout) == (0, "")
 
 
-def test_narration_before_a_tool_call_is_not_the_final_reply(tmp_path):
+def test_narration_before_a_tool_call_is_not_the_final_reply(stop_binding, tmp_path):
     records = [assistant(text("I'll order that later."), TOOL), RESULT,
                assistant(text("Ordered P362 to pi-story-tool."))]
-    result = stop(tmp_path, records, idle="echo pi-story-tool")
-    assert (result.returncode, result.stdout) == (0, "")
+    result = stop(stop_binding, tmp_path, records, idle=("pi-story-tool",))
+    assert (result.status, result.stdout) == (0, "")
 
 
-def test_a_stop_already_sent_back_passes(tmp_path):
-    result = stop(tmp_path, DEFERRING, idle="echo pi-story-tool", active=True)
-    assert (result.returncode, result.stdout) == (0, "")
-
-
-def test_a_failed_idle_read_blocks_and_says_so(tmp_path):
-    result = stop(tmp_path, DEFERRING, idle="echo 'no commander configured' >&2; exit 3")
-    decision = json.loads(result.stdout)
-    assert decision["decision"] == "block"
-    assert "no commander configured" in decision["reason"]
+def test_a_stop_already_sent_back_passes(stop_binding, tmp_path):
+    result = stop(stop_binding, tmp_path, DEFERRING, idle=("pi-story-tool",), active=True)
+    assert (result.status, result.stdout) == (0, "")
 
 
 @pytest.mark.parametrize(("shape", "reply"), [
@@ -97,12 +96,17 @@ def test_each_deferral_shape_recognises_its_phrase(shape, reply):
     assert tuple(shape.found(reply))
 
 
-@pytest.mark.parametrize("bound", ["", "unit-x"])
-def test_a_session_that_is_not_commander_stops_freely(tmp_path, monkeypatch, commander_bus, bound):
-    """Only the registry's commander is sent back; a unit or an unbound session may defer."""
-    monkeypatch.setenv("HOME", str(tmp_path / "unit-home"))
-    if bound:
-        WatchClaim("s").enrol(WatchRecord(bound, str(commander_bus.root), (), tmp_path / "state"))
-    result = stop(tmp_path, DEFERRING, idle="printf 'pi-story-tool\\n'")
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == ""
+def test_a_bound_unit_session_stops_freely(durable_home: Path, commander_bus: Comms, tmp_path: Path):
+    with resident_session(commander_bus, tmp_path / "state", "unit-x", "s") as bridge:
+        result = stop(bridge, tmp_path, DEFERRING, idle=("pi-story-tool",))
+        assert (result.status, result.stdout) == (0, "")
+
+
+def test_an_unbound_session_stops_freely(
+        durable_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({
+        "session_id": "unbound", "hook_event_name": "Stop",
+        "transcript_path": str(tmp_path / "session.jsonl"), "stop_hook_active": False})))
+    deferral.main()
+    assert capsys.readouterr().out == ""
