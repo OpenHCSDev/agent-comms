@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from agent_comms.cli_command import PendingCommandBinding
-from agent_comms.cli_support.thread_creation import ThreadCreationCliCommand, ThreadCreationFields
+from agent_comms.cli_support.thread_creation import ThreadCreationCliCommand, ThreadLaunchSettings
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
 from agent_comms.native_settings import NativeThreadDefaults
@@ -21,6 +21,6 @@ class NewThreadCliCommand(ThreadCreationCliCommand, declared_name="new"):
     @classmethod
     def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[PendingCommandBinding, ...]:
         defaults = NativeThreadDefaults()
-        return (PendingCommandBinding(cls, ThreadCreationFields(
-            name='', project=project, model=defaults.model,
+        return (PendingCommandBinding(cls, ThreadLaunchSettings(
+            project=project, model=defaults.model,
             thinking_level=defaults.thinking_level)),)
