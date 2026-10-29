@@ -385,7 +385,7 @@ class CommanderContext(BaseModel):
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return PlanReadings().read(repository, todos, tuple(
+        return PlanReadings().prepare(repository, todos, tuple(
             phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
 
     @boundary_decoder
