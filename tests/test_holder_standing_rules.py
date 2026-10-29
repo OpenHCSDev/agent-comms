@@ -28,6 +28,7 @@ from agent_comms.commander.standing import (
     HolderGone,
     MissedHeartbeat,
     UnitAskUnanswered,
+    ReassignedWheelSpin,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.commander_hud import CommanderFrame
@@ -35,6 +36,8 @@ from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
+from agent_comms.todos import ReleaseTodo, SharedWorktreeRefusal, StrikeReason
+from agent_comms.work_dispatch import ReusedWorkDispatch
 from agent_comms.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
@@ -142,6 +145,52 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     copied_bus = wire(copied)
     configured_repository(copied_bus)
     return copied_bus
+
+
+def test_shared_worktree_proposal_is_reported_without_aborting_the_board(held_bus):
+    comms = held_bus
+    original = comms.goals.todos.get('P1')
+    retained = comms.goals.todos.get('P2')
+    lead = comms.registry.require('lead').incarnation
+    ReleaseTodo(original.revision, lead, original.held(), StrikeReason(
+        'Release this isolated pending fixture while preserving its source and original order.'
+    )).record(comms.goals, original.id)
+    released = comms.goals.todos.get(original.id)
+    worker = comms.registry.require('worker')
+    declare_test_bus(comms, threads=(Thread(name='proposed', tags=frozenset({'comms'}),
+                                          worktree=worker.worktree),))
+    candidate = comms.registry.require('proposed')
+    goal_before = candidate.goal
+    action = ReissuedOrderGoalAction.for_todo(released, 'lead')
+    dispatch = ReusedWorkDispatch.for_unit(action, candidate)
+    proposal = ReassignedWheelSpin(released, dispatch)
+    question = comms.messaging.send('outsider', 'lead',
+        'Which retained source owns this independent question?', type=QuestionKind).message
+    ordinary = UnitAskUnanswered(question, 'outsider')
+    rejected = StandingRule.enforce_all(comms, 'lead', (proposal, ordinary))
+    refusal = rejected[proposal]
+    assert isinstance(refusal, SharedWorktreeRefusal)
+    assert (refusal.problem, refusal.holding_problem) == (released.id, retained.id)
+    assert refusal.holder == candidate.incarnation
+    assert refusal.holding_holder == worker.incarnation
+    assert str(refusal.worktree) in refusal.explanation()
+    assert comms.goals.todos.get(released.id) == released
+    assert comms.goals.todos.get(retained.id) == retained
+    assert comms.registry.require('proposed').goal == goal_before
+    lines = tuple(rule.rejected_line(error) for rule, error in rejected.items())
+    packet, = CommanderUpdate.derive(lead, (), (proposal, ordinary), (),
+                                     now=time.time(), not_applied=lines)
+    message = packet.send(comms, time.time(), ())
+    assert message.seq > 0
+    assert packet.not_applied == lines
+    assert question.message_id in packet.body(time.time(), ())
+    with pytest.raises(SharedWorktreeRefusal):
+        dispatch.start(comms)
+    isolated = comms.registry.require('outsider')
+    ReusedWorkDispatch.for_unit(action, isolated).start(comms)
+    assigned = comms.goals.todos.get(released.id)
+    assert assigned.held().owner_identity == isolated.incarnation
+    assert comms.goals.todos.get(retained.id) == retained
 
 
 def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
@@ -568,6 +617,18 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
         Message(sender='worker', target=target, type=QuestionKind, body=body,
                 timestamp=time.time() - AwaitingCommander.seconds - 1), destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
+    worker = held_bus.registry.require('worker').incarnation
+    outsider = held_bus.registry.require('outsider').incarnation
+    ask, = (rule for rule in OwedAnswer.opened(held_bus, 'lead')
+            if isinstance(rule, UnitAskUnanswered) and rule.message.message_id == question.message_id)
+    assert question.seq > 0
+    assert ask.questions_for(worker) == (question,)
+    assert ask.questions_for(outsider) == ()
+    frame = HeartbeatFrame.capture(held_bus, 'lead', ProgressRead())
+    observation, = (reading for reading in UnitState.observations(held_bus, 'lead', frame)
+                    if reading.thread.incarnation == worker)
+    assert question in observation.due_questions
+    assert tuple(AwaitingCommander.derive(observation))
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / 'reply.txt'
     reply.write_text('Responding to the worker with the actual commander command')
