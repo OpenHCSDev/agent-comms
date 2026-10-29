@@ -17,15 +17,16 @@ import any runtime implementation at module level.
 
 from __future__ import annotations
 
+from . import backends
+
 import asyncio
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UniqueExternalSelector
 from .field_codec import InputId
 from .image_input import ImageInput
 from .pi_counts import PiCount
@@ -51,7 +52,7 @@ class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
 
-class RuntimeLocation(DeclaredFamily, affix="Runtime"):
+class RuntimeLocation(DeclaredFamily, affix="Runtime", discovery_package=backends.__name__):
     """Runtime behavior derived once by the owning thread record."""
 
     path: str
@@ -379,7 +380,7 @@ class Forks(ABC):
 # ---------------------------------------------------------------------------
 
 
-class AgentBackend(DeclaredFamily, affix="Backend"):
+class AgentBackend(UniqueExternalSelector, DeclaredFamily, affix="Backend", discovery_package=backends.__name__):
     """One agent runtime, keyed by ``declared_name`` ("pi_native", ...).
 
     A backend declares its location type, capabilities through inheritance,
@@ -389,7 +390,6 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     location_type: ClassVar[type[RuntimeLocation]]
     event_kinds: ClassVar[frozenset[str]]
-    _sealed: ClassVar[bool] = False
 
     async def context_for_input(self, thread, context):
         return context
@@ -399,14 +399,6 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     async def close_idle(self) -> None:
         """A backend without a retained process has nothing to retire."""
-
-    def __init_subclass__(cls, **options: str | None) -> None:
-        if AgentBackend._sealed:
-            raise BackendDeclarationError(
-                f"{cls.__name__}: the AgentBackend registry is sealed; declare backends "
-                "before the Thread backend lookup seals its declarations."
-            )
-        super().__init_subclass__(**options)
 
     @classmethod
     @abstractmethod
@@ -418,23 +410,13 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     def new_location(cls, root, worktree) -> RuntimeLocation: ...
 
     @classmethod
-    def seal(cls) -> None:
-        """Bind concrete locations after validating all declaration relationships."""
-        NewThreadBackend.selected()
-        owners: dict[type[RuntimeLocation], type[AgentBackend]] = {}
-        for member in cls.members_with(cls):
-            location = member.location_type
-            if not issubclass(location, RuntimeLocation):
-                raise BackendDeclarationError(f"{member.__name__} declares no RuntimeLocation type")
-            if previous := owners.get(location):
-                raise BackendDeclarationError(
-                    f"location type {location.__name__} belongs to several backends "
-                    f"{previous.__name__}, {member.__name__}")
-            owners[location] = member
-        for location, owner in owners.items():
-            location._backend = owner
-        AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
-        AgentBackend._sealed = True
+    def selection_key(cls) -> type[RuntimeLocation]:
+        return cls.location_type
+
+    @classmethod
+    def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
+        super().validate_selection(members)
+        cls.location_type._backend = cls
 
     def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
         raise BackendDeclarationError(f"{type(self).__name__} does not run turns")

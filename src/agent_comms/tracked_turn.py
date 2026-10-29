@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_child import PersistentPiSession
+
 import asyncio
 import time
 from abc import ABC, abstractmethod
@@ -55,7 +57,6 @@ if TYPE_CHECKING:
     from .coordinated_runtime import NativeExecution
     from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
-    from .pi_native_backend import PersistentPiSession
     from .pi_payloads import UserMessage
     from .turn_failure import TurnFailure
 

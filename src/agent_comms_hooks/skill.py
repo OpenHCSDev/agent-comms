@@ -70,13 +70,13 @@ class DeckStart(DealtDeck):
         prompts = self.prompts()
         self.prepare(reader, prompts)
         return (
-            self.notice() + " " + reader.order(reader.sources()) +
+            self.notice() + " " + reader.order(reader.sources(), audit=
             " That audit is not optional: every tool but Read, and Write of"
             f" {self.audit}, is refused until the audit is written there as JSON:"
             ' {"rules": [{"rule": NAME, "broke": [each action since the last start or'
             ' compaction that broke it; empty means kept]}, one entry for every rule you were'
             ' dealt], "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are'
-            " doing about it right now}]}.",
+            " doing about it right now}]}"),
             self.owner_words(prompts),
             reader.header(self.held),
         )

@@ -10,7 +10,7 @@ from pathlib import Path
 import agent_comms.backend as backend
 from agent_comms.comms import wire
 from agent_comms.agent_backend import NoInputStartListener
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.native_child import PersistentPiSession
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.threads import Thread

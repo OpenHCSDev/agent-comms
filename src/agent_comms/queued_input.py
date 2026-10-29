@@ -559,8 +559,8 @@ class InitialInput(QueuedInput):
                 controller=inputs.runtime.controller.get(), input_id=input_id, origin=origin,
             ) as reservation:
                 item = reservation.item
-                # This original stays available to its source until dispatch has finished.
-                inputs.state(session_id).queued[item.input_id] = item
+                resources.push_async_callback(inputs.emit_queue_state, session_id)
+                await resources.enter_async_context(inputs.state(session_id).registered(item))
                 resources.push_async_callback(item.finish, inputs, session_id)
                 reservation.release()
             await inputs.emit_input_delivery_changed(session_id)
@@ -571,15 +571,9 @@ class InitialInput(QueuedInput):
         """Retire only this captured original after its dispatch resources join."""
         queued = inputs.state(session_id).queued
         if queued.get(self.input_id) is self:
-            try:
-                await Coordination.run_worker(partial(
-                    inputs.finish_original_inputs, (self.key,),
-                ))
-            finally:
-                # The joined original write finishes before cancellation is
-                # propagated. Burn only this live grant; durable UNKNOWN stays.
-                queued.pop(self.input_id)
-            await inputs.emit_queue_state(session_id)
+            await Coordination.run_worker(partial(
+                inputs.finish_original_inputs, (self.key,),
+            ))
 
     def is_live(self, inputs: InputDrain, session_id: str) -> bool:
         return inputs.state(session_id).queued.get(self.input_id) is self

@@ -33,7 +33,7 @@ from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
-from .pi_native_backend import PersistentPiSession
+from .native_child import PersistentPiSession
 from .selected_actions import CodingSelectedAction, SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn

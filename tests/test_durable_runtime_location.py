@@ -10,8 +10,8 @@ from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
 from agent_comms.agent_backend import NewThreadBackend
 from agent_comms.field_codec import FieldCodec
 from agent_comms.turn_digests import LastTurns
-from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
-from agent_comms.pi_native_backend import PiNativeBackend
+from agent_comms.backends.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
+from agent_comms.backends.pi_native_backend import PiNativeBackend
 from agent_comms.threads import Thread
 from agent_comms.turn_runner import TurnRunner
 from agent_comms.unstarted_runtime import UnstartedRuntime

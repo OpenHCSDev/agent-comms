@@ -8,7 +8,7 @@ from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.native_startup import NativeStartup
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.native_child import PersistentPiSession
 from agent_comms.selected_session import SelectedSession
 
 

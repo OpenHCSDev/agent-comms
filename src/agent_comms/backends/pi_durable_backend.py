@@ -6,35 +6,35 @@ from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from pydantic import JsonValue
 
 from agent_comms import field_codec
 
-from .agent_backend import (
+from ..agent_backend import (
     AgentBackend,
     CompactionOutcome,
     Compacts,
     RuntimeLocation,
 )
-from .agent_events import Error
-from .locked_store import SQLiteFile
-from .external_transcript import ExternalCut
-from .native_child import PiChild
-from .native_entries import StoredEntry
-from .native_session_files import SessionFiles
-from .native_transcript import StoredRecord
-from .pi_commands import (
+from ..agent_events import Error
+from ..locked_store import SQLiteFile
+from ..external_transcript import ExternalCut
+from ..native_child import PiChild
+from ..native_entries import StoredEntry
+from ..native_session_files import SessionFiles
+from ..native_transcript import StoredRecord
+from ..pi_commands import (
     Compact,
     ExactResponse,
     PiCommand,
     SetModel,
 )
-from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
-from .pi_payloads import PiOmitted, PiResponseData
-from .pi_vocabulary import ThinkingLevelField
-from .transcript_sources import TranscriptSource
+from ..pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
+from ..pi_payloads import PiOmitted, PiResponseData
+from ..pi_vocabulary import ThinkingLevelField
+from ..transcript_sources import TranscriptSource
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ class DurableTranscript(TranscriptSource):
             yield replace(self, execute=lambda source, command: HistoryData(()))
             return
         with asyncio.Runner() as loop:
-            child = loop.run(PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+            child = loop.run(PiChild.start_command(('node', str(PiDurableBackend.host_script)),
                 cwd=str(Path(self.location.path).parent), event_type=DurablePiEvent))
             try:
                 loop.run(child.request(OpenHistory(self.location.path)))
@@ -203,6 +203,7 @@ class CompactDurable(ExactResponse, Compact):
 
 
 class PiDurableBackend(AgentBackend, Compacts):
+    host_script: ClassVar[Path] = Path(__file__).parents[1] / 'pi_durable_host.mjs'
     location_type = DurableDatabase
     event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
 
@@ -227,7 +228,7 @@ class PiDurableBackend(AgentBackend, Compacts):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with ExitStack() as resources:
                     lock = resources.enter_context(thread.writable_runtime.writer_claim.claimed())
-                    child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                    child = await PiChild.start_command(('node', str(self.host_script)),
                         cwd=thread.worktree.path, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
                 async with child.failures():
                     model = thread.model.set_model(SetModel)

@@ -46,7 +46,8 @@ from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
 from agent_comms_hooks.read_gate import AuditDue, GatedCall, OwnerWordsAnswer, RuleAudit, SessionAudit
-from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
+from agent_comms.instruction_deck import CommanderReader, DeckReader, FleetReader
+from agent_comms_hooks.skill import DeckStart
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
@@ -403,7 +404,7 @@ def test_a_bound_unit_reads_every_rule_under_its_audience_heading(
     dealt = start.dealt_files.read_text().splitlines()
     assert all(str(rule.path.resolve()) in dealt for rule in FleetReader.rules())
     commander_only = [rule for rule in RuleFile.packaged() if rule.audience is CommanderAudience]
-    assert commander_only and not any(str(rule.path.resolve()) in dealt for rule in commander_only)
+    assert commander_only and all(str(rule.path.resolve()) in dealt for rule in commander_only)
     assert str(CommanderPackage.indictment().resolve()) not in dealt
 
 

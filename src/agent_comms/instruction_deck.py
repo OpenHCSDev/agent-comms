@@ -1,62 +1,79 @@
-"""The sources and full-read parts shared by bound Claude and Pi sessions."""
+"""Packaged rule sources, shared reminders and per-context full-read state."""
 
 from __future__ import annotations
 
+import inspect
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from .commander.package import CommanderPackage
-from .commander.rule_file import RuleAudience, RuleFile
+from .commander.rule_file import RuleFile
+from .field_codec import ToolCallId
 from .pattern_sources import PostmortemFailure
 from .slop import Slop
-
-if TYPE_CHECKING:
-    from .held_orders import HeldOrders
-    from .native_child import PiSessionChild
-    from .registry_document import RegistrySnapshot
-    from .participant_identity import ParticipantIdentity
-    from .pi_payloads import PiToolResult
+from .tool_denial import SelectedToolDenied
 
 
 class DeckReader(ABC):
-    """Every bound session reads every rule; audience headings explain authority."""
+    """Every bound session reads every rule; each file declares its audience."""
 
     deck_suffix: ClassVar[str]
     slice_chars: ClassVar[int] = 2_500
-
-    @staticmethod
-    def for_owner(snapshot: RegistrySnapshot, owner: ParticipantIdentity) -> DeckReader:
-        return (CommanderReader() if any(thread.incarnation.require_recorded().lookup == owner.lookup
-                for thread in snapshot.commander_project.commanders(snapshot)) else FleetReader())
 
     @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
         return RuleFile.packaged()
 
     @classmethod
-    def sources(cls, notice: str) -> str:
-        return "\n\n".join((
-            notice,
-            CommanderPackage.voice().read_text(encoding="utf-8", newline=""),
-            CommanderPackage.indictment().read_text(encoding="utf-8", newline=""),
-            "# Recorded failures\n\n" + PostmortemFailure.catalog(),
-            *(audience.heading + "\n\n" + "\n\n".join(rule.render() for rule in rules)
-              for audience, rules in RuleAudience.grouped(cls.rules())),
-            (Slop.catalog() / "README.md").read_text(encoding="utf-8", newline=""),
-            *cls.additional_sources(),
-        ))
-
-    @classmethod
-    def additional_sources(cls) -> tuple[str, ...]:
+    def preface(cls) -> tuple[Path, ...]:
         return ()
 
-    def header(self, held: Callable[[], Iterable[HeldOrders]]) -> str:
+    @classmethod
+    def instructions(cls) -> tuple[Path, ...]:
+        return ()
+
+    @classmethod
+    def catalogs(cls) -> tuple[Path, ...]:
+        return ()
+
+    @classmethod
+    def sources(cls) -> tuple[Path, ...]:
+        return (
+            CommanderPackage.voice(),
+            *cls.preface(),
+            Path(inspect.getfile(PostmortemFailure)),
+            *cls.instructions(),
+            *(rule.path for rule in cls.rules()),
+            *cls.catalogs(),
+        )
+
+    @classmethod
+    def prepare(cls) -> Mapping[Path, str]:
+        """Snapshot original files off the loop; completion compares only this text."""
+        return {source.resolve(): source.read_text(encoding="utf-8", newline="")
+                for source in cls.sources()}
+
+    def header(self, held: Callable[[], Iterable[str]]) -> str:
         return ("FUCK YOUR COMPACTION. Your summary is a paraphrase of these rules, and a"
                 " paraphrase drops the exact words they turn on. The files above are the source;"
                 " where your summary disagrees with them, the summary is wrong.")
+
+    @staticmethod
+    def order(sources: Iterable[Path], *, audit: str = "") -> str:
+        files = tuple(sources)
+        return (
+            f"Read each of these {len(files)} files in full with the Read tool before any other"
+            " action: they are every rule you follow and the sources they come from. A summary"
+            " or memory of them does not count as reading them, and every other tool is refused"
+            " until each one is read. Use no offset or limit. Then, before your next action,"
+            " check what you did since your last start or compaction against them and say,"
+            " one line each, every rule you broke and the action that broke it, and fix what"
+            " you can. This order returns after each context reset." + audit + "\n"
+            + "\n".join(str(source) for source in files)
+        )
 
     @classmethod
     @abstractmethod
@@ -115,105 +132,90 @@ class CommanderReader(FleetReader):
     deck_suffix = ".deck.json"
 
     @classmethod
-    def additional_sources(cls) -> tuple[str, ...]:
-        return (RuleFile.document(CommanderPackage.skill())[1],)
+    def preface(cls) -> tuple[Path, ...]:
+        return (CommanderPackage.indictment(),)
+
+    @classmethod
+    def instructions(cls) -> tuple[Path, ...]:
+        return (CommanderPackage.skill(),)
+
+    @classmethod
+    def catalogs(cls) -> tuple[Path, ...]:
+        return (Slop.catalog() / "README.md",)
 
     @classmethod
     def streams(cls) -> tuple[tuple[str, ...], ...]:
         indictment = cls.paragraphs(CommanderPackage.indictment().read_text(encoding="utf-8"))
         return (cls.voice(), indictment, cls.tells(), cls.failures())
 
-    def header(self, held: Callable[[], Iterable[HeldOrders]]) -> str:
-        return "\n".join((
-            super().header(held), "What your units actually hold:",
-            *(hold.recalled() for orders in held() for hold in orders.live),
-        ))
+    def header(self, held: Callable[[], Iterable[str]]) -> str:
+        return "\n".join((super().header(held), "What your units actually hold:", *held()))
 
 
 class PartReadCompletion(ABC):
-    """Each checked read owns whether its output can satisfy a rule part."""
+    """A checked read either proves one source or remains behind the ordinary gate."""
 
-    def require(self, child: PiSessionChild) -> None:
-        child.require_rule_reads()
+    def require(self, require_rules: Callable[[], None]) -> None:
+        require_rules()
 
     @abstractmethod
-    def complete(self, result: PiToolResult, parts_read: set[Path]) -> None: ...
+    def complete(self, text: Callable[[int], str], parts_read: set[Path]) -> None: ...
 
 
 @dataclass(frozen=True)
 class NotPartRead(PartReadCompletion):
-    def complete(self, result: PiToolResult, parts_read: set[Path]) -> None:
+    def complete(self, text: Callable[[int], str], parts_read: set[Path]) -> None:
         pass
 
 
 @dataclass(frozen=True)
 class PartRead(PartReadCompletion):
     path: Path
+    expected: str
 
-    def require(self, child: PiSessionChild) -> None:
+    def require(self, require_rules: Callable[[], None]) -> None:
         pass
 
-    def complete(self, result: PiToolResult, parts_read: set[Path]) -> None:
-        expected = self.path.read_text(encoding="utf-8")
-        if result.text(limit=len(expected) + 1) == expected:
+    def complete(self, text: Callable[[int], str], parts_read: set[Path]) -> None:
+        if text(len(self.expected) + 1) == self.expected:
             parts_read.add(self.path)
 
 
-@dataclass(frozen=True)
-class DeckParts:
-    """One chunker, bounded below both tools' default byte and line limits."""
+@dataclass(kw_only=True)
+class RuleReads(ABC):
+    """The read lifecycle is a child capability, not a dependency on its runtime."""
 
-    directory: Path
+    parts_read: set[Path] = field(default_factory=set)
+    pending_part_reads: dict[ToolCallId, PartReadCompletion] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "directory", self.directory.resolve())
+    @property
+    @abstractmethod
+    def reading_sources(self) -> Mapping[Path, str]: ...
 
-    part_bytes: ClassVar[int] = 48_000
-    part_lines: ClassVar[int] = 1_900
+    @property
+    @abstractmethod
+    def working_directory(self) -> Path: ...
 
-    @classmethod
-    def beside_session(cls, directory: Path) -> DeckParts:
-        return cls(directory / "rule-parts")
+    def reset_rule_reads(self) -> None:
+        self.parts_read.clear()
+        self.pending_part_reads = {call_id: NotPartRead() for call_id in self.pending_part_reads}
 
-    @classmethod
-    def chunks(cls, text: str) -> Iterator[str]:
-        lines: list[str] = []
-        size = 0
-        for line in text.splitlines(keepends=True):
-            width = len(line.encode("utf-8"))
-            if width > cls.part_bytes:
-                raise ValueError("A rule source line exceeds a full Read; split it at its source")
-            if lines and (size + width > cls.part_bytes or len(lines) >= cls.part_lines):
-                yield "".join(lines)
-                lines, size = [], 0
-            lines.append(line)
-            size += width
-        if lines:
-            yield "".join(lines)
+    def require_rule_reads(self) -> None:
+        unread = tuple(path for path in self.reading_sources if path not in self.parts_read)
+        if unread:
+            raise SelectedToolDenied(DeckReader.order(unread))
 
-    def numbered(self, number: int) -> Path:
-        return self.directory / f"{number:02}.md"
+    def begin_part_read(self, call_id: ToolCallId, path: str, *, full_read: bool) -> None:
+        selected = (self.working_directory / path).resolve()
+        completion = (PartRead(selected, self.reading_sources[selected])
+                      if full_read and selected in self.reading_sources else NotPartRead())
+        self.pending_part_reads[call_id] = completion
 
-    def prepare(self, reader: DeckReader, notice: str = "") -> tuple[Path, ...]:
-        self.directory.mkdir(parents=True, exist_ok=True)
-        for old in self.directory.iterdir():
-            old.unlink()
-        parts = []
-        for number, chunk in enumerate(self.chunks(reader.sources(notice)), 1):
-            path = self.numbered(number)
-            path.write_text(chunk, encoding="utf-8")
-            parts.append(path)
-        return tuple(parts)
+    def require_part_read(self, call_id: ToolCallId) -> None:
+        self.pending_part_reads[call_id].require(self.require_rule_reads)
 
-    @staticmethod
-    def order(parts: tuple[Path, ...]) -> str:
-        return (
-            f"Read each of these {len(parts)} files in full with the Read tool before any other"
-            " action: they are every rule you follow and the sources they come from. A summary"
-            " or memory of them does not count as reading them, and every other tool is refused"
-            " until each one is read. Use no offset or limit. Then, before your next action,"
-            " check what you did since your last start or compaction against them and say,"
-            " one line each, every rule you broke and the action that broke it, and fix what"
-            " you can. This order returns after each context reset.\n"
-            + "\n".join(str(part) for part in parts)
-        )
+    def completed_part_read(self, call_id: ToolCallId, text: Callable[[int], str]) -> None:
+        self.pending_part_reads.pop(call_id).complete(text, self.parts_read)
+
+    def discard_part_read(self, call_id: ToolCallId) -> None:
+        self.pending_part_reads.pop(call_id)

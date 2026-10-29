@@ -6,9 +6,10 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
+from .instruction_deck import RuleReads
 from .field_codec import (
     FieldCodec,
     NullMember,
@@ -32,10 +33,8 @@ from .tool_declaration import (
 )
 from .tool_denial import SelectedToolDenied
 
-if TYPE_CHECKING:
-    from .native_child import PiSessionChild
-    from .pi_payloads import PiToolResult
-    from .turn_goal_permission import TurnGoalPermission
+from .pi_payloads import PiToolResult
+from .turn_goal_permission import TurnGoalPermission
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,19 +160,19 @@ class ReadTool(ReadAction, PathTool, CodingTool):
     def context_read_paths(self) -> tuple[str, ...]:
         return (self.path,)
 
-    def started_instruction_read(self, child: PiSessionChild) -> None:
+    def started_instruction_read(self, child: RuleReads) -> None:
         # A slice never counts. Even an unsliced call must return the exact full text.
         child.begin_part_read(
             self.call_id, self.path,
             full_read=self.offset == UnsuppliedArgument() and self.limit == UnsuppliedArgument())
 
-    def require_instructions(self, child: PiSessionChild) -> None:
+    def require_instructions(self, child: RuleReads) -> None:
         child.require_part_read(self.call_id)
 
-    def completed_instruction_read(self, child: PiSessionChild, result: PiToolResult) -> None:
-        child.completed_part_read(self.call_id, result)
+    def completed_instruction_read(self, child: RuleReads, result: PiToolResult) -> None:
+        child.completed_part_read(self.call_id, result.text)
 
-    def failed_instruction_read(self, child: PiSessionChild) -> None:
+    def failed_instruction_read(self, child: RuleReads) -> None:
         child.discard_part_read(self.call_id)
 
 

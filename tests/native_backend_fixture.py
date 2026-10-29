@@ -27,7 +27,7 @@ from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArgu
 from agent_comms.native_child import PiSessionChild
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.native_child import PersistentPiSession
 from agent_comms.queued_input import InitialInput
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.storage_rules import StorageRule
@@ -53,9 +53,9 @@ class NativeBackendFixture(AnnouncedInputStart):
     @staticmethod
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
-        return Thread(
+        return wire(root).registry.declare(Thread(
             'direct-native', frozenset(), Checkout(project),
-        ).incarnation.require_recorded()
+        )).incarnation.require_recorded()
 
     def __init__(self, root, project, session, provider, config, package: VerifiedNativePackage):
         self.root, self.project, self.session, self.provider = root, project, session, provider
@@ -147,7 +147,9 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 input_id=InputId.mint(),
             ) as reservation:
                 item = reservation.item
-                await resources.enter_async_context(item.registered(agent.inputs, session_id))
+                resources.push_async_callback(agent.inputs.emit_queue_state, session_id)
+                await resources.enter_async_context(agent.inputs.state(session_id).registered(item))
+                resources.push_async_callback(item.finish, agent.inputs, session_id)
                 resources.push_async_callback(reservation.release().aclose)
             # Native acquisition begins after the wire reservation ends; its
             # rollback actions remain with this turn until acquisition finishes.

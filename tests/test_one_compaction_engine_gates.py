@@ -110,7 +110,7 @@ def test_no_custom_compaction_rpc_is_declared_or_sent():
 
 
 def test_pi_reports_compaction_only_through_its_own_events():
-    from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS
+    from agent_comms.backends.pi_native_backend import PI_0_85_1_EVENT_KINDS
 
     compaction_kinds = {kind for kind in PI_0_85_1_EVENT_KINDS if "compaction" in kind}
     assert compaction_kinds == {"compaction_start", "compaction_end"}

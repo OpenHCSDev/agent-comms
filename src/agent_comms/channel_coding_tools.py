@@ -24,12 +24,13 @@ from .envelope_claim_transitions import (
 )
 from .field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from .lifecycle_capability import Executing
+from .instruction_deck import RuleReads
 from .native_arguments import NativeArguments
 from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
-from .pi_payloads import StorageDenialToolDetails
+from .pi_payloads import PiToolResult, StorageDenialToolDetails
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -47,8 +48,6 @@ from .turn_goal_permission import TurnGoalPermission
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .coordination_tables.assignments import WakeAssignment
-    from .native_child import PiSessionChild
-    from .pi_payloads import PiToolResult
     from .pi_events import ToolExecutionEnd, ToolExecutionStart
     from .threads import Thread
 
@@ -80,11 +79,11 @@ class CodingToolOwner(ABC):
         return NoRoomNeeded()
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
+        call.progress.observation.require(Executing, ToolNotExecuting())
         call.require_instructions(turn.native)
 
         def check(store: Coordination) -> None:
             call.progress.observation.require(Executing, ToolNotExecuting())
-            call.require_instructions(turn.native)
             snapshot = self.comms.registry.snapshot()
             self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
             self.verify(store, turn, snapshot)
@@ -102,15 +101,15 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
 
-    def tool_started(self, call: CodingCall, child: PiSessionChild) -> None:
+    def tool_started(self, call: CodingCall, child: RuleReads) -> None:
         call.started_instruction_read(child)
 
-    def tool_completed(self, call: CodingCall, result: PiToolResult, child: PiSessionChild) -> None:
+    def tool_completed(self, call: CodingCall, result: PiToolResult, child: RuleReads) -> None:
         """Only an actually completed full read opens this child's rule gate."""
         call.completed_instruction_read(child, result)
         call.published_goal(result, self.goal_permission)
 
-    def tool_failed(self, call: CodingCall, child: PiSessionChild) -> None:
+    def tool_failed(self, call: CodingCall, child: RuleReads) -> None:
         call.failed_instruction_read(child)
 
     @abstractmethod

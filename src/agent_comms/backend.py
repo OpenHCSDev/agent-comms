@@ -52,7 +52,7 @@ from .extension_ui import ExtensionUiSession
 from .field_codec import InputId, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
 from .native_attestation import AttestationError
-from .native_child import PiSessionChild
+from .native_child import PersistentPiSession, PiSessionChild
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
@@ -63,9 +63,6 @@ from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
-from .registry_store import RegistryStore
-from .held_orders import HeldOrders
-from .todos import TodoStore
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
 from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
@@ -79,7 +76,6 @@ from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnW
 
 if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
-    from .pi_native_backend import PersistentPiSession
     from .pi_payloads import AssistantMessage, UserMessage
 
 
@@ -420,8 +416,6 @@ class NativeSession(MroDispatch, ABC):
         with self.startup.measurements.operation("native_open"):
             native = await self.native_session.open(
                 self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,
-                registry=RegistryStore.at(self.launch.root),
-                held_orders=partial(HeldOrders.of, TodoStore(self.launch.root)),
             )
         self.startup.native_process = native.proc.identity
         return native

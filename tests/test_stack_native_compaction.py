@@ -27,7 +27,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.native_child import PersistentPiSession
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from agent_comms.native_arguments import GivenArguments, GivenBinary

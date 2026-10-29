@@ -15,7 +15,7 @@ from agent_comms.acp_failure import (
 )
 from agent_comms.controller import SessionUpdateSink
 from agent_comms.native_arguments import GivenArguments, GivenBinary
-from agent_comms.pi_native_backend import PiNativeBackend
+from agent_comms.backends.pi_native_backend import PiNativeBackend
 from agent_comms.turn_input_source import NoTurnAcceptance
 from delivery_owner_fixture import canonical_agent
 

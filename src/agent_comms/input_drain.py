@@ -556,6 +556,15 @@ class DrainedSession:
     # A completed stable drain consumes this pending work.
     repeat_observation: bool = False
 
+    @asynccontextmanager
+    async def registered(self, item: QueuedInput) -> AsyncIterator[None]:
+        """Keep an original in this session's queue through its dispatch cleanup."""
+        self.queued[item.input_id] = item
+        try:
+            yield
+        finally:
+            self.queued.pop(item.input_id)
+
     def owned(self) -> OwnerSession:
         raise RelationViolationError("This session has not acquired local execution")
 

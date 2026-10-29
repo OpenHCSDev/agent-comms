@@ -7,7 +7,7 @@ import json
 import pytest
 
 from agent_comms import backend
-from agent_comms.instruction_deck import DeckParts, FleetReader
+from agent_comms.instruction_deck import CommanderReader, FleetReader
 from agent_comms.pi_events import CompactionEnd
 from agent_comms.pi_payloads import CompactionData, ReportedCompaction, ReportedFlag
 from agent_comms.turn_context import CoordinationSegment, RuleReadingSegment
@@ -49,7 +49,7 @@ async def test_saved_pi_requires_full_reads_and_rearms_on_compaction(tmp_path, n
         async with fixture.open_owner(native_options=()) as (agent, session_id):
             persistent = agent.turns.persistent_backends[session_id]
             child = persistent.child_state.child
-            parts = child.rule_reading.parts
+            parts = tuple(child.rule_reading.parts)
             marker = fixture.project / "allowed.txt"
             blocked = fixture.project / "blocked.txt"
             fixture.provider.plan = [
@@ -124,14 +124,33 @@ async def test_saved_pi_requires_full_reads_and_rearms_on_compaction(tmp_path, n
             assert not blocked.exists()
 
 
-def test_shared_parts_fit_one_full_read(tmp_path):
-    chunks = tuple(DeckParts.chunks(FleetReader.sources("")))
-    assert "".join(chunks) == FleetReader.sources("")
-    assert all(len(chunk.encode("utf-8")) <= DeckParts.part_bytes for chunk in chunks)
-    assert all(len(chunk.splitlines()) <= DeckParts.part_lines for chunk in chunks)
-    directory = tmp_path / "actual"
-    directory.mkdir()
-    alias = tmp_path / "symlink"
-    alias.symlink_to(directory, target_is_directory=True)
-    parts = DeckParts(alias).prepare(FleetReader())
-    assert parts and all(part.parent == directory and part == part.resolve() for part in parts)
+@pytest.mark.parametrize("reader", (FleetReader, CommanderReader))
+def test_prepared_rules_are_the_original_packaged_files(reader):
+    prepared = reader.prepare()
+    assert tuple(prepared) == tuple(source.resolve() for source in reader.sources())
+    assert all(text == path.read_text(encoding="utf-8", newline="")
+               for path, text in prepared.items())
+
+
+@pytest.mark.asyncio
+async def test_a_cold_child_receives_the_order_in_its_first_actual_provider_request(
+        tmp_path, native_runtime_package):
+    async with native_backend_fixture(
+        tmp_path, package=native_runtime_package, provider_type=RuleReadProvider,
+    ) as fixture:
+        await fixture.author_history()
+        async with fixture.open_owner(native_options=()) as (agent, session_id):
+            persistent = agent.turns.persistent_backends[session_id]
+            await persistent.close_idle()
+            assert not persistent.available and not fixture.provider.requests
+            async with fixture.original_input(agent, session_id, "Report the received rule order.") as turn:
+                await turn.prepare_native()
+                assert not persistent.child_state.retained
+                child = persistent.child_state.child
+                fixture.children.append(child)
+                await turn.stream()
+            sent = json.dumps(fixture.provider.requests[0]["messages"])
+            assert "Original saved question" in sent and "Original saved answer" in sent
+            assert "Read each of these" in sent
+            assert "FUCK YOUR COMPACTION" in sent
+            assert all(str(path) in sent for path in child.rule_reading.parts)

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from .native_child import PersistentPiSession
+
 from agent_comms.participant_identity import ParticipantIdentity
 
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from contextlib import aclosing
 from pathlib import Path
 from functools import partial
-from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import backend
@@ -18,10 +19,6 @@ from .native_startup import NativeStartup
 from .coordinator import Coordination
 from .pi_payloads import StateData
 from . import prompt_state
-
-if TYPE_CHECKING:
-    from .pi_native_backend import PersistentPiSession
-
 
 class NativeSessionPreparation(backend.NativeSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""

@@ -16,7 +16,7 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection
 from agent_comms.pi_commands import GetSessionStats
 from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_durable_backend import (
+from agent_comms.backends.pi_durable_backend import (
     CompactDurable,
     DurableDatabase,
     DurablePiEvent,

@@ -13,11 +13,9 @@ from .private_path import FileRevision
 from .turn_item import FreshNativeId
 
 if TYPE_CHECKING:
-    from .native_child import PiSessionChild
     from .native_runtime_input import NativeRuntimeInput
     from .native_entries import NativeEvidenceRead
     from agent_comms.native_pi import NativeContextProof
-    from .pi_native_backend import PersistentPiSession
 
 
 class NativeReopenError(ValueError):
@@ -44,6 +42,13 @@ class NoPiSessionId(NullMember, NativeSessionSelection):
     """The original native input has not selected a saved session."""
 
 
+class SessionRetainer[Child](ABC):
+    """A lifecycle owner declares the child type it can retain."""
+
+    @abstractmethod
+    def retain(self, child: Child, identity: NativeSessionIdentity) -> bool: ...
+
+
 class SessionRetention(ABC):
     """Only an attested saved identity can return a child to its session owner."""
 
@@ -53,11 +58,11 @@ class SessionRetention(ABC):
         return NoSessionRetention() if identity is None else identity
 
     @abstractmethod
-    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool: ...
+    def retain[Child](self, child: Child, session: SessionRetainer[Child]) -> bool: ...
 
 
 class NoSessionRetention(NullMember, SessionRetention):
-    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+    def retain[Child](self, child: Child, session: SessionRetainer[Child]) -> bool:
         return False
 
 
@@ -72,7 +77,7 @@ class NativeSessionIdentity(PresentMember, SessionRetention):
         if not self.session_id or not Path(self.session_file).is_absolute():
             raise NativeReopenError("Saved native session identity is incomplete")
 
-    def retain(self, child: PiSessionChild, session: PersistentPiSession) -> bool:
+    def retain[Child](self, child: Child, session: SessionRetainer[Child]) -> bool:
         return session.retain(child, self)
 
     @property

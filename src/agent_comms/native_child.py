@@ -8,39 +8,32 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coro
 from contextlib import AbstractContextManager, AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, NoReturn
+from typing import ClassVar, NoReturn, Self
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .declared_family import DeclaredFamily
-from .field_codec import ToolCallId
-from .instruction_deck import DeckParts, DeckReader, NotPartRead, PartRead, PartReadCompletion
-from .turn_context import RuleReadingSegment
-from .tool_denial import SelectedToolDenied
+from .instruction_deck import CommanderReader, FleetReader, RuleReads
+from .turn_context import ContextObservations, RuleReadingSegment, TurnContext
 from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_pi import NativePiRpcLaunch
-from .native_session_reopen import NativeSessionIdentity
+from .native_session_reopen import NativeSessionIdentity, SessionRetainer
 from .pending_requests import PendingRequest
 from .pi_events import PiEvent
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
 from .publication_measurements import PublicationMeasurements
-from .session_revision import SessionRevision
+from .session_revision import SessionRevision, SessionRevisionUnavailable
 
-if TYPE_CHECKING:
-    from typing import Self
-
-    from .native_package import VerifiedNativePackage
-    from .participant_identity import ParticipantIdentity
-    from .registry_store import RegistryStore
-    from .registry_document import RegistrySnapshot
-    from .held_orders import HeldOrders
-    from .pi_commands import ExtensionUiResponse, PiCommand
-    from .pi_native_backend import PiNativeBackend
-    from .pi_payloads import PiResponseData, PiToolResult, StateData
-    from .threads import Thread
-    from .turn_context import ContextSegment, Provenance, TurnContext
+from .native_package import VerifiedNativePackage
+from .participant_identity import ParticipantIdentity
+from .registry_store import RegistryStore
+from .held_orders import HeldOrders
+from .todos import TodoStore
+from .pi_commands import ExtensionUiResponse, PiCommand
+from .pi_payloads import PiResponseData, StateData
+from .threads import Thread
 
 
 class RetirementState(DeclaredFamily):
@@ -292,73 +285,49 @@ class PiChild:
 
 
 @dataclass
-class PiSessionChild(PiChild):
+class PiSessionChild(PiChild, RuleReads, ContextObservations):
     key: tuple[NativePiRpcLaunch, tuple[int, int]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
-    registry: RegistryStore = field(kw_only=True)
-    held_orders: Callable[[RegistrySnapshot, str], HeldOrders] = field(kw_only=True)
     rule_reading: RuleReadingSegment = field(kw_only=True)
-    received_context: dict[type[ContextSegment], tuple[Provenance, ...]] = field(default_factory=dict)
-    parts_read: set[Path] = field(default_factory=set)
-    pending_part_reads: dict[ToolCallId, PartReadCompletion] = field(default_factory=dict)
 
-    def remember_context(self, kind: type[ContextSegment], provenance: tuple[Provenance, ...]) -> None:
-        self.received_context[kind] = provenance
+    @property
+    def reading_sources(self) -> Mapping[Path, str]:
+        return self.rule_reading.parts
+
+    @property
+    def working_directory(self) -> Path:
+        return self.key[0].cwd
 
     @staticmethod
-    def prepare_rules(
-        launch: NativePiRpcLaunch, registry: RegistryStore,
-        held_orders: Callable[[RegistrySnapshot, str], HeldOrders],
-    ) -> RuleReadingSegment:
-        snapshot = registry.snapshot()
+    def prepare_rules(launch: NativePiRpcLaunch) -> RuleReadingSegment:
+        snapshot = RegistryStore.at(launch.root).snapshot()
         owner = snapshot.by_lookup[launch.session.files(launch.root).owner.lookup]
-        reader = DeckReader.for_owner(snapshot, owner.incarnation.require_recorded())
-        parts = DeckParts.beside_session(launch.session.directory).prepare(reader)
-        header = reader.header(lambda: (held_orders(snapshot, owner.name),))
+        reader = snapshot.commander_project.session_output(
+            owner.incarnation, commander=CommanderReader(), commanded=FleetReader())
+        parts = reader.prepare()
+        header = reader.header(lambda: (
+            hold.recalled() for hold in HeldOrders.of(TodoStore(launch.root), snapshot, owner.name).live))
         return RuleReadingSegment.for_parts(owner.incarnation, parts, header)
 
     async def forget_context(self) -> None:
         self.received_context.clear()
-        self.parts_read.clear()
-        self.pending_part_reads = {call_id: NotPartRead() for call_id in self.pending_part_reads}
-        self.rule_reading = await asyncio.to_thread(
-            self.prepare_rules, self.key[0], self.registry, self.held_orders)
-
-    def require_rule_reads(self) -> None:
-        unread = tuple(path for path in self.rule_reading.parts if path not in self.parts_read)
-        if unread:
-            raise SelectedToolDenied(DeckParts.order(unread))
-
-    def begin_part_read(self, call_id: ToolCallId, path: str, *, full_read: bool) -> None:
-        selected = (self.key[0].cwd / path).resolve()
-        completion = PartRead(selected) if full_read and selected in self.rule_reading.parts else NotPartRead()
-        self.pending_part_reads[call_id] = completion
-
-    def require_part_read(self, call_id: ToolCallId) -> None:
-        self.pending_part_reads[call_id].require(self)
-
-    def completed_part_read(self, call_id: ToolCallId, result: PiToolResult) -> None:
-        # Every finished Read must have its checked call; a missing record fails closed.
-        self.pending_part_reads.pop(call_id).complete(result, self.parts_read)
-
-    def discard_part_read(self, call_id: ToolCallId) -> None:
-        self.pending_part_reads.pop(call_id)
+        self.reset_rule_reads()
+        self.rule_reading = await asyncio.to_thread(self.prepare_rules, self.key[0])
 
     @classmethod
     async def start(
         cls, key: tuple[NativePiRpcLaunch, tuple[int, int]], attestation: NativeAttestation,
-        *, registry: RegistryStore, held_orders: Callable[[RegistrySnapshot, str], HeldOrders],
     ) -> Self:
         launch, _ = key
-        reading = await asyncio.to_thread(cls.prepare_rules, launch, registry, held_orders)
+        reading = await asyncio.to_thread(cls.prepare_rules, launch)
         with ExitStack() as resources:
             environment = dict(launch.env)
             if "AGENT_COMMS_PROJECT_SOCKET" in environment:
                 address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
                 environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
             return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
-                key=key, attestation=attestation, registry=registry, held_orders=held_orders,
+                key=key, attestation=attestation,
                 rule_reading=reading, resources=resources.pop_all())
 
 
@@ -387,7 +356,7 @@ class NativeChildState(ABC):
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
     async def inspect(
-        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        self, persistent: PersistentPiSession, prepare: Callable[[], Awaitable[StateData]],
         request: PiCommand,
     ) -> PiResponseData:
         """Prepare once, then inspect through the acquired idle capability."""
@@ -442,7 +411,7 @@ class RetiringNative(SuccessorNative):
     available = False
 
     async def inspect(
-        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        self, persistent: PersistentPiSession, prepare: Callable[[], Awaitable[StateData]],
         request: PiCommand,
     ) -> PiResponseData:
         raise NativePiUnavailable("Native context requires an acquired native child")
@@ -461,7 +430,7 @@ class RetiringNative(SuccessorNative):
 class BorrowedNative(SuccessorNative):
 
     async def inspect(
-        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        self, persistent: PersistentPiSession, prepare: Callable[[], Awaitable[StateData]],
         request: PiCommand,
     ) -> PiResponseData:
         # The active TurnSession owns receive/correlation. Borrow its original
@@ -486,7 +455,7 @@ class RetainedNative(ChildNative):
             return super().idle()
         return self
 
-    async def inspect_acquired(self, persistent: PiNativeBackend, request: PiCommand) -> PiResponseData:
+    async def inspect_acquired(self, persistent: PersistentPiSession, request: PiCommand) -> PiResponseData:
         async with persistent.lock:
             current = persistent.child_state.idle()
             data = await current.child.request(request)
@@ -529,4 +498,62 @@ class RetainedNative(ChildNative):
         if not self.current or self.identity.session_file != thread.runtime.read_key:
             return context
         return context.after_received(self.child.received_context)
+
+
+class PersistentPiSession(SessionRetainer[PiSessionChild]):
+    """Serialize borrowing and retirement with the child states that own it."""
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.child_state: NativeChildState = EmptyNative()
+
+    @property
+    def available(self) -> bool:
+        return self.child_state.available
+
+    async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
+        key = (launch, launch.configuration.auth_revision())
+        child = self.child_state.reuse(key) if reuse else None
+        reused = child is not None
+        if child is None:
+            await self.close()
+            attestation = launch.session.attestation()
+            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
+            with startup.measurements.operation("native_spawn"):
+                child = await PiSessionChild.start(key, attestation)
+            self.child_state = BorrowedNative(child, self.child_state)
+        else:
+            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
+            self.child_state = BorrowedNative(child, EmptyNative())
+        watchdog.spawned(reused)
+        return child
+
+    async def context_for_input(self, thread, context):
+        async with self.lock:
+            return await self.child_state.context_for_input(thread, context)
+
+    def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
+        if not child.proc.alive():
+            return False
+        try:
+            launch = child.key[0]
+            revision = SessionRevision.observe(launch.session.files(launch.root)).require_available()
+        except SessionRevisionUnavailable:
+            return False
+        self.child_state = RetainedNative(child, identity, revision)
+        return True
+
+    async def close(self) -> None:
+        await self._finish_retirement(self.child_state.retire())
+
+    async def _finish_retirement(self, retiring: NativeChildState) -> None:
+        self.child_state = retiring
+        try:
+            await retiring.closed()
+        finally:
+            self.child_state = retiring.settled
+
+    async def close_idle(self) -> None:
+        async with self.lock:
+            await self.close()
 

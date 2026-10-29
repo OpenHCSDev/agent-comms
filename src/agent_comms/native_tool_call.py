@@ -23,16 +23,16 @@ from .field_codec import (
     ToolCallId,
 )
 from .lifecycle_capability import Complete, Executing, LifecycleCapability
+from .instruction_deck import RuleReads
+from .pi_payloads import PiToolResult
+from .turn_goal_permission import TurnGoalPermission
 from .storage_room import NoRoomNeeded, RoomReservation
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .envelope_claim_transitions import FileClaimPath
-    from .native_child import PiSessionChild
     from .native_tool_transport import UnboundToolTransport
-    from .pi_payloads import PiToolResult
     from .shell_effects import StorageEffect
-    from .turn_goal_permission import TurnGoalPermission
 
 
 
@@ -271,16 +271,16 @@ class NativeToolCall(ABC):
 
 @dataclass(frozen=True)
 class CodingCall(NativeToolCall):
-    def started_instruction_read(self, child: PiSessionChild) -> None:
+    def started_instruction_read(self, child: RuleReads) -> None:
         pass
 
-    def require_instructions(self, child: PiSessionChild) -> None:
+    def require_instructions(self, child: RuleReads) -> None:
         child.require_rule_reads()
 
-    def completed_instruction_read(self, child: PiSessionChild, result: PiToolResult) -> None:
+    def completed_instruction_read(self, child: RuleReads, result: PiToolResult) -> None:
         pass
 
-    def failed_instruction_read(self, child: PiSessionChild) -> None:
+    def failed_instruction_read(self, child: RuleReads) -> None:
         pass
 
     def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:

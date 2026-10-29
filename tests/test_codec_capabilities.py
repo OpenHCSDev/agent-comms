@@ -244,7 +244,7 @@ def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unrepo
 
 @pytest.mark.parametrize("command", ["switch_session", "watch", "compact_durable"])
 def test_exact_response_capability_covers_sdk_and_durable_commands(command):
-    from agent_comms import pi_durable_backend  # Registers the actual host command family.
+    from agent_comms.backends import pi_durable_backend  # Registers the actual host command family.
     from agent_comms.pi_events import Response
 
     wire = {"id": "proof", "type": "response", "command": command,

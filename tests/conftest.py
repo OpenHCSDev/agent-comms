@@ -37,7 +37,7 @@ from agent_comms.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
 from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener
-from agent_comms.pi_durable_backend import PiDurableBackend
+from agent_comms.backends.pi_durable_backend import PiDurableBackend
 from agent_comms.publisher import InitialWrites, ParticipantPublisher
 from agent_comms.registration import Registration
 from agent_comms.thread_text import ForkedParent, GivenThreadText

@@ -31,7 +31,7 @@ from .field_codec import (
 )
 from .goals import Goal, NoGoal
 from .message_reference import MessageReference
-from .instruction_deck import DeckParts
+from .instruction_deck import DeckReader
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .repo import Checkout
@@ -44,7 +44,6 @@ from .wake_policy import WakePolicy
 if TYPE_CHECKING:
     from .context_store import RecordedContextState
     from .input_attempt import StoredInput
-    from .native_child import PiSessionChild
     from .presentation import ThreadView
     from .relationships import PeerRelation
     from .threads import Thread
@@ -1103,6 +1102,16 @@ class PeerState:
         )
 
 
+@dataclass(kw_only=True)
+class ContextObservations:
+    """A native context owns the segment sources it has actually received."""
+
+    received_context: dict[type[ContextSegment], tuple[Provenance, ...]] = field(default_factory=dict)
+
+    def remember_context(self, kind: type[ContextSegment], provenance: tuple[Provenance, ...]) -> None:
+        self.received_context[kind] = provenance
+
+
 @dataclass(frozen=True, kw_only=True)
 class OncePerContextSegment(InstructionSegment):
     def needed_after(self, received: Mapping[type[ContextSegment], tuple[Provenance, ...]]) -> bool:
@@ -1110,22 +1119,22 @@ class OncePerContextSegment(InstructionSegment):
         return not all(source in observed for source in self.provenance)
 
     @classmethod
-    def remember_received(cls, child: PiSessionChild, provenance: tuple[Provenance, ...]) -> None:
+    def remember_received(cls, child: ContextObservations, provenance: tuple[Provenance, ...]) -> None:
         child.remember_context(cls, provenance)
 
 
 @dataclass(frozen=True, kw_only=True)
 class RuleReadingSegment(OncePerContextSegment):
-    parts: tuple[Path, ...]
+    parts: Mapping[Path, str]
     header: str
 
     @classmethod
-    def for_parts(cls, owner: ThreadIncarnation, parts: tuple[Path, ...], header: str) -> Self:
+    def for_parts(cls, owner: ThreadIncarnation, parts: Mapping[Path, str], header: str) -> Self:
         revision = hashlib.sha256("\n".join(map(str, parts)).encode()).hexdigest()
-        return super().capture((OwnerProvenance(owner, revision),), parts=parts, header=header)
+        return super().capture((OwnerProvenance(owner, revision),), parts=MappingProxyType(dict(parts)), header=header)
 
     def values(self) -> dict[str, object]:
-        return {"read_order": DeckParts.order(self.parts), "header": self.header}
+        return {"read_order": DeckReader.order(self.parts), "header": self.header}
 
 
 @dataclass(frozen=True, kw_only=True)

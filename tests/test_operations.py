@@ -471,7 +471,7 @@ class TestLedgerOps:
     def test_recent_transcript_is_bounded_and_ordered(self, wired: Comms, tmp_path: Path) -> None:
         import json
 
-        from agent_comms.pi_native_backend import PiSessionFile
+        from agent_comms.backends.pi_native_backend import PiSessionFile
 
         path = tmp_path / "large-session.jsonl"
         with path.open("w") as stream:

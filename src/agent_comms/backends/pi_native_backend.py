@@ -1,70 +1,42 @@
-"""The Pi 0.85.1 runtime as an AgentBackend: one retained Pi RPC child per thread session.
-
-``PiNativeBackend`` is the only entry point Core uses for this runtime. It owns
-the per-session child (``PersistentPiSession``), its launch command, and the
-conversions from Pi's RPC, session file and settings vocabulary to Core's
-records. The transport, child lifecycle and turn machinery stay in private
-implementation modules (``backend``, ``pi_commands``, ``pi_events``,
-``native_entries``) and are imported lazily: this module is declared while
-``threads`` is still importing.
-"""
+"""Pi over RPC, discovered when a runtime location or backend is requested."""
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
 from functools import partial
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
-from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
-from agent_comms.pi_payloads import PiOmitted
-
-from .agent_backend import (
-    CompactionOutcome,
-    FailedCompaction,
-    Forks,
-    InputContent,
-    Interrupts,
-    NewThreadBackend,
-    NothingToCompaction,
-    PlacedCompaction,
-    RuntimeLocation,
+from .. import backend
+from ..agent_backend import (
+    CompactionOutcome, FailedCompaction, Forks, InputContent, Interrupts,
+    NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation,
 )
-from .coordinator import Coordination
-from .fresh_private_session import create_fresh_private_session
-from .native_arguments import NativeArguments
-from .native_failures import NativePiUnavailable
-from .native_fork import (
-    RuntimeForkHelper,
-    RuntimeForkRequest,
-)
-from .native_pi import NativePiRpcLaunch
-from .native_session_reopen import NativeSessionIdentity
-from .native_transcript import NativeTranscript
-from .pi_commands import Compact
-from .selected_session import SavedSelectedSession
-from .session_revision import (
-    SessionObservation,
-    SessionRevision,
-    SessionRevisionUnavailable,
-)
-
-if TYPE_CHECKING:
-    from .agent_events import AgentEvent, AgentInfo
-    from .comms import Comms
-    from .config_options import ConfigOptions
-    from .launch_runtime import LaunchRuntime
-    from .native_child import NativeChildState, PiSessionChild
-    from .native_session_reopen import NativeSessionIdentity
-    from .owned_turn import TurnDelivery
-    from .registry_store import RegistryStore
-    from .registry_document import RegistrySnapshot
-    from .held_orders import HeldOrders
-    from .pi_payloads import StateData
-    from .threads import Thread
-    from .turn_runner import TurnRunner
+from ..agent_events import AgentEvent, AgentInfo
+from ..comms import Comms
+from ..config_options import ConfigOptions
+from ..coordinator import Coordination
+from ..fresh_private_session import create_fresh_private_session
+from ..launch_runtime import LaunchRuntime
+from ..native_arguments import NativeArguments
+from ..native_child import PersistentPiSession
+from ..native_failures import NativePiUnavailable
+from ..native_fork import RuntimeForkHelper, RuntimeForkRequest
+from ..native_pi import NativePiRpcLaunch
+from ..native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
+from ..native_session_prepare import NativeSessionPreparation
+from ..native_session_reopen import NativeSessionIdentity
+from ..native_transcript import NativeTranscript
+from ..owned_turn import TurnDelivery
+from ..pi_commands import Compact
+from ..pi_events import NativePiEvent
+from ..pi_payloads import PiOmitted, StateData
+from ..selected_session import SavedSelectedSession
+from ..session_revision import SessionObservation, SessionRevision
+from ..threads import Thread
+from ..turn_runner import TurnRunner
 
 
 # The event kinds Pi 0.85.1 writes to RPC stdout, as built for Core. Sources,
@@ -101,9 +73,7 @@ class PiSessionFile(RuntimeLocation):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
-                    NativeSessionIdentity.from_evidence(
-                        source_reads.for_source(path)
-                    ))
+                    NativeSessionIdentity.from_evidence(source_reads.for_source(path)))
         return SavedSelectedSession(directory, identity=identity,
                                     owner=participant.owner.thread.incarnation.require_recorded())
 
@@ -129,85 +99,8 @@ class PiSessionFile(RuntimeLocation):
         return None
 
 
-class PersistentPiSession:
-    """Serialize borrowing and retirement of one native session's actual child."""
-
-    def __init__(self) -> None:
-        from .native_child import EmptyNative
-
-        self.lock = asyncio.Lock()
-        self.child_state: NativeChildState = EmptyNative()
-
-    @property
-    def available(self) -> bool:
-        return self.child_state.available
-
-    async def open(
-        self, launch, *, reuse, startup, watchdog, registry: RegistryStore,
-        held_orders: Callable[[RegistrySnapshot, str], HeldOrders],
-    ) -> PiSessionChild:
-        from .native_child import BorrowedNative, EmptyNative, PiSessionChild
-
-        key = (launch, launch.configuration.auth_revision())
-        child = self.child_state.reuse(key) if reuse else None
-        reused = child is not None
-        if child is None:
-            await self.close()
-            attestation = launch.session.attestation()
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
-            with startup.measurements.operation("native_spawn"):
-                child = await PiSessionChild.start(key, attestation, registry=registry, held_orders=held_orders)
-            self.child_state = BorrowedNative(child, self.child_state)
-        else:
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
-            self.child_state = BorrowedNative(child, EmptyNative())
-        watchdog.spawned(reused)
-        return child
-
-    async def context_for_input(self, thread, context):
-        async with self.lock:
-            return await self.child_state.context_for_input(thread, context)
-
-    def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
-        from .native_child import RetainedNative
-
-        if not child.proc.alive():
-            return False
-        try:
-            launch = child.key[0]
-            revision = SessionRevision.observe(launch.session.files(launch.root)).require_available()
-        except SessionRevisionUnavailable:
-            return False
-        self.child_state = RetainedNative(child, identity, revision)
-        return True
-
-    async def close(self) -> None:
-        await self._finish_retirement(self.child_state.retire())
-
-    async def _finish_retirement(self, retiring: NativeChildState) -> None:
-        self.child_state = retiring
-        try:
-            await retiring.closed()
-        finally:
-            self.child_state = retiring.settled
-
-    async def close_idle(self) -> None:
-        async with self.lock:
-            await self.close()
-
-
-class PiNativeBackend(
-    PersistentPiSession,
-    Interrupts,
-    Forks,
-    NewThreadBackend,
-):
-    """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
-
-    The instance owns the session's child. Its launch command (``agent_bin``
-    plus ``agent_args``) and the publisher of attested session info are fixed
-    when the worker creates it.
-    """
+class PiNativeBackend(PersistentPiSession, Interrupts, Forks, NewThreadBackend):
+    """The session's backend composes the existing child lifecycle capabilities."""
 
     location_type: ClassVar[type[RuntimeLocation]] = PiSessionFile
     event_kinds: ClassVar[frozenset[str]] = PI_0_85_1_EVENT_KINDS
@@ -234,19 +127,11 @@ class PiNativeBackend(
         return PiSessionFile(str(create_fresh_private_session(root, worktree=worktree).path))
 
     def arguments(self, thread: Thread) -> tuple[str, ...]:
-        """Pi's command-line arguments for this thread's model and thinking level."""
         return thread.model.native(self.configuration.agent_args).with_thinking(
             thread.thinking_level
         ).argv
 
-    # -- lifecycle --------------------------------------------------------
-
-    async def prepare(self, thread: Thread, *, open_native=None) -> StateData:
-        """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
-        from .native_session_prepare import NativeSessionPreparation
-
-        if open_native is None:
-            open_native = NativeSessionPreparation.open
+    async def prepare(self, thread: Thread, *, open_native=NativeSessionPreparation.open) -> StateData:
         environment = await Coordination.run_worker(lambda: self.configuration.native_environment(
             thread, self.comms.registry.snapshot(),
         ))
@@ -267,16 +152,11 @@ class PiNativeBackend(
         )
 
     async def inspect(self, thread: Thread, request):
-        """Answer one Pi query on the idle child, preparing it first when needed."""
         return await self.child_state.inspect(self, partial(self.prepare, thread), request)
-
-    # -- RunsTurns / Steers / Interrupts ------------------------------------
 
     async def run_turn(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
-        from . import backend
-
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
         async for event in backend.stream_agent_events(
@@ -305,14 +185,9 @@ class PiNativeBackend(
             yield event
 
     async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
-        from . import backend
-
         await backend.terminate_task_process(owner)
 
-    # -- Compacts ---------------------------------------------------------
-
-    async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
-        """Ask Pi's own engine to compact through its ``compact`` RPC."""
+    async def compact(self, thread: Thread, instructions) -> CompactionOutcome:
         try:
             command = Compact(custom_instructions=PiOmitted.from_input(instructions))
             data = await self.inspect(thread, command)
@@ -326,13 +201,10 @@ class PiNativeBackend(
             tokens_before=data.tokens_before,
         )
 
-    # -- Forks ------------------------------------------------------------
-
     @classmethod
     async def fork(
         cls, parent: Thread, launcher: str, runtime: LaunchRuntime, root: Path,
     ) -> PiSessionFile:
-        """Copy the parent's whole saved history with Pi's own session manager."""
         package = await Coordination.run_worker(partial(
             NativePiRpcLaunch.package_for_command, launcher, runtime,
         ))
@@ -343,3 +215,5 @@ class PiNativeBackend(
         )
         return PiSessionFile(identity.session_file)
 
+
+PiNativeBackend.require_event_family(NativePiEvent)
