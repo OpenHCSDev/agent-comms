@@ -20,7 +20,7 @@ from agent_comms.standing_rules import (
     HeadReviewTimerUp, IdlePullRequest, OrderlessPullRequest, OrderlessUnreviewedHead,
     LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
 )
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread
 from agent_comms.errors import RelationViolationError, ToolRefusedError
@@ -230,6 +230,53 @@ def test_guarded_grant_rechecks_captured_actor_and_root_on_editing_document(scop
             other if changed == 'root' else root,
             ThreadCaller('lead').repository_head_review_grant_actor)
     assert comms.registry.snapshot().commander_project == snapshot.commander_project
+
+
+def test_context_configuration_keeps_supplied_source_and_github_without_rediscovery(scoped_review_bus, tmp_path):
+    comms, _, primary, nra = scoped_review_bus
+    source = SourceRepository.create(tmp_path / 'custom-source', RepositoryName.from_wire('example/origin'))
+    module = source.checkout / 'packages' / 'custom' / 'owner.py'
+    module.parent.mkdir(parents=True)
+    module.write_text('class CustomOwner:\n    pass\n')
+    source.publish_change('Declare nondefault source', 'packages/custom/owner.py')
+    explicit = Repo(checkout=source.checkout, github=nra.repo, source='packages/custom')
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    select_reviewers(comms, nra.repo, (reviewer,))
+    project = comms.registry.snapshot().commander_project.require()
+    supplied = (project.repos[0], explicit)
+    order.Commander.on_root('lead', supplied, comms.root)
+    configured = comms.registry.snapshot().commander_project.require()
+    assert configured.repos == supplied
+    assert configured.repository_head_reviewers == project.repository_head_reviewers
+    assert explicit.github != Repo.of(explicit.checkout).github
+    order.Commander.on_root('lead', (supplied[0],), comms.root)
+    remaining = comms.registry.snapshot().commander_project.require()
+    assert remaining.repository_names() == (primary.repo,)
+    assert not remaining.repository_head_reviewers
+
+
+def test_public_grant_refuses_historical_root_without_changing_project(scoped_review_bus):
+    comms, _, _, nra = scoped_review_bus
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    before = comms.registry.snapshot().commander_project
+    comms.registry.store.mark_historical()
+    with pytest.raises(RelationViolationError, match='Historical roots are read-only'):
+        select_reviewers(comms, nra.repo, (reviewer,))
+    assert comms.registry.snapshot().commander_project == before
+
+
+def test_prepared_reviewer_birth_cannot_be_granted_to_a_replacement(scoped_review_bus):
+    comms, _, _, nra = scoped_review_bus
+    original = comms.registry.require('claude-nra')
+    tool = CommsSetRepositoryHeadReviewersTool(
+        repository=nra.repo, reviewers=(original.incarnation.require_recorded(),))
+    arguments = tool.arguments
+    before = comms.registry.snapshot().commander_project
+    comms.registry.remove(original.name)
+    comms.registry.declare(Thread(original.name, frozenset(), original.worktree))
+    with pytest.raises(RelationViolationError, match='registered incarnation'):
+        tool.invoke(comms, arguments, caller=ThreadCaller('lead'))
+    assert comms.registry.snapshot().commander_project == before
 
 
 def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp_path):

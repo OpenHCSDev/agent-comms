@@ -79,7 +79,7 @@ from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.commander.config import GivenRepos
+from agent_comms.repo import AcquiredRepositories
 from agent_comms.repo import Repo
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
@@ -406,7 +406,7 @@ class CommanderContext(BaseModel):
         thread = context.comms.registry.require(commander)
         project = context.comms.registry.snapshot().commander_project
         context.comms.registry.set_commander_project(project.named(
-            thread.incarnation, GivenRepos(tuple(repo.checkout for repo in repos))))
+            thread.incarnation, AcquiredRepositories(repos)))
         return context
 
     @property
