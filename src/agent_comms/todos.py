@@ -102,6 +102,8 @@ from agent_comms.head_review import (
     HeadReviewStatus,
     IntegrationInput,
     MergeArm,
+    MergeHeadReview,
+    UnpromotedHeadReview,
     OpenPullRequestHead,
     PreparedHeadReview,
     PullRequestHead,
@@ -4083,13 +4085,16 @@ class HeadVerdict(HeadReview, declared_name=None):
 
     @classmethod
     def require_merge(cls, request: PullRequestHead) -> None:
-        """Only a verdict that allows integration lets the owner's admin bypass merge."""
+        """Source review cannot authorize even the owner's direct merge path."""
         if not cls.allows_integration():
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
+        MergeHeadReview.require_merge(request)
 
-    def prepare_sources(self, goals: Goals, request: ReadPullRequestHead) -> None:
-        """Marking review pending or rejecting it grants no source promotion permission."""
+    def post(self, repo: RepositoryName, head: str, reviewer: str, subject: str) -> None:
+        # Withdraw first: a failed source-status write cannot leave an earlier promotion live.
+        UnpromotedHeadReview().post(repo, head, reviewer, subject)
+        super().post(repo, head, reviewer, subject)
 
     def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
                  reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
@@ -4100,7 +4105,7 @@ class HeadVerdict(HeadReview, declared_name=None):
         return HeadReviewed(recorded, self.landing(prepared.current))
 
     def landing(self, current: OpenPullRequestHead) -> MergeArm:
-        """Only an acceptance moves the PR toward main; every other verdict leaves auto-merge be."""
+        """Source verdicts never request merge; native explicit promotion owns enqueueing."""
         return UntouchedMergeArm()
 
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
@@ -4164,6 +4169,8 @@ class QualifiedHeadVerdict(DecidedHeadVerdict):
 
 @dataclass(frozen=True)
 class ReviewedHeadVerdict(DecidedHeadVerdict):
+    """Accept an exact source for combination, never enqueue its individual PR."""
+
     state = "success"
     verb = "Accepted"
     preparation_field = GrowthReason.option
@@ -4179,10 +4186,6 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
             return False
         if reviewed_change != current_change:
             return False
-        try:
-            self.prepare_sources(goals, current)
-        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired, ToolRefusedError, MalformedRecord):
-            return False
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
@@ -4194,24 +4197,9 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
     def allows_integration(cls) -> bool:
         return True
 
-    def prepare_sources(self, goals: Goals, request: ReadPullRequestHead) -> None:
-        """Final acceptance checks the actual source owners, never an author's self-hash."""
-        project = goals.registry.snapshot().commander_project.require()
-        repository = Repo.selected(project.repos, request.repo.to_wire())
-        message = WorkBranches(repository.checkout).commit_message(request.head)
-        for inputs in IntegrationInput.from_message(message):
-            goals.todos.require_input_links(inputs)
-            inputs.validate(project.repos, request)
-            for source in inputs.sources:
-                for head in source.heads:
-                    if not head.same_pull_request(request) and not HeadReview.accepted(head.repo, head.head):
-                        raise TodoError(
-                            f"{head.repo.to_wire()}#{head.pr} at {head.head} has no accepted exact-head "
-                            "source review; pending qualification cannot promote the carrier.")
-
-    def landing(self, current: OpenPullRequestHead) -> MergeArm:
-        """Accepting the current head means landing it: arm it, pinned to that head."""
-        return current.arm()
+    @classmethod
+    def grown(cls, reason: VerdictReason, growth: GrowthReason) -> ReviewedHeadVerdict:
+        return GrownHeadVerdict(reason, growth)
 
     def subject(self, goals: Goals, request: ReadPullRequestHead) -> str:
         project = goals.registry.snapshot().commander_project.require()
@@ -4237,8 +4225,8 @@ class CarriedHeadVerdict(ReviewedHeadVerdict):
 
 
 @dataclass(frozen=True)
-class GrownHeadVerdict(ReviewedHeadVerdict):
-    """Acceptance of a head whose source growth the reviewer explains file by file."""
+class ExplainedGrowth:
+    """Source review and combined promotion share the same explicit growth contract."""
 
     growth: GrowthReason
 
@@ -4247,6 +4235,11 @@ class GrownHeadVerdict(ReviewedHeadVerdict):
                        if not self.growth.names(path)]:
             raise TodoError(f"--growth names no reason for {', '.join(unnamed)} "
                             f"({growth.listing()}).")
+
+
+@dataclass(frozen=True)
+class GrownHeadVerdict(ExplainedGrowth, ReviewedHeadVerdict):
+    """Acceptance of a source whose growth the reviewer explains file by file."""
 
 
 @dataclass(frozen=True)

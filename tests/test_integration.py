@@ -14,7 +14,7 @@ import tomli_w
 
 from agent_comms import integration
 from agent_comms.errors import ToolRefusedError
-from agent_comms.head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, PullRequestHead
+from agent_comms.head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, PromotedHeadReview, PullRequestHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.todos import (
@@ -47,7 +47,7 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     tmp_path: Path, event: str,
 ) -> None:
     pair = mutual_sources
-    inputs = integration.IntegrationRun(pair.checkout, pair.output, "CI source graph").qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "CI source graph")
     carrier = pair.publish_carrier(github_cli)
     local = inputs.source(pair.core.github)
     # Actual synthetic merge: its own message deliberately has no source metadata.
@@ -73,6 +73,9 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
                             env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
     assert IntegrationInput.at(output) == inputs
+    assert inputs.carrier.pr == carrier.pr != pair.core.number
+    assert local.heads == (PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit),)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD^").strip() == inputs.carrier.head
     for source in inputs.sources:
         for side in (BaseSide, HeadSide):
             side.require_materialized(output, source)
@@ -121,6 +124,55 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     assert Package(base, resource.at(checkout.path, baseline, tested, BaseSide)).missing_names == ()
     assert {name for _, name in Package(candidate, resource.at(checkout.path, baseline, tested, HeadSide)).missing_names} == {"old_api"}
     assert not any("state=success" in call or call[:2] == ("pr", "merge") for call in github_cli.calls())
+    refused = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
+                              str(tmp_path / "refused-individual")), cwd=checkout.path,
+                             env=environment, capture_output=True, text=True, timeout=120)
+    assert refused.returncode != 0 and "individual source" in refused.stderr
+
+
+@pytest.mark.parametrize("event", ("pull_request", "merge_group"))
+def test_required_hosted_merge_gate_distinguishes_source_review_from_combined_promotion(
+    mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path, event: str,
+) -> None:
+    pair = mutual_sources
+    inputs = pair.capture(("P2", "P3"), "hosted gate must refuse an individually armed source")
+    carrier = pair.publish_carrier(github_cli)
+    for source in inputs.sources:
+        for head in source.heads:
+            ReviewedHeadVerdict(VerdictReason("The exact source is accepted for this actual combined carrier")).post(
+                head.repo, head.head, "lead", "source")
+    # A source review on the combined head is still not a merge promotion.
+    ReviewedHeadVerdict(VerdictReason("The combined source is reviewed but not yet promoted for merge")).post(
+        carrier.repo, carrier.head, "lead", "combined source")
+    local = inputs.source(pair.core.github)
+    tested = pair.core.git(pair.core.checkout, "commit-tree", local.candidate_tree,
+                           "-p", local.baseline.commit, "-p", carrier.head,
+                           "-m", "Actual queue/PR merge").strip()
+    checkout = integration.IntegrationCheckout.create(pair.core, tmp_path / "merge-gate", tested)
+    documents = {
+        "pull_request": {"number": carrier.pr, "pull_request": {"head": {"sha": carrier.head}}},
+        "merge_group": {"merge_group": {"head_sha": tested, "base_sha": local.baseline.commit,
+                        "head_ref": f"refs/heads/gh-readonly-queue/main/pr-{carrier.pr}-{carrier.head}"}},
+    }
+    document = tmp_path / "event.json"
+    document.write_text(json.dumps(documents[event]))
+    environment = {**os.environ, **ENVIRONMENT, "GITHUB_EVENT_NAME": event,
+                   "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
+                   "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
+                   "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    command = (sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs")
+    result = subprocess.run((*command, str(tmp_path / "before-promotion")), cwd=checkout.path,
+                            env=environment, capture_output=True, text=True, timeout=120)
+    assert (result.returncode == 0) == (event == "pull_request"), result.stdout + result.stderr
+    if event == "merge_group":
+        assert "no explicit reviewed merge promotion" in result.stderr
+    ReviewedHeadVerdict(VerdictReason("The actual combined carrier is explicitly reviewed for merge")).post(
+        carrier.repo, carrier.head, "lead", "source")
+    PromotedHeadReview().post(carrier.repo, carrier.head, "lead", "promotion")
+    promoted = subprocess.run((*command, str(tmp_path / "after-promotion")), cwd=checkout.path,
+                              env=environment, capture_output=True, text=True, timeout=120)
+    assert promoted.returncode == 0, promoted.stdout + promoted.stderr
+    assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 
 def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head_changes(
@@ -145,8 +197,7 @@ def test_actual_main_cli_keeps_merged_local_members_exact_and_refuses_later_head
         order=replace(primary.order.checked(), pull_requests=(peer.link,),
                       check=replace(primary.order.check, directory=peer.checkout)),
         review_at=RecordedEventTime(9999999999.0)))
-    inputs = integration.IntegrationRun(pair.checkout, pair.output, "actual main tuple").qualify(
-        pair.context, ("P2", "P3", "P4"))
+    inputs = pair.capture(("P2", "P3", "P4"), "actual main tuple")
     carrier = pair.publish_carrier(github_cli)
     pair.core.git(pair.core.checkout, "switch", "main")
     pair.core.git(pair.core.checkout, "merge", "--no-ff", "--no-edit", carrier.head)
@@ -210,7 +261,7 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(pair.client.github, DraftListedPullRequest(
         pair.client.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
-    inputs = integration.IntegrationRun(pair.checkout, pair.output, "real client checker tuple and native plugins").qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "real client checker tuple and native plugins")
     source = inputs.source(pair.core.github)
     head = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     clients = materialized_clients(pair.output, inputs)
@@ -313,7 +364,7 @@ def test_qualification_captures_actual_orders_without_reviewing_or_arming_source
         mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
     pair = mutual_sources
     run = integration.IntegrationRun(pair.checkout, pair.output, "mutually migrated API/import source")
-    inputs = run.qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), run.risk)
     assert FieldCodec.decode(IntegrationInput, FieldCodec.parse((pair.output / "input.json").read_bytes())) == inputs
     carrier = Repo.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     assert IntegrationInput.from_message(Repo.git(pair.checkout.path, "show", "--format=%B", "--no-patch", carrier)) == (inputs,)
@@ -324,6 +375,9 @@ def test_qualification_captures_actual_orders_without_reviewing_or_arming_source
         assert Repo.git(HeadSide.checkout(pair.output, source.repository), "rev-parse", "HEAD^{tree}").strip() == source.candidate_tree
         assert not HeadReview.accepted(source.repository, source.heads[0].head)
     assert run.accepted_heads() == ()
+    assert inputs.carrier.pr != pair.core.number
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD^").strip() == inputs.carrier.head
+    assert all(not head.same_pull_request(inputs.carrier) for source in inputs.sources for head in source.heads)
     assert not any(call[:2] == ("pr", "merge") or "POST" in call for call in github_cli.calls())
 
 
@@ -332,8 +386,7 @@ def test_real_mutual_imports_work_for_both_matched_cuts_and_fail_for_both_mixed_
     import sys
 
     pair = mutual_sources
-    integration.IntegrationRun(pair.checkout, pair.output, "both mixed imports must fail").qualify(
-        pair.context, ("P2", "P3"))
+    pair.capture(("P2", "P3"), "both mixed imports must fail")
     results = {}
     for core_side in (BaseSide, HeadSide):
         for client_side in (BaseSide, HeadSide):
@@ -358,7 +411,7 @@ def test_changed_main_during_source_review_refuses_the_frozen_input(
         mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
     pair = mutual_sources
     run = integration.IntegrationRun(pair.checkout, pair.output, "stale baseline must refuse")
-    inputs = run.qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), run.risk)
     carrier = pair.publish_carrier(github_cli)
     pair.client.git(pair.client.checkout, "checkout", "main")
     pair.client.commit_change("Advance client main", *pair.client.write_files({Path("main-only.py"): "advanced = True\n"}))

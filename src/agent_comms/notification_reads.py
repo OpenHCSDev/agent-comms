@@ -22,8 +22,11 @@ if TYPE_CHECKING:
     from .presentation import WireRevision
 
 
+@dataclass(frozen=True)
 class NotificationRead(UiRead[NotificationWindow], ABC):
-    """A batched notification window read; each member owns when its settled read is stale."""
+    """Every notification read declares its references; members own evidence freshness."""
+
+    references: tuple[MessageReference, ...]
 
     @abstractmethod
     def changed_since(self, comms: Comms, revision: WireRevision,
@@ -35,7 +38,6 @@ class LiveNotificationRead(NotificationRead):
     """Recipient handling of the referenced original messages, as its reader may see them.
     The UI reads as the operator; an MCP caller reads under its own viewer."""
 
-    references: tuple[MessageReference, ...]
     after: RecipientCursor = field(default_factory=FirstRecipient, kw_only=True)
     limit: int = field(default=RecipientSelection.max_limit, kw_only=True)
 

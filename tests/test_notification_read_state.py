@@ -171,10 +171,12 @@ REFERENCES = (MessageReference(1, MessageId.mint("original")),)
 @pytest.mark.parametrize("operation", [
     LiveNotificationRead(REFERENCES), RecordedNotificationRead(REFERENCES, "archive"),
 ], ids=["live", "recorded"])
-def test_notification_operations_are_root_free_family_records(operation):
+def test_notification_operations_are_root_free_family_records(operation: NotificationRead) -> None:
+    assert operation.references == REFERENCES
     encoded = FieldCodec.encode(operation)
     assert "root" not in encoded and "request_id" not in encoded
-    assert FieldCodec.decode(NotificationRead, encoded) == operation
+    decoded = FieldCodec.decode(NotificationRead, encoded)
+    assert decoded == operation and decoded.references == REFERENCES
     assert FieldCodec.decode(UiRead, encoded) == operation
     request = ReadNotifications("root", operation, request_id=4)
     assert FieldCodec.decode(ReadNotifications, FieldCodec.encode(request)) == request
