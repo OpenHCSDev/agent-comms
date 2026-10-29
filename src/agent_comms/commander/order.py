@@ -1289,6 +1289,15 @@ class RetireVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class EndVerb(OrderVerb):
+    help = "archive a commander fork that has stopped, reporting the work it left unrecorded"
+
+    def run(self, ctx: Commander) -> None:
+        ctx.actor.end(ctx.comms)
+        print(f'{ctx.actor_name} ended')
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProblemVerb(RequestedOrderVerb):
     help = "Core records the problem with its order, or nothing"
     order: Annotated[
