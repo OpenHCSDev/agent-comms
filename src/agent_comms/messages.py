@@ -1028,11 +1028,12 @@ class Message(MessageInput, TurnOrigin):
         return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self.envelope)}
 
     @classmethod
-    def from_wire(cls, data: Mapping) -> Message:
+    def from_wire(cls, data: object) -> Message:
         # Content identity is derived from the declared message fields.
         plan = FieldCodec.field_plan(Message, 'type')
         kind = cast(builtins.type[MessageKind], plan.value.decode(plan.raw(data)))
-        return kind.decode_message({"ts": 0.0, **data})
+        # The field decoder has already required a record; do not validate/copy it again.
+        return kind.decode_message({"ts": 0.0, **cast(Mapping[str, object], data)})
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES
@@ -1190,8 +1191,9 @@ class StoredWireHistory:
         return self.count_where("1")
 
     def count_where(self, predicate: str, parameters: tuple[object, ...] = ()) -> int:
-        return self.db.execute(f"SELECT count(*) FROM ({self.query}) WHERE {predicate}",
-                               (*self.parameters, *parameters)).fetchone()[0]
+        return FieldCodec.decode(int, self.db.execute(
+            f"SELECT count(*) FROM ({self.query}) WHERE {predicate}",
+            (*self.parameters, *parameters)).fetchone()[0])
 
     def newest_suffix(self, size: str, capacity: int) -> int:
         """SQLite sums encoded byte lengths newest-first; Python retains only a sequence."""
@@ -1205,7 +1207,7 @@ class StoredWireHistory:
                 if retained_bytes > capacity:
                     break
                 first = sequence
-        return first
+        return FieldCodec.decode(int, first)
 
 
 class PublicRecord(BusRecord):
