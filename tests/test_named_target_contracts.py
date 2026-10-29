@@ -11,6 +11,7 @@ from agent_comms.historical_views import ConversationObservation, DMDisplayHisto
 from agent_comms.message_page import ConversationMessagePageRequest
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_identity import BirthlessIncarnation
 from bus_record_fixture import context_comms
 from agent_comms.threads import Thread
 
@@ -64,8 +65,17 @@ def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_pa
     comms = context_comms(tmp_path)
     worktree = Checkout(tmp_path)
     target = IncarnationThreadTarget(comms.registry.require("Alice").incarnation)
+    original_cut = comms.registry.snapshot()
+    assert target.incarnation.require_current(original_cut).name == "Alice"
     original = comms.messaging.send_user_message(target, "before rename", worktree=worktree)
     comms.registry.rename("Alice", "renamed")
+    renamed_cut = comms.registry.snapshot()
+    current = target.incarnation.require_current(renamed_cut)
+    assert current == target.incarnation
+    assert current.name == "renamed"
+    assert target.selected_name(renamed_cut) == current.name
+    assert target.incarnation.resolved(renamed_cut).name == current.name
+    assert target.incarnation.require_current(original_cut).name == "Alice"
     sent = comms.messaging.send_user_message(target, "after rename", worktree=worktree)
     assert sent.target == "renamed"
     delivery = comms.bus.bus.delivery(sent.seq)
@@ -92,6 +102,13 @@ def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_pat
     comms.registry.remove("Alice")
     if recreate:
         comms.registry.declare(Thread("Alice", frozenset({"team"}), worktree))
+    snapshot = comms.registry.snapshot()
+    assert not target.incarnation.current(snapshot)
+    assert target.incarnation.resolved(snapshot) is target.incarnation
+    with pytest.raises(UnregisteredThreadError):
+        target.incarnation.require_current(snapshot)
+    with pytest.raises(UnregisteredThreadError):
+        target.selected_name(snapshot)
     before = comms.bus.bus.revision()
     with pytest.raises(HumanSendRefusedError):
         comms.messaging.send_user_message(target, "must not reach successor", worktree=worktree)
@@ -102,6 +119,17 @@ def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_pat
         DMDisplayHistory.revision(comms.views, target, ConversationObservation(), worktree=worktree)
     with pytest.raises(UnregisteredThreadError):
         comms.views.history_page(target, viewer=NamedViewer(viewer.name))
+
+
+@pytest.mark.parametrize("member", BirthlessIncarnation.members_with(BirthlessIncarnation))
+def test_birthless_identity_cannot_strictly_select_a_current_peer(named_target_journey, member):
+    incarnation = member.recorded_as("Alice")
+    snapshot = named_target_journey.registry.snapshot()
+    assert incarnation.resolved(snapshot) is incarnation
+    with pytest.raises(ValueError):
+        incarnation.require_current(snapshot)
+    with pytest.raises(ValueError):
+        IncarnationThreadTarget(incarnation)
 
 
 def test_dm_page_refuses_replacement_between_registry_capture_and_bus_read(tmp_path, monkeypatch):

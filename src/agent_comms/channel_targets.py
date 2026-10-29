@@ -483,10 +483,7 @@ class IncarnationThreadTarget(ThreadTarget):
         object.__setattr__(self, "name", self.incarnation.name)
 
     def selected_name(self, snapshot: RegistryProvenance) -> str:
-        if not self.incarnation.current(snapshot):
-            raise UnregisteredThreadError(
-                f"Original DM peer {self.name!r} is no longer registered.")
-        return super().selected_name(snapshot)
+        return self.incarnation.require_current(snapshot).name
 
     def require_publication(self, message: Message, snapshot: RegistryProvenance,
                             require_channel: Callable[[str], Channel]) -> None:

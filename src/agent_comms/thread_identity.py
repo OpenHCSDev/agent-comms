@@ -25,7 +25,7 @@ from .declared_family import (
     UnknownFamilyMember,
     declared_words,
 )
-from .errors import RelationViolationError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
     FieldCodec,
     TurnId,
@@ -208,6 +208,16 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     @abstractmethod
     def renamed(self, name: str) -> ThreadIncarnation:
         """Retain this member's birth state under an original alias."""
+
+    def require_current(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
+        """Require this original birth and return its current canonical incarnation."""
+        original = self.require_recorded()
+        current = snapshot.incarnation(original.name)
+        if current != original:
+            raise UnregisteredThreadError(
+                f"Thread {original.name!r} no longer has its recorded birth."
+            )
+        return current
 
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
