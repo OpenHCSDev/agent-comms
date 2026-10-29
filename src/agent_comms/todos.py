@@ -3355,8 +3355,13 @@ class HuntRecord(TodoStoreRows, TypedTable):
     hunt: Hunt
 
 
-class SharedWorktreeRefusal(TodoError):
+class SharedWorktreeRefusal(TodoError, RejectedEnforcementError):
     """Two different order holders cannot write into the same physical worktree."""
+
+    reason: ClassVar[str] = "the proposed holder shares an occupied worktree"
+
+    def explanation(self) -> str:
+        return str(self)
 
     def __init__(self, problem: str, holding_problem: str, holder: ThreadIncarnation,
                  holding_holder: ThreadIncarnation, worktree: Path) -> None:

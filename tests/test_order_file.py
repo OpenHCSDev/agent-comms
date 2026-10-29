@@ -35,6 +35,24 @@ def test_override_scan_follows_direct_declarations_through_multiple_parents(defi
     assert forwarders_added(diff, ())
 
 
+def test_generic_base_identity_excludes_its_type_arguments():
+    source = ('class DecoderPlan:\n    def answer(self): pass\n'
+              'class ValueDecoder[T](DecoderPlan):\n    pass\n'
+              'class UnionDecoder[T](ValueDecoder[T]):\n    pass\n'
+              'class Represented[T](ValueDecoder[T]):\n'
+              '    def answer(self): return self.peer.answer()\n'
+              'class TextEdited[T](UnionDecoder[T]):\n'
+              '    def answer(self): return self.peer.answer()\n')
+    assert overrides((source,)) == {'answer'}
+    assert not forwarders_added('+    def answer(self): return self.peer.answer()\n', (source,))
+    unrelated = ('class Unrelated:\n    def answer(self): pass\n'
+                 'class Parent[T]:\n    pass\n'
+                 'class Child(Parent[Unrelated]):\n'
+                 '    def answer(self): return self.peer.answer()\n')
+    assert not overrides((unrelated,))
+    assert forwarders_added('+    def answer(self): return self.peer.answer()\n', (unrelated,))
+
+
 def test_override_scan_excludes_nested_and_qualified_names():
     source = ('class Root:\n'
               '    def other(self):\n        def answer(): pass\n'

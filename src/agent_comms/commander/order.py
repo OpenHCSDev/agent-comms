@@ -193,6 +193,9 @@ class OverrideNames(ast.NodeVisitor):
     def visit_Name(self, node: ast.Name) -> None:
         self.names.add(node.id)
 
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        self.visit(node.value)
+
     @property
     def overrides(self) -> frozenset[str]:
         return frozenset(name for declaration in self.classes.values()

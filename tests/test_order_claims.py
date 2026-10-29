@@ -176,6 +176,10 @@ def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_com
     assert (owed.problem, owed.request, owed.message) == ("P1", claim.request(), claim.message)
     assert owed.cited == f"P1 claim of {claim.head[:9]}"
     assert not owed.answered_by((claim.message,))
+    assert claim.message.seq == 0
+    worker = comms.registry.require('worker').incarnation
+    assert owed.questions_for(worker) == ()
+    assert owed.questions_for(ctx.incarnation) == ()
     # Two identical resumptions at once publish one original with its retained content.
     with ThreadPoolExecutor(max_workers=2) as pool:
         for resumed in [pool.submit(ThreadCaller("worker").invoke, request, comms)
