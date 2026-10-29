@@ -7,7 +7,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from aiohttp import ClientError
 from pydantic import JsonValue
@@ -20,7 +20,9 @@ from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import DisclosureIdentity, OrderId, WireTransient, projected
+from agent_comms.field_codec import (
+    DisclosureIdentity, FieldCodec, HudExclude, OrderId, WireTransient, projected,
+)
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
@@ -74,11 +76,11 @@ class CommanderUnit(HudRow):
 
     unit: Annotated[ThreadIncarnation, DisclosureIdentity()]
     state: type[UnitState]
-    clock: UnitClock
-    orders: tuple[CommanderOrder, ...]
-    strikes: int
-    ready_prs: tuple[PullRequest, ...]
-    draft_prs: tuple[PullRequest, ...]
+    clock: Annotated[UnitClock, HudExclude()]
+    orders: Annotated[tuple[CommanderOrder, ...], HudExclude()]
+    strikes: Annotated[int, HudExclude()]
+    ready_prs: Annotated[tuple[PullRequest, ...], HudExclude()]
+    draft_prs: Annotated[tuple[PullRequest, ...], HudExclude()]
 
     def line(self) -> str:
         orders = "; ".join(
@@ -92,18 +94,23 @@ class CommanderUnit(HudRow):
             f"draft={','.join(str(pr.number) for pr in self.draft_prs)}"
         )
 
-    def brief_parts(self) -> tuple[str, ...]:
-        """The scan line's coherent pieces: the unit, each held order, its pull requests and
-        next action. The view owns wrapping, including sections wider than its viewport."""
-        orders = tuple(
-            f"{order.problem} {order.state} · {order.progress.line}" for order in self.orders
-        ) or ("no held orders",)
-        pulls = ", ".join(f"#{pr.number}@{pr.head[:9]}" for pr in (*self.ready_prs, *self.draft_prs))
-        return (self.unit.name, *orders, pulls or "no PR", f"→ {self.state.action}")
+    @projected(view="hud")
+    def work(self) -> str:
+        return "\n".join(f"{order.problem} {order.state}" for order in self.orders)
+
+    @projected(view="hud")
+    def change(self) -> str:
+        return "\n".join(order.progress.line for order in self.orders)
+
+    @projected(view="hud")
+    def next(self) -> str:
+        return self.state.action
 
     def brief(self) -> str:
-        """A dense scan line; expansion reads the original order and activity owners."""
-        return " | ".join(self.brief_parts())
+        """The same declared HUD view supplies the heartbeat's text scan line."""
+        return " | ".join(str(value) for value in cast(
+            dict[str, JsonValue], FieldCodec.project(self, "hud"),
+        ).values())
 
     def needs_hand(self) -> bool:
         """Its UnitState asks for the commander, or a review timer on one of its orders is up."""

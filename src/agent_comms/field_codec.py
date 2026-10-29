@@ -325,6 +325,10 @@ class SnapshotExclude(ViewExclusion):
     pass
 
 
+class HudExclude(ViewExclusion):
+    pass
+
+
 class ContentExclude(ViewExclusion):
     pass
 
@@ -2563,7 +2567,7 @@ class FieldCodec(MroDispatch, Sealed):
         result.update(cls._record_plan(type(value)).encoded(
             value, view, lambda entry, current: cls.project(current, view, entry.annotation)
         ))
-        properties = cls._projections(type(value), view)
+        properties = cls.projections(type(value), view)
         result.update(
             (member.wire_name, cls.project(getattr(value, name), view))
             for name, member in properties.items()
@@ -2630,7 +2634,7 @@ class FieldCodec(MroDispatch, Sealed):
                 key=lambda row: (WireOrder.read(row[1].annotation, row[0]), row[0]),
             )
         )
-        computed = {member.wire_name for member in cls._projections(record, "wire").values()}
+        computed = {member.wire_name for member in cls.projections(record, "wire").values()}
         wire_fields, required_keys = [], []
         for entry in entries:
             keys = entry.contribute(wire_fields)
@@ -2659,7 +2663,7 @@ class FieldCodec(MroDispatch, Sealed):
 
     @staticmethod
     @cache
-    def _projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
+    def projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
         # Cache immutable declarations only. Each consumer still invokes the
         # original property on the current record; projected values are never cached.
         return types.MappingProxyType({
@@ -3436,7 +3440,7 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         )
         result.update(
             (member.wire_name, FieldCodec.encode(getattr(value, name)))
-            for name, member in FieldCodec._projections(self.target, "wire").items()
+            for name, member in FieldCodec.projections(self.target, "wire").items()
         )
         return result
 
