@@ -59,10 +59,6 @@ class RelationViolationError(ValueError, DrainUnavailable):
     """A required relation between declarations cannot be proved."""
 
 
-class OverdueHeadRefusalError(RejectedEnforcementError, RelationViolationError):
-    reason: ClassVar[str] = "a reviewed head is overdue"
-
-
 class UnclaimedError(RelationViolationError):
     """The requested bus sequence has no committed claim transition."""
 

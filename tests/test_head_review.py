@@ -18,7 +18,7 @@ from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
     HeadReviewTimerUp, IdlePullRequest, OrderlessPullRequest, OrderlessUnreviewedHead,
-    OrderRefusingStandingRule, ReviewTimerUp, StuckMerge,
+    LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
 )
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
@@ -270,8 +270,8 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     assert not any(f"statuses/{four.head}" in call[1] for call in github.calls())
 
 
-def test_only_a_head_linked_to_the_callers_held_order_refuses_its_orders(head_bus):
-    """2026-10-25: dqdock's orders froze on claude-code's orderless #3311."""
+def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus):
+    """An overdue source review must not prevent an independent recovery order."""
     comms, _, request = head_bus
     todo = comms.goals.todos.get("P2")
     action = CreateProblemGoalAction(
@@ -280,14 +280,18 @@ def test_only_a_head_linked_to_the_callers_held_order_refuses_its_orders(head_bu
         repo=todo.repo, text="Repair the next owner", order=todo.order.checked(),
         review_at=RecordedEventTime(time.time() + 3600),
     )
-    assert not OrderRefusingStandingRule.refusals(comms.goals, "lead")
     assert [rule.request for rule in OrderlessUnreviewedHead.scan_reviews(
         comms.goals, "lead", ProgressRead(()))] == [request]
     comms.goals.update_goal("outsider", action)
     held = todo.held()
     RecordPullRequest(todo.revision, held.owner_identity,
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
-    assert OrderRefusingStandingRule.refusals(comms.goals, "lead")
+    held_orders = comms.goals.todos.held_for_commander(
+        comms.registry.require("lead").incarnation)
+    assert [rule.request for rule in LinkedUnreviewedHead.scan_reviews(
+        comms.goals, "lead", ProgressRead(held_orders))] == [request]
+    comms.goals.update_goal("outsider", replace(action, problem="P4"))
+    assert comms.goals.todos.get("P4").held().owner == "outsider"
 
 
 @pytest.mark.parametrize("has_head", (False, True))

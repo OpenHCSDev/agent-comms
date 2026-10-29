@@ -70,7 +70,6 @@ from .locked_store import (
     DeclaredFile,
     DurableFile,
     FilesRequest,
-    LiveFilesRequest,
     PublishedSQLiteFile,
     RegistryFile,
     RootFile,
@@ -83,6 +82,7 @@ from .locked_store import (
 from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from .private_path import PrivateDirectoryRole
 from .store_files import (
     BorrowedStoreLock,
     ExclusiveAtomicFile,
@@ -2827,11 +2827,13 @@ class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
         """A file with no stored schema has no opening to practise."""
 
     @staticmethod
-    def practice_openings(root: Path, excluding: tuple[type[ExternalStore], ...] = ()) -> None:
-        stores = set(ExternalStore.members_with(ExternalStore)) - set(excluding)
-        with TemporaryDirectory() as directory:
+    def practice_openings(
+        files: FilesRequest, *, scratch: Path, stores: tuple[type[ExternalStore], ...],
+    ) -> None:
+        PrivateDirectoryRole.make_parents(scratch)
+        with TemporaryDirectory(dir=scratch) as directory:
             for store in stores:
-                store.practice_opening(LiveFilesRequest(root), Path(directory))
+                store.practice_opening(files, Path(directory))
 
     @classmethod
     @abstractmethod
