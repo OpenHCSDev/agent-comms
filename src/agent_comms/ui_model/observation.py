@@ -59,7 +59,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.notification_reads import NotificationRead
-from agent_comms.read_basis import DisplayIdentity, NoDisplaySelection
+from agent_comms.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.presentation import (
     CoordinationSnapshot, MessageNotification, NoRevision, ReadState,
     WireRevision,
@@ -584,7 +584,7 @@ class ReadNotifications(ReadRequest):
     """The UI's root and request witness around one root-free notification operation."""
 
     operation: NotificationRead
-    display: DisplayIdentity | NoDisplaySelection = field(
+    display: DisplayCut = field(
         default_factory=NoDisplaySelection, kw_only=True)
     """The painted display this read serves; it decides whose read marks the window omits."""
 

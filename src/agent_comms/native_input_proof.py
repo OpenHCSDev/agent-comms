@@ -26,7 +26,7 @@ from .field_codec import (
     Sha256Text,
     WireName,
 )
-from .locked_store import SQLiteFile
+from .locked_store import DurableFile, PatternFile, SQLiteFile
 from .native_failures import NativePiUnavailable
 from .native_session_reopen import PiSessionId
 from .turn_item import FreshNativeId
@@ -38,6 +38,8 @@ from .typed_table import (
     ImmutableRows,
     Index,
     IntegerStorage,
+    ReconciledFile,
+    TableSchema,
     WithoutRowid,
 )
 
@@ -141,9 +143,20 @@ class NativeContextRecord(NativeInputCommit):
         )
 
 
+class NativeInputProof(DurableFile, ReconciledFile, PatternFile, DurableTables):
+    """A retained proof file whose journal declares membership through inheritance."""
+
+    __slots__ = ()
+    filename = "input-proofs/{lookup}/{name}.sqlite"
+
+    @classmethod
+    def table_schema(cls) -> type[TableSchema]:
+        return cls
+
+
 @dataclass(frozen=True, slots=True)
 class NativeContextJournal(
-    GuardedInserts, ImmutableRows, NativeContextRecord, WithoutRowid, DurableTables
+    GuardedInserts, ImmutableRows, NativeContextRecord, WithoutRowid, NativeInputProof
 ):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
