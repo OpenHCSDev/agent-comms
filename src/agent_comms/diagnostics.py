@@ -8,7 +8,7 @@ import os
 import time
 from contextlib import contextmanager
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from pathlib import Path
 from traceback import TracebackException
 from typing import TYPE_CHECKING
@@ -19,12 +19,14 @@ from metaclass_registry.mro_dispatch import (
 )
 
 
-from .child_process import Platform
+from .child_process import Platform, ProcessState
 from .field_codec import FieldCodec, InputId, ScratchName, TurnId
 from .locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
+from .publication_measurements import PublicationMeasurements
 from .store_files import AtomicFile
 from .turn_failure import TurnFailure
+from .turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic
@@ -55,48 +57,6 @@ class OwnerProcessOutput(RuntimeFile, PatternFile):
             yield output
 
 
-@dataclass
-class PublicationMeasurements:
-    """Bounded resource timings, not a message, phase or successful-send authority.
-
-    First/last delimit observed bodies, including exceptional exits. Maxima and
-    totals remain counters; nested operations must not be added as disjoint work.
-    """
-    count: int = 0
-    total_ns: int = 0
-    maximum_ns: int = 0
-    maximum_started_ns: int = 0
-    maximum_finished_ns: int = 0
-    first_started_ns: int = 0
-    last_finished_ns: int = 0
-    operations: dict[str, PublicationMeasurements] = field(default_factory=dict)
-
-    def operation(self, name: str):
-        """Borrow bounded counters for a declared acquisition/publication operation.
-
-        These counters observe resources; they never decide readiness, acknowledgement
-        acceptance or replay. Owners call this with their fixed operation names.
-        """
-        return self.operations.setdefault(name, PublicationMeasurements()).measuring()
-
-    @contextmanager
-    def measuring(self):
-        started = time.monotonic_ns()
-        try:
-            yield
-        finally:
-            finished = time.monotonic_ns()
-            duration = finished - started
-            if self.count == 0 or started < self.first_started_ns:
-                self.first_started_ns = started
-            self.last_finished_ns = max(self.last_finished_ns, finished)
-            self.count += 1
-            self.total_ns += duration
-            if duration > self.maximum_ns:
-                self.maximum_ns = duration
-                self.maximum_started_ns, self.maximum_finished_ns = started, finished
-
-
 def record_request_progress(root, lease, progress, native_process, *, publication=None):
     """Append original measurements with the exact existing turn/owner fence.
 
@@ -113,7 +73,13 @@ def record_request_progress(root, lease, progress, native_process, *, publicatio
     RequestObservations.record(root, lease, record)
 
 
-def record_acquisition_progress(root, lease, input_id, measurements, native_process):
+def record_acquisition_progress(
+    root: Path,
+    lease: TurnLeaseFence,
+    input_id: InputId,
+    measurements: PublicationMeasurements,
+    native_process: ProcessState,
+) -> None:
     """Report the parent's acquisition timings after its resources close.
 
     The original input owns these counters, not the recipient's cursor lifetime.

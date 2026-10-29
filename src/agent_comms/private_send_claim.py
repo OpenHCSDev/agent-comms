@@ -20,7 +20,6 @@ from .field_codec import AcpSessionId, InputId
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import (
-    PublicationMeasurements,
     record_acquisition_progress,
     record_request_progress,
 )
@@ -38,6 +37,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
 from .owned_send import OwnedSend
+from .publication_measurements import PublicationMeasurements
 from .registry_document import RegistrySnapshot
 from .text_digest import TextDigest
 from .tracked_turn import (

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import NoProcess, ProcessState
-from .diagnostics import PublicationMeasurements
+from .publication_measurements import PublicationMeasurements
 from .field_codec import boundary_decoder
 
 if TYPE_CHECKING:
