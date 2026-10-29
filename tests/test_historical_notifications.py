@@ -26,9 +26,9 @@ from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
-from agent_comms.harness_delivery_states import DeliveredOutcome
+from agent_comms.harness_delivery_states import DeliveredOutcome, ObservedMonitor
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
-from agent_comms.field_codec import InputId, MessageId, TurnId
+from agent_comms.field_codec import InputId, MessageId, TranscriptRecordId, TurnId
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -108,7 +108,8 @@ def test_harness_consumption_survives_human_display(archived_notification):
     with Coordination(str(CoordinationStore.path_in(live.root))) as store, \
             store.session.writing() as db:
         attempt = HarnessDelivery(ClaudeBridge, recipient.recipient_lookup, shown.message_id, shown.seq,
-                                  DeliveredOutcome)
+                                  DeliveredOutcome, ObservedMonitor(
+                                      TranscriptRecordId('complete-original'), shown.timestamp))
         assert attempt.begin(store.assignments, db)
         attempt.record(store.assignments, db)
 
@@ -122,7 +123,8 @@ def test_harness_consumption_survives_human_display(archived_notification):
             shown, human.incarnation, live.registry.snapshot(), document=None)
 
     consumed = notification()
-    assert consumed.label == "Consumed" and consumed.state.consumed and not consumed.displayed_to
+    assert consumed.state.consumed and not consumed.displayed_to
+    assert consumed.label == consumed.timed_state('Consumed', round(shown.timestamp * 1000))
     ledger = live.bus.reads.read()
     assert human_display() == ()
     # The UI's "mark read" on the agent's thread, as the registered human viewer.
@@ -478,13 +480,15 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
             store.session.writing() as db:
         for message in unread:
             attempt = HarnessDelivery(ClaudeBridge, lookup, message.message_id, message.seq,
-                                      DeliveredOutcome)
+                                      DeliveredOutcome, ObservedMonitor(
+                                          TranscriptRecordId('complete-original'), message.timestamp))
             assert attempt.begin(store.assignments, db)
             attempt.record(store.assignments, db)
     current, = old.views.message_notifications_for_references(AllOutcomes(), (messages[0].reference,)).outcomes[
         messages[0].seq, messages[0].message_id
     ]
-    assert current.label == "Consumed" and current.state.consumed and not current.displayed_to
+    assert current.state.consumed and not current.displayed_to
+    assert current.label == current.timed_state('Consumed', round(messages[0].timestamp * 1000))
     with live.bus.history.read_sources() as sources:
         archived, = source.notification_references(sources, (messages[0].reference,), AllOutcomes()).outcomes[
             messages[0].seq, messages[0].message_id

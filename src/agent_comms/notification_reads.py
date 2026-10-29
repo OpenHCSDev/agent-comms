@@ -7,13 +7,14 @@ and request id; MCP's single-message page calls the live read directly under its
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .bus_read import BusReader, UiRead
 from .historical_views import HistorySource
 from .message_reference import MessageReference
-from .notification_evidence import NotificationWindow
+from .notification_evidence import NotificationWindow, RecipientSelection
+from .presentation import FirstRecipient, RecipientCursor
 from .notification_read import NotificationsRead
 
 if TYPE_CHECKING:
@@ -35,10 +36,12 @@ class LiveNotificationRead(NotificationRead):
     The UI reads as the operator; an MCP caller reads under its own viewer."""
 
     references: tuple[MessageReference, ...]
+    after: RecipientCursor = field(default_factory=FirstRecipient, kw_only=True)
+    limit: int = field(default=RecipientSelection.max_limit, kw_only=True)
 
     def read_as(self, comms: Comms, reader: BusReader) -> NotificationWindow:
         return comms.views.message_notifications_for_references(
-            reader.outcome_viewer(comms), self.references)
+            reader.outcome_viewer(comms), self.references, after=self.after, limit=self.limit)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:
@@ -55,7 +58,7 @@ class RecordedNotificationRead(LiveNotificationRead):
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
             return source.notification_references(
-                sources, self.references, reader.outcome_viewer(comms))
+                sources, self.references, reader.outcome_viewer(comms), after=self.after, limit=self.limit)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:

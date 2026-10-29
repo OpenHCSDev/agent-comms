@@ -256,7 +256,7 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile):
 
     @classmethod
     def table_schema(cls) -> type[TableSchema]:
-        from .native_pi import NativeContextJournal
+        from .native_input_proof import NativeContextJournal
 
         return NativeContextJournal
 

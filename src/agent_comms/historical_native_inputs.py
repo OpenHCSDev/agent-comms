@@ -27,7 +27,7 @@ from .native_input_record import (
     NativeInputReference,
     TriageNativeExecution,
 )
-from .native_pi import NativeContextProof
+from .native_input_proof import NativeContextProof
 from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
 from .native_runtime_input import NativeRuntimeInput
 from .selected_triage import SelectedTriage

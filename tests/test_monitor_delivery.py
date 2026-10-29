@@ -39,8 +39,9 @@ from agent_comms.cli_bridges.shared import (
 )
 from agent_comms.harness_delivery_states import (
     DeliveredOutcome, EmittedOutcome, MismatchedMonitor, ObservedMonitor, ReceivingMonitor,
-    UnconfirmedOutcome, UnrecordedMonitor,
+    UnconfirmedOutcome, UnrecordedMonitor, WakeOnlyMonitor,
 )
+from agent_comms.notification_progress import SentProgress
 from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.errors import RelationViolationError
 from agent_comms.read_ledger import ReadLedger
@@ -534,6 +535,33 @@ async def test_a_body_that_fits_one_event_goes_inline_and_exports_nothing(bridge
     confirmed, = await bridge.attempts(message.message_id)
     assert confirmed.outcome is DeliveredOutcome
     assert not bridge.exports.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('original_body', ('Original board packet', ClaudeBridge.board_wake))
+async def test_board_wake_observation_cannot_confirm_original_packet(bridge, original_body):
+    """Exercise the actual wake transport, including an accidental exact-body collision."""
+    message = bridge.comms.messaging.send('peer', 'viewer', original_body).message
+    human_reads = ReadLedger.at(bridge.comms.root).read()
+    initial = bridge.attempt(message, UnconfirmedOutcome)
+    assert await bridge.coordinator_write(initial.begin)
+    async with attached_monitor(bridge) as reader:
+        outcome = await bridge.wake(message)
+        line = await only_event(reader)
+        assert ClaudeMonitorFrame.decode_line(line).body == ClaudeBridge.board_wake
+        await bridge.finish(bridge.attempt(message, outcome), partial(replace, outcome=outcome))
+        # Re-reading the wake cannot manufacture a proof of the original body.
+        for _ in range(2):
+            await observe(bridge, notification(line).updates(ClaudeSession()))
+        attached = await bridge.reader.prepare_delivery(bridge)
+        assert attached.attachment.pending_parts == {}
+    retained, = await bridge.attempts(message.message_id)
+    assert retained.outcome is EmittedOutcome
+    assert retained.monitor == WakeOnlyMonitor()
+    assert not retained.consumed_progress(SentProgress(round(message.timestamp * 1000))).consumed
+    assert await bridge.coordinator_read(lambda db: HarnessObservedPart.of(db, retained)) == ()
+    assert not await bridge.coordinator_write(initial.begin)
+    assert ReadLedger.at(bridge.comms.root).read() == human_reads
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ from agent_comms.agent_backend import (
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
+from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArguments
@@ -62,6 +63,7 @@ class NativeBackendFixture(AnnouncedInputStart):
         self.config = config
         self.package = package
         self.persistent = PersistentPiSession()
+        self.cursor_delivery = CursorDelivery()
         self.participant = self.participant_at(root, project)
         self.starts = []
         self.children: list[PiSessionChild] = []
@@ -197,6 +199,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 tool_mode=NoSelectedTools(),
                 steering_queue=queue,
                 input_start=self,
+                cursor_delivery=self.cursor_delivery,
                 **options,
              session_directory=self.root):
                 result.append(event)
@@ -303,6 +306,7 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
 
             async def retire_all():
                 async with AsyncExitStack() as retirement:
+                    retirement.callback(owner.cursor_delivery.close)
                     retirement.push_async_callback(close_server)
                     for child in owner.children:
                         retirement.push_async_callback(child.shutdown)

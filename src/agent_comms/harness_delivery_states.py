@@ -7,6 +7,7 @@ attempts can declare these families without importing the bridge transport.
 from __future__ import annotations
 
 import sqlite3
+from abc import abstractmethod
 from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
@@ -20,15 +21,11 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import LineMonitorBridge, MonitorPart, MonitorReadFile
     from .coordination_tables.harness_deliveries import HarnessDelivery
     from .notification_progress import DeliveryProgress
+    from .presentation import MessageNotification
 
 
 class Outcome(DeclaredFamily, affix="Outcome"):
     """Stored spellings stay the same; the stored outcome decides what may follow it."""
-
-    @classmethod
-    def claim_steps(cls, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
-        """The claim steps this outcome proves; an attempt that proves nothing moves no claim."""
-        return ()
 
     @classmethod
     def settle(cls, successor: HarnessDelivery, assignments: AssignmentStore,
@@ -38,17 +35,23 @@ class Outcome(DeclaredFamily, affix="Outcome"):
         return successor
 
     @classmethod
-    def consumed_progress(cls, progress: DeliveryProgress) -> DeliveryProgress:
-        """The recipient's progress after this attempt; an emitted, unconfirmed or filtered
-        attempt proves no context entry and leaves it."""
-        return progress
+    def arrival_count(cls) -> int:
+        return 0
 
     @classmethod
-    def finished_with(cls, export: MonitorReadFile) -> None:
-        """An unconsumed body keeps its export for a later Read."""
+    def arrival_label(cls, notification: MessageNotification) -> str:
+        return "Arrival unknown"
+
+    @classmethod
+    def input_detail(cls) -> str:
+        return "Attempt is uncertain; no replay is permitted."
 
 
 class FilteredOutcome(Outcome):
+    @classmethod
+    def input_detail(cls) -> str:
+        return "No input was submitted."
+
     @classmethod
     def settle(cls, successor: HarnessDelivery, assignments: AssignmentStore,
                db: sqlite3.Connection) -> HarnessDelivery:
@@ -62,21 +65,45 @@ class UnconfirmedOutcome(Outcome):
 
 
 class DeliveredOutcome(FilteredOutcome):
-    @classmethod
-    def claim_steps(cls, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
-        return state.harness_delivery()
+    """An original harness receipt, not evidence that a model took the body.
+
+    Older generic receipts retain this spelling and their actual monitor proof.
+    A producer name alone cannot upgrade their evidence to model context.
+    """
 
     @classmethod
-    def consumed_progress(cls, progress: DeliveryProgress) -> DeliveryProgress:
-        return progress.harness_consumed()
+    def input_detail(cls) -> str:
+        return "Harness reported delivery; model context is unproved."
+
+
+class AcceptedOutcome(DeliveredOutcome):
+    @classmethod
+    def arrival_count(cls) -> int:
+        return 1
 
     @classmethod
-    def finished_with(cls, export: MonitorReadFile) -> None:
-        export.retire()
+    def arrival_label(cls, notification: MessageNotification) -> str:
+        return "Arrived (RPC accepted; time unrecorded)"
+
+    @classmethod
+    def input_detail(cls) -> str:
+        return "RPC accepted input; model context proof is unavailable."
+
+
+class PersistedOutcome(AcceptedOutcome):
+    @classmethod
+    def arrival_label(cls, notification: MessageNotification) -> str:
+        return "Arrived (saved input; time unrecorded)"
+
+    @classmethod
+    def input_detail(cls) -> str:
+        return "Harness saved input; model context proof is unavailable."
 
 
 class EmittedOutcome(UnconfirmedOutcome):
-    pass
+    @classmethod
+    def input_detail(cls) -> str:
+        return "Emitted; recipient context remains unconfirmed."
 
 
 @dataclass(frozen=True)
@@ -92,15 +119,57 @@ class MonitorEvidence(DeclaredFamily):
         proves nothing leaves the recorded outcome."""
         return recorded, self
 
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress
+
+    def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
+        return ()
+
+    def arrival_count(self, outcome: type[Outcome]) -> int:
+        return outcome.arrival_count()
+
+    def arrival_label(self, outcome: type[Outcome], notification: MessageNotification) -> str:
+        return outcome.arrival_label(notification)
+
+    def finished_with(self, export: MonitorReadFile) -> None:
+        """A body without a complete original transcript proof keeps its export."""
+
 
 @dataclass(frozen=True)
 class UnrecordedMonitor(MonitorEvidence):
     pass
 
 
+class PendingMonitor(MonitorEvidence, declared_name=None):
+    """The emission owns whether its later observation can prove the original body."""
+
+    @classmethod
+    @abstractmethod
+    def for_parts(cls, total: int) -> PendingMonitor: ...
+
+
 @dataclass(frozen=True)
-class ReceivingMonitor(MonitorEvidence):
+class WakeOnlyMonitor(PendingMonitor):
+    """A board wake is not the original packet, even if its bytes happen to match."""
+
+    @classmethod
+    def for_parts(cls, total: int) -> WakeOnlyMonitor:
+        return cls()
+
+    async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+        # Retire only the wake's transport reservation, never original-body proof.
+        await bridge.part_observed(delivery.message_id, notification.number)
+        return ()
+
+
+@dataclass(frozen=True)
+class ReceivingMonitor(PendingMonitor):
     total: int
+
+    @classmethod
+    def for_parts(cls, total: int) -> ReceivingMonitor:
+        return cls(total)
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
@@ -131,3 +200,18 @@ class ObservedMonitor(MonitorEvidence):
     def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:
         """Only a complete, matching confirmation stores this, so the message entered context."""
         return DeliveredOutcome, self
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress.harness_consumed(round(self.timestamp * 1000))
+
+    def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
+        return state.harness_delivery()
+
+    def arrival_count(self, outcome: type[Outcome]) -> int:
+        return 1
+
+    def arrival_label(self, outcome: type[Outcome], notification: MessageNotification) -> str:
+        return notification.timed_state("Arrived", round(self.timestamp * 1000))
+
+    def finished_with(self, export: MonitorReadFile) -> None:
+        export.retire()

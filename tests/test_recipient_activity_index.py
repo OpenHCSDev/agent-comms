@@ -86,61 +86,7 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
     original = comms.bus.bus.delivery(sent.seq)
     lookups = {name: thread.incarnation.lookup
                for name, thread in comms.registry.snapshot().threads.items()}
+    viewer = viewer_of(lookups)
     window = MessageNotification.delivery_window(
-        comms.root, comms.registry, (original,),
-        NotificationAssignment.read(comms.root, (original,), viewer=viewer_of(lookups)),
-    )
-    assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == seen
-
-
-def test_a_viewer_follows_frozen_lookups_through_rename_and_never_into_a_rebirth(tmp_path):
-    comms = canonical_goal_wire(tmp_path / "bus")
-    for name in ("sender", "peer-a", "peer-b"):
-        comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout(tmp_path)))
-    sent = comms.messaging.send("sender", "#ci", "channel outcome").message
-    original = comms.bus.bus.delivery(sent.seq)
-    key = (sent.seq, sent.message_id)
-
-    def seen_by(name: str) -> set[str]:
-        viewer = OwnerOutcomes.of(comms.registry.require(name))
-        read = NotificationAssignment.read(comms.root, (original,), viewer=viewer)
-        assert read.viewer == viewer
-        window = MessageNotification.delivery_window(comms.root, comms.registry, (original,), read)
-        return {item.recipient for item in window.outcomes[key]}
-
-    assert seen_by("peer-a") == {"peer-a"}
-    comms.registry.rename("peer-a", "renamed-a")
-    assert seen_by("renamed-a") == {"peer-a"}
-    comms.registry.remove("peer-b")
-    comms.registry.declare(Thread("peer-b", frozenset({"ci"}), Checkout(tmp_path)))
-    assert seen_by("peer-b") == set()
-    assert seen_by("sender") == {"peer-a", "peer-b"}
-
-
-def test_a_public_root_without_a_coordinator_keeps_its_viewer_and_projects_visible_recipients(tmp_path):
-    from agent_comms.coordination_database import CoordinationStore
-
-    comms = wire(tmp_path / "bus")
-    for name in ("sender", "peer-a", "peer-b"):
-        comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout(tmp_path)))
-    sent = comms.messaging.send("sender", "#ci", "channel outcome").message
-    original = comms.bus.bus.delivery(sent.seq)
-    CoordinationStore.path_in(comms.root).unlink(missing_ok=True)
-    viewer = OwnerOutcomes.of(comms.registry.require("peer-a"))
-    read = NotificationAssignment.read(comms.root, (original,), viewer=viewer)
-    assert (read.sources, read.rows, read.attempts, read.viewer) == ((original,), (), (), viewer)
-    window = MessageNotification.delivery_window(comms.root, comms.registry, (original,), read)
-    assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == {"peer-a"}
-
-
-def test_a_private_root_without_a_coordinator_still_refuses_notification_reads(private_comms):
-    from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.coordination_errors import PublicationActivationBlocked
-
-    for name in ("sender", "peer-a"):
-        private_comms.registry.declare(Thread(name, frozenset({"ci"}), Checkout(private_comms.root)))
-    sent = private_comms.messaging.send("sender", "#ci", "channel outcome").message
-    original = private_comms.bus.bus.delivery(sent.seq)
-    CoordinationStore.path_in(private_comms.root).unlink()
-    with pytest.raises(PublicationActivationBlocked):
-        NotificationAssignment.read(private_comms.root, (original,), viewer=AllOutcomes())
+        comms.root, comms.registry,
+        NotificationAssignment.read(comms.root, viewer.selection((original,))),

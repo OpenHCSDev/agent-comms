@@ -24,7 +24,7 @@ from .native_session_files import BusTranscriptFile, NativeSessionFiles
 from .store_files import AtomicFile
 
 if TYPE_CHECKING:
-    from .native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .importing import ImportedConversation
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
@@ -40,7 +40,7 @@ from .field_codec import (
     WireOmitDefault,
 )
 from .importing import ImportedSessionMetadata
-from .native_input_record import NativeInputLocation
+from .native_input_proof import NativeInputLocation
 from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp

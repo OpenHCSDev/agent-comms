@@ -16,9 +16,8 @@ from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.native_arguments import SelectedModel
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_pi import (
-    NativeContextJournal,
-    NativeContextProof,
     NativePiRpcLaunch,
     NativePiTerminalFailure,
 )

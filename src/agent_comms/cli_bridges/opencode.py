@@ -19,7 +19,7 @@ from agent_comms.comms import wire
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_arguments import CliArguments
-from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
+from agent_comms.harness_delivery_states import Outcome, PersistedOutcome
 
 from .history import HarnessAddress, OnlineHistory, OpenCodeHistory
 from .shared import (
@@ -241,7 +241,7 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions]):
     async def deliver(self, message: Message) -> type[Outcome]:
         async with self.connection() as connection:
             await connection.deliver(IncomingFrame(message).text)
-        return DeliveredOutcome
+        return PersistedOutcome
 
     async def show_sent(self, result: SendResult) -> None:
         async with self.connection() as connection:

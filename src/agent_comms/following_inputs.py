@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
     from .input_drain import InputDrain
     from .tracked_turn import TrackedTurnSession
+    from .owned_send import OwnedSend
 
 
 class FollowingInputs:
@@ -56,7 +57,16 @@ class OwnerFollowingInputs(FollowingInputs):
     session_id: str
     owner: Thread
     inbox: TurnInbox
-    scope: LiveQueueScope = field(init=False)
+    sender: OwnedSend = field(init=False)
+
+    @property
+    def scope(self) -> LiveQueueScope:
+        lease = self.sender.thread.require_turn_lease()
+        return LiveQueueScope(
+            session_id=self.session_id,
+            claimed_identity=ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
+            owner=self.sender.thread.require_process(),
+        )
 
     async def pass_on_unread(self, turns: TurnRunner) -> None:
         """Inputs the ended turn never read start the next turn or are refused, never replayed."""
@@ -82,12 +92,7 @@ class OwnerFollowingInputs(FollowingInputs):
             session.prompt_send_boundary.following_sender,
             inputs, inputs.state(self.session_id).owned().identifier, session.command.message,
         ))
-        lease = sender.thread.require_turn_lease()
-        self.scope = LiveQueueScope(
-            session_id=self.session_id,
-            claimed_identity=ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
-            owner=sender.thread.require_process(),
-        )
+        self.sender = sender
         inputs.state(self.session_id).capture_first_source(sender.original_source)
         session.forward_inbox(self.inbox, sender)
         await self.ready(

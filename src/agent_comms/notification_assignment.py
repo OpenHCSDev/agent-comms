@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
+from itertools import batched
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
@@ -26,7 +27,7 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .notification_evidence import NotificationAssignmentRead, NotificationWindow, SourceEvidence
+from .notification_evidence import NotificationAssignmentRead, NotificationWindow, NotificationSelection
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow
@@ -151,9 +152,6 @@ class AssignmentActivity:
     def answered(self, notification: MessageNotification) -> MessageNotification:
         return self.response.answered(notification)
 
-    def recorded_response(self, message: Delivered) -> Self:
-        return replace(self, response=self.response.recorded(message))
-
 
 @dataclass(frozen=True)
 class AssignmentActivityEvidence(TypedRow):
@@ -236,170 +234,10 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def changed(cls, reads: Iterable[NotificationAssignmentRead], root: Path) -> tuple[NotificationAssignmentRead, ...]:
-        """Acquire fresh bounded rows once per captured viewer; retained reads own their
-        equality, each against evidence its own viewer may see."""
-        by_viewer: dict[OutcomeViewer, list[NotificationAssignmentRead]] = {}
-        for read in reads:
-            by_viewer.setdefault(read.viewer, []).append(read)
-        changed: list[NotificationAssignmentRead] = []
-        for viewer, viewed in by_viewer.items():
-            sources = tuple({source.message.reference: source
-                             for read in viewed for source in read.sources}.values())
-            fresh: dict[MessageReference, SourceEvidence] = {}
-            for sources_chunk in NotificationWindow.chunks(sources):
-                fresh.update(cls.read(root, sources_chunk, viewer=viewer).evidence)
-            changed.extend(read for read in viewed if read.differs_from(fresh))
-        return tuple(changed)
-
-    @classmethod
-    def resolve(cls, root: Path, read: NotificationAssignmentRead) -> tuple[NotificationAssignment, ...]:
-        resolved = tuple(cls(assignment, activity.resolve(pending_at_ms=assignment.updated_at_ms))
-                         for assignment, activity in read.rows)
-        return cls._recorded_conversation_responses(root, read.sources, resolved)
-
-    @classmethod
-    def for_deliveries(
-        cls, originals: Iterable[Delivered], records: Iterable[NotificationAssignment],
-        viewer: OutcomeViewer,
-    ) -> Iterator[tuple[Delivered, tuple[NotificationSource, ...]]]:
-        """Match notification assignments to messages and the recorded recipients this
-        viewer may see; an invisible recipient allocates no placeholder."""
-        by_recipient = {}
-        for record in records:
-            key = (record.assignment.source, record.assignment.recipient_lookup)
-            by_recipient.setdefault(key, []).append(record)
-        for original in originals:
-            reference = original.message.reference
-            sources = []
-            for recipient, decision in zip(original.recipients, original.decisions, strict=True):
-                if not viewer.includes(original.sender_lookup, recipient):
-                    continue
-                matching = by_recipient.get((reference, recipient.recipient_lookup), ())
-                if len(matching) > 1:
-                    raise ValueError("Original notification recipient has multiple handling rows")
-                sources.append(matching[0] if matching else UnrecordedNotificationSource(recipient, decision))
-            yield original, tuple(sources)
-
-    @classmethod
-    def _recorded_conversation_responses(
-        cls, root: Path, sources: tuple[Delivered, ...],
-        rows: tuple[NotificationAssignment, ...],
-    ) -> tuple[NotificationAssignment, ...]:
-        eligible = tuple(
-            row for row in rows if row.assignment.lifecycle.records_conversation_response
-        )
-        if not eligible:
-            return rows
-
-        originals = {original.message.reference: original for original in sources}
-        captured = Bus(Bus.path_in(root)).replies(
-            tuple({row.assignment.source for row in eligible}))
-        replies: dict[MessageReference, list[Delivered]] = {}
-        for record in captured:
-            for reply in record.deliveries():
-                for answered in reply.message.answers:
-                    replies.setdefault(answered, []).append(reply)
-        resolved = []
-        for row in rows:
-            if row.assignment.lifecycle.records_conversation_response:
-                response = row.assignment.lifecycle.recorded_response(
-                    originals[row.assignment.source],
-                    replies.get(row.assignment.source, ()),
-                    row.assignment.recipient_lookup,
-                )
-                if response is not None:
-                    row = replace(row, activity=row.activity.recorded_response(response))
-            resolved.append(row)
-        return tuple(resolved)
-
-    @classmethod
-    def capture(
-        cls, connection: sqlite3.Connection, sources: Sequence[Delivered],
-        privacy: RegistryPrivacy, viewer: OutcomeViewer,
+        cls, store: MissingStore, selection: NotificationSelection, privacy: RegistryPrivacy,
     ) -> NotificationAssignmentRead:
-        """Capture detached assignment evidence for one bounded window of originals from the
-        caller's SQLite snapshot: only the claims and attempts of recipients this viewer
-        may see are selected, by their exact original keys, before any row is decoded."""
-        sources = tuple(sources)
-        if len(sources) > NotificationWindow.window_limit:
-            raise ValueError("Notification reads require a bounded visible message window")
-        if not sources:
-            return NotificationAssignmentRead((), (), viewer=viewer)
-        privacy.coordinator_schema().require_schema(connection)
-        visible = tuple((source, recipient) for source in sources for recipient in source.recipients
-                        if viewer.includes(source.sender_lookup, recipient))
-        columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
-        context = privacy.notification_context_sql(connection)
-        rows = []
-        # Each batch's requested keys select their assignments through the
-        # recipient/seq index; their native-input membership is selected once per
-        # batch by its assignment index, not once per row and per column.
-        for requested in WakeAssignment.requested_keys(connection, tuple(
-                {"recipient_lookup": recipient.recipient_lookup,
-                 "wire_seq": source.message.seq, "message_id": source.message.message_id}
-                for source, recipient in visible)):
-            rows.extend(WakeAssignment.joined(
-                connection.execute(
-                    f"WITH {requested.values}, "
-                    f"w AS MATERIALIZED (SELECT * {requested.join}), "
-                    f"context AS MATERIALIZED ({context}) "
-                    f"SELECT {columns},context.triage_inflight,"
-                    "pointer.execution_id IS NOT NULL AS queued,context.context_committed_at_ms,"
-                    "p.seq AS response_seq, p.message_id AS response_message_id, "
-                    "p.received_at_ms AS response_received_at_ms "
-                    "FROM w "
-                    "JOIN context ON context.assignment_id=w.assignment_id "
-                    f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
-                    "ON pointer.owner_lookup=w.recipient_lookup "
-                    f"LEFT JOIN {PublicationEvidence.declared_name} p "
-                    "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target",
-                    requested.bindings,
-                ),
-                AssignmentActivityEvidence,
-            ))
-        attempts = HarnessDelivery.for_recipients(connection, tuple(
-            (recipient.recipient_lookup, source.message.reference) for source, recipient in visible))
-        return NotificationAssignmentRead(
-            sources, tuple(sorted(rows, key=lambda row: (-row[0].wire_seq, row[0].recipient))),
-            attempts, viewer=viewer)
-
-    @classmethod
-    def read(
-        cls, root: Path, sources: Sequence[Delivered], *, viewer: OutcomeViewer,
-    ) -> NotificationAssignmentRead:
-        """Capture this viewer's assignment evidence through the single observing
-        connection owner."""
-        privacy = RegistryStore.at(root).privacy()
-        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
-            cls, sources, privacy, viewer,
-        ) as result:
-            return result
-
-    @classmethod
-    def missing_store(
-        cls, store: MissingStore, sources: Sequence[Delivered], privacy: RegistryPrivacy,
-        viewer: OutcomeViewer,
-    ) -> NotificationAssignmentRead:
-        return privacy.missing_notification_assignments(sources, viewer)
+        return privacy.missing_notification_assignments(selection)
 
     @classmethod
     def invalid_store(
-        cls, store: InvalidStore, sources: Sequence[Delivered], privacy: RegistryPrivacy,
-        viewer: OutcomeViewer,
-    ) -> NoReturn:
-        raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
-
-    def recipient(self) -> FrozenRecipient:
-        return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
-
-    def project(
-        self, observation: RecipientActivity, sender_lookup: ThreadLookup
-    ) -> MessageNotification:
-        return self.assignment.lifecycle.notification(
-            self.recipient(),
-            sender_lookup,
-            observation=observation,
-            activity=self.activity,
-            updated_at_ms=self.assignment.updated_at_ms,
-            triage_inflight=self.activity.triage_inflight,
-        )
+        cls, store: InvalidStore, selection: NotificationSelection, privacy: RegistryPrivacy,
