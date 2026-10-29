@@ -140,6 +140,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         """Input and system evidence do not start an assistant answer."""
         return window
 
+    def answered_references(self, opening: tuple[MessageReference, ...]) -> tuple[MessageReference, ...]:
+        """Non-answer events do not clear a turn's opening questions."""
+        return ()
+
     def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
         return self
 
@@ -360,6 +364,9 @@ class ModelOutput:
 
 
 class AssistantTranscript(ModelOutput, AgentTextTranscript):
+    def answered_references(self, opening: tuple[MessageReference, ...]) -> tuple[MessageReference, ...]:
+        return opening if self.text else ()
+
     def append_to(self, events: list[TranscriptEvent]) -> None:
         if events and (merged := events[-1].followed_by_assistant(self)) is not None:
             events[-1] = merged

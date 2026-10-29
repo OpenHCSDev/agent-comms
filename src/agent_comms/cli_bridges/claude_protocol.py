@@ -38,7 +38,7 @@ from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
-    AllTurnsEnded,
+    AllTurnsCancelled, AllTurnsEnded,
     FinishedItem,
     HiddenItem,
     HistoryNotice,
@@ -637,7 +637,7 @@ class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
-            return (AllTurnsEnded(),)
+            return (AllTurnsCancelled(),)
         return record.origin.prompt(record, self.text, session)
 
 

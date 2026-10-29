@@ -12,6 +12,9 @@ from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import ItemStream
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.comms import Comms
+from agent_comms.connector import ConnectorSendTool
+from agent_comms.connector_caller import DirectorCaller
+from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.messages import Message, QuestionKind
 from agent_comms.registry_document import RegisteredCommanderProject
@@ -191,7 +194,8 @@ async def test_codex_send_answers_only_the_question_that_opened_its_turn(
 
             async def receive(item: dict) -> None:
                 updates = stream.receive(dict(method='item/completed', params=dict(
-                    threadId='codex-session', turnId='codex-turn', item=item)))
+                    threadId='codex-session', turnId='codex-turn', item=item,
+                    completedAtMs=1761699600000)))
                 output.publish_batch([await update.observed(codex) for update in updates])
 
             async def deliver(original: Message) -> None:
@@ -208,3 +212,56 @@ async def test_codex_send_answers_only_the_question_that_opened_its_turn(
             assert_opening_send(comms, opening, later)
     finally:
         await runner.cleanup()
+
+
+TURN_FINISHED = decoded_record(dict(type='system', subtype='turn_duration'))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('prefix', 'suffix', 'cleared'), (
+    ((), (assistant_record('directive-final', 'The requested work is explained'), TURN_FINISHED), True),
+    ((), (decoded_record(dict(
+        type='assistant', uuid=transcript_record('thinking-only'), timestamp='2026-10-29T01:00:00Z',
+        message=dict(content=[dict(type='thinking', thinking='Still considering the work')]),
+    )), TURN_FINISHED), False),
+    ((), (assistant_record('not-finished', 'An unfinished answer'),), False),
+    ((assistant_record('before-directives', 'Already answering something else'),),
+     (assistant_record('following-directives', 'Finishing that older answer'), TURN_FINISHED), False),
+    ((), (assistant_record('interrupted-output', 'A partial answer'), decoded_record(dict(
+        type='user', uuid=transcript_record('interrupted'), timestamp='2026-10-29T01:00:00Z',
+        message=dict(content='[Request interrupted by user]'),
+    ))), False),
+    ((), (assistant_record('empty-final', ''), TURN_FINISHED), False),
+), ids=('committed-final', 'thinking-only', 'still-open', 'mid-output', 'interrupted', 'empty-final'))
+async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
+    bridge: ClaudeBridge, prefix: tuple[ClaudeRecord, ...], suffix: tuple[ClaudeRecord, ...], cleared: bool,
+) -> None:
+    comms = bridge.comms
+    commander = comms.registry.require('viewer')
+    comms.registry.set_commander_project(RegisteredCommanderProject(commander.incarnation, ()))
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
+    session = ClaudeSession(turn=KnownTurn(NativeTurnId('directive-turn')))
+    for record in prefix:
+        output.publish_batch(list(record.updates(session)))
+    directives = []
+    for number in range(12):
+        request = comms.goals.todos.add_request(commander.incarnation, f'Independent request {number}')
+        ConnectorSendTool(target='viewer', request=request.id,
+                          body=f'Explain independent request {number}.').apply(
+                              comms, DirectorCaller('claude-code'))
+        directive, = comms.goals.todos.owner_request(request.id).directives
+        with comms.bus.bus.reading() as source:
+            directives.append(directive.original(source))
+    originals = tuple(directives)
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == {
+        message.reference for message in originals}
+    await confirm_messages(bridge, output, session, originals)
+    before = comms.bus.bus.revision()
+    for record in suffix:
+        output.publish_batch(list(record.updates(session)))
+    expected = set() if cleared else {message.reference for message in originals}
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == expected
+    assert comms.bus.bus.revision() == before
+    assert comms.bus.bus.unanswered_references(
+        tuple(message.seq for message in originals), frozenset({'viewer'})) == tuple(
+            message.reference for message in originals)

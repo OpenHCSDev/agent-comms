@@ -234,6 +234,10 @@ class ThreadOutput(activity.ThreadOutput):
         self.transcript.finish_all_replies()
         self.drafts.clear()
 
+    def cancel_all_turns(self) -> None:
+        self.transcript.cancel_replies()
+        self.drafts.clear()
+
     @property
     def activity_thread(self) -> str:
         return self.transcript.incarnation.name
@@ -268,7 +272,7 @@ class ReplyingThreadOutput(ThreadOutput):
 
     def publish_item(self, item: FinishedItem) -> None:
         self.flush_before(item.key)
-        if self.transcript.replies_for(item.turn_id).active_references and item.assistant_text:
+        if self.transcript.opening_for(item.turn_id) and item.assistant_text:
             self.pending[item.key] = item
             self.transcript.draft(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
         else:
@@ -284,7 +288,7 @@ class ReplyingThreadOutput(ThreadOutput):
                 continue
             item = self.pending[key]
             opening = self.messaging.bus.bus.messages_for_references(
-                self.transcript.replies_for(turn_id).active_references)
+                self.transcript.opening_for(turn_id))
             targets = {target for message in opening
                        for target in CommandTarget.named(message.target).automatic_reply_targets(message.sender)}
             publications = tuple(
@@ -303,6 +307,10 @@ class ReplyingThreadOutput(ThreadOutput):
         for turn_id in dict.fromkeys(key.turn_id for key in self.pending):
             self.end_turn(turn_id)
         super().end_all_turns()
+
+    def cancel_all_turns(self) -> None:
+        self.pending.clear()
+        super().cancel_all_turns()
 
 
 class ReadingPhase(ABC):
@@ -627,3 +635,10 @@ class AllTurnsEnded(TurnEnded):
 
     def retire(self, output: ThreadOutput) -> None:
         output.end_all_turns()
+
+
+class AllTurnsCancelled(TurnEnded):
+    """Interrupted output is retained context, not a completed answer."""
+
+    def retire(self, output: ThreadOutput) -> None:
+        output.cancel_all_turns()
