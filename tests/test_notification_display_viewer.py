@@ -9,6 +9,7 @@ from agent_comms.bus import Bus
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.historical_views import HistorySource
+from agent_comms.message_page import MessagePage
 from agent_comms.messages import Message
 from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.notification_progress import DeliveryProgress
@@ -39,6 +40,10 @@ class ArchivedReaders:
 
     def paint(self, name: str) -> None:
         self.selection(name).displayed.acknowledge(self.live.bus.history, self.live.registry)
+
+    def live_page(self, name: str) -> MessagePage:
+        """Read only this physical bus, not the integrated archive's nonempty page."""
+        return self.live.views.presentation.channel_page('#team', viewer=NamedViewer(name))
 
     def notifications(self, viewer: OutcomeViewer) -> NotificationWindow:
         with self.live.bus.history.read_sources() as sources:
@@ -102,9 +107,8 @@ def test_archive_display_requires_its_own_bus_even_for_the_same_viewer(archived_
     fixture = archived_readers
     fixture.paint('self')
     captured = fixture.selection('self').notification_identity
-    live_page = fixture.live.views.channel_display_page(
-        '#team', viewer=NamedViewer('self'),
-    )
+    live_page = fixture.live_page('self')
+    assert not live_page.messages
     foreign = live_page.selection.notification_identity
     assert foreign.viewer == captured.viewer
     assert not foreign.bus_identity.matches(captured.bus_identity)

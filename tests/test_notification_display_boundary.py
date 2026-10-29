@@ -7,7 +7,6 @@ from dataclasses import replace
 
 from agent_comms.notification_reads import RecordedNotificationRead
 from agent_comms.presentation import AllOutcomes
-from agent_comms.read_basis import NamedViewer
 from agent_comms.ui_model.observation import ReadNotifications
 from test_notification_display_viewer import ArchivedReaders, archived_readers  # noqa: F401
 
@@ -45,9 +44,8 @@ def test_notification_request_retains_viewer_source_and_full_operator_access(arc
 def test_same_viewer_in_a_foreign_source_is_a_distinct_notification_request(archived_readers: ArchivedReaders) -> None:
     fixture = archived_readers
     identity = fixture.selection('self').notification_identity
-    live_page = fixture.live.views.channel_display_page(
-        '#team', viewer=NamedViewer('self'),
-    )
+    live_page = fixture.live_page('self')
+    assert not live_page.messages
     live_identity = live_page.selection.notification_identity
     assert identity.viewer == live_identity.viewer
     assert not identity.bus_identity.matches(live_identity.bus_identity)
