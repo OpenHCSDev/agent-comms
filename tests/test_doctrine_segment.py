@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_comms.turn_context import ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn, TurnContext, UserInputSegment
+from agent_comms.turn_context import ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn, RuleReadingSegment, TurnContext, UserInputSegment
 from bus_record_fixture import context_comms
 
 # The provider measures the real tokens (about four bytes per token); the
@@ -37,7 +37,7 @@ def test_owner_context_does_not_repeat_project_maintenance_rules(tmp_path: Path)
             comms.registry.require(name), NextContextTurn(), "original task", (), (), comms.goals
         )
         kinds = tuple(type(segment) for segment in context.segments)
-        assert kinds == (CoordinationSegment, UserInputSegment)
+        assert kinds == (RuleReadingSegment, CoordinationSegment, UserInputSegment)
         assert _doctrine() not in kinds
         assert InstructionFile.read("doctrine.md").content not in context.render().text
         assert context.render().text.startswith(context.segments[0].text())

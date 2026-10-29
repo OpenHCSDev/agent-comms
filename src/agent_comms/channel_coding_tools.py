@@ -78,7 +78,10 @@ class CodingToolOwner(ABC):
         return NoRoomNeeded()
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
+        call.require_instructions(turn.native)
+
         def check(store: Coordination) -> None:
+            call.require_instructions(turn.native)
             snapshot = self.comms.registry.snapshot()
             self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
             self.verify(store, turn, snapshot)
@@ -96,8 +99,9 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
 
-    def tool_completed(self, call: CodingCall, result: PiToolResult) -> None:
-        """The checked terminal shares its actual publication with this turn's grant."""
+    def tool_completed(self, call: CodingCall, result: PiToolResult, child) -> None:
+        """Only an actually completed full read opens this child's rule gate."""
+        call.completed_instruction_read(child, result)
         call.published_goal(result, self.goal_permission)
 
     @abstractmethod
@@ -213,7 +217,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
             FieldCodec.encode(event.tool_call_id), 'Missing completed tool'
         )
         if not event.is_error.value_or(False):
-            self.owner.tool_completed(call, event.result)
+            self.owner.tool_completed(call, event.result, self.turn.native)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 

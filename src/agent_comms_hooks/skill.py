@@ -1,32 +1,22 @@
-"""At session start, resume and compaction, write a bound session's sources, order them read
-once, and deal the reminder deck.
-
-Every session bound to a bus is dealt the fleet's sources: the voice, the recorded failures and
-the fleet rules. The session the registry names commander is also dealt the indictment, the
-commander skill, the commander's own rules and the refactor-audit catalog's index; a rung file
-is read when an order or roast cites its pattern ID. Claude Code caps injected hook text at
-10,000 characters and the sources are far longer, so they go into parts beside the transcript
-and the hook injects the order to read each part, once; the read gate refuses every other tool
-until each part is read. The reminder hook then puts one short slice inline every few tool calls.
-"""
+"""Deal Core's rule sources at Claude session start and compaction."""
 
 from __future__ import annotations
 
 import inspect
 import json
-from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
-from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
-from agent_comms.registry_store import RegistryStore
 from agent_comms.slop import Slop
+from agent_comms.held_orders import HeldOrders
+from agent_comms.registry_store import RegistryStore
 from agent_comms.todos import TodoStore
 from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
 from agent_comms_hooks.watch import WatchClaim
@@ -189,15 +179,13 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
 
 @dataclass(frozen=True)
 class DealtDeck(ClaudeTranscriptHook):
-    """The slices the session start hook dealt beside the transcript, and the calls since."""
+    """The slices dealt beside the transcript, and the calls since."""
 
     def deck(self, reader: DeckReader) -> Path:
         return Path(self.transcript_path).with_suffix(reader.deck_suffix)
 
     @property
     def calls(self) -> Path:
-        """One byte per tool call since the deck was dealt. An append is atomic, so tool
-        calls that run in parallel each count once."""
         return Path(self.transcript_path).with_suffix(".calls")
 
 
@@ -207,14 +195,11 @@ class DeckStart(DealtDeck):
     """How many of the person's own last prompts the deal puts back in front of the session."""
 
     def take(self) -> tuple[str, ...]:
-        """What this hook says: nothing to a session no bus binding names, the fleet's deck to
-        a bound session, and the commander's deck to the one the registry names commander now."""
         return WatchClaim(self.session_id).state().by_role(
             unbound=tuple, fleet=lambda record: self.taken(FleetReader()),
             commander=lambda record: self.taken(CommanderReader()))
 
     def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        """A session start deals the deck."""
         return self.dealt(reader)
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
@@ -263,7 +248,6 @@ class DeckStart(DealtDeck):
                 stream, transcript.stat().st_size, self.owner_prompts)
 
     def held(self) -> str:
-        """Every order the units hold, from the Todo store: a summary is a paraphrase."""
         return "\n".join((
             "FUCK YOUR COMPACTION. Your summary is a paraphrase. What your units actually hold:",
             *(hold.recalled()
@@ -272,7 +256,6 @@ class DeckStart(DealtDeck):
         ))
 
     def commanders(self) -> Iterator[tuple[Path, RegistrySnapshot, Thread]]:
-        """Each commander registered on a bus this session is bound to, with that bus's cut."""
         for record in WatchClaim(self.session_id).state().bindings():
             root = Path(record.root)
             snapshot = RegistryStore.at(root).snapshot()

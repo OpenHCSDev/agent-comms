@@ -22,7 +22,9 @@ from typing import ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.read_gate import GatedCall
-from agent_comms_hooks.skill import DeckReader, DeckStart
+from agent_comms.instruction_deck import DeckReader
+from agent_comms_hooks.skill import DeckStart
+from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
@@ -50,7 +52,10 @@ class DeafReminder(SliceReminder):
     Monitor reading it. The line rides the next tool call, never the bridge it reports dead."""
 
     def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        return super().taken(reader) + reader.deaf(self.session_id)
+        watch = WatchClaim(self.session_id)
+        return super().taken(reader) + watch.state().by_role(
+            unbound=tuple, fleet=tuple,
+            commander=lambda: tuple(deaf.line() for deaf in watch.deaf()))
 
 
 @dataclass(frozen=True)
@@ -61,7 +66,9 @@ class BoardReminder(DeafReminder):
     """
 
     def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        return super().taken(reader) + reader.board(self.session_id)
+        watch = WatchClaim(self.session_id)
+        return super().taken(reader) + watch.state().by_role(
+            unbound=tuple, fleet=tuple, commander=lambda: watch.state().board())
 
 
 class ReminderProgram(ClaudeHookProgram):

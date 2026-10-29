@@ -126,7 +126,6 @@ def test_checkout_resources_remain_owned_by_stack_when_build_artifacts_exist(tmp
     namespace = load_resource_module(module)
     assert namespace["MANIFEST"] == tmp_path / "stack/pi-native.sha256"
     assert namespace["OWNER_INSTRUCTIONS"] == tmp_path / "stack/APPEND_SYSTEM.md"
-    assert namespace["UNIT_INSTRUCTIONS"] == tmp_path / "stack/UNIT_SYSTEM.md"
 
 
 def stamp_prepared(stack, env):

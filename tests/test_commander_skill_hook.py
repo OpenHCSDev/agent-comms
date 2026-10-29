@@ -391,7 +391,7 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
 
 
 
-def test_a_session_bound_to_another_bus_thread_reads_the_fleet_rules_and_not_the_commanders(
+def test_a_bound_unit_reads_every_rule_under_its_audience_heading(
         tmp_path, monkeypatch, commander_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
