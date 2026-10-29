@@ -28,6 +28,7 @@ from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .envelope_claim_transitions import FileClaimPath
+    from .native_child import PiSessionChild
     from .native_tool_transport import UnboundToolTransport
     from .pi_payloads import PiToolResult
     from .shell_effects import StorageEffect
@@ -270,10 +271,10 @@ class NativeToolCall(ABC):
 
 @dataclass(frozen=True)
 class CodingCall(NativeToolCall):
-    def require_instructions(self, child) -> None:
+    def require_instructions(self, child: PiSessionChild) -> None:
         child.require_rule_reads()
 
-    def completed_instruction_read(self, child, result: PiToolResult) -> None:
+    def completed_instruction_read(self, child: PiSessionChild, result: PiToolResult) -> None:
         pass
 
     def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:

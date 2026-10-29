@@ -47,6 +47,7 @@ from .turn_goal_permission import TurnGoalPermission
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .coordination_tables.assignments import WakeAssignment
+    from .native_child import PiSessionChild
     from .pi_payloads import PiToolResult
     from .threads import Thread
 
@@ -99,7 +100,7 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
 
-    def tool_completed(self, call: CodingCall, result: PiToolResult, child) -> None:
+    def tool_completed(self, call: CodingCall, result: PiToolResult, child: PiSessionChild) -> None:
         """Only an actually completed full read opens this child's rule gate."""
         call.completed_instruction_read(child, result)
         call.published_goal(result, self.goal_permission)
