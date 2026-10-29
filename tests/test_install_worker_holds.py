@@ -1,11 +1,12 @@
-import io
 import os
+import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
 import pytest
 
+from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.field_codec import ClaimId, FieldCodec
@@ -22,7 +23,10 @@ from agent_comms.installer.probes.owners import OwnerActionsProbe
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.upgrade import Stack
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.repo import Checkout
+from agent_comms.threads import Thread
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceClaimHolder
 
 
@@ -49,6 +53,37 @@ def test_cli_reply_preserves_declared_failure_from_each_entry(comms, probe_type)
     assert isinstance(refused.value.__cause__, CliRefusedError)
 
 
+def test_cli_probes_share_worker_and_keep_roots_and_refusals_separate(comms, tmp_path):
+    comms.registry.declare(Thread("only-first-root", frozenset(), Checkout(tmp_path)))
+    runtime = LaunchRuntime.running()
+    with InstallCommands() as commands:
+        stack = Stack(Path(__file__).resolve().parents[1], commands, runtime=runtime)
+        stack.probe(DistributionVersionsProbe())
+        (worker,) = commands.workers.values()
+        pid = worker.child.pid
+        assert stack.cli(comms.root, ReadBackCliCommand).threads == 1
+        assert stack.cli(tmp_path / "other-root", ReadBackCliCommand).threads == 0
+        help_output = stack.probe(CliCommandProbe(("--help",)))
+        assert help_output.returncode == 0
+        assert help_output.stdout
+        for probe_type in (CliCommandProbe, OwnerActionsProbe):
+            with pytest.raises(UpgradeRefused):
+                stack.cli_reply(probe_type(("--root", str(comms.root), "not-a-command")),
+                                partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))
+        assert stack.cli(comms.root, ReadBackCliCommand).threads == 1
+        stack.probe(DistributionVersionsProbe())
+        assert tuple(commands.workers.values()) == (worker,)
+        assert worker.child.pid == pid
+
+
+@pytest.mark.parametrize("arguments", [("read-back",), ("not-a-command",), ("--help",)])
+def test_cli_invocation_restores_the_callers_root(comms, tmp_path, arguments):
+    previous = LaunchRoot.from_path(tmp_path / "caller-root")
+    with previous.selected():
+        CliCommandProbe(("--root", str(comms.root), *arguments)).run()
+        assert LaunchRoot.current() == previous
+
+
 def test_owner_reports_own_their_refusal():
     StartedOwner("ready").require_success(UpgradeRefused)
     with pytest.raises(UpgradeRefused):
@@ -73,6 +108,7 @@ def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_p
     @dataclass(frozen=True)
     class HolderSeenProbe(RuntimeProbe[str]):
         def run(self) -> str:
+            assert sys.stdin.read() == "", "Operations must not read the request transport"
             return os.environ.get(HOLDER_NONCE, "")
 
     try:
@@ -81,9 +117,10 @@ def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_p
             FieldCodec.compact(FieldCodec.encode(ProbeRequest(HolderSeenProbe(), holder))) + "\n"
             for holder in holders
         )
-        # serve() takes over the descriptor of its stdout, so the answers need a real file.
-        answers = tmp_path / "answers"
-        monkeypatch.setattr("sys.stdin", io.StringIO(lines))
+        # serve() owns both transport descriptors; operations inherit EOF, not requests.
+        requests, answers = tmp_path / "requests", tmp_path / "answers"
+        requests.write_text(lines)
+        monkeypatch.setattr("sys.stdin", requests.open())
         monkeypatch.setattr("sys.stdout", answers.open("w"))
         monkeypatch.setenv(HOLDER_NONCE, str(ClaimId.mint()))
         serve()
