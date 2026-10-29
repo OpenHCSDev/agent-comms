@@ -33,6 +33,7 @@ from .tool_declaration import (
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
+    from .native_child import PiSessionChild
     from .pi_payloads import PiToolResult
     from .turn_goal_permission import TurnGoalPermission
 
@@ -160,12 +161,12 @@ class ReadTool(ReadAction, PathTool, CodingTool):
     def context_read_paths(self) -> tuple[str, ...]:
         return (self.path,)
 
-    def require_instructions(self, child) -> None:
+    def require_instructions(self, child: PiSessionChild) -> None:
         # A slice never counts. Even an unsliced call must return the exact full text.
         if self.offset == UnsuppliedArgument() and self.limit == UnsuppliedArgument():
             child.begin_part_read(self.call_id, self.path)
 
-    def completed_instruction_read(self, child, result: PiToolResult) -> None:
+    def completed_instruction_read(self, child: PiSessionChild, result: PiToolResult) -> None:
         child.completed_part_read(self.call_id, result)
 
 

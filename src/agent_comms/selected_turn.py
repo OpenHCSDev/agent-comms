@@ -5,6 +5,12 @@ from __future__ import annotations
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from functools import partial
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .coordination_tables.assignments import WakeAssignment
+    from .pi_native_backend import PersistentPiSession
+    from .selected_write_authority import SelectedWriteAuthority
 
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
@@ -61,7 +67,10 @@ class SelectedPrompt:
             (frame, SelectedTriageSegment.capture(participant, frame.provenance))
         ).render()
 
-    async def full(self, assignments, obligations, action: SelectedAction, pi_session) -> RenderedInput:
+    async def full(
+        self, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
+        action: SelectedAction, pi_session: PersistentPiSession,
+    ) -> RenderedInput:
         participant = self.participant
         frame = SelectedWakeSegment.capture(
             tuple(
@@ -174,7 +183,10 @@ class SelectedAttempt:
             goal_permission=participant.goal_permission,
         )
 
-    async def prepare(self, session, action, write_authority, *, pi_session):
+    async def prepare(
+        self, session: SelectedSession, action: SelectedAction, write_authority: SelectedWriteAuthority,
+        *, pi_session: PersistentPiSession,
+    ) -> tuple[SelectedRequest, BatchSelectedAction]:
         participant = self.participant
         try:
             action = BatchSelectedAction(tuple(

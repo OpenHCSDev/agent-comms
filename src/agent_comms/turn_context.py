@@ -44,6 +44,8 @@ from .wake_policy import WakePolicy
 if TYPE_CHECKING:
     from .context_store import RecordedContextState
     from .input_attempt import StoredInput
+    from .goal_management import Goals
+    from .native_child import PiSessionChild
     from .presentation import ThreadView
     from .relationships import PeerRelation
     from .threads import Thread
@@ -1108,7 +1110,7 @@ class OncePerContextSegment(InstructionSegment):
         return received.get(type(self), ()) != self.provenance
 
     @classmethod
-    def remember_received(cls, child, provenance):
+    def remember_received(cls, child: PiSessionChild, provenance: tuple[Provenance, ...]) -> None:
         child.remember_context(cls, provenance)
 
 
@@ -1118,7 +1120,7 @@ class RuleReadingSegment(OncePerContextSegment):
     header: str
 
     @classmethod
-    def capture(cls, owner: Thread, goals) -> RuleReadingSegment:
+    def capture(cls, owner: Thread, goals: Goals) -> RuleReadingSegment:
         snapshot = goals.registry.snapshot()
         reader = DeckReader.for_owner(snapshot, owner.incarnation.require_recorded())
         parts = DeckParts.beside_session(owner.native_session_directory(goals.root)).planned(reader)
