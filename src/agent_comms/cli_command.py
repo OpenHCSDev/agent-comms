@@ -16,6 +16,7 @@ from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, Started
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.target_fields import TargetField
+from agent_comms.thread_model import CatalogSelection
 from dataclasses import dataclass, field, replace
 from pydantic import JsonValue
 from collections.abc import Mapping
@@ -63,15 +64,128 @@ class CliExecution[Answer: CliResult = CliResult](Command[Comms, Answer]):
 Answer = TypeVar("Answer", bound=CliResult, covariant=True, default=CliResult)
 
 
+class CommandBinding(ABC):
+    """A declared operation can collect fields before a complete command exists."""
+
+    @property
+    @abstractmethod
+    def declaration(self) -> type[CliCommand]: ...
+
+    @property
+    @abstractmethod
+    def editable_fields(self) -> tuple[TargetField, ...]: ...
+
+    def for_editor(self, comms: Comms, target: str, project: Checkout) -> Self:
+        return self
+
+    @property
+    def catalog_context(self) -> object:
+        return self
+
+    def for_fields(self, arguments: Mapping[str, object]) -> CommandBinding:
+        return self.edited(self.declaration.editor_arguments(arguments)) if arguments else self
+
+    async def prepare_fields(self, arguments: Mapping[str, object] = {}) -> tuple[TargetField, ...]:
+        binding = self.for_fields(arguments)
+        catalogs = ConfigOptions.configured()
+        return tuple([await item.prepare(catalogs, binding.catalog_context)
+                      for item in binding.editable_fields])
+
+    def authorize_edits(self, arguments: Mapping[str, object]) -> frozenset[str]:
+        bound = frozenset(entry.key for entry in FieldCodec.argument_fields(self.declaration)
+                          if entry.setting(TargetBound, False))
+        if bound & arguments.keys():
+            raise ValueError("Target-bound parameters cannot be overridden")
+        if arguments.keys() - {item.name for item in self.editable_fields}:
+            raise ValueError("Parameters not offered by this target command cannot be overridden")
+        return bound
+
+    @abstractmethod
+    def edited(self, arguments: Mapping[str, object]) -> CliCommand: ...
+
+    @abstractmethod
+    def confirmation(self) -> str: ...
+
+    @classmethod
+    @abstractmethod
+    def selection_confirmation(cls, commands: tuple[Self, ...]) -> str: ...
+
+    @abstractmethod
+    def with_confirmation(self, confirmed: bool) -> CommandBinding: ...
+
+
+@dataclass(frozen=True)
+class CommandContext(CatalogSelection):
+    """A partial command's supplied fields, with native edits decoded by their plans."""
+
+    def edited(self, arguments: Mapping[str, object]) -> Self:
+        changes = {name: value
+                   for entry in FieldCodec.argument_fields(type(self)) if entry.key in arguments
+                   for name, value in entry.decoded({
+                       entry.key: entry.editor_payload(arguments[entry.key]),
+                   }).items()}
+        return replace(self, **changes) if changes else self
+
+
+@dataclass(frozen=True)
+class PendingCommandBinding(CommandBinding):
+    """Only supplied context, borrowing the concrete command's declared fields."""
+
+    command: type[CliCommand]
+    context: CommandContext
+
+    @property
+    def declaration(self) -> type[CliCommand]:
+        return self.command
+
+    @property
+    def catalog_context(self) -> CatalogSelection:
+        return self.context
+
+    @property
+    def editable_fields(self) -> tuple[TargetField, ...]:
+        supplied = {entry.name: entry.current(self.context)
+                    for entry in FieldCodec.argument_fields(type(self.context))}
+        return tuple(TargetField.of(entry, supplied[entry.name] if entry.name in supplied else entry.default())
+                     for entry in FieldCodec.argument_fields(self.declaration)
+                     if not entry.setting(TargetBound, False))
+
+    def for_fields(self, arguments: Mapping[str, object]) -> PendingCommandBinding:
+        return replace(self, context=self.context.edited(arguments))
+
+    def edited(self, arguments: Mapping[str, object]) -> CliCommand:
+        self.authorize_edits(arguments)
+        return self.declaration.from_payload({
+            **FieldCodec.encode(self.context),
+            self.declaration.family_discriminator: FieldCodec.encode(self.declaration),
+            **arguments,
+        })
+
+    def confirmation(self) -> str:
+        return ''
+
+    @classmethod
+    def selection_confirmation(cls, commands: tuple[Self, ...]) -> str:
+        return ''
+
+    def with_confirmation(self, confirmed: bool) -> CliCommand:
+        return self.edited({}).with_confirmation(confirmed)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
     ModuleMembers,
     DeclaredCommand,
     CliExecution[Answer],
+    CommandBinding,
     Generic[Answer],
     affix="CliCommand",
     discovery_package="agent_comms.cli_verbs",
 ):
+    @property
+    def declaration(self) -> type[Self]:
+        return type(self)
+
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
         result = TargetCompleted(batch.target, self, self.apply(comms))
         batch.outcomes.append((batch.position, result))
@@ -125,21 +239,21 @@ class CliCommand(
         return channel.channels_for(target)
 
     @classmethod
-    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: SurroundingChannel, *, catalog: CatalogAccess) -> tuple[CommandBinding, ...]:
         return ()
 
     @classmethod
-    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[CommandBinding, ...]:
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess) -> tuple[CommandBinding, ...]:
         return ()
 
     @classmethod
     def bindings(cls, comms: Comms, target: CommandTarget, channel: SurroundingChannel,
                  *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-                 resolved: ResolvedThread | ResolvedChannel | Checkout) -> tuple[Self, ...]:
+                 resolved: ResolvedThread | ResolvedChannel | Checkout) -> tuple[CommandBinding, ...]:
         return target.bindings(
             cls, comms, channel, resolved, project=project, snapshot=snapshot, catalog=catalog)
 
@@ -160,7 +274,7 @@ class CliCommand(
         catalog = (comms.channels.catalog.read()
                    if channel.needs_catalog or any(item.needs_channel_state for item in selected) else NoCatalog())
         resolved_targets = tuple((name, name.resolve(snapshot, comms.bus.require_channel)) for name in available_targets)
-        grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
+        grouped: dict[type[CliCommand], dict[CommandBinding, None]] = {}
         for member in target.command_members(cls):
             selected_channels = channel if member.channel_fields() else NoChannel()
             for name, resolved in resolved_targets:
@@ -176,9 +290,6 @@ class CliCommand(
                                   channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
 
-    def for_editor(self, comms: Comms, target: str, project: Checkout) -> Self:
-        return self
-
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
         """The command owns the parameters offered by its target action."""
@@ -188,11 +299,6 @@ class CliCommand(
             for entry in FieldCodec.argument_fields(type(self))
             if not entry.setting(TargetBound, False)
         )
-
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
-
-        catalogs = ConfigOptions.configured()
-        return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
 
     def describe(self, comms: Comms, target: CommandTarget, project: Checkout) -> TargetAction:
 
@@ -236,15 +342,7 @@ class CliCommand(
         return self
 
     def edited(self, arguments: Mapping[str, object]) -> Self:
-        bound = {
-            entry.key for entry in FieldCodec.argument_fields(type(self))
-            if entry.setting(TargetBound, False)
-        }
-        if bound & arguments.keys():
-            raise ValueError("Target-bound parameters cannot be overridden")
-        editable = {item.name for item in self.editable_fields}
-        if arguments.keys() - editable:
-            raise ValueError("Parameters not offered by this target command cannot be overridden")
+        bound = self.authorize_edits(arguments)
         encoded = FieldCodec.encode(self)
         return type(self).from_payload({
             **{key: encoded[key] for key in bound & encoded.keys()},
@@ -271,7 +369,7 @@ class CliCommand(
 @dataclass(frozen=True)
 class TargetAction:
     """A selection keeps the bound commands, not a separate permission list."""
-    bound: tuple[CliCommand, ...]
+    bound: tuple[CommandBinding, ...]
     targets: tuple[str, ...]
     declaration: type[CliCommand]
     channels: ChannelSelection = NoChannel()
@@ -280,8 +378,8 @@ class TargetAction:
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
 
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
-        return await self.bound[0].prepare_fields()
+    async def prepare_fields(self, arguments: Mapping[str, object] = {}) -> tuple[TargetField, ...]:
+        return await self.bound[0].prepare_fields(arguments)
 
     @property
     def label(self) -> str:
@@ -289,14 +387,14 @@ class TargetAction:
 
     @property
     def confirmation(self) -> str:
-        groups: dict[type[CliCommand], list[CliCommand]] = {}
+        groups: dict[type[CommandBinding], list[CommandBinding]] = {}
         for command in self.bound:
             groups.setdefault(type(command), []).append(command)
         return '\n'.join(filter(None, (declaration.selection_confirmation(tuple(commands))
                                        for declaration, commands in groups.items())))
 
     def edited(self, arguments: Mapping[str, object]) -> TargetAction:
-        return replace(self, bound=tuple(command.edited(type(command).editor_arguments(arguments))
+        return replace(self, bound=tuple(command.edited(command.declaration.editor_arguments(arguments))
                                         for command in self.bound))
 
     def with_confirmation(self, confirmed: bool) -> TargetAction:
@@ -480,7 +578,7 @@ class TargetBatch(TargetSelection):
                               if member.catalog_declaration() is declaration)
                         if declaration.catalog_declaration() is declaration else (declaration,))
         outcomes: list[tuple[int, TargetCompleted | TargetFailed]] = []
-        planned: dict[CliCommand, tuple[int, CommandTarget, SurroundingChannel]] = {}
+        planned: dict[CommandBinding, tuple[int, CommandTarget, SurroundingChannel]] = {}
         together: dict[type[AppliedTogether], list[tuple[int, CommandTarget, AppliedTogether]]] = {}
         for name in self.targets:
             try:
@@ -511,7 +609,7 @@ class TargetBatch(TargetSelection):
                 current = comms.registry.snapshot()
                 current_catalog = (comms.channels.catalog.read()
                                    if context.needs_catalog or name.needs_channel_state else NoCatalog())
-                if bound_command not in type(bound_command).bindings(
+                if bound_command not in bound_command.declaration.bindings(
                         comms, name, context, project=project, snapshot=current, catalog=current_catalog,
                         resolved=name.resolve(current, comms.bus.require_channel)):
                     raise CommandSelectionChanged(

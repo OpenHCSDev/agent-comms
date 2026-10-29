@@ -7,7 +7,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_command import CliCommand
+from agent_comms.cli_command import CliCommand, CommandContext
 from agent_comms.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions, ModelConfigOption, ThinkingLevelConfigOption
@@ -16,16 +16,17 @@ from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.repo import Checkout, LaunchCheckout
 from agent_comms.thread_management import ThreadCreationSpec
-from agent_comms.thread_model import CatalogSelection, ThreadModel
+from agent_comms.thread_model import ThreadModel
 
 
-type TagArgument[T] = Annotated[
-    T, EditorFormat(FieldCodec.encode), Normalize(_tag_choice_text), Argument(flags=("--tags",)),
-]
+TAG_ARGUMENT = (
+    EditorFormat(FieldCodec.encode), Normalize(_tag_choice_text), Argument(flags=("--tags",)),
+)
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadCreationCliCommand(NameArgument, CatalogSelection, CliCommand, declared_name=None):
+class ThreadCreationFields(NameArgument, CommandContext):
+    """Supplied launch context is also the complete command's field declaration."""
     task: Annotated[str, Multiline(), Argument(flags=("--task",))] = ""
     project: Annotated[Checkout, Argument(flags=("--project",))]
     model: Annotated[
@@ -36,18 +37,24 @@ class ThreadCreationCliCommand(NameArgument, CatalogSelection, CliCommand, decla
     ] = NativeThreadDefaults.thinking_level
 
     @property
-    @abstractmethod
-    def spec_type(self) -> type[ThreadCreationSpec]: ...
-
-    @property
     def project_path(self) -> Path:
         return self.project.path
 
-    def apply(self, ctx: Comms) -> ThreadCreatedResult:
-        spec = self.spec_type.from_task(**{
+
+@dataclass(frozen=True, kw_only=True)
+class ThreadCreationCliCommand(ThreadCreationFields, CliCommand, declared_name=None):
+    @property
+    @abstractmethod
+    def spec_type(self) -> type[ThreadCreationSpec]: ...
+
+    def specification(self) -> ThreadCreationSpec:
+        return self.spec_type.from_task(**{
             **{item.name: getattr(self, item.name) for item in fields(self.spec_type)},
             'project': LaunchCheckout.checked(self.project.path),
         })
+
+    def apply(self, ctx: Comms) -> ThreadCreatedResult:
+        spec = self.specification()
         asyncio.run(ConfigOptions.configured().validate(self))
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.process_identity)

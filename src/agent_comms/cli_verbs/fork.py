@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.cli_support.thread_creation import TagArgument, ThreadCreationCliCommand
+from agent_comms.cli_support.thread_creation import TAG_ARGUMENT, ThreadCreationCliCommand
 from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import TargetBound
@@ -21,7 +21,7 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, ThreadCreationCl
         str, TargetBound(), Argument(flags=("--parent",))
     ]
 
-    tags: TagArgument[TagChoice] = InheritedTags()
+    tags: Annotated[TagChoice, *TAG_ARGUMENT] = InheritedTags()
 
     @classmethod
     def thread_binding(cls, thread: Thread) -> Self:
