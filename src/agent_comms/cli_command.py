@@ -118,9 +118,10 @@ class CommandBinding(ABC):
 
     def edited(self, arguments: Mapping[str, object]) -> CliCommand:
         self.authorize_edits(arguments)
-        return FieldCodec.construct(self.declaration, {
-            **self.retained_payload(), **self.decoded_edits(self.declaration, arguments),
-        })
+        values = {**self.retained_payload(), **self.decoded_edits(self.declaration, arguments)}
+        for parameter in self.editable_fields:
+            parameter.plan.require_constructor_input(values)
+        return FieldCodec.construct(self.declaration, values)
 
     @abstractmethod
     def confirmation(self) -> str: ...
