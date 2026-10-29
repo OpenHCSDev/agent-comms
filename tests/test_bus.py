@@ -634,7 +634,7 @@ def test_answer_projection_rebuild_preserves_sequence_links_and_public_reference
 
 def commander_packet(bus, commander, body):
     return bus.append(lambda seq, db: PublicRecord.from_message(Message(
-        "commander-heartbeat", commander.name, body, InfoKind, seq=seq,
+        "user", commander.name, body, InfoKind, seq=seq,
         task=CommanderNotice(commander, ()))))
 
 
@@ -644,7 +644,7 @@ def test_commander_packet_positions_append_with_their_message_and_rebuild_from_i
     lead, other = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation("other", 2.0)
     first = commander_packet(bus, lead, "first board")
     raw = bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("commander-heartbeat", "lead", "independent instruction", InfoKind, seq=seq)))
+        Message("user", "lead", "independent instruction", InfoKind, seq=seq)))
     theirs = commander_packet(bus, other, "another commander's board")
 
     def positions():
@@ -693,7 +693,7 @@ def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, b
 
     def build(seq, db):
         record_from(PrivateRecord, Message(
-            "commander-heartbeat", "lead", "not committed", InfoKind, seq=seq,
+            "user", "lead", "not committed", InfoKind, seq=seq,
             task=CommanderNotice(lead, ())),
         ).append_to(db, seq)
         written.append((seq, CommanderUpdatePosition.select(db)))

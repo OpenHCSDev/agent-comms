@@ -27,6 +27,8 @@ from .owner_connection import OwnerConnection
 from .owner_launch import RetainedOwnerLaunch, StartOwnerRuntimeRequest, StopOwnerRuntimeRequest
 from .root_runtime import RootRuntimeStore
 from .commander_service import CommanderService
+from .channel_targets import ThreadTarget
+from .task_attachments.owner_notices import RestartNotice
 from .diagnostics import OwnerProcessOutput
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
@@ -415,9 +417,8 @@ class OwnerLifecycle:
 
     def _announce_restart(self, name: str, identities: str) -> None:
         """Publish once after the registry's process reservation commits."""
-        CommanderService.register(self.registry)
-        self.messaging.send(CommanderService.sender, name,
-            f"Restarted holding {identities}; continue them from your branch")
+        RestartNotice().publish(self.messaging, ThreadTarget(name),
+                                f"Restarted holding {identities}; continue them from your branch")
 
     def ensure_owner(
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
