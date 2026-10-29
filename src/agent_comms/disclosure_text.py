@@ -14,40 +14,12 @@ from agent_comms.field_codec import FieldCodec, FieldPlan, ValueDescription, Vie
 
 
 @dataclass(frozen=True)
-class DisclosureText(ValueDescription["DisclosureText"]):
+class DisclosureText:
     value: object
 
     @classmethod
     def of(cls, value: object) -> DisclosureText:
-        return FieldCodec.describe(value, cls)
-
-    @classmethod
-    def scalar(cls, value: object) -> DisclosureText:
-        return cls(value)
-
-    @classmethod
-    def record(cls, value: object) -> DisclosureText:
-        return RecordText(value)
-
-    @classmethod
-    def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> DisclosureText:
-        return IdentifiedRecordText(value, identity)
-
-    @classmethod
-    def class_value(cls, value: type) -> DisclosureText:
-        return ClassText(value)
-
-    @classmethod
-    def family_value(cls, value: FamilyMeta) -> DisclosureText:
-        return FamilyText(value)
-
-    @classmethod
-    def mapping(cls, value: Mapping[Hashable, object]) -> DisclosureText:
-        return MappingText(value)
-
-    @classmethod
-    def sequence(cls, value: Sequence[object]) -> DisclosureText:
-        return SequenceText(value)
+        return FieldCodec.describe(value, DisclosureShapes)
 
     def summary(self, width: int | None = None) -> str:
         text = str(self.value)[:width]
@@ -290,3 +262,33 @@ class SequenceText(CollectionText):
 class MappingText(CollectionText):
     value: Mapping[Hashable, object]
     noun = "field"
+
+
+class DisclosureShapes(ValueDescription[DisclosureText]):
+    @classmethod
+    def scalar(cls, value: object) -> DisclosureText:
+        return DisclosureText(value)
+
+    @classmethod
+    def record(cls, value: object) -> DisclosureText:
+        return RecordText(value)
+
+    @classmethod
+    def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> DisclosureText:
+        return IdentifiedRecordText(value, identity)
+
+    @classmethod
+    def class_value(cls, value: type) -> DisclosureText:
+        return ClassText(value)
+
+    @classmethod
+    def family_value(cls, value: FamilyMeta) -> DisclosureText:
+        return FamilyText(value)
+
+    @classmethod
+    def mapping(cls, value: Mapping[Hashable, object]) -> DisclosureText:
+        return MappingText(value)
+
+    @classmethod
+    def sequence(cls, value: Sequence[object]) -> DisclosureText:
+        return SequenceText(value)

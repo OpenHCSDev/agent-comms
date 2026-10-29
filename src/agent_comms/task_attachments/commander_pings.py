@@ -379,7 +379,17 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
                      for members in (group.members(packets, opened),) if members)
 
 
-class NewAlarms(AlarmGroup):
+class CompactAlarms:
+    """Sections keep actionable representatives and explicit per-kind overflow."""
+
+    maximum_per_kind: ClassVar[int] = 1
+
+    @classmethod
+    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        return pings[:cls.maximum_per_kind]
+
+
+class NewAlarms(CompactAlarms, AlarmGroup):
     tone = AccentTone
 
     @classmethod
@@ -387,16 +397,6 @@ class NewAlarms(AlarmGroup):
                 opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
         return tuple(line for packet in packets for ping in packet.new_pings()
                      for line in ping.alarm_pings())
-
-
-class CompactAlarms:
-    """Persistent sections keep actionable representatives and explicit per-kind overflow."""
-
-    maximum_per_kind: ClassVar[int] = 1
-
-    @classmethod
-    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        return pings[:cls.maximum_per_kind]
 
 
 class StillOpenAlarms(CompactAlarms, AlarmGroup):

@@ -85,10 +85,6 @@ class HudRecord(ABC):
     def needs_hand(self) -> bool:
         return self.hud_group.needs_hand()
 
-    def detail_key(self, root: Path, commander: ThreadIncarnation) -> object:
-        """A plain record's original disclosure changes with that record."""
-        return self
-
 
 @dataclass(frozen=True)
 class CommanderUnit(HudRecord):
@@ -100,7 +96,7 @@ class CommanderUnit(HudRecord):
 
     unit: Annotated[ThreadIncarnation, DisclosureIdentity()]
     state: type[UnitState]
-    clock: Annotated[UnitClock, HudExclude()]
+    clock: Annotated[UnitClock, HudExclude()] = field(compare=False)
     orders: Annotated[tuple[CommanderOrder, ...], HudExclude()]
     strikes: Annotated[int, HudExclude()]
     ready_prs: Annotated[tuple[PullRequest, ...], HudExclude()]
@@ -125,12 +121,6 @@ class CommanderUnit(HudRecord):
     @property
     def order_ids(self) -> tuple[OrderId, ...]:
         return tuple(dict.fromkeys(card.order for card in self.orders))
-
-    def detail_key(self, root: Path, commander: ThreadIncarnation) -> object:
-        """The actual read request is its invalidation key, not the card's hidden clocks."""
-        from agent_comms.ui_model.observation import ReadCommanderUnit
-
-        return ReadCommanderUnit(str(root), commander, self.unit, self.order_ids)
 
     def detail(self, comms: Comms, commander: ThreadIncarnation,
                orders: tuple[OrderId, ...]) -> CommanderUnitDetail:

@@ -506,7 +506,7 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
         ServicePassStore.at(comms.root).read().commander_completed)
 
 
-def test_rule_packets_list_every_new_line_then_repeat_it_without_a_new_wake(notification_bus):
+def test_rule_packets_compact_new_lines_keep_originals_then_repeat_without_a_new_wake(notification_bus):
     comms = notification_bus
     rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
                   for index in range(7))
@@ -516,7 +516,9 @@ def test_rule_packets_list_every_new_line_then_repeat_it_without_a_new_wake(noti
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
     assert sum(len(section.pings) for section in lead_hud(comms).alarms) == len(rules)
-    assert all(rule.line() in first.body for rule in rules)
+    assert rules[0].line() in first.body
+    details = "\n".join(lead_hud(comms).alarm_detail(lead_hud(comms).alarms, time.time()))
+    assert all(rule.line() in details for rule in rules)
     assert_status_fields(first, lead_hud(comms))
     beat(comms, rules)
     _, unchanged = notifications(comms)
@@ -681,14 +683,15 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
 
     hud = replace(lead_hud(comms), packets=(packet,), open_pings=packet.handled)
     message = packet.send(comms, time.time(), hud.hud_text(time.time()))
-    assert len(hud.alarm_text(hud.alarms, time.time())) < len(rules)
+    for frame in (lead_hud(comms), hud):
+        assert len(frame.alarm_text(frame.alarms, time.time())) < len(rules)
+        overflow = tuple(row for section in frame.alarms for table in section.tables(time.time())
+                         if table.record is AlarmOverflow for row in table.records)
+        assert sum(row.more for row in overflow) == len(rules) - 1
+        details = "\n".join(frame.alarm_detail(frame.alarms, time.time()))
+        assert all(rule.line() in details for rule in rules)
+    assert rules[0].line() in original.body
     assert rules[0].line() in message.body
-    overflow = tuple(row for section in hud.alarms for table in section.tables(time.time())
-                     if table.record is AlarmOverflow for row in table.records)
-    assert sum(row.more for row in overflow) == len(rules) - 1
-    assert all(rule.line() in original.body for rule in rules)
-    details = "\n".join(hud.alarm_detail(hud.alarms, time.time()))
-    assert all(rule.line() in details for rule in rules)
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms, "lead")} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
