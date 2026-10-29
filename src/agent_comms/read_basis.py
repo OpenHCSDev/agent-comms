@@ -33,6 +33,7 @@ from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .notification_evidence import NotificationSelection, RecipientSelection
 from .audience_manifest import FrozenRecipient
+from .bus_publication import Delivered
 from .private_path import FileObservation, MissingFile
 from .projection_source import ProducedRow, ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
@@ -431,7 +432,6 @@ if TYPE_CHECKING:
 
     from .private_registry_guard import RegistryPrivacy
     from .bus import Bus, BusReader, BusSnapshot
-    from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .channels import Channels, TagChannel

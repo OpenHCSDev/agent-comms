@@ -31,7 +31,6 @@ from agent_comms.typed_table import Column, Generated, sql_literal
 
 from .field_codec import FieldCodec, MessageId, ThreadLookup
 from .repo import Checkout
-from .read_basis import RepliesDisplayScope
 from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
@@ -63,14 +62,18 @@ class Delivered(BusRecord, AudiencedMessage, declared_name=None):
         yield SentSource(self.sender_lookup, self.seq)
         for recipient in self.recipients:
             yield ReceivedSource(recipient.recipient_lookup, self.seq)
-            scope = RepliesDisplayScope(
-                frozenset({recipient.canonical_thread}), frozenset({self.sender}),
-            )
-            if scope.includes(self):
+            if self.awaits_answer_from(recipient.canonical_thread):
                 yield AwaitingAnswerSource(
                     recipient.recipient_lookup, self.seq, recipient.canonical_thread,
                     self.role.response_policy(self).starts_direct_turn,
                 )
+
+    def awaits_answer_from(self, recipient: str) -> bool:
+        """Whether this delivery leaves the recipient owing its sender an answer: the
+        recipient sent it to itself, it was addressed to the recipient directly, or its
+        response policy names the recipient a required responder."""
+        return (self.sender == recipient or self.target == recipient
+                or bool(self.response_eligibility((recipient,)).required_responders))
 
     @property
     def history_record(self) -> Self:
