@@ -102,9 +102,22 @@ def test_a_registry_revision_that_changes_no_query_counts_only_appended_rows(bus
         db.set_trace_callback(queries.append)
         third = second.advanced(source, marked)
         recounted = [query for query in queries if query.startswith("WITH read_cursors")]
-        assert len(recounted) == 1
+        assert len(recounted) == 2 and all("target IN ('#team')" in query for query in recounted)
         assert third.counts == {"#team": 51, "#other": 0}
         assert third == source.display_unread(marked, through=source.revision())
+    reread = replace(marked, seen=marked.seen.add((
+        DisplayedConversation(ChannelConversation("#team"), (), prefix_through=180),
+    )))
+    queries.clear()
+    with bus.reading() as source, source.observing() as db:
+        db.set_trace_callback(queries.append)
+        fourth = third.advanced(source, reread)
+        recounted = [query for query in queries if query.startswith("WITH read_cursors")]
+        assert len(recounted) == 2
+        assert sorted("seq > 150" in query for query in recounted) == [False, True]
+        assert sorted("seq > 180" in query for query in recounted) == [False, True]
+        assert fourth.counts == {"#team": 21, "#other": 0}
+        assert fourth == source.display_unread(reread, through=source.revision())
 
 
 def test_status_row_equality_ignores_an_older_notification_outside_shown_lines():

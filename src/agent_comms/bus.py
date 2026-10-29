@@ -51,6 +51,7 @@ from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
+from agent_comms.read_basis import CursorRow
 from agent_comms.read_basis import (
     DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope, UnreadQuery,
 )
@@ -131,16 +132,27 @@ class DisplayUnread:
         through = source.revision()
         if through == self.through and tuple(self.counted) == queries:
             return self
-        kept = tuple(query for query in queries if query in self.counted)
+        earlier = {query.counting: query for query in self.counted}
+        kept = {query: query for query in queries if query in self.counted}
+        moved = {query: (earlier[query.counting], parts) for query in queries
+                 if query not in kept and query.counting in earlier
+                 and (parts := query.moved(earlier[query.counting]))}
+        progressed = (*kept, *(previous for previous, _ in moved.values()))
         appended = source.count_unread(
-            kept if through != self.through else (), through=through, after=self.through)
+            progressed if through != self.through else (), through=through, after=self.through)
+        corrections = source.count_unread(
+            tuple(part for _, parts in moved.values() for part in parts), through=through)
         fresh = source.count_unread(
-            tuple(query for query in queries if query not in self.counted), through=through)
-        return DisplayUnread(through, {
-            query: self.counted[query] + appended.get(query, 0) if query in self.counted
-            else fresh[query]
-            for query in queries
-        })
+            tuple(query for query in queries if query not in kept and query not in moved),
+            through=through)
+        counted = {
+            **fresh,
+            **{query: self.counted[query] + appended.get(query, 0) for query in kept},
+            **{query: self.counted[previous] + appended.get(previous, 0)
+               - corrections[before] + corrections[after]
+               for query, (previous, (before, after)) in moved.items()},
+        }
+        return DisplayUnread(through, {query: counted[query] for query in queries})
 
 
 class BusReader(RouteCounts, ABC):
@@ -455,7 +467,7 @@ class BusReader(RouteCounts, ABC):
                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
                     f'AND ({query.predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
-                    (*query.cursors, max(after, query.lower_bound), through,
+                    (CursorRow.binding(query.cursors), max(after, query.lower_bound), through,
                      *query.parameters, query.viewer_names),
                 ).fetchone()[0])
         return counts
