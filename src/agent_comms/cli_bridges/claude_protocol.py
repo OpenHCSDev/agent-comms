@@ -5,17 +5,15 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from functools import cached_property, partial
+from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 from xml.etree import ElementTree
 
 from pydantic import (
     Field,
     JsonValue,
     ModelWrapValidatorHandler,
-    PlainValidator,
-    PlainSerializer,
     field_validator,
     model_validator,
 )
@@ -788,8 +786,7 @@ class UserMessage(ContentBlocks):
 class PromptRecord(ClaudeRecord, TimedRecord, ABC, declared_name=None):
     """Every prompt shape opens its own source turn at the wire boundary."""
 
-    promptId: Annotated[NativeTurnId, PlainValidator(partial(FieldCodec.decode, NativeTurnId)),
-                        PlainSerializer(FieldCodec.encode)]
+    promptId: NativeTurnId
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(self.promptId)
