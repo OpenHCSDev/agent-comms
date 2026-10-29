@@ -385,8 +385,6 @@ class DeletingThreadStatus(ThreadStatus):
 
 
 class ThreadStatusName(TextRepresentation[ThreadStatus]):
-    schema_description = "agent_comms.thread_status.ThreadStatusName text"
-
     @classmethod
     def encode(cls, value: object) -> object:
         return FieldCodec.encode(type(value))

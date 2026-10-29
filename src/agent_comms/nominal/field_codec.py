@@ -1748,11 +1748,9 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
 class TextRepresentation[V](FieldRepresentation[V]):
     """External text scalars share strict decoding at the canonical boundary.
 
-    Its schema describes the declared external form, independently of the Python module
-    containing its implementation. SpelledText instead declares its accepted spelling.
+    Its schema derives the external form's description from its class name, independently
+    of the Python module containing it. SpelledText declares its accepted spelling.
     """
-
-    schema_description: ClassVar[str]
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
@@ -1773,7 +1771,7 @@ class TextRepresentation[V](FieldRepresentation[V]):
 
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:
-        return {"type": "string", "description": cls.schema_description}
+        return {"type": "string", "description": f"{cls.__qualname__} text"}
 
 
 class ValidatedScalar(FieldRepresentation):
@@ -1901,8 +1899,6 @@ class NominalSpelling[V: NominalText](SpelledText):
 
 
 class PathText(TextRepresentation[Path]):
-    schema_description = "agent_comms.field_codec.PathText text"
-
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, Path):
@@ -1917,8 +1913,6 @@ class PathText(TextRepresentation[Path]):
 class AbsolutePathText(PathText):
     """A filesystem path resolved once, where its external spelling enters."""
 
-    schema_description = "agent_comms.field_codec.AbsolutePathText text"
-
     @classmethod
     def from_text(cls, value: str) -> Path:
         return Path(value).expanduser().resolve()
@@ -1927,7 +1921,6 @@ class AbsolutePathText(PathText):
 class BoundedText(TextRepresentation[str], ValidatedScalar):
     """Nonempty identity text of bounded length: an owner, incarnation or message ID."""
 
-    schema_description = "agent_comms.field_codec.BoundedText text"
     max_length: ClassVar[int] = 4096
 
     @classmethod
@@ -1947,8 +1940,6 @@ class BoundedText(TextRepresentation[str], ValidatedScalar):
 
 class ResourcePathText(BoundedText):
     """A claimed resource, already a canonical absolute path."""
-
-    schema_description = "agent_comms.field_codec.ResourcePathText text"
 
     @classmethod
     def from_text(cls, value: str) -> str:
@@ -2004,8 +1995,6 @@ class RecordedTimestamp:
 
 
 class TimestampText(TextRepresentation[RecordedTimestamp]):
-    schema_description = "agent_comms.field_codec.TimestampText text"
-
     @classmethod
     def encode(cls, value: object) -> str:
         return value.text

@@ -672,8 +672,6 @@ class CodedProviderDiagnosticError(ProviderDiagnosticError):
 class TransportStageText(TextRepresentation[ProviderTransportStage]):
     """The native provider's scalar spelling, not a second record decoder."""
 
-    schema_description = "agent_comms.pi_payloads.TransportStageText text"
-
     @classmethod
     def encode(cls, value: ProviderTransportStage) -> str:
         return value.to_text()

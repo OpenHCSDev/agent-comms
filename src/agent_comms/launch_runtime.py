@@ -376,8 +376,6 @@ class RestartEnvironment(EnvironmentRecord):
 
 
 class TagListText(TextRepresentation[frozenset[str]]):
-    schema_description = "agent_comms.launch_runtime.TagListText text"
-
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, frozenset):
@@ -390,8 +388,6 @@ class TagListText(TextRepresentation[frozenset[str]]):
 
 
 class FlagText(TextRepresentation[bool]):
-    schema_description = "agent_comms.launch_runtime.FlagText text"
-
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, bool):

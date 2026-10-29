@@ -434,8 +434,6 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
     from agent_comms.typed_table import Column, TextStorage, TypedTable
 
     class HexInteger(TextRepresentation):
-        schema_description = "Hexadecimal integer text"
-
         @classmethod
         def encode(cls, value: object) -> str:
             if type(value) is not int:
@@ -463,7 +461,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
     assert FieldCodec.project(value, "status") == encoded
     assert FieldCodec.value_schema(Annotated[Path | None, PathText]) == {
         "anyOf": [
-            {"type": "string", "description": "agent_comms.field_codec.PathText text"},
+            {"type": "string", "description": "PathText text"},
             {"type": "null"},
         ]
     }

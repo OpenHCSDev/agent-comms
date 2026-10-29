@@ -159,8 +159,6 @@ class LocalRoute(CommsRoute):
 class AbsoluteRoutePathText(PathText):
     """Route roots and handed-down native packages share one absolute-path boundary."""
 
-    schema_description = "agent_comms.active_route.AbsoluteRoutePathText text"
-
     @classmethod
     def require_absolute(cls, path: Path) -> Path:
         if not path.is_absolute() or ".." in path.parts:
