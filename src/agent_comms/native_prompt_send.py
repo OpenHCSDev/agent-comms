@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .owned_send import OwnedSend
     from .native_pi import NativeContextProof
+    from .native_entries import NativeEvidenceScope
     from .tracked_turn import TrackedTurnSession
 
 _MAX_SEND_SECONDS = 5.0
@@ -36,7 +37,9 @@ class PromptBoundary(ABC):
     @abstractmethod
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
 
-    async def context_committed(self, context: NativeContextProof) -> None:
+    async def context_committed(
+        self, context: NativeContextProof, source_reads: NativeEvidenceScope,
+    ) -> None:
         """An unowned prompt has no durable recipient acknowledgement to advance."""
 
     def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:

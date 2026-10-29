@@ -228,19 +228,20 @@ class PrivateSendClaim(PromptBoundary):
             )
         return result
 
-    async def context_committed(self, context: NativeContextProof) -> None:
+    async def context_committed(
+        self, context: NativeContextProof, source_reads: NativeEvidenceScope,
+    ) -> None:
         """Publish corroborated entry while the model is still running.
 
         The context journal is borrowed before coordinator locking, as on the
         terminal path. Neither the RPC event nor model activity is a receipt.
         """
-        async with self.selected.cursor_delivery.reading() as source_reads:
-            def acknowledge(store: Coordination) -> None:
-                self.verify(store, context, source_reads)
-                self.stage.acknowledge_context(
-                    store, self.participant, self.input_id, self.token_digest, context,
-                )
-            await Coordination.run_async(self.store_path, acknowledge)
+        def acknowledge(store: Coordination) -> None:
+            self.verify(store, context, source_reads)
+            self.stage.acknowledge_context(
+                store, self.participant, self.input_id, self.token_digest, context,
+            )
+        await Coordination.run_async(self.store_path, acknowledge)
 
     def commit(self, store: Coordination, context: NativeContextProof) -> None:
         self.stage.acknowledge_context(

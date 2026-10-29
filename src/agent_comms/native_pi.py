@@ -31,6 +31,7 @@ from .field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
+    PathText,
     Sha256Text,
     WireName,
     boundary_decoder,
@@ -320,7 +321,7 @@ class NativeContextJournal(
 
 @dataclass(frozen=True, slots=True)
 class NativeContextProof(NativeContextRecord, NativeInputLocation):
-    session_file: Path
+    session_file: Annotated[Path, PathText]
 
     def require_continuation(self, context: NativeContextProof) -> None:
         """Repeated requests may include this input; its first receipt stays immutable.

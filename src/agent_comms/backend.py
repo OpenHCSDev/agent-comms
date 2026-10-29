@@ -544,6 +544,9 @@ class NativeSession(MroDispatch, ABC):
         self.active_session_file = self.launch.session.session_file
         self.watchdog.reading()
 
+    def following_started(self, command: commands.FollowingPrompt) -> None:
+        """An ordinary session has no tracked model-context proof observer."""
+
     async def finish_input(self) -> None:
         """Retire snapshot work before the input transport it borrows."""
         await self.stats.close()

@@ -14,7 +14,7 @@ from agent_comms.native_pi import NativeContextJournal, NativeContextProof
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.presentation import AllOutcomes
 from agent_comms.private_send_claim import PrivateSendClaim
-from agent_comms.text_digest import TextDigest
+from agent_comms.private_sidecar import native_request_digest
 from native_proof_cases import append_input_entry, recorded_context, write_proof_rows
 from test_coordinated_runtime import tmp_path  # noqa: F401
 from test_native_failure_recovery import SentHistory, prepared_native_input
@@ -30,7 +30,7 @@ def recorded_input_context(claim: PrivateSendClaim) -> NativeContextProof:
         'type': 'message', 'id': entry,
         'timestamp': '2026-10-01T00:00:00.000Z',
         'message': {'role': 'user', 'inputId': claim.input_id,
-                    'inputDigest': TextDigest.of(claim.prompt.text).value,
+                    'inputDigest': native_request_digest(claim.prompt.text),
                     'content': [{'type': 'text', 'text': claim.prompt.text}]},
     })
     record = {
@@ -41,6 +41,11 @@ def recorded_input_context(claim: PrivateSendClaim) -> NativeContextProof:
     }
     write_proof_rows(session.files(participant.comms.root), (record,))
     return recorded_context(identity.path, record, session_entry_start=offset)
+
+
+async def acknowledge_context(claim: PrivateSendClaim, context: NativeContextProof) -> None:
+    async with claim.selected.cursor_delivery.reading() as source_reads:
+        await claim.context_committed(context, source_reads)
 
 
 @pytest.mark.parametrize('source_count', (1, 3))
@@ -56,7 +61,7 @@ async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Pa
         before_rows = tuple(row for rows in before.outcomes.values() for row in rows)
         assert before_rows and all(not row.state.consumed for row in before_rows)
 
-        await claim.context_committed(context)
+        await acknowledge_context(claim, context)
 
         after = comms.views.message_notifications_for_references(AllOutcomes(), originals)
         after_rows = tuple(row for rows in after.outcomes.values() for row in rows)
@@ -76,7 +81,7 @@ async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Pa
 async def test_later_corroborated_request_preserves_first_context_receipt(tmp_path: Path):
     async with prepared_native_input(tmp_path) as claim:
         context = recorded_input_context(claim)
-        await claim.context_committed(context)
+        await acknowledge_context(claim, context)
         files = claim.session.files(claim.selected.comms.root)
         # Append through the declared journal owner, preserving its original file identity.
         with closing(sqlite3.connect(files.input_proof)) as db, db:
@@ -86,7 +91,7 @@ async def test_later_corroborated_request_preserves_first_context_receipt(tmp_pa
                             llm_context_digest='d' * 64, committed_at_ms=first.committed_at_ms + 1)
             later.insert(db)
         later_context = later.at(context.session_file, session_entry_start=context.session_entry_start)
-        await claim.context_committed(later_context)
+        await acknowledge_context(claim, later_context)
         with Coordination(claim.store_path) as store:
             claim.commit(store, later_context)
             retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
@@ -96,7 +101,7 @@ async def test_later_corroborated_request_preserves_first_context_receipt(tmp_pa
 async def test_same_request_contradiction_cannot_replace_context_receipt(tmp_path: Path):
     async with prepared_native_input(tmp_path) as claim:
         context = recorded_input_context(claim)
-        await claim.context_committed(context)
+        await acknowledge_context(claim, context)
         with Coordination(claim.store_path) as store:
             with pytest.raises(IdentityConflict):
                 claim.commit(store, replace(context, llm_context_digest='e' * 64))
@@ -114,7 +119,7 @@ async def test_uncorroborated_live_context_never_grants_consumption(
     async with prepared_native_input(tmp_path) as claim:
         context = recorded_input_context(claim)
         with pytest.raises(IdentityConflict):
-            await claim.context_committed(corrupt(context))
+            await acknowledge_context(claim, corrupt(context))
         with Coordination(claim.store_path) as store:
             retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert not retained.reference.recorded

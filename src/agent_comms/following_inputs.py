@@ -10,6 +10,8 @@ from .field_codec import InputId
 from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
+from .errors import RelationViolationError
+from .ordinary_turn_rules import RunningOrdinaryOwnerCheck
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import ClaimedIdentity
 from .turn_input_source import AcceptedFollowingInput
@@ -20,6 +22,8 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
     from .input_drain import InputDrain
     from .tracked_turn import TrackedTurnSession
+    from .owned_send import OwnedSend
+    from .native_pi import NativeContextProof
 
 
 class FollowingInputs:
@@ -44,6 +48,11 @@ class FollowingInputs:
     async def started(self, input_id: InputId) -> AcceptedFollowingInput:
         raise AssertionError("A turn without an inbox cannot start a following input")
 
+    async def context_committed(
+        self, input_id: InputId, sent_text: str, context: NativeContextProof,
+    ) -> None:
+        raise AssertionError("A turn without an inbox cannot acknowledge a following context")
+
     async def retired(self, event: InputRefused) -> None:
         raise AssertionError("A turn without an inbox cannot retire a following input")
 
@@ -56,7 +65,16 @@ class OwnerFollowingInputs(FollowingInputs):
     session_id: str
     owner: Thread
     inbox: TurnInbox
-    scope: LiveQueueScope = field(init=False)
+    sender: OwnedSend = field(init=False)
+
+    @property
+    def scope(self) -> LiveQueueScope:
+        lease = self.sender.thread.require_turn_lease()
+        return LiveQueueScope(
+            session_id=self.session_id,
+            claimed_identity=ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
+            owner=self.sender.thread.require_process(),
+        )
 
     async def pass_on_unread(self, turns: TurnRunner) -> None:
         """Inputs the ended turn never read start the next turn or are refused, never replayed."""
@@ -82,12 +100,7 @@ class OwnerFollowingInputs(FollowingInputs):
             session.prompt_send_boundary.following_sender,
             inputs, inputs.state(self.session_id).owned().identifier, session.command.message,
         ))
-        lease = sender.thread.require_turn_lease()
-        self.scope = LiveQueueScope(
-            session_id=self.session_id,
-            claimed_identity=ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
-            owner=sender.thread.require_process(),
-        )
+        self.sender = sender
         inputs.state(self.session_id).capture_first_source(sender.original_source)
         session.forward_inbox(self.inbox, sender)
         await self.ready(
@@ -100,6 +113,28 @@ class OwnerFollowingInputs(FollowingInputs):
         await source.started(self.inputs, self.session_id, self.scope)
         await self.ready(self.inputs, self.session_id)
         return source
+
+    async def context_committed(
+        self, input_id: InputId, sent_text: str, context: NativeContextProof,
+    ) -> None:
+        source = self.inputs.state(self.session_id).following[input_id]
+        def acknowledge() -> None:
+            if self.inputs.state(self.session_id).following.get(input_id) is not source:
+                raise RelationViolationError("Following context outlived its actual accepted input")
+            sender = self.sender
+            with self.inputs.comms.registry.store.current_snapshot() as cut:
+                snapshot = cut.snapshot
+                canonical = snapshot.canonical_name(sender.thread.name)
+                current = sender.require_owner(snapshot, canonical)
+                sender._check_owner(
+                    current, snapshot, canonical, source, sent_text,
+                    check_type=RunningOrdinaryOwnerCheck,
+                )
+                self.inputs.dispositions.context_committed(
+                    source.keys, lease=sender.thread.require_turn_lease(),
+                    sent_text=sent_text, context=context, snapshot=snapshot,
+                )
+        await Coordination.run_worker(acknowledge)
 
     async def retired(self, event: InputRefused) -> None:
         await event.apply_to(self.inputs, self.session_id)
