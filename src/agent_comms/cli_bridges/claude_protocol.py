@@ -411,6 +411,10 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """What the person typed in this record; most records carry none."""
         return ()
 
+    def prompt_origins(self) -> tuple[PromptOrigin, ...]:
+        """Who wrote the prompt this record carries; most records carry no prompt."""
+        return ()
+
 
 class AssistantBlock(TaggedWire, ABC, affix=""):
 
@@ -547,9 +551,22 @@ class PromptOrigin(TaggedWire, ABC, affix=""):
         """The words the person typed; only a person's prompt carries any."""
         return ()
 
+    def owner_present(self) -> bool:
+        """Whether the person typed this prompt: a scheduled fire or another agent's message
+        is not the owner standing behind the turn."""
+        return False
+
+    def voices(self) -> tuple[PromptOrigin, ...]:
+        """This origin when someone speaks through it; a notification or a continuation
+        speaks for nobody and never decides who stands behind the turn."""
+        return ()
+
 
 class Prompting(PromptOrigin, ABC, declared_name=None):
     """An origin whose text is a request to the model."""
+
+    def voices(self) -> tuple[PromptOrigin, ...]:
+        return (self,)
 
     def request(self, text: str) -> str:
         return text
@@ -576,6 +593,9 @@ class HumanPrompt(Prompting, declared_name='human'):
 
     def owner_words(self, text: str) -> tuple[str, ...]:
         return (text,)
+
+    def owner_present(self) -> bool:
+        return True
 
     def absorbed(self, record: TimedRecord, text: str,
                  session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -623,11 +643,18 @@ class UserBlock(TaggedWire, ABC, affix=""):
     def prompt_text(self) -> str:
         return ''
 
+    def voices(self, origin: PromptOrigin) -> tuple[PromptOrigin, ...]:
+        """Who speaks through this block: a tool result or an image carries nobody's words."""
+        return ()
+
 
 class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
 
     def prompt_text(self) -> str:
         return self.text
+
+    def voices(self, origin: PromptOrigin) -> tuple[PromptOrigin, ...]:
+        return origin.voices()
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
@@ -770,6 +797,10 @@ class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
 class UserMessage(ContentBlocks):
     content: list[Declared[UserBlock]]
 
+    def voices(self, origin: PromptOrigin) -> tuple[PromptOrigin, ...]:
+        """Who speaks in this message: its origin, once, when any block carries words."""
+        return next((voice for block in self.content if (voice := block.voices(origin))), ())
+
     def text(self) -> str:
         return '\n'.join(text for block in self.content if (text := block.prompt_text()))
 
@@ -787,6 +818,9 @@ class UserRecord(ClaudeRecord, TimedRecord, Originated, declared_name='user'):
 
     def owner_words(self) -> tuple[str, ...]:
         return self.origin.owner_words(self.message.text())
+
+    def prompt_origins(self) -> tuple[PromptOrigin, ...]:
+        return self.message.voices(self.origin)
 
 
 class CompactSummary(UserRecord, declared_name='compact-summary'):
@@ -902,6 +936,9 @@ class AttachmentPayload(OpenWire, ABC, affix=""):
         """What the person typed in this attachment; only a queued prompt carries any."""
         return ()
 
+    def prompt_origins(self) -> tuple[PromptOrigin, ...]:
+        return ()
+
 
 class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command'):
     """A prompt sent while a turn runs: its origin decides what the folded-in text is."""
@@ -919,6 +956,9 @@ class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command
     def owner_words(self) -> tuple[str, ...]:
         return self.origin.owner_words(self.prompt.text())
 
+    def prompt_origins(self) -> tuple[PromptOrigin, ...]:
+        return self.prompt.voices(self.origin)
+
 
 class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
 
@@ -934,6 +974,9 @@ class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
 
     def owner_words(self) -> tuple[str, ...]:
         return self.attachment.owner_words()
+
+    def prompt_origins(self) -> tuple[PromptOrigin, ...]:
+        return self.attachment.prompt_origins()
 
 
 class QueueOperation(MetadataRecord, declared_name='queue-operation'):

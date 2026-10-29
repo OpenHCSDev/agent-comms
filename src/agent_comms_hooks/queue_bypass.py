@@ -1,6 +1,8 @@
 """Required checks and the commander's head verdict protect merges.
 
-The owner's admin bypass stays. A commander-session admin or API merge needs
+The owner's admin bypass stays, and so does a session acting on the owner's own
+prompt: when the newest prompt in the transcript is one he typed, he is standing behind
+the command and it runs. A commander-session admin or API merge without him needs
 Core's recorded ok verdict on the explicitly pinned head. Other hook sessions cannot
 bypass the checks. claude-ai's separate owner path is unchanged.
 
@@ -17,6 +19,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from importlib.metadata import entry_points
+from pathlib import Path
 from typing import ClassVar, Self
 from urllib.parse import unquote, urlsplit
 
@@ -209,6 +212,8 @@ class QueueBypassGuard(BashRefusal):
     def reasons_for(cls, hook: ClaudeToolHook) -> tuple[str, ...]:
         command = Bash.decode(hook.tool_input).command
         reasons = cls.reasons(command)
+        if reasons and cls.owner_present(hook):
+            return ()
         state = WatchClaim(hook.session_id).state()
         if not reasons or not state.commands():
             return reasons
@@ -225,6 +230,16 @@ class QueueBypassGuard(BashRefusal):
             if checked.returncode:
                 return (checked.stdout.strip(),)
         return ()
+
+
+    @staticmethod
+    def owner_present(hook: ClaudeToolHook) -> bool:
+        """Whether the person typed the newest prompt in this session's transcript."""
+        from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+
+        transcript = Path(hook.transcript_path)
+        with transcript.open("rb") as stream:
+            return ClaudeJsonLines().owner_present(stream, transcript.stat().st_size)
 
 
 main = QueueBypassGuard.main
