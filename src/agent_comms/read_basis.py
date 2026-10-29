@@ -431,6 +431,7 @@ if TYPE_CHECKING:
 
     from .private_registry_guard import RegistryPrivacy
     from .bus import Bus, BusReader, BusSnapshot
+    from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .channels import Channels, TagChannel
