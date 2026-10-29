@@ -6,7 +6,6 @@ import pytest
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import TranscriptRecordId
 from agent_comms.harness_delivery_states import (
     AcceptedOutcome, DeliveredOutcome, EmittedOutcome, FilteredOutcome,
     ObservedMonitor, PersistedOutcome, UnconfirmedOutcome, UnrecordedMonitor,
@@ -14,6 +13,7 @@ from agent_comms.harness_delivery_states import (
 from agent_comms.notification_progress import HarnessConsumedProgress
 from agent_comms.presentation import AllOutcomes
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from transcript_record_fixture import transcript_record
 
 
 @pytest.mark.parametrize(('outcome', 'monitor', 'consumed', 'arrived'), (
@@ -23,7 +23,7 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
     (DeliveredOutcome, UnrecordedMonitor(), False, 0),
     (AcceptedOutcome, UnrecordedMonitor(), False, 1),
     (PersistedOutcome, UnrecordedMonitor(), False, 1),
-    (DeliveredOutcome, ObservedMonitor(TranscriptRecordId('complete-original'), 1791964800.125), True, 1),
+    (DeliveredOutcome, ObservedMonitor(transcript_record('complete-original'), 1791964800.125), True, 1),
 ))
 def test_only_retained_complete_body_proof_promotes_consumption(
     tmp_path, outcome, monitor, consumed, arrived,

@@ -40,7 +40,7 @@ from test_native_failure_recovery import prepared_native_input
 @asynccontextmanager
 async def following_session(directory: Path) -> AsyncIterator[PrivateSendClaim]:
     async with prepared_native_input(directory) as claim:
-        await acknowledge_context(claim, recorded_input_context(claim))
+        await acknowledge_context(claim, await recorded_input_context(claim))
         yield claim
 
 

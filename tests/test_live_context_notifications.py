@@ -21,27 +21,30 @@ from test_coordinated_runtime import tmp_path  # noqa: F401
 from test_native_failure_recovery import SentHistory, prepared_native_input, prepared_native_triage
 
 
-def recorded_input_context(claim: PrivateSendClaim) -> NativeContextProof:
-    """Record the actual reserved prompt at its selected session's byte position."""
-    session, participant = claim.session, claim.selected
-    SentHistory.write(claim, session, participant)
-    identity = session.identity
-    entry = 'input-before-answer'
-    offset = append_input_entry(identity.path, {
-        'type': 'message', 'id': entry,
-        'timestamp': '2026-10-01T00:00:00.000Z',
-        'message': {'role': 'user', 'inputId': claim.input_id,
-                    'inputDigest': native_request_digest(claim.prompt.text),
-                    'content': [{'type': 'text', 'text': claim.prompt.text}]},
-    })
-    record = {
-        'schema': 2, 'type': 'context_committed',
-        'inputId': claim.input_id, 'sessionId': identity.session_id,
-        'sessionEntryId': entry, 'requestGeneration': 1,
-        'llmContextDigest': 'f' * 64, 'committedAtMs': 1_791_964_800_001,
-    }
-    write_proof_rows(session.files(participant.comms.root), (record,))
-    return recorded_context(identity.path, record, session_entry_start=offset)
+async def recorded_input_context(claim: PrivateSendClaim) -> NativeContextProof:
+    """Join the isolated raw writer before returning its retained session/journal proof."""
+    def write() -> NativeContextProof:
+        session, participant = claim.session, claim.selected
+        SentHistory.write(claim, session, participant)
+        identity = session.identity
+        entry = 'input-before-answer'
+        offset = append_input_entry(identity.path, {
+            'type': 'message', 'id': entry,
+            'timestamp': '2026-10-01T00:00:00.000Z',
+            'message': {'role': 'user', 'inputId': claim.input_id,
+                        'inputDigest': native_request_digest(claim.prompt.text),
+                        'content': [{'type': 'text', 'text': claim.prompt.text}]},
+        })
+        record = {
+            'schema': 2, 'type': 'context_committed',
+            'inputId': claim.input_id, 'sessionId': identity.session_id,
+            'sessionEntryId': entry, 'requestGeneration': 1,
+            'llmContextDigest': 'f' * 64, 'committedAtMs': 1_791_964_800_001,
+        }
+        write_proof_rows(session.files(participant.comms.root), (record,))
+        return recorded_context(identity.path, record, session_entry_start=offset)
+
+    return await Coordination.run_worker(write)
 
 
 async def acknowledge_context(claim: PrivateSendClaim, context: NativeContextProof) -> None:
@@ -54,7 +57,7 @@ async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Pa
     async with prepared_native_input(
         tmp_path, source_bodies=tuple(f'Grouped source {index}' for index in range(source_count - 1)),
     ) as claim:
-        context = recorded_input_context(claim)
+        context = await recorded_input_context(claim)
         comms = claim.selected.comms
         originals = tuple(row.source for row in claim.stage.assignments)
         assert len(originals) == source_count
@@ -81,7 +84,7 @@ async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Pa
 
 async def test_triage_consumption_precedes_and_survives_later_verdict(tmp_path: Path):
     async with prepared_native_triage(tmp_path) as claim:
-        context = recorded_input_context(claim)
+        context = await recorded_input_context(claim)
         originals = tuple(row.source for row in claim.stage.assignments)
         before = claim.selected.comms.views.message_notifications_for_references(AllOutcomes(), originals)
         assert all(not row.state.consumed for rows in before.outcomes.values() for row in rows)
@@ -109,7 +112,7 @@ async def test_triage_consumption_precedes_and_survives_later_verdict(tmp_path: 
 
 async def test_triage_failure_keeps_previously_acknowledged_context_and_no_retry(tmp_path: Path):
     async with prepared_native_triage(tmp_path) as claim:
-        context = recorded_input_context(claim)
+        context = await recorded_input_context(claim)
         await acknowledge_context(claim, context)
         with Coordination(claim.store_path) as store:
             claim.stage.fail_decision(store, claim.participant, claim.input_id, claim.token_digest, context)
@@ -123,7 +126,7 @@ async def test_triage_failure_keeps_previously_acknowledged_context_and_no_retry
 
 async def test_later_corroborated_request_preserves_first_context_receipt(tmp_path: Path):
     async with prepared_native_input(tmp_path) as claim:
-        context = recorded_input_context(claim)
+        context = await recorded_input_context(claim)
         await acknowledge_context(claim, context)
         files = claim.session.files(claim.selected.comms.root)
         # Append through the declared journal owner, preserving its original file identity.
@@ -143,7 +146,7 @@ async def test_later_corroborated_request_preserves_first_context_receipt(tmp_pa
 
 async def test_same_request_contradiction_cannot_replace_context_receipt(tmp_path: Path):
     async with prepared_native_input(tmp_path) as claim:
-        context = recorded_input_context(claim)
+        context = await recorded_input_context(claim)
         await acknowledge_context(claim, context)
         with Coordination(claim.store_path) as store:
             with pytest.raises(IdentityConflict):
@@ -160,7 +163,7 @@ async def test_uncorroborated_live_context_never_grants_consumption(
     tmp_path: Path, corrupt: Callable[[NativeContextProof], NativeContextProof],
 ):
     async with prepared_native_input(tmp_path) as claim:
-        context = recorded_input_context(claim)
+        context = await recorded_input_context(claim)
         with pytest.raises(IdentityConflict):
             await acknowledge_context(claim, corrupt(context))
         with Coordination(claim.store_path) as store:
