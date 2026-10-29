@@ -96,7 +96,7 @@ class CliArgumentParser(argparse.ArgumentParser):
         args, _ = selection.parse_known_args(arguments, namespace=_CommandParsingArguments())
         return args.command
 
-    def exit(self, status: int = 0, message: str | None = None) -> Never:
+    def exit(self, status: int = 0, message: object = None) -> Never:
         raise CliParserExit(status, NoCliParserText())
 
     def error(self, message: str) -> Never:
