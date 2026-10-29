@@ -7,6 +7,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import batched
+from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
     from .coordination_tables.harness_deliveries import HarnessDelivery
     from .field_codec import ThreadLookup
     from .message_reference import MessageReference
-    from .notification_assignment import AssignmentActivityEvidence
+    from .notification_assignment import AssignmentActivityEvidence, AssignmentResponse
     from .notification_progress import DeliveryProgress
     from .presentation import MessageNotification, WireRevision, OutcomeViewer
     from .thread_identity import ThreadIncarnation
@@ -25,11 +26,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SourceEvidence:
-    """One original's captured claims and harness attempts, the attempts grouped once by
-    their frozen recipient. Equality over both is the window's change test."""
+    """One original's claims, attempts and independent responses, grouped by frozen
+    recipient. Equality over all three is the window's change test."""
 
     claims: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...] = ()
     attempts: Mapping[ThreadLookup, tuple[HarnessDelivery, ...]] = field(default_factory=dict)
+    responses: Mapping[ThreadLookup, AssignmentResponse] = field(default_factory=lambda: MappingProxyType({}))
+
+    def answered(self, recipient: ThreadLookup, notification: MessageNotification) -> MessageNotification:
+        from .notification_assignment import UnansweredResponse
+
+        return self.responses.get(recipient, UnansweredResponse()).answered(notification)
 
     def consumed_progress(self, recipient: ThreadLookup,
                           progress: DeliveryProgress) -> DeliveryProgress:
@@ -98,6 +105,8 @@ class NotificationAssignmentRead:
     selection: NotificationSelection
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
     attempts: tuple[HarnessDelivery, ...] = ()
+    responses: Mapping[tuple[ThreadLookup, MessageReference], AssignmentResponse] = field(
+        default_factory=lambda: MappingProxyType({}))
 
     @property
     def sources(self) -> tuple[Delivered, ...]:
@@ -112,12 +121,18 @@ class NotificationAssignmentRead:
         attempts: dict[MessageReference, dict[ThreadLookup, list[HarnessDelivery]]] = {
             source.message.reference: {} for source in self.sources
         }
+        responses: dict[MessageReference, dict[ThreadLookup, AssignmentResponse]] = {
+            source.message.reference: {} for source in self.sources
+        }
+        for (lookup, source), response in self.responses.items():
+            responses[source][lookup] = response
         for row in self.rows:
             claims.setdefault(row[0].source, []).append(row)
         for attempt in self.attempts:
             attempts[attempt.reference].setdefault(attempt.recipient_lookup, []).append(attempt)
         return {source: SourceEvidence(tuple(claims[source]), {
-                    lookup: tuple(rows) for lookup, rows in attempts[source].items()})
+                    lookup: tuple(rows) for lookup, rows in attempts[source].items()},
+                    MappingProxyType(responses[source]))
                 for source in claims}
 
     def differs_from(self, fresh: Mapping[MessageReference, SourceEvidence]) -> bool:

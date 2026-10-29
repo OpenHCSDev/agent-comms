@@ -72,6 +72,12 @@ class DeliveryProgress(ThreadPresentationStatus):
         """The lead a counted wrapper prints; a consumed proof is already named by its count."""
         return (notification.label,)
 
+    def answered_notification(self, notification: MessageNotification,
+                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
+        """An independent answer preserves this state's actual context proof."""
+        return replace(notification, state=AnsweredProgress(self),
+                       answer=reference, answered_at_ms=answered_at_ms, changed=True)
+
     def harness_consumed(self, observed_at_ms: int) -> DeliveryProgress:
         """Retain the original complete-body transcript observation time."""
         return HarnessConsumedProgress(observed_at_ms)
@@ -181,6 +187,11 @@ class FailedProgress(ContextualProgress):
 class AnsweredProgress(SettledDelivery, ContextualProgress):
     label = "Answered"
 
+    def answered_notification(self, notification: MessageNotification,
+                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
+        """A later independent response cannot replace an already recorded answer."""
+        return notification
+
     def notification_label(self, notification: MessageNotification) -> str:
         return notification.timed_state(self.label, notification.answered_at_ms)
 
@@ -204,11 +215,6 @@ class AssignmentProgress(DeliveryProgress):
 
     @abstractmethod
     def consumed_notification(self, notification: MessageNotification) -> MessageNotification: ...
-
-    def answered_notification(self, notification: MessageNotification,
-                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
-        return replace(notification, state=AnsweredProgress(self),
-                       answer=reference, answered_at_ms=answered_at_ms)
 
 
 @dataclass(frozen=True)

@@ -28,7 +28,8 @@ from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import DeliveredOutcome, ObservedMonitor
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
-from agent_comms.field_codec import InputId, MessageId, TranscriptRecordId, TurnId
+from agent_comms.field_codec import InputId, MessageId, TurnId
+from transcript_record_fixture import transcript_record
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -108,7 +109,7 @@ def test_harness_consumption_survives_human_display(archived_notification):
             store.session.writing() as db:
         attempt = HarnessDelivery(ClaudeBridge, recipient.recipient_lookup, shown.message_id, shown.seq,
                                   DeliveredOutcome, ObservedMonitor(
-                                      TranscriptRecordId('complete-original'), shown.timestamp))
+                                      transcript_record('complete-original'), shown.timestamp))
         assert attempt.begin(store.assignments, db)
         attempt.record(store.assignments, db)
 
@@ -480,7 +481,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
         for message in unread:
             attempt = HarnessDelivery(ClaudeBridge, lookup, message.message_id, message.seq,
                                       DeliveredOutcome, ObservedMonitor(
-                                          TranscriptRecordId('complete-original'), message.timestamp))
+                                          transcript_record('complete-original'), message.timestamp))
             assert attempt.begin(store.assignments, db)
             attempt.record(store.assignments, db)
     current, = old.views.message_notifications_for_references(AllOutcomes(), (messages[0].reference,)).outcomes[

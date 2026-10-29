@@ -13,7 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import PersistedOutcome
-from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_assignment import AnsweredResponse, NotificationAssignment
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.notification_evidence import RecipientSelection
@@ -136,6 +136,7 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
     recipient = selection.pages[0].recipients[0]
     record_attempt(comms, source, 0)
     before = NotificationAssignment.read(comms.root, selection)
+    reads = ReadLedger.at(comms.root).read()
     response = comms.messaging.send(recipient.canonical_thread, source.message.sender,
                                     "An independent answer", answers=(source.message.reference,)).message
     assert NotificationAssignment.changed((before,), comms.root) == (before,)
@@ -144,3 +145,34 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
     row, = window.outcomes[source.message.seq, source.message.message_id]
     assert row.answer == response.reference
     assert not row.state.consumed
+    assert after.rows == before.rows and after.attempts == before.attempts
+    assert ReadLedger.at(comms.root).read() == reads
+    later = comms.messaging.send(recipient.canonical_thread, source.message.sender,
+                                 "A later independent answer", answers=(source.message.reference,)).message
+    assert NotificationAssignment.changed((after,), comms.root) == ()
+    assert AnsweredResponse(later.reference, int(later.timestamp * 1000)).answered(row) is row
+
+
+def test_independent_reply_without_any_claim_is_retained_without_context_or_read_mutation(
+    frozen_window: tuple[Comms, Delivered],
+) -> None:
+    comms, _accepted_source = frozen_window
+    message = publish_initial(comms, "sender", "#team", "An original without a handling claim")
+    source = comms.bus.bus.delivery(message.seq)
+    selection = AllOutcomes().selection((source,), limit=1)
+    recipient = selection.pages[0].recipients[0]
+    reads = ReadLedger.at(comms.root).read()
+    before = NotificationAssignment.read(comms.root, selection)
+    assert before.rows == before.attempts == ()
+    response = comms.messaging.send(recipient.canonical_thread, source.message.sender,
+                                    "An answer without an input claim", answers=(message.reference,)).message
+    assert NotificationAssignment.changed((before,), comms.root) == (before,)
+    after = NotificationAssignment.read(comms.root, selection)
+    assert after.rows == after.attempts == ()
+    assert after.responses[recipient.recipient_lookup, message.reference] == AnsweredResponse(
+        response.reference, int(response.timestamp * 1000))
+    window = MessageNotification.delivery_window(comms.root, comms.registry, after)
+    row, = window.outcomes[message.seq, message.message_id]
+    assert row.answer == response.reference and row.changed
+    assert not row.state.consumed and not row.displayed_to
+    assert ReadLedger.at(comms.root).read() == reads
