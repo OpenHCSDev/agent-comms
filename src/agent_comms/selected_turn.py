@@ -29,7 +29,7 @@ from .selected_triage import SelectedTriageOutcome
 from .wake_candidate_index import WakeCandidateIndex
 from .context_segments.wake import SelectedWakeSegment
 from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
-from .turn_context import RecordedContextTurn, RenderedInput, TurnContext
+from .turn_context import RecordedContextTurn, RenderedInput, RuleReadingSegment, TurnContext
 from .turn_phase import PreparingPhase, PromptAcceptancePhase, PublishingPhase
 
 
@@ -61,7 +61,7 @@ class SelectedPrompt:
             (frame, SelectedTriageSegment.capture(participant, frame.provenance))
         ).render()
 
-    async def full(self, assignments, obligations, action: SelectedAction) -> RenderedInput:
+    async def full(self, assignments, obligations, action: SelectedAction, pi_session) -> RenderedInput:
         participant = self.participant
         frame = SelectedWakeSegment.capture(
             tuple(
@@ -85,14 +85,17 @@ class SelectedPrompt:
             assignments[-1],
             participant.owner.thread,
         )
-        return self.context(
+        context = self.context(
             (
+                RuleReadingSegment.capture(participant.owner.thread, participant.comms.goals),
                 frame,
                 *awareness,
                 SelectedWorkSegment.capture(participant, action, frame.provenance),
                 participant.batch.response_segment(),
             )
-        ).render()
+        )
+        context = await pi_session.context_for_input(participant.owner.thread, context)
+        return context.render()
 
 
 @dataclass(frozen=True)
@@ -171,7 +174,7 @@ class SelectedAttempt:
             goal_permission=participant.goal_permission,
         )
 
-    async def prepare(self, session, action, write_authority):
+    async def prepare(self, session, action, write_authority, *, pi_session):
         participant = self.participant
         try:
             action = BatchSelectedAction(tuple(
@@ -187,7 +190,7 @@ class SelectedAttempt:
                 for assignment in self.stage.assignments
             ))
             prompt = await SelectedPrompt(participant).full(
-                self.stage.assignments, self.obligations, action
+                self.stage.assignments, self.obligations, action, pi_session
             )
             request = await SelectedRequest.reserve(
                 participant, session, self.stage, self.token, prompt
@@ -208,7 +211,7 @@ class SelectedAttempt:
 
     async def run(self, execution, session: SelectedSession, action, write_authority):
         participant = self.participant
-        request, action = await self.prepare(session, action, write_authority)
+        request, action = await self.prepare(session, action, write_authority, pi_session=execution.pi_session)
         self.stage.progress.input_id = request.claim_scope.input_id
         async with request.native_failures():
             tools = self.tool_owner(session, request.claim_scope.input_id, action)

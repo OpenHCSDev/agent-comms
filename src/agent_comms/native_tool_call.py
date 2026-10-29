@@ -270,6 +270,12 @@ class NativeToolCall(ABC):
 
 @dataclass(frozen=True)
 class CodingCall(NativeToolCall):
+    def require_instructions(self, child) -> None:
+        child.require_rule_reads()
+
+    def completed_instruction_read(self, child, result: PiToolResult) -> None:
+        pass
+
     def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
         """Coding output is not a goal publication, even if its text resembles one."""
 

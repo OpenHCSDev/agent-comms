@@ -41,7 +41,7 @@ from .locked_store import SQLiteFile
 from .native_arguments import NativeArguments, SelectedModel
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_record import NativeInputCommit, NativeInputLocation
-from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
+from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage
 from .native_session_files import NativeAgentSettings, NativeSessionFiles
 from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
@@ -417,10 +417,7 @@ class NativePiRpcLaunch:
         runtime: LaunchRuntime,
     ):
         """Encode the held launch configuration at the native process boundary."""
-        try:
-            instructions = UNIT_INSTRUCTIONS.resolve(strict=True)
-        except OSError as error:
-            raise NativePiUnavailable("Unit instructions were not prepared with the native package") from error
+        instructions = OWNER_INSTRUCTIONS.resolve(strict=True)
         env = package.node_environment(environment)
         env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)

@@ -31,6 +31,7 @@ from .field_codec import (
 )
 from .goals import Goal, NoGoal
 from .message_reference import MessageReference
+from .instruction_deck import DeckParts, DeckReader
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .repo import Checkout
@@ -686,7 +687,7 @@ class ContextSegment(
     def public_description(self) -> str:
         return self.public_title()
 
-    def needed_after(self, received: tuple[Provenance, ...]) -> bool:
+    def needed_after(self, received: Mapping[type[ContextSegment], tuple[Provenance, ...]]) -> bool:
         return True
 
     @classmethod
@@ -1102,14 +1103,42 @@ class PeerState:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CoordinationSegment(InstructionSegment):
-    def needed_after(self, received: tuple[Provenance, ...]) -> bool:
-        return not all(source in received for source in self.provenance)
+class OncePerContextSegment(InstructionSegment):
+    def needed_after(self, received: Mapping[type[ContextSegment], tuple[Provenance, ...]]) -> bool:
+        return received.get(type(self), ()) != self.provenance
 
     @classmethod
     def remember_received(cls, child, provenance):
-        child.remember_coordination(provenance)
+        child.remember_context(cls, provenance)
 
+
+@dataclass(frozen=True, kw_only=True)
+class RuleReadingSegment(OncePerContextSegment):
+    parts: tuple[Path, ...]
+    header: str
+
+    @classmethod
+    def capture(cls, owner: Thread, goals) -> RuleReadingSegment:
+        snapshot = goals.registry.snapshot()
+        reader = DeckReader.for_owner(snapshot, owner.incarnation.require_recorded())
+        parts = DeckParts.beside_session(owner.native_session_directory(goals.root)).planned(reader)
+        def held() -> str:
+            from .held_orders import HeldOrders
+            from .todos import TodoStore
+
+            return "\n".join(hold.recalled()
+                             for hold in HeldOrders.of(TodoStore(goals.root), snapshot, owner.name).live)
+
+        header = reader.header(held)
+        revision = hashlib.sha256("\n".join(map(str, parts)).encode()).hexdigest()
+        return super().capture((OwnerProvenance(owner.incarnation, revision),), parts=parts, header=header)
+
+    def values(self) -> dict[str, object]:
+        return {"read_order": DeckParts.order(self.parts), "header": self.header}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CoordinationSegment(OncePerContextSegment):
     response_instruction: InstructionFile
     owner: ThreadIncarnation
     parent: str | None
@@ -1465,6 +1494,7 @@ class TurnContext(DeclaredReply):
             owner.incarnation,
             turn,
             (
+                RuleReadingSegment.capture(owner, goals),
                 CoordinationSegment.capture(owner, views, relations, goals),
                 UserInputSegment(provenance=source, content=task),
             ),
@@ -1476,7 +1506,7 @@ class TurnContext(DeclaredReply):
     def append(self, segment: ContextSegment) -> TurnContext:
         return replace(self, segments=(*self.segments, segment))
 
-    def after_received(self, received: tuple[Provenance, ...]) -> TurnContext:
+    def after_received(self, received: Mapping[type[ContextSegment], tuple[Provenance, ...]]) -> TurnContext:
         return replace(self, segments=tuple(segment for segment in self.segments
                                            if segment.needed_after(received)))
 

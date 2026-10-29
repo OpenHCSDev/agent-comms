@@ -139,7 +139,10 @@ async def prepared_native_input(
                     worktree=Path(participant.owner.thread.worktree),
                     owner=participant.owner.thread.incarnation.require_recorded(),
                 )
-                request, _action = await attempt.prepare(session, CodingSelectedAction(), NoSelectedWritePlans())
+                from agent_comms.pi_native_backend import PersistentPiSession
+
+                request, _action = await attempt.prepare(
+                    session, CodingSelectedAction(), NoSelectedWritePlans(), pi_session=PersistentPiSession())
                 yield request.claim_scope
 
 

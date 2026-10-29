@@ -23,7 +23,6 @@ from agent_comms.native_package import (
     write_native_manifest,
 )
 from agent_comms.thread_storage import StoragePath
-from agent_comms.unit_instructions import UnitInstructions
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -55,9 +54,7 @@ class QualifiedPackageVerb(PackageVerb):
     """Publication checks the manifest-named sealed build before using it."""
 
     def _native_package(self) -> VerifiedNativePackage:
-        package = VerifiedNativePackage.qualify(self.package)
-        print(UnitInstructions.prepare(), file=sys.stderr)
-        return package
+        return VerifiedNativePackage.qualify(self.package)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -68,7 +65,6 @@ class VerifyVerb(PackageVerb):
 
     def apply(self, ctx: None = None) -> None:
         VerifiedNativePackage.prepare(self.package)
-        print(UnitInstructions.prepare(), file=sys.stderr)
 
 
 @dataclass(frozen=True, kw_only=True)

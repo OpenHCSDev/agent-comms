@@ -45,7 +45,8 @@ from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
 from agent_comms_hooks.read_gate import GatedCall
-from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
+from agent_comms.instruction_deck import CommanderReader, DeckReader, FleetReader
+from agent_comms_hooks.skill import DeckStart
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
@@ -391,7 +392,7 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
 
 
 
-def test_a_session_bound_to_another_bus_thread_reads_the_fleet_rules_and_not_the_commanders(
+def test_a_bound_unit_reads_every_rule_under_its_audience_heading(
         tmp_path, monkeypatch, commander_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
@@ -403,8 +404,9 @@ def test_a_session_bound_to_another_bus_thread_reads_the_fleet_rules_and_not_the
     text = "".join(part.read_text() for part in sorted(start.parts.iterdir()))
     assert all(rule.render() in text for rule in FleetReader.rules())
     commander_only = [rule for rule in RuleFile.packaged() if rule.audience is CommanderAudience]
-    assert commander_only and not any(rule.render() in text for rule in commander_only)
-    assert CommanderPackage.indictment().read_text() not in text
+    assert commander_only and all(rule.render() in text for rule in commander_only)
+    assert CommanderAudience.heading in text
+    assert CommanderPackage.indictment().read_text() in text
 
 
 def test_the_commander_reads_every_packaged_rule():
