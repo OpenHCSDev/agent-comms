@@ -635,9 +635,6 @@ class PullRequestLink:
         if FieldCodec.decode(int, self.number) <= 0:
             raise TodoError("A pull request number must be positive.")
 
-    def __str__(self) -> str:
-        return f"{self.repo.to_wire()}#{self.number}"
-
     @property
     def url(self) -> str:
         return f"https://github.com/{self.repo.to_wire()}/pull/{self.number}"
