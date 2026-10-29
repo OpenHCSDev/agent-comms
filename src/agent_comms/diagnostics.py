@@ -8,7 +8,7 @@ import os
 import time
 from contextlib import contextmanager
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from pathlib import Path
 from traceback import TracebackException
 from typing import TYPE_CHECKING
@@ -19,12 +19,14 @@ from metaclass_registry.mro_dispatch import (
 )
 
 
-from .child_process import Platform
+from .child_process import Platform, ProcessState
 from .field_codec import FieldCodec, InputId, ScratchName, TurnId
 from .locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
+from .publication_measurements import PublicationMeasurements
 from .store_files import AtomicFile
 from .turn_failure import TurnFailure
+from .turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic
@@ -55,39 +57,6 @@ class OwnerProcessOutput(RuntimeFile, PatternFile):
             yield output
 
 
-@dataclass
-class PublicationMeasurements:
-    """Bounded transport timing counters, not a message or phase authority."""
-    count: int = 0
-    total_ns: int = 0
-    maximum_ns: int = 0
-    maximum_started_ns: int = 0
-    maximum_finished_ns: int = 0
-    operations: dict[str, PublicationMeasurements] = field(default_factory=dict)
-
-    def operation(self, name: str):
-        """Borrow bounded counters for a declared acquisition/publication operation.
-
-        These counters observe resources; they never decide readiness, acknowledgement
-        acceptance or replay. Owners call this with their fixed operation names.
-        """
-        return self.operations.setdefault(name, PublicationMeasurements()).measuring()
-
-    @contextmanager
-    def measuring(self):
-        started = time.monotonic_ns()
-        try:
-            yield
-        finally:
-            finished = time.monotonic_ns()
-            duration = finished - started
-            self.count += 1
-            self.total_ns += duration
-            if duration > self.maximum_ns:
-                self.maximum_ns = duration
-                self.maximum_started_ns, self.maximum_finished_ns = started, finished
-
-
 def record_request_progress(root, lease, progress, native_process, *, publication=None):
     """Append original measurements with the exact existing turn/owner fence.
 
@@ -104,15 +73,23 @@ def record_request_progress(root, lease, progress, native_process, *, publicatio
     RequestObservations.record(root, lease, record)
 
 
-def record_acquisition_progress(root, lease, input_id, measurements):
+def record_acquisition_progress(
+    root: Path,
+    lease: TurnLeaseFence,
+    input_id: InputId,
+    measurements: PublicationMeasurements,
+    native_process: ProcessState,
+) -> None:
     """Report the parent's acquisition timings after its resources close.
 
-    The same diagnostic stream retains native and parent clocks with distinct
-    keys. There is no additional phase, readiness ledger or observation store.
+    The original input owns these counters, not the recipient's cursor lifetime.
+    NativeStartup observed the actual acquired child, or NoProcess if acquisition
+    never returned. This diagnostic grants no send, readiness or replay permission.
     """
     RequestObservations.record(root, lease, {
         "turn": FieldCodec.encode(lease), "input_id": input_id,
         "acquisition": FieldCodec.encode(measurements),
+        "native_process": FieldCodec.encode(native_process),
         "recorded_monotonic_ns": time.monotonic_ns(),
     })
 

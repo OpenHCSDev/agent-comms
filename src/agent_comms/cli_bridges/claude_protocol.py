@@ -407,6 +407,10 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """The prompt this record carries, read without the session around it."""
         return ''
 
+    def owner_words(self) -> tuple[str, ...]:
+        """What the person typed in this record; most records carry none."""
+        return ()
+
 
 class AssistantBlock(TaggedWire, ABC, affix=""):
 
@@ -539,6 +543,10 @@ class PromptOrigin(TaggedWire, ABC, affix=""):
     def request(self, text: str) -> str:
         return ''
 
+    def owner_words(self, text: str) -> tuple[str, ...]:
+        """The words the person typed; only a person's prompt carries any."""
+        return ()
+
 
 class Prompting(PromptOrigin, ABC, declared_name=None):
     """An origin whose text is a request to the model."""
@@ -565,6 +573,9 @@ class AgentPrompt(Prompting, declared_name=None):
 
 
 class HumanPrompt(Prompting, declared_name='human'):
+
+    def owner_words(self, text: str) -> tuple[str, ...]:
+        return (text,)
 
     def absorbed(self, record: TimedRecord, text: str,
                  session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -774,6 +785,9 @@ class UserRecord(ClaudeRecord, TimedRecord, Originated, declared_name='user'):
     def request(self) -> str:
         return self.origin.request(self.message.text())
 
+    def owner_words(self) -> tuple[str, ...]:
+        return self.origin.owner_words(self.message.text())
+
 
 class CompactSummary(UserRecord, declared_name='compact-summary'):
     """Claude's summary of the conversation before its latest compaction."""
@@ -884,6 +898,10 @@ class AttachmentPayload(OpenWire, ABC, affix=""):
     @abstractmethod
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
 
+    def owner_words(self) -> tuple[str, ...]:
+        """What the person typed in this attachment; only a queued prompt carries any."""
+        return ()
+
 
 class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command'):
     """A prompt sent while a turn runs: its origin decides what the folded-in text is."""
@@ -898,6 +916,9 @@ class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.origin.absorbed(record, self.prompt.text(), session)
 
+    def owner_words(self) -> tuple[str, ...]:
+        return self.origin.owner_words(self.prompt.text())
+
 
 class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
 
@@ -910,6 +931,9 @@ class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.attachment.updates(self, session)
+
+    def owner_words(self) -> tuple[str, ...]:
+        return self.attachment.owner_words()
 
 
 class QueueOperation(MetadataRecord, declared_name='queue-operation'):
