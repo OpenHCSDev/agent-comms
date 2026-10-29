@@ -474,7 +474,7 @@ class DuplicatesPhase(MultipleInheritancePhase):
                     ("__init__",),
                     ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py"),
                 ),
-                (("wire_member",), ("pi_payloads.py", "field_codec.py")),
+                (("wire_member",), ("pi_payloads.py", "nominal/field_codec.py")),
                 (
                     (
                         "_assert_response_schema",
