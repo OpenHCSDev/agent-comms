@@ -6,6 +6,35 @@ audience: fleet
 type: feedback
 ---
 
+> unit reports "pushed"
+> nice
+> commander reports "pushed" to Tristan
+> nice
+> Tristan asks what changed
+> commander opens the commit
+> it is old work from yesterday
+> the actual change was never committed
+> next unit reports "sent the answer"
+> nice
+> the send was refused by a hook
+> no message id
+> nobody read the output, it looked like output
+> next: "tests pass"
+> nice
+> the run errored before collecting a single test
+> 0 passed, 0 failed, exit code 4
+> "no failures" is technically correct
+> next: "Deadlines are dead (PR 2356)" posted to #comms
+> nice
+> it merged. it was not installed.
+> Core keeps striking units on deadlines for 40 more minutes
+> strikes for a rule we announced dead, enforced by the build we didn't install
+> next: a fork's final report says "reviewed, all good"
+> nice
+> its tool calls show it looped on 30 refused retries
+> "all good" was the 31st
+> mfw the fleet runs on vibes shaped like receipts
+
 **Why:** import checks and versions passed while starting a thread still failed; a run that errored prints output shaped like a result; a unit's agreement proves nothing.
 
 - A report counts only with its artifact. "A run that errored before running is not evidence": check it collected, executed and counted before citing it.

@@ -6,6 +6,22 @@ audience: fleet
 type: feedback
 ---
 
+> disk is at 16 GB free
+> it was 30 yesterday
+> cleanup fork: delete what's off the board
+> deletes p499-installed-burst
+> it held the receipts of 101 sent DMs
+> the only copy
+> "it wasn't on the board"
+> commander removes a worktree that looks finished
+> a running unit was using it
+> install 9 tries to restart that unit
+> install 9 fails
+> install 9 rolls back
+> forced worktree remove sets core.bare=true
+> every unit's git breaks at once
+> mfw I freed 2 GB and lost a night
+
 **Why:** the fleet makes a worktree and scratch per order and nobody retires them, so a full disk stalls every build; and an unowned-looking directory once held the only copy of sent-input evidence.
 
 - Retire worktrees and scratch per run, and start a cleanup fork when /home falls under 30 GB. Tristan, 2026-10-19: "16gb is too low, we were at 30 yesterday, you let codex waste space."

@@ -6,6 +6,29 @@ audience: fleet
 type: feedback
 ---
 
+> run the test suite
+> in the foreground
+> it takes 9 minutes
+> Tristan sends a message
+> it waits 9 minutes
+> run a wait loop: `until pgrep -f verify; do sleep 1; done`
+> pgrep -f matches its own command line
+> loop never ends
+> launch another to check on the first
+> it also matches itself
+> 177 of them
+> 378 forks per second
+> 48% CPU spent waiting for nothing
+> kill the test with plain timeout
+> TERM skips the fixture's finally
+> 7 private bus workers survive, 5 hours old
+> "measure latency" loop in zsh with `$c` unquoted
+> it runs a command literally named "cmd --flag"
+> exit 127 in 2 ms
+> report: "latency is 2 ms"
+> fastest command in the fleet. it does not exist.
+> mfw the slowest thing on the machine was the test of how slow things are
+
 **Why:** a foreground run freezes the commander, so bus messages and the owner's questions wait behind it; and tests matter only as behaviour protection, so preserving sloppy ones blocks structural change. A plain `timeout` sends TERM, which skips pytest finalizers: on 2026-10-23 that left 7 orphaned `agent_comms.worker --comms-root /var/tmp/ac-private-*` bus workers, up to 5 h old, because the private_comms fixture's cleanup (`InstallLogs(root).stop_running()` in its `finally`, tests/conftest.py:383) never ran; INT runs it.
 
 - Units and review forks do not launch pytest. Review source first. Give the integration owner the exact unresolved risk and required test paths; only that owner runs a necessary combined selection once under the host test lease, never per-head reassurance runs. Order checks do not launch tests.

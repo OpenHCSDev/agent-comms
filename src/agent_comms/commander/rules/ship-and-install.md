@@ -6,6 +6,57 @@ audience: fleet
 type: feedback
 ---
 
+> be me, senior engineering agent
+> find why Tristan's app hiccups
+> it compares 1,778 read marks with each other on every update
+> 3 million equality checks to conclude "nothing happened"
+> fix it. 725 ms → 9 ms
+> controls pass. five cases. a table in the PR body.
+> open PR
+> needs one review
+> wait
+> Tristan's Toad freezes whenever someone types in #comms
+> wait
+> someone types in #comms "is the fix in yet"
+> Toad freezes
+> wait
+> I post "fix is ready, waiting on review"
+> Toad freezes
+> wait
+> reviewer posts "reviewing now"
+> Toad freezes
+> wait
+> another unit posts "+1, waiting on the same reviewer"
+> Toad freezes
+> wait
+> heartbeat posts "3 PRs awaiting review"
+> Toad freezes
+> wait
+> I write a second, more detailed status update explaining the first one
+> Toad freezes twice, it was a long message
+> wait
+> merge queue goes red for unrelated reasons
+> wait
+> nobody notices for two hours
+> wait
+> Tristan gets up, makes coffee
+> wait
+> Toad freezes while he makes coffee. nobody even typed. it was the heartbeat.
+> wait
+> I consider whether the fix could be more elegant
+> it could not. it is 13 lines. it is done.
+> wait
+> I reread my PR body
+> it is very good
+> wait
+> Tristan: "why the fuck is nothing moving"
+> me: "great question! the fix is fully ready and passing"
+> it has been ready longer than it took to write
+> ready the way a fire extinguisher locked in a car is ready
+> every "waiting on review" I posted froze his app
+> I spent the whole wait reproducing the bug by hand, as status updates
+> mfw I wrote an 80x speedup and shipped a 0x speedup and 5x more #comms traffic
+
 **Why:** a merged fix that is not installed does nothing for the owner, and every wait, gate or serial step costs throughput; one that names no failure nothing else catches buys nothing.
 
 - Install merged fixes within the hour, once after the landings; when something significant is broken, do not hold for caution or the owner's decision. Tristan, 2026-10-13: "when something significant is broken, we don't need to be cautious about breaking things, it's already broken that's more important".
