@@ -76,6 +76,7 @@ from agent_comms.errors import (
 from agent_comms.field_codec import (
     DefaultNonNull,
     Description,
+    DisclosureIdentity,
     FieldCodec,
     GitCommitText,
     GoalId,
@@ -1192,7 +1193,7 @@ class PullRequests:
 @dataclass(frozen=True)
 class ProgressPoint:
     """A revision and its time in the order's progress; Git rows use committer time."""
-    sha: str
+    sha: Annotated[str, DisclosureIdentity()]
     at: float
     format: ClassVar[str] = "%H %ct"
 
