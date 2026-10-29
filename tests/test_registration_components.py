@@ -176,3 +176,27 @@ def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(
     other['unread'] = written['unread']
     assert written == other
     assert written != ThreadRows.from_wire({})
+
+
+def test_birth_projection_agrees_for_full_thread_and_stored_float_records(tmp_path):
+    from agent_comms.thread_identity import ThreadIncarnationRecord
+
+    thread = Thread("owner", frozenset(), Checkout(tmp_path))
+    stored = ThreadIncarnationRecord(thread.name, thread.created_at.to_wire())
+    assert thread.birth == stored.birth
+    assert thread.incarnation == stored.incarnation
+    assert FieldCodec.decode(type(stored), FieldCodec.encode(stored)) == stored
+
+
+def test_full_thread_read_keeps_original_raw_wire_until_an_actual_assignment(tmp_path):
+    from agent_comms.registry_document import ThreadRows
+
+    thread = Thread("owner", frozenset({"kept"}), Checkout(tmp_path))
+    rows = ThreadRows.from_wire({thread.name: FieldCodec.encode_fields(thread)})
+    tags_key = FieldCodec.field_plan(Thread, "tags").key
+    kept_tags = rows.to_wire()[thread.name][tags_key]
+    loaded = rows[thread.name]
+    assert loaded == thread
+    assert rows.to_wire()[thread.name][tags_key] is kept_tags
+    rows[thread.name] = replace(loaded, tags=frozenset({"assigned"}))
+    assert rows.to_wire()[thread.name][tags_key] == ["assigned"]

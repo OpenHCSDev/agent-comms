@@ -4,16 +4,19 @@ from bus_history import read_history
 import json
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
+from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
 from agent_comms.registry_document import InvalidRegistryDocument, RosterVisibility, ThreadRows
 from agent_comms.relationships import (
     ChildrenRelationshipGroup, CollaboratingRelationshipGroup, InboundRelationshipGroup,
-    OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipContext, RelationshipEdit,
-    RelationshipGroup, SortableRelationshipGroup,
+    NamedEntrySource, OutboundRelationshipGroup, ParentRelationshipGroup,
+    RelationshipContext, RelationshipEdit, RelationshipEntry, RelationshipEntrySource,
+    RelationshipGroup, RelationshipInputs, SortableRelationshipGroup,
 )
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from conftest import installed_comms
 from agent_comms.display_order import LastActivityThreadSort, ThreadSort
 from agent_comms.field_codec import FieldCodec
@@ -42,7 +45,7 @@ def change_shared_peer(root, instruction):
     wire(root).relationships.edit(owner, RelationshipEdit.member_named(action), other, "Race")
 
 
-def setup_wire(tmp_path):
+def setup_wire(tmp_path: Path) -> Comms:
     comms = installed_comms(tmp_path / "wire")
     for name, parent in (("origin", NoParent()), ("owner", ForkedParent("origin")), ("peer", NoParent()),
                          ("child", ForkedParent("owner"))):
@@ -154,7 +157,9 @@ def test_recent_relationships_keep_the_global_cut_and_exact_preview(tmp_path):
 
 
 @pytest.mark.parametrize("order", ThreadSort.members_with(ThreadSort))
-def test_group_selection_hydrates_only_selected_threads_on_its_captured_cut(tmp_path, order):
+def test_group_selection_hydrates_only_selected_threads_on_its_captured_cut(
+    tmp_path: Path, order: type[ThreadSort],
+):
     comms = setup_wire(tmp_path)
     comms.registry.declare(Thread("unselected", frozenset(), Checkout(tmp_path)))
     comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "Real contact")
@@ -164,20 +169,25 @@ def test_group_selection_hydrates_only_selected_threads_on_its_captured_cut(tmp_
     registry = replace(captured, threads=ThreadRows.from_wire(raw))
     thread = registry.require("owner")
     contacts, _ = comms.relationships._goal_contacts(registry, thread)
-    context = RelationshipContext(
-        registry, thread, {}, (),
+    orders = {group: order for group in SortableRelationshipGroup.members_with(SortableRelationshipGroup)}
+    sent = order.sent_timestamps(comms.views, registry=registry)
+    inputs = RelationshipInputs(
+        registry, thread, (),
         DeliveryScope.capture(thread.name, registry, comms.views.channels.catalog.read()),
         comms.relationships.store.read().resolved(registry).collaborations, contacts,
-        {group: order for group in SortableRelationshipGroup.members_with(SortableRelationshipGroup)},
-        order.sent_timestamps(comms.views, registry=registry),
+        MappingProxyType(orders), MappingProxyType(sent),
     )
-    groups = {type(group): group for group in RelationshipGroup.capture(context, comms.views)}
+    original_orders, original_sent = dict(orders), dict(sent)
+    groups = {type(group): group for group in RelationshipGroup.capture(inputs, comms.views)}
     for group_type, target in ((ParentRelationshipGroup, "origin"),
                                (ChildrenRelationshipGroup, "child"),
                                (CollaboratingRelationshipGroup, "peer")):
         entry = groups[group_type].entries[target]
-        assert entry.available and entry.person.thread is registry.require(target)
-    assert set(context.people) == {"origin", "child", "peer"}
+        assert entry.available and entry.person.require_present().thread is registry.require(target)
+    selected = {person.thread.name for group in groups.values()
+                for entry in group.entries.values() for person in entry.person.present()}
+    assert selected == {"origin", "child", "peer"}
+    assert inputs.orders == original_orders and inputs.sent == original_sent
     assert all(selected.order is order for group in groups.values() for selected in group.selectable())
     with pytest.raises(InvalidRegistryDocument):
         registry.require("unselected")
@@ -244,7 +254,9 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
 
     missing = collaboration_rows(comms)[0]
     assert missing.target == "peer", "Deleted identity must remain copyable"
-    assert missing.available is False and missing.person is None
+    assert missing.available is False and missing.person.present() == ()
+    snapshot = comms.relationships.snapshot("owner")
+    assert FieldCodec.decode(type(snapshot), FieldCodec.encode(snapshot)) == snapshot
     assert missing.detail == original.note
     assert comms.relationships.collaborations("owner") == (original,)
 
@@ -289,7 +301,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     )
 
     row = collaboration_rows(comms)[0]
-    assert row.target == "peer" and row.person is None and not row.available
+    assert row.target == "peer" and row.person.present() == () and not row.available
     for action in ("add", "update"):
         with pytest.raises(ValueError):
             comms.relationships.edit(
@@ -305,7 +317,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     )
     assert new.peer_created != original.peer_created
     row = collaboration_rows(comms)[0]
-    assert row.available and row.person.thread.created_at == new.peer_created
+    assert row.available and row.person.require_present().thread.birth == new.peer_created
     assert collaboration_rows(comms, "peer")[0].target == "owner"
 
 
@@ -363,7 +375,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
     visible = collaboration_rows(comms)[0]
     assert (
         visible.available
-        and visible.person.thread.incarnation == comms.registry.require("renamed-peer").incarnation
+        and visible.person.require_present().thread.incarnation == comms.registry.require("renamed-peer").incarnation
     )
     assert visible.target == "renamed-peer"
     assert visible.sources == ("explicit", "goal_mention")
@@ -380,7 +392,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
     unavailable = collaboration_rows(comms)[0]
     assert unavailable.target == "renamed-peer"
     assert unavailable.sources == ("explicit", "goal_mention")
-    assert not unavailable.available and unavailable.person is None
+    assert not unavailable.available and unavailable.person.present() == ()
     assert "Retained explicit contact" in unavailable.detail
 
 
@@ -411,8 +423,9 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         assert selected.current_entry(
             SortedInboundRelationshipGroup, replace(earlier, kind="channel")
         ) is None
-        reused = replace(earlier.person, thread=replace(
-            earlier.person.thread, created_at=earlier.person.thread.created_at + 1
+        person = earlier.person.require_present()
+        reused = replace(person, thread=replace(
+            person.thread, created_at=person.thread.created_at + 1
         ))
         assert selected.current_entry(
             SortedInboundRelationshipGroup, replace(earlier, person=reused)
@@ -429,3 +442,45 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         assert FieldCodec.decode(type(reopened), FieldCodec.encode(reopened)) == reopened
     finally:
         RelationshipGroup.__registry__.pop(SortedInboundRelationshipGroup.declared_name)
+
+
+def test_new_group_retains_its_one_original_source_through_complete_presentation(tmp_path: Path):
+    comms = setup_wire(tmp_path)
+    selections: list[RelationshipInputs] = []
+    originals: list[NamedEntrySource] = []
+    built: list[NamedEntrySource] = []
+
+    class CapturedEntrySource(NamedEntrySource):
+        __slots__ = ()
+
+        def entry(self, context: RelationshipContext) -> RelationshipEntry:
+            built.append(self)
+            assert context.registry is selections[0].registry
+            assert context.people[self.name].thread is context.registry.require(self.name)
+            with pytest.raises(TypeError):
+                context.people["unexpected"] = context.people[self.name]
+            return super().entry(context)
+
+    class CapturedRelationshipGroup(RelationshipGroup):
+        title = "One original source"
+
+        @classmethod
+        def sources(cls, inputs: RelationshipInputs) -> tuple[RelationshipEntrySource, ...]:
+            selections.append(inputs)
+            assert len(selections) == 1
+            source = CapturedEntrySource(
+                CapturedEntrySource.canonical_target("peer", inputs.registry),
+            )
+            originals.append(source)
+            return (source,)
+
+    try:
+        snapshot = comms.relationships.snapshot("owner")
+        group = snapshot.groups_by_type[CapturedRelationshipGroup]
+        assert len(selections) == len(originals) == len(built) == 1
+        assert built[0] is originals[0]
+        entry = group.entries["peer"]
+        assert entry.person.require_present().thread is selections[0].registry.require("peer")
+        assert entry.available and entry.target == originals[0].name
+    finally:
+        RelationshipGroup.__registry__.pop(CapturedRelationshipGroup.declared_name)

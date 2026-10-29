@@ -36,6 +36,7 @@ from .field_codec import (
     JsonShapeFamily,
     JsonShapeMember,
     NullMember,
+    PresentMember,
     PresenceExclude,
     RecordMember,
     SubclassUnion,
@@ -720,7 +721,12 @@ class ThreadRecord(CliResult):
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadView(ThreadRecord):
+class NoThreadView(NullMember):
+    """A named navigation target has no captured thread presentation."""
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadView(ThreadRecord, PresentMember):
     activity: Annotated[ObservedActivity, PresenceExclude()]
     runtime: Annotated[RuntimeInfo, PresenceExclude()]
     last_seen: float
