@@ -51,6 +51,7 @@ from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
+from agent_comms.read_basis import CursorRow
 from agent_comms.read_basis import (
     DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope, UnreadQuery,
 )
@@ -466,7 +467,7 @@ class BusReader(RouteCounts, ABC):
                     f'JOIN "{MessageInput.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
                     f'AND ({query.predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
-                    (*query.cursors, max(after, query.lower_bound), through,
+                    (CursorRow.binding(query.cursors), max(after, query.lower_bound), through,
                      *query.parameters, query.viewer_names),
                 ).fetchone()[0])
         return counts

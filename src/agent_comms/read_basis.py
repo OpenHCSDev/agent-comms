@@ -315,6 +315,31 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
+class CursorRow:
+    """One actor's cursor on one (target, sender) key: the row `read_cursors` reads."""
+
+    actor: str
+    target: str
+    sender: str
+    cursor: ConversationCursor
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        return self.actor, self.target, self.sender
+
+    @property
+    def whole_bus(self) -> bool:
+        """The explicit whole-bus read: moving it may change every row's state."""
+        return self.target == ""
+
+    @staticmethod
+    def binding(rows: Iterable[CursorRow]) -> str:
+        """The `read_cursors` SQL parameter, in the column order ReadCursor.sql reads."""
+        return json.dumps([(row.actor, row.target, row.sender, row.cursor.high_water,
+                            row.cursor.exceptions) for row in rows])
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationCursor:
     """One conversation's proved prefix and ordered out-of-order reads."""
 
@@ -415,14 +440,21 @@ class ReadCursor:
         return scope.counted(self, snapshot)
 
     @staticmethod
+    def rows(snapshot: RegistryProvenance,
+             cursors: Mapping[str, Iterable[tuple[Conversation, ConversationCursor]]]
+             ) -> tuple[CursorRow, ...]:
+        """Each actor's cursor on every (target, sender) key its conversations resolve to."""
+        return tuple(
+            CursorRow(actor, target, sender, cursor)
+            for actor, selected in cursors.items() for conversation, cursor in selected
+            for target, sender in conversation.sql_keys(snapshot)
+        )
+
+    @staticmethod
     def sql_bindings(snapshot: RegistryProvenance,
                      cursors: Mapping[str, Iterable[tuple[Conversation, ConversationCursor]]]
                      ) -> dict[str, str]:
-        return {"read_cursors": json.dumps([
-            (actor, target, sender, cursor.high_water, cursor.exceptions)
-            for actor, selected in cursors.items() for conversation, cursor in selected
-            for target, sender in conversation.sql_keys(snapshot)
-        ])}
+        return {"read_cursors": CursorRow.binding(ReadCursor.rows(snapshot, cursors))}
 
     @classmethod
     def union(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
@@ -1148,7 +1180,7 @@ class UnreadQuery:
     conversations' rows above the lower of their two high waters."""
 
     channel: str
-    cursors: tuple[str, ...]
+    cursors: tuple[CursorRow, ...]
     lower_bound: int
     predicate: str
     parameters: tuple
@@ -1160,23 +1192,18 @@ class UnreadQuery:
         lower bound is the cursor's own floor over the scope's targets, so it moves with it."""
         return replace(self, cursors=(), lower_bound=0)
 
-    @property
-    def entries(self) -> dict[tuple[str, str, str], tuple[int, tuple[int, ...]]]:
-        """Each read-cursor row by its (actor, target, sender) key."""
-        return {(actor, target, sender): (high_water, tuple(exceptions))
-                for bound in self.cursors
-                for actor, target, sender, high_water, exceptions in json.loads(bound)}
-
     def moved(self, earlier: UnreadQuery) -> tuple[UnreadQuery, UnreadQuery] | None:
         """The earlier and current counts over only the conversations whose cursor moved,
         or None when a whole-bus read moved and every row may have changed."""
-        before, after = earlier.entries, self.entries
+        before = {row.key: row for row in earlier.cursors}
+        after = {row.key: row for row in self.cursors}
         changed = {key for key in before.keys() | after.keys() if before.get(key) != after.get(key)}
-        if any(target == "" for _, target, _ in changed):
+        rows = tuple(side[key] for side in (before, after) for key in changed if key in side)
+        if any(row.whole_bus for row in rows):
             return None
-        floor = min((min(before.get(key, (0, ()))[0], after.get(key, (0, ()))[0])
-                     for key in changed), default=0)
-        targets = tuple(sorted({target for _, target, _ in changed}))
+        floor = (0 if any(key not in before or key not in after for key in changed)
+                 else min((row.cursor.high_water for row in rows), default=0))
+        targets = tuple(sorted({row.target for row in rows}))
         return earlier.within(targets, floor), self.within(targets, floor)
 
     def within(self, targets: tuple[str, ...], floor: int) -> UnreadQuery:
@@ -1202,9 +1229,7 @@ class DisplayUnreadSelection:
         return tuple(
             UnreadQuery(
                 scope.channel,
-                tuple(ReadCursor.sql_bindings(self.registry, {
-                    "viewer": self.seen.counted(scope, self.registry),
-                }).values()),
+                ReadCursor.rows(self.registry, {"viewer": self.seen.counted(scope, self.registry)}),
                 self.seen.lower_bound(scope, self.registry),
                 *scope.index_predicate,
                 names,
