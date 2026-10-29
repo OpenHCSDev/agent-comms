@@ -185,6 +185,20 @@ class SubagentCaller(ThreadCaller):
 
 
 @dataclass(frozen=True)
+class CommanderPeerCaller(ThreadCaller):
+    """Another commander acting under its own name: membership in the commanders channel is
+    the declaration, so its verdicts and orders record its own incarnation, never the
+    registered commander's."""
+
+    channel = "commanders"
+
+    def commanding(self, comms: Comms, commander: str) -> None:
+        if self.channel not in comms.registry.require(self.name).tags:
+            raise ToolRefusedError(
+                f"{self.name} is not in #{self.channel}; join it to act as a commander.")
+
+
+@dataclass(frozen=True)
 class CommanderForkCaller(SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
