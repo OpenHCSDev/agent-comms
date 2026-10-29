@@ -348,7 +348,7 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
     held_bus.registry.register(outsider)
     checked = primary_order.order.checked()
     held_bus.goals.update_goal("outsider", CreateProblemGoalAction(
-        problem="P3", commander=lead.name, request=primary_order.request,
+        problem="P3", commander=lead.name, request=primary_order.request.require(),
         assigner=lead.incarnation, repo=primary_order.repo, text="Independent healthy work",
         review_at=RecordedEventTime(time.time() + 3600),
         order=replace(checked, id=OrderId.mint(),
