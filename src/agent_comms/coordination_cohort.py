@@ -23,13 +23,11 @@ from agent_comms.cohort_schema import (
     CohortTable,
     NoDeliveryClaim,
     SelectedClaim,
-    assert_optional_awareness_schema,
 )
 from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from agent_comms.coordination_errors import (
     IdentityConflict,
     IntegrityViolationError,
-    SchemaVersionError,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -37,7 +35,7 @@ from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 
-from .field_codec import AssignmentId, MalformedRecord, MessageId, WireName, RootId, ThreadLookup
+from .field_codec import AssignmentId, MessageId, WireName, RootId, ThreadLookup
 
 _LOG = logging.getLogger(__name__)
 
@@ -220,13 +218,12 @@ def _record_optional_owner_generations(
 ) -> None:
     """Same acceptance transaction; a failed optional savepoint cannot veto N/K.
 
-    Rows are written only while the exact cohort is unsealed. A missing or
-    damaged optional schema, or a frozen old-name claim accepted after rename,
-    leaves NO partial generation evidence. The reader then omits awareness.
+    Rows are written only while the exact cohort is unsealed. A missing owner
+    generation or row integrity refusal leaves NO partial generation evidence.
+    The reader then omits awareness; schema drift fails at the file owner.
     """
     db.execute("SAVEPOINT optional_awareness_claims")
     try:
-        assert_optional_awareness_schema(db)
         for assignment in assignments:
             current = OwnerGenerations.one(db, owner_lookup=assignment.recipient_lookup)
             if current is None:
@@ -238,7 +235,7 @@ def _record_optional_owner_generations(
                 owner_lookup=assignment.recipient_lookup,
                 owner_generation=current.generation,
             ).insert(db)
-    except (sqlite3.Error, SchemaVersionError, IdentityConflict, MalformedRecord) as error:
+    except (sqlite3.IntegrityError, IdentityConflict) as error:
         db.execute("ROLLBACK TO optional_awareness_claims")
         _LOG.warning("Optional generation provenance omitted: %r", error, exc_info=error)
     finally:
