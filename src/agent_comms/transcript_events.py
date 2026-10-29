@@ -44,6 +44,7 @@ from .ui_model.message_category import (
 
 if TYPE_CHECKING:
     from .importing import ImportBuffer, ImportLimits
+    from .runtime_updates import OpeningReplies
     from .transcript_sources import TranscriptSource
 
 
@@ -134,6 +135,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
 
     def assistant_parts(self) -> tuple[str, ...]:
         return ()
+
+    def reply_window(self, window: OpeningReplies) -> OpeningReplies:
+        """Input and system evidence do not start an assistant answer."""
+        return window
 
     def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
         return self
@@ -347,7 +352,14 @@ class UserTranscript(NativeTextTranscript):
         return (replace(self, routing=self.routing.with_requests(remaining)),)
 
 
-class AssistantTranscript(AgentTextTranscript):
+class ModelOutput:
+    """Assistant text, thinking and tool output close admission of automatic reply routes."""
+
+    def reply_window(self, window: OpeningReplies) -> OpeningReplies:
+        return window.answering()
+
+
+class AssistantTranscript(ModelOutput, AgentTextTranscript):
     def append_to(self, events: list[TranscriptEvent]) -> None:
         if events and (merged := events[-1].followed_by_assistant(self)) is not None:
             events[-1] = merged
@@ -437,7 +449,7 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
         raise ValueError("Sent report no longer matches its original assigned wire message")
 
 
-class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
+class ThinkingTranscript(ModelOutput, SilentTranscript, LiveTextTranscript):
     category = ThinkingCategory
 
     @property
@@ -453,7 +465,7 @@ class ContextTranscript(SilentTranscript, NativeTextTranscript):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolTranscript(SilentTranscript, RecordedTranscript):
+class ToolTranscript(ModelOutput, SilentTranscript, RecordedTranscript):
     category = ToolCategory
     tool_call_id: ToolCallId
     tool_name: str
