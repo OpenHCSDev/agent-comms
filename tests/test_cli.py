@@ -449,7 +449,7 @@ class TestSelectedTargetActions:
         reviewed = catalog["archive"].edited({}).with_confirmation(True)
         assert reviewed.targets == ("alpha", "beta", "#team")
         assert not catalog["read-target"].encode()["parameters"]["properties"]
-        assert all(command.worktree == str(tmp_path)
+        assert all(command.worktree == Checkout(tmp_path)
                    for command in catalog["read-target"].bound)
 
     def test_mixed_archive_reports_partial_results_in_selection_order(self, cli, tmp_path):
@@ -523,7 +523,7 @@ class TestSelectedTargetActions:
         catalog = comms.channels.catalog.read()
         target = ChannelTarget("#team")
         commands = StartCliCommand.bindings(
-            comms, target, NoChannel(), snapshot=snapshot, catalog=catalog,
+            comms, target, NoChannel(), project=Checkout(tmp_path), snapshot=snapshot, catalog=catalog,
             resolved=target.resolve(snapshot, comms.bus.require_channel))
         assert tuple(command.name for command in commands) == ("alpha",)
         assert all(comms.registry.require(name).process_identity == NoProcess()
@@ -611,7 +611,7 @@ class TestSelectedTargetActions:
         comms.messaging.send('alpha', 'beta', 'Executor message').message.message_id
         comms.messaging.send('alpha', viewer, 'Human DM').message.message_id
         comms.messaging.send('alpha', '#team', 'Channel message').message.message_id
-        before = completed_snapshot(comms, str(tmp_path))
+        before = completed_snapshot(comms, Checkout(tmp_path))
         assert before.thread_unread['alpha'] == ReplyUnread(1)
         assert before.unread['alpha'].count == 1
         # The canonical tag change also publishes its membership notification.
@@ -619,7 +619,7 @@ class TestSelectedTargetActions:
         result = TargetEdit(ReadTargetCliCommand, ReadTargetCliCommand.selected_targets((CommandTarget.named('alpha'), CommandTarget.named('#team'))),
                             {}, project=Checkout(tmp_path)).apply(comms)
         assert result.successful and tuple(item.result.read for item in result.outcomes) == ('alpha', '#team')
-        after = completed_snapshot(comms, str(tmp_path))
+        after = completed_snapshot(comms, Checkout(tmp_path))
         assert after.thread_unread['alpha'] == ReplyUnread(0)
         assert after.unread['alpha'].count == 0
         assert after.channel_unread['#team'].count == 0
