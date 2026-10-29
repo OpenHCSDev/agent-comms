@@ -403,7 +403,8 @@ class NativeSession(MroDispatch, ABC):
                 with self.startup.measurements.operation("open_transport"):
                     unbound = await self.open_transport(transport)
                 native = await self.open_native(reuse=reuse)
-                self.tool_socket = await unbound.bind_process(native.proc.pid)
+                with self.startup.measurements.operation("native_process_binding"):
+                    self.tool_socket = await unbound.bind_process(native.proc.pid)
                 native.transport = transport.pop_all()
         self.owner = asyncio.current_task()
         if self.owner is not None:
@@ -414,9 +415,11 @@ class NativeSession(MroDispatch, ABC):
     async def open_native(self, *, reuse: bool) -> PiSessionChild:
         """Let the session manage child ownership for new or continued input."""
         with self.startup.measurements.operation("native_open"):
-            return await self.native_session.open(
+            native = await self.native_session.open(
                 self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,
             )
+        self.startup.native_process = native.proc.identity
+        return native
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
         self.loop = asyncio.get_running_loop()

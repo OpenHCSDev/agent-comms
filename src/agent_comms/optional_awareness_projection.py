@@ -35,7 +35,6 @@ from .cohort_schema import (
     ClaimBatchMembers,
     CohortDeliveries,
     CohortTable,
-    assert_optional_awareness_schema,
 )
 from .context_segments.optional_awareness import (
     CompleteAwareness,
@@ -294,7 +293,6 @@ class OptionalAwarenessProjection:
     ) -> None:
         privacy.coordinator_schema().require_schema(db)
         CohortTable.require_installed(db)
-        assert_optional_awareness_schema(db)
         people = _ParticipantOwner.read(
             db.execute(
                 "SELECT p.committed,g.generation FROM participants p "
