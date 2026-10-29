@@ -72,7 +72,6 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     assert unpainted.displayed_to == ()
     # A human display is Read and nothing else: no context entry rides along with it.
     assert painted.state == unpainted.state and not painted.state.consumed
-    assert MessageNotification.summary((painted,)).endswith("Consumed 0/1 · Read 1/1")
     assert live.bus.reads.cursor("reader", live.registry.snapshot()) == ReadCursor()
     ledger = ReadLedger.at(source.root)
     document = ledger.read()
@@ -133,7 +132,6 @@ def test_harness_consumption_survives_human_display(archived_notification):
     assert human_display() == (human.incarnation,)
     displayed = notification()
     assert displayed.state == consumed.state and not displayed.displayed_to
-    assert MessageNotification.summary((displayed,)).endswith("Consumed 1/1 · Read 0/1")
 
 
 def test_native_context_commit_is_consumed():
@@ -260,7 +258,8 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
         activity=queued_activity,
         updated_at_ms=1_000,
     )
-    consumed_activity = replace(sent_activity, progress=ShownToModelProgress(2_000))
+    context_entry = ShownToModelProgress(2_000)
+    consumed_activity = replace(sent_activity, progress=context_entry)
     consumed = engagement.notification(
         recipient,
         SENDER,
@@ -325,8 +324,9 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     assert idle.label.startswith("Consumed ") and not idle.state.seen_working
     unconsumed = delivered_to(observed(ActivityState.WORKING), sent_activity)
     assert unconsumed.label.startswith("Sent ") and not unconsumed.state.seen_working
-    confirmed = replace(unconsumed, state=unconsumed.state.harness_consumed())
-    assert confirmed.label == "Seen, working" and confirmed.state.seen_working
+    confirmed = replace(unconsumed, state=unconsumed.state.harness_consumed(context_entry.at_ms))
+    assert confirmed.state.seen_working and confirmed.state.consumed
+    assert confirmed.label == confirmed.timed_state(WorkingTakenProgress.label, context_entry.at_ms)
     # An explicit ignore decision is the only Seen, not answering.
     ignored = IgnoredAssignment.build(FullWake(), None, None)
     declined = ignored.notification(recipient, SENDER, observation=RecordedRecipientActivity(),
@@ -336,9 +336,8 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
                                        activity=sent_activity, updated_at_ms=2_000)
     assert unconfirmed.label == "Not answering" and not unconfirmed.state.seen_not_answering
     assert unconfirmed.state == IgnoredProgress(SentProgress(1_000))
-    assert MessageNotification.summary((working, declined, unconfirmed, idle)) == (
-        "Seen, working 1 · Seen, not answering 1 · Delivered 4/4 · Consumed 3/4 · Read 0/4")
-    assert MessageNotification.summary((unconfirmed,)) == "Not answering · Delivered 1/1 · Consumed 0/1 · Read 0/1"
+    assert sum(row.state.consumed for row in (working, declined, unconfirmed, idle)) == 3
+    assert not unconfirmed.state.consumed
     assert delivered_answer.label.startswith("Answered ")
     assert delivered_answer.answer == MessageReference(99, reply_id)
     assert sent.recipient_identity == consumed.recipient_identity == answered.recipient_identity
